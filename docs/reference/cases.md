@@ -70,7 +70,7 @@ Reports then carry a *Fleets* section, with soft-link details in case notes only
 
 ## Contacts
 
-`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
+`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each domain is read once a run, whether the read succeeds or not, so endpoints under one registered domain (by the Public Suffix List) share its security.txt and RDAP reads. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
 
 `case contact add <id> --party provider|operator|csirt|declared-owner --org … --channel email|form|portal --address … --source <link>` adds a contact found by hand, such as a sector CSIRT or an authorised test's declared owner; `case contact rm <id> <address>` removes one. `case status` lists a missing provider contact and a missing notice draft under *Needs*.
 
