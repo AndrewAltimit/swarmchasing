@@ -111,7 +111,9 @@ Both thresholds are set in the rules file. A tier says the record looks like age
 
 **One relay hit is never enough.** People use relays, CORS proxies and echo services every day. No relay rule weighs as much as the suggestive threshold, so a single relay hit never flags a record. It needs another indicator first: a payload, a tag, a callback channel, a program, or residue.
 
-A cluster gets its own tier. It is at least the highest tier among its members. Evidence also stacks across a cluster: the cluster's score is the sum of the weights of the distinct rules seen in any member, and that score is graded against the same thresholds. A cluster is also significant when a significant member carries an attack payload.
+A cluster gets its own tier: the highest tier among its members, raised one step only by corroboration. A suggestive cluster becomes significant when two of its suggestive-or-above members each carry a kind of evidence the other lacks: one record shows a callback channel and model residue, another the same channel and a carrier program. Context kinds, which ordinary clients produce too, do not count towards that: `relay`, `cache_buster`, `self_id`, `header` and `outcome`. A cluster of noise records stays noise, and weak rules collected across many members never add up to a higher tier.
+
+The cluster's `score`, the sum of the weights of the distinct rules seen in any member, is listed for reference and does not set the tier. Code: `cluster_tier` in [`hints.rs`](../crates/sc-core/src/analyze/hints.rs).
 
 ## Linking into clusters
 
@@ -220,7 +222,7 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **Copied tags.** A tag quoted in a published report (such as `CHATGPTTEST1`) can be reused by anyone who read it. A linking tag reused by unrelated operators within the feature window, on no more than `linking.feature_max_hosts` hosts, still merges their clusters. Generic parameter names in `strong_params` (`tag`, `run`, `session`) can carry the same value by coincidence.
 
-**Stacking across a cluster.** A cluster's score sums distinct rules across all members, so a cluster of individually weak records can reach a tier no member reached. The cluster's member tiers and rules are listed so a reader can see how it got there.
+**Corroboration across a cluster.** A cluster can be one tier above its strongest member when two members bring different kinds of evidence. That rests on the link between them being right. The cluster's member tiers and rules are listed so a reader can see how it got there.
 
 **Heuristic decoding.** Base64 detection and unwrapping are heuristics. Truncated URLs decode partly. An opaque ID that happens to decode to text can, rarely, become a layer.
 

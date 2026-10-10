@@ -44,8 +44,11 @@ pub struct Cluster {
     pub members: Vec<usize>,
     pub start: i64,
     pub end: i64,
+    /// The strongest member's tier, raised one step only by corroboration
+    /// ([`hints::cluster_tier`]).
     pub tier: Tier,
     /// Sum of weights over the distinct rules seen anywhere in the cluster.
+    /// Descriptive: it does not set the tier.
     pub score: i32,
     pub rules: BTreeMap<String, usize>,
     pub kinds: BTreeMap<IndicatorKind, usize>,
@@ -359,6 +362,83 @@ mod tests {
         assert_eq!(a.clusters.len(), 1);
         assert_eq!(a.clusters[0].members.len(), 3);
         assert_eq!(a.results[3].cluster, None);
+    }
+
+    #[test]
+    fn weak_rules_across_members_do_not_raise_a_cluster() {
+        // One inbox; each record adds a different context rule. Summed over
+        // distinct rules this reaches the significant threshold; no member
+        // does, and context kinds corroborate nothing.
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let obs = vec![
+            o(1000, &format!("https://a.example/x?hook={inbox}&_=1")),
+            o(
+                1030,
+                &format!("https://a.example/y?hook={inbox}&agent=claude"),
+            ),
+            o(
+                1060,
+                &format!("https://r.jina.ai/https://a.example/z?hook={inbox}"),
+            ),
+        ];
+        let a = analyze(obs, &Rules::default_rules());
+        assert_eq!(a.clusters.len(), 1);
+        let c = &a.clusters[0];
+        assert!(c.score >= 6, "{}", c.score);
+        assert!(
+            a.results.iter().all(|r| r.tier == Tier::Suggestive),
+            "{:?}",
+            a.results
+                .iter()
+                .map(|r| (r.score, &r.hits))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(c.tier, Tier::Suggestive);
+    }
+
+    #[test]
+    fn corroborating_members_raise_a_cluster_one_step() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let obs = vec![
+            // Callback channel and model residue ...
+            o(
+                1000,
+                &format!("https://a.example/p%5D%28https://a.example/p%29?hook={inbox}"),
+            ),
+            // ... and callback channel and an echo carrier, in another record.
+            o(
+                1030,
+                &format!("https://httpbin.org/anything?u=https://a.example/&hook={inbox}"),
+            ),
+        ];
+        let a = analyze(obs.clone(), &Rules::default_rules());
+        assert!(
+            a.results.iter().all(|r| r.tier == Tier::Suggestive),
+            "{:?}",
+            a.results
+                .iter()
+                .map(|r| (r.score, &r.hits))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(a.clusters[0].tier, Tier::Significant);
+
+        // The same evidence twice is not corroboration.
+        let same = vec![obs[0].clone(), o(1060, &obs[0].url)];
+        let b = analyze(same, &Rules::default_rules());
+        assert_eq!(b.clusters[0].tier, Tier::Suggestive);
+
+        // A noise-only cluster stays noise.
+        let quiet = vec![
+            o(1000, "https://r.jina.ai/https://a.example/q?uqtag=abc1"),
+            o(1030, "https://r.jina.ai/https://a.example/r?uqtag=abc1"),
+        ];
+        let q = analyze(quiet, &Rules::default_rules());
+        assert!(q.clusters.iter().all(|c| {
+            c.tier
+                == q.results[c.members[0]]
+                    .tier
+                    .max(q.results[c.members[1]].tier)
+        }));
     }
 
     #[test]

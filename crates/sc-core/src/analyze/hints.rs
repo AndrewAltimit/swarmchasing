@@ -44,11 +44,8 @@ pub(super) fn cluster(
     let mut uas: BTreeMap<String, usize> = BTreeMap::new();
     let mut encodings: BTreeMap<String, usize> = BTreeMap::new();
     let mut feats: BTreeMap<&LinkFeature, usize> = BTreeMap::new();
-    let mut any_sig = false;
     for &i in &members {
         let r = &results[i];
-        any_sig |=
-            r.tier == Tier::Significant && r.hits.iter().any(|h| h.kind == IndicatorKind::Exploit);
         for h in &r.hits {
             *rules_seen.entry(h.rule_id.clone()).or_default() += 1;
             *kinds.entry(h.kind).or_default() += 1;
@@ -81,21 +78,7 @@ pub(super) fn cluster(
         .filter_map(|id| rules.rule(id))
         .map(|r| r.weight)
         .sum();
-    let member_tier = members
-        .iter()
-        .map(|&i| results[i].tier)
-        .max()
-        .unwrap_or_default();
-    // Evidence that stacks across a linked cluster raises its tier.
-    let tier = if any_sig || score >= rules.set.thresholds.significant {
-        Tier::Significant
-    } else {
-        member_tier.max(if score >= rules.set.thresholds.suggestive {
-            Tier::Suggestive
-        } else {
-            Tier::Noise
-        })
-    };
+    let tier = cluster_tier(results, &members);
     let ts: Vec<i64> = members.iter().map(|&i| results[i].obs.ts).collect();
     let mut t = timing(&ts, cfg);
     t.stale_dates = stale_dates(
@@ -183,6 +166,51 @@ pub(super) fn cluster(
         runs,
         timing: t,
     }
+}
+
+/// A cluster's tier: its strongest member's, raised one step (suggestive to
+/// significant) only by corroboration: two suggestive-or-above members that
+/// each carry an evidence kind the other lacks. Context kinds (relay, cache
+/// buster, self-identification, header, outcome), which ordinary clients
+/// produce too, do not count. Weak rules collected across many members never
+/// add up to a higher tier.
+pub(super) fn cluster_tier(results: &[ObsResult], members: &[usize]) -> Tier {
+    let top = members
+        .iter()
+        .map(|&i| results[i].tier)
+        .max()
+        .unwrap_or_default();
+    if top != Tier::Suggestive {
+        return top;
+    }
+    let kind_sets: BTreeSet<BTreeSet<IndicatorKind>> = members
+        .iter()
+        .map(|&i| &results[i])
+        .filter(|r| r.tier >= Tier::Suggestive)
+        .map(|r| {
+            r.hits
+                .iter()
+                .map(|h| h.kind)
+                .filter(|&k| !is_context_kind(k))
+                .collect()
+        })
+        .collect();
+    let corroborated = kind_sets
+        .iter()
+        .any(|a| kind_sets.iter().any(|b| !a.is_subset(b) && !b.is_subset(a)));
+    if corroborated { Tier::Significant } else { top }
+}
+
+/// Kinds that describe how a request was sent rather than what it did.
+fn is_context_kind(k: IndicatorKind) -> bool {
+    matches!(
+        k,
+        IndicatorKind::Relay
+            | IndicatorKind::CacheBuster
+            | IndicatorKind::SelfId
+            | IndicatorKind::Header
+            | IndicatorKind::Outcome
+    )
 }
 
 pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
