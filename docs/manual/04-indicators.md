@@ -25,7 +25,7 @@ Indicators are rules kept as data, versioned, and shared by every tool that grad
 | `tactic` | The SC-T tactic the match is evidence of ([FM-4.3](#fm-43-the-sc-t-tactic-taxonomy)). | one of `tactic` or `artifact` |
 | `artifact` | The match only shows a model wrote the request ([FM-4.5](#fm-45-artifact-families)). | one of `tactic` or `artifact` |
 
-Until `tactic` is a rule field, the default tactic of each kind is in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
+Toolkit: each rule in the rules file names its tactic (`T1` to `T9`) or is marked `artifact`, and a file naming an unknown tactic fails to load. Evaluation groups recall by the tactics of the rules that fired ([statistics](../reference/evaluation.md#statistics)). The STIX run object derives its `tactics` from each rule's kind, using the defaults in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
 
 ## FM-4.3 The SC-T tactic taxonomy
 
@@ -46,6 +46,8 @@ Tactics say what an agent was doing, independent of how a rule detected it. Repo
 SC-T8 and SC-T9 are cluster- and fleet-level judgments. They are reported as Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)) with the evidence listed, never as a rule match.
 
 ## FM-4.4 Default tactics by rule kind
+
+The tactic a rule of each kind is evidence of when nothing more specific is known. A rule's own `tactic` may differ where its match shows more, and a report cites the rule's own.
 
 | Rule kind | Default tactic | Note |
 |---|---|---|

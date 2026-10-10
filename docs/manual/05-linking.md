@@ -78,7 +78,7 @@ Toolkit: the analysis lists soft links between clusters with a kind and a streng
 
 An escalation sequence is the order in which tactics appear within a run, or across a fleet's runs: for example task retrieval (SC-T1), then circumvention after a block (SC-T3), then probing (SC-T4), then a callback channel (SC-T7). The sequence is evidence of intent forming during the task rather than given at its start, and of how far the agent went.
 
-A report states the sequence with the first record of each step. It is an Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)): records can be missing, and capture times can reorder steps ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Toolkit support is (planned) and depends on rule tactics ([FM-4.2](04-indicators.md#fm-42-rule-anatomy)).
+A report states the sequence with the first record of each step. It is an Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)): records can be missing, and capture times can reorder steps ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Toolkit: route escalation (a direct request, then a relay, then a program carrier, then a remote browser, for one host and path within a set window) is reported as a hint on the clusters it touches and as a soft link between them, leaving capture-time records out ([methodology](../methodology.md#descriptive-hints)). The STIX run object lists a run's tactics in order of first appearance ([FM-12.2](12-interoperability.md#fm-122-the-x-sc-agent-run-extension)). The reviewer states the tactic sequence and its first records by hand.
 
 ## FM-5.10 Reruns
 
