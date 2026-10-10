@@ -54,7 +54,17 @@ pub fn load_rules(p: Option<&Path>) -> Result<Rules> {
     }
 }
 
+/// Read every input, then fill missing client ASNs from the local IP-to-ASN
+/// table when one has been fetched.
 pub fn read_inputs(args: &InputArgs) -> Result<Vec<Observation>> {
+    let mut all = read_records(args)?;
+    crate::commands::asn::enrich(&mut all);
+    Ok(all)
+}
+
+/// Read every input as written, with no enrichment, so results do not depend
+/// on local tables (evaluation).
+pub fn read_records(args: &InputArgs) -> Result<Vec<Observation>> {
     let map = match &args.map {
         Some(m) => FieldMap::parse(m).map_err(anyhow::Error::msg)?,
         None => FieldMap::default(),
@@ -88,7 +98,6 @@ pub fn read_inputs(args: &InputArgs) -> Result<Vec<Observation>> {
         }
         all.extend(parsed.observations);
     }
-    crate::commands::asn::enrich(&mut all);
     Ok(all)
 }
 

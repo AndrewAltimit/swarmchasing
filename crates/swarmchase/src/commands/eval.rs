@@ -1,7 +1,7 @@
 //! `swarmchase eval`: the command around [`crate::eval`].
 
 use crate::eval::{self, Floors};
-use crate::input::{InputArgs, run_analysis};
+use crate::input::{InputArgs, load_rules, read_records};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use sc_core::eval::coverage::AllowList;
@@ -79,7 +79,11 @@ pub fn run(args: EvalArgs) -> Result<()> {
     let exclude = args.exclude_ids.as_deref().map(read_ids).transpose()?;
     eval::restrict(&mut l, only.as_deref(), exclude.as_deref());
     let rules_text = crate::pinning::RulesText::load(args.input.rules.as_deref())?.text;
-    let a = run_analysis(&args.input)?;
+    // No ASN enrichment: eval results must not depend on a local table.
+    let a = sc_core::analyze(
+        read_records(&args.input)?,
+        &load_rules(args.input.rules.as_deref())?,
+    );
 
     if let Some(kind) = args.split {
         let Some(out) = &args.split_out else {
