@@ -1,8 +1,23 @@
 #!/usr/bin/env bash
-# Build the WASM package into site/pkg.
+# Build the public site into _site/: the WASM module, then every page.
 #
-#     scripts/ci/build-site.sh          # release build, optimised with wasm-opt
-#     scripts/ci/build-site.sh --dev    # debug build, no wasm-opt
+#     scripts/ci/build-site.sh               # release module, optimised with wasm-opt
+#     scripts/ci/build-site.sh --dev         # debug module, no wasm-opt, no size check
+#     scripts/ci/build-site.sh --pages-only  # pages only; reuse site/pkg as built
+#
+# Environment:
+#     SITE_OUT                output directory (default _site)
+#     SITE_BASE_URL           the site's public URL, for the feed and the sitemap
+#                             (default http://localhost:8080/)
+#     WASM_OPT                path to a wasm-opt binary
+#     SWARMCHASE_WASM_OPT_CACHE  wasm-opt cache directory
+#                             (default ${XDG_CACHE_HOME:-$HOME/.cache}/swarmchase-wasm-opt)
+#
+# The module: wasm-pack builds sc-wasm into site/pkg (gitignored) on the
+# release profile with size settings (opt-level "z", one codegen unit,
+# panic=abort) passed as CARGO_PROFILE_RELEASE_* variables, so they apply to
+# this build only and never to native binaries. A release module over
+# BUDGET bytes fails the build.
 #
 # wasm-opt is the slow half of a release build (minutes on the runner, against
 # seconds for the cargo build when the cache is warm), and its output depends
@@ -10,35 +25,53 @@
 # with --no-opt and this script runs wasm-opt itself, caching the optimised
 # module outside the checkout (actions/checkout cleans the workspace) under
 # the SHA-256 of the unoptimised module, the flags and the wasm-opt version.
-# A deploy that did not change the Rust reuses the cached module.
-#
 # The flags are read from `[package.metadata.wasm-pack.profile.release]
-# wasm-opt = [...]` in crates/sc-wasm/Cargo.toml, the same list wasm-pack
-# would pass, so the manifest stays the one place they are set.
+# wasm-opt = [...]` in crates/sc-wasm/Cargo.toml, the list wasm-pack would
+# pass. wasm-opt is taken from $WASM_OPT, else PATH, else wasm-pack's own
+# cache; with none found, wasm-pack optimises (uncached) and downloads it.
 #
-# wasm-opt is taken from $WASM_OPT, else PATH, else the copy wasm-pack keeps
-# in its own cache. When none is found (a fresh machine), the script lets
-# wasm-pack optimise the module itself, uncached; that run downloads wasm-opt
-# into wasm-pack's cache, so the next run finds it.
-#
-# Environment:
-#     WASM_OPT                path to a wasm-opt binary
-#     SWARMCHASE_WASM_OPT_CACHE  cache directory
-#                             (default ${XDG_CACHE_HOME:-$HOME/.cache}/swarmchase-wasm-opt)
+# The pages: the sc-site binary (crates/sc-publish) reads committed inputs
+# only (notices/, docs/, rules/default.toml, samples/eval/, site/), refuses
+# anything under data/ or $SWARMCHASE_DATA, and writes the site. Then
+# check-site.py checks every generated page and that every input it read is
+# tracked by git.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 mode=--release
-[[ "${1:-}" == "--dev" ]] && mode=--dev
-command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
+case "${1:-}" in
+    --dev) mode=--dev ;;
+    --pages-only) mode=pages ;;
+    "") ;;
+    *) echo "usage: $0 [--dev|--pages-only]" >&2; exit 2 ;;
+esac
 
 PKG=site/pkg
 WASM="$PKG/sc_wasm_bg.wasm"
+OUT="${SITE_OUT:-_site}"
+BASE_URL="${SITE_BASE_URL:-http://localhost:8080/}"
 CACHE="${SWARMCHASE_WASM_OPT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/swarmchase-wasm-opt}"
-KEEP=20   # cached modules kept; older ones are pruned
+KEEP=20                 # cached modules kept; older ones are pruned
+BUDGET=$((1536 * 1024)) # bytes: the module every analysis page downloads
+
+python_bin() {
+    local p
+    for p in python3 python; do
+        if command -v "$p" >/dev/null 2>&1 && "$p" -c "" >/dev/null 2>&1; then
+            echo "$p"
+            return
+        fi
+    done
+    echo "[build-site] no python found" >&2
+    return 1
+}
 
 pack() {
-    wasm-pack build crates/sc-wasm --target web --out-dir ../../site/pkg --no-typescript "$@"
+    command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
+    CARGO_PROFILE_RELEASE_OPT_LEVEL=z \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+    CARGO_PROFILE_RELEASE_PANIC=abort \
+        wasm-pack build crates/sc-wasm --target web --out-dir ../../site/pkg --no-typescript "$@"
     rm -f "$PKG/.gitignore" "$PKG/package.json" "$PKG/README.md"
 }
 
@@ -79,47 +112,61 @@ sha256() {
     fi
 }
 
-if [[ "$mode" == --dev ]]; then
-    pack --dev
-    echo "site ready (dev build): serve ./site (e.g. python -m http.server -d site 8080)"
-    exit 0
-fi
-
-mapfile -t FLAGS < <(opt_flags)
-OPT="$(find_wasm_opt || true)"
-
-if [[ ${#FLAGS[@]} -eq 0 ]]; then
-    echo "[build-site] wasm-opt disabled in crates/sc-wasm/Cargo.toml; building unoptimised"
-    pack --release --no-opt
-elif [[ -z "$OPT" ]]; then
-    echo "[build-site] wasm-opt not found; letting wasm-pack optimise (uncached, downloads wasm-opt for next time)"
-    pack --release
-else
-    pack --release --no-opt
-    version="$("$OPT" --version | head -n1)"
-    key="$({ sha256 <"$WASM"; printf '%s\n' "${FLAGS[@]}" "$version"; } | sha256)"
-    mkdir -p "$CACHE"
-    hit="$CACHE/$key.wasm"
-    if [[ -s "$hit" ]]; then
-        echo "[build-site] wasm-opt cache hit ($key)"
-        cp "$hit" "$WASM"
-        touch "$hit"
+build_release_module() {
+    local -a FLAGS
+    mapfile -t FLAGS < <(opt_flags)
+    local OPT
+    OPT="$(find_wasm_opt || true)"
+    if [[ ${#FLAGS[@]} -eq 0 ]]; then
+        echo "[build-site] wasm-opt disabled in crates/sc-wasm/Cargo.toml; building unoptimised"
+        pack --release --no-opt
+    elif [[ -z "$OPT" ]]; then
+        echo "[build-site] wasm-opt not found; letting wasm-pack optimise (uncached, downloads wasm-opt for next time)"
+        pack --release
     else
-        echo "[build-site] wasm-opt ${FLAGS[*]} ($version); cache miss ($key)"
-        start=$SECONDS
-        "$OPT" "$WASM" -o "$WASM.opt" "${FLAGS[@]}"
-        mv "$WASM.opt" "$WASM"
-        # Write then rename, so an interrupted copy never becomes a cache hit.
-        cp "$WASM" "$hit.tmp.$$"
-        mv "$hit.tmp.$$" "$hit"
-        echo "[build-site] wasm-opt took $((SECONDS - start))s"
+        pack --release --no-opt
+        local version key hit start
+        version="$("$OPT" --version | head -n1)"
+        key="$({ sha256 <"$WASM"; printf '%s\n' "${FLAGS[@]}" "$version"; } | sha256)"
+        mkdir -p "$CACHE"
+        hit="$CACHE/$key.wasm"
+        if [[ -s "$hit" ]]; then
+            echo "[build-site] wasm-opt cache hit ($key)"
+            cp "$hit" "$WASM"
+            touch "$hit"
+        else
+            echo "[build-site] wasm-opt ${FLAGS[*]} ($version); cache miss ($key)"
+            start=$SECONDS
+            "$OPT" "$WASM" -o "$WASM.opt" "${FLAGS[@]}"
+            mv "$WASM.opt" "$WASM"
+            # Write then rename, so an interrupted copy never becomes a cache hit.
+            cp "$WASM" "$hit.tmp.$$"
+            mv "$hit.tmp.$$" "$hit"
+            echo "[build-site] wasm-opt took $((SECONDS - start))s"
+        fi
+        # Keep the newest $KEEP modules (a hit refreshes its mtime).
+        ls -1t "$CACHE"/*.wasm 2>/dev/null | tail -n +$((KEEP + 1)) | while IFS= read -r old; do
+            rm -f -- "$old"
+        done
     fi
-    # Keep the newest $KEEP modules (a hit refreshes its mtime).
-    ls -1t "$CACHE"/*.wasm 2>/dev/null | tail -n +$((KEEP + 1)) | while IFS= read -r old; do
-        rm -f -- "$old"
-    done
-fi
+    local size
+    size=$(wc -c <"$WASM" | tr -d ' ')
+    echo "[build-site] $WASM: $size bytes ($((size / 1024)) KiB; budget $((BUDGET / 1024)) KiB)"
+    if ((size > BUDGET)); then
+        echo "[build-site] the WASM module is over its size budget; trim it before deploying" >&2
+        exit 1
+    fi
+}
 
-size=$(wc -c <"$WASM" | tr -d ' ')
-echo "[build-site] $WASM: $size bytes ($((size / 1024)) KiB; advisory target < 1536 KiB)"
-echo "site ready: serve ./site (e.g. python -m http.server -d site 8080)"
+case "$mode" in
+    --release) build_release_module ;;
+    --dev) pack --dev ;;
+    pages) [[ -s "$WASM" ]] || echo "[build-site] warning: $WASM missing; the analysis pages will not load" ;;
+esac
+
+LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
+cargo run -q --profile release-test -p sc-publish --bin sc-site -- \
+    --out "$OUT" --base-url "$BASE_URL" --inputs-log "$LOG"
+"$(python_bin)" scripts/ci/check-site.py --built "$OUT" --inputs "$LOG"
+echo "site ready: serve ./$OUT (e.g. python -m http.server -d $OUT 8080)"
