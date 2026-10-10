@@ -54,9 +54,9 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`redact`](src/redact.rs) | Replaces secrets with `REDACTED-<hash>` at ingest. |
 | [`extract`](src/extract.rs) | URL unwrapping, indicator matching for one record, and `defang`. |
 | [`rules`](src/rules.rs) | Loading and compiling rule sets. |
-| [`analyze`](src/analyze.rs) | The pipeline: extract, score, link into clusters, time. |
+| [`analyze`](src/analyze/mod.rs) | The pipeline: extract, score, link into clusters (`link`), describe each cluster (`hints`), time. Clusters have a number (`C1`) and a stable `key`. |
 | [`chains`](src/chains.rs) | Probe chains: one client trying variant after variant of a request. |
-| [`timing`](src/timing.rs) | Cadence, bursts, fleet-wide pauses, hour-of-day profiles, date tags and shared pauses. |
+| [`timing`](src/timing/mod.rs) | Cadence, bursts and pauses (`cadence`), hour-of-day profiles (`rhythm`), date tags (`dates`) and shared pauses (`pauses`). |
 | [`fingerprint`](src/fingerprint.rs) | How a request was encoded, and header sets. |
 | [`paths`](src/paths.rs) | Path sets per host and fabricated-looking identifiers. |
 | [`dialect`](src/dialect.rs) | Payload dialect, shared dialects between clusters, repeated cut lengths. |
@@ -64,8 +64,8 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day. |
 | [`endpoints`](src/endpoints.rs) | Flagged activity grouped by target host. |
 | [`attribution`](src/attribution.rs) | The evidence ladder and who a report may name. |
-| [`report`](src/report.rs) | Markdown drafts and the public notice. |
-| [`notice`](src/notice.rs) | Notice files: front matter and dated updates. |
+| [`report`](src/report/mod.rs) | Markdown drafts and the public notice: per-audience wording (`audience`), cluster hint lines (`hints`), attribution and endpoints (`sections`). |
+| [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |
 | [`eval`](src/eval.rs) | Precision and recall against labelled records. |
 | [`securitytxt`](src/securitytxt.rs) | RFC 9116 `security.txt` parsing. |

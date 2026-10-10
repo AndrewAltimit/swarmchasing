@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/sc-core", "crates/sc-collect", "crates/swarmchase", "crates/sc-wasm"]
+members = ["crates/sc-core", "crates/sc-collect", "crates/sc-publish", "crates/swarmchase", "crates/sc-wasm"]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,6 +16,7 @@ repository = "https://github.com/AndrewAltimit/swarmchasing"
 # Workspace crates.
 sc-core = { path = "crates/sc-core" }
 sc-collect = { path = "crates/sc-collect" }
+sc-publish = { path = "crates/sc-publish" }
 
 # External crates.
 serde = { version = "1", features = ["derive"] }

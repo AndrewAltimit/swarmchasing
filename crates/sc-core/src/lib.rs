@@ -39,7 +39,6 @@ pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
     Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tier, fmt_ts, parse_ts,
 };
-pub use notice::{NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind};
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use recurrence::{RecurrenceOptions, Rerun, TargetRun, reruns};
 pub use redact::{redact_observation, redact_url};

@@ -28,12 +28,13 @@ use crate::evidence::{self, EvidenceCmd, OperatorEvidence, Scope};
 use crate::{InputArgs, load_rules, read_inputs, to_ndjson, watch};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
-pub use sc_core::NoticeStatus;
-use sc_core::notice::{NoticeFile, NoticeMeta, lint_public, write_notice};
+use sc_core::notice::lint_public;
 use sc_core::{
     Analysis, Audience, Claim, EndpointOptions, Evidence, LinkFeature, Observation, ReportOptions,
     Role, Tier, analyze, endpoints, fmt_ts, render_markdown, render_notice,
 };
+pub use sc_publish::NoticeStatus;
+use sc_publish::{NoticeFile, NoticeMeta, write_notice};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
