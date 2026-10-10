@@ -2,14 +2,15 @@
 //! numbers and stable keys.
 //!
 //! Records are joined by a shared linking feature (within a time window, and
-//! only while the feature is not common), by close timing against the same
-//! target with a rule in common, and by a probe chain. Everything else about
+//! only while the feature is not common), by close request or submit times
+//! against the same target with a rule in common, and by a probe chain. Everything else about
 //! a cluster is description ([`super::hints`]).
 
 use super::{Cluster, CommonFeature, ObsResult};
 use crate::chains::Chain;
 use crate::model::LinkFeature;
 use crate::rules::{Linking, Rules};
+use crate::timing::request_like;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// What linking found.
@@ -69,10 +70,14 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
         a.start.cmp(&b.start).then(a.feature.cmp(&b.feature))
     });
 
-    // Same target host, close in time, and sharing at least one rule.
+    // Same target host, close in time, and sharing at least one rule. Only
+    // request-like times count: two archive captures minutes apart say when
+    // a crawler saved them, not that one client sent them together.
     let mut by_host: HashMap<&str, Vec<usize>> = HashMap::new();
     for &i in flagged {
-        if let Some(h) = results[i].target_host.as_deref() {
+        if let Some(h) = results[i].target_host.as_deref()
+            && request_like(results[i].obs.ts_kind)
+        {
             by_host.entry(h).or_default().push(i);
         }
     }

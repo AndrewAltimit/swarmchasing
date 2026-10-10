@@ -489,6 +489,31 @@ mod tests {
     }
 
     #[test]
+    fn capture_times_never_link_by_timing() {
+        use crate::model::TsKind;
+        // Two records for one target a minute apart, sharing a rule, with
+        // nothing else in common.
+        let pair = |kind| {
+            let obs = [
+                "https://r.jina.ai/https://a.example/p?x=%7B%7Bhost%7D%7D",
+                "https://r.jina.ai/https://a.example/q?y=%7B%7Bname%7D%7D",
+            ]
+            .iter()
+            .enumerate()
+            .map(|(i, u)| Observation {
+                ts_kind: kind,
+                ..o(1_791_000_000 + 60 * i as i64, u)
+            })
+            .collect();
+            analyze(obs, &Rules::default_rules()).clusters.len()
+        };
+        assert_eq!(pair(TsKind::Request), 1);
+        assert_eq!(pair(TsKind::Submit), 1);
+        assert_eq!(pair(TsKind::Unknown), 1);
+        assert_eq!(pair(TsKind::Capture), 0);
+    }
+
+    #[test]
     fn chain_pace_is_not_read_from_capture_times() {
         use crate::model::TsKind;
         let chain = |kind| {
