@@ -1800,10 +1800,12 @@ fn notice_draft(
             e.id, e.org, e.id
         ));
     }
+    let mut lint = leak_check(root, &c, |r| {
+        lint_public(&format!("{}\n{}", n.meta.title, n.body), r)
+    })?;
+    lint.extend(notice.leaks);
     let review = NoticeReview {
-        lint: leak_check(root, &c, |r| {
-            lint_public(&format!("{}\n{}", n.meta.title, n.body), r)
-        })?,
+        lint,
         withheld,
         flags: notice.flags,
         unreviewed: c

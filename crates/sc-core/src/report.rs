@@ -79,6 +79,10 @@ pub struct Notice {
     pub withheld: Vec<String>,
     /// What could not be classified; withheld, but the admin decides.
     pub flags: Vec<String>,
+    /// Withheld values that still appear in the draft. Empty unless
+    /// something went wrong; the lines never repeat the values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leaks: Vec<String>,
 }
 
 fn ten() -> usize {
@@ -147,6 +151,7 @@ pub fn render_notice(a: &Analysis, opts: &ReportOptions) -> Notice {
     let mut view = PublicView::new(a, &opts.exposed_hosts);
     let markdown = render(a, &opts, Some(&mut view));
     Notice {
+        leaks: view.leaks(&markdown),
         markdown,
         withheld: view.withheld.into_iter().collect(),
         flags: view.flags.into_iter().collect(),

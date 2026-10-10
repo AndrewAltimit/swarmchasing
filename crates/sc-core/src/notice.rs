@@ -65,10 +65,30 @@ pub fn mask_emails(s: &str) -> String {
         .into_owned()
 }
 
+/// A pattern for `value` as it may be written in a URL: each character as
+/// itself, percent-encoded or double percent-encoded, a space also as `+`,
+/// ignoring case.
+fn written_forms(value: &str) -> Option<Regex> {
+    let mut p = String::from("(?i)");
+    for c in value.chars() {
+        let mut buf = [0u8; 4];
+        let lit = regex::escape(c.encode_utf8(&mut buf));
+        let bytes = c.encode_utf8(&mut buf).as_bytes();
+        let enc: String = bytes.iter().map(|b| format!("%{b:02x}")).collect();
+        let enc2: String = bytes.iter().map(|b| format!("%25{b:02x}")).collect();
+        let plus = if c == ' ' { r"|\+" } else { "" };
+        let _ = write!(p, "(?:{lit}|{enc}|{enc2}{plus})");
+    }
+    Regex::new(&p).ok()
+}
+
 /// Decides what a public notice may show, and remembers what it withheld.
 pub struct PublicView {
     kinds: HashMap<String, IndicatorKind>,
     exposed: BTreeSet<String>,
+    /// Values withheld from the output, so a finished text can be checked
+    /// for any that survived ([`PublicView::leaks`]). Never shown.
+    hidden: BTreeSet<String>,
     /// What was withheld, for the admin.
     pub withheld: BTreeSet<String>,
     /// What could not be classified (also withheld), for the admin.
@@ -89,6 +109,7 @@ impl PublicView {
                 .iter()
                 .map(|h| h.to_ascii_lowercase())
                 .collect(),
+            hidden: BTreeSet::new(),
             withheld: BTreeSet::new(),
             flags: BTreeSet::new(),
         }
@@ -109,6 +130,17 @@ impl PublicView {
 
     /// The value to show for a linking feature, or `None` to withhold it.
     fn feature_value<'f>(&mut self, f: &'f str) -> Option<&'f str> {
+        let shown = self.classify(f);
+        if shown.is_none() {
+            let value = feature_secret(f);
+            if !value.is_empty() {
+                self.hidden.insert(value.to_string());
+            }
+        }
+        shown
+    }
+
+    fn classify<'f>(&mut self, f: &'f str) -> Option<&'f str> {
         if let Some(rest) = f.strip_prefix("param:") {
             let (name, value) = rest.split_once('=').unwrap_or((rest, ""));
             if TAG_PARAMS.contains(&name) {
@@ -171,21 +203,50 @@ impl PublicView {
             if self.feature_value(f).is_some() {
                 continue;
             }
-            let value = f
-                .strip_prefix("param:")
-                .and_then(|p| p.split_once('=').map(|x| x.1))
-                .or_else(|| f.split_once(':').map(|x| x.1))
-                .unwrap_or("");
-            let lower = url.to_ascii_lowercase();
-            match lower.find(&value.to_ascii_lowercase()) {
-                Some(p) if !value.is_empty() && lower.len() == url.len() => {
-                    url.replace_range(p..p + value.len(), WITHHELD);
+            // Every occurrence, in whatever encoding it was written.
+            let value = feature_secret(f);
+            match written_forms(value) {
+                Some(re) if !value.is_empty() && re.is_match(&url) => {
+                    url = re.replace_all(&url, WITHHELD).into_owned();
                 }
                 _ => return None,
             }
         }
         Some(mask_emails(&url))
     }
+
+    /// Withheld values that survive in finished text, one line per value.
+    /// The lines name the problem, not the value.
+    pub fn leaks(&self, text: &str) -> Vec<String> {
+        let plain = refang(text);
+        self.hidden
+            .iter()
+            .filter(|v| written_forms(v).is_some_and(|re| re.is_match(&plain)))
+            .map(|v| {
+                format!(
+                    "a withheld linking value ({} chars) survives in the text",
+                    v.chars().count()
+                )
+            })
+            .collect()
+    }
+
+    /// [`lint_public`] plus [`PublicView::leaks`]: everything wrong with a
+    /// text this view produced.
+    pub fn lint(&self, text: &str, rules: &Rules) -> Vec<String> {
+        let mut out = lint_public(text, rules);
+        out.extend(self.leaks(text));
+        out
+    }
+}
+
+/// The identifying part of a linking feature: the parameter value of
+/// `param:<name>=<value>`, the matched text of `<rule>:<match>`.
+fn feature_secret(f: &str) -> &str {
+    f.strip_prefix("param:")
+        .and_then(|p| p.split_once('=').map(|x| x.1))
+        .or_else(|| f.split_once(':').map(|x| x.1))
+        .unwrap_or("")
 }
 
 /// Undo `defang` so the lint sees what a reader could rebuild.
@@ -793,6 +854,43 @@ mod tests {
             mask_emails("write to x9q2@mail.tm or a%40b.example"),
             "write to [withheld]@mail.tm or [withheld]%40b.example"
         );
+    }
+
+    #[test]
+    fn view_withholds_every_occurrence_in_any_encoding() {
+        let rules = Rules::default_rules();
+        let a = analyze(
+            vec![
+                obs(
+                    "twice",
+                    1_791_000_000,
+                    "https://r.jina.ai/https://portal.example.gov/q?id=1%20UNION%20SELECT%201&tok=Abc123xyz&next=/x?tok=abc123XYZ",
+                ),
+                obs(
+                    "encoded",
+                    1_791_000_030,
+                    "https://r.jina.ai/https://portal.example.gov/q?id=2%20UNION%20SELECT%201&tok=a%2Fb+c%3D1&back=a%252Fb%2520c%253D1&again=A%2fB+C%3d1",
+                ),
+            ],
+            &rules,
+        );
+        let mut v = PublicView::new(&a, &[]);
+        let by = |id: &str| a.results.iter().find(|r| r.obs.id == id).unwrap();
+
+        let url = v.record_url(by("twice")).unwrap();
+        assert_eq!(url.matches(WITHHELD).count(), 2, "{url}");
+        assert!(!url.to_ascii_lowercase().contains("abc123xyz"), "{url}");
+
+        let url = v.record_url(by("encoded")).unwrap();
+        assert_eq!(url.matches(WITHHELD).count(), 3, "{url}");
+        assert!(!url.contains("2Fb") && !url.contains("2fB"), "{url}");
+
+        // A value that survives in finished text is a lint problem.
+        assert!(v.leaks(&url).is_empty(), "{:?}", v.leaks(&url));
+        let bad = format!("{url}\nsee hxxps://x[.]example/?t=ABC123XYZ");
+        assert_eq!(v.leaks(&bad).len(), 1, "{:?}", v.leaks(&bad));
+        assert_eq!(v.lint(&bad, &rules).len(), 1);
+        assert!(!v.leaks(&bad)[0].contains("ABC"), "names no value");
     }
 
     #[test]

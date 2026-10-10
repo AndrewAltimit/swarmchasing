@@ -437,7 +437,10 @@ fn main() -> Result<()> {
                 for f in &n.flags {
                     eprintln!("decide:   {f}");
                 }
-                for l in sc_core::notice::lint_public(&n.markdown, &Rules::default_rules()) {
+                for l in sc_core::notice::lint_public(&n.markdown, &Rules::default_rules())
+                    .iter()
+                    .chain(&n.leaks)
+                {
                     eprintln!("LEAK:     {l}");
                 }
                 write_out(out.as_deref(), &n.markdown)?;
