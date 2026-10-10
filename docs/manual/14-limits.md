@@ -38,7 +38,7 @@ A person who pastes a chatbot's answer into a scan form leaves the same Markdown
 
 ## FM-14.9 Stacking across a cluster
 
-A cluster's score sums distinct rules across its members, so a cluster of individually weak records can reach a tier no member reached. List the member tiers and rules so a reader can see how it got there, and check the links first ([FM-5.6](05-linking.md#fm-56-cluster-hygiene)): a false link also stacks false evidence.
+Summing weak rules across a cluster's members lets a large cluster of individually weak records reach a tier no member reached, so the tier never comes from a summed score. A cluster takes its strongest member's tier and rises one step only when at least two members at suggestive or above each carry an indicator kind the other lacks, excluding kinds ordinary clients also produce (relays, cache busters, self-identification, headers, outcomes). Even so, list the member tiers and rules so a reader can see how it got there, and check the links first ([FM-5.6](05-linking.md#fm-56-cluster-hygiene)): a false link also stacks false evidence.
 
 ## FM-14.10 Malformed URLs make bogus targets
 

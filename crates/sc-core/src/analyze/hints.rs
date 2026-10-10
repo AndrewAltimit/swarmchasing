@@ -4,11 +4,13 @@
 
 use super::{Cluster, ObsResult};
 use crate::fanout::FanRequest;
-use crate::model::{IndicatorKind, LinkFeature, Tier};
+use crate::model::{IndicatorKind, LinkFeature, Tactic, Tier};
 use crate::paths::PathStats;
 use crate::rules::Rules;
-use crate::timing::{Span, parse_date_tag, stale_dates, timing};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use crate::timing::{
+    Span, TimeBasis, parse_date_tag, request_like, rhythm_of, stale_dates, timing,
+};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// Unflagged requests by target host: the context path hints read around a
 /// cluster (a recon opening is rarely flagged itself).
@@ -29,7 +31,7 @@ pub(super) fn unflagged_by_host(results: &[ObsResult]) -> HashMap<&str, Vec<usiz
 pub(super) fn cluster(
     results: &[ObsResult],
     mut members: Vec<usize>,
-    feature_count: &HashMap<&LinkFeature, usize>,
+    joined: &HashSet<(usize, &LinkFeature)>,
     unflagged_by_host: &HashMap<&str, Vec<usize>>,
     rules: &Rules,
 ) -> Cluster {
@@ -37,19 +39,25 @@ pub(super) fn cluster(
     members.sort_by_key(|&i| results[i].obs.ts);
     let mut rules_seen: BTreeMap<String, usize> = BTreeMap::new();
     let mut kinds: BTreeMap<IndicatorKind, usize> = BTreeMap::new();
+    let mut tactics: BTreeMap<Tactic, usize> = BTreeMap::new();
+    let mut artifacts = 0;
     let mut hosts: BTreeMap<String, usize> = BTreeMap::new();
     let mut asns: BTreeMap<u32, usize> = BTreeMap::new();
     let mut uas: BTreeMap<String, usize> = BTreeMap::new();
     let mut encodings: BTreeMap<String, usize> = BTreeMap::new();
-    let mut feats: BTreeSet<LinkFeature> = BTreeSet::new();
-    let mut any_sig = false;
+    let mut header_sets: BTreeMap<String, usize> = BTreeMap::new();
+    let mut feats: BTreeMap<&LinkFeature, usize> = BTreeMap::new();
     for &i in &members {
         let r = &results[i];
-        any_sig |=
-            r.tier == Tier::Significant && r.hits.iter().any(|h| h.kind == IndicatorKind::Exploit);
         for h in &r.hits {
             *rules_seen.entry(h.rule_id.clone()).or_default() += 1;
             *kinds.entry(h.kind).or_default() += 1;
+            if let Some(t) = h.tactic {
+                *tactics.entry(t).or_default() += 1;
+            }
+        }
+        if r.hits.iter().any(|h| h.artifact) {
+            artifacts += 1;
         }
         if let Some(h) = &r.target_host {
             *hosts.entry(h.clone()).or_default() += 1;
@@ -64,34 +72,39 @@ pub(super) fn cluster(
         if enc.informative() {
             *encodings.entry(enc.style).or_default() += 1;
         }
-        for f in &r.features {
-            if feature_count.get(f).copied().unwrap_or(0) > 1 {
-                feats.insert(f.clone());
-            }
+        if let Some(h) = crate::fingerprint::header_set(&r.obs.headers) {
+            *header_sets.entry(h.hash).or_default() += 1;
+        }
+        for f in r.features.iter().filter(|f| joined.contains(&(i, *f))) {
+            *feats.entry(f).or_default() += 1;
         }
     }
     let score: i32 = rules_seen
         .keys()
-        .filter_map(|id| rules.compiled.iter().find(|r| &r.def.id == id))
-        .map(|r| r.def.weight)
+        .filter_map(|id| rules.rule(id))
+        .map(|r| r.weight)
         .sum();
-    let member_tier = members
-        .iter()
-        .map(|&i| results[i].tier)
-        .max()
-        .unwrap_or_default();
-    // Evidence that stacks across a linked cluster raises its tier.
-    let tier = if any_sig || score >= rules.set.thresholds.significant {
-        Tier::Significant
-    } else {
-        member_tier.max(if score >= rules.set.thresholds.suggestive {
-            Tier::Suggestive
-        } else {
-            Tier::Noise
-        })
-    };
+    let tier = cluster_tier(results, &members);
     let ts: Vec<i64> = members.iter().map(|&i| results[i].obs.ts).collect();
+    let timed = || {
+        members
+            .iter()
+            .map(|&i| &results[i].obs)
+            .filter(|o| o.ts > 0)
+    };
+    let time_basis = TimeBasis::of(timed().map(|o| o.ts_kind));
     let mut t = timing(&ts, cfg);
+    // Per cluster only the hours with records; a long, sparse cluster would
+    // otherwise carry thousands of empty hours.
+    t.hourly.retain(|&(_, n)| n > 0);
+    // The hour-of-day profile reads request times; capture times are when
+    // an archive saved a URL.
+    t.rhythm = rhythm_of(
+        &timed()
+            .filter(|o| request_like(o.ts_kind))
+            .map(|o| o.ts)
+            .collect::<Vec<_>>(),
+    );
     t.stale_dates = stale_dates(
         &members
             .iter()
@@ -111,9 +124,9 @@ pub(super) fn cluster(
         results,
         &members,
         unflagged_by_host,
-        t.start,
-        t.end,
+        (t.start, t.end),
         cfg.window_secs,
+        &rules.set.paths,
     );
     let dialect = crate::dialect::dialect(
         &members
@@ -127,45 +140,107 @@ pub(super) fn cluster(
             .map(|&i| {
                 let r = &results[i];
                 FanRequest {
-                    ts: r.obs.ts,
+                    ts: if request_like(r.obs.ts_kind) {
+                        r.obs.ts
+                    } else {
+                        0
+                    },
                     host: r.target_host.clone(),
                     path: crate::paths::normalize_path(target_text(r)),
                 }
             })
             .collect::<Vec<_>>(),
+        &rules.set.fanout,
     );
     let cut_lengths = crate::dialect::cut_lengths(
         &members
             .iter()
             .map(|&i| {
                 let r = &results[i];
-                let fired = r.hits.iter().any(|h| h.rule_id == TRUNCATED_RULE);
+                let fired = r
+                    .hits
+                    .iter()
+                    .any(|h| h.rule_id == rules.set.cut_lengths.rule);
                 (r.obs.url.as_str(), fired)
             })
             .collect::<Vec<_>>(),
+        &rules.set.cut_lengths,
     );
     Cluster {
         id: String::new(),
         key: String::new(),
         start: t.start,
         end: t.end,
+        time_basis,
         members,
         tier,
         score,
         rules: rules_seen,
         kinds,
+        tactics,
+        artifacts,
         target_hosts: hosts,
         asns,
         user_agents: uas,
         encodings,
+        header_sets,
         paths,
         dialect,
         fanout,
         cut_lengths,
-        link_features: feats.into_iter().collect(),
+        link_features: feats
+            .into_iter()
+            .filter(|&(_, n)| n > 1)
+            .map(|(f, _)| f.clone())
+            .collect(),
         runs,
         timing: t,
     }
+}
+
+/// A cluster's tier: its strongest member's, raised one step (suggestive to
+/// significant) only by corroboration: two suggestive-or-above members that
+/// each carry an evidence kind the other lacks. Context kinds (relay, cache
+/// buster, self-identification, header, outcome), which ordinary clients
+/// produce too, do not count. Weak rules collected across many members never
+/// add up to a higher tier.
+pub(super) fn cluster_tier(results: &[ObsResult], members: &[usize]) -> Tier {
+    let top = members
+        .iter()
+        .map(|&i| results[i].tier)
+        .max()
+        .unwrap_or_default();
+    if top != Tier::Suggestive {
+        return top;
+    }
+    let kind_sets: BTreeSet<BTreeSet<IndicatorKind>> = members
+        .iter()
+        .map(|&i| &results[i])
+        .filter(|r| r.tier >= Tier::Suggestive)
+        .map(|r| {
+            r.hits
+                .iter()
+                .map(|h| h.kind)
+                .filter(|&k| !is_context_kind(k))
+                .collect()
+        })
+        .collect();
+    let corroborated = kind_sets
+        .iter()
+        .any(|a| kind_sets.iter().any(|b| !a.is_subset(b) && !b.is_subset(a)));
+    if corroborated { Tier::Significant } else { top }
+}
+
+/// Kinds that describe how a request was sent rather than what it did.
+fn is_context_kind(k: IndicatorKind) -> bool {
+    matches!(
+        k,
+        IndicatorKind::Relay
+            | IndicatorKind::CacheBuster
+            | IndicatorKind::SelfId
+            | IndicatorKind::Header
+            | IndicatorKind::Outcome
+    )
 }
 
 pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
@@ -188,12 +263,9 @@ pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
     runs
 }
 
-/// The rule whose hit marks a URL as cut off.
-const TRUNCATED_RULE: &str = "marker.truncated_output";
-
 /// The request on the target host: the layer naming that host, else the
 /// submitted URL.
-pub(super) fn target_text(r: &ObsResult) -> &str {
+pub(crate) fn target_text(r: &ObsResult) -> &str {
     r.target_host
         .as_deref()
         .and_then(|host| {
@@ -225,9 +297,9 @@ fn path_stats(
     results: &[ObsResult],
     members: &[usize],
     unflagged_by_host: &HashMap<&str, Vec<usize>>,
-    start: i64,
-    end: i64,
+    (start, end): (i64, i64),
     window: i64,
+    opts: &crate::paths::PathOptions,
 ) -> PathStats {
     use crate::paths::*;
     let mut idxs: BTreeSet<usize> = members.iter().copied().collect();
@@ -260,8 +332,8 @@ fn path_stats(
         .collect();
 
     let mut stats = PathStats {
-        preambles: shared_preambles(&reqs, PREAMBLE_LEN, MIN_HOSTS),
-        shared_unusual_sets: shared_unusual_sets(&reqs, MIN_JACCARD, MIN_PATHS, MIN_HOSTS),
+        preambles: shared_preambles(&reqs, opts),
+        shared_unusual_sets: shared_unusual_sets(&reqs, opts),
         ..Default::default()
     };
     for &i in members {
