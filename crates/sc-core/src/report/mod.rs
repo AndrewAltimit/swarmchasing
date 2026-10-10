@@ -1,53 +1,32 @@
 //! Disclosure drafts. Every report is a *draft* for a human to verify.
+//!
+//! `audience` holds the wording that differs per reader, `hints` the
+//! one-line cluster hints, `sections` attribution and the endpoint table;
+//! this module selects the clusters and lays the report out.
+
+mod audience;
+mod hints;
+mod sections;
+
+pub use audience::Audience;
+
+use hints::{cut_line, dialect_line, fanout_line, rhythm_line, stale_dates_line};
+use sections::{attribution_section, endpoint_table};
 
 use crate::analyze::{Analysis, Cluster};
-use crate::attribution::{Claim, Evidence, Role, attribute, merge};
-use crate::dialect::{CutGroup, CutLengths, Dialect};
-use crate::endpoints::{EndpointOptions, EndpointView, endpoints};
-use crate::extract::defang;
-use crate::fanout::FanOut;
-use crate::model::{IndicatorKind, Tier, fmt_ts, truncate};
+use crate::attribution::{Claim, Evidence, attribute, merge};
+use crate::extract::{defang, defang_host};
+use crate::model::{IndicatorKind, Tier, fmt_ts, top_counts, truncate};
 use crate::notice::PublicView;
-use crate::timing::{Rhythm, RhythmVerdict, STALE_AGREE_SHARE, STALE_MIN_DAYS, StaleDates};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::Write;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum Audience {
-    /// The AI developer whose agents appear to be responsible.
-    Provider,
-    /// The operator of a targeted or compromised system.
-    Affected,
-    /// Our own case notes.
-    #[default]
-    Internal,
-    /// The public notice: withholds callback channels, credential-like
-    /// identifiers and attack details for compromised endpoints.
-    Public,
-}
-
-impl std::str::FromStr for Audience {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, String> {
-        match s.to_ascii_lowercase().as_str() {
-            "provider" => Ok(Self::Provider),
-            "affected" | "victim" | "operator" => Ok(Self::Affected),
-            "internal" => Ok(Self::Internal),
-            "public" | "notice" => Ok(Self::Public),
-            _ => Err(format!(
-                "unknown audience `{s}` (provider|affected|internal|public)"
-            )),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportOptions {
     #[serde(default)]
     pub audience: Audience,
-    /// Cluster id (`C1`); `None` = every non-noise cluster.
+    /// Cluster id (`C1`) or key (`k-3f9a2c1b`); `None` = every non-noise cluster.
     #[serde(default)]
     pub cluster: Option<String>,
     #[serde(default)]
@@ -79,6 +58,10 @@ pub struct Notice {
     pub withheld: Vec<String>,
     /// What could not be classified; withheld, but the admin decides.
     pub flags: Vec<String>,
+    /// Withheld values that still appear in the draft. Empty unless
+    /// something went wrong; the lines never repeat the values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leaks: Vec<String>,
 }
 
 fn ten() -> usize {
@@ -116,13 +99,6 @@ fn kind_label(k: IndicatorKind) -> &'static str {
     }
 }
 
-fn top<K: ToString + Clone>(m: &BTreeMap<K, usize>, n: usize) -> Vec<(String, usize)> {
-    let mut v: Vec<(String, usize)> = m.iter().map(|(k, c)| (k.to_string(), *c)).collect();
-    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    v.truncate(n);
-    v
-}
-
 fn dur(secs: i64) -> String {
     match secs {
         s if s < 120 => format!("{s}s"),
@@ -147,6 +123,7 @@ pub fn render_notice(a: &Analysis, opts: &ReportOptions) -> Notice {
     let mut view = PublicView::new(a, &opts.exposed_hosts);
     let markdown = render(a, &opts, Some(&mut view));
     Notice {
+        leaks: view.leaks(&markdown),
         markdown,
         withheld: view.withheld.into_iter().collect(),
         flags: view.flags.into_iter().collect(),
@@ -155,20 +132,11 @@ pub fn render_notice(a: &Analysis, opts: &ReportOptions) -> Notice {
 
 fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>) -> String {
     let clusters: Vec<&Cluster> = match &opts.cluster {
-        Some(id) => a
-            .clusters
-            .iter()
-            .filter(|c| c.id.eq_ignore_ascii_case(id))
-            .collect(),
+        Some(id) => a.clusters.iter().filter(|c| c.matches(id)).collect(),
         None => a.clusters.iter().filter(|c| c.tier > Tier::Noise).collect(),
     };
     let mut s = String::new();
-    let title = match opts.audience {
-        Audience::Provider => "Report of suspected misaligned agent activity",
-        Audience::Affected => "Notice: automated agent activity targeting your systems",
-        Audience::Internal => "Case notes: agent activity",
-        Audience::Public => "Public notice: suspected misaligned agent activity",
-    };
+    let title = audience::title(opts.audience);
     let _ = writeln!(s, "# {title}\n");
     let _ = writeln!(
         s,
@@ -216,7 +184,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             *kinds.entry(*k).or_default() += n;
         }
     }
-    let host_list: Vec<String> = top(&hosts, 5)
+    let host_list: Vec<String> = top_counts(&hosts, 5)
         .into_iter()
         .map(|(h, n)| {
             format!(
@@ -225,40 +193,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             )
         })
         .collect();
-    let _ = match opts.audience {
-        Audience::Provider => writeln!(
-            s,
-            "We observed automated activity consistent with AI agents operating with little or no human oversight. \
-             Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. \
-             Targets included {}.",
-            if host_list.is_empty() {
-                "unidentified hosts".into()
-            } else {
-                host_list.join(", ")
-            }
-        ),
-        Audience::Affected => writeln!(
-            s,
-            "Public scan and archive records show automated agents sending requests to systems we believe you operate ({}). \
-             We are sharing this so you can check your own logs. We have not confirmed whether any request succeeded.",
-            if host_list.is_empty() {
-                "see below".into()
-            } else {
-                host_list.join(", ")
-            }
-        ),
-        Audience::Internal => writeln!(s, "Targets: {}.", host_list.join(", ")),
-        Audience::Public => writeln!(
-            s,
-            "Public scan and archive records show automated activity consistent with AI agents operating with little or no human oversight, aimed at {}. \
-             Reports went to the AI provider and the affected operators when this notice was published. We have not confirmed whether any request succeeded.",
-            if host_list.is_empty() {
-                "unidentified hosts".into()
-            } else {
-                host_list.join(", ")
-            }
-        ),
-    };
+    let _ = writeln!(s, "{}", audience::summary(opts.audience, &host_list));
     if kinds.contains_key(&IndicatorKind::Exploit) {
         let _ = writeln!(
             s,
@@ -337,7 +272,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 "  - iterative probing: {} variants of {} on `{}{}` over {} (median gap {}, {}){}{retries}",
                 ch.variants,
                 varied.join(", "),
-                ch.host.replace('.', "[.]"),
+                defang_host(&ch.host),
                 truncate(&ch.path, 60),
                 dur(ch.end - ch.start),
                 dur(ch.median_gap_secs),
@@ -362,7 +297,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 .take(5)
                 .map(|f| match view.as_deref_mut() {
                     Some(v) => v.feature(f),
-                    None => f.clone(),
+                    None => f.to_string(),
                 })
                 .map(|f| format!("`{}`", defang(&truncate(&f, 90))))
                 .collect();
@@ -424,22 +359,30 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             let _ = writeln!(s, "  - {line}");
         }
     }
-    for sp in &a.shared_pauses {
+    // A pair hint names both clusters. Outside case notes it appears only
+    // when the report covers both, so a report on one cluster never names
+    // another (which may be someone else's).
+    let selected = |id: &str| clusters.iter().any(|c| c.id == id);
+    let pair_shown = |x: &str, y: &str| {
+        if opts.audience == Audience::Internal {
+            selected(x) || selected(y)
+        } else {
+            selected(x) && selected(y)
+        }
+    };
+    for sp in a.shared_pauses.iter().filter(|sp| pair_shown(&sp.a, &sp.b)) {
         let _ = writeln!(
             s,
             "\n**{}** and **{}** went quiet together: {}. Their records share no identifier; a link to check, not a merge.",
             sp.a, sp.b, sp.reason
         );
     }
-    for p in &a.dialect_pairs {
+    for p in a.dialect_pairs.iter().filter(|p| pair_shown(&p.a, &p.b)) {
         let pair: Vec<&Cluster> = a
             .clusters
             .iter()
             .filter(|c| c.id == p.a || c.id == p.b)
             .collect();
-        if !pair.iter().any(|c| clusters.iter().any(|x| x.id == c.id)) {
-            continue;
-        }
         let list = if pair.iter().any(|c| touches_exposed(view.as_deref(), c)) {
             String::new()
         } else {
@@ -505,10 +448,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                     s,
                     "1. {} — `{}` — request withheld from the public notice (sent to the affected parties)",
                     fmt_ts(r.obs.ts),
-                    r.target_host
-                        .as_deref()
-                        .unwrap_or("unknown host")
-                        .replace('.', "[.]")
+                    defang_host(r.target_host.as_deref().unwrap_or("unknown host"))
                 );
             }
         }
@@ -543,31 +483,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     let _ = writeln!(s);
 
     let _ = writeln!(s, "## Requested action\n");
-    let _ = match opts.audience {
-        Audience::Provider => writeln!(
-            s,
-            "- Check whether these patterns match agents or sandboxes on your platform during the window above.\n\
-             - If they do, stop the runs and review why the agents chose to probe or circumvent access controls.\n\
-             - Let us know whether you can confirm or rule out involvement, so the public record can be corrected."
-        ),
-        Audience::Affected => writeln!(
-            s,
-            "- Check your access logs for the window above and the parameters listed.\n\
-             - Treat any request carrying attack payloads as an intrusion attempt and check whether it was handled safely.\n\
-             - Rotate any credentials or API keys issued to throwaway accounts during this window.\n\
-             - Contact us with questions; we will share raw record links on request."
-        ),
-        Audience::Internal => writeln!(
-            s,
-            "- [ ] verify records\n- [ ] identify contacts (`swarmchase contact <domain>`)\n- [ ] send provider + affected notices"
-        ),
-        Audience::Public => writeln!(
-            s,
-            "- If you operate a listed host, check your access logs for the window above and the indicators listed, and contact us for the full report.\n\
-             - If you run an agent platform, check whether these patterns match your users' agents.\n\
-             - If anything here is wrong, tell us: corrections are published on this page with their date."
-        ),
-    };
+    let _ = writeln!(s, "{}", audience::requested_action(opts.audience));
     s
 }
 
@@ -576,239 +492,14 @@ fn touches_exposed(view: Option<&PublicView>, c: &Cluster) -> bool {
     view.is_some_and(|v| c.target_hosts.keys().any(|h| v.exposed(h)))
 }
 
-/// The cluster's canonical test payloads, or nothing for fewer than two
-/// records (one person pasting one payload is no habit).
-fn dialect_line(d: &Dialect) -> Option<String> {
-    if d.records < 2 {
-        return None;
-    }
-    let fams: Vec<String> = d
-        .families()
-        .into_iter()
-        .map(|(fam, vs)| {
-            let vs: Vec<String> = vs.iter().map(|(v, n)| format!("{v} ×{n}")).collect();
-            format!("{fam} ({})", vs.join(", "))
-        })
-        .collect();
-    let order = if d.first_seen.len() > 1 {
-        let shown: Vec<&str> = d.first_seen.iter().take(8).map(String::as_str).collect();
-        format!("; first seen {}", shown.join(" → "))
-    } else {
-        String::new()
-    };
-    Some(format!(
-        "payload dialect `{}` over {} records: {}{order}. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own",
-        d.signature,
-        d.records,
-        fams.join("; ")
-    ))
-}
-
-/// The modal batch width, when one width holds for most batches.
-fn fanout_line(f: &FanOut) -> Option<String> {
-    let w = f.modal_width?;
-    let widths: Vec<String> = f.widths.iter().map(|(w, n)| format!("{w}×{n}")).collect();
-    Some(format!(
-        "parallel fan-out: {} of {} one-second batches were {w} alike requests wide (width×batches: {}), like an agent issuing tool calls in parallel; a scanner submitting a list in bulk looks the same (a hint, not evidence)",
-        f.widths.get(&w).copied().unwrap_or(0),
-        f.batches,
-        widths.join(", ")
-    ))
-}
-
-/// Truncated URLs cut at nearly one length.
-fn cut_line(c: &CutLengths) -> Option<String> {
-    let span = |g: &CutGroup| {
-        if g.min == g.max {
-            format!("{}", g.min)
-        } else {
-            format!("{}–{}", g.min, g.max)
-        }
-    };
-    let mut parts = Vec::new();
-    if let Some(g) = &c.url {
-        parts.push(format!(
-            "{} of {} truncated URLs were cut at {} characters",
-            g.records,
-            c.truncated,
-            span(g)
-        ));
-    }
-    if let Some(g) = &c.value {
-        parts.push(format!(
-            "{} of {} cut parameter values were {} characters long",
-            g.records,
-            c.truncated,
-            span(g)
-        ));
-    }
-    if parts.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "cut lengths: {}, consistent with a model or tool output limit, not evidence on its own (rule out the source's own display limit first)",
-        parts.join("; ")
-    ))
-}
-
-/// The hour-of-day profile as a hint, or nothing when there is too little to say.
-/// Date tags far behind when they were seen, or nothing when they agree with
-/// the clock.
-fn stale_dates_line(d: &StaleDates) -> Option<String> {
-    if !d.consistent {
-        return None;
-    }
-    let named = match d.modal_date {
-        Some(date) if d.same_date_share >= STALE_AGREE_SHARE => {
-            format!(", {:.0}% naming {date}", d.same_date_share * 100.0)
-        }
-        _ => String::new(),
-    };
-    Some(format!(
-        "date tags: {} of {} name a day at least {STALE_MIN_DAYS} days before they were seen (median lag {} days{named}), like a model with no clock writing the date it believes is today (a hint, not evidence)",
-        d.behind,
-        d.tags,
-        d.median_lag_days.unwrap_or(0)
-    ))
-}
-
-fn rhythm_line(r: &Rhythm) -> Option<String> {
-    let over = format!(
-        "over {} days (hour-of-day entropy {:.2}, longest idle {})",
-        r.days,
-        r.entropy,
-        dur((r.longest_idle_hours * 3600.0) as i64)
-    );
-    Some(match r.verdict {
-        RhythmVerdict::TooShort => return None,
-        RhythmVerdict::RoundTheClock => format!(
-            "daily rhythm: active around the clock {over}; people sleep, automated fleets need not (a hint, not evidence)"
-        ),
-        RhythmVerdict::Daytime {
-            utc_offset_guess,
-            start_hour,
-            hours,
-        } => format!(
-            "daily rhythm: active {start_hour:02}:00–{:02}:00 UTC {over}, like a working day near UTC{utc_offset_guess:+} (a hint, not evidence of where the operator is)",
-            (start_hour as u32 + hours as u32) % 24
-        ),
-        RhythmVerdict::Unclear => format!("daily rhythm: no clear pattern {over}"),
-    })
-}
-
-/// Who is behind the clusters, each claim with the evidence it rests on.
-/// Case notes show every claim; other audiences see a developer named only
-/// at or above `opts.min_named`.
-fn attribution_section(s: &mut String, claims: &[Claim], opts: &ReportOptions) {
-    if claims.is_empty() {
-        return;
-    }
-    let min = opts.min_named.max(Evidence::FLOOR);
-    let internal = opts.audience == Audience::Internal;
-    let _ = writeln!(s, "## Attribution\n");
-    let _ = writeln!(
-        s,
-        "Each claim names the strongest evidence it rests on. A developer is named only on evidence at least as strong as: {}.\n",
-        min.describe()
-    );
-    let mut withheld = 0;
-    for c in claims {
-        let detail = c.details.join("; ");
-        match c.role {
-            Role::Developer if c.nameable(min) => {
-                let _ = writeln!(
-                    s,
-                    "- **{}** (developer). Evidence: {}. {detail}.",
-                    c.party,
-                    c.evidence.describe()
-                );
-            }
-            Role::Developer if internal => {
-                let _ = writeln!(
-                    s,
-                    "- {} (developer, **not named outside case notes**). Evidence: {}. {detail}.",
-                    c.party,
-                    c.evidence.describe()
-                );
-            }
-            Role::Developer => withheld += 1,
-            Role::Host => {
-                let _ = writeln!(
-                    s,
-                    "- **{}** (hosting network). {detail}. A host is not necessarily the developer.",
-                    c.party
-                );
-            }
-        }
-    }
-    if withheld > 0 {
-        let _ = writeln!(
-            s,
-            "- Some requests name a model or vendor. That is not attribution: agents misreport who built them, and anyone can submit such a string to a public scanner."
-        );
-    }
-    let _ = writeln!(s);
-}
-
-/// Every flagged hit on the hosts these clusters touched, including hits
-/// outside the clusters: an operator checks its logs per host, not per cluster.
-fn endpoint_table(
-    s: &mut String,
-    a: &Analysis,
-    hosts: &BTreeMap<String, usize>,
-    mut view: Option<&mut PublicView>,
-) {
-    let views: Vec<EndpointView> = endpoints(a, &EndpointOptions::default())
-        .into_iter()
-        .filter(|v| hosts.contains_key(&v.host))
-        .collect();
-    if views.is_empty() {
-        return;
-    }
-    let _ = writeln!(s, "## Endpoints\n");
-    let _ = writeln!(
-        s,
-        "Every flagged request to each host, including requests outside the linked clusters. \"Ongoing\" means hit within 7 days of the newest record reviewed.\n"
-    );
-    let _ = writeln!(
-        s,
-        "| Host | Hits | First seen | Last seen | Status | Attack payloads |\n|---|---|---|---|---|---|"
-    );
-    for v in &views {
-        let exposed = view.as_deref().is_some_and(|p| p.exposed(&v.host));
-        if exposed && let Some(p) = view.as_deref_mut() {
-            p.note_exposed(&v.host);
-        }
-        let payloads = if exposed {
-            "withheld (endpoint compromised)".into()
-        } else if v.payloads {
-            v.payload_rules
-                .keys()
-                .map(|r| format!("`{r}`"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        } else {
-            "none seen".into()
-        };
-        let _ = writeln!(
-            s,
-            "| `{}` | {} | {} | {} | {} | {payloads} |",
-            v.host.replace('.', "[.]"),
-            v.hits,
-            fmt_ts(v.first_seen),
-            fmt_ts(v.last_seen),
-            v.activity.label()
-        );
-    }
-    let _ = writeln!(s);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::analyze::analyze;
+    use crate::attribution::Role;
     use crate::model::Observation;
     use crate::rules::Rules;
+    use crate::timing::SharedPause;
 
     #[test]
     fn renders() {
@@ -1016,5 +707,58 @@ mod tests {
         );
         assert_eq!(md.matches("payload dialect `").count(), 1, "{md}");
         assert!(md.contains("favour the same canonical test payloads: 4 shared variants, Jaccard"));
+    }
+
+    #[test]
+    fn single_cluster_reports_name_no_other_cluster() {
+        let mut obs = Vec::new();
+        for (tag, base) in [("zz9", 1_791_000_000), ("yy8", 1_791_600_000)] {
+            for (k, h) in ["d", "e", "f"].iter().enumerate() {
+                obs.push(Observation {
+                    ts: base + 300 * k as i64,
+                    url: format!(
+                        "https://r.jina.ai/https://{h}.example/item?uqtag={tag}&id=1'%20OR%201=1--&p=../../../etc/passwd"
+                    ),
+                    ..Default::default()
+                });
+            }
+        }
+        let mut a = analyze(obs, &Rules::default_rules());
+        assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters);
+        assert_eq!(a.dialect_pairs.len(), 1, "{:?}", a.dialect_pairs);
+        a.shared_pauses.push(SharedPause {
+            a: "C1".into(),
+            b: "C2".into(),
+            pauses: Vec::new(),
+            on_the_hour: 0,
+            expected: 0.001,
+            p_chance: 0.001,
+            reason: "2 pause(s) matched".into(),
+        });
+        for audience in [Audience::Provider, Audience::Affected, Audience::Public] {
+            let opts = ReportOptions {
+                audience,
+                cluster: Some("C1".into()),
+                ..Default::default()
+            };
+            let md = render_markdown(&a, &opts);
+            assert!(!md.contains("C2"), "{audience:?}: {md}");
+            assert!(!md.contains("went quiet together"), "{md}");
+            assert!(!md.contains("favour the same canonical"), "{md}");
+        }
+        // Case notes keep the lead; a report on both clusters names both.
+        let both = render_markdown(&a, &ReportOptions::default());
+        assert!(
+            both.contains("**C1** and **C2** went quiet together"),
+            "{both}"
+        );
+        let notes = render_markdown(
+            &a,
+            &ReportOptions {
+                cluster: Some("C1".into()),
+                ..Default::default()
+            },
+        );
+        assert!(notes.contains("went quiet together"), "{notes}");
     }
 }

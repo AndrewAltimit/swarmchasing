@@ -98,7 +98,7 @@ enum Cmd {
         /// provider | affected | internal | public
         #[arg(long, default_value = "internal")]
         audience: Audience,
-        /// Limit to one cluster (e.g. C1).
+        /// Limit to one cluster, by number (C1) or stable key (k-3f9a2c1b).
         #[arg(long)]
         cluster: Option<String>,
         #[arg(long)]
@@ -322,8 +322,9 @@ fn main() -> Result<()> {
                 let hosts: Vec<String> = top(&c.target_hosts, 3);
                 let rules: Vec<String> = top(&c.rules, 6);
                 println!(
-                    "{:<4} [{:<11}] {:>5} records  {} runs  {} → {}",
+                    "{:<4} {} [{:<11}] {:>5} records  {} runs  {} → {}",
                     c.id,
+                    c.key,
                     c.tier.label(),
                     c.members.len(),
                     c.runs.len(),
@@ -416,7 +417,7 @@ fn main() -> Result<()> {
             };
             let a = run_analysis(&input)?;
             if let Some(id) = &cluster
-                && !a.clusters.iter().any(|c| c.id.eq_ignore_ascii_case(id))
+                && a.cluster(id).is_none()
             {
                 bail!("no cluster `{id}` (run `swarmchase clusters` first)");
             }
@@ -437,7 +438,10 @@ fn main() -> Result<()> {
                 for f in &n.flags {
                     eprintln!("decide:   {f}");
                 }
-                for l in sc_core::notice::lint_public(&n.markdown, &Rules::default_rules()) {
+                for l in sc_core::notice::lint_public(&n.markdown, &Rules::default_rules())
+                    .iter()
+                    .chain(&n.leaks)
+                {
                     eprintln!("LEAK:     {l}");
                 }
                 write_out(out.as_deref(), &n.markdown)?;
@@ -918,10 +922,8 @@ fn print_summary(a: &Analysis) {
 }
 
 fn top<K: ToString>(m: &std::collections::BTreeMap<K, usize>, n: usize) -> Vec<String> {
-    let mut v: Vec<(String, usize)> = m.iter().map(|(k, c)| (k.to_string(), *c)).collect();
-    v.sort_by_key(|x| std::cmp::Reverse(x.1));
-    v.into_iter()
-        .take(n)
+    sc_core::top_counts(m, n)
+        .into_iter()
         .map(|(k, c)| format!("{k}×{c}"))
         .collect()
 }

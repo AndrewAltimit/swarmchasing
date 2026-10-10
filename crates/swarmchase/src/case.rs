@@ -28,12 +28,13 @@ use crate::evidence::{self, EvidenceCmd, OperatorEvidence, Scope};
 use crate::{InputArgs, load_rules, read_inputs, to_ndjson, watch};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
-pub use sc_core::NoticeStatus;
-use sc_core::notice::{NoticeFile, NoticeMeta, lint_public, write_notice};
+use sc_core::notice::lint_public;
 use sc_core::{
-    Analysis, Audience, Claim, EndpointOptions, Evidence, Observation, ReportOptions, Role, Tier,
-    analyze, endpoints, fmt_ts, render_markdown, render_notice,
+    Analysis, Audience, Claim, EndpointOptions, Evidence, LinkFeature, Observation, ReportOptions,
+    Role, Tier, analyze, endpoints, fmt_ts, render_markdown, render_notice,
 };
+pub use sc_publish::NoticeStatus;
+use sc_publish::{NoticeFile, NoticeMeta, write_notice};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -204,7 +205,8 @@ pub struct Selection {
     input: Vec<PathBuf>,
     #[arg(long, default_value_t = 30)]
     days: i64,
-    /// Clusters to take, as numbered by this analysis (see `swarmchase clusters`).
+    /// Clusters to take, by number in this analysis (C1) or stable key
+    /// (k-3f9a2c1b); `swarmchase clusters` lists both.
     #[arg(long = "cluster")]
     clusters: Vec<String>,
     /// Individual records to take, by ID.
@@ -801,9 +803,7 @@ fn pick(
     let mut idx = BTreeSet::new();
     for id in clusters {
         let c = a
-            .clusters
-            .iter()
-            .find(|c| c.id.eq_ignore_ascii_case(id))
+            .cluster(id)
             .with_context(|| format!("no cluster `{id}` in this analysis"))?;
         idx.extend(c.members.iter().copied());
     }
@@ -979,7 +979,7 @@ fn run_evidence(root: &Path, cmd: EvidenceCmd, today: &str) -> Result<()> {
                     "{}  {}  {}  received {}  {}/{} records  sha256 {}  {}",
                     e.id,
                     e.org,
-                    e.host.replace('.', "[.]"),
+                    sc_core::defang_host(&e.host),
                     e.received,
                     e.kept,
                     e.lines,
@@ -1216,7 +1216,7 @@ pub(crate) fn tier_changes(
 /// agent markers) and the endpoints it hit, as its pinned rules extract them.
 pub(crate) struct CaseIndicators {
     /// Linking feature -> what it names (see [`crate::stix::feature_kind`]).
-    pub features: BTreeMap<String, &'static str>,
+    pub features: BTreeMap<LinkFeature, &'static str>,
     /// Endpoints, except those classified as not affected.
     pub endpoints: BTreeSet<String>,
     /// The case's own records, which never count as new activity.
@@ -1241,9 +1241,11 @@ impl CaseIndicators {
             .iter()
             .filter_map(|f| {
                 let what = self.features.get(f)?;
-                let value = f.strip_prefix("param:").unwrap_or(f);
-                let value = value.split_once(':').map_or(value, |(_, v)| v);
-                Some(format!("{what} {value}"))
+                let value = match f {
+                    LinkFeature::Param { .. } => f.to_string(),
+                    LinkFeature::Rule { value, .. } => value.clone(),
+                };
+                Some(format!("{what} {}", value.trim_start_matches("param:")))
             })
             .collect();
         if let Some(h) = x.target_host.filter(|h| self.endpoints.contains(h)) {
@@ -1558,7 +1560,7 @@ fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> {
             out,
             "  {:<12} {:<40} {}{}",
             e.state.label(),
-            e.host.replace('.', "[.]"),
+            sc_core::defang_host(&e.host),
             v.map(|v| format!(
                 "{} hits, last {}, {}{}",
                 v.hits,
@@ -1603,7 +1605,7 @@ fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> {
                 "  {:<4} {} ({}), received {}, {} of {} records kept — {}",
                 e.id,
                 e.org,
-                e.host.replace('.', "[.]"),
+                sc_core::defang_host(&e.host),
                 e.received,
                 e.kept,
                 e.lines,
@@ -1800,10 +1802,12 @@ fn notice_draft(
             e.id, e.org, e.id
         ));
     }
+    let mut lint = leak_check(root, &c, |r| {
+        lint_public(&format!("{}\n{}", n.meta.title, n.body), r)
+    })?;
+    lint.extend(notice.leaks);
     let review = NoticeReview {
-        lint: leak_check(root, &c, |r| {
-            lint_public(&format!("{}\n{}", n.meta.title, n.body), r)
-        })?,
+        lint,
         withheld,
         flags: notice.flags,
         unreviewed: c

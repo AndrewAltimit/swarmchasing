@@ -154,13 +154,12 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
             }
         }
     }
-    // Networks the requests came from. On a scan-service record the ASN is
-    // where the scanner reached the submitted URL (the target or a relay), so
-    // it says nothing about who sent the request and is left out.
+    // Networks the requests came from: the client's `asn`. A target's network
+    // (`target_asn`, where a scan service reached the URL) says nothing about
+    // who sent the request.
     let mut sent_from: BTreeMap<u32, usize> = BTreeMap::new();
     for &m in &c.members {
-        let o = &a.results[m].obs;
-        if let Some(asn) = o.asn.filter(|_| o.source != crate::urlquery::SOURCE) {
+        if let Some(asn) = a.results[m].obs.asn {
             *sent_from.entry(asn).or_default() += 1;
         }
     }
@@ -257,6 +256,8 @@ mod tests {
                 asn,
                 ..Default::default()
             })
+            // As stored and read back, the way every record reaches analysis.
+            .map(|o| serde_json::from_value(serde_json::to_value(o).unwrap()).unwrap())
             .collect();
         let a = analyze(obs, &Rules::default_rules());
         assert_eq!(a.clusters.len(), 1, "fixture should form one cluster");
@@ -315,6 +316,10 @@ mod tests {
             (dev.party.as_str(), dev.evidence),
             ("Tencent", Evidence::SelfId)
         );
+        // A stored urlquery record's `asn` was always the target's.
+        let o = &a.results[a.clusters[c].members[0]].obs;
+        assert_eq!((o.asn, o.target_asn), (None, Some(132203)));
+        assert_eq!(o.ts_kind, crate::model::TsKind::Submit);
     }
 
     #[test]

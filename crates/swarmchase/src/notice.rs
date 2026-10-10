@@ -11,9 +11,9 @@ use crate::case;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_core::Rules;
-use sc_core::notice::{
-    NoticeFile, NoticePage, NoticeStatus, NoticeUpdate, UpdateKind, atom_feed, check_notice,
-    index_entry, md_blocks, parse_notice, write_notice,
+use sc_publish::{
+    NoticeFile, NoticeStatus, NoticeUpdate, UpdateKind, build_site, check_notice, parse_notice,
+    strip_draft_banner, write_notice,
 };
 use std::path::{Path, PathBuf};
 
@@ -175,7 +175,7 @@ pub fn run(args: NoticeArgs) -> Result<()> {
 }
 
 fn notice_path(dir: &Path, id: &str) -> Result<PathBuf> {
-    if !sc_core::notice::is_slug(id) {
+    if !sc_publish::is_slug(id) {
         bail!("notice id `{id}` is not a slug");
     }
     Ok(dir.join(format!("{id}.md")))
@@ -226,26 +226,7 @@ fn lint_file(p: &Path, rules: &Rules) -> Vec<String> {
 }
 
 fn append(n: &mut NoticeFile, u: NoticeUpdate, status: Option<NoticeStatus>) -> Result<()> {
-    if let Some(last) = n.meta.updates.last()
-        && u.date < last.date
-    {
-        bail!("{} is before the last update ({})", u.date, last.date);
-    }
-    if u.kind == UpdateKind::Reply && u.from.is_none() {
-        bail!("a statement needs --from (who it is from)");
-    }
-    if u.kind == UpdateKind::Status && status.is_none() {
-        bail!("a status update needs --status");
-    }
-    if u.kind == UpdateKind::Published {
-        bail!("`published` is added by `notice add`");
-    }
-    if let Some(s) = status {
-        n.meta.status = s;
-    }
-    n.meta.updated = u.date.clone();
-    n.meta.updates.push(u);
-    Ok(())
+    n.append(u, status).map_err(anyhow::Error::msg)
 }
 
 /// Turn the case's reviewed draft into a notice file in `dir`.
@@ -317,25 +298,6 @@ fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result
     Ok(target)
 }
 
-fn strip_draft_banner(body: &str) -> String {
-    let mut out = String::new();
-    let mut skip_blank = false;
-    for line in body.lines() {
-        if line.starts_with("> **DRAFT**") {
-            skip_blank = true;
-            continue;
-        }
-        if skip_blank && line.trim().is_empty() {
-            skip_blank = false;
-            continue;
-        }
-        skip_blank = false;
-        out.push_str(line);
-        out.push('\n');
-    }
-    out
-}
-
 /// Write `index.json`, `<id>.json` and `feed.xml` into `out`. Refuses when
 /// any notice fails its check.
 fn build(dir: &Path, out: &Path, base_url: &str, rules: &Rules) -> Result<usize> {
@@ -347,31 +309,11 @@ fn build(dir: &Path, out: &Path, base_url: &str, rules: &Rules) -> Result<usize>
         }
         notices.push(read(&p)?);
     }
-    notices.sort_by(|a, b| {
-        b.meta
-            .updated
-            .cmp(&a.meta.updated)
-            .then(a.meta.id.cmp(&b.meta.id))
-    });
+    let files = build_site(&mut notices, base_url, rules).map_err(anyhow::Error::msg)?;
     std::fs::create_dir_all(out)?;
-    let index: Vec<_> = notices.iter().map(index_entry).collect();
-    std::fs::write(out.join("index.json"), serde_json::to_string(&index)?)?;
-    for n in &notices {
-        let page = NoticePage {
-            meta: &n.meta,
-            blocks: md_blocks(&n.body),
-        };
-        std::fs::write(
-            out.join(format!("{}.json", n.meta.id)),
-            serde_json::to_string(&page)?,
-        )?;
+    for (name, text) in files {
+        std::fs::write(out.join(name), text)?;
     }
-    let base = if base_url.ends_with('/') {
-        base_url.to_string()
-    } else {
-        format!("{base_url}/")
-    };
-    std::fs::write(out.join("feed.xml"), atom_feed(&notices, &base))?;
     Ok(notices.len())
 }
 

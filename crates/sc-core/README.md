@@ -26,7 +26,7 @@ for r in &analysis.results {
     // r.obs (the record), r.score, r.tier, r.hits (the rules that fired)
 }
 for c in &analysis.clusters {
-    // c.id ("C1"), c.members (indexes into results), timing and descriptive hints
+    // c.id ("C1"), c.key (stable), c.members (indexes into results), timing and hints
 }
 let draft = render_markdown(&analysis, &ReportOptions::default()); // an internal draft
 ```
@@ -35,11 +35,11 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 
 ## Concepts
 
-- **`Observation`**: one public record of a request: `id`, `source`, `ts`, `url`, and optionally IP, ASN, user agent, headers, status, final URL and a link to the public record.
+- **`Observation`**: one public record of a request: `id`, `source`, `ts` and what it is the time of (`ts_kind`: a request, an archive capture, a scan submission), `url`, and optionally IP, the client's ASN, the target's ASN, user agent, headers, status, final URL and a link to the public record. Records stored before `ts_kind` and `target_asn` are upgraded as they are read.
 - **Unwrapping**: relays (`r.jina.ai/https://…`, `*.translate.goog`), URL parameters, `data:` programs and base64 values are peeled into layers until the real target is found.
 - **Rules**: data-driven indicators from [`rules/default.toml`](../../rules/default.toml), each with a weight. A record's score is the sum of the rules it triggers.
 - **Tier**: `significant` (a rule marked significant fired, or score ≥ 6), `suggestive` (score ≥ 3) or `noise`.
-- **Cluster**: records linked by shared identifiers, close timing against the same target, or a probe chain. Clusters carry timing and descriptive hints (encoding style, payload dialect, fan-out width and others). The hints are shown in reports and never change a score or a link.
+- **Cluster**: records linked by shared identifiers (`LinkFeature`, serialised as `param:<name>=<value>` or `<rule>:<text>`), close timing against the same target, or a probe chain. Each has a number by strength (`C1`), which can change between runs, and a stable `key` (`k-` and 8 hex digits) that every cluster selector also accepts. Clusters carry timing and descriptive hints (encoding style, payload dialect, fan-out width and others). The hints are shown in reports and never change a score or a link.
 - **Report**: a Markdown draft for one audience (`provider`, `affected`, `internal`, `public`). The public audience withholds what notices must not carry. Every report is a draft for a person to check.
 
 [docs/methodology.md](../../docs/methodology.md) explains how records become tiers, clusters and claims, and the known limits.
@@ -48,24 +48,26 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 
 | Module | Covers |
 |---|---|
-| [`model`](src/model.rs) | `Observation`, `Tier`, `Hit` and timestamp helpers. |
+| [`model`](src/model.rs) | `Observation` (with what its timestamp is, `TsKind`, and the client's `asn` apart from the `target_asn`), `Tier`, `Hit`, `LinkFeature` and timestamp helpers. |
 | [`ingest`](src/ingest.rs) | NDJSON, JSON, CDX, urlquery, URL lists and access logs into `Observation`s; `--map` field mappings. |
 | [`urlquery`](src/urlquery.rs) | urlquery.net report records into `Observation`s. |
-| [`redact`](src/redact.rs) | Replaces secrets with `REDACTED-<hash>` at ingest. |
+| [`capture`](src/capture.rs) | Wayback and Arquivo.pt captures into `Observation`s, with one id however they arrive. |
+| [`redact`](src/redact.rs) | Replaces secrets with `REDACTED-<hash>` at ingest, and in every layer unwrapping decodes. |
 | [`extract`](src/extract.rs) | URL unwrapping, indicator matching for one record, and `defang`. |
 | [`rules`](src/rules.rs) | Loading and compiling rule sets. |
-| [`analyze`](src/analyze.rs) | The pipeline: extract, score, link into clusters, time. |
+| [`analyze`](src/analyze/mod.rs) | The pipeline: extract, score, link into clusters (`link`), describe each cluster (`hints`), time. Clusters have a number (`C1`) and a stable `key`. |
 | [`chains`](src/chains.rs) | Probe chains: one client trying variant after variant of a request. |
-| [`timing`](src/timing.rs) | Cadence, bursts, fleet-wide pauses, hour-of-day profiles, date tags and shared pauses. |
+| [`timing`](src/timing/mod.rs) | Cadence, bursts and pauses (`cadence`), hour-of-day profiles (`rhythm`), date tags (`dates`) and shared pauses (`pauses`). |
 | [`fingerprint`](src/fingerprint.rs) | How a request was encoded, and header sets. |
 | [`paths`](src/paths.rs) | Path sets per host and fabricated-looking identifiers. |
 | [`dialect`](src/dialect.rs) | Payload dialect, shared dialects between clusters, repeated cut lengths. |
 | [`fanout`](src/fanout.rs) | Parallel fan-out width. |
-| [`recurrence`](src/recurrence.rs) | One task rerun on another day. |
+| [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |
+| [`bursts`](src/bursts.rs) | Bursts of archive captures of a host the archives rarely capture. |
 | [`endpoints`](src/endpoints.rs) | Flagged activity grouped by target host. |
 | [`attribution`](src/attribution.rs) | The evidence ladder and who a report may name. |
-| [`report`](src/report.rs) | Markdown drafts and the public notice. |
-| [`notice`](src/notice.rs) | Notice files: front matter and dated updates. |
+| [`report`](src/report/mod.rs) | Markdown drafts and the public notice: per-audience wording (`audience`), cluster hint lines (`hints`), attribution and endpoints (`sections`). |
+| [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |
 | [`eval`](src/eval.rs) | Precision and recall against labelled records. |
 | [`securitytxt`](src/securitytxt.rs) | RFC 9116 `security.txt` parsing. |
@@ -79,5 +81,7 @@ Rule changes go in `rules/default.toml`, not in code, and must pass the eval gat
 ```sh
 cargo test -p sc-core
 ```
+
+Unit tests sit beside the code. [`tests/integration.rs`](tests/integration.rs) gathers the integration tests into one binary; [`tests/golden.rs`](tests/golden.rs) analyses the labelled set in `samples/eval/` end to end and holds the eval gate's numbers, so a change that moves them fails `cargo test` as well as the gate.
 
 `scripts/ci/check-wasm-target.sh` checks that the crate still builds for `wasm32-unknown-unknown`, so anything that needs the OS (files, network, the clock) stays out of it.

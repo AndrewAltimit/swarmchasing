@@ -38,11 +38,10 @@ use crate::case::{self, CaseStatus, NoticeStatus};
 use crate::health::{RuleHistory, RuleRun, SourceHealth};
 use anyhow::{Context, Result, bail};
 use sc_collect::{CdxQuery, Client};
-use sc_core::rules::Linking;
-use sc_core::timing::timing;
+use sc_core::bursts::{ArchiveBurst, archive_bursts};
+use sc_core::recurrence::{ClusterRun, cluster_reruns};
 use sc_core::{
-    Analysis, Observation, RecurrenceOptions, ReportOptions, Rerun, Rules, TargetRun, Tier,
-    analyze, render_markdown, reruns,
+    Analysis, Observation, ReportOptions, Rules, Tier, analyze, defang_host, render_markdown,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -177,6 +176,9 @@ pub struct Summary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterSummary {
     pub id: String,
+    /// The cluster's stable key ([`sc_core::Cluster::key`]).
+    #[serde(default)]
+    pub key: String,
     pub tier: Tier,
     pub score: i32,
     pub records: usize,
@@ -517,6 +519,7 @@ fn summarise(a: &Analysis, prev: &Summary, generated: String) -> Summary {
             first.id.clone(),
             ClusterSummary {
                 id: c.id.clone(),
+                key: c.key.clone(),
                 tier: c.tier,
                 score: c.score,
                 records: c.members.len(),
@@ -688,7 +691,7 @@ fn digest(
     }
 
     // Descriptive only: a rerun is a lead for the admin, never a merge.
-    let (runs, matches) = rerun_matches(a, new_ids);
+    let (runs, matches) = cluster_reruns(a, new_ids);
     let _ = writeln!(t, "\n## Possible reruns ({})\n", matches.len());
     none(&mut t, matches.is_empty());
     for m in &matches {
@@ -1009,151 +1012,25 @@ fn tier_change_line(id: &str, n: usize, version: &str) -> String {
     )
 }
 
-/// One run (a stretch of a cluster with no long gap) as the rerun check sees it.
-struct RunInfo {
-    cluster: String,
-    start: i64,
-    records: usize,
-    new: bool,
-}
-
-fn run_label(r: &RunInfo) -> String {
+fn run_label(r: &ClusterRun) -> String {
     format!(
-        "{} run at {} ({} records)",
+        "{} {} run at {} ({} records)",
         r.cluster,
+        r.key,
         sc_core::fmt_ts(r.start),
         r.records
     )
 }
 
-/// Runs in the analysis whose target sequence repeats an earlier run in a
-/// different cluster, where the later run has records new in this watch run.
-fn rerun_matches(a: &Analysis, new_ids: &BTreeSet<String>) -> (Vec<RunInfo>, Vec<Rerun>) {
-    let mut infos = Vec::new();
-    let mut runs = Vec::new();
-    for c in &a.clusters {
-        for (n, span) in c.runs.iter().enumerate() {
-            let members: Vec<&sc_core::ObsResult> = c
-                .members
-                .iter()
-                .map(|&m| &a.results[m])
-                .filter(|r| r.obs.ts >= span.start && r.obs.ts <= span.end)
-                .collect();
-            runs.push(TargetRun {
-                key: format!("{}#{}", c.id, n + 1),
-                targets: members
-                    .iter()
-                    .filter_map(|r| Some((r.obs.ts, r.target_host.clone()?)))
-                    .collect(),
-            });
-            infos.push(RunInfo {
-                cluster: c.id.clone(),
-                start: span.start,
-                records: members.len(),
-                new: members.iter().any(|r| new_ids.contains(&r.obs.id)),
-            });
-        }
-    }
-    let matches = reruns(&runs, &RecurrenceOptions::default())
-        .into_iter()
-        .filter(|m| infos[m.later].new && infos[m.earlier].cluster != infos[m.later].cluster)
-        .collect();
-    (infos, matches)
-}
-
-/// A cluster of archive captures of one host within minutes, against a host
-/// that is otherwise rarely captured.
-#[derive(Debug, Clone)]
-pub struct ArchiveBurst {
-    pub host: String,
-    pub start: i64,
-    pub end: i64,
-    pub count: usize,
-    pub distinct_urls: usize,
-    /// Captures in the burst that matched at least one rule.
-    pub flagged: usize,
-    /// The host's captures per day across the store, this burst excluded.
-    pub baseline_per_day: f64,
-}
-
-/// Bursts of Wayback / Arquivo captures per target host that contain a record
-/// new in this run, where the host is normally sparse in the store. The
-/// thresholds are the `archive_burst_*` settings in the rules' `[linking]`.
-fn archive_bursts(
-    store: &[Observation],
-    new_ids: &BTreeSet<String>,
-    rules: &Rules,
-    now: i64,
-) -> Vec<ArchiveBurst> {
-    struct Capture<'a> {
-        ts: i64,
-        id: &'a str,
-        url: &'a str,
-        flagged: bool,
-    }
-    let mut by_host: BTreeMap<String, Vec<Capture>> = BTreeMap::new();
-    let mut first = i64::MAX;
-    for o in store {
-        if !matches!(o.source.as_str(), "wayback" | "arquivo") || o.ts <= 0 {
-            continue;
-        }
-        let x = sc_core::extract(o, rules);
-        let Some(host) = x.target_host.or_else(|| x.layers.first()?.host.clone()) else {
-            continue;
-        };
-        first = first.min(o.ts);
-        by_host.entry(host).or_default().push(Capture {
-            ts: o.ts,
-            id: &o.id,
-            url: &o.url,
-            flagged: x.score > 0,
-        });
-    }
-    let days = ((now - first) as f64 / DAY as f64).max(1.0);
-    let l = &rules.set.linking;
-    let cfg = Linking {
-        burst_gap_secs: l.archive_burst_gap_secs,
-        burst_min: l.archive_burst_min,
-        ..Default::default()
-    };
-
-    let mut out = Vec::new();
-    for (host, caps) in &by_host {
-        if !caps.iter().any(|c| new_ids.contains(c.id)) {
-            continue;
-        }
-        let ts: Vec<i64> = caps.iter().map(|c| c.ts).collect();
-        for b in timing(&ts, &cfg).bursts {
-            let inside: Vec<&Capture> = caps
-                .iter()
-                .filter(|c| c.ts >= b.start && c.ts <= b.end)
-                .collect();
-            if !inside.iter().any(|c| new_ids.contains(c.id)) {
-                continue;
-            }
-            let baseline = (caps.len() - b.count) as f64 / days;
-            if (b.count as f64) < l.archive_burst_ratio * baseline {
-                continue;
-            }
-            out.push(ArchiveBurst {
-                host: host.clone(),
-                start: b.start,
-                end: b.end,
-                count: b.count,
-                distinct_urls: inside.iter().map(|c| c.url).collect::<BTreeSet<_>>().len(),
-                flagged: inside.iter().filter(|c| c.flagged).count(),
-                baseline_per_day: baseline,
-            });
-        }
-    }
-    out.sort_by(|x, y| y.count.cmp(&x.count).then_with(|| x.start.cmp(&y.start)));
-    out
-}
-
 fn cluster_line(c: &ClusterSummary) -> String {
     format!(
-        "{} [{}] score {}, {} records, {} → {}; targets {}; rules {}",
+        "{}{} [{}] score {}, {} records, {} → {}; targets {}; rules {}",
         c.id,
+        if c.key.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", c.key)
+        },
         c.tier.label(),
         c.score,
         c.records,
@@ -1168,10 +1045,6 @@ fn cluster_line(c: &ClusterSummary) -> String {
     )
 }
 
-fn defang_host(h: &str) -> String {
-    h.replace('.', "[.]")
-}
-
 fn one_line(s: &str, n: usize) -> String {
     let s = s.replace(['\n', '|'], " ");
     if s.chars().count() > n {
@@ -1182,9 +1055,10 @@ fn one_line(s: &str, n: usize) -> String {
 }
 
 fn top<K: ToString>(m: &BTreeMap<K, usize>, n: usize) -> Vec<String> {
-    let mut v: Vec<(String, usize)> = m.iter().map(|(k, c)| (k.to_string(), *c)).collect();
-    v.sort_by_key(|x| std::cmp::Reverse(x.1));
-    v.into_iter().take(n).map(|(k, _)| k).collect()
+    sc_core::top_counts(m, n)
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect()
 }
 
 /// CDX timestamp (`yyyyMMddhhmmss`).
@@ -1602,7 +1476,8 @@ mod tests {
         let c = case::load(&data.join("cases"), "p-1").unwrap();
         let ind = case::indicators(&data.join("cases"), &c, &rules.rules).unwrap();
         assert!(
-            ind.features.contains_key("param:uqtag=zz9"),
+            ind.features
+                .contains_key(&"param:uqtag=zz9".parse::<sc_core::LinkFeature>().unwrap()),
             "{:?}",
             ind.features
         );

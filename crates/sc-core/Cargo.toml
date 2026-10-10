@@ -4,7 +4,13 @@ description = "Platform-independent swarmchasing analysis: indicator extraction,
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
+publish.workspace = true
+# tests/integration.rs gathers every tests/*.rs into one binary.
+autotests = false
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
 
 [dependencies]
 serde.workspace = true

@@ -1011,6 +1011,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-publish"
+version = "0.1.0"
+dependencies = [
+ "sc-core",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "sc-wasm"
 version = "0.1.0"
 dependencies = [
@@ -1151,6 +1161,7 @@ dependencies = [
  "clap",
  "sc-collect",
  "sc-core",
+ "sc-publish",
  "serde",
  "serde_json",
  "sha2",

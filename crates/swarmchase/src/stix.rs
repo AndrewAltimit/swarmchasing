@@ -20,7 +20,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args;
 use sc_core::notice::{PublicView, TAG_PARAMS, WITHHELD, lint_public};
 use sc_core::rules::Target;
-use sc_core::{Analysis, Audience, IndicatorKind, ObsResult, Rules, Tier, analyze};
+use sc_core::{Analysis, Audience, IndicatorKind, LinkFeature, ObsResult, Rules, Tier, analyze};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::IpAddr;
@@ -214,9 +214,11 @@ fn build(a: &Analysis, rules: &Rules, o: &Options) -> Result<Value> {
             {
                 refs.insert(add_sco(&mut scos, "domain-name", json!({ "value": h })));
             }
-            if let Some(asn) = r.obs.asn {
+            // The network observed in the record: the client's, or the
+            // target's where a scan service recorded only that.
+            if let Some(asn) = r.obs.asn.or(r.obs.target_asn) {
                 let mut v = json!({ "number": asn });
-                if let Some(n) = asn_names.get(&asn) {
+                if let Some(n) = asn_names.get(&asn).copied().or_else(|| rules.asn_org(asn)) {
                     v["name"] = json!(n);
                 }
                 refs.insert(add_sco(&mut scos, "autonomous-system", v));
@@ -429,15 +431,19 @@ fn indicators(
     let mut domains = BTreeSet::new();
 
     for f in &r.features {
-        if public && view.feature(f) != *f {
+        if public && view.feature(f) != f.to_string() {
             continue;
         }
         let what = feature_kind(f, kinds);
-        if let Some(p) = f.strip_prefix("param:") {
-            url_like(&mut out, p, format!("{what} {p}"), "param");
-            continue;
-        }
-        let (rule, value) = f.split_once(':').unwrap_or((f, ""));
+        let (rule, value) = match f {
+            LinkFeature::Param { .. } => {
+                let p = f.to_string();
+                let p = p.trim_start_matches("param:");
+                url_like(&mut out, p, format!("{what} {p}"), "param");
+                continue;
+            }
+            LinkFeature::Rule { rule, value } => (rule.as_str(), value.as_str()),
+        };
         match kinds.get(rule) {
             Some(IndicatorKind::Exfil) if !value.contains('/') && url.contains(value) => {
                 if domains.insert(value.to_string()) {
@@ -461,8 +467,8 @@ fn indicators(
             .iter()
             .filter(|h| h.kind == IndicatorKind::AgentMarker)
         {
-            let f = format!("{}:{}", h.rule_id, h.matched.to_ascii_lowercase());
-            if public && view.feature(&f) != f {
+            let f = LinkFeature::rule(&h.rule_id, &h.matched);
+            if public && view.feature(&f) != f.to_string() {
                 continue;
             }
             url_like(
@@ -496,19 +502,14 @@ fn indicators(
 
 /// What a linking feature names, as indicators label it: a run tag or other
 /// linking parameter, a callback channel, or an agent marker.
-pub(crate) fn feature_kind(f: &str, kinds: &BTreeMap<&str, IndicatorKind>) -> &'static str {
-    if let Some(p) = f.strip_prefix("param:") {
-        let name = p.split('=').next().unwrap_or(p);
-        return if TAG_PARAMS.contains(&name) {
-            "Run tag"
-        } else {
-            "Linking parameter"
-        };
-    }
-    let rule = f.split_once(':').map_or(f, |(r, _)| r);
-    match kinds.get(rule) {
-        Some(IndicatorKind::Exfil) => "Callback channel",
-        _ => "Agent marker",
+pub(crate) fn feature_kind(f: &LinkFeature, kinds: &BTreeMap<&str, IndicatorKind>) -> &'static str {
+    match f {
+        LinkFeature::Param { name, .. } if TAG_PARAMS.contains(&name.as_str()) => "Run tag",
+        LinkFeature::Param { .. } => "Linking parameter",
+        LinkFeature::Rule { rule, .. } => match kinds.get(rule.as_str()) {
+            Some(IndicatorKind::Exfil) => "Callback channel",
+            _ => "Agent marker",
+        },
     }
 }
 
