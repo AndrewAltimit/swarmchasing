@@ -71,6 +71,16 @@ It also shows the HTTP requests each source made. Any health warning gets the di
 
 Both are leads to review; neither merges clusters.
 
+### Candidate fleets, escalations and common features
+
+Over the whole window, up to ten lines each:
+
+- **Candidate fleets.** Clusters tied by soft links, with the kinds and the weakest pair's strength. Merging one is a case decision ([fleets](cases.md#fleets)).
+- **Escalations.** Requests for one page whose route climbed (direct, relay, program, remote browser), with the clusters they touch.
+- **Common features.** Linking values shared too widely to link on, so they were demoted: records, hosts, span and the limit they passed.
+
+Clusters are named by number and stable key throughout (`C3 k-3f9a2c1b`), and hosts and values are defanged. These sections alone never make a run count as changed.
+
 ### Case status
 
 The watch matches new records against every case's indicators: its clusters' linking features and its endpoints, under the case's pinned rules. The *Case status* section then proposes:
