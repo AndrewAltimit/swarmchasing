@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the public site into _site/: the WASM module, then every page.
+# Build the public site into _site/: the WASM modules, then every page.
 #
 #     scripts/ci/build-site.sh               # release module, optimised with wasm-opt
 #     scripts/ci/build-site.sh --dev         # debug module, no wasm-opt, no size check
@@ -13,11 +13,13 @@
 #     SWARMCHASE_WASM_OPT_CACHE  wasm-opt cache directory
 #                             (default ${XDG_CACHE_HOME:-$HOME/.cache}/swarmchase-wasm-opt)
 #
-# The module: wasm-pack builds sc-wasm into site/pkg (gitignored) on the
-# release profile with size settings (opt-level "z", one codegen unit,
-# panic=abort) passed as CARGO_PROFILE_RELEASE_* variables, so they apply to
-# this build only and never to native binaries. A release module over
-# BUDGET bytes fails the build.
+# The modules: wasm-pack builds sc-wasm (the analysis engine) into site/pkg
+# and sc-rules-wasm (rules TOML to JSON, loaded only for edited rules) into
+# site/pkg-rules, both gitignored, on the release profile with size settings
+# (opt-level "z", one codegen unit, panic=abort) passed as
+# CARGO_PROFILE_RELEASE_* variables, so they apply to these builds only and
+# never to native binaries. A release engine over BUDGET bytes fails the
+# build.
 #
 # wasm-opt is the slow half of a release build (minutes on the runner, against
 # seconds for the cargo build when the cache is warm), and its output depends
@@ -46,8 +48,7 @@ case "${1:-}" in
     *) echo "usage: $0 [--dev|--pages-only]" >&2; exit 2 ;;
 esac
 
-PKG=site/pkg
-WASM="$PKG/sc_wasm_bg.wasm"
+WASM=site/pkg/sc_wasm_bg.wasm
 OUT="${SITE_OUT:-_site}"
 BASE_URL="${SITE_BASE_URL:-http://localhost:8080/}"
 CACHE="${SWARMCHASE_WASM_OPT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/swarmchase-wasm-opt}"
@@ -66,13 +67,16 @@ python_bin() {
     return 1
 }
 
+# pack <crate> <out dir under site/> [wasm-pack flags]
 pack() {
+    local crate=$1 out=$2
+    shift 2
     command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
     CARGO_PROFILE_RELEASE_OPT_LEVEL=z \
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
     CARGO_PROFILE_RELEASE_PANIC=abort \
-        wasm-pack build crates/sc-wasm --target web --out-dir ../../site/pkg --no-typescript "$@"
-    rm -f "$PKG/.gitignore" "$PKG/package.json" "$PKG/README.md"
+        wasm-pack build "crates/$crate" --target web --out-dir "../../site/$out" --no-typescript "$@"
+    rm -f "site/$out/.gitignore" "site/$out/package.json" "site/$out/README.md"
 }
 
 find_wasm_opt() {
@@ -101,7 +105,7 @@ find_wasm_opt() {
 opt_flags() {
     sed -n '/^\[package\.metadata\.wasm-pack\.profile\.release\]/,/^\[/{
         s/^wasm-opt[[:space:]]*=[[:space:]]*\[\(.*\)\].*/\1/p
-    }' crates/sc-wasm/Cargo.toml | tr ',' '\n' | sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//' | sed '/^$/d'
+    }' "crates/$1/Cargo.toml" | tr ',' '\n' | sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//' | sed '/^$/d'
 }
 
 sha256() {
@@ -112,19 +116,21 @@ sha256() {
     fi
 }
 
+# build_release_module <crate> <out dir under site/> <module file> <budget bytes or 0>
 build_release_module() {
+    local crate=$1 out=$2 WASM=$3 budget=$4
     local -a FLAGS
-    mapfile -t FLAGS < <(opt_flags)
+    mapfile -t FLAGS < <(opt_flags "$crate")
     local OPT
     OPT="$(find_wasm_opt || true)"
     if [[ ${#FLAGS[@]} -eq 0 ]]; then
-        echo "[build-site] wasm-opt disabled in crates/sc-wasm/Cargo.toml; building unoptimised"
-        pack --release --no-opt
+        echo "[build-site] wasm-opt disabled in crates/$crate/Cargo.toml; building unoptimised"
+        pack "$crate" "$out" --release --no-opt
     elif [[ -z "$OPT" ]]; then
         echo "[build-site] wasm-opt not found; letting wasm-pack optimise (uncached, downloads wasm-opt for next time)"
-        pack --release
+        pack "$crate" "$out" --release
     else
-        pack --release --no-opt
+        pack "$crate" "$out" --release --no-opt
         local version key hit start
         version="$("$OPT" --version | head -n1)"
         key="$({ sha256 <"$WASM"; printf '%s\n' "${FLAGS[@]}" "$version"; } | sha256)"
@@ -151,16 +157,22 @@ build_release_module() {
     fi
     local size
     size=$(wc -c <"$WASM" | tr -d ' ')
-    echo "[build-site] $WASM: $size bytes ($((size / 1024)) KiB; budget $((BUDGET / 1024)) KiB)"
-    if ((size > BUDGET)); then
-        echo "[build-site] the WASM module is over its size budget; trim it before deploying" >&2
+    echo "[build-site] $WASM: $size bytes ($((size / 1024)) KiB)"
+    if ((budget > 0 && size > budget)); then
+        echo "[build-site] $WASM is over its size budget of $((budget / 1024)) KiB; trim it before deploying" >&2
         exit 1
     fi
 }
 
 case "$mode" in
-    --release) build_release_module ;;
-    --dev) pack --dev ;;
+    --release)
+        build_release_module sc-wasm pkg site/pkg/sc_wasm_bg.wasm "$BUDGET"
+        build_release_module sc-rules-wasm pkg-rules site/pkg-rules/sc_rules_wasm_bg.wasm 0
+        ;;
+    --dev)
+        pack sc-wasm pkg --dev
+        pack sc-rules-wasm pkg-rules --dev
+        ;;
     pages) [[ -s "$WASM" ]] || echo "[build-site] warning: $WASM missing; the analysis pages will not load" ;;
 esac
 

@@ -267,11 +267,13 @@ export function strip({ rows, points, onSelect = null, width = 900 }) {
 export function hourly({ data, pauses = [], width = 900 }) {
   if (!data.length) return el("p", { class: "hint" }, "No timestamps on flagged records.");
   const W = Math.max(320, width), H = 220, L = 36, R = 8, T = 8, B = 26;
+  data = [...data].sort((p, q) => p[0] - q[0]);
   const max = Math.max(1, ...data.map((d) => d[1]));
-  const step = (W - L - R) / data.length;
+  // Hours may be listed sparsely (empty hours left out): place each by its time.
+  const x0 = data[0][0], hours = Math.round((data[data.length - 1][0] - x0) / 3600) + 1, span = hours * 3600;
+  const step = (W - L - R) / hours;
   const bw = Math.max(1, step - 2);
   const y = (v) => T + (H - T - B) * (1 - v / max);
-  const x0 = data[0][0], span = data.length * 3600;
   const xs = (t) => L + ((t - x0) / span) * (W - L - R);
   const root = svg("svg", { class: "chart hourly", viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "group", "aria-label": "Flagged records per hour, UTC" });
   const grid = svg("g", { class: "grid" });
@@ -281,9 +283,13 @@ export function hourly({ data, pauses = [], width = 900 }) {
   }
   root.prepend(grid);
   for (const p of clip(pauses, x0, x0 + span)) root.append(svg("rect", { class: "pause", x: xs(p.start), y: T, width: Math.max(1, xs(p.end) - xs(p.start)), height: H - T - B }));
-  const every = Math.max(1, Math.ceil(data.length / Math.max(2, Math.floor(W / 110))));
-  data.forEach(([h, c], i) => {
-    if (i % every === 0) root.append(svg("text", { x: L + i * step + step / 2, y: H - 8, "text-anchor": "middle" }, data.length > 24 ? fmtShort(h).replace(/:\d\d$/, "h") : fmtShort(h).slice(6)));
+  const every = Math.max(1, Math.ceil(hours / Math.max(2, Math.floor(W / 110))));
+  for (let i = 0; i < hours; i += every) {
+    const h = x0 + i * 3600;
+    root.append(svg("text", { x: L + i * step + step / 2, y: H - 8, "text-anchor": "middle" }, hours > 24 ? fmtShort(h).replace(/:\d\d$/, "h") : fmtShort(h).slice(6)));
+  }
+  data.forEach(([h, c]) => {
+    const i = Math.round((h - x0) / 3600);
     if (!c) return;
     const bar = svg("rect", { class: "bar", x: L + i * step + 1, y: y(c), width: bw, height: H - B - y(c), rx: Math.min(4, bw / 2), tabindex: data.length <= 200 ? 0 : null, role: "img", "aria-label": `${fmtTs(h).slice(0, 16)} UTC: ${c} flagged` });
     tip(bar, `${fmtTs(h).slice(0, 16)} UTC · ${c} flagged`);

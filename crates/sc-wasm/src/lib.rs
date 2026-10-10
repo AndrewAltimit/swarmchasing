@@ -1,13 +1,19 @@
 //! Browser bindings. Everything crosses the boundary as JSON strings so the
 //! page needs nothing but `JSON.parse`.
 //!
+//! Rules arrive as JSON: the bundled rules are converted when the module is
+//! built, and edited rules (TOML, as the CLI reads them) by the small
+//! `sc-rules-wasm` module, which keeps a TOML parser out of this one.
+//!
 //! `analyze` keeps its result in this module, and `report` and `endpoints`
 //! read it from there, so the page never sends a whole analysis back across
 //! the boundary and the module carries no deserialiser for one.
 
 use sc_core::eval::LabelSet;
 use sc_core::timing::{DateTagOffset, infer_offset, parse_date_tag};
-use sc_core::{Analysis, Claim, Evidence, FieldMap, Format, Label, ReportOptions, Rules, Tier};
+use sc_core::{
+    Analysis, Claim, Evidence, FieldMap, Format, Label, ReportOptions, RuleSet, Rules, Tier,
+};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use wasm_bindgen::prelude::*;
@@ -22,12 +28,22 @@ thread_local! {
     static LAST: RefCell<Option<Analysis>> = const { RefCell::new(None) };
 }
 
-fn rules_from(text: &str) -> Result<Rules, JsError> {
-    if text.trim().is_empty() {
-        Ok(Rules::default_rules())
+/// `rules/default.toml` as JSON, converted by `build.rs`.
+const DEFAULT_RULES_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/default_rules.json"));
+
+/// A rule set from its JSON; empty means the bundled rules.
+fn parse_rules(json: &str) -> Result<Rules, String> {
+    let text = if json.trim().is_empty() {
+        DEFAULT_RULES_JSON
     } else {
-        Rules::from_toml(text).map_err(|e| JsError::new(&e))
-    }
+        json
+    };
+    let set: RuleSet = serde_json::from_str(text).map_err(|e| format!("rules: {e}"))?;
+    Rules::compile(set)
+}
+
+fn rules_from(json: &str) -> Result<Rules, JsError> {
+    parse_rules(json).map_err(|e| JsError::new(&e))
 }
 
 fn json<T: serde::Serialize>(v: &T) -> Result<String, JsError> {
@@ -46,8 +62,8 @@ pub fn default_rules() -> String {
 
 /// Validate rules; returns `{"rules":n,"asns":n,"version":"..."}`.
 #[wasm_bindgen]
-pub fn check_rules(rules_toml: &str) -> Result<String, JsError> {
-    let r = rules_from(rules_toml)?;
+pub fn check_rules(rules_json: &str) -> Result<String, JsError> {
+    let r = rules_from(rules_json)?;
     Ok(serde_json::json!({"rules": r.set.rules.len(), "asns": r.set.asns.len(), "version": r.set.meta.version}).to_string())
 }
 
@@ -57,8 +73,8 @@ pub fn check_rules(rules_toml: &str) -> Result<String, JsError> {
 /// Secrets are replaced with hashes before analysis (see `sc_core::redact`).
 /// The analysis is kept for `report` and `endpoints`.
 #[wasm_bindgen]
-pub fn analyze(input: &str, format: &str, map: &str, rules_toml: &str) -> Result<String, JsError> {
-    let rules = rules_from(rules_toml)?;
+pub fn analyze(input: &str, format: &str, map: &str, rules_json: &str) -> Result<String, JsError> {
+    let rules = rules_from(rules_json)?;
     let format: Format = format.parse().map_err(|e: String| JsError::new(&e))?;
     let map = if map.trim().is_empty() {
         FieldMap::default()
@@ -121,8 +137,8 @@ fn cluster_date_tags(a: &Analysis) -> BTreeMap<String, DateTagOffset> {
 
 /// Unwrap a single URL; returns `{"layers": [...], "extracted": {...}}`.
 #[wasm_bindgen]
-pub fn unwrap(url: &str, rules_toml: &str) -> Result<String, JsError> {
-    let rules = rules_from(rules_toml)?;
+pub fn unwrap(url: &str, rules_json: &str) -> Result<String, JsError> {
+    let rules = rules_from(rules_json)?;
     let obs = sc_core::Observation {
         url: url.to_string(),
         ..Default::default()
@@ -204,8 +220,8 @@ pub fn parse_security_txt(text: &str) -> String {
 /// record (`id`, `label`, `tier`, `score`, `rules`, `url` defanged and cut
 /// short), and `misclassified`, those the suggestive-or-above call gets wrong.
 #[wasm_bindgen]
-pub fn eval_labelled(rules_toml: &str, set: &str) -> Result<String, JsError> {
-    let rules = rules_from(rules_toml)?;
+pub fn eval_labelled(rules_json: &str, set: &str) -> Result<String, JsError> {
+    let rules = rules_from(rules_json)?;
     Ok(eval_with(&rules, set))
 }
 
@@ -330,6 +346,22 @@ mod tests {
         // Below the floor, the floor applies.
         let md = draft("self_id", "self_id");
         assert!(!md.contains("Example AI"), "{md}");
+    }
+
+    // The bundled JSON, and edited TOML through sc-rules-wasm, read as the
+    // CLI reads the TOML.
+    #[test]
+    fn json_rules_match_the_toml() {
+        let as_json = |set: &RuleSet| serde_json::to_string(set).unwrap();
+        let bundled = parse_rules("").unwrap();
+        assert_eq!(as_json(&bundled.set), as_json(&Rules::default_rules().set));
+        let edited = sc_core::DEFAULT_RULES.replace("weight = 2\n", "weight = 5\n");
+        let via = parse_rules(&sc_rules_wasm::to_json(&edited).unwrap()).unwrap();
+        assert_eq!(
+            as_json(&via.set),
+            as_json(&Rules::from_toml(&edited).unwrap().set)
+        );
+        assert!(parse_rules("{\"rule\": 3}").is_err_and(|e| e.starts_with("rules: ")));
     }
 
     #[test]

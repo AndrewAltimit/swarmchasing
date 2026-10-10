@@ -2,16 +2,16 @@
 // opened; its text is shown defanged.
 import { $, el, showError } from "../lib/dom.js";
 import { trunc } from "../lib/fmt.js";
-import { engine, editedRules, host, rulesNote } from "../lib/wasm.js";
+import { engine, host, pageRules } from "../lib/wasm.js";
 
 const sc = await engine();
-rulesNote(sc, $("rules-note"));
+const rules = await pageRules(sc, $("rules-note"));
 
 function run() {
   const out = $("unwrap-out");
   let x;
   try {
-    x = JSON.parse(sc.unwrap($("unwrap-url").value.trim(), editedRules()));
+    x = JSON.parse(sc.unwrap($("unwrap-url").value.trim(), rules));
   } catch (e) {
     return showError(out, e);
   }

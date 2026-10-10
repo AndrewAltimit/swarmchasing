@@ -1,7 +1,7 @@
 // Rules page: filter the pre-rendered cards; the editor loads the engine
 // when it is opened.
 import { $, showError, store } from "../lib/dom.js";
-import { engine, RULES_KEY } from "../lib/wasm.js";
+import { engine, rulesJson, RULES_KEY } from "../lib/wasm.js";
 import { renderComparison, scoreBoth } from "../lib/evalview.js";
 
 const form = document.querySelector("[data-rule-filters]");
@@ -21,7 +21,8 @@ if (form) {
         (!f.get("target") || d.target === f.get("target")) &&
         (!f.get("tactic") || d.tactic === f.get("tactic")) &&
         (!f.get("significant") || d.significant === "true") &&
-        (!f.get("link") || d.link === "true");
+        (!f.get("link") || d.link === "true") &&
+        (!f.get("artifact") || d.artifact === "true");
       c.hidden = !ok;
       if (ok) shown++;
     }
@@ -69,7 +70,7 @@ if (editor && text) {
     if (!sc) return;
     if (act === "validate" || act === "save") {
       try {
-        const r = JSON.parse(sc.check_rules(text.value));
+        const r = JSON.parse(sc.check_rules(await rulesJson(text.value)));
         if (act === "save") {
           store.set(RULES_KEY, text.value);
           say(`Saved: ${r.rules} rules, version ${r.version}. The workbench and the unwrap tool now use them in this browser.`);
@@ -81,7 +82,7 @@ if (editor && text) {
       const out = $("eval-out");
       say("Scoring the labelled set…");
       try {
-        const [base, edited, files] = await scoreBoth(sc, text.value);
+        const [base, edited, files] = await scoreBoth(sc, await rulesJson(text.value));
         out.replaceChildren(...renderComparison(base, edited, files));
         say("");
       } catch (e) {

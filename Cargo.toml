@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/sc-core", "crates/sc-collect", "crates/sc-publish", "crates/swarmchase", "crates/sc-wasm"]
+members = ["crates/sc-core", "crates/sc-collect", "crates/sc-publish", "crates/swarmchase", "crates/sc-wasm", "crates/sc-rules-wasm"]
 
 [workspace.package]
 version = "0.1.0"

@@ -5,7 +5,7 @@
 // id, a view), never hosts, URLs or other record data.
 import { $, el, activate, download, fetchRoot, showError } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
-import { engine, editedRules, host as hostOf, rulesNote } from "../lib/wasm.js";
+import { engine, host as hostOf, pageRules } from "../lib/wasm.js";
 import { figure, legend, legendKey, tierLegend, rampLegend, swimlanes, fleetGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
 
 const VIEWS = ["runs", "fleet", "heat", "rhythm", "strip", "hourly"];
@@ -15,7 +15,7 @@ const MAX_ROWS = 300;
 const mobile = () => matchMedia("(max-width: 899px)").matches;
 
 const sc = await engine();
-rulesNote(sc, $("rules-note"));
+const rules = await pageRules(sc, $("rules-note"));
 {
   const ev = JSON.parse(sc.evidence_levels());
   $("min-named").replaceChildren(...ev.levels.map((l) => el("option", { value: l.id }, l.label)));
@@ -101,7 +101,7 @@ function runAnalysis() {
   warn.hidden = true;
   let out;
   try {
-    out = JSON.parse(sc.analyze($("input").value, $("format").value, $("map").value, editedRules()));
+    out = JSON.parse(sc.analyze($("input").value, $("format").value, $("map").value, rules));
   } catch (e) {
     warn.hidden = false;
     warn.textContent = String(e?.message ?? e);
@@ -253,15 +253,17 @@ function fleetEdges(keys) {
   for (const s of arr(a.soft_links)) {
     const o = obj(s);
     const ends = arr(o.clusters).length >= 2 ? o.clusters : [o.a ?? o.from ?? o.a_key, o.b ?? o.to ?? o.b_key];
-    const why = String(o.reason ?? o.kind ?? o.why ?? "soft link");
-    const score = num(o.score ?? o.confidence);
-    add(ends[0], ends[1], "soft", `Soft link: ${trunc(why, 120)}${score != null ? ` (${score.toFixed(2)})` : ""}`);
+    const why = [o.kind, o.detail ?? o.reason].filter(Boolean).map(String).join(": ") || "soft link";
+    const score = num(o.strength ?? o.score);
+    add(ends[0], ends[1], "soft", `Soft link (${trunc(why, 140)})${score != null ? `, strength ${score.toFixed(2)}` : ""}: a hint, not evidence`);
   }
   for (const f of arr(a.candidate_fleets)) {
     const o = Array.isArray(f) ? { clusters: f } : obj(f);
     const members = arr(o.clusters ?? o.members ?? o.keys);
-    const name = trunc(String(o.reason ?? o.name ?? o.id ?? "candidate fleet"), 120);
-    for (let i = 1; i < members.length; i++) add(members[0], members[i], "fleet", `Candidate fleet: ${name}`);
+    const name = trunc(String(o.id ?? o.name ?? "candidate fleet"), 60);
+    const kinds = arr(o.kinds).map(String).join(", ");
+    const score = num(o.strength);
+    for (let i = 1; i < members.length; i++) add(members[0], members[i], "fleet", `Candidate fleet ${name} of ${members.length} clusters${kinds ? ` (${kinds})` : ""}${score != null ? `, strength ${score.toFixed(2)}` : ""}: a hint, not evidence`);
   }
   return edges;
 }
@@ -424,6 +426,12 @@ function renderEndpoints() {
 // Wording follows the CLI report (sc-core report). Every hint is descriptive:
 // none changes a score or links records. Unknown fields are ignored.
 const PACE = { tool: "tool pace", model: "model pace", slow: "slow pace" };
+const TACTICS = {
+  T1: "task retrieval", T2: "tool escalation", T3: "access-control circumvention", T4: "vulnerability probing",
+  T5: "account or identity acquisition", T6: "credential reuse", T7: "callback or side channels", T8: "off-task targets", T9: "inter-agent coordination",
+};
+const tactic = (t) => `${t} ${TACTICS[t] ?? ""}`.trim();
+const BASIS = { request: "request times", submit: "submission times", capture: "archive capture times", mixed: "mixed time sources" };
 const span = (s) => `${fmtTs(s.start)} → ${fmtTs(s.end)} (${dur(Math.max(0, s.end - s.start))})`;
 
 function rhythmText(r) {
@@ -461,7 +469,11 @@ function chainLine(ch) {
   if (num(ch.retries_after_error)) notes.push(`${ch.retries_after_error} variant(s) followed an error response`);
   const unflagged = arr(ch.members).length - (num(ch.flagged) ?? 0);
   if (unflagged > 0) notes.push(`${unflagged} of its requests matched no rule`);
-  return `${ch.variants ?? "?"} variants of ${varied} on ${safe(`https://${ch.host ?? ""}${ch.path ?? ""}`, 90).replace(/^hxxps:\/\//, "")} over ${dur(Math.max(0, (ch.end ?? 0) - (ch.start ?? 0)))} (median gap ${dur(num(ch.median_gap_secs) ?? 0)}, ${PACE[ch.pace] ?? "unknown pace"})${notes.length ? "; " + notes.join("; ") : ""}`;
+  // Capture times say when an archive saw a request, not when it was sent: no pace.
+  const timing = ch.time_basis === "capture"
+    ? "capture-timed, so no pace"
+    : `median gap ${dur(num(ch.median_gap_secs) ?? 0)}, ${PACE[ch.pace] ?? "unknown pace"}`;
+  return `${ch.variants ?? "?"} variants of ${varied} on ${safe(`https://${ch.host ?? ""}${ch.path ?? ""}`, 90).replace(/^hxxps:\/\//, "")} over ${dur(Math.max(0, (ch.end ?? 0) - (ch.start ?? 0)))} (${timing})${notes.length ? "; " + notes.join("; ") : ""}`;
 }
 
 function clusterContext(c) {
@@ -473,6 +485,14 @@ function clusterContext(c) {
   row("Seen", `${fmtTs(c.start)} → ${fmtTs(c.end)}`);
   row("Targets", chips(topEntries(c.target_hosts, 6).map(([h, n]) => `${host(h)} ×${n}`)));
   row("Top rules", chips(topEntries(c.rules, 8).map(([r, n]) => `${r} ×${n}`)));
+  const tac = topEntries(c.tactics, 9);
+  if (tac.length) row("Tactics", chips(tac.map(([t, n]) => `${tactic(t)} ×${n}`)), el("div", { class: "hint" }, "what the matches show the agent doing; descriptive, never scored"));
+  if (num(c.artifacts)) row("Model artifacts", `${c.artifacts} match(es) show only that a model wrote the request (residue, self-identification)`);
+  else if (Object.keys(obj(c.artifacts)).length) row("Model artifacts", chips(topEntries(c.artifacts, 8).map(([k, n]) => `${safe(k, 40)} ×${n}`)));
+  if (c.time_basis) row("Times are", BASIS[c.time_basis] ?? String(c.time_basis), c.time_basis === "capture" ? el("div", { class: "hint" }, "when an archive saw the requests, not when they were sent: pace and rhythm are weak here") : null);
+  const hs = c.header_sets;
+  if (Array.isArray(hs) && hs.length) row("Header sets", chips(hs.slice(0, 6).map((h) => safe(typeof h === "string" ? h : JSON.stringify(h), 80))));
+  else if (Object.keys(obj(hs)).length) row("Header sets", chips(topEntries(hs, 6).map(([h, n]) => `${safe(h, 80)} ×${n}`)));
   row("Runs", runs.length ? el("ul", {}, runs.slice(0, 6).map((r) => el("li", {}, `${span(r)}, ${r.count ?? 0} record(s)`)), runs.length > 6 ? el("li", { class: "hint" }, `${runs.length - 6} more`) : null) : "none");
   row("Daily rhythm", rhythmText(t.rhythm) ?? el("span", { class: "hint" }, "too little data to say (needs 3 days, 20 records)"));
   row("Offset from date tags", offsetText(dateTags[c.id]));
@@ -539,7 +559,9 @@ function recordContext(i) {
   if (r.obs.source) row("Source", trunc(String(r.obs.source), 60));
   if (r.target_host) row("Target", host(r.target_host));
   row("URL (defanged)", el("code", {}, safe(r.obs.url, 1200)));
-  row("Rules", el("ul", {}, arr(r.hits).map((h) => el("li", {}, el("strong", {}, h.rule_id), ` +${h.weight}`, h.matched ? [": ", el("code", {}, safe(h.matched, 160))] : null))));
+  row("Rules", el("ul", {}, arr(r.hits).map((h) => el("li", {}, el("strong", {}, h.rule_id), ` +${h.weight}`,
+    h.tactic ? el("span", { class: "chip" }, tactic(h.tactic)) : null, h.artifact ? el("span", { class: "chip" }, "model artifact") : null,
+    h.matched ? [": ", el("code", {}, safe(h.matched, 160))] : null))));
   if (arr(r.layers).length > 1) row("Layers", `${r.layers.length} (see the unwrap tool for each)`);
   return [el("div", { class: "ctx-head" }, el("h3", {}, `Record #${i}`), pill(r.tier), el("span", { class: "hint" }, `score ${r.score}`)), el("dl", { class: "kv" }, rows)];
 }
@@ -569,6 +591,22 @@ function renderLinks() {
   out.push(chains.length
     ? el("ul", {}, chains.slice(0, 30).map((ch) => el("li", {}, chainLine(ch))), chains.length > 30 ? el("li", { class: "hint" }, `${chains.length - 30} more`) : null)
     : el("p", { class: "hint" }, "No probe chains: no runs of three or more variants of one request."));
+  const common = arr(a.common_features);
+  if (common.length) {
+    out.push(el("h4", {}, `Common features (${common.length})`));
+    out.push(el("p", { class: "hint" }, "Values many unrelated records share (a popular tool's tag, a shared service): kept from linking, shown so they are not read as one operator."));
+    out.push(el("ul", {}, common.slice(0, 20).map((f) => el("li", {}, el("code", {}, safe(typeof f.feature === "string" ? f.feature : JSON.stringify(f.feature), 80)),
+      ` in ${f.records ?? "?"} records on ${f.hosts ?? "?"} hosts${f.reason ? `: ${safe(f.reason, 120)}` : ""}`))));
+  }
+  const esc = arr(a.escalations);
+  if (esc.length) {
+    out.push(el("h4", {}, `Escalations (${esc.length})`));
+    out.push(el("p", { class: "hint" }, "One target asked for again by another route (direct, then through a relay or carrier): tool escalation, a hint to check."));
+    out.push(el("ul", {}, esc.slice(0, 20).map((e) => el("li", {}, el("code", {}, safe(`https://${e.host ?? ""}${e.path ?? ""}`, 90).replace(/^hxxps:\/\//, "")),
+      `: ${arr(e.steps).map((s) => safe(s.route, 20)).join(" → ")} over ${dur(Math.max(0, (e.end ?? 0) - (e.start ?? 0)))}`,
+      arr(e.clusters).length ? ` (clusters ${arr(e.clusters).map((x) => safe(x, 20)).join(", ")})` : "",
+      e.time_basis === "capture" ? el("span", { class: "hint" }, " capture-timed") : null))));
+  }
   const soft = arr(a.soft_links), fleets = arr(a.candidate_fleets);
   if (soft.length || fleets.length) {
     const edges = fleetEdges(new Set(a.clusters.map(keyOf))).filter((e) => e.kind === "soft" || e.kind === "fleet");

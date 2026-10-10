@@ -90,7 +90,7 @@ fn stored_differences(st: &Stamp, text: &str) -> Result<Vec<String>, String> {
     Ok(diffs)
 }
 
-/// Re-run a bundle's analysis and compare it with its stamp. `rules_toml`
+/// Re-run a bundle's analysis and compare it with its stamp. `rules_json`
 /// empty means the bundled rules. Returns `{"stamp": Stamp, "differences":
 /// [...], "notes": [...], "rules_version": "...", "analysis": Analysis}`;
 /// no differences means the bundle verifies. `analysis` is the re-run, not
@@ -100,9 +100,9 @@ pub fn verify_bundle(
     records_ndjson: &str,
     analysis_json: &str,
     stamp_json: &str,
-    rules_toml: &str,
+    rules_json: &str,
 ) -> Result<String, JsError> {
-    let rules = super::rules_from(rules_toml)?;
+    let rules = super::rules_from(rules_json)?;
     let out =
         check(records_ndjson, analysis_json, stamp_json, &rules).map_err(|e| JsError::new(&e))?;
     serde_json::to_string(&out).map_err(|e| JsError::new(&e.to_string()))

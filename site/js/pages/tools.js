@@ -4,7 +4,7 @@
 // Record contents are untrusted: inserted as text, URLs defanged.
 import { $, el, showError } from "../lib/dom.js";
 import { fmtTs, topEntries, trunc } from "../lib/fmt.js";
-import { engine, editedRules, host } from "../lib/wasm.js";
+import { engine, host, pageRules } from "../lib/wasm.js";
 import { figure, swimlanes, tierLegend } from "../lib/charts.js";
 
 const FILES = ["records.ndjson", "analysis.json", "stamp.json"];
@@ -13,6 +13,7 @@ const MAX_ROWS = 500;
 const pill = (t) => el("span", { class: `pill ${t}` }, t);
 
 const sc = await engine();
+const rules = await pageRules(sc, null);
 
 async function sha256(buf) {
   const d = await crypto.subtle.digest("SHA-256", buf);
@@ -55,7 +56,7 @@ async function load(files) {
     const text = (f) => (byName.has(f) ? byName.get(f).text() : "");
     const [records, analysis, stamp] = await Promise.all(FILES.map(text));
     const hashDiffs = await checkManifest(byName);
-    res = JSON.parse(sc.verify_bundle(records, analysis, stamp, editedRules()));
+    res = JSON.parse(sc.verify_bundle(records, analysis, stamp, rules));
     res.differences = [...hashDiffs, ...res.differences];
   } catch (e) {
     return showError(out, e);

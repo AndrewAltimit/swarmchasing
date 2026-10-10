@@ -488,3 +488,4 @@ table.records .chip { overflow-wrap: normal; white-space: nowrap; }
 table.records td:last-child { min-width: 150px; }
 table.records td.url { min-width: 180px; }
 svg.chart.heat, svg.chart.rhythm { width: auto; max-width: none; }
+.flag.artifact::before { content: "✎ "; color: var(--text-muted); }

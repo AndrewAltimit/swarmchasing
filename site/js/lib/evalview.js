@@ -21,10 +21,10 @@ export async function labelledSet() {
 }
 
 /** Score both rule sets; returns [bundled, edited]. */
-export async function scoreBoth(sc, editedToml) {
+export async function scoreBoth(sc, editedJson) {
   const s = await labelledSet();
   const base = JSON.parse(sc.eval_labelled("", s.ndjson));
-  const edited = JSON.parse(sc.eval_labelled(editedToml, s.ndjson));
+  const edited = JSON.parse(sc.eval_labelled(editedJson, s.ndjson));
   return [base, edited, s.files];
 }
 

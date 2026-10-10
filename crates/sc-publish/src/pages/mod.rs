@@ -30,7 +30,7 @@ pub const EXAMPLE_FILE: &str = "llm-residue.ndjson";
 
 /// Fields of a labelled record that carry the answer, stripped from the
 /// example the workbench loads.
-const LABEL_FIELDS: [&str; 3] = ["label", "class", "cite"];
+const LABEL_FIELDS: [&str; 5] = ["label", "class", "cite", "hard_negative_for", "run"];
 
 /// What the site is built from. Every field holds committed text.
 pub struct SiteInputs {

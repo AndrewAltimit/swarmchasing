@@ -33,25 +33,50 @@ export function engine() {
   return loading;
 }
 
-/** The rules edited on the rules page (kept in this browser), or "" for the bundled ones. */
+/** The rules edited on the rules page (TOML, kept in this browser), or "". */
 export const editedRules = () => store.get(RULES_KEY) ?? "";
 
-/** Show which rules a page runs, in `node`, when they are edited ones. */
-export function rulesNote(sc, node) {
+// The engine reads rules as JSON. Edited rules are TOML, so a second, small
+// module converts them; it loads only when there are edited rules.
+let rulesModule = null;
+/** Rules TOML as the engine's JSON; empty stays empty (the bundled rules). Throws on a TOML error. */
+export async function rulesJson(toml) {
+  if (!toml || !toml.trim()) return "";
+  rulesModule ??= (async () => {
+    const m = await import(new URL("../../pkg-rules/sc_rules_wasm.js", import.meta.url).href);
+    await m.default();
+    return m;
+  })().catch((e) => {
+    rulesModule = null;
+    throw e;
+  });
+  return (await rulesModule).rules_json(toml);
+}
+
+/**
+ * The rules a page runs: the edited ones as JSON when they convert and
+ * compile, else the bundled ones. Says which in `node`.
+ */
+export async function pageRules(sc, node) {
   const edited = editedRules();
-  if (!node) return;
   if (!edited) {
-    node.hidden = true;
-    return;
+    if (node) node.hidden = true;
+    return "";
   }
-  let version = "?";
+  let json = "", msg;
   try {
-    version = JSON.parse(sc.check_rules(edited)).version;
-  } catch {
-    version = "invalid";
+    json = await rulesJson(edited);
+    const v = JSON.parse(sc.check_rules(json)).version;
+    msg = `Using the rules you edited on the rules page (version ${v}), kept in this browser. Reset them there to use the bundled rules.`;
+  } catch (e) {
+    json = "";
+    msg = `Your edited rules do not load (${e?.message ?? e}); using the bundled rules. Fix or reset them on the rules page.`;
   }
-  node.hidden = false;
-  node.textContent = `Using the rules you edited on the rules page (version ${version}), kept in this browser. Reset them there to use the bundled rules.`;
+  if (node) {
+    node.hidden = false;
+    node.textContent = msg;
+  }
+  return json;
 }
 
 /** A host, defanged. */

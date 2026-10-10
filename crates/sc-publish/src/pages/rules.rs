@@ -20,6 +20,16 @@ pub struct RuleCard {
     pub link: bool,
     pub description: String,
     pub tactic: Option<String>,
+    pub artifact: bool,
+}
+
+/// `T2 tool escalation`: a tactic id with its name, or the id alone when
+/// the vocabulary does not know it.
+pub fn tactic_label(id: &str) -> String {
+    sc_core::model::Tactic::ALL
+        .iter()
+        .find(|t| t.id() == id)
+        .map_or_else(|| id.to_string(), |t| format!("{} {}", t.id(), t.label()))
 }
 
 /// The rules of a rules file, in file order.
@@ -61,6 +71,7 @@ pub fn parse_rules(toml_text: &str) -> Result<(String, i64, i64, Vec<RuleCard>),
                 .and_then(|x| x.as_str())
                 .filter(|s| !s.is_empty())
                 .map(String::from),
+            artifact: r.get("artifact").and_then(|x| x.as_bool()).unwrap_or(false),
         });
     }
     Ok((version, th("suggestive"), th("significant"), cards))
@@ -106,13 +117,18 @@ pub fn body(toml_text: &str, stats: &[RuleStat]) -> Result<String, String> {
     if !tactics.is_empty() {
         s.push_str("<label>Tactic<select name=\"tactic\"><option value=\"\">Any</option>");
         for t in &tactics {
-            let _ = write!(s, "<option value=\"{0}\">{0}</option>", esc(t));
+            let _ = write!(
+                s,
+                "<option value=\"{}\">{}</option>",
+                esc(t),
+                esc(&tactic_label(t))
+            );
         }
         s.push_str("</select></label>");
     }
     s.push_str("<label class=\"check\"><input type=\"checkbox\" name=\"significant\"> significant alone</label>");
     s.push_str(
-        "<label class=\"check\"><input type=\"checkbox\" name=\"link\"> links records</label>",
+        "<label class=\"check\"><input type=\"checkbox\" name=\"link\"> links records</label><label class=\"check\"><input type=\"checkbox\" name=\"artifact\"> model artifact</label>",
     );
     let _ = write!(
         s,
@@ -123,7 +139,7 @@ pub fn body(toml_text: &str, stats: &[RuleStat]) -> Result<String, String> {
         let st = stats.get(c.id.as_str());
         let _ = write!(
             s,
-            "<article class=\"rule-card\" id=\"rule-{}\" data-kind=\"{}\" data-target=\"{}\" data-tactic=\"{}\" data-significant=\"{}\" data-link=\"{}\" data-text=\"{}\">\
+            "<article class=\"rule-card\" id=\"rule-{}\" data-kind=\"{}\" data-target=\"{}\" data-tactic=\"{}\" data-significant=\"{}\" data-link=\"{}\" data-artifact=\"{}\" data-text=\"{}\">\
 <header><h2><code>{}</code></h2><span class=\"badge kind-{}\">{}</span></header>",
             esc(&c.id),
             esc(&c.kind),
@@ -131,6 +147,7 @@ pub fn body(toml_text: &str, stats: &[RuleStat]) -> Result<String, String> {
             esc(c.tactic.as_deref().unwrap_or("")),
             c.significant,
             c.link,
+            c.artifact,
             esc(&format!("{} {} {}", c.id, c.pattern, c.description).to_lowercase()),
             esc(&c.id),
             esc(&slug_class(&c.kind)),
@@ -146,16 +163,23 @@ pub fn body(toml_text: &str, stats: &[RuleStat]) -> Result<String, String> {
             esc(&c.target.replace('_', " "))
         );
         if let Some(t) = &c.tactic {
-            let _ = write!(s, "<div><dt>Tactic</dt><dd>{}</dd></div>", esc(t));
+            let _ = write!(
+                s,
+                "<div><dt>Tactic</dt><dd>{}</dd></div>",
+                esc(&tactic_label(t))
+            );
         }
         s.push_str("</dl>");
-        if c.significant || c.link {
+        if c.significant || c.link || c.artifact {
             s.push_str("<p class=\"flags\">");
             if c.significant {
                 s.push_str("<span class=\"flag sig\">significant alone</span>");
             }
             if c.link {
                 s.push_str("<span class=\"flag link\">links records</span>");
+            }
+            if c.artifact {
+                s.push_str("<span class=\"flag artifact\" title=\"The match only shows that a model wrote the request\">model artifact</span>");
             }
             s.push_str("</p>");
         }
@@ -234,6 +258,7 @@ link = true
         let b = body(toml, &[]).unwrap();
         assert!(!b.contains("<script") && !b.contains("<img"), "{b}");
         assert!(b.contains("Tactic</dt><dd>recon"));
+        assert_eq!(tactic_label("T2"), "T2 tool escalation");
         assert!(b.contains("data-link=\"true\""));
     }
 
