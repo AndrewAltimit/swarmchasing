@@ -22,8 +22,8 @@ Indicators are rules kept as data, versioned, and shared by every tool that grad
 | `weight` | Contribution to the score. Low for anything ordinary clients also do. | yes |
 | `significant` | A single match puts the record in the top tier. Reserved for unambiguous payloads and fingerprints. | yes |
 | `link` | The matched text becomes a link feature. Only for values one operator would hold. | yes |
-| `tactic` | The SC-T tactic the match is evidence of ([FM-4.3](#fm-43-the-sc-t-tactic-taxonomy)). | (planned) |
-| `artifact` | The artifact family the match belongs to ([FM-4.5](#fm-45-artifact-families)). | (planned) |
+| `tactic` | The SC-T tactic the match is evidence of ([FM-4.3](#fm-43-the-sc-t-tactic-taxonomy)). | one of `tactic` or `artifact` |
+| `artifact` | The match only shows a model wrote the request ([FM-4.5](#fm-45-artifact-families)). | one of `tactic` or `artifact` |
 
 Until `tactic` is a rule field, the default tactic of each kind is in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
 

@@ -60,7 +60,7 @@ Each record, and each cluster, is graded into one tier:
 | **Suggestive** | The summed weight reached the suggestive threshold. |
 | **Noise** | Anything below; including records with some weight. |
 
-A tier says how strongly a record looks like agent activity under the rules. It does not say who sent it, and it does not say the request succeeded. A cluster's tier is at least the highest tier among its members, and evidence stacks across a cluster ([FM-14.9](14-limits.md#fm-149-stacking-across-a-cluster)).
+A tier says how strongly a record looks like agent activity under the rules. It does not say who sent it, and it does not say the request succeeded. A cluster's tier is the highest tier among its members, raised one step only when independent members corroborate each other ([FM-14.9](14-limits.md#fm-149-stacking-across-a-cluster)).
 
 The tier names match those in the [Transluce release](references.md#incident-reports), so results can be compared against its labels.
 

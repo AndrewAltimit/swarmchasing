@@ -22,7 +22,7 @@ The standard bounds this link two ways:
 - **Time bound.** The two records fall within a set interval of each other. Beyond it, the shared feature is a soft link: an inbox reused months later may have changed hands, or the value may have been copied.
 - **Commonness cap.** A feature carried by more distinct targets or clusters than a set cap, or quoted in a published report, is demoted to a soft link. Common values (`test`, `1`, a tag a report made famous) are not identifiers ([FM-14.5](14-limits.md#fm-145-tags-get-copied-after-publication)).
 
-Toolkit: shared features link with no time bound and no commonness cap. The bound and the cap are (planned); until then, the reviewer checks each cluster's link features against both by hand.
+Toolkit: shared features link only within `feature_link_window_secs` of each other, and a feature carried by more than `feature_max_hosts` target hosts is listed as a common feature instead of linking (both in the rules file's `[linking]` table). A feature quoted in a published report is not yet demoted automatically (planned); the reviewer checks for it.
 
 ## FM-5.3 Close timing on the same target
 
@@ -72,7 +72,7 @@ Clusters joined by soft links form a **candidate fleet**. A candidate fleet is n
 
 Merges and splits are reversible and both are logged. A fleet grows, merges with another or breaks apart as evidence arrives. This mirrors how threat-intelligence teams handle uncategorised activity clusters, which "can grow, merge with, or break off from other clusters" before they are named ([Mandiant](references.md#attribution-practice)).
 
-Toolkit: soft links appear in reports and the watch digest as leads (shared pauses, shared dialects, reruns, archive bursts). Candidate-fleet objects and a merge/split command are (planned); today the decision is recorded with a case note.
+Toolkit: the analysis lists soft links between clusters with a kind and a strength (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations), and groups strongly soft-linked clusters into candidate fleets, shown in internal reports. Candidate fleets never merge clusters or change a tier. A merge/split command is (planned); today the decision is recorded with a case note.
 
 ## FM-5.9 Escalation sequences
 
