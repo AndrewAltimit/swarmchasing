@@ -1,0 +1,141 @@
+# Sources `swarmchase watch` collects from. Index records only: captures are never opened.
+# Runs are incremental: only records not seen before are stored, and the last
+# `analysis_window_days` of records are analysed together each run.
+#
+# Every source needs a rationale: which agent behaviour it catches, which rule
+# it feeds, and what its noise looks like. A source with no rationale gets cut.
+min_interval_secs = 3
+overlap_days = 3            # re-check this far back for late-indexed captures
+analysis_window_days = 30
+retain_days = 180           # delete runs and stored records older than this (docs/policies.md)
+contained_after_days = 14   # digest proposes "contained" for an active notice after this long with no matching record
+
+# ── Relays: agents wrap targets so the request comes from someone else's server ──
+# Archives capture these wrapped URLs when the relay's output is saved or linked,
+# so the capture's URL carries the real target plus any payload and run tags.
+
+# Rationale: a relay named in the published swarmcha.se and Transluce incident
+# reports. `r.jina.ai/<target>` puts the full target URL in the path, so payloads
+# and `uqtag`-style run tags survive. Feeds relay.jina. Noise: people reading
+# articles through Jina; scoring needs a second indicator to flag those.
+[[source]]
+name = "jina-reader"
+kind = "wayback"          # wayback | arquivo | urlquery
+pattern = "r.jina.ai/*"
+from = "20260901"         # first run starts here; later runs continue from the cursor
+limit = 5000              # max records per run; the rest continue next run
+page_size = 1000
+
+# Rationale: CORS proxy agents use to fetch pages from inside a remote browser
+# (`/get?url=` and `/raw?url=` carry the target as a parameter). Feeds
+# relay.allorigins. Noise: front-end demos fetching public APIs.
+[[source]]
+name = "allorigins"
+kind = "wayback"
+pattern = "api.allorigins.win/*"
+from = "20260901"
+limit = 5000
+
+# Rationale: URL-to-Markdown converter used the same way as Jina Reader, by agents
+# that need page text without running a browser. Feeds relay.markdown_new.
+[[source]]
+name = "markdown-new"
+kind = "wayback"
+pattern = "markdown.new/*"
+from = "20260901"
+limit = 2000
+
+# Rationale: headless fetch API; the target is in `?url=` and agents add
+# `screenshot`, `meta` or `data` options that show automated use. Feeds
+# relay.microlink. Noise: link-preview widgets, which repeat the same few URLs.
+[[source]]
+name = "microlink"
+kind = "wayback"
+pattern = "api.microlink.io/*"
+from = "20260901"
+limit = 2000
+
+# Rationale: public CORS proxy, used the same way as allorigins; the target
+# follows `?url=` or the path. Feeds relay.corsproxy.
+[[source]]
+name = "corsproxy-io"
+kind = "wayback"
+pattern = "corsproxy.io/*"
+from = "20260901"
+limit = 2000
+
+# Rationale: CodeTabs proxy endpoint, the other proxy relay.corsproxy names. Only
+# the `/v1/proxy` path is collected; the rest of the site is unrelated tools.
+[[source]]
+name = "codetabs-proxy"
+kind = "wayback"
+pattern = "api.codetabs.com/v1/proxy*"
+from = "20260901"
+limit = 2000
+
+# Rationale: referrer-stripping redirector that hides where a visit came from,
+# so the target's logs do not show the agent's origin page. Low weight (relay.hrefli = 1), so it
+# only matters alongside other indicators. Noise: ordinary privacy-minded links.
+[[source]]
+name = "hrefli"
+kind = "wayback"
+pattern = "href.li/*"
+from = "20260901"
+limit = 2000
+
+# ── Carriers: services that run or reshape the agent's request ─────────────────
+
+# Rationale: request echo service; agents use it to turn a GET into a POST, test
+# headers, or check their own egress IP before probing. Feeds carrier.httpbin.
+# Noise: very high (developer tests), so the limit is low and only the paths
+# agents use are worth reading in the digest.
+[[source]]
+name = "httpbin"
+kind = "wayback"
+pattern = "httpbin.org/*"
+from = "20260901"
+limit = 1000
+
+# Rationale: in-browser code playground. Share links carry the whole program in
+# the URL, so a fetch program aimed at a target is visible in the capture itself,
+# and it runs from a third-party origin. Feeds carrier.livecodes and carrier.inline_fetch_program.
+[[source]]
+name = "livecodes"
+kind = "wayback"
+pattern = "livecodes.io/*"
+from = "20260901"
+limit = 2000
+
+# ── Scan services ──────────────────────────────────────────────────────────────
+
+# Rationale: agents submit targets to public scanners to fetch them from a
+# neutral origin; urlquery reports keep the submitted URL, the final URL (which
+# shows network errors and bot challenges) and the target's IP and ASN. Needs
+# URLQUERY_APIKEY; skipped without it. urlquery's terms allow personal,
+# non-commercial research and forbid redistributing their content, so notices
+# cite urlquery reports by link and quote only the indicators we derived.
+[[source]]
+name = "urlquery-jina"
+kind = "urlquery"
+pattern = "r.jina.ai"
+from = "20260901"
+limit = 1000
+page_size = 100
+
+# ── Deliberately not watched ───────────────────────────────────────────────────
+# - Callback channels (webhook.site, requestbin, ntfy.sh, paste sites): listing
+#   captures of those URLs means reading the swarm's channels, which the passive
+#   rule forbids. They are matched in records found through other sources.
+# - Arquivo.pt: its index lags by over a year, so it adds nothing to a 30-day
+#   window. Use `swarmchase collect arquivo` per case for an endpoint's history.
+# - *.translate.goog: very high volume and mostly people translating pages; the
+#   relay rule still catches it inside records from the sources above.
+#
+# Add targets you are watching (agencies, data portals) per case, with match_type:
+# [[source]]
+# name = "portal"
+# kind = "wayback"
+# pattern = "data.portal.example"
+# match_type = "domain"
+# from = "20260901"
+# limit = 5000

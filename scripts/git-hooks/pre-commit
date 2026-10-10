@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: a fast local mirror of the gates main-ci.yml runs.
+#
+# Install (once per clone):
+#     scripts/ci/install-hooks.sh
+#
+# Scoped to what is staged, so a docs-only commit does not pay for clippy:
+#
+#   every commit      check-committed-data.py --staged (no raw dumps, no
+#                     unredacted secrets - the one hard rule)
+#   *.md              check-md-links.py --staged
+#   site/             check-site.py (CSP, no HTML sinks)
+#   notices/          swarmchase notice lint (nothing a notice withholds)
+#   Cargo.lock,       cargo-deny (scripts/ci/deny.sh); skipped with a warning
+#   deny.toml         when cargo-deny is not installed
+#   Rust / Cargo      cargo fmt --check (auto-fixed), cargo clippy -D warnings
+#   rules, sc-core,   detection eval gate (scripts/ci/eval-gate.sh)
+#   samples/eval
+#   sc-core, sc-wasm  wasm32 type-check
+#
+# Format drift is auto-fixed: if `cargo fmt --check` fails, the hook runs
+# `cargo fmt --all` and re-stages the previously-staged .rs files it
+# reformatted. Files with both staged AND unstaged changes are not auto-fixed
+# (re-staging would fold the unstaged diff into the commit); the hook aborts
+# and asks you to resolve the working tree first.
+#
+# Tests are not run here; run `cargo test --workspace --profile release-test`
+# before pushing.
+#
+# Skip in an emergency with SWARMCHASE_SKIP_PRECOMMIT=1 for one command.
+
+set -euo pipefail
+
+if [[ "${SWARMCHASE_SKIP_PRECOMMIT:-0}" == "1" ]]; then
+    printf '[pre-commit] SWARMCHASE_SKIP_PRECOMMIT=1 -- skipping checks\n' >&2
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+PY=python3
+command -v "$PY" >/dev/null 2>&1 || PY=python
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+# Runs on every commit: a raw dump or a live token is exactly the kind of
+# file that arrives in a commit nobody thought of as touching data.
+printf '[pre-commit] committed-data check\n'
+if ! "$PY" scripts/ci/check-committed-data.py --staged --quiet; then
+    printf '[pre-commit] move raw output to data/ or redact it (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+    exit 1
+fi
+
+if grep -q '\.md$' <<<"$STAGED"; then
+    printf '[pre-commit] doc link + anchor check\n'
+    if ! "$PY" scripts/ci/check-md-links.py --staged --quiet; then
+        printf '[pre-commit] fix the link target (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+fi
+
+if grep -q '^site/' <<<"$STAGED"; then
+    printf '[pre-commit] site safety check\n'
+    if ! "$PY" scripts/ci/check-site.py >/dev/null; then
+        printf '[pre-commit] fix the site code (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+fi
+
+if grep -q '^notices/' <<<"$STAGED"; then
+    printf '[pre-commit] notice lint\n'
+    if ! cargo run -q --profile release-test -p swarmchase -- notice lint; then
+        printf '[pre-commit] a notice carries something notices withhold (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+fi
+
+# A new or bumped dependency is where an advisory or a copyleft license gets
+# in. Not installed means not checked here; CI installs it and checks.
+if grep -qE '^(Cargo\.lock|deny\.toml)$' <<<"$STAGED"; then
+    if cargo deny --version >/dev/null 2>&1; then
+        printf '[pre-commit] cargo-deny (advisories, licenses, sources, bans)\n'
+        if ! scripts/ci/deny.sh >/dev/null; then
+            printf '[pre-commit] run scripts/ci/deny.sh for details (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+            exit 1
+        fi
+    else
+        printf '[pre-commit] WARNING: cargo-deny not installed; supply-chain check skipped (cargo install --locked cargo-deny)\n' >&2
+    fi
+fi
+
+if ! grep -qE '(^crates/|^Cargo\.(toml|lock)$|^rust-toolchain|^rules/|^samples/eval/)' <<<"$STAGED"; then
+    exit 0
+fi
+
+printf '[pre-commit] cargo fmt --check\n'
+if ! cargo fmt --all -- --check >/dev/null 2>&1; then
+    STAGED_RS="$(grep '\.rs$' <<<"$STAGED" || true)"
+    PARTIAL="$(comm -12 <(sort <<<"$STAGED_RS") <(git diff --name-only | sort))"
+    if [[ -n "$PARTIAL" ]]; then
+        printf '[pre-commit] fmt drift in files with unstaged changes; not auto-fixing:\n%s\n' "$PARTIAL" >&2
+        exit 1
+    fi
+    cargo fmt --all
+    if [[ -n "$STAGED_RS" ]]; then
+        xargs git add -- <<<"$STAGED_RS"
+    fi
+    printf '[pre-commit] reformatted and re-staged; review the diff and commit again\n' >&2
+    exit 1
+fi
+
+printf '[pre-commit] cargo clippy -D warnings\n'
+cargo clippy --all-targets --workspace --quiet -- -D warnings
+
+# Rules and the analysis they run in decide what gets flagged, so a change to
+# either re-measures precision and recall against samples/eval/.
+if grep -qE '^(rules/|crates/sc-core/|samples/eval/)' <<<"$STAGED"; then
+    printf '[pre-commit] detection eval gate\n'
+    scripts/ci/eval-gate.sh >/dev/null
+fi
+
+if grep -qE '^crates/(sc-core|sc-wasm)/' <<<"$STAGED"; then
+    printf '[pre-commit] wasm32 type-check\n'
+    scripts/ci/check-wasm-target.sh >/dev/null
+fi

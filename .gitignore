@@ -1,0 +1,17 @@
+/target
+/data
+/site/pkg
+*.analysis.json
+/cases/
+# Built from notices/ at deploy time (swarmchase notice build).
+/site/notices/
+
+# Private planning notes (requirements, roadmap, status); never published.
+/docs/PRD.md
+
+# Local secrets (API keys, SMTP credentials). Copy env.list.example to start.
+/env.list
+
+# Local tool state.
+/.claude/
+__pycache__/

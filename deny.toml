@@ -1,0 +1,50 @@
+# cargo-deny: what the dependency tree may contain. Run with
+# scripts/ci/deny.sh (installs cargo-deny when missing) or `cargo deny check`.
+#
+#   advisories  any RustSec advisory (vulnerable, unmaintained, unsound,
+#               yanked) fails, unless listed in `ignore` with a reason
+#   licenses    permissive only, so the workspace can ship as MIT OR Unlicense
+#   bans        no wildcard version requirements
+#   sources     crates.io only: no other registries, no git dependencies
+
+[graph]
+# No `targets` list: every platform's dependencies are checked, since the
+# browser toolkit builds for wasm32 and the runner is Linux arm64.
+all-features = true
+
+[advisories]
+version = 2
+db-urls = ["https://github.com/rustsec/advisory-db"]
+unmaintained = "all"
+yanked = "deny"
+# An advisory that does not apply goes here with the reason, e.g.
+# { id = "RUSTSEC-0000-0000", reason = "..." }
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# The licenses the tree uses, all compatible with MIT OR Unlicense
+# distribution. Adding one here is a review decision; copyleft never is.
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+# Workspace path dependencies (`sc-core = { path = ... }`) carry no version;
+# allowed only between unpublished workspace crates.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

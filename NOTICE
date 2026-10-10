@@ -1,0 +1,42 @@
+swarmchasing
+============
+
+This project is dual-licensed at the user's option under either:
+
+  * The Unlicense (public-domain dedication) - see LICENSE
+  * The MIT License                            - see LICENSE-MIT
+
+These licenses cover ONLY the original work in this repository: the Rust
+source code, indicator rules, scripts, site, and documentation authored by
+the project's contributors.
+
+
+Scope of the licenses
+---------------------
+
+The Unlicense / MIT grants do NOT, and cannot, extend to material owned by
+third parties. In particular:
+
+  * Records quoted in `samples/`, `notices/` and `cases/*/reports/` are
+    excerpts of public web-archive and scan-service indexes (for example the
+    Internet Archive's Wayback Machine and Arquivo.pt). They are quoted as
+    evidence for security reporting. Rights in the underlying records, and in
+    the pages they point to, remain with their owners. Secret-shaped values
+    in them are redacted before they are committed.
+
+  * Raw collector output is never committed. `data/` and `cases/*/raw/` are
+    gitignored, and the watch pipeline keeps its record store on the runner,
+    outside the checkout.
+
+  * The methods implemented here follow incident reports published by
+    swarmcha.se and Transluce. Those reports are linked, not copied, and
+    remain the work of their authors.
+
+
+Trademarks
+----------
+
+Names of AI providers, hosting platforms, relay services and affected
+organisations appear in rules, reports and notices descriptively, to
+identify the subject of a finding. Their use does not imply endorsement by,
+or affiliation with, any of them.

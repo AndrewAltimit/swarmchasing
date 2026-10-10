@@ -1,0 +1,77 @@
+name: watch
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run at a time: runs share the state file and record store.
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+env:
+  # Outside the checkout: actions/checkout cleans untracked files in the
+  # workspace, which would wipe the cursors and record store between runs.
+  # Defaults to ~/swarmchase-data for the runner user; override with a repo variable.
+  SWARMCHASE_DATA: ${{ vars.SWARMCHASE_DATA }}
+  # Email is optional. Without SMTP_URL the run still writes its digest; it just isn't mailed.
+  SMTP_URL: ${{ secrets.SMTP_URL }}
+  SMTP_USER: ${{ secrets.SMTP_USER }}
+  SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+  MAIL_FROM: ${{ secrets.MAIL_FROM }}
+  MAIL_TO: ${{ secrets.MAIL_TO }}
+  # If it is missing, urlquery sources are skipped and the digest says so.
+  URLQUERY_APIKEY: ${{ secrets.URLQUERY_APIKEY }}
+
+jobs:
+  watch:
+    runs-on: [self-hosted]
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: true
+
+      # Shares main-ci.yml's persistent cargo cache, so a scheduled run only
+      # rebuilds when the code changed.
+      - name: Select per-toolchain target dir
+        run: scripts/ci/select-ci-target-dir.sh
+
+      - name: Collect and analyse
+        id: watch
+        run: |
+          export SWARMCHASE_DATA="${SWARMCHASE_DATA:-$HOME/swarmchase-data}"
+          mkdir -p "$SWARMCHASE_DATA"
+          cargo run --release -p swarmchase -- watch watchlist.toml 2>&1 | tee "$RUNNER_TEMP/watch.log"
+
+      - name: Email digest
+        if: steps.watch.outputs.changed == 'true' && env.SMTP_URL != ''
+        run: |
+          bash scripts/ci/send-mail.sh "[swarmchase] watch digest $(basename '${{ steps.watch.outputs.run_dir }}')" \
+            "${{ steps.watch.outputs.run_dir }}/digest.md"
+
+      - name: Email failure alert
+        if: failure() && env.SMTP_URL != ''
+        run: |
+          {
+            echo "The scheduled watch run failed."
+            echo
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo
+            echo "Last lines of the log:"
+            tail -n 40 "$RUNNER_TEMP/watch.log" 2>/dev/null || echo "(no log)"
+          } > "$RUNNER_TEMP/alert.txt"
+          bash scripts/ci/send-mail.sh "[swarmchase] watch run FAILED" "$RUNNER_TEMP/alert.txt"
+
+      # No artifact upload: artifacts on a public repo are downloadable by anyone,
+      # and these are unreviewed leads. They stay in $SWARMCHASE_DATA on the runner
+      # and reach the admin only through the digest email.

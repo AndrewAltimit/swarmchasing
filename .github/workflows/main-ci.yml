@@ -1,0 +1,236 @@
+---
+# CI + GitHub Pages deploy for swarmchasing. Modelled on legend-of-legaia-re's
+# main-ci.yml (same self-hosted runner convention):
+#   - Pull requests run the repo gates (`gates`) and a lint pass (`pr-lint`:
+#     fmt, clippy, wasm32 type-check) on every push to the PR. The full build
+#     + test pass (`ci`) runs on push-to-main and workflow_dispatch; run the
+#     tests locally before opening a PR.
+#   - Pull requests from forks run NOTHING. The runner is a self-hosted box
+#     shared with other workloads, and a fork PR is arbitrary code. Also turn
+#     on Settings > Actions > "Require approval for all outside collaborators".
+#   - cargo runs directly on the runner (Ubuntu arm64, DGX Spark).
+#   - `deploy-pages` builds the browser toolkit with wasm-pack and publishes
+#     `site/` after `gates` and `ci` pass on main. Settings > Pages > Source
+#     must be "GitHub Actions".
+#   - watch.yml is separate: it is cron-driven and never touches Pages.
+
+name: Main CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A PR push supersedes the previous push's run; pushes to main keep one group
+# per commit and never cancel.
+concurrency:
+  group: main-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Every cargo job narrows CARGO_TARGET_DIR to a per-toolchain cache outside the
+# checkout (scripts/ci/select-ci-target-dir.sh). `actions/checkout` with
+# `clean: true` deletes the gitignored target/, so without it every run would
+# rebuild the workspace from cold. The cache defaults to
+# ~/.cache/swarmchase-ci-target for the runner user.
+
+jobs:
+  # -- Repository Gates -------------------------------------------------------
+  # The scripts/ci/check-*.py gates also run from scripts/git-hooks/pre-commit,
+  # but a gate that lives only in a hook is one skipped install away from being
+  # fiction. Separate job, not a step of `ci`: these take seconds, so a broken
+  # doc link or a committed dump reports in seconds rather than behind clippy.
+  gates:
+    name: Repo Gates
+    runs-on: self-hosted
+    timeout-minutes: 10
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: true
+
+      # The one hard rule: no raw dumps, no unredacted secrets. The gate
+      # self-tests its detectors and refuses to pass when a control fails.
+      - name: Committed data (no dumps, no live secrets)
+        run: python3 scripts/ci/check-committed-data.py
+
+      - name: Doc links + heading anchors
+        run: python3 scripts/ci/check-md-links.py
+
+      # The site renders attack payloads: strict CSP, no HTML parsing of strings.
+      - name: Site safety (CSP, no HTML sinks)
+        run: python3 scripts/ci/check-site.py
+
+      # RustSec advisories (vulnerable, unmaintained, yanked), permissive
+      # licenses only, crates.io as the only source, no wildcard versions.
+      # The first run on a runner installs the pinned cargo-deny.
+      - name: Supply chain (cargo-deny)
+        run: scripts/ci/deny.sh
+
+  # -- PR Lint ----------------------------------------------------------------
+  pr-lint:
+    name: PR Lint
+    runs-on: self-hosted
+    timeout-minutes: 60
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: true
+
+      - name: Select per-toolchain target dir
+        run: scripts/ci/select-ci-target-dir.sh
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --workspace -- -D warnings
+
+      - name: wasm32 type-check
+        run: scripts/ci/check-wasm-target.sh
+
+  # -- Cargo CI ---------------------------------------------------------------
+  ci:
+    name: Swarmchase CI
+    runs-on: self-hosted
+    timeout-minutes: 60
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: true
+
+      - name: Select per-toolchain target dir
+        run: scripts/ci/select-ci-target-dir.sh
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --workspace -- -D warnings
+
+      # `release-test` is release optimisation without fat LTO (Cargo.toml).
+      - name: Test
+        run: cargo test --workspace --profile release-test
+
+      # Precision/recall floors on samples/eval/. With no embargo a
+      # false positive goes public as soon as it is acted on, so a rules change
+      # that costs precision fails here.
+      - name: Detection eval gate
+        run: scripts/ci/eval-gate.sh --profile release-test
+
+      # Every committed notice: valid front matter and updates, and nothing a
+      # notice withholds (callback channels, addresses, credential shapes).
+      - name: Notices (nothing withheld leaks)
+        run: cargo run -q --profile release-test -p swarmchase -- notice lint
+
+      - name: Build
+        run: cargo build --release --workspace
+
+      - name: wasm32 type-check
+        run: scripts/ci/check-wasm-target.sh
+
+  # -- Deploy GitHub Pages ----------------------------------------------------
+  deploy-pages:
+    name: Deploy GitHub Pages
+    needs: [gates, ci]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: self-hosted
+    timeout-minutes: 30
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          clean: true
+
+      - name: Select per-toolchain target dir
+        run: scripts/ci/select-ci-target-dir.sh
+
+      - name: Build browser toolkit
+        run: scripts/ci/build-site.sh
+
+      # notices/*.md -> site/notices/ (index, one page per notice, Atom feed).
+      # Refuses to build if any notice fails `notice lint`.
+      - name: Build notices
+        run: |
+          owner="$(tr '[:upper:]' '[:lower:]' <<<"$GITHUB_REPOSITORY_OWNER")"
+          cargo run -q --profile release-test -p swarmchase -- notice build \
+            --out site/notices --base-url "https://${owner}.github.io/${GITHUB_REPOSITORY#*/}/"
+
+      # Target: bundle under 1.5 MB. Reported, not fatal.
+      - name: WASM bundle size (advisory)
+        run: |
+          size=$(stat -c %s site/pkg/sc_wasm_bg.wasm)
+          echo "sc_wasm_bg.wasm: $size bytes"
+          echo "WASM bundle: $(( size / 1024 )) KiB (target < 1536 KiB)" >> "$GITHUB_STEP_SUMMARY"
+
+      # The built page must not run anything a record carries. Fatal when a
+      # browser is installed; skipped with a warning when none is.
+      - name: Site XSS check (headless Chrome)
+        run: |
+          rc=0; node scripts/site-xss-check.mjs || rc=$?
+          if [ "$rc" -eq 2 ]; then echo "::warning::site XSS check skipped: no Chrome on the runner"; exit 0; fi
+          exit "$rc"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # -- CI Summary -------------------------------------------------------------
+  notify:
+    name: CI Summary
+    needs: [gates, pr-lint, ci, deploy-pages]
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: self-hosted
+    env:
+      GATES: ${{ needs.gates.result }}
+      PR_LINT: ${{ needs.pr-lint.result }}
+      CI: ${{ needs.ci.result }}
+      PAGES: ${{ needs.deploy-pages.result }}
+    steps:
+      - name: Generate summary
+        run: |
+          status() { case "$1" in success) echo pass;; skipped) echo skipped;; *) echo FAIL;; esac; }
+          {
+            echo "## Main CI Summary"
+            echo ""
+            echo "**Commit**: ${{ github.sha }}"
+            echo "**Branch**: ${{ github.ref_name }}"
+            echo ""
+            echo "| Stage | Status |"
+            echo "|-------|--------|"
+            echo "| Repo Gates | $(status "$GATES") |"
+            echo "| PR Lint | $(status "$PR_LINT") |"
+            echo "| CI | $(status "$CI") |"
+            echo "| GitHub Pages | $(status "$PAGES") |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for r in "$GATES" "$PR_LINT" "$CI" "$PAGES"; do
+            if [[ "$r" == failure ]]; then
+              echo "CI failed - please review the logs" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          done
