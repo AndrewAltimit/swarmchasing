@@ -62,7 +62,7 @@ pub struct Rhythm {
 /// The rhythm of `ts`, in any order; unknown timestamps (<= 0) are ignored.
 pub fn rhythm_of(ts: &[i64]) -> Rhythm {
     let mut t: Vec<i64> = ts.iter().copied().filter(|&x| x > 0).collect();
-    t.sort_unstable();
+    crate::sort::sort(&mut t);
     rhythm(&t)
 }
 

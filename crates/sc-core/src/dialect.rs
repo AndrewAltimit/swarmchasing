@@ -352,7 +352,7 @@ pub fn cut_lengths(urls: &[(&str, bool)], opts: &CutOptions) -> CutLengths {
 
 /// The largest set of lengths within `tolerance` of a common centre.
 fn cut_group(mut lens: Vec<usize>, opts: &CutOptions) -> Option<CutGroup> {
-    lens.sort_unstable();
+    crate::sort::sort(&mut lens);
     let mut best: Option<CutGroup> = None;
     for (i, &lo) in lens.iter().enumerate() {
         let n = lens[i..]

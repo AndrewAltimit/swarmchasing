@@ -79,7 +79,7 @@ pub fn fanout(reqs: &[FanRequest], opts: &FanOutOptions) -> FanOut {
     if rs.len() < 2 || rs.iter().all(|r| r.ts % 60 == 0) {
         return FanOut::default();
     }
-    rs.sort_by_key(|r| r.ts);
+    crate::sort::by_key(&mut rs, |r| r.ts);
     let mut widths: BTreeMap<usize, usize> = BTreeMap::new();
     let mut i = 0;
     while i < rs.len() {

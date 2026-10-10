@@ -71,7 +71,7 @@ struct Seq {
 
 fn seq(r: &TargetRun) -> Seq {
     let mut t: Vec<&(i64, String)> = r.targets.iter().filter(|(ts, _)| *ts > 0).collect();
-    t.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    crate::sort::by(&mut t, |a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
     let mut set = BTreeSet::new();
     let mut hosts = Vec::new();
     for (_, h) in &t {
@@ -119,7 +119,7 @@ pub fn reruns(runs: &[TargetRun], opt: &RecurrenceOptions) -> Vec<Rerun> {
     let mut order: Vec<usize> = (0..seqs.len())
         .filter(|&i| seqs[i].hosts.len() >= opt.min_shared.max(1))
         .collect();
-    order.sort_by_key(|&i| (seqs[i].start, i));
+    crate::sort::by_key(&mut order, |&i| (seqs[i].start, i));
 
     let mut out = Vec::new();
     for (k, &i) in order.iter().enumerate() {

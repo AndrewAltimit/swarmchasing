@@ -26,6 +26,7 @@ pub mod redact;
 pub mod report;
 pub mod rules;
 pub mod securitytxt;
+pub mod sort;
 pub mod stamp;
 pub mod timing;
 pub mod urlquery;

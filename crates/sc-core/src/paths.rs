@@ -222,7 +222,7 @@ fn collapse_segment(s: &str) -> String {
 /// The first `k` distinct paths requested on each host, in time order.
 pub fn host_preambles(reqs: &[PathRequest], k: usize) -> BTreeMap<String, Vec<String>> {
     let mut sorted: Vec<&PathRequest> = reqs.iter().collect();
-    sorted.sort_by_key(|r| r.ts);
+    crate::sort::by_key(&mut sorted, |r| r.ts);
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for r in sorted {
         let v = out.entry(r.host.clone()).or_default();
@@ -264,7 +264,9 @@ pub fn shared_preambles(reqs: &[PathRequest], opts: &PathOptions) -> Vec<SharedP
             hosts,
         })
         .collect();
-    out.sort_by(|a, b| b.hosts.cmp(&a.hosts).then(a.paths.cmp(&b.paths)));
+    crate::sort::by(&mut out, |a, b| {
+        b.hosts.cmp(&a.hosts).then(a.paths.cmp(&b.paths))
+    });
     out
 }
 
@@ -322,7 +324,9 @@ pub fn shared_unusual_sets(reqs: &[PathRequest], opts: &PathOptions) -> Vec<Shar
             not_found,
         });
     }
-    out.sort_by(|a, b| b.hosts.cmp(&a.hosts).then(a.paths.cmp(&b.paths)));
+    crate::sort::by(&mut out, |a, b| {
+        b.hosts.cmp(&a.hosts).then(a.paths.cmp(&b.paths))
+    });
     out
 }
 

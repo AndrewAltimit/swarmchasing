@@ -50,13 +50,13 @@ fn stored_differences(st: &Stamp, text: &str) -> Result<Vec<String>, String> {
             .iter()
             .map(|&m| id(m))
             .collect::<Result<Vec<_>, _>>()?;
-        members.sort();
+        sc_core::sort::sort(&mut members);
         clusters.push(StampCluster {
             tier: c.tier,
             members,
         });
     }
-    clusters.sort_by(|x, y| x.members.cmp(&y.members));
+    sc_core::sort::by(&mut clusters, |x, y| x.members.cmp(&y.members));
     let flagged: BTreeMap<&str, Tier> = a
         .results
         .iter()

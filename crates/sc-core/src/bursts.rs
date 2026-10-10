@@ -100,7 +100,9 @@ pub fn archive_bursts(
             });
         }
     }
-    out.sort_by(|x, y| y.count.cmp(&x.count).then_with(|| x.start.cmp(&y.start)));
+    crate::sort::by(&mut out, |x, y| {
+        y.count.cmp(&x.count).then_with(|| x.start.cmp(&y.start))
+    });
     out
 }
 

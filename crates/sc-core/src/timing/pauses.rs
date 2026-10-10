@@ -101,9 +101,9 @@ pub fn shared_pauses(
         .iter()
         .filter_map(|(id, ts)| {
             let mut t: Vec<i64> = ts.iter().copied().filter(|&x| x > 0).collect();
-            t.sort_unstable();
+            crate::sort::sort(&mut t);
             let mut gaps: Vec<f64> = t.windows(2).map(|w| (w[1] - w[0]) as f64).collect();
-            gaps.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            crate::sort::by(&mut gaps, |a, b| a.partial_cmp(b).unwrap());
             let pauses = pause_spans(&t, quantile(&gaps, 0.5), opts.pause_min_secs);
             (!pauses.is_empty()).then(|| C {
                 id,
@@ -126,7 +126,7 @@ pub fn shared_pauses(
             let pb: Vec<&Span> = b.pauses.iter().filter(inside).collect();
 
             let mut durs: Vec<i64> = pb.iter().map(|p| p.end - p.start).collect();
-            durs.sort_unstable();
+            crate::sort::sort(&mut durs);
             let window = (hi - lo) as f64;
             let expected: f64 = pa
                 .iter()

@@ -131,7 +131,7 @@ pub fn stale_dates(samples: &[(i64, NaiveDate)]) -> StaleDates {
         return out;
     }
     let mut lags: Vec<i64> = stale.iter().map(|s| s.0).collect();
-    lags.sort_unstable();
+    crate::sort::sort(&mut lags);
     let median = lags[(lags.len() - 1) / 2];
     let mut by_date: BTreeMap<NaiveDate, usize> = BTreeMap::new();
     for &(_, d) in &stale {

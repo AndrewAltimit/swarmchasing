@@ -603,7 +603,7 @@ pub fn merge(mut claims: Vec<Claim>, extra: &[Claim]) -> Vec<Claim> {
 /// By layer; within a layer, strongest evidence first, harness candidates by
 /// records and model families by likelihood.
 fn sort(claims: &mut [Claim]) {
-    claims.sort_by(|a, b| {
+    crate::sort::by(claims, |a, b| {
         a.role
             .cmp(&b.role)
             .then(b.evidence.cmp(&a.evidence))

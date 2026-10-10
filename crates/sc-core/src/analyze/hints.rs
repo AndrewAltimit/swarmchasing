@@ -36,7 +36,7 @@ pub(super) fn cluster(
     rules: &Rules,
 ) -> Cluster {
     let cfg = &rules.set.linking;
-    members.sort_by_key(|&i| results[i].obs.ts);
+    crate::sort::by_key(&mut members, |&i| results[i].obs.ts);
     let mut rules_seen: BTreeMap<String, usize> = BTreeMap::new();
     let mut kinds: BTreeMap<IndicatorKind, usize> = BTreeMap::new();
     let mut tactics: BTreeMap<Tactic, usize> = BTreeMap::new();
@@ -245,7 +245,7 @@ fn is_context_kind(k: IndicatorKind) -> bool {
 
 pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
     let mut t: Vec<i64> = ts.iter().copied().filter(|&x| x > 0).collect();
-    t.sort_unstable();
+    crate::sort::sort(&mut t);
     let mut runs: Vec<Span> = Vec::new();
     for x in t {
         match runs.last_mut() {

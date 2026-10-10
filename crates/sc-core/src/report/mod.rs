@@ -494,7 +494,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
         .iter()
         .flat_map(|c| c.members.iter().copied())
         .collect();
-    ev.sort_by(|&x, &y| {
+    crate::sort::by(&mut ev, |&x, &y| {
         a.results[y]
             .score
             .cmp(&a.results[x].score)

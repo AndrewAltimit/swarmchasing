@@ -225,7 +225,7 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
             }
         }
         let mut ids: Vec<&str> = r.hits.iter().map(|h| h.rule_id.as_str()).collect();
-        ids.sort_unstable();
+        crate::sort::sort(&mut ids);
         ids.dedup();
         for id in &ids {
             let e = rules.entry((*id).to_string()).or_default();
@@ -289,7 +289,9 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
         t.precision_ci = stats::wilson(t.tp, t.tp + t.fp);
         t.recall_ci = stats::wilson(t.tp, t.tp + t.fn_);
     }
-    fps.sort_by(|x, y| y.tier.cmp(&x.tier).then(y.score.cmp(&x.score)));
+    crate::sort::by(&mut fps, |x, y| {
+        y.tier.cmp(&x.tier).then(y.score.cmp(&x.score))
+    });
     let missing_records = labels
         .labels
         .keys()
@@ -304,7 +306,7 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
             on_benign,
         })
         .collect();
-    rules.sort_by(|x, y| {
+    crate::sort::by(&mut rules, |x, y| {
         (y.on_agent + y.on_benign)
             .cmp(&(x.on_agent + x.on_benign))
             .then_with(|| x.rule_id.cmp(&y.rule_id))

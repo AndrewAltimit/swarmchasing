@@ -189,7 +189,7 @@ pub fn escalations(
         if !reqs.iter().any(|&(_, r)| r > Route::Direct) {
             continue;
         }
-        reqs.sort_by_key(|&(i, _)| (results[i].obs.ts, i));
+        crate::sort::by_key(&mut reqs, |&(i, _)| (results[i].obs.ts, i));
         let mut start = 0;
         for k in 1..=reqs.len() {
             let split = k == reqs.len()
@@ -202,7 +202,9 @@ pub fn escalations(
             }
         }
     }
-    out.sort_by(|a, b| a.start.cmp(&b.start).then(a.host.cmp(&b.host)));
+    crate::sort::by(&mut out, |a, b| {
+        a.start.cmp(&b.start).then(a.host.cmp(&b.host))
+    });
     out
 }
 

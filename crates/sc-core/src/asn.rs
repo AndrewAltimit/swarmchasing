@@ -54,7 +54,7 @@ impl AsnTable {
                 (asn != 0 && s <= e).then_some((s, e, asn, org))
             })
             .collect();
-        rows.sort_by_key(|r| r.0);
+        crate::sort::by_key(&mut rows, |r| r.0);
         let mut t = Self::default();
         let mut org_ids = std::collections::HashMap::new();
         for (s, e, asn, org) in rows {

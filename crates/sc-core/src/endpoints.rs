@@ -91,7 +91,7 @@ pub fn endpoints(a: &Analysis, opts: &EndpointOptions) -> Vec<EndpointView> {
     let mut clusters: BTreeMap<&str, BTreeSet<usize>> = BTreeMap::new();
 
     let mut order: Vec<usize> = (0..a.results.len()).collect();
-    order.sort_by_key(|&i| a.results[i].obs.ts);
+    crate::sort::by_key(&mut order, |&i| a.results[i].obs.ts);
     for i in order {
         let r = &a.results[i];
         let Some(host) = r.target_host.as_deref() else {
@@ -164,7 +164,7 @@ pub fn endpoints(a: &Analysis, opts: &EndpointOptions) -> Vec<EndpointView> {
             v
         })
         .collect();
-    out.sort_by(|x, y| {
+    crate::sort::by(&mut out, |x, y| {
         y.payloads
             .cmp(&x.payloads)
             .then(y.max_tier.cmp(&x.max_tier))

@@ -487,7 +487,7 @@ fn de_ts<'de, D: Deserializer<'de>>(d: D) -> Result<i64, D::Error> {
 /// The `n` largest counts, largest first, ties in key order.
 pub fn top_counts<K: ToString>(m: &BTreeMap<K, usize>, n: usize) -> Vec<(String, usize)> {
     let mut v: Vec<(String, usize)> = m.iter().map(|(k, c)| (k.to_string(), *c)).collect();
-    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    crate::sort::by(&mut v, |a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     v.truncate(n);
     v
 }

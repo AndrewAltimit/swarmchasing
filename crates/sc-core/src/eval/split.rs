@@ -117,7 +117,9 @@ pub fn split(a: &Analysis, labels: &LabelSet, kind: SplitKind, seed: u64, fracti
     match kind {
         SplitKind::Time => {
             let mut order: Vec<usize> = (0..recs.len()).collect();
-            order.sort_by(|&x, &y| recs[x].1.cmp(&recs[y].1).then(recs[x].0.cmp(recs[y].0)));
+            crate::sort::by(&mut order, |&x, &y| {
+                recs[x].1.cmp(&recs[y].1).then(recs[x].0.cmp(recs[y].0))
+            });
             if target > 0 {
                 let cut = recs[order[recs.len() - target]].1;
                 cutoff_ts = Some(cut);
@@ -149,7 +151,7 @@ pub fn split(a: &Analysis, labels: &LabelSet, kind: SplitKind, seed: u64, fracti
                     (h, m)
                 })
                 .collect();
-            keyed.sort_by_key(|(h, _)| *h);
+            crate::sort::by_key(&mut keyed, |(h, _)| *h);
             // Fisher-Yates over the id-sorted groups.
             for i in (1..keyed.len()).rev() {
                 let j = (rng.next() % (i as u64 + 1)) as usize;
@@ -172,7 +174,7 @@ pub fn split(a: &Analysis, labels: &LabelSet, kind: SplitKind, seed: u64, fracti
             .filter(|&i| f(i))
             .map(|i| recs[i].0.to_string())
             .collect();
-        v.sort();
+        crate::sort::sort(&mut v);
         v
     };
     Split {

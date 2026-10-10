@@ -278,7 +278,7 @@ pub fn header_set(headers: &BTreeMap<String, String>) -> Option<HeaderSet> {
         HeaderCasing::Mixed
     };
     let mut names: Vec<String> = raw.iter().map(|k| k.to_ascii_lowercase()).collect();
-    names.sort();
+    crate::sort::sort(&mut names);
     names.dedup();
     let hash = short_hash(&format!("{casing:?}|{}", names.join(",")));
     Some(HeaderSet {

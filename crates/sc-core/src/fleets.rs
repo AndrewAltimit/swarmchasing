@@ -325,7 +325,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             }
         }
     }
-    out.sort_by(|p, q| {
+    crate::sort::by(&mut out, |p, q| {
         q.strength
             .total_cmp(&p.strength)
             .then(order[p.a.as_str()].cmp(&order[q.a.as_str()]))

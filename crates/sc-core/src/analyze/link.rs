@@ -44,7 +44,7 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
         .map(|r| r.obs.ts)
         .filter(|&t| t > 0)
         .collect();
-    all_ts.sort_unstable();
+    crate::sort::sort(&mut all_ts);
     let mut joined = HashSet::new();
     let mut common = Vec::new();
     for (&f, idxs) in &carriers {
@@ -65,7 +65,9 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
             joined.extend(group.iter().map(|&i| (i, f)));
         }
     }
-    common.sort_by(|a, b| a.start.cmp(&b.start).then(a.feature.cmp(&b.feature)));
+    crate::sort::by(&mut common, |a, b| {
+        a.start.cmp(&b.start).then(a.feature.cmp(&b.feature))
+    });
 
     // Same target host, close in time, and sharing at least one rule.
     let mut by_host: HashMap<&str, Vec<usize>> = HashMap::new();
@@ -75,7 +77,7 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
         }
     }
     for idxs in by_host.values_mut() {
-        idxs.sort_by_key(|&i| results[i].obs.ts);
+        crate::sort::by_key(idxs, |&i| results[i].obs.ts);
         for w in idxs.windows(2) {
             let (a, b) = (&results[w[0]], &results[w[1]]);
             let close = a.obs.ts > 0 && b.obs.ts > 0 && b.obs.ts - a.obs.ts <= cfg.window_secs;
@@ -123,7 +125,7 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
 fn feature_groups(results: &[ObsResult], idxs: &[usize], window: i64) -> Vec<Vec<usize>> {
     let (mut timed, untimed): (Vec<usize>, Vec<usize>) =
         idxs.iter().partition(|&&i| results[i].obs.ts > 0);
-    timed.sort_by_key(|&i| (results[i].obs.ts, i));
+    crate::sort::by_key(&mut timed, |&i| (results[i].obs.ts, i));
     let mut groups: Vec<Vec<usize>> = Vec::new();
     for i in timed {
         let ts = results[i].obs.ts;
@@ -197,7 +199,7 @@ fn common_feature(
 /// Order clusters strongest first, number them `C1..`, give each its key,
 /// and point every member record at its cluster.
 pub(super) fn number(clusters: &mut [Cluster], results: &mut [ObsResult]) {
-    clusters.sort_by(|a, b| {
+    crate::sort::by(clusters, |a, b| {
         b.tier
             .cmp(&a.tier)
             .then(b.members.len().cmp(&a.members.len()))

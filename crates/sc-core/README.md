@@ -73,6 +73,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |
 | [`eval`](src/eval.rs) | Precision and recall against labelled records. |
 | [`securitytxt`](src/securitytxt.rs) | RFC 9116 `security.txt` parsing. |
+| [`sort`](src/sort.rs) | Stable sorts that share one compiled routine, so each call site does not add a copy of the standard sort to the browser module. Same order as `slice::sort_by`. |
 
 ## Rules
 

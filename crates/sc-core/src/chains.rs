@@ -155,7 +155,7 @@ pub fn chains(results: &[ObsResult], opts: &ChainOptions) -> Vec<Chain> {
     }
     let mut out = Vec::new();
     for ((host, path), mut reqs) in by_target {
-        reqs.sort_by_key(|(i, _)| (results[*i].obs.ts, *i));
+        crate::sort::by_key(&mut reqs, |(i, _)| (results[*i].obs.ts, *i));
         let mut seg: Vec<(usize, Params)> = Vec::new();
         let mut flush = |seg: &mut Vec<(usize, Params)>| {
             if let Some(c) = chain_of(results, &host, &path, seg, opts) {
@@ -173,7 +173,9 @@ pub fn chains(results: &[ObsResult], opts: &ChainOptions) -> Vec<Chain> {
         }
         flush(&mut seg);
     }
-    out.sort_by(|a, b| a.start.cmp(&b.start).then(a.host.cmp(&b.host)));
+    crate::sort::by(&mut out, |a, b| {
+        a.start.cmp(&b.start).then(a.host.cmp(&b.host))
+    });
     out
 }
 
@@ -216,7 +218,7 @@ fn chain_of(
         })
         .count();
     let mut gaps: Vec<i64> = ts.windows(2).map(|w| w[1] - w[0]).collect();
-    gaps.sort_unstable();
+    crate::sort::sort(&mut gaps);
     let median = gaps.get(gaps.len() / 2).copied().unwrap_or(0);
     Some(Chain {
         host: host.to_string(),
@@ -236,7 +238,7 @@ fn chain_of(
 
 fn sorted(p: &Params) -> Params {
     let mut p = p.clone();
-    p.sort();
+    crate::sort::sort(&mut p);
     p
 }
 

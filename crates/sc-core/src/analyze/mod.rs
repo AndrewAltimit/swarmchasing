@@ -270,7 +270,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
             count,
         })
         .collect();
-    asns.sort_by_key(|a| std::cmp::Reverse(a.count));
+    crate::sort::by_key(&mut asns, |a| std::cmp::Reverse(a.count));
     let quiet: Vec<(String, Vec<i64>)> = clusters
         .iter()
         .filter(|c| c.tier > Tier::Noise)

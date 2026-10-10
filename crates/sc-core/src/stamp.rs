@@ -96,14 +96,14 @@ impl Stamp {
                     .iter()
                     .map(|&m| a.results[m].obs.id.clone())
                     .collect();
-                members.sort();
+                crate::sort::sort(&mut members);
                 StampCluster {
                     tier: c.tier,
                     members,
                 }
             })
             .collect();
-        clusters.sort_by(|x, y| x.members.cmp(&y.members));
+        crate::sort::by(&mut clusters, |x, y| x.members.cmp(&y.members));
         Stamp {
             case: case.to_string(),
             generated: generated.to_string(),

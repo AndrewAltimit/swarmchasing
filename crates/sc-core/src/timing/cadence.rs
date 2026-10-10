@@ -30,13 +30,13 @@ pub(super) fn pause_spans(t: &[i64], median_gap: Option<f64>, pause_min_secs: i6
 /// `ts` need not be sorted. Unknown timestamps (<= 0) are ignored.
 pub fn timing(ts: &[i64], cfg: &Linking) -> TimingStats {
     let mut t: Vec<i64> = ts.iter().copied().filter(|&x| x > 0).collect();
-    t.sort_unstable();
+    crate::sort::sort(&mut t);
     if t.is_empty() {
         return TimingStats::default();
     }
     let gaps: Vec<i64> = t.windows(2).map(|w| w[1] - w[0]).collect();
     let mut sorted: Vec<f64> = gaps.iter().map(|&g| g as f64).collect();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    crate::sort::by(&mut sorted, |a, b| a.partial_cmp(b).unwrap());
     let median = quantile(&sorted, 0.5);
 
     let mut bursts = Vec::new();
@@ -57,7 +57,7 @@ pub fn timing(ts: &[i64], cfg: &Linking) -> TimingStats {
     }
 
     let mut pauses = pause_spans(&t, median, cfg.pause_min_secs);
-    pauses.sort_by_key(|p| std::cmp::Reverse(p.end - p.start));
+    crate::sort::by_key(&mut pauses, |p| std::cmp::Reverse(p.end - p.start));
     pauses.truncate(20);
 
     let first_hour = t[0] - t[0].rem_euclid(3600);
@@ -97,7 +97,7 @@ pub fn max_concurrency(intervals: &[(i64, i64)]) -> usize {
         }
     }
     // Starts before ends at the same instant, so touching intervals overlap.
-    ev.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+    crate::sort::by(&mut ev, |a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
     let (mut cur, mut best) = (0i32, 0i32);
     for (_, d) in ev {
         cur += d;

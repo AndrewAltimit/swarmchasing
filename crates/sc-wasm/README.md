@@ -18,7 +18,7 @@ await init();
 const out = JSON.parse(sc.analyze(text, "auto", "", ""));
 ```
 
-What keeps the module small: regex without Unicode property tables or literal prefilters (the workspace manifest); rules read as JSON, not TOML (edited rules go through [`sc-rules-wasm`](../sc-rules-wasm/README.md), and [`build.rs`](build.rs) converts the bundled rules); the labelled set and the example records served by the site, not compiled in; no deserialiser for a whole analysis.
+What keeps the module small: regex without Unicode property tables or literal prefilters (the workspace manifest); rules read as JSON, not TOML (edited rules go through [`sc-rules-wasm`](../sc-rules-wasm/README.md), and [`build.rs`](build.rs) converts the bundled rules); the labelled set and the example records served by the site, not compiled in; no deserialiser for a whole analysis; sorts through one shared routine ([`sc_core::sort`](../sc-core/src/sort.rs)) rather than one copy of the standard sort per call site.
 
 ## API
 
@@ -26,8 +26,6 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 
 | Function | Returns |
 |---|---|
-| `version()` | The toolkit version. |
-| `default_rules()` | The bundled `rules/default.toml` text. |
 | `check_rules(rules_json)` | `{"rules", "asns", "version"}`, or throws on an invalid rule set. |
 | `analyze(input, format, map, rules_json)` | `{"analysis", "warnings", "redacted", "cluster_date_tags"}`, and keeps the analysis for `report` and `endpoints`. `format` is `auto`, `ndjson`, `json`, `lines` or `access_log`; `map` is a field mapping such as `ts=a.b,url=c`, or empty. Secrets are redacted before analysis. |
 | `unwrap(url, rules_json)` | The layers inside one URL and the rules that fired. |

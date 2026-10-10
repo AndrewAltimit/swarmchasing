@@ -50,16 +50,6 @@ fn json<T: serde::Serialize>(v: &T) -> Result<String, JsError> {
     serde_json::to_string(v).map_err(|e| JsError::new(&e.to_string()))
 }
 
-#[wasm_bindgen]
-pub fn version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
-}
-
-#[wasm_bindgen]
-pub fn default_rules() -> String {
-    sc_core::DEFAULT_RULES.to_string()
-}
-
 /// Validate rules; returns `{"rules":n,"asns":n,"version":"..."}`.
 #[wasm_bindgen]
 pub fn check_rules(rules_json: &str) -> Result<String, JsError> {
@@ -242,7 +232,7 @@ fn eval_with(rules: &Rules, set: &str) -> String {
             continue;
         }
         let mut ids: Vec<&str> = r.hits.iter().map(|h| h.rule_id.as_str()).collect();
-        ids.sort_unstable();
+        sc_core::sort::sort(&mut ids);
         ids.dedup();
         let rec = EvalRecord {
             id: &r.obs.id,
