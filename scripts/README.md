@@ -20,8 +20,8 @@ A gate fails the commit or the run. CI is the authority; the hook is a fast loca
 | `cargo test --profile release-test` | The test suite. | `ci` | not run; run it before pushing |
 | [`ci/eval-gate.sh`](ci/eval-gate.sh) | Precision and recall floors on `samples/eval/` ([evaluation](../docs/reference/evaluation.md#the-eval-gate)). | `ci` | staged `rules/`, `crates/sc-core/`, `samples/eval/` |
 | `swarmchase notice lint` | Committed notices carry nothing a notice withholds ([notices](../docs/reference/notices.md#lint)). | `ci` | staged `notices/` |
-| [`ci/check-wasm-target.sh`](ci/check-wasm-target.sh) | Type-checks `sc-wasm` for `wasm32-unknown-unknown`. | `ci` | staged `crates/sc-core/`, `crates/sc-wasm/` |
-| [`site-xss-check.mjs`](site-xss-check.mjs) | Loads XSS probes and a hostile notice into the built site in headless Chrome; fails if any runs. | `deploy-pages` | not run |
+| [`ci/check-wasm-target.sh`](ci/check-wasm-target.sh) | Type-checks `sc-wasm` and `sc-rules-wasm` for `wasm32-unknown-unknown`. | `ci` | staged `crates/sc-core/`, `crates/sc-wasm/` |
+| [`site-xss-check.mjs`](site-xss-check.mjs) | Builds the site with a hostile notice and drives every page in headless Chrome with XSS probes; fails if any runs. | `deploy-pages` | not run |
 
 Pull requests run `gates` then `ci`; pushes to `main` run both and then `deploy-pages`. Pull requests from forks run nothing. The jobs are in [`main-ci.yml`](../.github/workflows/main-ci.yml); the runner setup is in [runner](../docs/reference/runner.md).
 
@@ -32,7 +32,7 @@ Pull requests run `gates` then `ci`; pushes to `main` run both and then `deploy-
 | Script | Does | Used by |
 |---|---|---|
 | [`ci/select-ci-target-dir.sh`](ci/select-ci-target-dir.sh) | Points `CARGO_TARGET_DIR` at a per-compiler cache outside the checkout and prunes the others. | every cargo job in both workflows |
-| [`ci/build-site.sh`](ci/build-site.sh) | Builds `sc-wasm` into `site/pkg`, running wasm-opt itself with a cache keyed by the module hash. `--dev` skips wasm-opt. | `deploy-pages`; local site work |
+| [`ci/build-site.sh`](ci/build-site.sh) | Builds the WASM modules (wasm-opt cached by module hash, size budget enforced), then the site into `_site/`, then runs `check-site.py` on it. | `deploy-pages`; local site work |
 | [`ci/send-mail.sh`](ci/send-mail.sh) | Sends a plain-text email to the admin over SMTP with `curl`, with Date and Message-ID headers; refuses header injection. | `watch.yml` digest and failure alert |
 | [`ci/install-hooks.sh`](ci/install-hooks.sh) | Points `core.hooksPath` at `git-hooks/`. Run once per clone. | contributors |
 

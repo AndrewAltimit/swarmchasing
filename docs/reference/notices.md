@@ -43,4 +43,4 @@ CI runs it on every pull request and push, and so does the pre-commit hook when 
 
 ## Build
 
-At deploy, `notice build --out site/notices --base-url <url>` turns `notices/` into `site/notices/`: an index, one page per notice and an Atom feed with one entry per update. It refuses to build if any notice fails the lint. `site/notices/` is generated and gitignored. In the browser toolkit, the Notices tab lists them by status, provider and affected host ([browser toolkit](browser-toolkit.md#notices-tab)).
+`notice build --out <dir> --base-url <url>` turns `notices/` into the notice data: an index, one JSON page per notice and an Atom feed with one entry per update. It refuses to build if any notice fails the lint. At deploy the site build writes the same files under `notices/`, plus a static page per notice and the filterable index ([browser toolkit](browser-toolkit.md#pages)).

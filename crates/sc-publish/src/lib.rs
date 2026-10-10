@@ -14,6 +14,7 @@
 pub mod feed;
 pub mod file;
 pub mod markdown;
+pub mod pages;
 pub mod site;
 
 pub use feed::atom_feed;
@@ -22,6 +23,7 @@ pub use file::{
     parse_notice, strip_draft_banner, write_notice,
 };
 pub use markdown::{Block, Inline, ListItem, md_blocks, md_inline};
+pub use pages::{SiteInputs, build_pages};
 pub use site::{IndexEntry, NoticePage, build_site, index_entry};
 
 #[cfg(test)]
@@ -133,6 +135,6 @@ mod tests {
         );
         assert!(f.find("Correction:").unwrap() < f.find("Published:").unwrap());
         assert!(f.contains("<updated>2026-10-22T00:00:00Z</updated>"));
-        assert!(f.contains("#notice=2026-10-portal#1"));
+        assert!(f.contains("notices/2026-10-portal/#1"));
     }
 }

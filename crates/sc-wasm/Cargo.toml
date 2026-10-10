@@ -15,5 +15,12 @@ serde.workspace = true
 serde_json.workspace = true
 wasm-bindgen.workspace = true
 
+[build-dependencies]
+serde_json.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+sc-rules-wasm = { path = "../sc-rules-wasm" }
+
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Os"]
+wasm-opt = ["-Oz"]

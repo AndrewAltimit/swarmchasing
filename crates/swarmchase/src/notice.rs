@@ -483,7 +483,7 @@ mod tests {
         let page = std::fs::read_to_string(out.join("n-1.json")).unwrap();
         assert!(page.contains("\"t\":\"heading\""), "{page}");
         let feed = std::fs::read_to_string(out.join("feed.xml")).unwrap();
-        assert!(feed.contains("https://x.example/s/#notice=n-1"), "{feed}");
+        assert!(feed.contains("https://x.example/s/notices/n-1/"), "{feed}");
 
         // A leak in any notice stops the build.
         std::fs::write(

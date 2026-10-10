@@ -14,8 +14,9 @@
 #     shared with other workloads, and a fork PR is arbitrary code. Also turn
 #     on Settings > Actions > "Require approval for all outside collaborators".
 #   - cargo runs directly on the runner (Ubuntu arm64, DGX Spark).
-#   - `deploy-pages` builds the browser toolkit with wasm-pack and publishes
-#     `site/` after `gates` and `ci` pass on main. Settings > Pages > Source
+#   - `deploy-pages` builds the site (the WASM modules, then every page from
+#     committed inputs, into `_site/`) and publishes it after `gates` and
+#     `ci` pass on main. Settings > Pages > Source
 #     must be "GitHub Actions".
 #   - watch.yml is separate: it is cron-driven, never touches Pages, and
 #     builds its own release binary into the shared cargo cache.
@@ -171,30 +172,31 @@ jobs:
       - name: Select per-toolchain target dir
         run: scripts/ci/select-ci-target-dir.sh
 
+      # The WASM modules, then every page into _site/ (scripts/ci/build-site.sh).
       # wasm-pack builds without optimising; the script runs wasm-opt itself
       # and caches the result outside the checkout, keyed by the hash of the
       # unoptimised module, so a deploy that did not change the Rust skips
-      # the multi-minute optimiser pass.
-      - name: Build browser toolkit
-        run: scripts/ci/build-site.sh
-
-      # notices/*.md -> site/notices/ (index, one page per notice, Atom feed).
-      # Refuses to build if any notice fails `notice lint`.
-      - name: Build notices
+      # the multi-minute optimiser pass. It fails when the analysis module is
+      # over 1.5 MiB, when a notice fails its check, when a page breaks the
+      # site policy (check-site.py), or when the build read anything that is
+      # not a committed site input (nothing under data/ or $SWARMCHASE_DATA).
+      - name: Build site
         run: |
           owner="$(tr '[:upper:]' '[:lower:]' <<<"$GITHUB_REPOSITORY_OWNER")"
-          cargo run -q --profile release-test -p swarmchase -- notice build \
-            --out site/notices --base-url "https://${owner}.github.io/${GITHUB_REPOSITORY#*/}/"
+          SITE_BASE_URL="https://${owner}.github.io/${GITHUB_REPOSITORY#*/}/" scripts/ci/build-site.sh
 
-      # Target: bundle under 1.5 MB. Reported, not fatal.
-      - name: WASM bundle size (advisory)
+      - name: WASM module sizes
         run: |
-          size=$(stat -c %s site/pkg/sc_wasm_bg.wasm)
-          echo "sc_wasm_bg.wasm: $size bytes"
-          echo "WASM bundle: $(( size / 1024 )) KiB (target < 1536 KiB)" >> "$GITHUB_STEP_SUMMARY"
+          for f in site/pkg/sc_wasm_bg.wasm site/pkg-rules/sc_rules_wasm_bg.wasm; do
+            size=$(stat -c %s "$f")
+            echo "$f: $size bytes"
+            echo "$(basename "$f"): $(( size / 1024 )) KiB" >> "$GITHUB_STEP_SUMMARY"
+          done
 
-      # The built page must not run anything a record carries. Fatal when a
-      # browser is installed. With no Chrome (exit 2) it is skipped with a
+      # No generated page may run anything a notice, record, claim or edited
+      # rule carries: the check builds the site again with a hostile notice
+      # and drives every page in headless Chrome. Fatal when a browser is
+      # installed. With no Chrome (exit 2) it is skipped with a
       # warning, unless the repo variable SWARMCHASE_REQUIRE_BROWSER is
       # 'true': then a runner that lost its browser fails the deploy instead
       # of publishing an unchecked page.
@@ -216,7 +218,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: site/
+          path: _site/
 
       - name: Deploy to GitHub Pages
         id: deployment
