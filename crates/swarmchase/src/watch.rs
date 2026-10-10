@@ -37,7 +37,7 @@
 use crate::case::{self, CaseStatus, NoticeStatus};
 use crate::health::{RuleHistory, RuleRun, SourceHealth};
 use anyhow::{Context, Result, bail};
-use sc_collect::{CdxQuery, Client};
+use sc_collect::{CdxQuery, Client, Cursor, Kind, cdx_ts};
 use sc_core::bursts::{ArchiveBurst, archive_bursts};
 use sc_core::recurrence::{ClusterRun, cluster_reruns};
 use sc_core::{
@@ -428,58 +428,48 @@ fn pull(
     st: &mut SourceState,
     overlap: i64,
 ) -> Result<(usize, Vec<Observation>)> {
+    let kind: Kind = s.kind.parse()?;
     let mut q = s.query.clone();
     let configured_from = q.from.as_deref().and_then(sc_core::parse_ts).unwrap_or(0);
     let from = match &st.pending {
         Some(p) => p.from.clone(),
         None => cdx_ts(configured_from.max(st.cursor - overlap).max(0)),
     };
-    q.from = Some(from.clone()).filter(|f| f != "19700101000000");
-
-    let mut records = Vec::new();
-    match s.kind.as_str() {
-        "wayback" => {
-            let mut key = st.pending.as_ref().map(|p| p.resume_key.clone());
-            let mut done = false;
-            while records.len() < q.limit {
-                let size = (q.limit - records.len()).min(q.page_size.max(1));
-                let page = match client.wayback_cdx_page(&q, size, key.as_deref()) {
-                    Ok(p) => p,
-                    Err(e) if !records.is_empty() => {
-                        // Keep what we have; continue from the last good key next run.
-                        eprint!("(stopped early: {e:#}) ");
-                        break;
-                    }
-                    Err(e) => return Err(e),
-                };
-                records.extend(page.records);
-                key = page.resume_key;
-                if key.is_none() {
-                    done = true;
-                    break;
-                }
-            }
-            st.pending = match (done, key) {
-                (false, Some(k)) => Some(Pending {
-                    resume_key: k,
-                    from: from.clone(),
-                }),
-                _ => None,
-            };
+    // The pull's `since` replaces the configured `from`.
+    q.from = None;
+    let since = sc_core::parse_ts(&from).filter(|&t| t > 0);
+    let limit = q.limit;
+    let key = match kind {
+        Kind::Urlquery => {
+            Some(urlquery_key().with_context(|| format!("{URLQUERY_KEY_ENV} not set"))?)
         }
-        "arquivo" | "urlquery" => {
-            records = if s.kind == "arquivo" {
-                client.arquivo_cdx(&q)?
-            } else {
-                let key = urlquery_key().with_context(|| format!("{URLQUERY_KEY_ENV} not set"))?;
-                client.urlquery(&key, &q)?
-            };
-            if records.len() >= q.limit {
-                eprint!("(hit limit {}; raise it or narrow the pattern) ", q.limit);
-            }
-        }
-        k => bail!("unknown kind `{k}` (expected wayback, arquivo or urlquery)"),
+        _ => None,
+    };
+    let src = sc_collect::source(kind, q, key)?;
+    let resumable = src.resumable();
+    let cursor = st
+        .pending
+        .as_ref()
+        .filter(|_| resumable)
+        .map(|p| Cursor::Key(p.resume_key.clone()));
+    let mut res = src.pull(client, since, cursor, limit)?;
+    if !resumable {
+        res = res.strict()?;
+    } else if let Some(e) = &res.stopped {
+        // Keep what we have; continue from the last good key next run.
+        eprint!("(stopped early: {e:#}) ");
     }
+    st.pending = match res.next_cursor {
+        Some(Cursor::Key(k)) if resumable => Some(Pending {
+            resume_key: k,
+            from: from.clone(),
+        }),
+        _ => None,
+    };
+    if !resumable && res.observations.len() >= limit {
+        eprint!("(hit limit {limit}; raise it or narrow the pattern) ");
+    }
+    let records = res.observations;
 
     let pulled = records.len();
     let mut fresh = Vec::new();
@@ -1061,14 +1051,6 @@ fn top<K: ToString>(m: &BTreeMap<K, usize>, n: usize) -> Vec<String> {
         .collect()
 }
 
-/// CDX timestamp (`yyyyMMddhhmmss`).
-fn cdx_ts(ts: i64) -> String {
-    chrono::DateTime::from_timestamp(ts, 0)
-        .unwrap_or_default()
-        .format("%Y%m%d%H%M%S")
-        .to_string()
-}
-
 /// Delete run directories stamped before `cutoff` and stored records captured
 /// before it. Records with no timestamp are kept: their age is unknown.
 /// Returns (run dirs deleted, records deleted).
@@ -1212,15 +1194,6 @@ mod tests {
             .collect();
         assert_eq!(kept, ["new", "undated"]);
         std::fs::remove_dir_all(&out).unwrap();
-    }
-
-    #[test]
-    fn cdx_timestamps() {
-        assert_eq!(cdx_ts(0), "19700101000000");
-        assert_eq!(
-            sc_core::parse_ts(&cdx_ts(1_791_000_000)),
-            Some(1_791_000_000)
-        );
     }
 
     #[test]

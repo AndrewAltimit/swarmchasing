@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
-use sc_collect::{CdxQuery, Client};
+use sc_collect::{CdxQuery, Client, Cursor, Kind, Source, Wayback};
 use sc_core::{
     Analysis, Audience, FieldMap, Format, Observation, ReportOptions, Rules, Tier, analyze, defang,
     fmt_ts, parse_input, parse_security_txt, render_markdown, unwrap_layers,
@@ -501,11 +501,10 @@ fn main() -> Result<()> {
             let client = Client::new(Duration::from_secs(2))?;
             let (args, kind) = match source {
                 CollectSource::UrlqueryReports { .. } => unreachable!("handled above"),
-                CollectSource::Wayback(a) => (a, "wayback"),
-                CollectSource::Arquivo(a) => (a, "arquivo"),
-                CollectSource::Urlquery(a) => (a, "urlquery"),
+                CollectSource::Wayback(a) => (a, Kind::Wayback),
+                CollectSource::Arquivo(a) => (a, Kind::Arquivo),
+                CollectSource::Urlquery(a) => (a, Kind::Urlquery),
             };
-            let is_wayback = kind == "wayback";
             let q = CdxQuery {
                 pattern: args.pattern,
                 from: args.from,
@@ -515,17 +514,23 @@ fn main() -> Result<()> {
                 collapse_digest: false,
                 page_size: args.page_size,
             };
-            match (&args.out, is_wayback) {
-                (Some(out), true) => collect_wayback_to_file(&client, &q, out, args.resume)?,
+            match (&args.out, kind) {
+                (Some(out), Kind::Wayback) => {
+                    collect_wayback_to_file(&client, q, out, args.resume)?
+                }
                 _ => {
                     if args.resume {
                         bail!("--resume only applies to wayback");
                     }
-                    let obs = match kind {
-                        "wayback" => client.wayback_cdx(&q)?,
-                        "arquivo" => client.arquivo_cdx(&q)?,
-                        _ => client.urlquery(&urlquery_key()?, &q)?,
+                    let key = match kind {
+                        Kind::Urlquery => Some(urlquery_key()?),
+                        _ => None,
                     };
+                    let limit = q.limit;
+                    let obs = sc_collect::source(kind, q, key)?
+                        .pull(&client, None, None, limit)?
+                        .strict()?
+                        .observations;
                     eprintln!("{} records", obs.len());
                     write_out(args.out.as_deref(), &to_ndjson(&obs)?)?;
                 }
@@ -958,10 +963,10 @@ struct ResumeState {
     written: usize,
 }
 
-fn collect_wayback_to_file(client: &Client, q: &CdxQuery, out: &Path, resume: bool) -> Result<()> {
+fn collect_wayback_to_file(client: &Client, q: CdxQuery, out: &Path, resume: bool) -> Result<()> {
     let state_path = PathBuf::from(format!("{}.resume.json", out.display()));
     let saved: Option<ResumeState> = read_json(&state_path)?;
-    let (mut key, mut written) = match saved {
+    let (key, mut written) = match saved {
         Some(s) if resume => {
             if s.query.pattern != q.pattern
                 || s.query.from != q.from
@@ -999,32 +1004,40 @@ fn collect_wayback_to_file(client: &Client, q: &CdxQuery, out: &Path, resume: bo
         .truncate(key.is_none())
         .open(out)
         .with_context(|| format!("opening {}", out.display()))?;
-    while written < q.limit {
-        let size = (q.limit - written).min(q.page_size.max(1));
-        let page = client.wayback_cdx_page(q, size, key.as_deref())?;
-        std::io::Write::write_all(&mut f, to_ndjson(&page.records)?.as_bytes())?;
-        written += page.records.len();
-        key = page.resume_key;
-        eprintln!("{written} records");
-        match &key {
-            Some(k) => write_json(
-                &state_path,
-                &ResumeState {
-                    query: q.clone(),
-                    resume_key: k.clone(),
-                    written,
-                },
-            )?,
-            None => break,
-        }
-    }
-    if key.is_none() {
+    let limit = q.limit;
+    let src = Wayback { query: q };
+    // Every page goes to the file, and its resume key to the state file,
+    // before the next one is fetched.
+    let pull = src
+        .pull_each(
+            client,
+            None,
+            key.map(Cursor::Key),
+            limit.saturating_sub(written),
+            &mut |page| {
+                std::io::Write::write_all(&mut f, to_ndjson(&page.records)?.as_bytes())?;
+                written += page.records.len();
+                eprintln!("{written} records");
+                if let Some(Cursor::Key(k)) = &page.next {
+                    write_json(
+                        &state_path,
+                        &ResumeState {
+                            query: src.query.clone(),
+                            resume_key: k.clone(),
+                            written,
+                        },
+                    )?;
+                }
+                Ok(())
+            },
+        )?
+        .strict()?;
+    if pull.complete {
         let _ = std::fs::remove_file(&state_path);
         eprintln!("done: {written} records in {}", out.display());
     } else {
         eprintln!(
-            "stopped at --limit {}; more records remain (continue with --resume and a higher --limit)",
-            q.limit
+            "stopped at --limit {limit}; more records remain (continue with --resume and a higher --limit)"
         );
     }
     Ok(())
