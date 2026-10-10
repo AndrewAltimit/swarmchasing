@@ -429,22 +429,30 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             let _ = writeln!(s, "  - {line}");
         }
     }
-    for sp in &a.shared_pauses {
+    // A pair hint names both clusters. Outside case notes it appears only
+    // when the report covers both, so a report on one cluster never names
+    // another (which may be someone else's).
+    let selected = |id: &str| clusters.iter().any(|c| c.id == id);
+    let pair_shown = |x: &str, y: &str| {
+        if opts.audience == Audience::Internal {
+            selected(x) || selected(y)
+        } else {
+            selected(x) && selected(y)
+        }
+    };
+    for sp in a.shared_pauses.iter().filter(|sp| pair_shown(&sp.a, &sp.b)) {
         let _ = writeln!(
             s,
             "\n**{}** and **{}** went quiet together: {}. Their records share no identifier; a link to check, not a merge.",
             sp.a, sp.b, sp.reason
         );
     }
-    for p in &a.dialect_pairs {
+    for p in a.dialect_pairs.iter().filter(|p| pair_shown(&p.a, &p.b)) {
         let pair: Vec<&Cluster> = a
             .clusters
             .iter()
             .filter(|c| c.id == p.a || c.id == p.b)
             .collect();
-        if !pair.iter().any(|c| clusters.iter().any(|x| x.id == c.id)) {
-            continue;
-        }
         let list = if pair.iter().any(|c| touches_exposed(view.as_deref(), c)) {
             String::new()
         } else {
@@ -814,6 +822,7 @@ mod tests {
     use crate::analyze::analyze;
     use crate::model::Observation;
     use crate::rules::Rules;
+    use crate::timing::SharedPause;
 
     #[test]
     fn renders() {
@@ -1021,5 +1030,58 @@ mod tests {
         );
         assert_eq!(md.matches("payload dialect `").count(), 1, "{md}");
         assert!(md.contains("favour the same canonical test payloads: 4 shared variants, Jaccard"));
+    }
+
+    #[test]
+    fn single_cluster_reports_name_no_other_cluster() {
+        let mut obs = Vec::new();
+        for (tag, base) in [("zz9", 1_791_000_000), ("yy8", 1_791_600_000)] {
+            for (k, h) in ["d", "e", "f"].iter().enumerate() {
+                obs.push(Observation {
+                    ts: base + 300 * k as i64,
+                    url: format!(
+                        "https://r.jina.ai/https://{h}.example/item?uqtag={tag}&id=1'%20OR%201=1--&p=../../../etc/passwd"
+                    ),
+                    ..Default::default()
+                });
+            }
+        }
+        let mut a = analyze(obs, &Rules::default_rules());
+        assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters);
+        assert_eq!(a.dialect_pairs.len(), 1, "{:?}", a.dialect_pairs);
+        a.shared_pauses.push(SharedPause {
+            a: "C1".into(),
+            b: "C2".into(),
+            pauses: Vec::new(),
+            on_the_hour: 0,
+            expected: 0.001,
+            p_chance: 0.001,
+            reason: "2 pause(s) matched".into(),
+        });
+        for audience in [Audience::Provider, Audience::Affected, Audience::Public] {
+            let opts = ReportOptions {
+                audience,
+                cluster: Some("C1".into()),
+                ..Default::default()
+            };
+            let md = render_markdown(&a, &opts);
+            assert!(!md.contains("C2"), "{audience:?}: {md}");
+            assert!(!md.contains("went quiet together"), "{md}");
+            assert!(!md.contains("favour the same canonical"), "{md}");
+        }
+        // Case notes keep the lead; a report on both clusters names both.
+        let both = render_markdown(&a, &ReportOptions::default());
+        assert!(
+            both.contains("**C1** and **C2** went quiet together"),
+            "{both}"
+        );
+        let notes = render_markdown(
+            &a,
+            &ReportOptions {
+                cluster: Some("C1".into()),
+                ..Default::default()
+            },
+        );
+        assert!(notes.contains("went quiet together"), "{notes}");
     }
 }
