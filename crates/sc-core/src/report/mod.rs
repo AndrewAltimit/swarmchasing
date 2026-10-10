@@ -284,6 +284,24 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 }
             );
         }
+        for e in a.escalations.iter().filter(|e| e.clusters.contains(&c.id)) {
+            if view.as_deref().is_some_and(|v| v.exposed(&e.host)) {
+                continue;
+            }
+            let basis = e
+                .time_basis
+                .note()
+                .map(|n| format!("; {n}"))
+                .unwrap_or_default();
+            let _ = writeln!(
+                s,
+                "  - route escalation on `{}{}`: {} over {}{basis}. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)",
+                defang_host(&e.host),
+                truncate(&e.path, 60),
+                e.route_line(),
+                dur(e.end - e.start)
+            );
+        }
         if let Some(line) = rhythm_line(&c.timing.rhythm) {
             let _ = writeln!(s, "  - {line}{}", basis_note(c));
         }

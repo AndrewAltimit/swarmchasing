@@ -149,6 +149,8 @@ pub struct RuleSet {
     pub cut_lengths: crate::dialect::CutOptions,
     #[serde(default)]
     pub paths: crate::paths::PathOptions,
+    #[serde(default)]
+    pub escalation: crate::escalation::EscalationOptions,
     #[serde(default, rename = "rule")]
     pub rules: Vec<RuleDef>,
     #[serde(default, rename = "asn")]
@@ -349,6 +351,10 @@ mod tests {
         assert_eq!(s.fanout, crate::fanout::FanOutOptions::default());
         assert_eq!(s.cut_lengths, crate::dialect::CutOptions::default());
         assert_eq!(s.paths, crate::paths::PathOptions::default());
+        assert_eq!(
+            s.escalation,
+            crate::escalation::EscalationOptions::default()
+        );
     }
 
     #[test]

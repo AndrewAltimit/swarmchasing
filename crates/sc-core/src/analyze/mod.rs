@@ -6,6 +6,8 @@
 mod hints;
 mod link;
 
+pub(crate) use hints::target_text;
+
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::{Layer, extract};
 use crate::fanout::FanOut;
@@ -128,6 +130,10 @@ pub struct Analysis {
     /// that would otherwise have been joined by one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub common_features: Vec<CommonFeature>,
+    /// Requests for one target whose route climbed (direct, relay, program,
+    /// remote browser) within a window: a hint on the clusters they touch.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub escalations: Vec<crate::escalation::Escalation>,
 }
 
 /// A linking feature whose carriers were not joined because it is common:
@@ -211,6 +217,8 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
     let chains = links.chains;
     let common_features = links.common;
     link::number(&mut clusters, &mut results);
+    let cluster_ids: Vec<String> = clusters.iter().map(|c| c.id.clone()).collect();
+    let escalations = crate::escalation::escalations(&results, &cluster_ids, &rules.set.escalation);
 
     let mut tier_counts = BTreeMap::new();
     let mut rule_counts = BTreeMap::new();
@@ -282,6 +290,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         shared_pauses,
         dialect_pairs,
         common_features,
+        escalations,
         results,
         clusters,
     }

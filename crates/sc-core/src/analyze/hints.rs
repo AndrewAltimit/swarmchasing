@@ -257,7 +257,7 @@ pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
 
 /// The request on the target host: the layer naming that host, else the
 /// submitted URL.
-pub(super) fn target_text(r: &ObsResult) -> &str {
+pub(crate) fn target_text(r: &ObsResult) -> &str {
     r.target_host
         .as_deref()
         .and_then(|host| {
