@@ -128,9 +128,14 @@ pub enum CaseCmd {
         /// Look up endpoints that already have contacts too.
         #[arg(long)]
         refresh: bool,
-        /// Only add provider contacts from the directory; no network lookups.
+        /// Only add provider contacts from the directory; no network lookups
+        /// and no CSIRTs.
         #[arg(long)]
         providers_only: bool,
+        /// The country whose national CSIRT to propose for every endpoint
+        /// (ISO 3166-1 alpha-2). Default: each host's country-code TLD.
+        #[arg(long)]
+        country: Option<String>,
     },
     /// Add or remove a contact by hand.
     Contact {
@@ -562,9 +567,11 @@ pub fn run(args: CaseArgs) -> Result<()> {
             id,
             refresh,
             providers_only,
+            country,
         } => {
             let claims = all_claims(&root, &load(&root, &id)?)?;
             let dir = crate::contacts::Directory::builtin();
+            let csirts = crate::csirts::Csirts::builtin();
             update(&root, &id, |c| {
                 let n = crate::contacts::seed_providers(c, &claims, &dir, &today, &mut out)?;
                 if n == 0 {
@@ -572,6 +579,13 @@ pub fn run(args: CaseArgs) -> Result<()> {
                 }
                 if providers_only {
                     return Ok(());
+                }
+                let n =
+                    crate::csirts::seed_csirts(c, &csirts, country.as_deref(), &today, &mut out)?;
+                if n > 0 {
+                    println!(
+                        "{n} national CSIRT(s) proposed; remove any not relevant with `case contact rm`"
+                    );
                 }
                 let client = sc_collect::Client::new(std::time::Duration::from_millis(500))?;
                 crate::contacts::find_contacts(c, &client, refresh, &today, &mut std::io::stdout())

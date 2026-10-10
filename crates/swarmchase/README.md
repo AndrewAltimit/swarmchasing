@@ -160,6 +160,7 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, and the indicators the watch matches. |
 | [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |
 | [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |
+| [`csirts.rs`](src/csirts.rs) | National CSIRTs by country ([`contacts/csirts.toml`](../../contacts/csirts.toml)). |
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
 | [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
 | [`stix/`](src/stix/mod.rs) | STIX 2.1 export: records to observables and indicators, one builder per object type, deterministic ids. |

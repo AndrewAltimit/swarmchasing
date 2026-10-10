@@ -34,7 +34,7 @@ Each change is logged with its date.
 | `case note <id> "…"` | Adds a dated entry to the decision log. |
 | `case fleet merge\|split\|show <id> …` | Groups soft-linked clusters into one fleet, splits one off, or lists fleets and candidates ([fleets](#fleets)). |
 | `case add <id> …` | Adds new records. |
-| `case contacts <id> [--providers-only]` | Adds provider contacts from the directory, then finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
+| `case contacts <id> [--providers-only] [--country CC]` | Adds provider contacts from the directory, proposes national CSIRTs, then finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
 | `case report <id> --audience …` | Drafts a report into `reports/`, applying the case's claims and naming threshold. |
 | `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
@@ -70,13 +70,21 @@ Reports then carry a *Fleets* section, with soft-link details in case notes only
 
 ## Contacts
 
-`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. `--providers-only` skips the lookups. Each contact has a source link, a confidence and a date.
+`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
 
-`case contact add <id> --party provider|operator|csirt|declared-owner --org … --channel email|form|portal --address … --source <link>` adds a contact found by hand, such as a CSIRT from the [FIRST directory](../manual/references.md#disclosure) or an authorised test's declared owner; `case contact rm <id> <address>` removes one. `case status` lists a missing provider contact and a missing notice draft under *Needs*.
+`case contact add <id> --party provider|operator|csirt|declared-owner --org … --channel email|form|portal --address … --source <link>` adds a contact found by hand, such as a sector CSIRT or an authorised test's declared owner; `case contact rm <id> <address>` removes one. `case status` lists a missing provider contact and a missing notice draft under *Needs*.
 
 ### The provider directory
 
 [`contacts/providers.toml`](../../contacts/providers.toml) lists the security and abuse channels of AI providers and agent hosts. Each entry records the page its address was read from and the date. `swarmchase contacts list` prints it. `swarmchase contacts verify [--draft <file>]` re-reads every source, reports addresses its source no longer lists, sources that cannot be read and new security.txt contacts, and writes an updated copy for the admin to review and commit. It never changes the directory itself.
+
+### National CSIRTs
+
+[`contacts/csirts.toml`](../../contacts/csirts.toml) lists one national CSIRT per country, each address read from the team's page in [FIRST's team directory](https://www.first.org/members/teams/) on its `verified` date. Teams whose page lists no address, or only a named person's, are left out.
+
+`case contacts` reads each endpoint's country from its host's country-code TLD (`.uk` is GB; `.gov` and `.mil` are US). `--country CC` sets the country for every endpoint, for hosts under generic TLDs such as `.com`. It proposes one contact per team, with role `csirt`, and logs which endpoints it covers. A host with no country, or a country with no team listed, is reported and skipped. A CSIRT is relevant when an operator is public-sector or critical infrastructure, or has no reachable contact ([SC-FM 10](../manual/10-disclosure.md)); remove the others with `case contact rm`.
+
+`swarmchase contacts list --csirts` prints the directory; `swarmchase contacts verify --csirts [--draft <file>]` re-reads every source like the provider directory's check.
 
 ## Drafts
 

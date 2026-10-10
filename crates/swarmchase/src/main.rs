@@ -13,6 +13,7 @@ mod bundle;
 mod case;
 mod commands;
 mod contacts;
+mod csirts;
 mod eval;
 mod evidence;
 mod health;
