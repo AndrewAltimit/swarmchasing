@@ -399,6 +399,23 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             p.jaccard
         );
     }
+    if opts.audience == Audience::Internal && !a.common_features.is_empty() {
+        let _ = writeln!(
+            s,
+            "\nCommon features, not used to link (a popular or copied value, not one operator's):\n"
+        );
+        for c in a.common_features.iter().take(10) {
+            let _ = writeln!(
+                s,
+                "- `{}`: {} records, {} → {}, {}",
+                defang(&truncate(&c.feature.to_string(), 90)),
+                c.records,
+                fmt_ts(c.start),
+                fmt_ts(c.end),
+                c.reason
+            );
+        }
+    }
     if a.date_tags.consistent && a.date_tags.ahead > 0 {
         let _ = writeln!(
             s,

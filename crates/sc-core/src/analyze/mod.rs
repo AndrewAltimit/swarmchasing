@@ -117,6 +117,26 @@ pub struct Analysis {
     /// a link to check, never a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dialect_pairs: Vec<DialectPair>,
+    /// Linking features shared too widely to link: each group of records
+    /// that would otherwise have been joined by one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub common_features: Vec<CommonFeature>,
+}
+
+/// A linking feature whose carriers were not joined because it is common:
+/// on too many target hosts, or on too large a share of the records around
+/// it. A popular or copied tag, not one operator's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommonFeature {
+    pub feature: LinkFeature,
+    /// Flagged records carrying it in this group.
+    pub records: usize,
+    /// Distinct target hosts among them.
+    pub hosts: usize,
+    pub start: i64,
+    pub end: i64,
+    /// Which limit it passed.
+    pub reason: String,
 }
 
 impl Cluster {
@@ -179,17 +199,10 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
     let mut clusters: Vec<Cluster> = links
         .groups
         .into_iter()
-        .map(|members| {
-            hints::cluster(
-                &results,
-                members,
-                &links.feature_count,
-                &unflagged_by_host,
-                rules,
-            )
-        })
+        .map(|members| hints::cluster(&results, members, &links.joined, &unflagged_by_host, rules))
         .collect();
     let chains = links.chains;
+    let common_features = links.common;
     link::number(&mut clusters, &mut results);
 
     let mut tier_counts = BTreeMap::new();
@@ -261,6 +274,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         chains,
         shared_pauses,
         dialect_pairs,
+        common_features,
         results,
         clusters,
     }
@@ -354,7 +368,9 @@ mod tests {
             o(1000, &format!("{inbox}?kind=headers0")),
             o(
                 1040,
-                &format!("https://r.jina.ai/https://p.example/%60https://p.example/x%60?cb={inbox}"),
+                &format!(
+                    "https://r.jina.ai/https://p.example/%60https://p.example/x%60?cb={inbox}"
+                ),
             ),
         ];
         let a = analyze(obs, &Rules::default_rules());
@@ -375,6 +391,109 @@ mod tests {
         let json = serde_json::to_value(&a).unwrap();
         assert_eq!(json["clusters"][0]["tactics"]["T7"], 3);
         assert_eq!(json["results"][1]["hits"][0]["tactic"], "T2");
+    }
+
+    #[test]
+    fn a_feature_reused_months_later_starts_a_new_cluster() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let day = 86_400;
+        let t0 = 1_791_000_000;
+        let obs = vec![
+            o(t0, &format!("https://a.example/x?cb={inbox}")),
+            o(t0 + 2 * day, &format!("https://b.example/y?cb={inbox}")),
+            // Three months on, the same inbox on other hosts.
+            o(t0 + 90 * day, &format!("https://c.example/z?cb={inbox}")),
+            o(t0 + 91 * day, &format!("https://d.example/w?cb={inbox}")),
+        ];
+        let a = analyze(obs.clone(), &Rules::default_rules());
+        assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters);
+        assert_eq!(a.results[0].cluster, a.results[1].cluster);
+        assert_eq!(a.results[2].cluster, a.results[3].cluster);
+        assert_ne!(a.results[0].cluster, a.results[2].cluster);
+        for c in &a.clusters {
+            assert_eq!(c.link_features.len(), 1, "{:?}", c.link_features);
+        }
+        assert!(a.common_features.is_empty());
+
+        // With no window, one inbox is one cluster however far apart.
+        let mut rules = Rules::default_rules();
+        rules.set.linking.feature_link_window_secs = 0;
+        let b = analyze(obs, &rules);
+        assert_eq!(b.clusters.len(), 1, "{:?}", b.clusters);
+        assert_eq!(b.clusters[0].members.len(), 4);
+    }
+
+    #[test]
+    fn a_popular_tag_is_common_and_never_links() {
+        // A copied test tag on many unrelated sites in one afternoon.
+        let t0 = 1_791_000_000;
+        let obs: Vec<Observation> = (0..25)
+            .map(|i| {
+                o(
+                    t0 + i * 600,
+                    &format!("https://site{i}.example/page?q=CHATGPTTEST1"),
+                )
+            })
+            .collect();
+        let a = analyze(obs.clone(), &Rules::default_rules());
+        assert_eq!(a.clusters.len(), 0, "{:?}", a.clusters);
+        assert_eq!(a.common_features.len(), 1, "{:?}", a.common_features);
+        let c = &a.common_features[0];
+        assert_eq!(c.feature.to_string(), "marker.test_tag:chatgpttest1");
+        assert_eq!((c.records, c.hosts), (25, 25));
+        assert_eq!((c.start, c.end), (t0, t0 + 24 * 600));
+        assert!(c.reason.contains("feature_max_hosts"), "{}", c.reason);
+        let report = |audience| {
+            crate::report::render_markdown(
+                &a,
+                &crate::report::ReportOptions {
+                    audience,
+                    ..Default::default()
+                },
+            )
+        };
+        let internal = report(crate::report::Audience::Internal);
+        assert!(
+            internal.contains("Common features") && internal.contains("chatgpttest1"),
+            "{internal}"
+        );
+        assert!(!report(crate::report::Audience::Provider).contains("Common features"));
+
+        // The same tag on a few hosts still links.
+        let few: Vec<Observation> = obs.into_iter().take(4).collect();
+        let b = analyze(few, &Rules::default_rules());
+        assert_eq!(b.clusters.len(), 1);
+        assert!(b.common_features.is_empty());
+    }
+
+    #[test]
+    fn a_feature_on_most_records_is_common_when_a_share_is_set() {
+        // A run parameter value on most of a broad input, one host each.
+        let t0 = 1_791_000_000;
+        let mut obs: Vec<Observation> = (0..60)
+            .map(|i| {
+                o(
+                    t0 + i * 60,
+                    &format!("https://h{}.example/?uqtag=default&_=1", i % 5),
+                )
+            })
+            .collect();
+        obs.extend((0..60).map(|i| o(t0 + i * 60 + 30, &format!("https://plain{i}.example/"))));
+        let mut rules = Rules::default_rules();
+        rules.set.linking.feature_max_share = 0.4;
+        rules.set.linking.feature_share_min_records = 100;
+        let a = analyze(obs.clone(), &rules);
+        assert!(
+            a.common_features
+                .iter()
+                .any(|c| c.feature.to_string() == "param:uqtag=default"
+                    && c.reason.contains("feature_max_share")),
+            "{:?}",
+            a.common_features
+        );
+        // Off by default: one fleet can be most of a case's records.
+        let b = analyze(obs, &Rules::default_rules());
+        assert!(b.common_features.is_empty());
     }
 
     #[test]

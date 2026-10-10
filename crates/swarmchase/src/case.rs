@@ -2200,8 +2200,8 @@ mod tests {
             .collect();
         new_case(&root, "t-2", "Portal probe", records, &rules, "2026-10-12").unwrap();
         let log = [
-            r#"203.0.113.9 - - [20/Oct/2026:12:00:00 +0000] "GET /q?id=9%20UNION%20SELECT%201&uqtag=zz9 HTTP/1.1" 200 10 "-" "python-httpx/0.27""#,
-            r#"198.51.100.7 - - [20/Oct/2026:12:00:20 +0000] "GET /about HTTP/1.1" 200 10 "-" "Mozilla/5.0""#,
+            r#"203.0.113.9 - - [04/Oct/2026:12:00:00 +0000] "GET /q?id=9%20UNION%20SELECT%201&uqtag=zz9 HTTP/1.1" 200 10 "-" "python-httpx/0.27""#,
+            r#"198.51.100.7 - - [04/Oct/2026:12:00:20 +0000] "GET /about HTTP/1.1" 200 10 "-" "Mozilla/5.0""#,
         ]
         .join("\n");
         let map = sc_core::FieldMap {

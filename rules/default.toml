@@ -44,6 +44,17 @@ significant = 6
 [linking]
 # Parameter names whose *values* link observations to the same run/operator.
 strong_params = ["uqtag", "uqscan", "tok", "tag", "run", "runid", "run_id", "session", "sid", "nonce", "cb_tag"]
+# A shared feature (strong parameter value or `link = true` match) joins
+# records at most this far apart; a longer gap starts a new group (0: no limit).
+feature_link_window_secs = 259200
+# A feature on more than this many target hosts within one group is common: it
+# does not link, and is listed as a common feature instead (0: no limit).
+feature_max_hosts = 20
+# ... or on more than this share of all records in its group's time span, when
+# that span holds at least `feature_share_min_records` records (0: off; for
+# broad inputs such as the watch, where one fleet is not most of the records).
+feature_max_share = 0.0
+feature_share_min_records = 100
 # Observations of the same target host closer than this are joined.
 window_secs = 600
 # Within a cluster, a gap longer than this starts a new run.

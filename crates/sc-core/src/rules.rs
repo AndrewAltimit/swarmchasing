@@ -81,6 +81,16 @@ impl Default for Thresholds {
 #[serde(default)]
 pub struct Linking {
     pub strong_params: Vec<String>,
+    /// A shared feature joins records at most this far apart (0: no limit).
+    pub feature_link_window_secs: i64,
+    /// A feature on more than this many target hosts in one group does not
+    /// link (0: no limit).
+    pub feature_max_hosts: usize,
+    /// A feature on more than this share of the records in its group's time
+    /// span does not link (0: off) ...
+    pub feature_max_share: f64,
+    /// ... when that span holds at least this many records.
+    pub feature_share_min_records: usize,
     pub window_secs: i64,
     pub run_gap_secs: i64,
     pub burst_gap_secs: i64,
@@ -95,6 +105,10 @@ impl Default for Linking {
     fn default() -> Self {
         Self {
             strong_params: vec![],
+            feature_link_window_secs: 3 * 86_400,
+            feature_max_hosts: 20,
+            feature_max_share: 0.0,
+            feature_share_min_records: 100,
             window_secs: 600,
             run_gap_secs: 900,
             burst_gap_secs: 5,

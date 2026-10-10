@@ -8,7 +8,7 @@ use crate::model::{IndicatorKind, LinkFeature, Tactic, Tier};
 use crate::paths::PathStats;
 use crate::rules::Rules;
 use crate::timing::{Span, parse_date_tag, stale_dates, timing};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// Unflagged requests by target host: the context path hints read around a
 /// cluster (a recon opening is rarely flagged itself).
@@ -29,7 +29,7 @@ pub(super) fn unflagged_by_host(results: &[ObsResult]) -> HashMap<&str, Vec<usiz
 pub(super) fn cluster(
     results: &[ObsResult],
     mut members: Vec<usize>,
-    feature_count: &HashMap<&LinkFeature, usize>,
+    joined: &HashSet<(usize, &LinkFeature)>,
     unflagged_by_host: &HashMap<&str, Vec<usize>>,
     rules: &Rules,
 ) -> Cluster {
@@ -43,7 +43,7 @@ pub(super) fn cluster(
     let mut asns: BTreeMap<u32, usize> = BTreeMap::new();
     let mut uas: BTreeMap<String, usize> = BTreeMap::new();
     let mut encodings: BTreeMap<String, usize> = BTreeMap::new();
-    let mut feats: BTreeSet<LinkFeature> = BTreeSet::new();
+    let mut feats: BTreeMap<&LinkFeature, usize> = BTreeMap::new();
     let mut any_sig = false;
     for &i in &members {
         let r = &results[i];
@@ -72,10 +72,8 @@ pub(super) fn cluster(
         if enc.informative() {
             *encodings.entry(enc.style).or_default() += 1;
         }
-        for f in &r.features {
-            if feature_count.get(f).copied().unwrap_or(0) > 1 {
-                feats.insert(f.clone());
-            }
+        for f in r.features.iter().filter(|f| joined.contains(&(i, *f))) {
+            *feats.entry(f).or_default() += 1;
         }
     }
     let score: i32 = rules_seen
@@ -177,7 +175,11 @@ pub(super) fn cluster(
         dialect,
         fanout,
         cut_lengths,
-        link_features: feats.into_iter().collect(),
+        link_features: feats
+            .into_iter()
+            .filter(|&(_, n)| n > 1)
+            .map(|(f, _)| f.clone())
+            .collect(),
         runs,
         timing: t,
     }
