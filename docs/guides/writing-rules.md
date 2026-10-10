@@ -22,7 +22,7 @@ cargo run -p swarmchase -- unwrap 'https://reader.relay.example/https://stats.ag
 [[rule]]
 id = "relay.reader_example"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "reader.relay.example"
 weight = 2
@@ -35,6 +35,7 @@ description = "Reader relay: fetches a page server-side and returns text (synthe
 | `kind` | The family: `relay`, `carrier`, `exploit`, `agent_marker`, `cache_buster`, `self_id`, `exfil`, `header`, `outcome`, `anti_bot`, `infra`. |
 | `target` | What the rule reads (see below). |
 | `pattern` | A host suffix for `host`; a case-insensitive regular expression otherwise. |
+| `check` | A test a `param_value` match must also pass (see [checks](#checks)). |
 | `weight` | What a match adds to the record's score. Defaults to 1. |
 | `significant` | `true`: one match puts the record in the top tier. |
 | `link` | `true`: the matched text joins records into one cluster. |
@@ -42,7 +43,7 @@ description = "Reader relay: fetches a page server-side and returns text (synthe
 | `artifact` | `true`: the match only shows that a model wrote the request. |
 | `description` | One line a reader of a report can understand. |
 
-A rule names a `tactic` or sets `artifact = true`; a test fails on a bundled rule with neither, and a tactic outside `T1` to `T9` stops the file loading. Tactics and artifacts describe; they never change a score.
+A rule names a `tactic` or sets `artifact = true`; a test fails on a bundled rule with neither, and a tactic outside `T1` to `T9` stops the file loading. Each kind has a default tactic ([FM-4.4](../manual/04-indicators.md#fm-44-default-tactics-by-rule-kind)); a bundled rule on another tactic needs an entry with its reason in `TACTIC_EXCEPTIONS` ([`rules.rs`](../../crates/sc-core/src/rules.rs)). Tactics and artifacts describe; they never change a score.
 
 ### Targets
 
@@ -58,6 +59,28 @@ A rule names a `tactic` or sets `artifact = true`; a test fails on a bundled rul
 Pick the narrowest target that works. A `url` pattern also sees hosts and paths, so it fires more widely than a `param_value` pattern with the same text. `header`, `user_agent` and `final_url` rules fire only on records that carry those fields: most archive rows do not, and operator access logs often do.
 
 The analysis module in the browser has no Unicode property classes (`\p{…}`); a pattern that uses one works in the CLI only ([edited rules](../reference/browser-toolkit.md#edited-rules)).
+
+### Checks
+
+Some shapes need counting, which a regular expression cannot do. A `param_value` rule can name a `check`: the pattern picks candidate values cheaply, and the rule fires only on a value the check also passes. The checks:
+
+| `check` | Passes when |
+|---|---|
+| `repeated_token` | One word of three characters or more, or a phrase of two or three words, repeats five or more times in a row. |
+
+```toml
+[[rule]]
+id = "marker.loop_example"
+kind = "agent_marker"
+artifact = true
+target = "param_value"
+pattern = "(\\S+\\s+){4}\\S"
+check = "repeated_token"
+weight = 1
+description = "A word or phrase repeated in a loop (synthetic example)"
+```
+
+A check on any other target, or a name not in the table, stops the file loading. Keep the pattern loose enough to reach every value the check should see: here, any value of five words or more. A new check is code in sc-core ([`prose.rs`](../../crates/sc-core/src/prose.rs) holds `repeated_token`) with its own tests, and hard negatives in the eval set like any rule.
 
 ## Choosing a weight
 
@@ -90,6 +113,34 @@ description = "Per-user request-catcher inbox (synthetic example)"
 ```
 
 Run-tag parameters whose values link are listed in `linking.strong_params`, not marked per rule. A pattern that matches the same text on every record (a fixed tag prefix, say) links all of them; match the distinguishing part, or do not link.
+
+## Benchmark and stale-knowledge entries
+
+Two tables in the rules file describe clusters without scoring them: `[[benchmark]]` lists public practice targets and benchmark environments, and `[[stale]]` lists retired endpoints and old client versions ([FM-4.5](../manual/04-indicators.md#fm-45-artifact-families), [FM-4.9](../manual/04-indicators.md#fm-49-benchmark-targets-and-declared-testing)).
+
+```toml
+[[benchmark]]
+id = "practice_shop_example"
+# https://docs.practice.example/ (the vendor's page for its demo shop)
+pattern = "://demo\\.practice\\.example\\b"
+note = "A deliberately vulnerable demo shop (synthetic example)"
+
+[[stale]]
+id = "widgets_api_v1"
+target = "user_agent"
+# https://docs.widgets.example/deprecations (the retirement notice)
+pattern = "\\bWidgetsClient/1\\."
+note = "Widgets client 1.x, retired (synthetic example)"
+```
+
+| Field | What it does |
+|---|---|
+| `id` | Unique name, shown in reports and in the cluster's `benchmarks` or `stale_knowledge`. |
+| `target` | `url` (the default: the request on the target host) or `user_agent`. |
+| `pattern` | A case-insensitive regular expression. |
+| `note` | One line saying what a match means, shown with stale entries. |
+
+Every entry needs a source in a comment: the site's own page for a practice target, the provider's deprecation notice for a retired API. Anchor host patterns on `://` and a word boundary so a path or a search mentioning the name does not match. An entry changes no score and no tier, so it does not move the eval numbers; check it with two stand-in records through `report --audience internal` or the workbench's cluster detail instead. A stale entry is reported only when two or more members of a cluster carry it, so one old script in a cluster stays quiet.
 
 ## Writing eval records
 

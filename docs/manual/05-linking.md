@@ -9,7 +9,7 @@ Linking decides which records belong to one operator. It is the step whose error
 | Link | Effect | Examples |
 |---|---|---|
 | **Hard** | Joins records into one cluster, automatically. | A shared link feature within its bounds; close timing on the same target with a rule in common; a probe chain. |
-| **Soft** | Proposes that clusters may be one operator. Never joins them. | Shared pauses; shared payload dialect; reruns; the same uncommon path set or recon opening; the same hosting network. |
+| **Soft** | Proposes that clusters may be one operator. Never joins them. | Shared pauses; shared payload dialect; reruns; the same uncommon path set or recon opening; the same hosting network; the same captured secret. |
 
 Only flagged records (score above zero) are linked. Ordinary traffic to the same host is never swept into a cluster. A cluster needs at least two records, and hard links are transitive: if A links to B and B to C, all three are one cluster. Each cluster lists the features and links that joined it, so a reader can check them.
 
@@ -22,13 +22,13 @@ The standard bounds this link two ways:
 - **Time bound.** The two records fall within a set interval of each other. Beyond it, the shared feature is a soft link: an inbox reused months later may have changed hands, or the value may have been copied.
 - **Commonness cap.** A feature carried by more distinct targets or clusters than a set cap, or quoted in a published report, is demoted to a soft link. Common values (`test`, `1`, a tag a report made famous) are not identifiers ([FM-14.5](14-limits.md#fm-145-tags-get-copied-after-publication)).
 
-Toolkit: shared features link only within `feature_link_window_secs` of each other, and a feature carried by more than `feature_max_hosts` target hosts is listed as a common feature instead of linking (both in the rules file's `[linking]` table). A feature quoted in a published report is not yet demoted automatically (planned); the reviewer checks for it.
+Toolkit: shared features link only within `feature_link_window_secs` of each other, and a feature carried by more than `feature_max_hosts` target hosts is listed as a common feature instead of linking (both in the rules file's `[linking]` table). A tag quoted in a public report is listed under `published_tags` in the same table, each with its source; a feature whose value is one of them (ignoring case) never links, however few hosts carry it, and is listed as a common feature with that reason. A quoted tag missing from the list still links, so the reviewer adds a tag when a report quotes it.
 
 ## FM-5.3 Close timing on the same target
 
 Consecutive flagged records to the same target host, at most a set window apart, that share at least one rule are hard-linked. The shared rule keeps two unrelated clients who happened to hit the same host in the same minutes apart, unless they also share an indicator.
 
-Close timing is only as good as the timestamps. It **should** use request or submission times; capture times say when an archive saved a URL, not when an agent sent it ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Toolkit: records carry their timestamp kind; restricting this link by kind is (planned). Popular targets read through popular relays are the usual false merge here ([FM-14.6](14-limits.md#fm-146-common-features-cause-giant-clusters)).
+Close timing is only as good as the timestamps. It **should** use request or submission times; capture times say when an archive saved a URL, not when an agent sent it ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Toolkit: only request and submit times link this way, with times of unknown kind read as requests; two archive captures minutes apart are never joined by timing ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Popular targets read through popular relays are the usual false merge here ([FM-14.6](14-limits.md#fm-146-common-features-cause-giant-clusters)).
 
 ## FM-5.4 Probe chains
 
@@ -61,6 +61,9 @@ Soft links are leads for a reviewer, listed with the evidence for each:
 | Shared hosting network | One runtime. | Many tenants share a cloud network. |
 | Link feature outside its bounds | Same operator, later. | Copied or reassigned values ([FM-5.2](#fm-52-shared-link-features)). |
 | Archive burst | Something drove many captures of one host at once. | Crawlers and readers burst too. |
+| Shared captured secret | One client's captured token used again by another cluster. The strongest soft link. | A token can leak or be published. Stock passwords are sent by everyone and do not count. |
+| Same relay stack | The same chain of two or more relays and carriers: one harness's route. | Tools and tutorials share routes. A single relay is every relay user's habit and does not count. |
+| Same callback service | A fresh inbox per run on one service: one operator's habit. | Many clients use the same service. The same inbox is a hard link ([FM-5.2](#fm-52-shared-link-features)). |
 
 ## FM-5.8 Candidate fleets, merge and split
 
@@ -72,7 +75,7 @@ Clusters joined by soft links form a **candidate fleet**. A candidate fleet is n
 
 Merges and splits are reversible and both are logged. A fleet grows, merges with another or breaks apart as evidence arrives. This mirrors how threat-intelligence teams handle uncategorised activity clusters, which "can grow, merge with, or break off from other clusters" before they are named ([Mandiant](references.md#attribution-practice)).
 
-Toolkit: the analysis lists soft links between clusters with a kind and a strength (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations), and groups strongly soft-linked clusters into candidate fleets, shown in internal reports. Candidate fleets never merge clusters or change a tier. The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
+Toolkit: the analysis lists soft links between clusters with a kind and a strength (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services), and groups strongly soft-linked clusters into candidate fleets, shown in internal reports. Candidate fleets never merge clusters or change a tier. The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
 
 ## FM-5.9 Escalation sequences
 

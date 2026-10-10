@@ -22,7 +22,7 @@ An archive timestamp is when the archive saved the URL. That may be the agent's 
 
 ## FM-14.5 Tags get copied after publication
 
-A run tag or marker quoted in a published report can be reused by anyone who read it, by imitation, testing or mischief. After publication, the tag is a soft link, not a hard one, and a new cluster carrying it is not evidence of the original operator ([FM-5.2](05-linking.md#fm-52-shared-link-features)). Generic tag values (`test`, `1`) collide by chance.
+A run tag or marker quoted in a published report can be reused by anyone who read it, by imitation, testing or mischief. After publication, the tag is a soft link, not a hard one, and a new cluster carrying it is not evidence of the original operator ([FM-5.2](05-linking.md#fm-52-shared-link-features)). Add the tag to the published-tags list when the report appears, not when a copy turns up. Generic tag values (`test`, `1`) collide by chance.
 
 ## FM-14.6 Common features cause giant clusters
 
