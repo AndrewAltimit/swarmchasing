@@ -45,20 +45,37 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (67, 0, 6, 66),
+        (67, 0, 6, 68),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (29, 0, 44, 66), "significant");
+    assert_eq!(counts(Tier::Significant), (29, 0, 44, 68), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 139);
+    assert_eq!(a.total, 141);
     assert_eq!(
         tiers,
-        [72, 38, 29],
+        [74, 38, 29],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 16, "clusters");
+    assert_eq!(a.clusters.len(), 17, "clusters");
+
+    // Every benign record says what kind of traffic it is.
+    assert!(
+        report.benign_classes.iter().all(|c| c.class != "unclassed"),
+        "{:?}",
+        report.benign_classes
+    );
+    // The two readers sharing a popular campaign tag months apart are
+    // merged: linking's known false merge, reported, not gated.
+    let c = &report.clusters;
+    assert!(
+        c.false_merges
+            .iter()
+            .any(|m| m.runs == ["benign-tag-reader-1", "benign-tag-reader-2"]),
+        "{c:?}"
+    );
+    assert!(c.run_labelled > 0 && c.bcubed_precision.is_some());
 }
