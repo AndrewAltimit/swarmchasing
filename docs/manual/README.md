@@ -57,3 +57,4 @@ The manual describes the method as a standard. Where this repository's toolkit d
 | [`methodology.md`](../methodology.md) | The toolkit's implementation: settings, thresholds, code. |
 | [`guides/admin-workflow.md`](../guides/admin-workflow.md) | The admin's day with this toolkit. |
 | [`guides/for-operators.md`](../guides/for-operators.md) | For an operator who received a report. |
+| [`guides/for-researchers.md`](../guides/for-researchers.md) | For a researcher applying, citing or checking the method. |
