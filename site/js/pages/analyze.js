@@ -28,6 +28,7 @@ let dateTags = {};
 let endpointsCache = null;
 let sel = { c: null, r: null, rule: null };
 let view = "runs";
+let lastWidth = 0; // the views panel width the current view was drawn at
 
 const host = (h) => hostOf(sc, h);
 const safe = (s, n = 120) => trunc(sc.defang(String(s ?? "")), n);
@@ -62,6 +63,8 @@ function goStep(step) {
   }
   for (const p of document.querySelectorAll("[data-pane]")) p.classList.toggle("on", p.dataset.pane === step);
   if (mobile()) document.querySelector(".steps")?.scrollIntoView({ block: "start" });
+  // A view drawn while its pane was hidden had no width: redraw it at its size.
+  if (a && step === "explore" && Math.abs($("viz-panel").clientWidth - lastWidth) > 24) renderView();
 }
 for (const b of document.querySelectorAll(".steps button")) b.addEventListener("click", () => goStep(b.dataset.step));
 goStep("input");
@@ -385,6 +388,7 @@ function viewHourly() {
 function renderView() {
   const panel = $("viz-panel");
   if (!a) return;
+  lastWidth = panel.clientWidth;
   const make = { runs: viewRuns, fleet: viewFleet, heat: viewHeat, rhythm: viewRhythm, strip: viewStrip, hourly: viewHourly }[view];
   try {
     panel.replaceChildren(make());
@@ -393,7 +397,6 @@ function renderView() {
   }
 }
 
-let lastWidth = 0;
 let resizeTimer = 0;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);

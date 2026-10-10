@@ -29,7 +29,7 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 | Path | What it shows |
 |---|---|
 | `/` | The mission, a run timeline of the synthetic example, the latest notices, where to go next. |
-| `/notices/` | Every notice, filterable by status, provider, affected host, text and date; one page per notice. |
+| `/notices/` | Every notice, filterable by status, provider, sector, affected host, text and update date; one page per notice. |
 | `/methodology/`, `/docs/` | The methodology and every other doc, including the Field Manual. |
 | `/operators/` | The operators' guide, with a link to the workbench's access-log preset. |
 | `/rules/` | One card per rule, filterable, with an editor and an in-browser evaluation. |
@@ -37,6 +37,8 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 | `/analyze/` | The workbench. |
 | `/unwrap/` | The layers inside one URL and the rules each triggers. |
 | `/tools/` | Evidence bundle check, `security.txt` reader, defang. |
+
+The index is a plain table without scripts; with them, a filter form appears and keeps its state in the URL hash (`#sector=health&from=2026-08-01`), so a filtered view can be linked. On phones each notice is a card.
 
 Each notice page shows its status, its dated updates as a timeline (corrections and retractions marked, statements quoted verbatim with who they are from), the rules and toolkit version, and the body. `notices/index.json`, `notices/<id>.json` and `notices/feed.xml` are written as `notice build` writes them.
 
@@ -47,12 +49,14 @@ The workbench analyses pasted or loaded records, including an operator's own acc
 On a wide screen it has three panes: the records and clusters, the views, and the context of what is selected. Phones step through them. The views are:
 
 - **Runs**: a lane per cluster and a bar per run, pauses shaded, shared pauses outlined;
-- **Fleet**: clusters as nodes and the hints between them (shared pauses, probe chains, payload dialects, soft links, candidate fleets) as edges;
+- **Fleet**: clusters as nodes and the hints between them (shared pauses, probe chains, payload dialects, soft links, candidate fleets) as edges, one style per soft-link kind in the legend; a kind the page does not know is drawn in the generic style under its own name;
 - **Rules × clusters**: a heatmap whose cells filter the records;
 - **Rhythm**: records by weekday and hour, UTC;
 - **Endpoints × time** and **Hourly**.
 
-Every view has a table view. Edges, shared pauses and rhythms are hints to check, not evidence ([methodology](../methodology.md#descriptive-hints)). The selection is kept in the URL hash as ids only (a cluster key, a record number, a rule id), never hosts or URLs.
+The context panel shows a selected cluster's tactics as a small bar chart, its timing, and the hints the analysis found; the links panel lists shared pauses, dialects, probe chains, common features, escalations, candidate fleets and soft links. Chains and escalations timed by archive captures show no pace.
+
+Every view has a table view. Every mark that selects something is a keyboard button (Enter or Space), focus stays on it after the views redraw, and Escape clears the selection. Edges, shared pauses and rhythms are hints to check, not evidence ([methodology](../methodology.md#descriptive-hints)). The selection is kept in the URL hash as ids only (a cluster key, a record number, a rule id), never hosts or URLs.
 
 The last step drafts a disclosure. It follows the CLI's naming gate: pick the weakest evidence that may name a developer, and paste claims from case work (the JSON `swarmchase report --claims` reads). Outside case notes, a developer below that level is not named ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
 
@@ -69,11 +73,19 @@ The tools page checks an evidence bundle. Pick its four files or its folder, and
 1. checks each SHA-256 against the manifest;
 2. re-runs the analysis with the bundled rules, or the edited ones;
 3. compares every tier and cluster with the stamp, as `case verify` does;
-4. shows the stamp, the runs per cluster, the clusters and the records, defanged.
+4. shows the stamp with the method and evaluation snapshot it cites, the attribution layers, the runs per cluster, the clusters, any candidate fleets and escalations, and the records, defanged.
+
+The attribution table has a row per layer (developer and operator, hosting and runtime, harness and framework, model family) with each party or candidate, its label (Confirmed, Suspected, Possible, Unattributed) and the strongest likelihood word that label allows, the evidence, and the claim tag. Developers are shown only as a report at the default naming level would name them. Pick the case's `claims.json` (the array `report --claims` reads) with the bundle to merge in claims from case work.
 
 ## Loading and size
 
-Only the workbench, unwrap and tools pages load the analysis module on arrival; the rules and evaluation pages load it when it is first needed. Until it is ready the page says so and its controls stay disabled. The release build fails when the module is over 1.5 MiB.
+Only the workbench, unwrap and tools pages load the analysis module on arrival, and they preload it with their scripts; the rules and evaluation pages load it when it is first needed. Other pages load no WASM. The only render-blocking script is the few lines of `theme.js`, which apply a stored theme before the first paint.
+
+Scripts, the stylesheet and the WASM modules are published under content-hashed names (`js/site.<hash>.js`): GitHub Pages sets its own cache headers, so a changed file gets a new name and a cached one is never stale. The generator rewrites the references in pages and between modules, and `check-site.py` fails a page that loads an unhashed asset. Until it is ready the page says so and its controls stay disabled. The release build fails when the module is over 1.5 MiB.
+
+## Accessibility
+
+Every page has a banner, navigation, main and footer landmark, one `h1` and headings in order, a skip link and a visible focus ring. Charts are labelled groups with a table view. Status and tier colours reach 4.5:1 against every surface in both themes, and motion stops under `prefers-reduced-motion`.
 
 ## Safety
 
@@ -82,4 +94,4 @@ Records, notices, claims and edited rules can carry attack payloads, so the site
 - Every page carries a strict Content-Security-Policy: only the site's own scripts, styles and WASM modules, no inline script or style, no requests elsewhere.
 - Generated pages escape every value; page scripts insert text, never HTML. URLs from records are shown defanged and never as links.
 
-[`check-site.py`](../../scripts/ci/check-site.py) checks the sources in CI and the pre-commit hook, and every generated page and the build's inputs after a build. [`site-xss-check.mjs`](../../scripts/site-xss-check.mjs) builds the site with a hostile notice, loads every page in headless Chrome, drives the workbench with XSS probes, hostile claims and hostile edited rules, and fails if any of them runs; CI runs it at deploy.
+[`check-site.py`](../../scripts/ci/check-site.py) checks the sources in CI and the pre-commit hook, and every generated page and the build's inputs after a build. [`site-xss-check.mjs`](../../scripts/site-xss-check.mjs) builds the site with a hostile notice, loads every page in headless Chrome, drives the workbench with XSS probes, hostile claims and hostile edited rules, picks a hostile evidence bundle in the bundle viewer, checks the notice filters on synthetic notices (`crates/sc-publish/tests/fixtures/notices/`, never published), and fails if any of them runs; CI runs it at deploy.
