@@ -120,6 +120,14 @@ pub struct RuleSet {
     pub thresholds: Thresholds,
     #[serde(default)]
     pub linking: Linking,
+    #[serde(default)]
+    pub chains: crate::chains::ChainOptions,
+    #[serde(default)]
+    pub fanout: crate::fanout::FanOutOptions,
+    #[serde(default)]
+    pub cut_lengths: crate::dialect::CutOptions,
+    #[serde(default)]
+    pub paths: crate::paths::PathOptions,
     #[serde(default, rename = "rule")]
     pub rules: Vec<RuleDef>,
     #[serde(default, rename = "asn")]
@@ -309,6 +317,17 @@ mod tests {
         let r = Rules::default_rules();
         assert!(r.compiled.len() > 30);
         assert_eq!(r.asn_org(132203), Some("Tencent Cloud"));
+    }
+
+    /// A rules file without these sections (one a case pinned earlier) gets
+    /// the same settings as the bundled file.
+    #[test]
+    fn bundled_settings_match_the_defaults() {
+        let s = Rules::default_rules().set;
+        assert_eq!(s.chains, crate::chains::ChainOptions::default());
+        assert_eq!(s.fanout, crate::fanout::FanOutOptions::default());
+        assert_eq!(s.cut_lengths, crate::dialect::CutOptions::default());
+        assert_eq!(s.paths, crate::paths::PathOptions::default());
     }
 
     #[test]

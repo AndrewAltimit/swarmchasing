@@ -65,7 +65,7 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
     // Flagged requests in one probe chain (variants of one request to the
     // same host and path, minutes apart) are one client working an endpoint,
     // even when different rules fired on each.
-    let chains = crate::chains::chains(results);
+    let chains = crate::chains::chains(results, &rules.set.chains);
     for ch in &chains {
         let f: Vec<usize> = ch
             .members

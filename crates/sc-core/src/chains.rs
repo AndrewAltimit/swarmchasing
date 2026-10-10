@@ -21,27 +21,49 @@ use crate::analyze::ObsResult;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Requests further apart than this start a new chain.
-pub const MAX_GAP_SECS: i64 = 300;
-/// A chain needs at least this many distinct variants.
-pub const MIN_VARIANTS: usize = 3;
+/// Probe chain settings (`[chains]` in the rules file).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChainOptions {
+    /// Requests further apart than this start a new chain.
+    pub max_gap_secs: i64,
+    /// A chain needs at least this many distinct variants.
+    pub min_variants: usize,
+    /// A median gap under this is tool pace.
+    pub tool_pace_below_secs: i64,
+    /// A median gap from the tool band up to this is model pace; slower is
+    /// slow pace.
+    pub model_pace_max_secs: i64,
+}
+
+impl Default for ChainOptions {
+    fn default() -> Self {
+        Self {
+            max_gap_secs: 300,
+            min_variants: 3,
+            tool_pace_below_secs: 2,
+            model_pace_max_secs: 120,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Pace {
-    /// Median gap under 2 s: a scanner or script.
+    /// Median gap under `tool_pace_below_secs`: a scanner or script.
     Tool,
-    /// 2 s to 2 min: consistent with a model choosing each request.
+    /// Up to `model_pace_max_secs`: consistent with a model choosing each
+    /// request.
     Model,
     /// Slower: a person, or a model that reasons longer per step.
     Slow,
 }
 
 impl Pace {
-    pub fn of(median_gap: i64) -> Self {
+    pub fn of(median_gap: i64, opts: &ChainOptions) -> Self {
         match median_gap {
-            g if g < 2 => Self::Tool,
-            g if g <= 120 => Self::Model,
+            g if g < opts.tool_pace_below_secs => Self::Tool,
+            g if g <= opts.model_pace_max_secs => Self::Model,
             _ => Self::Slow,
         }
     }
@@ -102,7 +124,7 @@ fn target_of(r: &ObsResult) -> Option<(String, String, Params, String)> {
 }
 
 /// Find probe chains that include at least one flagged record.
-pub fn chains(results: &[ObsResult]) -> Vec<Chain> {
+pub fn chains(results: &[ObsResult], opts: &ChainOptions) -> Vec<Chain> {
     let mut by_target: BTreeMap<(String, String), Vec<(usize, Params)>> = BTreeMap::new();
     for (i, r) in results.iter().enumerate() {
         if r.obs.ts <= 0 {
@@ -119,14 +141,14 @@ pub fn chains(results: &[ObsResult]) -> Vec<Chain> {
         reqs.sort_by_key(|(i, _)| (results[*i].obs.ts, *i));
         let mut seg: Vec<(usize, Params)> = Vec::new();
         let mut flush = |seg: &mut Vec<(usize, Params)>| {
-            if let Some(c) = chain_of(results, &host, &path, seg) {
+            if let Some(c) = chain_of(results, &host, &path, seg, opts) {
                 out.push(c);
             }
             seg.clear();
         };
         for req in reqs {
             if let Some((last, _)) = seg.last()
-                && results[req.0].obs.ts - results[*last].obs.ts > MAX_GAP_SECS
+                && results[req.0].obs.ts - results[*last].obs.ts > opts.max_gap_secs
             {
                 flush(&mut seg);
             }
@@ -143,10 +165,11 @@ fn chain_of(
     host: &str,
     path: &str,
     seg: &[(usize, Params)],
+    opts: &ChainOptions,
 ) -> Option<Chain> {
     let flagged = seg.iter().filter(|(i, _)| results[*i].score > 0).count();
     let variants: BTreeSet<Params> = seg.iter().map(|(_, p)| sorted(p)).collect();
-    if flagged == 0 || variants.len() < MIN_VARIANTS {
+    if flagged == 0 || variants.len() < opts.min_variants {
         return None;
     }
     let mut values: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
@@ -164,7 +187,7 @@ fn chain_of(
         return None;
     }
     let ts: Vec<i64> = seg.iter().map(|(i, _)| results[*i].obs.ts).collect();
-    // Within a chain every step is inside `MAX_GAP_SECS`. A change is a new
+    // Within a chain every step is inside `max_gap_secs`. A change is a new
     // parameter value, or the same values encoded differently.
     let retries_after_error = seg
         .windows(2)
@@ -188,7 +211,7 @@ fn chain_of(
         start: ts[0],
         end: *ts.last().unwrap_or(&ts[0]),
         median_gap_secs: median,
-        pace: Pace::of(median),
+        pace: Pace::of(median, opts),
         retries_after_error,
     })
 }
@@ -281,8 +304,9 @@ mod tests {
 
     #[test]
     fn pace() {
-        assert_eq!(Pace::of(0), Pace::Tool);
-        assert_eq!(Pace::of(30), Pace::Model);
-        assert_eq!(Pace::of(600), Pace::Slow);
+        let o = ChainOptions::default();
+        assert_eq!(Pace::of(0, &o), Pace::Tool);
+        assert_eq!(Pace::of(30, &o), Pace::Model);
+        assert_eq!(Pace::of(600, &o), Pace::Slow);
     }
 }

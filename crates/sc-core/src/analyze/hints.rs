@@ -111,9 +111,9 @@ pub(super) fn cluster(
         results,
         &members,
         unflagged_by_host,
-        t.start,
-        t.end,
+        (t.start, t.end),
         cfg.window_secs,
+        &rules.set.paths,
     );
     let dialect = crate::dialect::dialect(
         &members
@@ -133,16 +133,21 @@ pub(super) fn cluster(
                 }
             })
             .collect::<Vec<_>>(),
+        &rules.set.fanout,
     );
     let cut_lengths = crate::dialect::cut_lengths(
         &members
             .iter()
             .map(|&i| {
                 let r = &results[i];
-                let fired = r.hits.iter().any(|h| h.rule_id == TRUNCATED_RULE);
+                let fired = r
+                    .hits
+                    .iter()
+                    .any(|h| h.rule_id == rules.set.cut_lengths.rule);
                 (r.obs.url.as_str(), fired)
             })
             .collect::<Vec<_>>(),
+        &rules.set.cut_lengths,
     );
     Cluster {
         id: String::new(),
@@ -188,9 +193,6 @@ pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
     runs
 }
 
-/// The rule whose hit marks a URL as cut off.
-const TRUNCATED_RULE: &str = "marker.truncated_output";
-
 /// The request on the target host: the layer naming that host, else the
 /// submitted URL.
 pub(super) fn target_text(r: &ObsResult) -> &str {
@@ -225,9 +227,9 @@ fn path_stats(
     results: &[ObsResult],
     members: &[usize],
     unflagged_by_host: &HashMap<&str, Vec<usize>>,
-    start: i64,
-    end: i64,
+    (start, end): (i64, i64),
     window: i64,
+    opts: &crate::paths::PathOptions,
 ) -> PathStats {
     use crate::paths::*;
     let mut idxs: BTreeSet<usize> = members.iter().copied().collect();
@@ -260,8 +262,8 @@ fn path_stats(
         .collect();
 
     let mut stats = PathStats {
-        preambles: shared_preambles(&reqs, PREAMBLE_LEN, MIN_HOSTS),
-        shared_unusual_sets: shared_unusual_sets(&reqs, MIN_JACCARD, MIN_PATHS, MIN_HOSTS),
+        preambles: shared_preambles(&reqs, opts),
+        shared_unusual_sets: shared_unusual_sets(&reqs, opts),
         ..Default::default()
     };
     for &i in members {

@@ -52,6 +52,53 @@ archive_burst_gap_secs = 180
 archive_burst_min = 5
 archive_burst_ratio = 10.0
 
+# Probe chains: requests to one host and path, each at most `max_gap_secs`
+# after the last, with at least `min_variants` distinct parameter sets. The
+# median gap sets the pace hint: under `tool_pace_below_secs` is a tool, up to
+# `model_pace_max_secs` is consistent with a model choosing each request.
+[chains]
+max_gap_secs = 300
+min_variants = 3
+tool_pace_below_secs = 2
+model_pace_max_secs = 120
+
+# Parallel fan-out: one-second batches of alike requests. A width is reported
+# when at least `min_batches` batches exist and one width, at least
+# `min_width`, covers at least `min_share` of them.
+[fanout]
+batch_secs = 1
+min_batches = 4
+min_width = 2
+min_share = 0.6
+
+# Repeated cut lengths: at least `min_records` truncated URLs within
+# `tolerance` characters of a common length. `rule` marks a URL as cut off.
+[cut_lengths]
+min_records = 3
+tolerance = 2
+rule = "marker.truncated_output"
+
+# Path hints: recon openings (the first `preamble_len` paths on a host) and
+# unusual path sets shared by `min_hosts` hosts or more.
+[paths]
+preamble_len = 5
+min_hosts = 3
+min_paths = 3
+min_jaccard = 0.6
+# What polite crawlers fetch first; an opening of only these is ordinary.
+crawler = ["/", "/robots.txt", "/sitemap.xml", "/sitemap_index.xml", "/favicon.ico", "/ads.txt", "/manifest.json"]
+# Well-known files a client reads to learn about a host (and /.well-known/*).
+recon = [
+    "/security.txt", "/humans.txt", "/llms.txt", "/llms-full.txt", "/.git/head", "/.git/config",
+    "/.env", "/.ds_store", "/crossdomain.xml", "/clientaccesspolicy.xml", "/server-status",
+    "/openapi.json", "/swagger.json", "/api-docs", "/version", "/health",
+]
+# Paths nearly every site serves, which say nothing about a client.
+common = [
+    "/index.html", "/index.php", "/index.htm", "/home", "/about", "/contact", "/login",
+    "/search", "/admin", "/api", "/wp-admin", "/wp-login.php",
+]
+
 # ── Relays: fetch-through / conversion services ────────────────────────────
 [[rule]]
 id = "relay.jina"
