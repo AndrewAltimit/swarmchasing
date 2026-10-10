@@ -128,6 +128,14 @@ Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../
 
 Non-zero on an error, when `eval` misses a floor, when `case verify` finds a difference, and when `notice lint` or `notice add` finds a problem.
 
+## Tests
+
+```sh
+cargo test -p swarmchase
+```
+
+Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built binary over `samples/eval/` in scratch data directories: scan, clusters, a public report, a case from a cluster key to a verified bundle, notice lint, and an offline watch run. None touches the network.
+
 ## Source
 
 | File | Covers |
