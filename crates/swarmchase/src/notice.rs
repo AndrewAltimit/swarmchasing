@@ -640,7 +640,9 @@ mod tests {
             ],
         );
         assert_eq!(on_remote(&dir, "n-1"), None, "committed, not pushed");
-        git(&work, &["push", "-q", "origin", "main"]);
+        // What a push leaves behind locally: origin's tracking ref at the
+        // commit. Set it directly so the test needs no push.
+        git(&work, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
         assert_eq!(
             on_remote(&dir, "n-1").as_deref(),
             Some("origin/main:notices/n-1.md")
