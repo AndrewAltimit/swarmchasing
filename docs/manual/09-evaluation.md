@@ -31,7 +31,7 @@ A frozen split is used for measurement only. Looking at its errors to change a r
 
 Labels from an external release are used with documented overrides, each with its reason. The [Transluce release](references.md#incident-reports) is such a source: it labels scan reports and ships report ids, not contents, so a practitioner fetches the reports under their own access and measures record by record ([held-out steps](../../samples/eval/README.md#held-out-evaluation-on-the-transluce-release)). Its labels draw on context a single record cannot show, so the per-class table matters more than the total.
 
-Toolkit: the Transluce measurement runs today; a frozen split by time and cluster is (planned).
+Toolkit: the Transluce measurement runs record by record, and `eval --split time|cluster` freezes a split of any labelled set ([frozen splits](../reference/evaluation.md#frozen-splits)). Results are saved as numbers and hashes ([saved results](../reference/evaluation.md#saved-results)).
 
 ## FM-9.4 Prospective evaluation
 
@@ -54,7 +54,7 @@ centre    = (p + z²/(2n)) / (1 + z²/n)
 halfwidth = (z / (1 + z²/n)) · sqrt( p(1−p)/n + z²/(4n²) )
 ```
 
-Toolkit: precision and recall per tier and recall per class exist; intervals, per-tactic and per-cluster figures are (planned).
+Toolkit: precision and recall per tier, recall per class and per tactic, and false positives per benign class, each with its Wilson interval ([statistics](../reference/evaluation.md#statistics)). Detection scored with the cluster as the unit is (planned).
 
 ## FM-9.6 Cluster metrics
 
@@ -64,7 +64,7 @@ Linking is measured against reference groupings (records labelled with their tru
 - **False-merge rate**: the share of predicted clusters whose records span more than one true group. This is the error that misattributes, so it is reported on its own.
 - **False-split rate**: the share of true groups spread over more than one predicted cluster.
 
-Toolkit support is (planned).
+Toolkit: B-cubed precision, recall and F1, false merges and split runs, reported but not gated ([cluster-level evaluation](../reference/evaluation.md#cluster-level-evaluation)).
 
 ## FM-9.7 Attribution calibration
 
@@ -80,7 +80,7 @@ Unresolved attributions are reported as a count, not dropped. Toolkit support is
 
 Labels are judgments. A sample of leads is labelled by two reviewers independently, and agreement is reported as Cohen's κ ([Cohen 1960](references.md#statistics)); with more than two reviewers, Fleiss' κ ([Fleiss 1971](references.md#statistics)). Report κ with the sample size, the label set (agent, benign, unsure) and how disagreements were settled. Low agreement on a class means its labels, and any number built on them, are weak.
 
-Toolkit: `review --stats` counts reviews and disagreements; κ is (planned).
+Toolkit: `review --labeller <name>` keeps each reviewer's labels apart, and `review --stats` reports Cohen's κ for each pair with its disagreements ([two labellers](../reference/evaluation.md#two-labellers)). Fleiss' κ is (planned).
 
 ## FM-9.9 What to publish with a number
 

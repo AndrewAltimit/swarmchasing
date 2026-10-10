@@ -18,13 +18,30 @@
 //!   `disposition` + `confidence` (+ `broad_class`). A bare urlquery report ID is
 //!   prefixed `urlquery:` to match collected records. `review_required` rows are
 //!   skipped: they are unlabelled.
+//!
+//! Beyond the label, a record may carry `run` (its true run, for the
+//! cluster-level evaluation in [`clusters`]) and, when benign,
+//! `hard_negative_for` (the rule ids it was written to resemble, for
+//! [`coverage`]). Benign records' `class` says what kind of ordinary traffic
+//! they are (`relay_reading`, `api_client`, `crawler`, ...), so false
+//! positives are reported per benign class.
+//!
+//! Submodules: [`stats`] (Wilson intervals, Cohen's κ), [`clusters`],
+//! [`coverage`], [`split`] (frozen held-out splits) and [`summary`] (the
+//! whole evaluation as one JSON-ready value, for the CLI and the site).
+
+pub mod clusters;
+pub mod coverage;
+pub mod split;
+pub mod stats;
+pub mod summary;
 
 use crate::analyze::Analysis;
 use crate::model::Tier;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Label {
     Agent,
@@ -43,6 +60,12 @@ pub struct Labelled {
     /// Where the label came from (an article, a dataset), kept for the record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cite: Option<String>,
+    /// The true run the record belongs to, for cluster-level evaluation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<String>,
+    /// For a benign record: the rules it was written to resemble.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hard_negative_for: Vec<String>,
 }
 
 #[derive(Debug, Default)]
@@ -65,6 +88,11 @@ pub struct Threshold {
     /// `None` when nothing was flagged at this threshold.
     pub precision: Option<f64>,
     pub recall: Option<f64>,
+    /// 95% Wilson interval `[lo, hi]` for precision, `None` when undefined.
+    #[serde(default)]
+    pub precision_ci: Option<(f64, f64)>,
+    #[serde(default)]
+    pub recall_ci: Option<(f64, f64)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +109,24 @@ pub struct ClassStat {
     pub agents: usize,
     pub suggestive_or_above: usize,
     pub significant: usize,
+}
+
+/// False positives among benign records of one class.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenignClassStat {
+    pub class: String,
+    pub benign: usize,
+    /// Flagged suggestive or above.
+    pub suggestive_or_above: usize,
+    pub significant: usize,
+}
+
+/// Benign records naming a rule in `hard_negative_for`, and how many of
+/// them the rule fired on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HardNegative {
+    pub records: usize,
+    pub fired: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +154,15 @@ pub struct EvalReport {
     pub thresholds: Vec<Threshold>,
     pub rules: Vec<RuleStat>,
     pub classes: Vec<ClassStat>,
+    /// False positives per benign class (`unclassed` when none given).
+    #[serde(default)]
+    pub benign_classes: Vec<BenignClassStat>,
+    /// Rule id -> its hard negatives.
+    #[serde(default)]
+    pub hard_negatives: BTreeMap<String, HardNegative>,
+    /// Linking against labelled runs (report only).
+    #[serde(default)]
+    pub clusters: clusters::ClusterEval,
     /// Labeller's tier → our tier → count, for labels that carry a tier.
     pub agreement: BTreeMap<String, BTreeMap<String, usize>>,
     /// Benign records we flagged, strongest first.
@@ -134,10 +189,14 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
             tn: 0,
             precision: None,
             recall: None,
+            precision_ci: None,
+            recall_ci: None,
         })
         .collect();
     let mut rules: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     let mut classes: BTreeMap<String, ClassStat> = BTreeMap::new();
+    let mut benign_classes: BTreeMap<String, BenignClassStat> = BTreeMap::new();
+    let mut hard_negatives: BTreeMap<String, HardNegative> = BTreeMap::new();
     let mut agreement: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
     let mut fps = Vec::new();
 
@@ -187,7 +246,26 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
             c.agents += 1;
             c.suggestive_or_above += usize::from(r.tier >= Tier::Suggestive);
             c.significant += usize::from(r.tier == Tier::Significant);
-        } else if r.tier >= Tier::Suggestive {
+        } else {
+            let class = l.class.clone().unwrap_or_else(|| "unclassed".into());
+            let c = benign_classes
+                .entry(class.clone())
+                .or_insert(BenignClassStat {
+                    class,
+                    benign: 0,
+                    suggestive_or_above: 0,
+                    significant: 0,
+                });
+            c.benign += 1;
+            c.suggestive_or_above += usize::from(r.tier >= Tier::Suggestive);
+            c.significant += usize::from(r.tier == Tier::Significant);
+            for rule in &l.hard_negative_for {
+                let h = hard_negatives.entry(rule.clone()).or_default();
+                h.records += 1;
+                h.fired += usize::from(ids.contains(&rule.as_str()));
+            }
+        }
+        if !is_agent && r.tier >= Tier::Suggestive {
             fps.push(Miss {
                 id: r.obs.id.clone(),
                 label: l.label,
@@ -208,6 +286,8 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
     for t in &mut thresholds {
         t.precision = ratio(t.tp, t.tp + t.fp);
         t.recall = ratio(t.tp, t.tp + t.fn_);
+        t.precision_ci = stats::wilson(t.tp, t.tp + t.fp);
+        t.recall_ci = stats::wilson(t.tp, t.tp + t.fn_);
     }
     fps.sort_by(|x, y| y.tier.cmp(&x.tier).then(y.score.cmp(&x.score)));
     let missing_records = labels
@@ -239,6 +319,9 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
         thresholds,
         rules,
         classes: classes.into_values().collect(),
+        benign_classes: benign_classes.into_values().collect(),
+        hard_negatives,
+        clusters: clusters::cluster_eval(a, labels),
         agreement,
         false_positives: fps,
     }
@@ -311,6 +394,16 @@ fn parse_ndjson_labels(text: &str) -> LabelSet {
                 ref_tier,
                 class: s("class"),
                 cite: s("cite"),
+                run: s("run"),
+                hard_negative_for: v
+                    .get("hard_negative_for")
+                    .and_then(|x| x.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
             },
         );
     }
@@ -338,6 +431,7 @@ fn parse_csv_labels(text: &str) -> LabelSet {
     let conf_col = col(&["confidence"]);
     let class_col = col(&["class", "broad_class"]);
     let cite_col = col(&["cite", "report_url"]);
+    let run_col = col(&["run"]);
     if label_col.is_none() && disp_col.is_none() {
         out.warnings
             .push("CSV has neither a label nor a disposition column".into());
@@ -367,6 +461,8 @@ fn parse_csv_labels(text: &str) -> LabelSet {
                 ref_tier,
                 class: get(class_col).filter(|s| !s.is_empty()).map(str::to_string),
                 cite: get(cite_col).filter(|s| !s.is_empty()).map(str::to_string),
+                run: get(run_col).filter(|s| !s.is_empty()).map(str::to_string),
+                hard_negative_for: Vec::new(),
             },
         );
     }

@@ -20,6 +20,9 @@ pub enum Cursor {
 pub struct Page {
     pub records: Vec<Observation>,
     pub next: Option<Cursor>,
+    /// The source had more records than it returned and cannot page to them
+    /// (Arquivo.pt's index, a one-page feed). The pull is incomplete.
+    pub truncated: bool,
 }
 
 /// The result of one pull.
@@ -35,6 +38,8 @@ pub struct Pull {
     /// A page failed after earlier pages succeeded. The pull kept what it had,
     /// and `next_cursor` is the last good cursor.
     pub stopped: Option<anyhow::Error>,
+    /// A page was cut short by a source that cannot page (see [`Page::truncated`]).
+    pub truncated: bool,
 }
 
 impl Pull {
@@ -72,6 +77,7 @@ pub fn pull(
             Err(e) => return Err(e),
         };
         on_page(&page)?;
+        out.truncated |= page.truncated;
         out.observations.extend(page.records);
         cursor = page.next;
         if cursor.is_none() {
@@ -98,6 +104,7 @@ mod tests {
                 })
                 .collect(),
             next: next.map(|k| Cursor::Key(k.into())),
+            truncated: false,
         })
     }
 

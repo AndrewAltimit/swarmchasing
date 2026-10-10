@@ -7,8 +7,8 @@ use std::time::Duration;
 
 pub fn run(domain: &str) -> Result<()> {
     let client = Client::new(Duration::from_millis(500))?;
-    match client.security_txt(domain) {
-        Ok((url, body)) => {
+    match client.security_txt_checked(domain) {
+        Ok(sc_collect::securitytxt::Fetch { url, body, expired }) => {
             let s = parse_security_txt(&body);
             println!(
                 "source:  {url}{}",
@@ -24,7 +24,14 @@ pub fn run(domain: &str) -> Result<()> {
                 println!("key:     {e}");
             }
             if let Some(x) = &s.expires {
-                println!("expires: {x}");
+                println!(
+                    "expires: {x}{}",
+                    if expired {
+                        " (EXPIRED: treat the contacts as stale)"
+                    } else {
+                        ""
+                    }
+                );
             }
         }
         Err(e) => {

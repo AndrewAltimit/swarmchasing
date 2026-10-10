@@ -4,16 +4,19 @@
 //! in the browser via `sc-wasm`.
 
 pub mod analyze;
+pub mod asn;
 pub mod attribution;
 pub mod bursts;
 pub mod capture;
 pub mod chains;
 pub mod dialect;
 pub mod endpoints;
+pub mod escalation;
 pub mod eval;
 pub mod extract;
 pub mod fanout;
 pub mod fingerprint;
+pub mod fleets;
 pub mod ingest;
 pub mod model;
 pub mod notice;
@@ -33,14 +36,17 @@ pub use bursts::{ArchiveBurst, archive_bursts};
 pub use chains::{Chain, Pace};
 pub use dialect::{CutLengths, Dialect, DialectPair};
 pub use endpoints::{Activity, EndpointOptions, EndpointView, endpoints};
+pub use escalation::{Escalation, Route};
+pub use eval::summary::{Summary, summarize};
 pub use eval::{EvalReport, Label, LabelSet, evaluate, parse_labels};
 pub use extract::{Extracted, Layer, defang, defang_host, extract, unwrap_layers};
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
+pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tier, TsKind, fmt_ts, parse_ts,
-    top_counts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tactic, Tier, TsKind, fmt_ts,
+    parse_ts, top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use recurrence::{ClusterRun, RecurrenceOptions, Rerun, TargetRun, cluster_reruns, reruns};

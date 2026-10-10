@@ -40,9 +40,14 @@ impl Source for Arquivo {
             q.from = Some(cdx_ts(t));
         }
         q.limit = size;
+        let records = client.arquivo_cdx(&q)?;
+        // The API takes no offset, page or resume key, so a full page is as far
+        // as a query reaches: narrow the pattern or the dates to see the rest.
+        let truncated = records.len() >= size;
         Ok(Page {
-            records: client.arquivo_cdx(&q)?,
+            records,
             next: None,
+            truncated,
         })
     }
 }

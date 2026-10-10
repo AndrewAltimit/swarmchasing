@@ -3,6 +3,7 @@
 //! and notice commands have modules of their own.
 
 pub mod analyze;
+pub mod asn;
 pub mod certs;
 pub mod clusters;
 pub mod collect;

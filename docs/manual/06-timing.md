@@ -15,7 +15,7 @@ Every record states what its time measures. A timing claim names the kind it res
 | **Capture** | When an archive saved a URL. May be the agent's own save request, or a later crawl of a link to it. | "Requested no later than"; bursts of captures as a lead ([FM-5.7](05-linking.md#fm-57-soft-links)). | Cadence, pauses, rhythm, fan-out, clock offset, close-timing links, the order of steps. |
 | **Unknown** | Not stated. | Nothing beyond the record's existence. | Any timing claim. |
 
-Toolkit: every record carries its kind (request, capture, submit, unknown), set from its source. Gating each timing feature and the close-timing link by kind is (planned); until then the reviewer discards timing claims that rest on capture times.
+Toolkit: every record carries its kind (request, capture, submit, unknown), set from its source, and each cluster and probe chain states its time basis. Rhythm and fan-out skip capture times, chains timed by captures report no pace, and submit times are labelled as such. Gating the close-timing link by kind is (planned); until then the reviewer discards close-timing links that rest on capture times.
 
 ## FM-6.2 Cadence, bursts and pauses
 

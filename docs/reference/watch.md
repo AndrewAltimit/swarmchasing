@@ -14,6 +14,8 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
 | `cases/<id>/` | Case files ([cases](cases.md)). |
 | `rules/<version>.toml` | Rules versions that cases pin. |
+| `cache/http/` | Cached collector responses; safe to delete. |
+| `asn/ip2asn-v4.tsv.gz` | The IP-to-ASN table, once fetched. |
 
 ## Collection
 
@@ -24,6 +26,29 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 - **Overlap.** Each pull overlaps the last by `overlap_days` to catch late-indexed captures.
 - **Analysis window.** Every run analyses the last `analysis_window_days` of stored records together, so clusters can span runs. It reads only that window plus the overlap from the store, and this run's new records whatever their capture time.
 - **urlquery.** urlquery sources need `URLQUERY_APIKEY`. Without it they are skipped and the digest says so ([configuration](configuration.md#urlquerynet)).
+- **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached.
+- **ASN.** Once `swarmchase asn fetch` has put the IP-to-ASN table in `asn/`, records that carry an IP but no network get one ([configuration](configuration.md#ip-to-asn-table)).
+
+### Source kinds
+
+Each `[[source]]` names a `kind`. Its `pattern` means what the table says; `endpoint` and `scan` apply where noted.
+
+| Kind | Reads | Pattern | Also |
+|---|---|---|---|
+| `wayback` | Wayback Machine CDX | CDX URL pattern | `match_type`, resumes across runs |
+| `arquivo` | Arquivo.pt CDX | CDX URL pattern | cannot page; warns when cut at `limit` |
+| `commoncrawl` | Common Crawl CDX | CDX URL pattern | `endpoint`: `latest`, `latest:N` or a crawl id |
+| `memento` | One URL's timemap | exact URL | `endpoint`: the timemap service |
+| `urlquery` | urlquery.net search | search query | needs `URLQUERY_APIKEY` |
+| `urlscan` | urlscan.io public search | search query | per case only (terms) |
+| `gharchive` | GH Archive events | substrings | `scan`: newest hours read |
+| `npm` | npm registry search | search text | |
+| `pypi` | PyPI RSS feed | substrings | `endpoint`: `updates` or `packages` |
+| `ctlog` | One CT log | substrings | `endpoint`: log URL; `scan`: newest entries |
+
+Substrings are `|`-separated and case-insensitive. Archive kinds date records by capture, scan services by submission, and the rest by when the request reached the service (`ts_kind`).
+
+Streamed and feed kinds read a bounded sample each run, not the whole stream, and their records are leads for review: the record's URL is the event, package or certificate name, so the URL rules rarely fire on it. Every kind's terms of use are summarised in the [watchlist](../../watchlist.toml) and in its [collector](../../crates/sc-collect/README.md#record-sources).
 
 ## The digest
 
@@ -75,6 +100,7 @@ At the end of each run, run directories and stored records older than `retain_da
 Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing.
 
 - `--unflagged N` adds a stable sample of unflagged records, which grows the benign baseline and catches misses.
-- `--stats` counts reviews and disagreements; `--list` prints the queue.
+- `--stats` counts reviews and disagreements, and Cohen's κ between labellers; `--list` prints the queue.
+- `--labeller <name>` saves to `labels/reviewed-<name>.ndjson` instead, for a second, independent reviewer ([two labellers](evaluation.md#two-labellers)).
 
 Each answer goes to `labels/reviewed.ndjson` with the record, so `swarmchase eval <data>/labels/reviewed.ndjson` measures the rules against everything reviewed ([evaluation](evaluation.md)). The file stays in the data directory and is never committed.

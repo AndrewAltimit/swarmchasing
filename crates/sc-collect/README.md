@@ -1,21 +1,30 @@
 # sc-collect
 
-Passive collectors for public records: the Wayback Machine and Arquivo.pt CDX indexes, urlquery.net search and reports, crt.sh certificate logs, security.txt and RDAP. They return [`sc-core`](../sc-core/README.md) `Observation`s, with secrets already redacted.
+Passive collectors for public records. They return [`sc-core`](../sc-core/README.md) `Observation`s, with secrets already redacted:
 
-Most people use it through the [`swarmchase`](../swarmchase/README.md) CLI (`collect`, `certs`, `contact`, `watch`, `case contacts`) rather than directly.
+- web archive indexes: the Wayback Machine, Arquivo.pt and Common Crawl CDX, and Memento timemaps;
+- scan services: urlquery.net and urlscan.io search;
+- event streams and registries: GH Archive, npm search and PyPI feeds;
+- certificates: crt.sh, and CT logs read directly;
+- contacts: security.txt and RDAP.
+
+It also holds the [Public Suffix List](src/psl.rs) helper and the [IP-to-ASN table](src/asn.rs) download.
+
+Most people use it through the [`swarmchase`](../swarmchase/README.md) CLI (`collect`, `certs`, `contact`, `watch`, `asn`, `case contacts`) rather than directly.
 
 ## Ground rules
 
 What this crate does and does not implement keeps collection passive:
 
 - It reads **indexes and public records only**. It never opens a captured page or a URL an agent submitted, which may be a live exploit or trigger a callback to the agent's operator.
+- It never downloads archived content (WARC records, mementos), package code, repositories or scanned pages: index rows and metadata only.
 - It never reads or writes agent callback channels (inboxes, notification topics, pastes).
-- It is polite: one request at a time with a minimum interval, an identifying user agent, and backoff when a server is overloaded.
+- It is polite: one request at a time with a minimum interval per host, an identifying user agent, and jittered backoff when a server is overloaded.
 - Records are redacted before they leave the crate.
 
 Archive captures get the id `<archive>:<timestamp>:<digest>` from [`sc_core::capture`](../sc-core/src/capture.rs), the same id an imported CDX export gets, and record their timestamp as a capture time.
 
-A new collector must keep to these. See [docs/policies.md](../../docs/policies.md) for the collection policy.
+A new collector must keep to these. Its module docs record the source's terms of use, with their URL, and what they allow. See [docs/policies.md](../../docs/policies.md) for the collection policy.
 
 ## Use
 
@@ -25,20 +34,16 @@ It is a workspace crate (not published):
 use sc_collect::{CdxQuery, Client};
 use std::time::Duration;
 
-let client = Client::new(Duration::from_millis(1500))?; // minimum gap between requests
+let client = Client::new(Duration::from_millis(1500))?; // minimum gap per host
 let q = CdxQuery {
     pattern: "r.jina.ai/*".into(),
     from: Some("20260901".into()),
-    to: None,
-    limit: 5000,
-    match_type: None,
-    collapse_digest: false,
-    page_size: 1000,
+    ..Default::default() // limit 5000, page_size 1000
 };
 let records = client.wayback_cdx(&q)?;
 ```
 
-`CdxQuery` also deserialises from a `watchlist.toml` source entry, with `limit` and `page_size` defaulting to 5000 and 1000.
+`CdxQuery` also deserialises from a `watchlist.toml` source entry, with `limit` and `page_size` defaulting to 5000 and 1000. `endpoint` picks the instance of a source that has several (a CT log, a crawl, a feed). `scan` bounds how much of a streamed source one pull reads.
 
 | Method | Source |
 |---|---|
@@ -47,22 +52,53 @@ let records = client.wayback_cdx(&q)?;
 | `urlquery`, `urlquery_page` | urlquery.net report search. Takes an API key. |
 | `urlquery_report` | One urlquery.net report by ID. |
 | `crtsh` | Certificate Transparency via crt.sh. |
-| `security_txt` | A domain's `/.well-known/security.txt`. |
+| `security_txt`, `security_txt_checked` | A domain's security.txt; the checked form says whether it has expired. |
 | `rdap_domain` | A domain's RDAP record, for the registrar's abuse contact. |
+| `download` | A large file streamed to disk (the ASN table). |
 
-`parse_wayback_cdx`, `parse_arquivo_cdx` and `parse_urlquery_search` parse a saved response without the network.
+Every source has a `parse_*` function that reads a saved response without the network.
+
+### Record sources
+
+| `Kind` | Reads | Pattern | `ts_kind` |
+|---|---|---|---|
+| `wayback` | Wayback Machine CDX | CDX URL pattern | capture |
+| `arquivo` | Arquivo.pt CDX (no paging) | CDX URL pattern | capture |
+| `commoncrawl` | Common Crawl CDX, newest crawls | CDX URL pattern | capture |
+| `memento` | One URL's Memento timemap | exact URL | capture |
+| `urlquery` | urlquery.net search (key needed) | search query | submit |
+| `urlscan` | urlscan.io public search | search query | submit |
+| `gharchive` | GH Archive hourly events | substrings | request |
+| `npm` | npm registry search | search text | request |
+| `pypi` | PyPI RSS feeds | substrings | request |
+| `ctlog` | One CT log's newest entries | substrings | request |
+
+"Substrings" are `|`-separated and case-insensitive; `*` keeps everything. Each module's docs give the source's terms of use and what they allow.
 
 ### Sources and paging
 
-The record sources (`Wayback`, `Arquivo`, `Urlquery`, or `source(kind, query, key)`) implement the `Source` trait. `pull(client, since, cursor, limit)` fetches pages through the shared [`pager`](src/pager.rs) until the limit or the end, and returns a `Pull`: the records, the cursor to continue from, whether the source is exhausted, and the requests made. `pull_each` also shows each page as it arrives, so a caller can save progress page by page.
+The record sources (or `source(kind, query, key)`) implement the `Source` trait. `pull(client, since, cursor, limit)` fetches pages through the shared [`pager`](src/pager.rs) until the limit or the end, and returns a `Pull`: the records, the cursor to continue from, whether the source is exhausted, and the requests made. `pull_each` also shows each page as it arrives, so a caller can save progress page by page.
 
-A pull that fails after its first page keeps what it has and says so in `Pull::stopped`; `Pull::strict` turns that back into an error. Wayback's resume key stays valid across runs (`Source::resumable`), so the watch continues a cut-short pull on its next run. A urlquery offset is valid only within one pull.
+A pull that fails after its first page keeps what it has and says so in `Pull::stopped`; `Pull::strict` turns that back into an error. A source that cannot page (Arquivo.pt, a feed) sets `Pull::truncated` when a page came back full.
 
-## Retries
+Wayback's resume key and Common Crawl's crawl-and-page cursor stay valid across runs (`Source::resumable`), so the watch continues a cut-short pull on its next run. A urlquery or npm offset is valid only within one pull.
 
-Timeouts, dropped connections, HTTP 429 and 5xx are retried with exponential backoff (5 retries from 5 seconds, each wait capped at 5 minutes), honouring `Retry-After`. Other errors fail at once. Change the policy with `Client::with_retry`. `Client::requests` counts the requests sent, retries included, for sources with a quota.
+Streamed sources read a bounded sample each pull: the newest `scan` hours of GH Archive, decoded a line at a time, and the newest `scan` entries of a CT log.
+
+## Retries, limits and the cache
+
+- **Retries.** Timeouts, dropped connections, HTTP 429 and 5xx are retried with exponential backoff: 5 retries from 5 seconds, spread ±25%, each wait capped at 5 minutes. Other errors fail at once. Change the policy with `Client::with_retry`.
+- **Retry-After.** A server's `Retry-After`, in seconds or as an HTTP date, is honoured as given.
+- **Pacing.** The minimum interval applies per host, so sources on different hosts do not slow each other.
+- **Size cap.** A response read into memory is capped at 64 MiB (`Client::with_max_body`). Large files are streamed with their own cap.
+- **Cache.** `Client::with_cache(dir, ttl)` keeps responses on disk. One younger than `ttl` is reused without a request; an older one is revalidated with its ETag or Last-Modified. Requests carrying API keys are never cached.
+- **Counts.** `Client::requests` counts the requests sent, retries included; `Client::cache_hits` counts reuses.
 
 Error messages name the URL and never a header value, so an API key does not end up in a log.
+
+## security.txt
+
+`security_txt` takes a bare domain name and refuses a path, user info, port or IP address. It follows redirects only within that host, over HTTPS. It accepts `text/plain`, or no type when the body is not HTML. A file whose `Expires` has passed is returned marked expired: RFC 9116 makes it stale, not void.
 
 ## Environment
 
@@ -70,7 +106,7 @@ Error messages name the URL and never a header value, so an API key does not end
 |---|---|
 | `SWARMCHASE_UA` | Overrides the user agent, which by default names the tool, its version and the repository. |
 
-The urlquery API key is passed in by the caller; the CLI reads it from `URLQUERY_APIKEY`.
+API keys are passed in by the caller. `Kind::key_env` names the variable the CLI reads: `URLQUERY_APIKEY` (required for urlquery) and `URLSCAN_APIKEY` (optional for urlscan).
 
 ## Tests
 
@@ -78,14 +114,19 @@ The urlquery API key is passed in by the caller; the CLI reads it from `URLQUERY
 cargo test -p sc-collect
 ```
 
-The tests parse saved responses and feed the pager canned pages; none touches the network.
+The tests parse synthetic responses (never third-party records) and feed the pager canned pages; none touches the network.
 
 ## Source
 
 | File | Covers |
 |---|---|
-| [`lib.rs`](src/lib.rs) | `CdxQuery`, `Kind`, the `Source` trait. |
-| [`client.rs`](src/client.rs) | The HTTP client: pacing, retries, `Retry-After`, user agent, request count. |
+| [`lib.rs`](src/lib.rs) | `CdxQuery`, `Kind`, the `Source` trait, substring filters. |
+| [`client.rs`](src/client.rs) | The HTTP client: pacing, retries, `Retry-After`, size cap, user agent, request count. |
+| [`cache.rs`](src/cache.rs) | The on-disk response cache. |
 | [`pager.rs`](src/pager.rs) | Paging, cursors and `Pull`. |
-| [`wayback.rs`](src/wayback.rs), [`arquivo.rs`](src/arquivo.rs), [`urlquery.rs`](src/urlquery.rs) | The record sources. |
+| [`wayback.rs`](src/wayback.rs), [`arquivo.rs`](src/arquivo.rs), [`commoncrawl.rs`](src/commoncrawl.rs), [`memento.rs`](src/memento.rs) | Archive index sources. |
+| [`urlquery.rs`](src/urlquery.rs), [`urlscan.rs`](src/urlscan.rs) | Scan-service sources. |
+| [`gharchive.rs`](src/gharchive.rs), [`npm.rs`](src/npm.rs), [`pypi.rs`](src/pypi.rs) | Event-stream and registry sources. |
+| [`ctlog.rs`](src/ctlog.rs) | The CT log source and its SAN parser. |
 | [`crtsh.rs`](src/crtsh.rs), [`securitytxt.rs`](src/securitytxt.rs), [`rdap.rs`](src/rdap.rs) | Lookups: certificates, security.txt, RDAP. |
+| [`psl.rs`](src/psl.rs), [`asn.rs`](src/asn.rs) | Registrable domains; the IP-to-ASN table download. |

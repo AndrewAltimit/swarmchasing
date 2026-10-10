@@ -8,11 +8,11 @@ A public record is a trace of a request that a third party publishes to anyone, 
 
 | Source class | What it records | Toolkit support |
 |---|---|---|
-| Public scan services | A submitted URL, where the scan ended, the target's address and network | urlquery.net search and reports |
-| Web archives | Index rows: when a URL was captured, its status and digest | Wayback Machine CDX, Arquivo.pt CDX |
-| Certificate Transparency logs | Certificates issued for a name | crt.sh lookups, per case |
-| Package registries | Package metadata: names, versions, publish times, maintainers | (planned) |
-| Public code-host event streams | Public events: repository creation, pushes, issues | (planned) |
+| Public scan services | A submitted URL, where the scan ended, the target's address and network | urlquery.net and urlscan.io search |
+| Web archives | Index rows: when a URL was captured, its status and digest | Wayback Machine, Arquivo.pt and Common Crawl CDX; Memento timemaps |
+| Certificate Transparency logs | Certificates issued for a name | crt.sh lookups; CT logs read directly |
+| Package registries | Package metadata: names, versions, publish times, maintainers | npm search, PyPI feeds |
+| Public code-host event streams | Public events: repository creation, pushes, issues | GH Archive |
 | Published security contacts | An organisation's security.txt, or its registrar's abuse address | security.txt, RDAP |
 
 The last row is not evidence: it is how a practitioner finds whom to report to ([FM-10.4](10-disclosure.md#fm-104-contacts-and-channels)).
@@ -43,7 +43,7 @@ A source with no rationale is dropped. Sources deliberately not collected are li
 
 ## FM-3.4 Terms of use
 
-A practitioner follows each source's terms. Where terms forbid redistributing content, reports and notices link to the record and quote only indicators the practitioner derived; the content is never committed, published or put in a benchmark ([FM-9.10](09-evaluation.md#fm-910-benchmark-publication-rules)). urlquery.net is such a source ([configuration](../reference/configuration.md#urlquerynet)). Recording a terms review for every source in a structured field is (planned); today it is part of the rationale where it constrains use.
+A practitioner follows each source's terms. Where terms forbid redistributing content, reports and notices link to the record and quote only indicators the practitioner derived; the content is never committed, published or put in a benchmark ([FM-9.10](09-evaluation.md#fm-910-benchmark-publication-rules)). urlquery.net is such a source ([configuration](../reference/configuration.md#urlquerynet)). In the toolkit, each source's terms (with their URL) and what they allow are recorded in its rationale and its collector's module docs.
 
 ## FM-3.5 Politeness
 

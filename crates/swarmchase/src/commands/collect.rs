@@ -14,11 +14,32 @@ use std::time::Duration;
 pub enum CollectSource {
     /// Wayback Machine CDX index.
     Wayback(CollectArgs),
-    /// Arquivo.pt CDX index.
+    /// Arquivo.pt CDX index. It cannot page: a full result is cut at --limit.
     Arquivo(CollectArgs),
     /// urlquery.net report search (needs URLQUERY_APIKEY). PATTERN is a urlquery
     /// search query; --from/--to are rounded to whole days.
     Urlquery(CollectArgs),
+    /// Common Crawl CDX index rows (never WARC content). --endpoint picks the
+    /// crawl: `latest` (default), `latest:N`, or a crawl id.
+    Commoncrawl(CollectArgs),
+    /// urlscan.io public search (URLSCAN_APIKEY optional). PATTERN is a urlscan
+    /// search query, e.g. `task.domain:r.jina.ai`. A per-case lookup: its terms
+    /// rule out scheduled collection.
+    Urlscan(CollectArgs),
+    /// Memento timemap of one exact URL across web archives. --endpoint is the
+    /// timemap endpoint (default: LANL TimeTravel).
+    Memento(CollectArgs),
+    /// GH Archive public GitHub events matching PATTERN (`|`-separated
+    /// substrings of repo names or payload URLs). --scan is the hours read.
+    Gharchive(CollectArgs),
+    /// npm registry search: package names, versions and publish times.
+    Npm(CollectArgs),
+    /// PyPI RSS feed items matching PATTERN (`*` for all). --endpoint is
+    /// `updates` (default) or `packages`.
+    Pypi(CollectArgs),
+    /// Certificates in a CT log whose DNS names match PATTERN. --endpoint is the
+    /// log's base URL; --scan the newest entries read (default 256).
+    Ctlog(CollectArgs),
     /// Fetch urlquery.net reports by ID (needs URLQUERY_APIKEY), e.g. to turn a
     /// labelled report list such as Transluce's reports.csv into records for
     /// `swarmchase eval`. Appends to --out and skips IDs already in it, so an
@@ -38,7 +59,8 @@ pub enum CollectSource {
 
 #[derive(Args)]
 pub struct CollectArgs {
-    /// CDX URL pattern, e.g. `r.jina.ai/*` (for urlquery, a search query)
+    /// CDX URL pattern, e.g. `r.jina.ai/*` (a search query or filter for the
+    /// search and stream sources)
     pattern: String,
     /// yyyyMMdd[hhmmss]
     #[arg(long)]
@@ -53,6 +75,17 @@ pub struct CollectArgs {
     /// Records per request (Wayback pages through the index).
     #[arg(long, default_value_t = 1000)]
     page_size: usize,
+    /// Which instance of the source: a CT log URL, a crawl id, a timemap
+    /// endpoint, a PyPI feed.
+    #[arg(long)]
+    endpoint: Option<String>,
+    /// How much of a streamed source to read: CT log entries, GH Archive hours.
+    #[arg(long)]
+    scan: Option<usize>,
+    /// Cache responses in <data>/cache/http (data: SWARMCHASE_DATA, else ./data)
+    /// and revalidate them with ETags.
+    #[arg(long)]
+    cache: bool,
     /// Output NDJSON file (default stdout).
     #[arg(short, long)]
     out: Option<PathBuf>,
@@ -60,6 +93,9 @@ pub struct CollectArgs {
     #[arg(long, requires = "out")]
     resume: bool,
 }
+
+/// How long a cached response is used without revalidation.
+const CACHE_TTL: Duration = Duration::from_secs(3600);
 
 pub fn run(source: CollectSource) -> Result<()> {
     let (args, kind) = match source {
@@ -69,8 +105,22 @@ pub fn run(source: CollectSource) -> Result<()> {
         CollectSource::Wayback(a) => (a, Kind::Wayback),
         CollectSource::Arquivo(a) => (a, Kind::Arquivo),
         CollectSource::Urlquery(a) => (a, Kind::Urlquery),
+        CollectSource::Commoncrawl(a) => (a, Kind::CommonCrawl),
+        CollectSource::Urlscan(a) => (a, Kind::Urlscan),
+        CollectSource::Memento(a) => (a, Kind::Memento),
+        CollectSource::Gharchive(a) => (a, Kind::GhArchive),
+        CollectSource::Npm(a) => (a, Kind::Npm),
+        CollectSource::Pypi(a) => (a, Kind::Pypi),
+        CollectSource::Ctlog(a) => (a, Kind::CtLog),
     };
-    let client = Client::new(Duration::from_secs(2))?;
+    let mut client = Client::new(Duration::from_secs(2))?;
+    if args.cache {
+        let data = std::env::var("SWARMCHASE_DATA")
+            .ok()
+            .filter(|d| !d.is_empty())
+            .map_or_else(|| PathBuf::from("data"), PathBuf::from);
+        client = client.with_cache(&data.join("cache").join("http"), CACHE_TTL);
+    }
     let q = CdxQuery {
         pattern: args.pattern,
         from: args.from,
@@ -79,6 +129,8 @@ pub fn run(source: CollectSource) -> Result<()> {
         match_type: args.match_type,
         collapse_digest: false,
         page_size: args.page_size,
+        endpoint: args.endpoint,
+        scan: args.scan,
     };
     if let (Some(out), Kind::Wayback) = (&args.out, kind) {
         return collect_wayback_to_file(&client, q, out, args.resume);
@@ -88,15 +140,29 @@ pub fn run(source: CollectSource) -> Result<()> {
     }
     let key = match kind {
         Kind::Urlquery => Some(require_urlquery_key()?),
-        _ => None,
+        k => k.key_from_env(),
     };
     let limit = q.limit;
-    let obs = sc_collect::source(kind, q, key)?
+    let pull = sc_collect::source(kind, q, key)?
         .pull(&client, None, None, limit)?
-        .strict()?
-        .observations;
-    eprintln!("{} records", obs.len());
-    write_out(args.out.as_deref(), &to_ndjson(&obs)?)
+        .strict()?;
+    if pull.truncated {
+        eprintln!(
+            "warning: {} returned a full page it cannot page past; narrow the pattern or dates, or raise --limit",
+            kind.name()
+        );
+    }
+    eprintln!(
+        "{} records, {} requests{}",
+        pull.observations.len(),
+        pull.requests,
+        if client.cache_hits() > 0 {
+            format!(", {} from cache", client.cache_hits())
+        } else {
+            String::new()
+        }
+    );
+    write_out(args.out.as_deref(), &to_ndjson(&pull.observations)?)
 }
 
 /// Report IDs to fetch: every benign-labelled one, plus agent-labelled ones

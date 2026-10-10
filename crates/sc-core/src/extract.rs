@@ -5,8 +5,8 @@
 //! `data:` URLs carrying fetch programs, or base64 parameters. We peel
 //! those layers so rules can see every hop and the real target.
 
-use crate::model::{Hit, IndicatorKind, LinkFeature, Observation, truncate};
-use crate::rules::{Matcher, Rules, Target, host_matches};
+use crate::model::{Hit, LinkFeature, Observation, truncate};
+use crate::rules::{Matcher, Rules, Target, host_matches, is_intermediary_kind};
 use base64::Engine;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ const MAX_DEPTH: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Layer {
-    /// How this layer was found: `submitted`, `path`, `param:<name>`, `base64:<name>`, `data-url`, `embedded`, `translate.goog`.
+    /// How this layer was found: `submitted`, `path`, `param:<name>`, `base64:<name>`, `data-url`, `embedded`, `translate.goog`, `doubled-scheme`.
     pub via: String,
     pub depth: usize,
     /// Host if this layer is a URL.
@@ -98,6 +98,20 @@ fn untranslate_host(host: &str) -> Option<String> {
     Some(out)
 }
 
+/// A host that is really a URL scheme left over from a doubled scheme.
+fn is_scheme_name(host: &str) -> bool {
+    matches!(host, "http" | "https" | "hxxp" | "hxxps")
+}
+
+/// The URL after a doubled scheme: `https://https://a.example/x` and
+/// `http://https//a.example/x` give `https://a.example/x`.
+fn after_doubled_scheme(decoded: &str) -> Option<String> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?i)^[a-z]+:/*(https?)[:/]+(.+)$").unwrap());
+    let c = re.captures(decoded.trim())?;
+    Some(format!("{}://{}", c[1].to_ascii_lowercase(), &c[2]))
+}
+
 /// Peel every layer we can find, breadth first.
 ///
 /// Decoding can expose secrets ingest never saw (a token inside a base64
@@ -121,6 +135,13 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
             continue;
         }
         let mut children: Vec<(String, String)> = Vec::new();
+        let inner = (!raw.starts_with("data:"))
+            .then(|| after_doubled_scheme(&pct_decode(&raw)))
+            .flatten();
+        let doubled = inner.is_some();
+        if let Some(inner) = inner {
+            children.push((inner, "doubled-scheme".into()));
+        }
 
         if let Some(rest) = raw.strip_prefix("data:") {
             let (meta, body) = rest.split_once(',').unwrap_or(("", rest));
@@ -140,7 +161,12 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
                 params: vec![],
             });
         } else if let Ok(parsed) = url::Url::parse(&raw) {
-            let host = parsed.host_str().map(|h| h.to_ascii_lowercase());
+            // `https://https://a.example/` parses with the host `https`: a
+            // scheme written twice. The URL after it is the real one.
+            let host = parsed
+                .host_str()
+                .map(|h| h.to_ascii_lowercase())
+                .filter(|h| !doubled || !is_scheme_name(h.trim_end_matches("%3a")));
             let sas = parsed.query_pairs().any(|(k, _)| k == "sv");
             let params: Vec<(String, String)> = parsed
                 .query_pairs()
@@ -284,6 +310,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     let mut hits: Vec<Hit> = Vec::new();
     let mut features = BTreeSet::new();
     let mut fired = BTreeSet::new();
+    let mut significant_hit = false;
 
     // Layers whose own host is a relay/carrier/inbox, so they are not the real target.
     let mut intermediary = vec![false; layers.len()];
@@ -297,12 +324,15 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             features.insert(LinkFeature::rule(&r.def.id, m));
         }
         if fired.insert(r.def.id.clone()) {
+            significant_hit |= r.def.significant;
             hits.push(Hit {
                 rule_id: r.def.id.clone(),
                 kind: r.def.kind,
                 weight: r.def.weight,
                 matched: truncate(m, 160),
                 layer,
+                tactic: r.def.tactic,
+                artifact: r.def.artifact,
             });
         }
     };
@@ -320,7 +350,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
                 }
             }
         }
-        for r in rules.of_target(Target::Url) {
+        for r in rules.matching(Target::Url, &layer.text) {
             if let Matcher::Re(re) = &r.matcher
                 && let Some(m) = re.find(&layer.text)
             {
@@ -336,14 +366,10 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             }
         }
         for (k, v) in &layer.params {
-            for r in rules.of_target(Target::ParamName) {
-                if let Matcher::Re(re) = &r.matcher
-                    && re.is_match(k)
-                {
-                    push(&mut hits, &mut features, r, &format!("{k}={v}"), i);
-                }
+            for r in rules.matching(Target::ParamName, k) {
+                push(&mut hits, &mut features, r, &format!("{k}={v}"), i);
             }
-            for r in rules.of_target(Target::ParamValue) {
+            for r in rules.matching(Target::ParamValue, v) {
                 if let Matcher::Re(re) = &r.matcher
                     && let Some(m) = re.find(v)
                 {
@@ -388,7 +414,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             .map(|(_, v)| v.as_str())
     });
     if let Some(ua) = ua {
-        for r in rules.of_target(Target::UserAgent) {
+        for r in rules.matching(Target::UserAgent, ua) {
             if let Matcher::Re(re) = &r.matcher
                 && let Some(m) = re.find(ua)
             {
@@ -397,7 +423,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         }
     }
     if let Some(fin) = &obs.final_url {
-        for r in rules.of_target(Target::FinalUrl) {
+        for r in rules.matching(Target::FinalUrl, fin) {
             if let Matcher::Re(re) = &r.matcher
                 && let Some(m) = re.find(fin)
             {
@@ -407,12 +433,6 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     }
 
     let score = hits.iter().map(|h| h.weight).sum();
-    let significant_hit = hits.iter().any(|h| {
-        rules
-            .compiled
-            .iter()
-            .any(|r| r.def.id == h.rule_id && r.def.significant)
-    });
     let target_host = layers
         .iter()
         .enumerate()
@@ -430,13 +450,6 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         target_host,
         features: features.into_iter().collect(),
     }
-}
-
-fn is_intermediary_kind(k: IndicatorKind) -> bool {
-    matches!(
-        k,
-        IndicatorKind::Relay | IndicatorKind::Carrier | IndicatorKind::Exfil
-    )
 }
 
 /// A host name made safe to print: `example[.]com`.
@@ -477,6 +490,47 @@ mod tests {
             hosts,
             vec!["r.jina.ai", "api.allorigins.win", "data.portal.example"]
         );
+    }
+
+    #[test]
+    fn a_doubled_scheme_is_not_a_host() {
+        let rules = Rules::default_rules();
+        for (url, target) in [
+            (
+                "https://r.jina.ai/https://https://records.a.example/staff?uqtag=r7k2",
+                "records.a.example",
+            ),
+            (
+                "https://api.microlink.io/?url=http%3A%2F%2Fhttps%3A%2F%2Fdata.b.example%2Fapi",
+                "data.b.example",
+            ),
+            ("https://https//c.example/x", "c.example"),
+            ("http://https%3A//d.example/", "d.example"),
+        ] {
+            let x = extract(&obs(url), &rules);
+            assert_eq!(x.target_host.as_deref(), Some(target), "{url}");
+            assert!(
+                x.layers.iter().all(|l| l.host.as_deref() != Some("https")),
+                "{url}: {:?}",
+                x.layers
+            );
+            // The last one does not parse as a URL, so its text is not decoded.
+            assert!(
+                url.starts_with("http://https%3A")
+                    || x.hits.iter().any(|h| h.rule_id == "marker.doubled_scheme"),
+                "{url}: {:?}",
+                x.layers
+            );
+        }
+        // Two records on different real hosts no longer share the host `https`.
+        let a = crate::analyze(
+            vec![
+                obs("https://r.jina.ai/https://https://e.example/p?q=%5Bx%5D(https://e.example)"),
+                obs("https://r.jina.ai/https://https://f.example/p?q=%5Bx%5D(https://f.example)"),
+            ],
+            &rules,
+        );
+        assert!(a.clusters.is_empty(), "{:?}", a.clusters);
     }
 
     #[test]
@@ -601,6 +655,27 @@ mod tests {
             "https://d.example.gov/s?q=O%27Brien+family",
             "exploit.sqli_quote"
         ));
+        for url in [
+            "https://d.example/q?id=1%20UNION%20SELECT%20null,null--",
+            "https://d.example/q?id=-1+union+all+select+1,2,3",
+            "https://d.example/q?id=1%20UNION/**/SELECT/**/user,password%20FROM%20users",
+            "https://d.example/q?id=1'%20union%20select%20version()--",
+        ] {
+            assert!(has(url, "exploit.sqli_union"), "{url}");
+        }
+        for url in [
+            "https://www.labor.example/search?q=labor+union+selection+process",
+            "https://www.jobs.example/q?t=credit%20union%20selected%20branches",
+            "https://www.example.com/search?q=union+select+a+band",
+        ] {
+            assert!(!has(url, "exploit.sqli_union"), "{url}");
+        }
+        assert!(has("https://ntfy.sh/covrun7results", "exfil.ntfy"));
+        assert!(has(
+            "https://a.example/?cb=ntfy.sh/covrun7results",
+            "exfil.ntfy"
+        ));
+        assert!(!has("https://docs.ntfy.sh/publish/", "exfil.ntfy"));
         assert!(has(
             "https://d.example.gov/api?a=1&zz=oai17816834089056622",
             "marker.oai_tag"
