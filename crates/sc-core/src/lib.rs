@@ -4,6 +4,7 @@
 //! in the browser via `sc-wasm`.
 
 pub mod analyze;
+pub mod asn;
 pub mod attribution;
 pub mod bursts;
 pub mod capture;
