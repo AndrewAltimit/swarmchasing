@@ -267,7 +267,11 @@ pub fn print_coverage(c: &Coverage) {
         println!(
             "{:<32} {:<8} {:>9} {:>7} {:>9}  {}",
             r.rule_id,
-            r.tactics.join(","),
+            match (r.artifact, r.tactics.as_slice()) {
+                (true, [t]) if t == sc_core::eval::coverage::UNTAGGED => "artifact".to_string(),
+                (true, t) => format!("{},art", t.join(",")),
+                (false, t) => t.join(","),
+            },
             r.positives,
             r.on_benign,
             if r.hard_negatives > 0 {

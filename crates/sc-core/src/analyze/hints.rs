@@ -27,6 +27,9 @@ pub(super) fn unflagged_by_host(results: &[ObsResult]) -> HashMap<&str, Vec<usiz
     unflagged_by_host
 }
 
+/// Distinct declarations kept per cluster.
+const MAX_DECLARED: usize = 8;
+
 /// One cluster of `members` (indexes into `results`), not yet numbered.
 pub(super) fn cluster(
     results: &[ObsResult],
@@ -47,8 +50,17 @@ pub(super) fn cluster(
     let mut encodings: BTreeMap<String, usize> = BTreeMap::new();
     let mut header_sets: BTreeMap<String, usize> = BTreeMap::new();
     let mut feats: BTreeMap<&LinkFeature, usize> = BTreeMap::new();
+    let mut relay_stacks: BTreeMap<String, usize> = BTreeMap::new();
+    let mut declared: BTreeMap<(String, Option<String>), usize> = BTreeMap::new();
     for &i in &members {
         let r = &results[i];
+        let params = r.layers.iter().flat_map(|l| l.params.iter());
+        if let Some(d) = crate::declared::declared(&r.obs, params) {
+            *declared.entry(d).or_default() += 1;
+        }
+        if let Some(s) = relay_stack(r) {
+            *relay_stacks.entry(s).or_default() += 1;
+        }
         for h in &r.hits {
             *rules_seen.entry(h.rule_id.clone()).or_default() += 1;
             *kinds.entry(h.kind).or_default() += 1;
@@ -166,6 +178,15 @@ pub(super) fn cluster(
             .collect::<Vec<_>>(),
         &rules.set.cut_lengths,
     );
+    let prose = crate::prose::prose_stats(members.iter().map(|&i| {
+        let r = &results[i];
+        let values = r
+            .layers
+            .iter()
+            .flat_map(|l| l.params.iter().map(|(_, v)| v.as_str()))
+            .collect();
+        (r.target_host.as_deref(), values)
+    }));
     Cluster {
         id: String::new(),
         key: String::new(),
@@ -188,6 +209,19 @@ pub(super) fn cluster(
         dialect,
         fanout,
         cut_lengths,
+        relay_stacks,
+        prose,
+        benchmarks: BTreeMap::new(),
+        stale_knowledge: Vec::new(),
+        declared: declared
+            .into_iter()
+            .take(MAX_DECLARED)
+            .map(|((text, contact), records)| crate::declared::Declared {
+                text,
+                contact,
+                records,
+            })
+            .collect(),
         link_features: feats
             .into_iter()
             .filter(|&(_, n)| n > 1)
@@ -261,6 +295,30 @@ pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
         }
     }
     runs
+}
+
+/// The relays and carriers one record went through, outermost first, then
+/// `target`: the rule ids of its relay and carrier hits in unwrapping order.
+/// `None` for a direct request.
+pub(crate) fn relay_stack(r: &ObsResult) -> Option<String> {
+    let depth = |l: usize| r.layers.get(l).map_or(0, |x| x.depth);
+    let mut hops: Vec<(usize, usize, &str)> = r
+        .hits
+        .iter()
+        .filter(|h| matches!(h.kind, IndicatorKind::Relay | IndicatorKind::Carrier))
+        .map(|h| (depth(h.layer), h.layer, h.rule_id.as_str()))
+        .collect();
+    if hops.is_empty() {
+        return None;
+    }
+    crate::sort::sort(&mut hops);
+    let mut s = String::new();
+    for (_, _, id) in hops {
+        s.push_str(id);
+        s.push_str(" → ");
+    }
+    s.push_str("target");
+    Some(s)
 }
 
 /// The request on the target host: the layer naming that host, else the

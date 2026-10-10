@@ -95,6 +95,30 @@ pub struct Cluster {
     /// ([`crate::dialect::cut_lengths`]). Descriptive.
     #[serde(default, skip_serializing_if = "CutLengths::is_empty")]
     pub cut_lengths: CutLengths,
+    /// Relay chains of members sent through relays or carriers, outermost
+    /// first and ending at the target (`relay.jina → relay.translate_goog →
+    /// target`), with how many members used each. Descriptive.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub relay_stacks: BTreeMap<String, usize>,
+    /// Members announcing themselves as testing or research, with the
+    /// contact they name ([`crate::declared`]). A hint for the case's
+    /// handling of authorised testing; never scored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declared: Vec<crate::declared::Declared>,
+    /// Public benchmark or practice targets the members hit, by
+    /// `[[benchmark]]` id: evaluation or training activity, not malice.
+    /// Descriptive.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub benchmarks: BTreeMap<String, usize>,
+    /// Retired endpoints, old client versions and older API versions
+    /// repeated across members ([`crate::knowledge`]). Descriptive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stale_knowledge: Vec<crate::knowledge::StaleUse>,
+    /// Prose in members' parameter values and its guessed languages,
+    /// against their targets' country domains ([`crate::prose`]).
+    /// Descriptive.
+    #[serde(default, skip_serializing_if = "crate::prose::Prose::is_empty")]
+    pub prose: crate::prose::Prose,
     /// Features that joined members together.
     pub link_features: Vec<LinkFeature>,
     pub runs: Vec<Span>,
@@ -143,7 +167,8 @@ pub struct Analysis {
     pub escalations: Vec<crate::escalation::Escalation>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
-    /// lengths, header sets, escalations, common features), strongest
+    /// lengths, header sets, escalations, common features, captured
+    /// secrets), strongest
     /// first. They never merge clusters or change a score.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub soft_links: Vec<crate::fleets::SoftLink>,
@@ -231,6 +256,11 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         .into_iter()
         .map(|members| hints::cluster(&results, members, &links.joined, &unflagged_by_host, rules))
         .collect();
+    let newest = crate::knowledge::newest_versions(&results);
+    for c in clusters.iter_mut() {
+        c.benchmarks = crate::knowledge::benchmarks(&results, &c.members, &rules.benchmarks);
+        c.stale_knowledge = crate::knowledge::stale(&results, &c.members, &rules.stale, &newest);
+    }
     let chains = links.chains;
     let common_features = links.common;
     link::number(&mut clusters, &mut results);
@@ -489,6 +519,138 @@ mod tests {
     }
 
     #[test]
+    fn benchmark_targets_and_stale_knowledge_are_hints() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let obs = vec![
+            o(
+                1000,
+                &format!("http://testphp.vulnweb.com/artists.php?artist=1'&cb={inbox}"),
+            ),
+            o(
+                1030,
+                &format!("http://testphp.vulnweb.com/listproducts.php?cat=1&cb={inbox}"),
+            ),
+            // An agent reading two APIs through retired or older endpoints,
+            // while v3 is in use on the same host family.
+            o(
+                2000,
+                &format!("https://api.data.example/v1/items?hook={inbox}"),
+            ),
+            o(
+                2030,
+                &format!("https://www.data.example/api/v1/stats?hook={inbox}"),
+            ),
+            o(
+                2060,
+                &format!("https://graph.facebook.com/v2.8/me?hook={inbox}"),
+            ),
+            o(
+                2090,
+                &format!("https://graph.facebook.com/v2.9/page?hook={inbox}"),
+            ),
+            o(99_000, "https://api.data.example/v3/items"),
+        ];
+        let a = analyze(obs, &Rules::default_rules());
+        let bench: Vec<&Cluster> = a
+            .clusters
+            .iter()
+            .filter(|c| !c.benchmarks.is_empty())
+            .collect();
+        assert_eq!(bench.len(), 1, "{:?}", a.clusters);
+        assert_eq!(bench[0].benchmarks.get("acunetix_vulnweb"), Some(&2));
+        let stale: Vec<(&str, usize, usize)> = a
+            .clusters
+            .iter()
+            .flat_map(|c| &c.stale_knowledge)
+            .map(|u| (u.id.as_str(), u.records, u.hosts))
+            .collect();
+        assert!(stale.contains(&("facebook_graph_v2", 2, 1)), "{stale:?}");
+        assert!(
+            stale.contains(&(crate::knowledge::OLDER_API_VERSION, 2, 2)),
+            "{stale:?}"
+        );
+        let md = report_of(&a);
+        assert!(md.contains("benchmark or practice targets"), "{md}");
+        assert!(md.contains("stale knowledge `facebook_graph_v2`"), "{md}");
+        // Hints change nothing: same clusters and scores without the lists.
+        let mut bare = Rules::default_rules().set;
+        bare.benchmarks.clear();
+        bare.stale.clear();
+        let b = analyze(
+            a.results.iter().map(|r| r.obs.clone()).collect(),
+            &Rules::compile(bare).unwrap(),
+        );
+        for (x, y) in a.clusters.iter().zip(&b.clusters) {
+            assert_eq!((&x.members, x.score, x.tier), (&y.members, y.score, y.tier));
+        }
+    }
+
+    #[test]
+    fn declared_testing_is_extracted_but_never_scored() {
+        let ua = "AcmeScan/1.0 (authorized security test; sec@acme.example)";
+        let obs = |ua: Option<&str>| -> Vec<Observation> {
+            (0..2)
+                .map(|i| Observation {
+                    user_agent: ua.map(str::to_string),
+                    ..o(
+                        1000 + 30 * i,
+                        &format!("https://a.example/item?id={i}%20UNION%20SELECT%20null--"),
+                    )
+                })
+                .collect()
+        };
+        let a = analyze(obs(Some(ua)), &Rules::default_rules());
+        let b = analyze(obs(None), &Rules::default_rules());
+        let c = &a.clusters[0];
+        assert_eq!(c.declared.len(), 1, "{:?}", c.declared);
+        assert_eq!(c.declared[0].records, 2);
+        assert_eq!(c.declared[0].contact.as_deref(), Some("sec@acme.example"));
+        assert!(b.clusters[0].declared.is_empty());
+        assert_eq!((c.score, c.tier), (b.clusters[0].score, b.clusters[0].tier));
+        let json = serde_json::to_value(&a).unwrap();
+        assert_eq!(
+            json["clusters"][0]["declared"][0]["contact"],
+            "sec@acme.example"
+        );
+        let report = |audience| {
+            crate::report::render_markdown(
+                &a,
+                &crate::report::ReportOptions {
+                    audience,
+                    ..Default::default()
+                },
+            )
+        };
+        assert!(report(crate::report::Audience::Internal).contains("sec@acme.example"));
+        assert!(!report(crate::report::Audience::Provider).contains("declares testing"));
+    }
+
+    #[test]
+    fn capture_times_never_link_by_timing() {
+        use crate::model::TsKind;
+        // Two records for one target a minute apart, sharing a rule, with
+        // nothing else in common.
+        let pair = |kind| {
+            let obs = [
+                "https://r.jina.ai/https://a.example/p?x=%7B%7Bhost%7D%7D",
+                "https://r.jina.ai/https://a.example/q?y=%7B%7Bname%7D%7D",
+            ]
+            .iter()
+            .enumerate()
+            .map(|(i, u)| Observation {
+                ts_kind: kind,
+                ..o(1_791_000_000 + 60 * i as i64, u)
+            })
+            .collect();
+            analyze(obs, &Rules::default_rules()).clusters.len()
+        };
+        assert_eq!(pair(TsKind::Request), 1);
+        assert_eq!(pair(TsKind::Submit), 1);
+        assert_eq!(pair(TsKind::Unknown), 1);
+        assert_eq!(pair(TsKind::Capture), 0);
+    }
+
+    #[test]
     fn chain_pace_is_not_read_from_capture_times() {
         use crate::model::TsKind;
         let chain = |kind| {
@@ -617,16 +779,20 @@ mod tests {
                 .find(|h| h.rule_id == id)
                 .unwrap()
         };
-        assert_eq!(hit("relay.jina").tactic, Some(Tactic::ToolEscalation));
+        assert_eq!(hit("relay.jina").tactic, Some(Tactic::TaskRetrieval));
         assert!(hit("marker.md_url_wrapper").artifact);
         assert_eq!(hit("marker.md_url_wrapper").tactic, None);
         let c = &a.clusters[0];
         assert_eq!(c.tactics.get(&Tactic::CallbackChannels), Some(&3));
-        assert_eq!(c.tactics.get(&Tactic::ToolEscalation), Some(&1));
+        assert_eq!(
+            c.tactics.get(&Tactic::TaskRetrieval),
+            Some(&2),
+            "relay and cache buster"
+        );
         assert_eq!(c.artifacts, 1);
         let json = serde_json::to_value(&a).unwrap();
         assert_eq!(json["clusters"][0]["tactics"]["T7"], 3);
-        assert_eq!(json["results"][1]["hits"][0]["tactic"], "T2");
+        assert_eq!(json["results"][1]["hits"][0]["tactic"], "T1");
     }
 
     #[test]
@@ -671,7 +837,10 @@ mod tests {
                 )
             })
             .collect();
-        let a = analyze(obs.clone(), &Rules::default_rules());
+        // Not as a published tag here: the host limit is what is tested.
+        let mut unpublished = Rules::default_rules();
+        unpublished.set.linking.published_tags.clear();
+        let a = analyze(obs.clone(), &unpublished);
         assert_eq!(a.clusters.len(), 0, "{:?}", a.clusters);
         assert_eq!(a.common_features.len(), 1, "{:?}", a.common_features);
         let c = &a.common_features[0];
@@ -695,11 +864,24 @@ mod tests {
         );
         assert!(!report(crate::report::Audience::Provider).contains("Common features"));
 
-        // The same tag on a few hosts still links.
+        // The same tag on a few hosts still links ...
         let few: Vec<Observation> = obs.into_iter().take(4).collect();
-        let b = analyze(few, &Rules::default_rules());
+        let b = analyze(few.clone(), &unpublished);
         assert_eq!(b.clusters.len(), 1);
         assert!(b.common_features.is_empty());
+
+        // ... unless a public report quoted it: then it is common however few.
+        let p = analyze(few, &Rules::default_rules());
+        assert!(p.clusters.is_empty(), "{:?}", p.clusters);
+        assert_eq!(p.common_features.len(), 1);
+        assert_eq!(p.common_features[0].hosts, 4);
+        assert!(
+            p.common_features[0]
+                .reason
+                .contains("linking.published_tags"),
+            "{}",
+            p.common_features[0].reason
+        );
     }
 
     #[test]

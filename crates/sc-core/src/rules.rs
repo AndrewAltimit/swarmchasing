@@ -51,11 +51,33 @@ pub struct RuleDef {
     /// to load.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tactic: Option<Tactic>,
-    /// A match only shows that a model wrote the request.
+    /// A match is a trace of how the agent was built (model-output residue,
+    /// run tags, client headers), not an action.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub artifact: bool,
+    /// A test a `param_value` match must also pass: the pattern finds
+    /// candidates, the check decides what regular expressions cannot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<Check>,
     #[serde(default)]
     pub description: String,
+}
+
+/// Tests beyond a regular expression, named by a rule's `check`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Check {
+    /// One word or short phrase repeated five or more times in a row
+    /// ([`crate::prose::repeated_token`]).
+    RepeatedToken,
+}
+
+impl Check {
+    pub(crate) fn passes(self, value: &str) -> bool {
+        match self {
+            Check::RepeatedToken => crate::prose::repeated_token(value),
+        }
+    }
 }
 
 fn one() -> i32 {
@@ -91,6 +113,9 @@ pub struct Linking {
     pub feature_max_share: f64,
     /// ... when that span holds at least this many records.
     pub feature_share_min_records: usize,
+    /// Tags quoted in public reports: anyone can copy one, so a feature with
+    /// one of these values (ignoring case) never links.
+    pub published_tags: Vec<String>,
     pub window_secs: i64,
     pub run_gap_secs: i64,
     pub burst_gap_secs: i64,
@@ -109,6 +134,7 @@ impl Default for Linking {
             feature_max_hosts: 20,
             feature_max_share: 0.0,
             feature_share_min_records: 100,
+            published_tags: vec![],
             window_secs: 600,
             run_gap_secs: 900,
             burst_gap_secs: 5,
@@ -157,6 +183,12 @@ pub struct RuleSet {
     pub rules: Vec<RuleDef>,
     #[serde(default, rename = "asn")]
     pub asns: Vec<AsnDef>,
+    /// Public benchmark and practice targets ([`crate::knowledge`]).
+    #[serde(default, rename = "benchmark", skip_serializing_if = "Vec::is_empty")]
+    pub benchmarks: Vec<crate::knowledge::KnownPattern>,
+    /// Retired endpoints and old client versions ([`crate::knowledge`]).
+    #[serde(default, rename = "stale", skip_serializing_if = "Vec::is_empty")]
+    pub stale: Vec<crate::knowledge::KnownPattern>,
 }
 
 pub(crate) enum Matcher {
@@ -188,6 +220,8 @@ pub struct Rules {
     /// Host suffixes and URL patterns of relay, carrier and callback rules.
     intermediary_suffixes: Vec<String>,
     intermediary_urls: Option<RegexSet>,
+    pub(crate) benchmarks: crate::knowledge::KnownSet,
+    pub(crate) stale: crate::knowledge::KnownSet,
 }
 
 impl Rules {
@@ -206,6 +240,12 @@ impl Rules {
         for def in &set.rules {
             if !seen.insert(def.id.clone()) {
                 return Err(format!("duplicate rule id `{}`", def.id));
+            }
+            if def.check.is_some() && def.target != Target::ParamValue {
+                return Err(format!(
+                    "rule `{}`: a check needs target = \"param_value\"",
+                    def.id
+                ));
             }
             let matcher = match def.target {
                 Target::Host => Matcher::HostSuffix(def.pattern.to_ascii_lowercase()),
@@ -250,6 +290,8 @@ impl Rules {
                 .filter(|r| r.def.target == Target::Url)
                 .map(|r| r.def.pattern.as_str()),
         );
+        let benchmarks = crate::knowledge::KnownSet::compile(&set.benchmarks, "benchmark")?;
+        let stale = crate::knowledge::KnownSet::compile(&set.stale, "stale")?;
         let asn_orgs = set.asns.iter().map(|a| (a.asn, a.org.clone())).collect();
         Ok(Self {
             set,
@@ -259,6 +301,8 @@ impl Rules {
             by_id,
             intermediary_suffixes,
             intermediary_urls,
+            benchmarks,
+            stale,
         })
     }
 
@@ -369,6 +413,105 @@ mod tests {
         let exploit = r.rule("exploit.sqli_union").unwrap();
         assert_eq!(exploit.tactic, Some(Tactic::VulnerabilityProbing));
         assert!(r.rule("marker.md_link").unwrap().artifact);
+    }
+
+    /// The Field Manual's default tactic for each rule kind (FM-4.4); `None`
+    /// for kinds whose matches are artifacts or attribution evidence.
+    fn kind_default(k: IndicatorKind) -> Option<Tactic> {
+        use IndicatorKind as K;
+        match k {
+            K::Relay | K::CacheBuster => Some(Tactic::TaskRetrieval),
+            K::Carrier => Some(Tactic::ToolEscalation),
+            K::AntiBot | K::Outcome => Some(Tactic::AccessControlCircumvention),
+            K::Exploit => Some(Tactic::VulnerabilityProbing),
+            K::Exfil => Some(Tactic::CallbackChannels),
+            K::AgentMarker | K::Header | K::SelfId | K::Infra => None,
+        }
+    }
+
+    /// Bundled rules whose tactic is not their kind's default, and why.
+    const TACTIC_EXCEPTIONS: &[(&str, &str)] = &[
+        (
+            "marker.callback_seq",
+            "numbered callback reports: a side channel (T7)",
+        ),
+        (
+            "marker.title_write",
+            "a program writing a fetched page into the title a scan service shows: a side channel (T7)",
+        ),
+        (
+            "marker.placeholder_identity",
+            "stock identities in sign-up fields: identity acquisition (T5, FM-4.3)",
+        ),
+        (
+            "exfil.cookie",
+            "a captured cookie sent on: credential reuse (T6, FM-4.3)",
+        ),
+        (
+            "exfil.disposable_mail",
+            "disposable inboxes for sign-ups: account acquisition (T5, FM-4.3)",
+        ),
+    ];
+
+    #[test]
+    fn bundled_tactics_follow_the_kind_defaults() {
+        let r = Rules::default_rules();
+        for d in &r.set.rules {
+            let want = kind_default(d.kind);
+            if let Some((_, why)) = TACTIC_EXCEPTIONS.iter().find(|(id, _)| *id == d.id) {
+                assert!(d.tactic.is_some() && d.tactic != want, "{}: {why}", d.id);
+                continue;
+            }
+            assert_eq!(d.tactic, want, "{} ({:?})", d.id, d.kind);
+            if want.is_none() {
+                assert!(d.artifact, "{}: no tactic, so an artifact", d.id);
+            }
+            // Inter-agent coordination and off-task targets are never one match.
+            assert!(
+                !matches!(
+                    d.tactic,
+                    Some(Tactic::InterAgentCoordination | Tactic::OffTaskTargets)
+                ),
+                "{}",
+                d.id
+            );
+        }
+        for (id, _) in TACTIC_EXCEPTIONS {
+            assert!(r.rule(id).is_some(), "exception names no rule: {id}");
+        }
+    }
+
+    #[test]
+    fn checks_need_a_param_value_target_and_a_known_name() {
+        let rule = |target: &str, check: &str| {
+            format!(
+                "[[rule]]\nid = \"x.y\"\nkind = \"agent_marker\"\ntarget = \"{target}\"\npattern = \"a\"\ncheck = \"{check}\"\n"
+            )
+        };
+        assert!(Rules::from_toml(&rule("param_value", "repeated_token")).is_ok());
+        let e = Rules::from_toml(&rule("url", "repeated_token"))
+            .err()
+            .unwrap();
+        assert!(e.contains("param_value"), "{e}");
+        let e = Rules::from_toml(&rule("param_value", "palindrome"))
+            .err()
+            .unwrap();
+        assert!(e.contains("unknown variant"), "{e}");
+        let has = |url: &str| {
+            let o = crate::model::Observation {
+                url: url.into(),
+                ..Default::default()
+            };
+            crate::extract::extract(&o, &Rules::default_rules())
+                .hits
+                .iter()
+                .any(|h| h.rule_id == "marker.repeated_token")
+        };
+        assert!(has(
+            "https://a.example/s?q=permit+permit+permit+permit+permit+x"
+        ));
+        assert!(!has("https://a.example/s?q=na+na+na+na+na+na+na+na+batman"));
+        assert!(!has("https://a.example/s?q=one+two+three+four+five+six"));
     }
 
     #[test]

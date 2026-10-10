@@ -376,6 +376,75 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
         if let Some(line) = cut_line(&c.cut_lengths) {
             let _ = writeln!(s, "  - {line}");
         }
+        for (st, n) in c
+            .relay_stacks
+            .iter()
+            .filter(|(st, _)| st.matches(" → ").count() >= 2)
+        {
+            let _ = writeln!(
+                s,
+                "  - relay stack `{st}` on {n} records: one client's habit, not evidence on its own"
+            );
+        }
+        if !c.benchmarks.is_empty() {
+            let shown: Vec<String> = c
+                .benchmarks
+                .iter()
+                .map(|(id, n)| format!("`{id}` ×{n}"))
+                .collect();
+            let _ = writeln!(
+                s,
+                "  - benchmark or practice targets: {}. Evaluation or training activity is likely, not malice (a hint)",
+                shown.join(", ")
+            );
+        }
+        for u in &c.stale_knowledge {
+            let _ = writeln!(
+                s,
+                "  - stale knowledge `{}` on {} records, {} hosts ({}): consistent with a model writing from old training data; old scripts do the same (a hint)",
+                u.id, u.records, u.hosts, u.note
+            );
+        }
+        if !c.prose.is_empty() {
+            let langs: Vec<String> = c
+                .prose
+                .languages
+                .iter()
+                .map(|(l, n)| format!("{l} ×{n}"))
+                .collect();
+            let off = match c.prose.mismatched {
+                0 => String::new(),
+                n => format!(
+                    "; {n} in a language other than their target's country domain, as an agent working from a prompt in its own language writes"
+                ),
+            };
+            let _ = writeln!(
+                s,
+                "  - prose in parameters: {} values ({}){off} (a hint, not evidence)",
+                c.prose.values,
+                if langs.is_empty() {
+                    "language unclear".to_string()
+                } else {
+                    langs.join(", ")
+                }
+            );
+        }
+        // A named contact is for the admin to check, not for a recipient.
+        if opts.audience == Audience::Internal {
+            for d in &c.declared {
+                let contact = d
+                    .contact
+                    .as_ref()
+                    .map(|x| format!(", contact `{x}`"))
+                    .unwrap_or_default();
+                let _ = writeln!(
+                    s,
+                    "  - declares testing on {} records: `{}`{contact}. Check it with its owner before treating the cluster as authorised; anyone can write this",
+                    d.records,
+                    defang(&d.text)
+                );
+            }
+        }
     }
     // A pair hint names both clusters. Outside case notes it appears only
     // when the report covers both, so a report on one cluster never names
