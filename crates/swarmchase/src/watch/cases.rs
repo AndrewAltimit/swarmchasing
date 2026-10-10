@@ -111,7 +111,7 @@ impl CaseCheck<'_> {
         fresh: &[Observation],
         cw: &mut CaseWatch,
     ) -> Result<(Vec<String>, BTreeSet<String>)> {
-        let rules = case::case_rules(self.root, c)?;
+        let rules = crate::pinning::case_rules(self.root, c)?;
         let ind = case::indicators(self.root, c, &rules)?;
         let known: BTreeSet<String> = cw.hits.iter().map(|h| h.id.clone()).collect();
         let new_hits = case_hits(&ind, fresh, &rules, self.stamp, &known);
@@ -139,7 +139,7 @@ impl CaseCheck<'_> {
         // Compared on every run rather than by version name: a rule set edited
         // without a version bump changes tiers too.
         if c.status != CaseStatus::Closed {
-            let n = case::tier_changes(self.root, c, self.rules)?.len();
+            let n = crate::pinning::tier_changes(self.root, c, self.rules)?.len();
             if n > 0 {
                 keys.insert(format!("rules:{version}:{n}"));
                 lines.push(tier_change_line(&c.id, n, version));
@@ -297,7 +297,7 @@ mod tests {
 
     /// A data directory with case `p-1` opened from four records of one run
     /// against portal.example.gov, pinned to `rules`.
-    fn case_data(name: &str, rules: &case::RulesText) -> std::path::PathBuf {
+    fn case_data(name: &str, rules: &crate::pinning::RulesText) -> std::path::PathBuf {
         let data =
             std::env::temp_dir().join(format!("swarmchase-watch-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&data);
@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn new_records_match_case_indicators() {
-        let rules = case::RulesText::load(None).unwrap();
+        let rules = crate::pinning::RulesText::load(None).unwrap();
         let data = case_data("match", &rules);
         let c = case::load(&data.join("cases"), "p-1").unwrap();
         let ind = case::indicators(&data.join("cases"), &c, &rules.rules).unwrap();
@@ -532,19 +532,19 @@ mod tests {
     #[test]
     fn digest_says_when_current_rules_change_tiers_in_a_case() {
         // The case is pinned to a stricter edit of the bundled rules.
-        let current = case::RulesText::load(None).unwrap();
+        let current = crate::pinning::RulesText::load(None).unwrap();
         let text = current
             .text
             .replace("suggestive = 3", "suggestive = 300")
             .replace("significant = 6", "significant = 600")
             .replace("significant = true", "significant = false");
-        let strict = case::RulesText {
+        let strict = crate::pinning::RulesText {
             rules: Rules::from_toml(&text).unwrap(),
             text,
         };
         let data = case_data("rules", &strict);
         let c = case::load(&data.join("cases"), "p-1").unwrap();
-        let n = case::tier_changes(&data.join("cases"), &c, &current.rules)
+        let n = crate::pinning::tier_changes(&data.join("cases"), &c, &current.rules)
             .unwrap()
             .len();
         assert!(n > 0);

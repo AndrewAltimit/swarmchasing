@@ -141,9 +141,10 @@ Non-zero on an error, when `eval` misses a floor, when `case verify` finds a dif
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review.rs`](src/review.rs) | Interactive labelling. |
 | [`eval.rs`](src/eval.rs) | The `eval` command. |
-| [`case.rs`](src/case.rs) | Case files and their subcommands. |
-| [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup. |
+| [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, and the indicators the watch matches. |
+| [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |
+| [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
-| [`evidence.rs`](src/evidence.rs) | Logs operators send back. |
+| [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
 | [`stix.rs`](src/stix.rs) | STIX 2.1 export. |
-| [`notice.rs`](src/notice.rs) | Adding, updating, linting and building notices. |
+| [`notice.rs`](src/notice.rs) | The notice draft (`case notice`); adding, updating, linting and building notices. |

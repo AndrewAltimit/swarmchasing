@@ -1,0 +1,213 @@
+//! `case status`: the list of cases, or one case and what it still needs.
+
+use super::*;
+use crate::evidence::Scope;
+use crate::pinning::case_rules;
+use anyhow::Result;
+use sc_core::{Claim, EndpointOptions, Evidence, Role, analyze, endpoints, fmt_ts};
+use std::io::Write;
+use std::path::Path;
+
+pub(crate) fn list(root: &Path, out: &mut impl Write) -> Result<()> {
+    let mut cases = all(root)?;
+    if cases.is_empty() {
+        writeln!(out, "no cases in {}", root.display())?;
+        return Ok(());
+    }
+    cases.sort_by(|a, b| b.opened.cmp(&a.opened).then(a.id.cmp(&b.id)));
+    writeln!(
+        out,
+        "{:<32} {:<10} {:<11} {:<10} title",
+        "id", "status", "notice", "opened"
+    )?;
+    for c in &cases {
+        writeln!(
+            out,
+            "{:<32} {:<10} {:<11} {:<10} {}",
+            c.id,
+            format!("{:?}", c.status).to_lowercase(),
+            format!("{:?}", c.notice).to_lowercase(),
+            c.opened,
+            c.title
+        )?;
+    }
+    Ok(())
+}
+
+pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> {
+    let c = load(root, id)?;
+    let a = analyze(case_records(root, &c, &Scope::All)?, &case_rules(root, &c)?);
+    writeln!(out, "# {} — {}", c.id, c.title)?;
+    writeln!(
+        out,
+        "status {:?} · notice {:?} · opened {} · developers named at: {}",
+        c.status,
+        c.notice,
+        c.opened,
+        c.min_named.max(Evidence::FLOOR).describe()
+    )?;
+    let current = &sc_core::Rules::default_rules().set.meta.version;
+    match &c.rules_version {
+        Some(pin) if a.rules_version == *current => writeln!(out, "rules {pin} (pinned)")?,
+        Some(pin) => writeln!(
+            out,
+            "rules {pin} (pinned; current rules {current}, see `swarmchase case rules {}`)",
+            c.id
+        )?,
+        None => writeln!(
+            out,
+            "rules not pinned; rendering with the current rules {current}"
+        )?,
+    }
+    writeln!(
+        out,
+        "{} records ({} flagged) · {} clusters · {} → {}",
+        a.total,
+        a.flagged,
+        a.clusters.len(),
+        fmt_ts(a.timing.start),
+        fmt_ts(a.timing.end)
+    )?;
+    for cl in &a.clusters {
+        writeln!(
+            out,
+            "  {} [{}] {} records, {} → {}",
+            cl.id,
+            cl.tier.label(),
+            cl.members.len(),
+            fmt_ts(cl.start),
+            fmt_ts(cl.end)
+        )?;
+    }
+
+    writeln!(out, "\nEndpoints")?;
+    let views = endpoints(&a, &EndpointOptions::default());
+    for e in &c.endpoints {
+        let v = views.iter().find(|v| v.host == e.host);
+        writeln!(
+            out,
+            "  {:<12} {:<40} {}{}",
+            e.state.label(),
+            sc_core::defang_host(&e.host),
+            v.map(|v| format!(
+                "{} hits, last {}, {}{}",
+                v.hits,
+                fmt_ts(v.last_seen),
+                v.activity.label(),
+                if v.payloads { ", payloads" } else { "" }
+            ))
+            .unwrap_or_default(),
+            e.note
+                .as_deref()
+                .map(|n| format!(" — {n}"))
+                .unwrap_or_default()
+        )?;
+    }
+
+    writeln!(out, "\nAttribution")?;
+    let claims = a.clusters.iter().fold(c.claims.clone(), |acc, cl| {
+        sc_core::attribution::merge(acc, &sc_core::attribute(&a, cl))
+    });
+    if claims.is_empty() {
+        writeln!(out, "  none")?;
+    }
+    for cl in &claims {
+        writeln!(
+            out,
+            "  {:<3} {} ({:?}) — {}",
+            if cl.nameable(c.min_named) {
+                "✓"
+            } else {
+                "·"
+            },
+            cl.party,
+            cl.role,
+            cl.evidence.describe()
+        )?;
+    }
+    if !c.evidence.is_empty() {
+        writeln!(out, "\nOperator evidence")?;
+        for e in &c.evidence {
+            writeln!(
+                out,
+                "  {:<4} {} ({}), received {}, {} of {} records kept — {}",
+                e.id,
+                e.org,
+                sc_core::defang_host(&e.host),
+                e.received,
+                e.kept,
+                e.lines,
+                e.public
+                    .as_deref()
+                    .map(|p| format!("may be published ({p})"))
+                    .unwrap_or_else(|| "private reports only".into())
+            )?;
+        }
+    }
+    writeln!(
+        out,
+        "\nContacts: {} · decisions: {} · sent: {}",
+        c.contacts.len(),
+        c.decisions.len(),
+        c.sent.len()
+    )?;
+
+    let todo = todo(&c, &claims);
+    if !todo.is_empty() {
+        writeln!(out, "\nNeeds")?;
+        for t in todo {
+            writeln!(out, "  - {t}")?;
+        }
+    }
+    Ok(())
+}
+
+/// What the case still needs before reports can go out.
+fn todo(c: &Case, claims: &[Claim]) -> Vec<String> {
+    let mut t = Vec::new();
+    let unreviewed = c
+        .endpoints
+        .iter()
+        .filter(|e| e.state == EndpointState::Unreviewed)
+        .count();
+    if unreviewed > 0 {
+        t.push(format!(
+            "classify {unreviewed} endpoint(s): `swarmchase case endpoint {} <host> compromised|targeted|historical|not-affected`",
+            c.id
+        ));
+    }
+    let affected = c.endpoints.iter().any(|e| {
+        matches!(
+            e.state,
+            EndpointState::Compromised | EndpointState::Targeted | EndpointState::Historical
+        )
+    });
+    if affected && !c.contacts.iter().any(|x| x.role == "affected") {
+        t.push(format!(
+            "find contacts for the affected operators: `swarmchase case contacts {}`",
+            c.id
+        ));
+    }
+    let named = claims
+        .iter()
+        .any(|x| x.role == Role::Developer && x.nameable(c.min_named));
+    if !named {
+        t.push(format!(
+            "no developer can be named yet (needs {} or stronger); the provider report can still go to the host",
+            c.min_named.max(Evidence::FLOOR).describe()
+        ));
+    }
+    if c.rules_version.is_none() {
+        t.push(format!(
+            "rules not pinned; pin them so reports stop following rule changes: `swarmchase case rules {} --update`",
+            c.id
+        ));
+    }
+    if c.status == CaseStatus::Open && c.sent.is_empty() {
+        t.push(format!(
+            "draft reports: `swarmchase case report {} --audience provider|affected`",
+            c.id
+        ));
+    }
+    t
+}

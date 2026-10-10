@@ -70,7 +70,7 @@ pub fn run(args: ReviewArgs) -> Result<()> {
         return stats(&store, &mut std::io::stdout());
     }
     let min = check_min_tier(crate::input::parse_tier(&args.min_tier)?)?;
-    let rules = crate::case::RulesText::load(args.rules.as_deref())?;
+    let rules = crate::pinning::RulesText::load(args.rules.as_deref())?;
     let from = if args.input.is_empty() {
         format!("the watch store's last {} days", args.days)
     } else {
@@ -390,7 +390,7 @@ pub struct CaseSink {
     /// The case root, `<data>/cases`.
     pub root: PathBuf,
     /// The rules the session analysed with; a new case is pinned to them.
-    pub rules: crate::case::RulesText,
+    pub rules: crate::pinning::RulesText,
     /// What is being reviewed (record files, or the watch store), for the
     /// decision log.
     pub from: String,
@@ -691,7 +691,7 @@ mod tests {
     fn sink(store: &ReviewStore) -> CaseSink {
         CaseSink {
             root: store.path.parent().unwrap().parent().unwrap().join("cases"),
-            rules: crate::case::RulesText::load(None).unwrap(),
+            rules: crate::pinning::RulesText::load(None).unwrap(),
             from: "leads.ndjson".into(),
             today: "2026-10-12".into(),
         }

@@ -17,6 +17,7 @@ mod evidence;
 mod health;
 mod input;
 mod notice;
+mod pinning;
 mod review;
 mod stix;
 mod store;

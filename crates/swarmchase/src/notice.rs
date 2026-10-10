@@ -7,13 +7,19 @@
 //! lint` is the CI check that no committed notice carries what notices
 //! withhold, and `notice build` writes the site's notice pages and feed.
 
-use crate::case;
+use crate::case::{
+    self, EndpointState, NOTICE_DRAFT, case_dir, case_records, load, report_options, update,
+};
+use crate::evidence::Scope;
+use crate::pinning::{case_rules, leak_check};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_core::Rules;
+use sc_core::notice::lint_public;
+use sc_core::{Audience, Role, analyze, render_notice};
 use sc_publish::{
-    NoticeFile, NoticeStatus, NoticeUpdate, UpdateKind, build_site, check_notice, parse_notice,
-    strip_draft_banner, write_notice,
+    NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind, build_site, check_notice,
+    parse_notice, strip_draft_banner, write_notice,
 };
 use std::path::{Path, PathBuf};
 
@@ -268,7 +274,7 @@ fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result
             "Notice published. Reports went to the AI provider and the affected operators at the same time.".into()
         },
     }];
-    let mut problems = case::leak_check(cases, &c, |r| check_notice(&n, r))?;
+    let mut problems = leak_check(cases, &c, |r| check_notice(&n, r))?;
     for p in check_notice(&n, rules) {
         if !problems.contains(&p) {
             problems.push(p);
@@ -315,6 +321,112 @@ fn build(dir: &Path, out: &Path, base_url: &str, rules: &Rules) -> Result<usize>
         std::fs::write(out.join(name), text)?;
     }
     Ok(notices.len())
+}
+
+/// What the admin reviews in a notice draft.
+pub struct NoticeReview {
+    pub withheld: Vec<String>,
+    pub flags: Vec<String>,
+    /// Anything a notice must not carry that got through anyway.
+    pub lint: Vec<String>,
+    pub unreviewed: Vec<String>,
+}
+
+pub(crate) fn notice_draft(
+    root: &Path,
+    id: &str,
+    force: bool,
+    today: &str,
+) -> Result<(PathBuf, NoticeReview)> {
+    let c = load(root, id)?;
+    let path = case_dir(root, id)?.join(NOTICE_DRAFT);
+    if path.exists() && !force {
+        bail!(
+            "{} exists and may hold your edits; pass --force to replace it",
+            path.display()
+        );
+    }
+    let a = analyze(
+        case_records(root, &c, &Scope::Public)?,
+        &case_rules(root, &c)?,
+    );
+    let opts = report_options(&c, Audience::Public, None, today);
+    let notice = render_notice(&a, &opts);
+    let claims = a.clusters.iter().fold(c.claims.clone(), |acc, cl| {
+        sc_core::attribution::merge(acc, &sc_core::attribute(&a, cl))
+    });
+    let mut providers: Vec<String> = claims
+        .iter()
+        .filter(|x| x.role == Role::Developer && x.nameable(c.min_named))
+        .map(|x| x.party.clone())
+        .collect();
+    providers.dedup();
+    let n = NoticeFile {
+        meta: NoticeMeta {
+            id: id.to_string(),
+            title: c.title.clone(),
+            status: c.notice,
+            published: today.to_string(),
+            updated: today.to_string(),
+            providers,
+            affected: c
+                .endpoints
+                .iter()
+                .filter(|e| {
+                    matches!(
+                        e.state,
+                        EndpointState::Compromised
+                            | EndpointState::Targeted
+                            | EndpointState::Historical
+                    )
+                })
+                .map(|e| e.host.clone())
+                .collect(),
+            rules_version: a.rules_version.clone(),
+            toolkit: env!("CARGO_PKG_VERSION").to_string(),
+            updates: Vec::new(),
+        },
+        body: notice.markdown.clone(),
+    };
+    std::fs::write(&path, write_notice(&n))?;
+    let mut withheld = notice.withheld;
+    for e in c
+        .evidence
+        .iter()
+        .filter(|e| e.public.is_none() && e.kept > 0)
+    {
+        withheld.push(format!(
+            "operator logs {} from {} (no agreement recorded; `swarmchase case evidence consent {id} {}`)",
+            e.id, e.org, e.id
+        ));
+    }
+    let mut lint = leak_check(root, &c, |r| {
+        lint_public(&format!("{}\n{}", n.meta.title, n.body), r)
+    })?;
+    lint.extend(notice.leaks);
+    let review = NoticeReview {
+        lint,
+        withheld,
+        flags: notice.flags,
+        unreviewed: c
+            .endpoints
+            .iter()
+            .filter(|e| e.state == EndpointState::Unreviewed)
+            .map(|e| e.host.clone())
+            .collect(),
+    };
+    update(root, id, |c| {
+        c.log(
+            today,
+            format!(
+                "notice drafted ({} withheld, {} to decide)",
+                review.withheld.len(),
+                review.flags.len()
+            ),
+        );
+        Ok(())
+    })?;
+    Ok((path, review))
 }
 
 #[cfg(test)]

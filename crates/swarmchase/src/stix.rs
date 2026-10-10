@@ -113,7 +113,7 @@ pub fn export(
             "warning: {unreviewed} endpoint(s) are still unreviewed; classify them before sharing"
         );
     }
-    let rules = case::case_rules(root, &c)?;
+    let rules = crate::pinning::case_rules(root, &c)?;
     let records = case::case_records(root, &c, &case::scope(audience, contact))?;
     let a = analyze(records, &rules);
     let exposed: Vec<String> = c
