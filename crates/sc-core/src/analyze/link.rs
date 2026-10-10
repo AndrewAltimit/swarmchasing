@@ -148,8 +148,8 @@ fn feature_groups(results: &[ObsResult], idxs: &[usize], window: i64) -> Vec<Vec
     groups
 }
 
-/// Whether one group of a feature's carriers is too widespread to link it:
-/// more than `feature_max_hosts` target hosts, or (when `feature_max_share`
+/// Whether one group of a feature's carriers is too common to link it: a
+/// published tag, more than `feature_max_hosts` target hosts, or (when `feature_max_share`
 /// is set and its time span holds at least `feature_share_min_records`
 /// records) more than that share of the records in its span. `all_ts` is
 /// every record's timestamp, sorted.
@@ -167,7 +167,13 @@ fn common_feature(
     let ts = group.iter().map(|&i| results[i].obs.ts).filter(|&t| t > 0);
     let (start, end) = (ts.clone().min().unwrap_or(0), ts.max().unwrap_or(0));
     let records = group.len();
-    let reason = if cfg.feature_max_hosts > 0 && hosts.len() > cfg.feature_max_hosts {
+    let reason = if cfg
+        .published_tags
+        .iter()
+        .any(|t| t.eq_ignore_ascii_case(f.value()))
+    {
+        "quoted in a public report (linking.published_tags)".to_string()
+    } else if cfg.feature_max_hosts > 0 && hosts.len() > cfg.feature_max_hosts {
         format!(
             "on {} target hosts, more than linking.feature_max_hosts ({})",
             hosts.len(),

@@ -696,7 +696,10 @@ mod tests {
                 )
             })
             .collect();
-        let a = analyze(obs.clone(), &Rules::default_rules());
+        // Not as a published tag here: the host limit is what is tested.
+        let mut unpublished = Rules::default_rules();
+        unpublished.set.linking.published_tags.clear();
+        let a = analyze(obs.clone(), &unpublished);
         assert_eq!(a.clusters.len(), 0, "{:?}", a.clusters);
         assert_eq!(a.common_features.len(), 1, "{:?}", a.common_features);
         let c = &a.common_features[0];
@@ -720,11 +723,24 @@ mod tests {
         );
         assert!(!report(crate::report::Audience::Provider).contains("Common features"));
 
-        // The same tag on a few hosts still links.
+        // The same tag on a few hosts still links ...
         let few: Vec<Observation> = obs.into_iter().take(4).collect();
-        let b = analyze(few, &Rules::default_rules());
+        let b = analyze(few.clone(), &unpublished);
         assert_eq!(b.clusters.len(), 1);
         assert!(b.common_features.is_empty());
+
+        // ... unless a public report quoted it: then it is common however few.
+        let p = analyze(few, &Rules::default_rules());
+        assert!(p.clusters.is_empty(), "{:?}", p.clusters);
+        assert_eq!(p.common_features.len(), 1);
+        assert_eq!(p.common_features[0].hosts, 4);
+        assert!(
+            p.common_features[0]
+                .reason
+                .contains("linking.published_tags"),
+            "{}",
+            p.common_features[0].reason
+        );
     }
 
     #[test]

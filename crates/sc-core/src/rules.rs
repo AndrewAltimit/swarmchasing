@@ -91,6 +91,9 @@ pub struct Linking {
     pub feature_max_share: f64,
     /// ... when that span holds at least this many records.
     pub feature_share_min_records: usize,
+    /// Tags quoted in public reports: anyone can copy one, so a feature with
+    /// one of these values (ignoring case) never links.
+    pub published_tags: Vec<String>,
     pub window_secs: i64,
     pub run_gap_secs: i64,
     pub burst_gap_secs: i64,
@@ -109,6 +112,7 @@ impl Default for Linking {
             feature_max_hosts: 20,
             feature_max_share: 0.0,
             feature_share_min_records: 100,
+            published_tags: vec![],
             window_secs: 600,
             run_gap_secs: 900,
             burst_gap_secs: 5,

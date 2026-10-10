@@ -55,6 +55,14 @@ feature_max_hosts = 20
 # broad inputs such as the watch, where one fleet is not most of the records).
 feature_max_share = 0.0
 feature_share_min_records = 100
+# Tags quoted in public incident reports. Anyone who read the report can copy
+# one, so a feature with one of these values (ignoring case) never links: its
+# carriers are listed as a common feature instead. Each entry names its source.
+published_tags = [
+    "chatgpttest1", # https://transluce.org/agent-activity
+    "tok=expt",     # https://transluce.org/agent-activity (marker.test_tag match)
+    "expt3",        # https://transluce.org/agent-activity (`tok` value)
+]
 # Observations of the same target host closer than this are joined.
 window_secs = 600
 # Within a cluster, a gap longer than this starts a new run.
