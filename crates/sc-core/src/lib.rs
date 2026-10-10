@@ -36,6 +36,7 @@ pub use chains::{Chain, Pace};
 pub use dialect::{CutLengths, Dialect, DialectPair};
 pub use endpoints::{Activity, EndpointOptions, EndpointView, endpoints};
 pub use escalation::{Escalation, Route};
+pub use eval::summary::{Summary, summarize};
 pub use eval::{EvalReport, Label, LabelSet, evaluate, parse_labels};
 pub use extract::{Extracted, Layer, defang, defang_host, extract, unwrap_layers};
 pub use fanout::FanOut;

@@ -75,6 +75,7 @@ At the end of each run, run directories and stored records older than `retain_da
 Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing.
 
 - `--unflagged N` adds a stable sample of unflagged records, which grows the benign baseline and catches misses.
-- `--stats` counts reviews and disagreements; `--list` prints the queue.
+- `--stats` counts reviews and disagreements, and Cohen's κ between labellers; `--list` prints the queue.
+- `--labeller <name>` saves to `labels/reviewed-<name>.ndjson` instead, for a second, independent reviewer ([two labellers](evaluation.md#two-labellers)).
 
 Each answer goes to `labels/reviewed.ndjson` with the record, so `swarmchase eval <data>/labels/reviewed.ndjson` measures the rules against everything reviewed ([evaluation](evaluation.md)). The file stays in the data directory and is never committed.
