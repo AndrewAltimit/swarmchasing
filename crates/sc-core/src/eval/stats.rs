@@ -52,7 +52,19 @@ pub fn wilson_z(k: usize, n: usize, z: f64) -> Option<(f64, f64)> {
     let denom = 1.0 + z2 / n;
     let centre = (p + z2 / (2.0 * n)) / denom;
     let half = (z / denom) * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt();
-    Some(((centre - half).max(0.0), (centre + half).min(1.0)))
+    // At k = 0 or k = n one bound is exactly 0 or 1; pin it rather than
+    // leave floating-point dust (0.9999999999999999).
+    let lo = if k == 0 {
+        0.0
+    } else {
+        (centre - half).max(0.0)
+    };
+    let hi = if k as f64 == n {
+        1.0
+    } else {
+        (centre + half).min(1.0)
+    };
+    Some((lo, hi))
 }
 
 /// Cohen's κ over paired labels (one pair per item both labellers saw).
@@ -102,6 +114,7 @@ mod tests {
         let (lo, hi) = wilson(43, 43).unwrap();
         assert!(close(lo, 43.0 / (43.0 + Z95 * Z95)), "{lo}");
         assert_eq!(hi, 1.0);
+        assert_eq!(wilson(28, 28).unwrap().1, 1.0);
         let (lo, hi) = wilson(0, 10).unwrap();
         assert_eq!(lo, 0.0);
         assert!(close(hi, 0.2775), "{hi}");
