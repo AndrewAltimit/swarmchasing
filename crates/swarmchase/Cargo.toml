@@ -24,6 +24,8 @@ base64.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 reqwest.workspace = true
+age.workspace = true
+tar.workspace = true
 chrono = { workspace = true, features = ["clock"] }
 
 [dev-dependencies]

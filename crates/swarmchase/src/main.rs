@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 use commands::{analyze, clusters, collect, endpoints, report, scan};
 use std::path::PathBuf;
 
+mod backup;
 mod bundle;
 mod case;
 mod commands;
@@ -85,6 +86,9 @@ enum Cmd {
     Case(case::CaseArgs),
     /// Public notices: add a reviewed draft, append updates, lint, build the site files.
     Notice(notice::NoticeArgs),
+    /// Encrypted backups of cases, labels, pinned rules and state.json:
+    /// create, list, verify, restore, and keygen for the age identity.
+    Backup(backup::BackupArgs),
     /// The offline IP-to-ASN table: fetch it into the data directory, look up addresses.
     Asn(commands::asn::AsnArgs),
     /// Validate a rules file, or print the bundled rules.
@@ -116,6 +120,7 @@ fn main() -> Result<()> {
         Cmd::Review(a) => review::run(a),
         Cmd::Case(a) => case::run(a),
         Cmd::Notice(a) => notice::run(a),
+        Cmd::Backup(a) => backup::run(a),
         Cmd::Asn(a) => commands::asn::run(a),
         Cmd::Rules { file, dump } => commands::rules::run(file.as_deref(), dump),
     }

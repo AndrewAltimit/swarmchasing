@@ -113,3 +113,7 @@ There is no embargo: the reports and the notice go out at the same time.
 - **Rules changes.** `case rules <id>` shows records whose tier would change under the current rules; `--update` re-pins.
 
 Close the case with `case set <id> --status closed` when nothing is left to do. Its records stay with the case for the retention period in [policies](../policies.md#collection).
+
+## Backups
+
+Run `swarmchase backup create --keep 30` after case work, or on a schedule, and `swarmchase backup verify <file> --identity <key file>` now and then from your own machine. The key file never goes on the runner ([backups](../reference/configuration.md#backups)).
