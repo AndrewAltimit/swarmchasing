@@ -146,5 +146,5 @@ Non-zero on an error, when `eval` misses a floor, when `case verify` finds a dif
 | [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
 | [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
-| [`stix.rs`](src/stix.rs) | STIX 2.1 export. |
+| [`stix/`](src/stix/mod.rs) | STIX 2.1 export: records to observables and indicators, one builder per object type, deterministic ids. |
 | [`notice.rs`](src/notice.rs) | The notice draft (`case notice`); adding, updating, linting and building notices. |
