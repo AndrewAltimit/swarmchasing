@@ -72,8 +72,8 @@ pub(super) fn cluster(
     }
     let score: i32 = rules_seen
         .keys()
-        .filter_map(|id| rules.compiled.iter().find(|r| &r.def.id == id))
-        .map(|r| r.def.weight)
+        .filter_map(|id| rules.rule(id))
+        .map(|r| r.weight)
         .sum();
     let member_tier = members
         .iter()

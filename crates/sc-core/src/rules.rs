@@ -1,9 +1,9 @@
 //! Data-driven indicator rules (see `rules/default.toml`).
 
 use crate::model::IndicatorKind;
-use regex::{Regex, RegexBuilder};
+use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub const DEFAULT_RULES: &str = include_str!("../../../rules/default.toml");
 
@@ -17,6 +17,22 @@ pub enum Target {
     Header,
     UserAgent,
     FinalUrl,
+}
+
+impl Target {
+    const ALL: [Target; 7] = [
+        Target::Host,
+        Target::Url,
+        Target::ParamName,
+        Target::ParamValue,
+        Target::Header,
+        Target::UserAgent,
+        Target::FinalUrl,
+    ];
+
+    fn slot(self) -> usize {
+        self as usize
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,11 +136,25 @@ pub(crate) struct CompiledRule {
     pub matcher: Matcher,
 }
 
+/// The regex rules of one target, compiled once more as a set so one pass
+/// over a text says which of them match.
+pub(crate) struct TargetSet {
+    set: Option<RegexSet>,
+    /// Indexes into `Rules::compiled`, in set order.
+    rules: Vec<usize>,
+}
+
 /// A rule set ready for matching.
 pub struct Rules {
     pub set: RuleSet,
     pub(crate) compiled: Vec<CompiledRule>,
     pub(crate) asn_orgs: BTreeMap<u32, String>,
+    /// Per target ([`Target::slot`]).
+    by_target: Vec<TargetSet>,
+    by_id: HashMap<String, usize>,
+    /// Host suffixes and URL patterns of relay, carrier and callback rules.
+    intermediary_suffixes: Vec<String>,
+    intermediary_urls: Option<RegexSet>,
 }
 
 impl Rules {
@@ -159,12 +189,49 @@ impl Rules {
                 matcher,
             });
         }
+        let by_target = Target::ALL
+            .iter()
+            .map(|&t| {
+                let rules: Vec<usize> = (0..compiled.len())
+                    .filter(|&i| compiled[i].def.target == t && t != Target::Host)
+                    .collect();
+                let patterns = rules.iter().map(|&i| compiled[i].def.pattern.as_str());
+                TargetSet {
+                    set: regex_set(patterns),
+                    rules,
+                }
+            })
+            .collect();
+        let by_id = (0..compiled.len())
+            .map(|i| (compiled[i].def.id.clone(), i))
+            .collect();
+        let intermediary = || compiled.iter().filter(|r| is_intermediary_kind(r.def.kind));
+        let intermediary_suffixes = intermediary()
+            .filter_map(|r| match &r.matcher {
+                Matcher::HostSuffix(s) => Some(s.clone()),
+                Matcher::Re(_) => None,
+            })
+            .collect();
+        let intermediary_urls = regex_set(
+            intermediary()
+                .filter(|r| r.def.target == Target::Url)
+                .map(|r| r.def.pattern.as_str()),
+        );
         let asn_orgs = set.asns.iter().map(|a| (a.asn, a.org.clone())).collect();
         Ok(Self {
             set,
             compiled,
             asn_orgs,
+            by_target,
+            by_id,
+            intermediary_suffixes,
+            intermediary_urls,
         })
+    }
+
+    /// The rule with this id.
+    pub fn rule(&self, id: &str) -> Option<&RuleDef> {
+        self.by_id.get(id).map(|&i| &self.compiled[i].def)
     }
 
     pub fn asn_org(&self, asn: u32) -> Option<&str> {
@@ -175,18 +242,55 @@ impl Rules {
         self.compiled.iter().filter(move |r| r.def.target == t)
     }
 
+    /// The regex rules of target `t` that match `text`, in rule order. The
+    /// set says which rules match in one pass; only those run on their own.
+    pub(crate) fn matching<'a>(
+        &'a self,
+        t: Target,
+        text: &str,
+    ) -> Box<dyn Iterator<Item = &'a CompiledRule> + 'a> {
+        let ts = &self.by_target[t.slot()];
+        match &ts.set {
+            Some(set) => Box::new(
+                set.matches(text)
+                    .into_iter()
+                    .map(move |k| &self.compiled[ts.rules[k]]),
+            ),
+            None => Box::new(ts.rules.iter().map(move |&i| &self.compiled[i])),
+        }
+    }
+
     /// True if `host` is a known relay/carrier host (i.e. not the real target).
     pub(crate) fn is_intermediary_host(&self, host: &str) -> bool {
-        self.compiled.iter().any(|r| {
-            matches!(
-                r.def.kind,
-                IndicatorKind::Relay | IndicatorKind::Carrier | IndicatorKind::Exfil
-            ) && match &r.matcher {
-                Matcher::HostSuffix(s) => host_matches(host, s),
-                Matcher::Re(re) => r.def.target == Target::Url && re.is_match(host),
-            }
-        })
+        self.intermediary_suffixes
+            .iter()
+            .any(|s| host_matches(host, s))
+            || self
+                .intermediary_urls
+                .as_ref()
+                .is_some_and(|set| set.is_match(host))
     }
+}
+
+pub(crate) fn is_intermediary_kind(k: IndicatorKind) -> bool {
+    matches!(
+        k,
+        IndicatorKind::Relay | IndicatorKind::Carrier | IndicatorKind::Exfil
+    )
+}
+
+/// The patterns as one case-insensitive set, or `None` when there are none
+/// or the set is too large to build (callers then try each rule in turn).
+fn regex_set<'a>(patterns: impl IntoIterator<Item = &'a str>) -> Option<RegexSet> {
+    let patterns: Vec<&str> = patterns.into_iter().collect();
+    if patterns.is_empty() {
+        return None;
+    }
+    RegexSetBuilder::new(patterns)
+        .case_insensitive(true)
+        .size_limit(1 << 26)
+        .build()
+        .ok()
 }
 
 pub(crate) fn host_matches(host: &str, suffix: &str) -> bool {

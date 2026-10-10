@@ -5,8 +5,8 @@
 //! `data:` URLs carrying fetch programs, or base64 parameters. We peel
 //! those layers so rules can see every hop and the real target.
 
-use crate::model::{Hit, IndicatorKind, LinkFeature, Observation, truncate};
-use crate::rules::{Matcher, Rules, Target, host_matches};
+use crate::model::{Hit, LinkFeature, Observation, truncate};
+use crate::rules::{Matcher, Rules, Target, host_matches, is_intermediary_kind};
 use base64::Engine;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -284,6 +284,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     let mut hits: Vec<Hit> = Vec::new();
     let mut features = BTreeSet::new();
     let mut fired = BTreeSet::new();
+    let mut significant_hit = false;
 
     // Layers whose own host is a relay/carrier/inbox, so they are not the real target.
     let mut intermediary = vec![false; layers.len()];
@@ -297,6 +298,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             features.insert(LinkFeature::rule(&r.def.id, m));
         }
         if fired.insert(r.def.id.clone()) {
+            significant_hit |= r.def.significant;
             hits.push(Hit {
                 rule_id: r.def.id.clone(),
                 kind: r.def.kind,
@@ -320,7 +322,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
                 }
             }
         }
-        for r in rules.of_target(Target::Url) {
+        for r in rules.matching(Target::Url, &layer.text) {
             if let Matcher::Re(re) = &r.matcher
                 && let Some(m) = re.find(&layer.text)
             {
@@ -336,14 +338,10 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             }
         }
         for (k, v) in &layer.params {
-            for r in rules.of_target(Target::ParamName) {
-                if let Matcher::Re(re) = &r.matcher
-                    && re.is_match(k)
-                {
-                    push(&mut hits, &mut features, r, &format!("{k}={v}"), i);
-                }
+            for r in rules.matching(Target::ParamName, k) {
+                push(&mut hits, &mut features, r, &format!("{k}={v}"), i);
             }
-            for r in rules.of_target(Target::ParamValue) {
+            for r in rules.matching(Target::ParamValue, v) {
                 if let Matcher::Re(re) = &r.matcher
                     && let Some(m) = re.find(v)
                 {
@@ -388,7 +386,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             .map(|(_, v)| v.as_str())
     });
     if let Some(ua) = ua {
-        for r in rules.of_target(Target::UserAgent) {
+        for r in rules.matching(Target::UserAgent, ua) {
             if let Matcher::Re(re) = &r.matcher
                 && let Some(m) = re.find(ua)
             {
@@ -397,7 +395,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         }
     }
     if let Some(fin) = &obs.final_url {
-        for r in rules.of_target(Target::FinalUrl) {
+        for r in rules.matching(Target::FinalUrl, fin) {
             if let Matcher::Re(re) = &r.matcher
                 && let Some(m) = re.find(fin)
             {
@@ -407,12 +405,6 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     }
 
     let score = hits.iter().map(|h| h.weight).sum();
-    let significant_hit = hits.iter().any(|h| {
-        rules
-            .compiled
-            .iter()
-            .any(|r| r.def.id == h.rule_id && r.def.significant)
-    });
     let target_host = layers
         .iter()
         .enumerate()
@@ -430,13 +422,6 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         target_host,
         features: features.into_iter().collect(),
     }
-}
-
-fn is_intermediary_kind(k: IndicatorKind) -> bool {
-    matches!(
-        k,
-        IndicatorKind::Relay | IndicatorKind::Carrier | IndicatorKind::Exfil
-    )
 }
 
 /// A host name made safe to print: `example[.]com`.
