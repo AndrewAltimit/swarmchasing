@@ -13,6 +13,7 @@ mod bundle;
 mod case;
 mod commands;
 mod contacts;
+mod csirts;
 mod eval;
 mod evidence;
 mod health;
@@ -22,6 +23,7 @@ mod pinning;
 mod review;
 mod stix;
 mod store;
+mod suggest;
 mod util;
 mod watch;
 
@@ -89,6 +91,9 @@ enum Cmd {
     /// Encrypted backups of cases, labels, pinned rules and state.json:
     /// create, list, verify, restore, and keygen for the age identity.
     Backup(backup::BackupArgs),
+    /// The public site: `site build` writes it into a directory from the
+    /// committed inputs, as `sc-site` does.
+    Site(commands::site::SiteArgs),
     /// The offline IP-to-ASN table: fetch it into the data directory, look up addresses.
     Asn(commands::asn::AsnArgs),
     /// Validate a rules file, or print the bundled rules.
@@ -121,6 +126,7 @@ fn main() -> Result<()> {
         Cmd::Case(a) => case::run(a),
         Cmd::Notice(a) => notice::run(a),
         Cmd::Backup(a) => backup::run(a),
+        Cmd::Site(a) => commands::site::run(a),
         Cmd::Asn(a) => commands::asn::run(a),
         Cmd::Rules { file, dump } => commands::rules::run(file.as_deref(), dump),
     }

@@ -71,6 +71,16 @@ It also shows the HTTP requests each source made. Any health warning gets the di
 
 Both are leads to review; neither merges clusters.
 
+### Candidate fleets, escalations and common features
+
+Over the whole window, up to ten lines each:
+
+- **Candidate fleets.** Clusters tied by soft links, with the kinds and the weakest pair's strength. Merging one is a case decision ([fleets](cases.md#fleets)).
+- **Escalations.** Requests for one page whose route climbed (direct, relay, program, remote browser), with the clusters they touch.
+- **Common features.** Linking values shared too widely to link on, so they were demoted: records, hosts, span and the limit they passed.
+
+Clusters are named by number and stable key throughout (`C3 k-3f9a2c1b`), and hosts and values are defanged. These sections alone never make a run count as changed.
+
 ### Case status
 
 The watch matches new records against every case's indicators: its clusters' linking features and its endpoints, under the case's pinned rules. The *Case status* section then proposes:
@@ -102,5 +112,17 @@ Text after the key is saved as a note (`b ordinary article read`). Answers are s
 - `--unflagged N` adds a stable sample of unflagged records, which grows the benign baseline and catches misses.
 - `--stats` counts reviews and disagreements, and Cohen's κ between labellers; `--list` prints the queue.
 - `--labeller <name>` saves to `labels/reviewed-<name>.ndjson` instead, for a second, independent reviewer ([two labellers](evaluation.md#two-labellers)).
+- `--suggest` shows a local model's label suggestion before each prompt ([label suggestions](#label-suggestions)).
 
 Each answer goes to `labels/reviewed.ndjson` with the record, so `swarmchase eval <data>/labels/reviewed.ndjson` measures the rules against everything reviewed ([evaluation](evaluation.md)). The file stays in the data directory and is never committed.
+
+### Label suggestions
+
+`review --suggest` asks a language model for a label before each prompt and shows it as `suggestion: agent — <reason>`. The admin still answers; the suggestion is saved beside the label as `suggested` and is never the label, so eval reads only the admin's.
+
+It is allowed only with a model running locally:
+
+- **Local only.** `SWARMCHASE_LLM_URL` is an OpenAI-compatible server (`/v1/chat/completions`; the base URL is enough) on `localhost`, a loopback address, a private address (RFC 1918, or RFC 4193 for IPv6) or a link-local one. Any other host is refused before anything is sent, so records never reach a third-party API. The request goes through no proxy and follows no redirect. `SWARMCHASE_LLM_MODEL` names the model ([configuration](configuration.md#environment-variables)).
+- **What it sees.** The defanged URL, target host and rule hits, the tier and score, and the cluster's size, tier, top rules and target hosts, with a fixed prompt asking for `{"label": "agent" | "benign" | "unsure", "reason": "…"}`. No IP addresses.
+- **No fetching.** The model gets text and no tools; the prompt says the URLs are data, never to be visited.
+- **Failures.** A timeout (60 s), an error or a reply that is not that JSON means no suggestion for the record; the review carries on.

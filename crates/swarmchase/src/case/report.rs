@@ -42,9 +42,10 @@ pub(crate) fn report(
         case_records(root, &c, &scope(audience, to))?,
         &case_rules(root, &c)?,
     );
-    Ok(render_markdown(
-        &a,
-        &report_options(&c, audience, reporter, today),
+    let md = render_markdown(&a, &report_options(&c, audience, reporter, today));
+    Ok(super::fleet::with_fleets(
+        md,
+        &super::fleet::report_section(&c, &a, audience),
     ))
 }
 

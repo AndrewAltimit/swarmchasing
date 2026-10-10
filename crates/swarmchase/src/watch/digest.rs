@@ -293,6 +293,8 @@ pub fn digest(d: &DigestInput) -> Digest {
         );
     }
 
+    leads(&mut t, a);
+
     let _ = writeln!(t, "\n## Archive bursts ({})\n", d.bursts.len());
     none(&mut t, d.bursts.is_empty());
     for b in d.bursts {
@@ -331,6 +333,105 @@ pub fn digest(d: &DigestInput) -> Digest {
         || errors
         || !health.alerts.is_empty();
     Digest { text: t, changed }
+}
+
+/// `C3 k-3f9a2c1b`: a cluster's number in this analysis and its stable key.
+fn cluster_ref(a: &Analysis, id: &str) -> String {
+    match a.cluster(id) {
+        Some(c) if !c.key.is_empty() => format!("{} {}", c.id, c.key),
+        _ => id.to_string(),
+    }
+}
+
+/// How many lines each lead section shows.
+const LEAD_LINES: usize = 10;
+
+/// Candidate fleets, escalations and common features over the window:
+/// descriptive leads for the admin, defanged, never merges.
+fn leads(t: &mut String, a: &Analysis) {
+    let more = |t: &mut String, n: usize| {
+        if n > LEAD_LINES {
+            let _ = writeln!(t, "- … {} more", n - LEAD_LINES);
+        }
+    };
+    let _ = writeln!(t, "\n## Candidate fleets ({})\n", a.candidate_fleets.len());
+    if a.candidate_fleets.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for f in a.candidate_fleets.iter().take(LEAD_LINES) {
+        let kinds: Vec<&str> = f.kinds.iter().map(|k| k.label()).collect();
+        let _ = writeln!(
+            t,
+            "- {}: {}; {} soft link(s): {} (weakest pair {:.2})",
+            f.id,
+            f.clusters
+                .iter()
+                .map(|id| cluster_ref(a, id))
+                .collect::<Vec<_>>()
+                .join(", "),
+            f.links,
+            kinds.join(", "),
+            f.strength
+        );
+    }
+    more(t, a.candidate_fleets.len());
+    if !a.candidate_fleets.is_empty() {
+        let _ = writeln!(
+            t,
+            "\nProposals only: merge one in a case with `swarmchase case fleet merge <case> <key>...`."
+        );
+    }
+
+    let _ = writeln!(t, "\n## Escalations ({})\n", a.escalations.len());
+    if a.escalations.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for e in a.escalations.iter().take(LEAD_LINES) {
+        let clusters = if e.clusters.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "; {}",
+                e.clusters
+                    .iter()
+                    .map(|id| cluster_ref(a, id))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        let _ = writeln!(
+            t,
+            "- `{}`: {}, {} → {}{clusters}",
+            sc_core::defang(&one_line(&format!("{}{}", e.host, e.path), 100)),
+            e.route_line(),
+            sc_core::fmt_ts(e.start),
+            sc_core::fmt_ts(e.end)
+        );
+    }
+    more(t, a.escalations.len());
+
+    let _ = writeln!(t, "\n## Common features ({})\n", a.common_features.len());
+    if a.common_features.is_empty() {
+        let _ = writeln!(t, "None.");
+    } else {
+        let _ = writeln!(
+            t,
+            "Linking values shared too widely to link on: a popular or copied value, not one operator's.\n"
+        );
+    }
+    for c in a.common_features.iter().take(LEAD_LINES) {
+        let _ = writeln!(
+            t,
+            "- `{}`: {} records on {} hosts, {} → {}; {}",
+            sc_core::defang(&one_line(&c.feature.to_string(), 90)),
+            c.records,
+            c.hosts,
+            sc_core::fmt_ts(c.start),
+            sc_core::fmt_ts(c.end),
+            sc_core::defang(&one_line(&c.reason, 120))
+        );
+    }
+    more(t, a.common_features.len());
 }
 
 fn run_label(r: &ClusterRun) -> String {
@@ -433,6 +534,29 @@ mod tests {
             "{}",
             d3.text
         );
+    }
+
+    #[test]
+    fn digest_lists_candidate_fleets_by_key() {
+        let mut rules = Rules::default_rules();
+        rules.set.soft_links.fleet_min_strength = 0.3;
+        let a = analyze(crate::case::fleet::tests::two_runs(), &rules);
+        assert_eq!(a.candidate_fleets.len(), 1);
+        let s = summarise(&a, &Summary::default(), "t1".into());
+        let d = write("t1", &a, &s, &s, &BTreeSet::new(), &Health::default(), &[]);
+        assert!(d.text.contains("## Candidate fleets (1)"), "{}", d.text);
+        for c in &a.clusters {
+            assert!(
+                d.text.contains(&format!("{} {}", c.id, c.key)),
+                "{}",
+                d.text
+            );
+        }
+        assert!(d.text.contains("case fleet merge"), "{}", d.text);
+        assert!(d.text.contains("## Escalations ("), "{}", d.text);
+        assert!(d.text.contains("## Common features ("), "{}", d.text);
+        // A standing proposal alone is not news.
+        assert!(!d.changed, "{}", d.text);
     }
 
     #[test]
