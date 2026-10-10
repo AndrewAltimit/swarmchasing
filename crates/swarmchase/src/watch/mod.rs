@@ -244,7 +244,7 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
             Err(e) => {
                 eprintln!("error: {e:#}");
                 st.last_error = Some(format!("{e:#}"));
-                rep.error = Some(format!("{e:#}"));
+                rep.error = Some(digest::short_reason(&e));
             }
         }
         // Save after every source so an interrupted run keeps its progress.

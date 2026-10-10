@@ -62,7 +62,7 @@ The health section flags:
 - a source that has failed two runs in a row;
 - a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it.
 
-It also shows the HTTP requests each source made. Any health warning gets the digest emailed.
+It also shows the HTTP requests each source made. A failed source's status gives a short reason, such as `HTTP 504 after 3 attempts`, without the request URL; the full error is in the run's log and in `state.json`. Any health warning gets the digest emailed.
 
 ### Possible reruns and archive bursts
 
