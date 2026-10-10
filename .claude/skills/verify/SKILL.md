@@ -44,18 +44,18 @@ Give precision and recall at both tiers and the changed rule's own precision. Ne
 
 ## Browser toolkit
 
-1. Build the WASM package and the notice pages (both are gitignored):
+1. Build the site (all generated, all gitignored):
    ```bash
-   scripts/ci/build-site.sh                                  # site/pkg; --dev skips wasm-opt
-   cargo run -q -p swarmchase -- notice build --out site/notices --base-url http://localhost:8080/
+   scripts/ci/build-site.sh                # WASM modules, then every page into _site/; --dev skips wasm-opt
+   scripts/ci/build-site.sh --pages-only   # pages only, after a change to site/, docs/ or sc-publish
    ```
-   `build-site.sh` caches the optimised module in `${XDG_CACHE_HOME:-~/.cache}/swarmchase-wasm-opt`, so a rebuild with unchanged Rust skips wasm-opt.
-2. Serve it: `python -m http.server -d site 8080` (run it in the background and stop it when done).
+   `build-site.sh` caches the optimised modules in `${XDG_CACHE_HOME:-~/.cache}/swarmchase-wasm-opt`, so a rebuild with unchanged Rust skips wasm-opt. It runs `check-site.py --built _site --inputs ...` itself; a new file under `site/` must be `git add`ed first, because the build may read committed inputs only.
+2. Serve it: `python -m http.server -d _site 8080` (run it in the background and stop it when done).
 3. Run the XSS check. It starts its own server and Chrome, so the step above is not needed for it:
    ```bash
    node scripts/site-xss-check.mjs [path/to/chrome]
    ```
-   Exit 0 is a pass, 1 a failure, 2 means it could not run (no Chrome, or `site/pkg` missing). Run it after any change to `site/`, `sc-wasm`, or anything that renders records or notices.
+   It builds its own copy of the site with a hostile notice (cargo), so it needs `site/pkg` and `site/pkg-rules` built. Exit 0 is a pass, 1 a failure, 2 means it could not run (no Chrome, no cargo, or the modules missing). Run it after any change to `site/`, `sc-wasm`, or anything that renders records or notices.
 
 ## Looking at pages headlessly
 

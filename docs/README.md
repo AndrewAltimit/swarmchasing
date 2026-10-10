@@ -21,7 +21,7 @@ What each part does and how it is configured.
 | [`reference/cases.md`](reference/cases.md) | Case files: `case.toml`, every `case` subcommand, contacts, drafts, bundles, pinned rules, STIX, operator evidence. |
 | [`reference/notices.md`](reference/notices.md) | Drafting, adding and updating notices; what they withhold; lint and build. |
 | [`reference/evaluation.md`](reference/evaluation.md) | `swarmchase eval`, the CI eval gate and its floors, the held-out measurement. |
-| [`reference/browser-toolkit.md`](reference/browser-toolkit.md) | The Pages site: building, each tab, and how it keeps payloads inert. |
+| [`reference/browser-toolkit.md`](reference/browser-toolkit.md) | The Pages site: how it is built, each page, the workbench, and how it keeps payloads inert. |
 | [`reference/configuration.md`](reference/configuration.md) | `env.list`, environment variables, the urlquery.net key and terms. |
 | [`reference/runner.md`](reference/runner.md) | The workflows, secrets and variables, caches outside the checkout, runner requirements. |
 

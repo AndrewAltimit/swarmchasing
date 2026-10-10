@@ -24,7 +24,8 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 | [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (Wayback / Arquivo CDX, urlquery.net search and reports, crt.sh, security.txt) with retry and paging. |
 | [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README); [`watch/`](crates/swarmchase/src/watch/mod.rs) is the incremental watch pipeline and digest; [`case/`](crates/swarmchase/src/case/mod.rs) is case files and send drafts; [`pinning.rs`](crates/swarmchase/src/pinning.rs) is the rules a case is pinned to; [`evidence.rs`](crates/swarmchase/src/evidence.rs) is logs operators send back; [`stix/`](crates/swarmchase/src/stix/mod.rs) is the STIX 2.1 export; [`notice.rs`](crates/swarmchase/src/notice.rs) adds, updates, lints and builds public notices. |
 | [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site page generation. Text in, text out. |
-| [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit in [`site/`](site/index.html). |
+| [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit; [`sc-rules-wasm`](crates/sc-rules-wasm/README.md) converts edited rules. |
+| [`site/`](site/js/site.js) | The site's styles and page scripts; `sc-site` (sc-publish) generates the pages into `_site/`. |
 | `notices/` | Published notices (`<id>.md`, front matter + dated updates). Committing one publishes it ([notices](docs/reference/notices.md)). |
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. Every change passes the eval gate. |
 | [`samples/eval/`](samples/eval/README.md) | Labelled evaluation set behind the CI eval gate; the held-out Transluce steps. |
@@ -44,7 +45,7 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 | [`reference/cases.md`](docs/reference/cases.md) | `case.toml`, every `case` subcommand, drafts, bundles, pinned rules. |
 | [`reference/notices.md`](docs/reference/notices.md) | Notice lifecycle, what notices withhold, lint and build. |
 | [`reference/evaluation.md`](docs/reference/evaluation.md) | `eval`, the eval gate's floors, held-out measurement. |
-| [`reference/browser-toolkit.md`](docs/reference/browser-toolkit.md) | The Pages site: build, tabs, payload safety. |
+| [`reference/browser-toolkit.md`](docs/reference/browser-toolkit.md) | The Pages site: build, pages, workbench, payload safety. |
 | [`reference/configuration.md`](docs/reference/configuration.md) | `env.list`, environment variables, urlquery key and terms. |
 | [`reference/runner.md`](docs/reference/runner.md) | Workflows, secrets and variables, caches, runner requirements. |
 | [`methodology.md`](docs/methodology.md) | Tiers, clusters, hints, attribution levels, known limits. |
@@ -70,7 +71,7 @@ cargo run -p swarmchase -- scan records.ndjson           # flagged records
 cargo run -p swarmchase -- eval samples/eval/*.ndjson    # rules precision/recall
 cargo run -p swarmchase -- notice lint                   # committed notices
 scripts/with-env.sh cargo run -p swarmchase -- watch     # one watch run with env.list loaded
-scripts/ci/build-site.sh && python -m http.server -d site 8080
+scripts/ci/build-site.sh && python -m http.server -d _site 8080
 python3 scripts/ci/check-md-links.py && python3 scripts/ci/check-doc-density.py
 ```
 
@@ -91,7 +92,7 @@ python3 scripts/ci/check-md-links.py && python3 scripts/ci/check-doc-density.py
 - **urlquery content is never committed or quoted.** Not in samples, fixtures, notices or eval overrides; link the report, quote only derived indicators. Details: [configuration](docs/reference/configuration.md#urlquerynet).
 - **Fork PRs run nothing** on the self-hosted runner. To test a fork's change, push it to a branch of this repository. Details: [runner](docs/reference/runner.md).
 - **`actions/checkout` cleans the workspace.** Anything that must persist (cargo cache, wasm-opt cache, watch data) lives outside the checkout. Details: [runner](docs/reference/runner.md#what-lives-outside-the-checkout).
-- **`site/pkg/` and `site/notices/` are generated** and gitignored; build them before serving or running the XSS check. Details: [verify skill](.claude/skills/verify/SKILL.md).
+- **`_site/`, `site/pkg/` and `site/pkg-rules/` are generated** and gitignored; the site build reads committed inputs only. Details: [verify skill](.claude/skills/verify/SKILL.md).
 - **Floors only go up.** Never lower an [`eval-gate.sh`](scripts/ci/eval-gate.sh) floor to land a change; fix the rule or argue the label.
 - **Defang in every output.** Hosts print as `a[.]b`, and a record's URL is never made clickable, in reports, digests, notices and the site.
 
