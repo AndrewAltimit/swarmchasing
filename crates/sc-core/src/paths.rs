@@ -21,14 +21,99 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
-/// Requests per host that make up its preamble.
-pub const PREAMBLE_LEN: usize = 5;
-/// Hosts that must share a preamble or a path set before it is reported.
-pub const MIN_HOSTS: usize = 3;
-/// Smallest unusual path set worth comparing.
-pub const MIN_PATHS: usize = 3;
-/// Jaccard similarity at which two hosts' unusual path sets are "the same".
-pub const MIN_JACCARD: f64 = 0.6;
+/// Path hint settings and path lists (`[paths]` in the rules file).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PathOptions {
+    /// Requests per host that make up its preamble.
+    pub preamble_len: usize,
+    /// Hosts that must share a preamble or a path set before it is reported.
+    pub min_hosts: usize,
+    /// Smallest unusual path set worth comparing.
+    pub min_paths: usize,
+    /// Jaccard similarity at which two hosts' unusual path sets are "the same".
+    pub min_jaccard: f64,
+    /// Paths polite crawlers fetch first; an opening of only these is ordinary.
+    pub crawler: Vec<String>,
+    /// Well-known files a client fetches to learn about a host before using
+    /// it. Anything under `/.well-known/` counts too.
+    pub recon: Vec<String>,
+    /// Paths requested on nearly every site, which say nothing about a client.
+    pub common: Vec<String>,
+}
+
+impl Default for PathOptions {
+    fn default() -> Self {
+        let own = |v: &[&str]| v.iter().map(|s| s.to_string()).collect();
+        Self {
+            preamble_len: 5,
+            min_hosts: 3,
+            min_paths: 3,
+            min_jaccard: 0.6,
+            crawler: own(&[
+                "/",
+                "/robots.txt",
+                "/sitemap.xml",
+                "/sitemap_index.xml",
+                "/favicon.ico",
+                "/ads.txt",
+                "/manifest.json",
+            ]),
+            recon: own(&[
+                "/security.txt",
+                "/humans.txt",
+                "/llms.txt",
+                "/llms-full.txt",
+                "/.git/head",
+                "/.git/config",
+                "/.env",
+                "/.ds_store",
+                "/crossdomain.xml",
+                "/clientaccesspolicy.xml",
+                "/server-status",
+                "/openapi.json",
+                "/swagger.json",
+                "/api-docs",
+                "/version",
+                "/health",
+            ]),
+            common: own(&[
+                "/index.html",
+                "/index.php",
+                "/index.htm",
+                "/home",
+                "/about",
+                "/contact",
+                "/login",
+                "/search",
+                "/admin",
+                "/api",
+                "/wp-admin",
+                "/wp-login.php",
+            ]),
+        }
+    }
+}
+
+impl PathOptions {
+    fn is_crawler_path(&self, p: &str) -> bool {
+        self.crawler.iter().any(|x| x == p)
+    }
+
+    /// True for a well-known recon path (crawler files included).
+    pub fn is_recon_path(&self, p: &str) -> bool {
+        self.is_crawler_path(p)
+            || self.recon.iter().any(|x| x == p)
+            || p.starts_with("/.well-known/")
+    }
+
+    /// True for a path that is neither a recon file nor one every site serves.
+    pub fn is_unusual_path(&self, p: &str) -> bool {
+        !self.is_recon_path(p)
+            && !self.common.iter().any(|x| x == p)
+            && !p.trim_end_matches('/').is_empty()
+    }
+}
 
 /// One path request on one host.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,67 +219,6 @@ fn collapse_segment(s: &str) -> String {
     }
 }
 
-/// Paths polite crawlers fetch first; an opening of only these is ordinary.
-const CRAWLER_PATHS: &[&str] = &[
-    "/",
-    "/robots.txt",
-    "/sitemap.xml",
-    "/sitemap_index.xml",
-    "/favicon.ico",
-    "/ads.txt",
-    "/manifest.json",
-];
-
-/// Well-known files a client fetches to learn about a host before using it.
-const RECON_PATHS: &[&str] = &[
-    "/security.txt",
-    "/humans.txt",
-    "/llms.txt",
-    "/llms-full.txt",
-    "/.git/head",
-    "/.git/config",
-    "/.env",
-    "/.ds_store",
-    "/crossdomain.xml",
-    "/clientaccesspolicy.xml",
-    "/server-status",
-    "/openapi.json",
-    "/swagger.json",
-    "/api-docs",
-    "/version",
-    "/health",
-];
-
-/// Paths requested on nearly every site, which say nothing about a client.
-const COMMON_PATHS: &[&str] = &[
-    "/index.html",
-    "/index.php",
-    "/index.htm",
-    "/home",
-    "/about",
-    "/contact",
-    "/login",
-    "/search",
-    "/admin",
-    "/api",
-    "/wp-admin",
-    "/wp-login.php",
-];
-
-fn is_crawler_path(p: &str) -> bool {
-    CRAWLER_PATHS.contains(&p)
-}
-
-/// True for a well-known recon path (crawler files included).
-pub fn is_recon_path(p: &str) -> bool {
-    is_crawler_path(p) || RECON_PATHS.contains(&p) || p.starts_with("/.well-known/")
-}
-
-/// True for a path that is neither a recon file nor one every site serves.
-pub fn is_unusual_path(p: &str) -> bool {
-    !is_recon_path(p) && !COMMON_PATHS.contains(&p) && !p.trim_end_matches('/').is_empty()
-}
-
 /// The first `k` distinct paths requested on each host, in time order.
 pub fn host_preambles(reqs: &[PathRequest], k: usize) -> BTreeMap<String, Vec<String>> {
     let mut sorted: Vec<&PathRequest> = reqs.iter().collect();
@@ -211,28 +235,29 @@ pub fn host_preambles(reqs: &[PathRequest], k: usize) -> BTreeMap<String, Vec<St
 
 /// The recon opening of a preamble: its leading run of recon paths, when
 /// that run holds at least two recon files and one beyond what crawlers fetch.
-pub fn recon_opening(preamble: &[String]) -> Option<Vec<String>> {
+pub fn recon_opening(preamble: &[String], opts: &PathOptions) -> Option<Vec<String>> {
     let open: Vec<String> = preamble
         .iter()
-        .take_while(|p| is_recon_path(p))
+        .take_while(|p| opts.is_recon_path(p))
         .cloned()
         .collect();
     let recon = open.iter().filter(|p| p.as_str() != "/").count();
-    let beyond = open.iter().any(|p| !is_crawler_path(p));
+    let beyond = open.iter().any(|p| !opts.is_crawler_path(p));
     (recon >= 2 && beyond).then_some(open)
 }
 
-/// Recon openings shared by at least `min_hosts` hosts, most hosts first.
-pub fn shared_preambles(reqs: &[PathRequest], k: usize, min_hosts: usize) -> Vec<SharedPreamble> {
+/// Recon openings of the first `preamble_len` paths shared by at least
+/// `min_hosts` hosts, most hosts first.
+pub fn shared_preambles(reqs: &[PathRequest], opts: &PathOptions) -> Vec<SharedPreamble> {
     let mut by_open: BTreeMap<Vec<String>, usize> = BTreeMap::new();
-    for pre in host_preambles(reqs, k).values() {
-        if let Some(open) = recon_opening(pre) {
+    for pre in host_preambles(reqs, opts.preamble_len).values() {
+        if let Some(open) = recon_opening(pre, opts) {
             *by_open.entry(open).or_default() += 1;
         }
     }
     let mut out: Vec<SharedPreamble> = by_open
         .into_iter()
-        .filter(|(_, n)| *n >= min_hosts)
+        .filter(|(_, n)| *n >= opts.min_hosts)
         .map(|(paths, hosts)| SharedPreamble {
             hash: crate::fingerprint::short_hash(&paths.join(" ")),
             paths,
@@ -257,14 +282,10 @@ fn jaccard(a: &BTreeSet<&str>, b: &BTreeSet<&str>) -> f64 {
 /// similarity of at least `min_jaccard` with the group's first host, and share
 /// at least `min_paths` paths. The caller picks the time window by choosing
 /// which requests to pass. Each host joins at most one group.
-pub fn shared_unusual_sets(
-    reqs: &[PathRequest],
-    min_jaccard: f64,
-    min_paths: usize,
-    min_hosts: usize,
-) -> Vec<SharedPathSet> {
+pub fn shared_unusual_sets(reqs: &[PathRequest], opts: &PathOptions) -> Vec<SharedPathSet> {
+    let (min_jaccard, min_paths, min_hosts) = (opts.min_jaccard, opts.min_paths, opts.min_hosts);
     let mut sets: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
-    for r in reqs.iter().filter(|r| is_unusual_path(&r.path)) {
+    for r in reqs.iter().filter(|r| opts.is_unusual_path(&r.path)) {
         sets.entry(&r.host).or_default().insert(&r.path);
     }
     sets.retain(|_, s| s.len() >= min_paths);
@@ -506,13 +527,13 @@ mod tests {
         }
         // A fourth host opened differently.
         reqs.extend(crawl("d.example", 0, &["/", "/about", "/robots.txt"]));
-        let s = shared_preambles(&reqs, PREAMBLE_LEN, MIN_HOSTS);
+        let s = shared_preambles(&reqs, &PathOptions::default());
         assert_eq!(s.len(), 1, "{s:?}");
         assert_eq!(s[0].paths, open);
         assert_eq!(s[0].hosts, 3);
         assert_eq!(s[0].hash.len(), 8);
         // Two hosts are not enough.
-        assert!(shared_preambles(&reqs[..8], PREAMBLE_LEN, MIN_HOSTS).is_empty());
+        assert!(shared_preambles(&reqs[..8], &PathOptions::default()).is_empty());
     }
 
     #[test]
@@ -528,7 +549,7 @@ mod tests {
                 &["/robots.txt", "/sitemap.xml", "/", "/about", "/products/12"],
             ));
         }
-        assert!(shared_preambles(&reqs, PREAMBLE_LEN, MIN_HOSTS).is_empty());
+        assert!(shared_preambles(&reqs, &PathOptions::default()).is_empty());
         // Order matters: the same files in another order are another opening.
         let mut mixed = Vec::new();
         for (i, h) in ["a.example", "b.example", "c.example"].iter().enumerate() {
@@ -539,7 +560,7 @@ mod tests {
             };
             mixed.extend(crawl(h, 0, p));
         }
-        assert!(shared_preambles(&mixed, PREAMBLE_LEN, MIN_HOSTS).is_empty());
+        assert!(shared_preambles(&mixed, &PathOptions::default()).is_empty());
     }
 
     #[test]
@@ -562,7 +583,7 @@ mod tests {
         }
         // One extra path on one host keeps Jaccard at 0.75.
         reqs.push(req("c.example", 20, "/api/v2/import-all"));
-        let s = shared_unusual_sets(&reqs, MIN_JACCARD, MIN_PATHS, MIN_HOSTS);
+        let s = shared_unusual_sets(&reqs, &PathOptions::default());
         assert_eq!(s.len(), 1, "{s:?}");
         assert_eq!(s[0].hosts, 3);
         assert_eq!(s[0].not_found, 3);
@@ -589,13 +610,13 @@ mod tests {
             0,
             &["/docs/install", "/docs/api", "/faq"],
         ));
-        assert!(shared_unusual_sets(&reqs, MIN_JACCARD, MIN_PATHS, MIN_HOSTS).is_empty());
+        assert!(shared_unusual_sets(&reqs, &PathOptions::default()).is_empty());
         // Too few paths per host.
         let mut small = Vec::new();
         for h in ["a.example", "b.example", "c.example"] {
             small.extend(crawl(h, 0, &["/x-one", "/x-two"]));
         }
-        assert!(shared_unusual_sets(&small, MIN_JACCARD, MIN_PATHS, MIN_HOSTS).is_empty());
+        assert!(shared_unusual_sets(&small, &PathOptions::default()).is_empty());
     }
 
     fn reasons(text: &str) -> Vec<FabricatedReason> {

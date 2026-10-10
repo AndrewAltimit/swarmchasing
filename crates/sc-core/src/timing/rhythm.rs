@@ -59,6 +59,13 @@ pub struct Rhythm {
     pub verdict: RhythmVerdict,
 }
 
+/// The rhythm of `ts`, in any order; unknown timestamps (<= 0) are ignored.
+pub fn rhythm_of(ts: &[i64]) -> Rhythm {
+    let mut t: Vec<i64> = ts.iter().copied().filter(|&x| x > 0).collect();
+    t.sort_unstable();
+    rhythm(&t)
+}
+
 /// `t` must be sorted, all > 0.
 pub(super) fn rhythm(t: &[i64]) -> Rhythm {
     let cells: BTreeSet<i64> = t.iter().map(|x| x.div_euclid(3600)).collect();

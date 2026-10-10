@@ -12,14 +12,30 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// Records at most this many seconds after a batch's first record join it.
-pub const BATCH_SECS: i64 = 1;
-/// Batches needed before a width is reported.
-pub const MIN_BATCHES: usize = 4;
-/// Narrowest width worth reporting; width 1 is sequential work.
-pub const MIN_WIDTH: usize = 2;
-/// Share of batches the modal width must cover.
-pub const MIN_SHARE: f64 = 0.6;
+/// Fan-out settings (`[fanout]` in the rules file).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FanOutOptions {
+    /// Records at most this many seconds after a batch's first record join it.
+    pub batch_secs: i64,
+    /// Batches needed before a width is reported.
+    pub min_batches: usize,
+    /// Narrowest width worth reporting; width 1 is sequential work.
+    pub min_width: usize,
+    /// Share of batches the modal width must cover.
+    pub min_share: f64,
+}
+
+impl Default for FanOutOptions {
+    fn default() -> Self {
+        Self {
+            batch_secs: 1,
+            min_batches: 4,
+            min_width: 2,
+            min_share: 0.6,
+        }
+    }
+}
 
 /// One record as the fan-out reads it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,8 +56,8 @@ pub struct FanOut {
     /// Batches by width.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub widths: BTreeMap<usize, usize>,
-    /// The width most batches have, when it is at least [`MIN_WIDTH`], covers
-    /// at least [`MIN_SHARE`] of them and there are at least [`MIN_BATCHES`].
+    /// The width most batches have, when it is at least `min_width`, covers
+    /// at least `min_share` of them and there are at least `min_batches`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub modal_width: Option<usize>,
     /// Share of batches at the most common width.
@@ -58,7 +74,7 @@ impl FanOut {
 /// Batch widths over `reqs`. Nothing when fewer than two records carry a
 /// time, or when every time is a whole minute: minute-rounded sources put
 /// unrelated requests in one "second".
-pub fn fanout(reqs: &[FanRequest]) -> FanOut {
+pub fn fanout(reqs: &[FanRequest], opts: &FanOutOptions) -> FanOut {
     let mut rs: Vec<&FanRequest> = reqs.iter().filter(|r| r.ts > 0).collect();
     if rs.len() < 2 || rs.iter().all(|r| r.ts % 60 == 0) {
         return FanOut::default();
@@ -69,7 +85,7 @@ pub fn fanout(reqs: &[FanRequest]) -> FanOut {
     while i < rs.len() {
         let n = rs[i..]
             .iter()
-            .take_while(|r| r.ts - rs[i].ts <= BATCH_SECS)
+            .take_while(|r| r.ts - rs[i].ts <= opts.batch_secs)
             .count();
         for w in alike_groups(&rs[i..i + n]) {
             *widths.entry(w).or_default() += 1;
@@ -84,7 +100,9 @@ pub fn fanout(reqs: &[FanRequest]) -> FanOut {
     let modal_share = count as f64 / batches as f64;
     FanOut {
         batches,
-        modal_width: (batches >= MIN_BATCHES && mode >= MIN_WIDTH && modal_share >= MIN_SHARE)
+        modal_width: (batches >= opts.min_batches
+            && mode >= opts.min_width
+            && modal_share >= opts.min_share)
             .then_some(mode),
         modal_share,
         widths,
@@ -122,6 +140,10 @@ fn alike_groups(win: &[&FanRequest]) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fanout(reqs: &[FanRequest]) -> FanOut {
+        super::fanout(reqs, &FanOutOptions::default())
+    }
 
     fn r(ts: i64, host: &str, path: &str) -> FanRequest {
         FanRequest {
