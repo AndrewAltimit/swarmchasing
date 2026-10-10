@@ -3,10 +3,14 @@
 //! A capture gets the same id, source and record link whichever way it
 //! arrived: a collector page from the Wayback Machine or Arquivo.pt CDX
 //! index, or a CDX export imported by hand. The id is
-//! `<archive>:<timestamp>:<digest>`, so the same capture deduplicates across
-//! both paths.
+//! `<archive>:<timestamp>:<digest>:<url hash>`, so the same capture
+//! deduplicates across both paths. The digest is of the response body, so
+//! different URLs saved in the same second with the same body (a batch of
+//! saves that all got one error page) share it; the hash of the redacted URL
+//! keeps them apart.
 
 use crate::model::{Observation, TsKind, parse_ts};
+use crate::redact::redact_url;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Archive {
@@ -59,7 +63,11 @@ pub fn capture(
     digest: &str,
 ) -> Observation {
     Observation {
-        id: format!("{}:{ts}:{digest}", archive.source()),
+        id: format!(
+            "{}:{ts}:{digest}:{}",
+            archive.source(),
+            crate::fingerprint::short_hash(&redact_url(original, &mut 0))
+        ),
         source: archive.source().into(),
         ts: parse_ts(ts).unwrap_or(0),
         status,
@@ -83,7 +91,7 @@ mod tests {
             Some(200),
             "D",
         );
-        assert_eq!(o.id, "arquivo:20261004081000:D");
+        assert!(o.id.starts_with("arquivo:20261004081000:D:"), "{}", o.id);
         assert_eq!(o.source, "arquivo");
         assert_eq!(
             o.reference.as_deref(),
@@ -98,5 +106,14 @@ mod tests {
             Archive::detect(["AWPX", "", "crawl-1.warc.gz"]),
             Archive::Wayback
         );
+    }
+
+    #[test]
+    fn same_second_and_body_but_different_urls_get_different_ids() {
+        let at = |url: &str| capture(Archive::Wayback, "20261004081000", url, None, "E").id;
+        assert_ne!(at("https://a.example/1"), at("https://a.example/2"));
+        // The same whether the URL is redacted before or after.
+        let raw = "https://a.example/?api_key=s3cr3t";
+        assert_eq!(at(raw), at(&redact_url(raw, &mut 0)));
     }
 }

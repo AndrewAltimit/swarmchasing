@@ -2,14 +2,15 @@
 //! numbers and stable keys.
 //!
 //! Records are joined by a shared linking feature (within a time window, and
-//! only while the feature is not common), by close timing against the same
-//! target with a rule in common, and by a probe chain. Everything else about
+//! only while the feature is not common), by close request or submit times
+//! against the same target with a rule in common, and by a probe chain. Everything else about
 //! a cluster is description ([`super::hints`]).
 
 use super::{Cluster, CommonFeature, ObsResult};
 use crate::chains::Chain;
 use crate::model::LinkFeature;
 use crate::rules::{Linking, Rules};
+use crate::timing::request_like;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// What linking found.
@@ -69,10 +70,14 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
         a.start.cmp(&b.start).then(a.feature.cmp(&b.feature))
     });
 
-    // Same target host, close in time, and sharing at least one rule.
+    // Same target host, close in time, and sharing at least one rule. Only
+    // request-like times count: two archive captures minutes apart say when
+    // a crawler saved them, not that one client sent them together.
     let mut by_host: HashMap<&str, Vec<usize>> = HashMap::new();
     for &i in flagged {
-        if let Some(h) = results[i].target_host.as_deref() {
+        if let Some(h) = results[i].target_host.as_deref()
+            && request_like(results[i].obs.ts_kind)
+        {
             by_host.entry(h).or_default().push(i);
         }
     }
@@ -143,8 +148,8 @@ fn feature_groups(results: &[ObsResult], idxs: &[usize], window: i64) -> Vec<Vec
     groups
 }
 
-/// Whether one group of a feature's carriers is too widespread to link it:
-/// more than `feature_max_hosts` target hosts, or (when `feature_max_share`
+/// Whether one group of a feature's carriers is too common to link it: a
+/// published tag, more than `feature_max_hosts` target hosts, or (when `feature_max_share`
 /// is set and its time span holds at least `feature_share_min_records`
 /// records) more than that share of the records in its span. `all_ts` is
 /// every record's timestamp, sorted.
@@ -162,7 +167,13 @@ fn common_feature(
     let ts = group.iter().map(|&i| results[i].obs.ts).filter(|&t| t > 0);
     let (start, end) = (ts.clone().min().unwrap_or(0), ts.max().unwrap_or(0));
     let records = group.len();
-    let reason = if cfg.feature_max_hosts > 0 && hosts.len() > cfg.feature_max_hosts {
+    let reason = if cfg
+        .published_tags
+        .iter()
+        .any(|t| t.eq_ignore_ascii_case(f.value()))
+    {
+        "quoted in a public report (linking.published_tags)".to_string()
+    } else if cfg.feature_max_hosts > 0 && hosts.len() > cfg.feature_max_hosts {
         format!(
             "on {} target hosts, more than linking.feature_max_hosts ({})",
             hosts.len(),

@@ -43,8 +43,8 @@ The manual describes the method as a standard. Where this repository's toolkit d
 | [9. Evaluation](09-evaluation.md) | Evaluation sets, metrics, agreement, what to publish with a number, benchmarks. |
 | [10. Disclosure](10-disclosure.md) | Parties, simultaneous release, relation to ISO/IEC and FIRST guidance, reply, consent. |
 | [11. Notice standard](11-notices.md) | Notice structure, status lifecycle, withholding, lint, corrections. |
-| [12. Interoperability](12-interoperability.md) | STIX 2.1 profile, the planned run extension, AI incident databases. |
-| [13. Case study template](13-case-study.md) | The template, and a worked example on synthetic records. |
+| [12. Interoperability](12-interoperability.md) | STIX 2.1 profile, the `x-sc-agent-run` extension, AI incident databases. |
+| [13. Case study template](13-case-study.md) | The template, a worked example on synthetic records, and three published incidents read with it. |
 | [14. Known limits and traps](14-limits.md) | Conclusions that look sound and are not. |
 | [Glossary](glossary.md) | Every defined term, with the section that defines it. |
 | [References](references.md) | Every source the manual cites. |
@@ -57,3 +57,4 @@ The manual describes the method as a standard. Where this repository's toolkit d
 | [`methodology.md`](../methodology.md) | The toolkit's implementation: settings, thresholds, code. |
 | [`guides/admin-workflow.md`](../guides/admin-workflow.md) | The admin's day with this toolkit. |
 | [`guides/for-operators.md`](../guides/for-operators.md) | For an operator who received a report. |
+| [`guides/for-researchers.md`](../guides/for-researchers.md) | For a researcher applying, citing or checking the method. |

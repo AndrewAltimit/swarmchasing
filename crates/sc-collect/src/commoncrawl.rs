@@ -228,6 +228,9 @@ pub fn parse_cc_cdx(body: &str, crawl: &str) -> Vec<Observation> {
             ..Default::default()
         };
         redact_observation(&mut o);
+        // The digest is the body's: same-second captures of different URLs
+        // with one body (an error page) would otherwise share an id.
+        o.id = format!("{}:{}", o.id, crate::short_hash(&o.url));
         out.push(o);
     }
     out
@@ -257,7 +260,7 @@ mod tests {
         );
         let v = parse_cc_cdx(body, "CC-MAIN-2099-40");
         assert_eq!(v.len(), 2);
-        assert_eq!(v[0].id, "commoncrawl:20260910120000:ABC");
+        assert!(v[0].id.starts_with("commoncrawl:20260910120000:ABC:"));
         assert_eq!(v[0].ts_kind, TsKind::Capture);
         assert!(v[0].url.contains("api_key=REDACTED-"));
         assert!(

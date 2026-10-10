@@ -59,6 +59,8 @@ export function figure({ chart, legend = null, caption = null, head = [], rows =
 }
 
 export const legendKey = (cls, label) => el("span", {}, el("span", { class: `key ${cls}` }), label);
+/** A legend entry drawn with the edge's own classes, so it matches the graph. */
+export const edgeKey = (cls, label) => el("span", {}, svg("svg", { class: "chart key-line", viewBox: "0 0 26 10", width: 26, height: 10, "aria-hidden": "true" }, svg("path", { class: `edge ${cls}`, d: "M1,5 L25,5" })), label);
 export const legend = (...keys) => el("p", { class: "legend" }, keys);
 export const tierLegend = () => legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"));
 
@@ -98,24 +100,28 @@ export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onS
     const y = T + i * LH;
     const on = selected == null || selected === lane.key;
     root.append(svg("line", { class: "lane", x1: L, x2: W - R, y1: y + LH / 2, y2: y + LH / 2 }));
-    const lab = svg("text", { class: `lane-label${selected === lane.key ? " sel" : ""}`, x: L - 8, y: y + LH / 2 + 4, "text-anchor": "end" }, lane.label);
-    if (onSelect) lab.addEventListener("click", () => onSelect(lane.key));
+    const lab = svg("text", {
+      class: `lane-label${selected === lane.key ? " sel" : ""}`, x: L - 8, y: y + LH / 2 + 4, "text-anchor": "end",
+      tabindex: onSelect ? 0 : null, role: onSelect ? "button" : null, "aria-pressed": onSelect ? String(selected === lane.key) : null,
+      "aria-label": onSelect ? `Cluster ${lane.label}` : null, "data-focus-key": `lane:${lane.key}`,
+    }, lane.label);
+    if (onSelect) activate(lab, () => onSelect(lane.key));
     root.append(lab);
     for (const b of clip(bands.filter((b) => b.key === lane.key), t0, t1)) {
       root.append(tip(svg("rect", { class: "band", x: x(b.start), y: y + 2, width: Math.max(2, x(b.end) - x(b.start)), height: LH - 4 }), b.label));
     }
-    for (const r of lane.runs) {
+    lane.runs.forEach((r, ri) => {
       const bw = Math.max(5, x(r.end) - x(r.start));
       const bar = svg("rect", {
         class: `run tier-${lane.tier}${on ? "" : " dim"}${selected === lane.key ? " sel" : ""}`,
         x: Math.min(x(r.start), W - R - bw), y: y + 6, width: bw, height: LH - 12, rx: 4,
         tabindex: onSelect ? 0 : null, role: onSelect ? "button" : null,
-        "aria-label": `${lane.label}: run ${fmtTs(r.start)} to ${fmtTs(r.end)}, ${r.count} records`,
+        "aria-label": `${lane.label}: run ${fmtTs(r.start)} to ${fmtTs(r.end)}, ${r.count} records`, "data-focus-key": `run:${lane.key}:${ri}`,
       });
       tip(bar, `${lane.label} · ${fmtShort(r.start)} → ${fmtShort(r.end)} UTC (${dur(Math.max(0, r.end - r.start))}) · ${r.count} record(s)`);
       if (onSelect) activate(bar, () => onSelect(lane.key));
       root.append(bar);
-    }
+    });
   });
   return root;
 }
@@ -152,7 +158,7 @@ export function fleetGraph({ nodes, edges, selected = null, onSelect = null, wid
     const c = { x: mx + (-dy / len) * bow, y: my + (dx / len) * bow };
     const d = `M${p.x},${p.y} Q${c.x},${c.y} ${q.x},${q.y}`;
     const dim = selected && !(e.a === selected || e.b === selected);
-    root.append(svg("path", { class: `edge ${e.kind}${dim ? " dim" : ""}`, d }));
+    root.append(svg("path", { class: `edge ${e.kind}${e.sub ? ` ${e.sub}` : ""}${dim ? " dim" : ""}`, d }));
     const hit = svg("path", { class: "edge-hit", d, tabindex: 0, role: "img", "aria-label": e.label });
     tip(hit, e.label);
     root.append(hit);
@@ -163,7 +169,7 @@ export function fleetGraph({ nodes, edges, selected = null, onSelect = null, wid
     const c = svg("circle", {
       class: `node tier-${n.tier}${selected === n.key ? " sel" : ""}${dim ? " dim" : ""}`, cx: p.x, cy: p.y, r: p.r,
       tabindex: onSelect ? 0 : null, role: onSelect ? "button" : null, "aria-label": `${n.label}: ${n.sub}`,
-      "aria-pressed": onSelect ? String(selected === n.key) : null,
+      "aria-pressed": onSelect ? String(selected === n.key) : null, "data-focus-key": `node:${n.key}`,
     });
     tip(c, `${n.label} · ${n.sub}`);
     if (onSelect) activate(c, () => onSelect(n.key));
@@ -199,7 +205,7 @@ export function heatmap({ rows, cols, value, selected = {}, onSelect = null, wid
       const cell = svg("rect", {
         class: `cell q${k}${sel ? " sel" : ""}`, x: L + j * cw, y, width: cw, height: ch, rx: 2,
         tabindex: v && onSelect ? 0 : null, role: v && onSelect ? "button" : null,
-        "aria-label": v ? `${r.label} in ${c.label}: ${v} record(s)` : null,
+        "aria-label": v ? `${r.label} in ${c.label}: ${v} record(s)` : null, "data-focus-key": `cell:${r.id}:${c.key}`,
       });
       if (v) {
         tip(cell, `${r.label} · ${c.label}: ${v} record(s)`);
@@ -255,7 +261,7 @@ export function strip({ rows, points, onSelect = null, width = 900 }) {
   });
   const focusable = points.length <= 300;
   for (const p of points) {
-    const d = svg("circle", { class: `dot tier-${p.tier}${p.sel ? " sel" : ""}`, cx: x(p.t), cy: T + p.row * RH + RH / 2, r: p.sel ? 6 : 4.5, tabindex: focusable && onSelect ? 0 : null, role: focusable && onSelect ? "button" : null, "aria-label": focusable ? p.label : null });
+    const d = svg("circle", { class: `dot tier-${p.tier}${p.sel ? " sel" : ""}`, cx: x(p.t), cy: T + p.row * RH + RH / 2, r: p.sel ? 6 : 4.5, tabindex: focusable && onSelect ? 0 : null, role: focusable && onSelect ? "button" : null, "aria-label": focusable ? p.label : null, "data-focus-key": `dot:${p.idx}` });
     tip(d, p.label);
     if (onSelect) activate(d, () => onSelect(p.idx));
     root.append(d);

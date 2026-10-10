@@ -43,7 +43,7 @@ Harness traces are reported as ranked candidates with the traces for each, tagge
 
 ## FM-7.5 Model family layer
 
-Model-family attribution reads traces of the model itself: output residue, formatting habits, stale dates from a training cut-off, payload preferences, code style. Its rules:
+Model-family attribution reads traces of the model itself: output residue, formatting habits, stale dates and stale knowledge from a training cut-off ([FM-4.5](04-indicators.md#fm-45-artifact-families)), payload preferences, code style. Its rules:
 
 - **Ranked likelihoods only.** The result is a ranked list of families with likelihood words ([chapter 8](08-confidence.md)), never a single answer.
 - **Measured method.** Each ranking states the method's accuracy on a held-out set and the size of the corpus it was trained or tuned on ([FM-9.7](09-evaluation.md#fm-97-attribution-calibration)). A method without a held-out measurement is not used.

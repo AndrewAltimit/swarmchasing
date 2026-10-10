@@ -5,9 +5,13 @@
 // violation or an error.
 //
 // It covers: every page in the sitemap (and 404.html); the hostile notice's
-// page and the index row; the workbench with XSS probes, HTML programs, a
-// probe chain and an unusual path set in the records, every view, cluster,
-// record and report audience, and hostile claims; the rules editor and the
+// page and the index row; the index filters and their URL hash, on the
+// synthetic notices in crates/sc-publish/tests/fixtures/notices/; the
+// bundle viewer with a hostile stamp, manifest and case claims; the workbench with XSS probes, HTML programs, a
+// probe chain, an unusual path set and a cluster with every per-cluster hint
+// in the records, every view, cluster, record and report audience, and
+// hostile claims, and that declared testing reaches no view and no draft but
+// an internal one; the rules editor and the
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
 // defang on the tools page.
 //
@@ -20,7 +24,7 @@
 // local server.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
@@ -107,6 +111,10 @@ text = ${lit(`javascript:${fire}`)}
 ${program}
 `);
 
+// The synthetic notices the index filters are tested on (never under notices/).
+const FIXTURES = join(ROOT, "crates", "sc-publish", "tests", "fixtures", "notices");
+for (const f of readdirSync(FIXTURES).filter((f) => f.endsWith(".md"))) copyFileSync(join(FIXTURES, f), join(noticesDir, f));
+
 const build = spawnSync("cargo", ["run", "-q", "--profile", "release-test", "-p", "sc-publish", "--bin", "sc-site", "--",
   "--out", siteDir, "--base-url", BASE, "--extra-notices", noticesDir], { cwd: ROOT, stdio: ["ignore", "inherit", "inherit"] });
 if (build.error) {
@@ -134,9 +142,23 @@ const chain = Array.from({ length: 4 }, (_, i) => ({
 const odd = [`/<img src=x onerror=${fire}>.php`, `/"><script>${fire}</script>`, `/javascript:${fire}`];
 const pathset = ["h1.example", "h2.example", "h3.example"].flatMap((h, j) =>
   odd.map((p, k) => ({ id: `xss:path${j}${k}`, ts: `2026-06-02T17:${j}${k}:00Z`, url: `https://r.jina.ai/https://${h}${p}?uqtag=${tag}` })));
+// One cluster with every per-cluster hint: a benchmark target, stale
+// knowledge, prose, a relay stack, and declared testing, whose contact must
+// never reach the page outside an internal draft.
+const DECLARED = "zz-declared-contact";
+const inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+const declaredUa = `AcmeScan/1.0 (authorized security test; ${DECLARED}@acme.example)`;
+const hinted = [
+  { url: `http://testphp.vulnweb.com/artists.php?artist=1'&cb=${inbox}&q=${encodeURIComponent(`bitte finde die neuesten Berichte und die Zahlen <img src=x onerror=${fire}>`)}`, user_agent: declaredUa },
+  { url: `http://testphp.vulnweb.com/listproducts.php?cat=1&cb=${inbox}`, user_agent: declaredUa },
+  { url: `https://graph.facebook.com/v2.8/me?hook=${inbox}&x=<svg/onload=${fire}>` },
+  { url: `https://graph.facebook.com/v2.9/page?hook=${inbox}` },
+  { url: `https://r.jina.ai/https://www-shop-example.translate.goog/<svg/onload=${fire}>?hook=${inbox}` },
+  { url: `https://r.jina.ai/https://www-shop-example.translate.goog/b?hook=${inbox}` },
+].map((p, i) => ({ id: `xss:hint${i}`, ts: `2026-06-02T18:0${i}:00Z`, ...p }));
 const fixture =
   readFileSync(join(ROOT, "samples/eval/published-patterns.ndjson"), "utf8").trimEnd() + "\n" +
-  [...probes, ...chain, ...pathset].map((p) => JSON.stringify(p)).join("\n") + "\n";
+  [...probes, ...chain, ...pathset, ...hinted].map((p) => JSON.stringify(p)).join("\n") + "\n";
 const badClaims = JSON.stringify([{ party: program, role: `<script>${fire}</script>`, evidence: `javascript:${fire}` }]);
 const claims = JSON.stringify([
   { party: program, role: "developer", evidence: "provider_confirmed", details: [program, `javascript:${fire}`, tag] },
@@ -155,6 +177,27 @@ weight = 9
 significant = true
 tactic = "T2"
 `;
+// A hostile evidence bundle for the tools page: records from the probes, a
+// stamp and manifest whose every field carries markup, and case claims at
+// every attribution layer.
+const bundleDir = join(tmp, "bundle");
+mkdirSync(bundleDir);
+const bundleRecords = [...probes, ...chain].map((p) => JSON.stringify({ ...p, ts: Math.floor(Date.parse(p.ts) / 1000), source: program })).join("\n") + "\n";
+const bundleStamp = {
+  case: program, generated: program, toolkit_version: program, toolkit_commit: program, rules_version: program, records: 1,
+  flagged: { [program]: "significant" }, clusters: [{ tier: "significant", members: [program] }], method: program,
+  eval: { rules_version: program, labelled: 3, suggestive_precision: 0.5, suggestive_recall: 0.5 },
+};
+const bundleClaims = ["developer", "host", "harness", "model_family"].map((role) => ({ party: program, role, evidence: "provider_confirmed", details: [program, `javascript:${fire}`] }));
+for (const [name, text] of [
+  ["records.ndjson", bundleRecords],
+  ["analysis.json", JSON.stringify({ total: program })],
+  ["stamp.json", JSON.stringify(bundleStamp)],
+  ["claims.json", JSON.stringify(bundleClaims)],
+  ["MANIFEST.sha256", `${"0".repeat(64)}  records.ndjson\n${program}  stamp.json\n`],
+]) writeFileSync(join(bundleDir, name), text);
+const bundleFiles = ["records.ndjson", "analysis.json", "stamp.json", "claims.json", "MANIFEST.sha256"].map((n) => join(bundleDir, n));
+
 const sectxt = `Contact: mailto:${program}\nContact: javascript:${fire}\nPolicy: ${tag}\nExpires: ${program}\n`;
 
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".svg": "image/svg+xml", ".json": "application/json", ".xml": "application/xml" };
@@ -264,6 +307,23 @@ try {
   await open("notices/");
   const rows = await run(`(() => { const f = document.querySelector("[data-notice-filters] [name=q]"); f.value = "xss"; f.dispatchEvent(new Event("input", { bubbles: true })); return [...document.querySelectorAll(".notice-table tbody tr")].filter((r) => !r.hidden).length; })()`);
   if (rows !== 1) failures.push(`the notice filter showed ${rows} row(s) for the hostile notice, expected 1`);
+  if (!(await run(`location.hash === "#q=xss"`))) failures.push("the notice filter did not write the URL hash");
+  // Filters from the hash, on the synthetic notices.
+  const shown = `[...document.querySelectorAll(".notice-table tbody tr")].filter((r) => !r.hidden).map((r) => r.querySelector(".hint").textContent)`;
+  for (const [hash, want] of [
+    ["sector=health", ["synthetic-clinic-scan"]],
+    ["provider=Example+AI+Labs", ["synthetic-portal-probe"]],
+    ["status=historical", ["synthetic-course-relay"]],
+    ["host=clinic%5B.%5Dexample", ["synthetic-clinic-scan"]],
+    ["from=2026-08-01&to=2026-08-31", ["synthetic-clinic-scan"]],
+    ["sector=%3Cscript%3E&from=nope", null],
+  ]) {
+    await open(`notices/#${hash}`);
+    const got = await run(shown);
+    const all = await run(`document.querySelectorAll(".notice-table tbody tr").length`);
+    const ok = want ? JSON.stringify(got) === JSON.stringify(want) : got.length === all;
+    if (!ok) failures.push(`notices/#${hash}: showed ${JSON.stringify(got)}`);
+  }
   await audit("notice index");
 
   // The workbench: the synthetic example, then the probes through every view.
@@ -279,13 +339,16 @@ try {
   await sleep(800);
   const views = await run(`(async () => {
     const wait = (ms = 60) => new Promise((r) => setTimeout(r, ms));
-    let detail = 0, hostile = false, marks = 0;
+    let detail = 0, hostile = false, marks = 0, declared = false;
+    const hints = new Set();
     for (const b of document.querySelectorAll(".cluster-row")) {
       b.click();
       await wait();
       const c = document.getElementById("context");
       detail = Math.max(detail, c.querySelectorAll("dt").length);
       hostile ||= c.textContent.includes("onerror");
+      declared ||= c.textContent.includes(${JSON.stringify(DECLARED)});
+      for (const dt of c.querySelectorAll("dt")) hints.add(dt.textContent);
       for (const t of document.querySelectorAll(".viz-tabs [role=tab]")) {
         t.click();
         await wait(20);
@@ -313,8 +376,10 @@ try {
       aud.dispatchEvent(new Event("change"));
       await wait();
       named ||= document.getElementById("report").textContent.includes("<script>");
+      if (o.value !== "internal") declared ||= document.getElementById("report").textContent.includes(${JSON.stringify(DECLARED)});
     }
-    return { detail, hostile, marks, claimsError, named, links: document.querySelectorAll("#links li").length, records: document.querySelectorAll("table.records tbody tr").length };
+    declared ||= document.getElementById("links").textContent.includes(${JSON.stringify(DECLARED)});
+    return { detail, hostile, marks, claimsError, named, declared, hints: [...hints], links: document.querySelectorAll("#links li").length, records: document.querySelectorAll("table.records tbody tr").length };
   })()`);
   Object.assign(stats, { records: views.records, detailRows: views.detail, chartMarks: views.marks, linkItems: views.links });
   if (!views.detail) failures.push("the context panel rendered nothing for a cluster");
@@ -323,6 +388,9 @@ try {
   if (!views.links) failures.push("the links panel listed nothing (the probe chain should be there)");
   if (!views.claimsError) failures.push("the invalid claims raised no error");
   if (!views.named) failures.push("the hostile claims did not reach the report as text");
+  if (views.declared) failures.push("declared testing reached the page outside an internal draft");
+  for (const h of ["Relay stacks", "Benchmark targets", "Stale knowledge", "Prose in parameters"])
+    if (!views.hints.includes(h)) failures.push(`no cluster showed "${h}": the hint fixture did not exercise it`);
   await audit("workbench");
 
   // Unwrap: every probe URL.
@@ -354,6 +422,23 @@ try {
   if (!tools.sectxt) failures.push("the hostile security.txt did not render as text");
   if (!tools.defang) failures.push("defang did not defang");
   await audit("tools");
+
+  // The bundle viewer: a hostile bundle (stamp, manifest and case claims
+  // carry probes), picked through the file input as a visitor would.
+  await send("DOM.enable");
+  const doc = await send("DOM.getDocument");
+  const input = await send("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: "#case-files" });
+  await send("DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: bundleFiles });
+  for (let i = 0; i < 40 && !(await run(`document.querySelectorAll("#case-out table.layers tbody tr").length`)); i++) await sleep(150);
+  const bundle = await run(`(() => {
+    const out = document.getElementById("case-out");
+    return { layers: out.querySelectorAll("table.layers tbody tr").length, text: out.textContent.includes("<script>"), verdict: out.querySelector(".verdict")?.textContent ?? "", method: out.textContent.includes("onerror") };
+  })()`);
+  stats.bundleLayers = bundle.layers;
+  if (bundle.layers < 4) failures.push(`the bundle viewer showed ${bundle.layers} attribution row(s), expected one per layer at least`);
+  if (!bundle.text) failures.push("the hostile bundle did not render as text");
+  if (!/Does not verify/.test(bundle.verdict)) failures.push(`the tampered bundle verified: ${bundle.verdict}`);
+  await audit("bundle viewer");
 
   // Hostile edited rules: the rules editor's evaluation, then every page that runs them.
   await open("rules/");

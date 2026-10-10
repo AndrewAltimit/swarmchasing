@@ -13,7 +13,7 @@ Each incident is reported to:
 | **National CSIRT**, where relevant | When an affected operator is public-sector or critical infrastructure, or has no reachable security contact. | What the affected operator receives, for the operators in its constituency. |
 | **The public** | Others targeted, other providers and researchers can check their own exposure. | The notice ([chapter 11](11-notices.md)). |
 
-Where the declared owner of an "authorised test" is identified, it is a party too ([FM-10.6](#fm-106-authorised-testing)). Toolkit: the toolkit finds operator contacts; CSIRT lookup is (planned), and the admin uses the national team's published contact, for example through the [FIRST team directory](references.md#disclosure).
+Where the declared owner of an "authorised test" is identified, it is a party too ([FM-10.6](#fm-106-authorised-testing)). Toolkit: the toolkit finds operator contacts and proposes the national team for each affected host's country from a directory built from the [FIRST team directory](references.md#disclosure), each entry with its source and the date it was verified.
 
 ## FM-10.2 Simultaneous release
 
@@ -45,6 +45,8 @@ A provider's or affected operator's statement is appended to the notice verbatim
 ## FM-10.6 Authorised testing
 
 A cluster that declares itself an authorised red-team or research evaluation is handled as a normal incident: a declaration in a request is self-identification and is not checked by being believed. Its declared owner is contacted at the same time as the provider. If the owner confirms the test was authorised and in scope, the notice is published as "authorised test, closed". It is not withheld: other operators saw the same traffic and need to know what it was.
+
+Toolkit: a cluster whose requests declare a test lists the declaring text and the contact it names, in case notes only ([FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing)). The admin adds the owner it names with `case contact add --party declared-owner`.
 
 ## FM-10.7 Operator-supplied logs
 

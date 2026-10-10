@@ -109,6 +109,9 @@ pub struct NoticeMeta {
     /// Affected endpoints (hosts).
     #[serde(default)]
     pub affected: Vec<String>,
+    /// The affected operators' sector, one of [`SECTORS`]. Optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sector: Option<String>,
     pub rules_version: String,
     pub toolkit: String,
     #[serde(default, rename = "update")]
@@ -122,6 +125,26 @@ pub struct NoticeFile {
 }
 
 const FENCE: &str = "+++";
+
+/// The sectors a notice's `sector` may name. A fixed list, so the notices
+/// index can filter on it.
+pub const SECTORS: &[&str] = &[
+    "government",
+    "health",
+    "education",
+    "research",
+    "finance",
+    "energy",
+    "water",
+    "telecom",
+    "transport",
+    "technology",
+    "media",
+    "nonprofit",
+    "retail",
+    "manufacturing",
+    "other",
+];
 
 pub fn parse_notice(text: &str) -> Result<NoticeFile, String> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
@@ -178,6 +201,11 @@ pub fn check_notice(n: &NoticeFile, rules: &Rules) -> Vec<String> {
             "`updated` is {}, the last update is {}",
             n.meta.updated, last.date
         ));
+    }
+    if let Some(s) = &n.meta.sector
+        && !SECTORS.contains(&s.as_str())
+    {
+        out.push(format!("unknown sector `{s}` ({})", SECTORS.join("|")));
     }
     let mut text = n.body.clone();
     for u in &n.meta.updates {

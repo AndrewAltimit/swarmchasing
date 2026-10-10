@@ -23,19 +23,29 @@
 #   link        true = the matched text links observations into one cluster
 #               (use for inbox IDs, unique tags - things only one operator would share)
 #   tactic      what the match shows the agent doing (descriptive, never scored):
-#               T1 task retrieval            T2 tool escalation (relays, carriers)
-#               T3 access-control circumvention (anti-bot)
+#               T1 task retrieval (relays)   T2 tool escalation (carriers, programs)
+#               T3 access-control circumvention (anti-bot, outcomes)
 #               T4 vulnerability probing     T5 account or identity acquisition
 #               T6 credential reuse          T7 callback or side channels
 #               T8 off-task targets          T9 inter-agent coordination
-#   artifact    true = the match only shows that a model wrote the request
-#               (model-output residue, self-identification)
+#               Each kind has a default tactic (Field Manual FM-4.4): relay and
+#               cache_buster T1, carrier T2, anti_bot and outcome T3, exploit T4,
+#               exfil T7; agent_marker, header, self_id and infra none. A rule
+#               on another tactic is listed with its reason in rules.rs
+#               (TACTIC_EXCEPTIONS). T8 and T9 are cluster-level judgments,
+#               never a rule match.
+#   artifact    true = the match is a trace of how the agent was built, not an
+#               action (model-output residue, run tags, self-identification,
+#               client headers, sandbox hosts)
+#   check       param_value rules only: a test the matched value must also pass,
+#               for what a regex cannot say (repeated_token: a word or phrase
+#               repeated five or more times in a row)
 #
 # A single relay hit is NOT evidence of an agent: people use these services too.
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-15"
+version = "2026-10-10"
 
 [thresholds]
 suggestive = 3
@@ -55,6 +65,14 @@ feature_max_hosts = 20
 # broad inputs such as the watch, where one fleet is not most of the records).
 feature_max_share = 0.0
 feature_share_min_records = 100
+# Tags quoted in public incident reports. Anyone who read the report can copy
+# one, so a feature with one of these values (ignoring case) never links: its
+# carriers are listed as a common feature instead. Each entry names its source.
+published_tags = [
+    "chatgpttest1", # https://transluce.org/agent-activity
+    "tok=expt",     # https://transluce.org/agent-activity (marker.test_tag match)
+    "expt3",        # https://transluce.org/agent-activity (`tok` value)
+]
 # Observations of the same target host closer than this are joined.
 window_secs = 600
 # Within a cluster, a gap longer than this starts a new run.
@@ -119,6 +137,16 @@ cut_length = 0.3
 header_set = 0.3
 escalation = 0.6
 common_feature = 0.3
+# The same redacted secret (REDACTED-<hash>) in records of both clusters: a
+# captured token reused by another cluster. Stock passwords do not count.
+shared_secret = 0.8
+# The same chain of two or more relays and carriers (jina, then a translate
+# proxy, then the target). A single relay is every relay user's habit.
+relay_stack = 0.3
+# Inboxes on the same callback service (webhook.site, a request catcher, an
+# ntfy server) in both clusters. The same inbox links outright; a fresh inbox
+# per run on one service is a habit worth a look, shared by many clients.
+callback_service = 0.3
 
 # Repeated cut lengths: at least `min_records` truncated URLs within
 # `tolerance` characters of a common length. `rule` marks a URL as cut off.
@@ -152,7 +180,7 @@ common = [
 [[rule]]
 id = "relay.jina"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "r.jina.ai"
 weight = 2
@@ -161,7 +189,7 @@ description = "Jina Reader: fetches a page server-side and returns Markdown"
 [[rule]]
 id = "relay.markdown_new"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "markdown.new"
 weight = 2
@@ -170,7 +198,7 @@ description = "URL-to-Markdown converter"
 [[rule]]
 id = "relay.microlink"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "api.microlink.io"
 weight = 2
@@ -179,7 +207,7 @@ description = "Microlink headless fetch API"
 [[rule]]
 id = "relay.hrefli"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "href.li"
 weight = 1
@@ -188,7 +216,7 @@ description = "Referrer-stripping redirector"
 [[rule]]
 id = "relay.translate_goog"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "translate.goog"
 weight = 2
@@ -197,7 +225,7 @@ description = "Google Translate proxy host rewriting"
 [[rule]]
 id = "relay.allorigins"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "allorigins.win"
 weight = 2
@@ -206,7 +234,7 @@ description = "CORS proxy"
 [[rule]]
 id = "relay.corsproxy"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "url"
 pattern = "corsproxy\\.io|cors-anywhere|thingproxy|codetabs\\.com/v1/proxy"
 weight = 2
@@ -382,7 +410,7 @@ description = "Out-of-range ID values (often precede injection probes)"
 [[rule]]
 id = "marker.uq_tags"
 kind = "agent_marker"
-tactic = "T9"
+artifact = true
 target = "param_name"
 pattern = "^(uqscan|uqtag|uq_tag|uq)$"
 weight = 3
@@ -391,7 +419,7 @@ description = "urlquery cache-busting / tracking tags seen in agent fleets"
 [[rule]]
 id = "marker.test_tag"
 kind = "agent_marker"
-tactic = "T9"
+artifact = true
 target = "url"
 pattern = "chatgpttest\\d*|agenttest\\d*|tok=expt|archive_test="
 weight = 3
@@ -401,7 +429,7 @@ description = "Test tags agents add to URLs"
 [[rule]]
 id = "marker.oai_tag"
 kind = "agent_marker"
-tactic = "T9"
+artifact = true
 target = "url"
 pattern = "[?&]zz=oai\\d{6,}"
 weight = 3
@@ -611,6 +639,21 @@ pattern = "^(john|jane)[._-]?doe@|^(user|test|foo|someone|name|email|me|you|your
 weight = 1
 description = "Placeholder identity (john.doe@, user@example.com, test123, 123 Main St, 555-01xx)"
 
+[[rule]]
+id = "marker.repeated_token"
+kind = "agent_marker"
+artifact = true
+target = "param_value"
+# The pattern finds values of five words or more; the check then wants one
+# word (three characters or more, with a letter) or a phrase of up to three
+# words repeated five or more times in a row, as a model stuck in a generation
+# loop writes. Short refrains ("na na na") and one long run ("aaaa") do not
+# count. People type such strings rarely, but they do, so this stays at weight 1.
+pattern = "(\\S+\\s+){4}\\S"
+check = "repeated_token"
+weight = 1
+description = "A word or phrase repeated five or more times in a row (a model generation loop)"
+
 # ── Cache busters ──────────────────────────────────────────────────────────
 [[rule]]
 id = "cache.buster"
@@ -735,7 +778,7 @@ description = "General-purpose OCR API pointed at a CAPTCHA image"
 [[rule]]
 id = "header.via_hysandbox"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "header"
 pattern = "^via:.*hysandbox"
 weight = 4
@@ -745,7 +788,7 @@ description = "Via header from a hysandbox Apache Traffic Server proxy"
 [[rule]]
 id = "header.via_ats"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "header"
 pattern = "^via:.*(ApacheTrafficServer|\\(ats\\)|-ats\\))"
 weight = 1
@@ -754,7 +797,7 @@ description = "Request passed through Apache Traffic Server"
 [[rule]]
 id = "header.gzip_only_requests"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "header"
 pattern = "^accept-encoding:\\s*gzip\\s*$"
 weight = 1
@@ -763,7 +806,7 @@ description = "Accept-Encoding normalised to bare gzip (ATS normalize_ae), unusu
 [[rule]]
 id = "header.scripted_ua"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "user_agent"
 pattern = "python-requests|python-httpx|aiohttp|node-fetch|undici|Go-http-client|curl/|axios/"
 weight = 1
@@ -772,7 +815,7 @@ description = "Scripted HTTP client user agent"
 [[rule]]
 id = "header.headless_ua"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "user_agent"
 pattern = "HeadlessChrome|PhantomJS|Playwright"
 weight = 1
@@ -782,7 +825,7 @@ description = "Headless browser user agent"
 [[rule]]
 id = "outcome.neterror"
 kind = "outcome"
-tactic = "T2"
+tactic = "T3"
 target = "final_url"
 pattern = "^about:(neterror|privatebrowsing|blank#blocked)"
 weight = 1
@@ -801,7 +844,7 @@ description = "Ended on a bot challenge"
 [[rule]]
 id = "infra.hysandbox_host"
 kind = "infra"
-tactic = "T2"
+artifact = true
 target = "url"
 pattern = "hysandbox\\.tencent-cloud\\.com"
 weight = 3
@@ -863,3 +906,123 @@ org = "Hetzner"
 [[asn]]
 asn = 16276
 org = "OVH"
+
+# ── Benchmark and practice targets ─────────────────────────────────────────
+# Public sites and environments built to be tested against: intentionally
+# vulnerable demo sites, and benchmark environments agents are evaluated in.
+# A cluster hitting them gets a `benchmarks` hint: evaluation or training
+# activity, not malice. A hint only; it never scores or lowers a score.
+#   id       unique name, shown in reports
+#   target   url (default: the request on the target host) or user_agent
+#   pattern  case-insensitive regex
+#   note     what a match means
+
+[[benchmark]]
+id = "acunetix_vulnweb"
+# http://www.vulnweb.com/ (Acunetix test sites)
+pattern = "://(testphp|testhtml5|testasp|testaspnet|rest)\\.vulnweb\\.com\\b"
+note = "Acunetix's intentionally vulnerable test sites"
+
+[[benchmark]]
+id = "altoro_mutual"
+# https://github.com/HCL-TECH-SOFTWARE/AltoroJ (the demo.testfire.net bank)
+pattern = "://(demo\\.)?testfire\\.net\\b"
+note = "Altoro Mutual, a deliberately vulnerable demo bank"
+
+[[benchmark]]
+id = "owasp_juice_shop"
+# https://github.com/juice-shop/juice-shop (public demo instances)
+pattern = "://(demo\\.owasp-juice\\.shop|juice-shop\\.herokuapp\\.com)\\b"
+note = "OWASP Juice Shop, a deliberately insecure training shop"
+
+[[benchmark]]
+id = "google_firing_range"
+# https://github.com/google/firing-range
+pattern = "://public-firing-range\\.appspot\\.com\\b"
+note = "Google Firing Range, a test bed for web scanners"
+
+[[benchmark]]
+id = "hack_yourself_first"
+# https://hack-yourself-first.com/ (Troy Hunt's training site)
+pattern = "://(www\\.)?hack-yourself-first\\.com\\b"
+note = "Hack Yourself First, a deliberately vulnerable training site"
+
+[[benchmark]]
+id = "webarena"
+# https://github.com/web-arena-x/webarena and
+# https://github.com/web-arena-x/visualwebarena (environment URLs)
+pattern = "://metis\\.lti\\.cs\\.cmu\\.edu:(3000|4399|7770|7780|8023|8888|9980|9999)\\b"
+note = "WebArena or VisualWebArena benchmark environment"
+
+[[benchmark]]
+id = "miniwob"
+# https://github.com/Farama-Foundation/miniwob-plusplus (task pages)
+pattern = "/miniwob/[a-z0-9-]+\\.html\\b"
+note = "MiniWoB++ web-agent benchmark task"
+
+[[benchmark]]
+id = "picoctf"
+# https://picoctf.org/ (challenge hosts); InterCode-CTF and other agent
+# benchmarks draw tasks from it: https://intercode-benchmark.github.io/
+pattern = "://(mercury|saturn|jupiter|titan)\\.picoctf\\.net\\b"
+note = "picoCTF challenge host, used by CTF agent benchmarks"
+
+# ── Stale knowledge ────────────────────────────────────────────────────────
+# Retired API endpoints and old client versions. A model writes requests
+# from what its training data knew; an agent repeating one across its targets
+# shows that. Reported per cluster when at least two members carry one, with
+# API path versions below the newest one seen on the same host family
+# (`older_api_version`). A hint only: old scripts and pinned clients do the
+# same. Fields as for [[benchmark]].
+
+[[stale]]
+id = "openai_engines_api"
+# https://platform.openai.com/docs/deprecations (Engines endpoints, 2022)
+pattern = "api\\.openai\\.com/v1/engines\\b"
+note = "OpenAI Engines endpoints, deprecated in 2022"
+
+[[stale]]
+id = "openai_python_0x"
+target = "user_agent"
+# https://github.com/openai/openai-python/releases/tag/v1.0.0 (November 2023)
+pattern = "\\bOpenAI/Python 0\\."
+note = "openai-python before 1.0, superseded in 2023"
+
+[[stale]]
+id = "twitter_api_v1_1"
+# https://developer.x.com/en/docs/x-api/v1 (v1.1 retired for most uses, 2023)
+pattern = "api\\.twitter\\.com/1\\.1/"
+note = "Twitter API v1.1, retired for most uses in 2023"
+
+[[stale]]
+id = "google_ajax_search"
+# https://developers.google.com/custom-search/v1/overview (replaced the
+# Web Search API, shut down in 2016)
+pattern = "ajax\\.googleapis\\.com/ajax/services/search/"
+note = "Google Web Search API, shut down in 2016"
+
+[[stale]]
+id = "yahoo_yql"
+# https://developer.yahoo.com/yql/ (retired in January 2019)
+pattern = "query\\.yahooapis\\.com/v1/public/yql"
+note = "Yahoo Query Language, retired in 2019"
+
+[[stale]]
+id = "facebook_graph_v2"
+# https://developers.facebook.com/docs/graph-api/changelog/versions (every
+# v2.x version expired by 2020)
+pattern = "graph\\.facebook\\.com/v2\\.\\d+/"
+note = "Facebook Graph API v2.x, expired by 2020"
+
+[[stale]]
+id = "github_query_token"
+# https://developer.github.com/changes/2020-02-10-deprecating-auth-through-query-param/
+pattern = "api\\.github\\.com/[^?#]*\\?([^#]*&)?access_token="
+note = "GitHub API token in the query string, removed in 2021"
+
+[[stale]]
+id = "python_requests_old"
+target = "user_agent"
+# https://pypi.org/project/requests/#history (2.10 released in 2016)
+pattern = "\\bpython-requests/(1\\.|2\\.[0-9]\\.)"
+note = "python-requests before 2.10 (2016)"

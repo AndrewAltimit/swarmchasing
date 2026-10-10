@@ -156,7 +156,7 @@ mod tests {
             ["ai,jina,r)/https://b.example/ 20261004081500"]]"#;
         let p = parse_wayback_cdx(body).unwrap();
         assert_eq!(p.records.len(), 2);
-        assert_eq!(p.records[0].id, "wayback:20261004081000:AAA");
+        assert!(p.records[0].id.starts_with("wayback:20261004081000:AAA:"));
         assert!(p.records[0].url.contains("api_key=REDACTED-"));
         assert!(p.resume_key.as_deref().unwrap().ends_with("20261004081500"));
     }

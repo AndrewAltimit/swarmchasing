@@ -52,7 +52,9 @@ pub fn archive_bursts(
             continue;
         }
         let x = extract(o, rules);
-        let Some(host) = x.target_host.or_else(|| x.layers.first()?.host.clone()) else {
+        // A capture of a relay or carrier page with no target behind it
+        // (`corsproxy.io/`) is the service's own traffic, not a target's.
+        let Some(host) = x.target_host else {
             continue;
         };
         first = first.min(o.ts);
@@ -166,5 +168,29 @@ mod tests {
             })
             .collect();
         assert!(archive_bursts(&requests, &new_ids, &rules, now).is_empty());
+    }
+
+    #[test]
+    fn a_relay_is_never_the_burst_target() {
+        let rules = Rules::default_rules();
+        let now = 1_791_000_000;
+        let store: Vec<Observation> = (0..12)
+            .map(|i| Observation {
+                id: format!("c{i}"),
+                ts: now - 3600 + i * 30,
+                ts_kind: TsKind::Capture,
+                // Half the relay's own page, half a target read through it.
+                url: if i % 2 == 0 {
+                    "https://corsproxy.io/".into()
+                } else {
+                    format!("https://corsproxy.io/?https://t.example/p{i}")
+                },
+                ..Default::default()
+            })
+            .collect();
+        let ids: BTreeSet<String> = store.iter().map(|o| o.id.clone()).collect();
+        let b = archive_bursts(&store, &ids, &rules, now);
+        assert_eq!(b.len(), 1, "{b:?}");
+        assert_eq!((b[0].host.as_str(), b[0].count), ("t.example", 6));
     }
 }

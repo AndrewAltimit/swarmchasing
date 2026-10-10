@@ -25,7 +25,7 @@ A notice has machine-readable front matter and a body.
 
 Hosts are defanged (`a[.]b`) and no URL from a record is a link.
 
-Toolkit: `case notice` drafts the body from the case, and the admin edits it; per-layer attribution sections and claim tags in the draft are (planned).
+Toolkit: `case notice` drafts the body from the case, and the admin edits it. The draft's attribution section gives each host claim, and each developer claim that passes the naming gate, with its layer, label, claim tag and evidence, and a Conclusion line for each named developer; developers below the gate and harness and model-family candidates are left out. Claim tags outside the attribution section are added by hand.
 
 ## FM-11.3 Status lifecycle
 

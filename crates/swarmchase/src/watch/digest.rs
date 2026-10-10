@@ -72,6 +72,67 @@ impl SourceReport {
     }
 }
 
+/// A failed source's reason in a few words, for its status cell: the HTTP
+/// status or the root cause, and the attempts made (`HTTP 504 after 3
+/// attempts`). Request URLs are left out: they are long, and a watch query
+/// can carry text the digest has no business repeating. The full error goes
+/// to the run's log and the watch state.
+pub fn short_reason(e: &anyhow::Error) -> String {
+    let msgs: Vec<String> = e.chain().map(|c| c.to_string()).collect();
+    let attempts = msgs.iter().find_map(|m| {
+        m.strip_prefix("gave up after ")
+            .and_then(|r| r.strip_suffix(" attempts"))
+            .map(str::to_string)
+    });
+    // The messages that say what went wrong, without the retry wrapper and
+    // without contexts that only name the request (`GET <url>`).
+    let causes: Vec<String> = msgs
+        .iter()
+        .filter(|m| !m.starts_with("gave up after "))
+        .map(|m| without_urls(m))
+        .filter(|m| !m.is_empty() && m != "GET")
+        .collect();
+    let what = causes
+        .iter()
+        .find_map(|m| http_status(m))
+        .or_else(|| match causes.as_slice() {
+            [] => None,
+            [only] => Some(only.clone()),
+            [first, .., last] => Some(format!("{first}: {last}")),
+        })
+        .unwrap_or_else(|| "unknown error".into());
+    let what = one_line(&what, 120);
+    match attempts {
+        Some(n) => format!("{what} after {n} attempts"),
+        None => what,
+    }
+}
+
+/// `HTTP <code>` when `m` reports a response status.
+fn http_status(m: &str) -> Option<String> {
+    m.match_indices("HTTP ").find_map(|(i, _)| {
+        let code = m.get(i + 5..i + 8)?;
+        let next = m[i + 8..].chars().next();
+        (code.bytes().all(|b| b.is_ascii_digit()) && !next.is_some_and(|c| c.is_ascii_digit()))
+            .then(|| format!("HTTP {code}"))
+    })
+}
+
+/// `m` with every word that holds a URL removed, and a request method left
+/// in front of one (`GET https://a/b: reading body` is `reading body`).
+fn without_urls(m: &str) -> String {
+    let mut words: Vec<&str> = m.split_whitespace().collect();
+    if words.len() > 1 && words[0] == "GET" && words[1].contains("://") {
+        words.remove(0);
+    }
+    let s = words
+        .into_iter()
+        .filter(|w| !w.contains("://"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    s.trim_end_matches([':', ' ']).to_string()
+}
+
 /// How the run's sources fared, with warnings. Any alert or source error
 /// makes the run count as changed, so it is emailed.
 #[derive(Default)]
@@ -293,6 +354,8 @@ pub fn digest(d: &DigestInput) -> Digest {
         );
     }
 
+    leads(&mut t, a);
+
     let _ = writeln!(t, "\n## Archive bursts ({})\n", d.bursts.len());
     none(&mut t, d.bursts.is_empty());
     for b in d.bursts {
@@ -331,6 +394,105 @@ pub fn digest(d: &DigestInput) -> Digest {
         || errors
         || !health.alerts.is_empty();
     Digest { text: t, changed }
+}
+
+/// `C3 k-3f9a2c1b`: a cluster's number in this analysis and its stable key.
+fn cluster_ref(a: &Analysis, id: &str) -> String {
+    match a.cluster(id) {
+        Some(c) if !c.key.is_empty() => format!("{} {}", c.id, c.key),
+        _ => id.to_string(),
+    }
+}
+
+/// How many lines each lead section shows.
+const LEAD_LINES: usize = 10;
+
+/// Candidate fleets, escalations and common features over the window:
+/// descriptive leads for the admin, defanged, never merges.
+fn leads(t: &mut String, a: &Analysis) {
+    let more = |t: &mut String, n: usize| {
+        if n > LEAD_LINES {
+            let _ = writeln!(t, "- … {} more", n - LEAD_LINES);
+        }
+    };
+    let _ = writeln!(t, "\n## Candidate fleets ({})\n", a.candidate_fleets.len());
+    if a.candidate_fleets.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for f in a.candidate_fleets.iter().take(LEAD_LINES) {
+        let kinds: Vec<&str> = f.kinds.iter().map(|k| k.label()).collect();
+        let _ = writeln!(
+            t,
+            "- {}: {}; {} soft link(s): {} (weakest pair {:.2})",
+            f.id,
+            f.clusters
+                .iter()
+                .map(|id| cluster_ref(a, id))
+                .collect::<Vec<_>>()
+                .join(", "),
+            f.links,
+            kinds.join(", "),
+            f.strength
+        );
+    }
+    more(t, a.candidate_fleets.len());
+    if !a.candidate_fleets.is_empty() {
+        let _ = writeln!(
+            t,
+            "\nProposals only: merge one in a case with `swarmchase case fleet merge <case> <key>...`."
+        );
+    }
+
+    let _ = writeln!(t, "\n## Escalations ({})\n", a.escalations.len());
+    if a.escalations.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for e in a.escalations.iter().take(LEAD_LINES) {
+        let clusters = if e.clusters.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "; {}",
+                e.clusters
+                    .iter()
+                    .map(|id| cluster_ref(a, id))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        let _ = writeln!(
+            t,
+            "- `{}`: {}, {} → {}{clusters}",
+            sc_core::defang(&one_line(&format!("{}{}", e.host, e.path), 100)),
+            e.route_line(),
+            sc_core::fmt_ts(e.start),
+            sc_core::fmt_ts(e.end)
+        );
+    }
+    more(t, a.escalations.len());
+
+    let _ = writeln!(t, "\n## Common features ({})\n", a.common_features.len());
+    if a.common_features.is_empty() {
+        let _ = writeln!(t, "None.");
+    } else {
+        let _ = writeln!(
+            t,
+            "Linking values shared too widely to link on: a popular or copied value, not one operator's.\n"
+        );
+    }
+    for c in a.common_features.iter().take(LEAD_LINES) {
+        let _ = writeln!(
+            t,
+            "- `{}`: {} records on {} hosts, {} → {}; {}",
+            sc_core::defang(&one_line(&c.feature.to_string(), 90)),
+            c.records,
+            c.hosts,
+            sc_core::fmt_ts(c.start),
+            sc_core::fmt_ts(c.end),
+            sc_core::defang(&one_line(&c.reason, 120))
+        );
+    }
+    more(t, a.common_features.len());
 }
 
 fn run_label(r: &ClusterRun) -> String {
@@ -433,6 +595,73 @@ mod tests {
             "{}",
             d3.text
         );
+    }
+
+    #[test]
+    fn a_failed_source_shows_a_short_reason() {
+        let url = "https://web.archive.org/cdx/search/cdx?url=r.jina.ai/*&from=20261001&output=json&limit=5000";
+        let gave_up =
+            anyhow::anyhow!("GET {url}: HTTP 504 Gateway Timeout: <html>upstream timed out</html>")
+                .context("gave up after 3 attempts");
+        assert_eq!(short_reason(&gave_up), "HTTP 504 after 3 attempts");
+        let refused = anyhow::anyhow!("tcp connect error: Connection refused")
+            .context(format!("error sending request for url ({url})"))
+            .context(format!("GET {url}"))
+            .context("gave up after 2 attempts");
+        assert_eq!(
+            short_reason(&refused),
+            "error sending request for url: tcp connect error: Connection refused after 2 attempts"
+        );
+        let fatal = anyhow::anyhow!("GET {url}: HTTP 403 Forbidden: denied");
+        assert_eq!(short_reason(&fatal), "HTTP 403");
+        let parse =
+            anyhow::anyhow!("expected value at line 1 column 1").context("parsing a CDX page");
+        assert_eq!(
+            short_reason(&parse),
+            "parsing a CDX page: expected value at line 1 column 1"
+        );
+
+        // In the digest's status cell, with no part of the URL.
+        let a = analyze(Vec::new(), &Rules::default_rules());
+        let mut rep = SourceReport::new("wayback-jina");
+        rep.requests = 3;
+        rep.error = Some(short_reason(&gave_up));
+        let health = Health {
+            sources: vec![rep],
+            ..Default::default()
+        };
+        let s = summarise(&a, &Summary::default(), "t1".into());
+        let d = write("t1", &a, &s, &s, &BTreeSet::new(), &health, &[]);
+        assert!(
+            d.text
+                .contains("| wayback-jina | 0 | 0 | 3 | error: HTTP 504 after 3 attempts |"),
+            "{}",
+            d.text
+        );
+        assert!(!d.text.contains("web.archive.org"), "{}", d.text);
+    }
+
+    #[test]
+    fn digest_lists_candidate_fleets_by_key() {
+        let mut rules = Rules::default_rules();
+        rules.set.soft_links.fleet_min_strength = 0.3;
+        let a = analyze(crate::case::fleet::tests::two_runs(), &rules);
+        assert_eq!(a.candidate_fleets.len(), 1);
+        let s = summarise(&a, &Summary::default(), "t1".into());
+        let d = write("t1", &a, &s, &s, &BTreeSet::new(), &Health::default(), &[]);
+        assert!(d.text.contains("## Candidate fleets (1)"), "{}", d.text);
+        for c in &a.clusters {
+            assert!(
+                d.text.contains(&format!("{} {}", c.id, c.key)),
+                "{}",
+                d.text
+            );
+        }
+        assert!(d.text.contains("case fleet merge"), "{}", d.text);
+        assert!(d.text.contains("## Escalations ("), "{}", d.text);
+        assert!(d.text.contains("## Common features ("), "{}", d.text);
+        // A standing proposal alone is not news.
+        assert!(!d.changed, "{}", d.text);
     }
 
     #[test]

@@ -69,8 +69,8 @@ impl From<&Threshold> for TierSummary {
 pub struct RuleSummary {
     pub rule_id: String,
     pub tactics: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub artifact: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub artifact: bool,
     /// Labelled records it fired on: agent (true positives) and benign.
     pub tp: usize,
     pub fp: usize,
@@ -177,7 +177,7 @@ fn build(
         .map(|c| RuleSummary {
             rule_id: c.rule_id.clone(),
             tactics: c.tactics.clone(),
-            artifact: c.artifact.clone(),
+            artifact: c.artifact,
             tp: c.positives,
             fp: c.on_benign,
             precision: Proportion::new(c.positives, c.positives + c.on_benign),

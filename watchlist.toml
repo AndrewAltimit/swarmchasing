@@ -94,16 +94,6 @@ pattern = "api.codetabs.com/v1/proxy*"
 from = "20260901"
 limit = 2000
 
-# Rationale: referrer-stripping redirector that hides where a visit came from,
-# so the target's logs do not show the agent's origin page. Low weight (relay.hrefli = 1), so it
-# only matters alongside other indicators. Noise: ordinary privacy-minded links.
-[[source]]
-name = "hrefli"
-kind = "wayback"
-pattern = "href.li/*"
-from = "20260901"
-limit = 2000
-
 # ── Carriers: services that run or reshape the agent's request ─────────────────
 
 # Rationale: request echo service; agents use it to turn a GET into a POST, test
@@ -227,6 +217,10 @@ limit = 200
 #   rule forbids. They are matched in records found through other sources.
 # - Arquivo.pt: its index lags by over a year, so it adds nothing to a 30-day
 #   window. Use `swarmchase collect arquivo` per case for an endpoint's history.
+# - href.li (referrer-stripping redirector, relay.hrefli): the Wayback CDX
+#   query for `href.li/*` times out at the server's gateway (HTTP 504) even
+#   with a small limit and a recent `from`, because the host has too many
+#   captures. relay.hrefli still fires inside records from the sources above.
 # - *.translate.goog: very high volume and mostly people translating pages; the
 #   relay rule still catches it inside records from the sources above.
 #

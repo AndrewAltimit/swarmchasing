@@ -1,0 +1,441 @@
+# National CSIRTs, one per country, from FIRST's public team directory
+# (https://www.first.org/members/teams/).
+#
+# `swarmchase case contacts` proposes the national CSIRT of each affected
+# endpoint's country, read from the host's country-code top-level domain
+# (`tlds`, default the lowercased `country`) or given with `--country`.
+# Contacts it adds carry role `csirt`. FIRST publishes these addresses for
+# incident response only; nothing here is ever used to send anything.
+#
+# Every address was read from its `source` page on the `verified` date.
+# Add an entry only the same way, never guess an address, and leave out a
+# team whose page lists no address or only a named person's.
+
+[[csirt]]
+country = "AT"
+name = "CERT.at"
+official = "National Computer Emergency Response Team of Austria"
+channel = "email"
+address = "team@cert.at"
+source = "https://www.first.org/members/teams/cert-at"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "BE"
+name = "Centre for Cybersecurity Belgium (CCB)"
+channel = "email"
+address = "incidents@ccb.belgium.be"
+source = "https://www.first.org/members/teams/centre_for_cybersecurity_belgium-ccb"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "BR"
+name = "CERT.br"
+official = "Computer Emergency Response Team Brazil"
+channel = "email"
+address = "cert@cert.br"
+source = "https://www.first.org/members/teams/cert-br"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "CA"
+name = "CCCS"
+official = "Canadian Centre for Cyber Security"
+channel = "email"
+address = "cyberincident@cyber.gc.ca"
+source = "https://www.first.org/members/teams/cccs"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "CH"
+name = "NCSC.ch"
+official = "National Cyber Security Centre Switzerland"
+channel = "email"
+address = "incidents@govcert.ch"
+source = "https://www.first.org/members/teams/ncsc-ch"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "CL"
+name = "National CSIRT of Chile"
+channel = "email"
+address = "ayuda@anci.gob.cl"
+source = "https://www.first.org/members/teams/national_csirt_of_chile"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "CN"
+name = "CNCERT/CC"
+official = "National Computer Network Emergency Response Technical Team / Coordination Center of China"
+channel = "email"
+address = "cncert@cert.org.cn"
+source = "https://www.first.org/members/teams/cncert-cc"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "CY"
+name = "National CSIRT-CY"
+official = "Cyprus National Computer Security Incident Response Team"
+channel = "email"
+address = "info@csirt.cy"
+source = "https://www.first.org/members/teams/national_csirt-cy"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "CZ"
+name = "CSIRT.CZ"
+official = "Czech National CSIRT"
+channel = "email"
+address = "abuse@csirt.cz"
+source = "https://www.first.org/members/teams/csirt-cz"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "DE"
+name = "CERT-Bund"
+channel = "email"
+address = "certbund@bsi.bund.de"
+source = "https://www.first.org/members/teams/cert-bund"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "DK"
+name = "CFCS"
+official = "Centre For Cyber Security (DK)"
+channel = "email"
+address = "cert@cert.cfcs.dk"
+source = "https://www.first.org/members/teams/cfcs"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "EE"
+name = "CERT-EE"
+official = "CERT Estonia"
+channel = "email"
+address = "cert@cert.ee"
+source = "https://www.first.org/members/teams/cert-ee"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "EG"
+name = "EG-CERT"
+official = "Egyptian National Computer Emergency Readiness Team"
+channel = "email"
+address = "incident@egcert.eg"
+source = "https://www.first.org/members/teams/eg-cert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "ES"
+name = "INCIBE-CERT"
+official = "INCIBE-CERT (Spanish National Cybersecurity Institute - National CSIRT)"
+channel = "email"
+address = "incidencias@incibe-cert.es"
+source = "https://www.first.org/members/teams/incibe-cert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "FI"
+tlds = ["fi", "ax"]
+name = "NCSC-FI"
+official = "National Cyber Security Centre Finland"
+channel = "email"
+address = "cert@ncsc.fi"
+source = "https://www.first.org/members/teams/ncsc-fi"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "FR"
+name = "CERT-FR"
+official = "French Government CSIRT"
+channel = "email"
+address = "cert-fr@ssi.gouv.fr"
+source = "https://www.first.org/members/teams/cert-fr"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "GB"
+tlds = ["uk"]
+name = "National Cyber Security Centre (UK)"
+channel = "email"
+address = "incidents@ncsc.gov.uk"
+source = "https://www.first.org/members/teams/national_cyber_security_centre-uk"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "HK"
+name = "HKCERT"
+official = "Hong Kong Computer Emergency Response Team Coordination Centre"
+channel = "email"
+address = "hkcert@hkcert.org"
+source = "https://www.first.org/members/teams/hkcert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "HR"
+name = "CERT.hr"
+official = "Croatian National CERT"
+channel = "email"
+address = "ncert@cert.hr"
+source = "https://www.first.org/members/teams/cert-hr"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "HU"
+name = "NCSC Hungary"
+official = "National Cyber Security Center"
+channel = "email"
+address = "team@nki.gov.hu"
+source = "https://www.first.org/members/teams/ncsc_hungary"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "ID"
+name = "ID-SIRTII/CC"
+official = "Indonesia Security Incident Response Team on Internet Infrastructure coordination centre"
+channel = "email"
+address = "info@idsirtii.or.id"
+source = "https://www.first.org/members/teams/id-sirtii-cc"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "IE"
+name = "CSIRT-IE"
+official = "Computer Security Incident Response Team for Ireland"
+channel = "email"
+address = "certreport@ncsc.gov.ie"
+source = "https://www.first.org/members/teams/csirt-ie"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "IN"
+name = "CERT-In"
+official = "Indian Computer Emergency Response Team"
+channel = "email"
+address = "info@cert-in.org.in"
+source = "https://www.first.org/members/teams/cert-in"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "IS"
+name = "CERT-IS"
+official = "Computer Incident Response Team Iceland"
+channel = "email"
+address = "cert@cert.is"
+source = "https://www.first.org/members/teams/cert-is"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "IT"
+name = "CSIRT-IT"
+official = "CSIRT Italia"
+channel = "email"
+address = "info@csirt.gov.it"
+source = "https://www.first.org/members/teams/csirt-it"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "JP"
+name = "JPCERT/CC"
+official = "JPCERT Coordination Center"
+channel = "email"
+address = "info@jpcert.or.jp"
+source = "https://www.first.org/members/teams/jpcert-cc"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "KE"
+name = "National KE-CIRT/CC"
+official = "The National Kenya Computer Incident Response Team - Coordination Centre"
+channel = "email"
+address = "incidents@ke-cirt.go.ke"
+source = "https://www.first.org/members/teams/national_ke-cirt-cc"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "LT"
+name = "NKSC/CERT-LT"
+official = "National Cyber Security Centre under the MoD"
+channel = "email"
+address = "cert@nksc.lt"
+source = "https://www.first.org/members/teams/nksc-cert-lt"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "LU"
+name = "CIRCL"
+official = "CIRCL - Computer Incident Response Center Luxembourg"
+channel = "email"
+address = "info@circl.lu"
+source = "https://www.first.org/members/teams/circl"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "LV"
+name = "CERT.LV"
+channel = "email"
+address = "cert@cert.lv"
+source = "https://www.first.org/members/teams/cert-lv"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "MX"
+name = "CERT-MX"
+official = "Centro Nacional de Respuesta a Incidentes Cibernéticos de Mexico"
+channel = "email"
+address = "cert-mx@gn.gob.mx"
+source = "https://www.first.org/members/teams/cert-mx"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "MY"
+name = "MyCERT"
+official = "Malaysian Computer Emergency Response Team"
+channel = "email"
+address = "cyber999@cybersecurity.my"
+source = "https://www.first.org/members/teams/mycert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "NL"
+name = "NCSC-NL"
+official = "National Cyber Security Centre of The Netherlands"
+channel = "email"
+address = "cert@ncsc.nl"
+source = "https://www.first.org/members/teams/ncsc-nl"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "NO"
+name = "NCSC-NO"
+official = "National Cyber Security Centre in Norway"
+channel = "email"
+address = "cert@ncsc.no"
+source = "https://www.first.org/members/teams/ncsc-no"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "NZ"
+name = "NCSC NZ"
+official = "National Cyber Security Centre NZ"
+channel = "email"
+address = "ir@ops.cert.govt.nz"
+source = "https://www.first.org/members/teams/ncsc_nz"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "PH"
+name = "CERT-PH"
+channel = "email"
+address = "ncert@dict.gov.ph"
+source = "https://www.first.org/members/teams/cert-ph"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "PL"
+name = "CERT POLSKA"
+official = "Computer Emergency Response Team Polska"
+channel = "email"
+address = "cert@cert.pl"
+source = "https://www.first.org/members/teams/cert_polska"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "PT"
+name = "CNCS/CERT.PT"
+official = "Centro Nacional de Cibersegurança"
+channel = "email"
+address = "cert@cert.pt"
+source = "https://www.first.org/members/teams/cncs-cert-pt"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "RS"
+name = "SRB-CERT"
+official = "National CERT of the Republic of Serbia"
+channel = "email"
+address = "office@cert.rs"
+source = "https://www.first.org/members/teams/srb-cert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "SE"
+name = "CERT-SE"
+official = "Swedish National CSIRT"
+channel = "email"
+address = "cert@cert.se"
+source = "https://www.first.org/members/teams/cert-se"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "SG"
+name = "SingCERT"
+official = "Singapore Cyber Emergency Response Team"
+channel = "email"
+address = "singcert@csa.gov.sg"
+source = "https://www.first.org/members/teams/singcert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "SI"
+name = "SI-CERT"
+official = "Slovenian CERT"
+channel = "email"
+address = "cert@cert.si"
+source = "https://www.first.org/members/teams/si-cert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "SK"
+name = "SK-CERT"
+official = "Slovak Computer Emergency Response Team"
+channel = "email"
+address = "incident@nbu.gov.sk"
+source = "https://www.first.org/members/teams/sk-cert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "TH"
+name = "ThaiCERT"
+official = "Thailand Computer Emergency Response Team"
+channel = "email"
+address = "thaicert@ncsa.or.th"
+source = "https://www.first.org/members/teams/thaicert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "TR"
+name = "TR-CERT"
+official = "National Cyber Security Incident Response Team"
+channel = "email"
+address = "trcert@usom.gov.tr"
+source = "https://www.first.org/members/teams/tr-cert"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "TW"
+name = "TWCERT/CC"
+official = "Taiwan Computer Emergency Response Team/Coordination Center"
+channel = "email"
+address = "twcert@cert.org.tw"
+source = "https://www.first.org/members/teams/twcert-cc"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "UA"
+name = "CERT-UA"
+official = "Computer Emergency Response Team of Ukraine"
+channel = "email"
+address = "cert@cert.gov.ua"
+source = "https://www.first.org/members/teams/cert-ua"
+verified = "2026-10-10"
+
+[[csirt]]
+country = "US"
+tlds = ["us", "gov", "mil"]
+name = "CISA"
+official = "Cybersecurity and Infrastructure Security Agency"
+channel = "email"
+address = "contact@cisa.dhs.gov"
+source = "https://www.first.org/members/teams/cisa"
+verified = "2026-10-10"

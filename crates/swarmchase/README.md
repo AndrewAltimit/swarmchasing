@@ -83,7 +83,7 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 | Command | What it does |
 |---|---|
 | `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`. Details: [Watch runs](../../docs/reference/watch.md). |
-| `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
+| `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest` shows a local model's suggestion. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
 | `eval <input>…` | Precision and recall of the rules on labelled records. Labels come from a `label` field or `--labels` (NDJSON or CSV). With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. |
 
 ```sh
@@ -117,6 +117,7 @@ Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, 
 | `notice update <id> --kind …` | Appends a dated update, status change, correction, reply or retraction. |
 | `notice lint [files]` | Checks front matter, update order and that nothing withheld got through. CI and the pre-commit hook run it. |
 | `notice build --out <dir> --base-url <url>` | Writes the site's notice index, pages and Atom feed. |
+| `site build [--out _site] [--base-url <url>]` | Builds the whole public site from the checkout, as `sc-site` does ([how the site is built](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). |
 
 Details: [Notices](../../docs/reference/notices.md).
 
@@ -156,10 +157,12 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review.rs`](src/review.rs) | Interactive labelling. |
+| [`suggest.rs`](src/suggest.rs) | Label suggestions from a local model (`review --suggest`), local hosts only. |
 | [`eval.rs`](src/eval.rs) | The `eval` command. |
 | [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, and the indicators the watch matches. |
 | [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |
 | [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |
+| [`csirts.rs`](src/csirts.rs) | National CSIRTs by country ([`contacts/csirts.toml`](../../contacts/csirts.toml)). |
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
 | [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
 | [`stix/`](src/stix/mod.rs) | STIX 2.1 export: records to observables and indicators, one builder per object type, deterministic ids. |

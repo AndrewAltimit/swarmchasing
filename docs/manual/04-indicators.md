@@ -19,13 +19,16 @@ Indicators are rules kept as data, versioned, and shared by every tool that grad
 | `kind` | The family of thing matched: relay, carrier, exploit, agent marker, callback channel, header, outcome, anti-bot, infrastructure, self-identification, cache-buster. | yes |
 | `target` | What the rule reads: a layer's host, a layer's decoded text, parameter names or values, headers, user agent, final URL. | yes |
 | `pattern` | Host suffix, or a case-insensitive regular expression. | yes |
+| `check` | A named test a parameter-value match must also pass, for what a regular expression cannot say. | `repeated_token` |
 | `weight` | Contribution to the score. Low for anything ordinary clients also do. | yes |
 | `significant` | A single match puts the record in the top tier. Reserved for unambiguous payloads and fingerprints. | yes |
 | `link` | The matched text becomes a link feature. Only for values one operator would hold. | yes |
 | `tactic` | The SC-T tactic the match is evidence of ([FM-4.3](#fm-43-the-sc-t-tactic-taxonomy)). | one of `tactic` or `artifact` |
 | `artifact` | The match only shows a model wrote the request ([FM-4.5](#fm-45-artifact-families)). | one of `tactic` or `artifact` |
 
-Until `tactic` is a rule field, the default tactic of each kind is in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
+A check exists because some shapes need counting or comparing. `repeated_token` wants one word of three characters or more, or a phrase of two or three words, repeated five or more times in a row ([FM-4.5](#fm-45-artifact-families)); short refrains and one long run of a letter fail it.
+
+Toolkit: each rule in the rules file names its tactic (`T1` to `T9`) or is marked `artifact`, and a file naming an unknown tactic fails to load. A check on a rule that does not read parameter values, or an unknown check, also stops the file loading. Evaluation groups recall by the tactics of the rules that fired ([statistics](../reference/evaluation.md#statistics)). The STIX run object derives its `tactics` from each rule's kind, using the defaults in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
 
 ## FM-4.3 The SC-T tactic taxonomy
 
@@ -47,6 +50,8 @@ SC-T8 and SC-T9 are cluster- and fleet-level judgments. They are reported as Inf
 
 ## FM-4.4 Default tactics by rule kind
 
+The tactic a rule of each kind is evidence of when nothing more specific is known. A rule's own `tactic` may differ where its match shows more, and a report cites the rule's own.
+
 | Rule kind | Default tactic | Note |
 |---|---|---|
 | relay | SC-T1 | SC-T3 when it follows a block or challenge on the same target. |
@@ -66,13 +71,21 @@ Artifacts are traces of how an agent was built, not of what it tried to do. They
 |---|---|---|
 | Model-output residue | Text a model wrote around a URL: Markdown link or code syntax, unfilled placeholders, chat-reply openers, doubled schemes. | Scores, low weight; never links. People pasting chatbot answers leave the same. |
 | Tool-call residue | Function-call markup, tool-call JSON or argument objects left in a request. | Scores, low weight; never links. |
+| Generation loops | One word or a short phrase repeated five or more times in a row, as a model stuck in a loop writes. | Scores at weight 1 through a `check`; never links. |
 | Fabricated identifiers | UUIDs no generator produces, hand-typed hashes, stock identities. | Hint; stock identities score at low weight. |
 | Stale dates | "Today" date tags well behind the observed date ([FM-6.6](06-timing.md#fm-66-stale-dates)). | Hint. |
+| Stale knowledge | Retired API endpoints, old client versions, or an API version below the newest seen on the same host family. | Hint when two or more members carry it. Old scripts and pinned clients do the same. |
+| Prose language | Parameter values written as prose, with an offline guess at their language, set against the target's country domain. | Hint. Travellers and English-language sites abroad mismatch too. |
+| Relay stacks | The relays and carriers a request went through, outermost first, ending at the target. | Hint; the same stack of two or more hops is a soft link ([FM-5.7](05-linking.md#fm-57-soft-links)). |
 | Payload dialect | Which canonical test payloads a cluster prefers, and how deep its traversals go. | Hint; a shared uncommon mix is a soft link. |
 | Cut lengths | Truncated URLs cut at nearly the same length, as an output limit would. | Hint. A scan service's display limit does the same ([FM-3.6](03-sources.md#fm-36-known-source-biases)). |
 | Encodings | How a URL was written: escape case, space encoding, double encoding, parameter order. | Hint; mostly library defaults. |
 
 Why hints never score or link: letting a widely shared trait raise a score flags ordinary clients, and letting it link merges unrelated clusters, an error every later step inherits ([FM-14.6](14-limits.md#fm-146-common-features-cause-giant-clusters)).
+
+Stale knowledge and prose language say something about where the requests were written: a model writes from what its training data knew, and an agent prompted in one language often searches a foreign site in it. Both are inputs to the model-family and operator layers at most ([FM-7.5](07-attribution.md#fm-75-model-family-layer)), never a name.
+
+Toolkit: retired endpoints and old clients are listed under `[[stale]]` in the rules file, each with its source; a cluster lists each entry two or more members carry (`stale_knowledge`), with older API versions as `older_api_version`. Prose is at least six words with letters, or twelve characters of a script written without spaces; each cluster counts its prose values, their languages and how many mismatch their target's country domain (`prose`). Each cluster counts its members' relay stacks (`relay_stacks`), and reports list those of two or more hops ([methodology](../methodology.md#descriptive-hints)).
 
 ## FM-4.6 Cross-walk to MITRE ATLAS and ATT&CK
 
@@ -109,3 +122,12 @@ Synthetic examples are allowed and marked synthetic. Examples are never copied f
 ## FM-4.8 Rule versions and pinning
 
 A rules set carries a version. Each case pins the version it was opened with, so its reports, notices and evidence bundles use one set throughout, and a rules change cannot silently move a tier between drafting and sending. Re-pinning is an admin decision, logged in the case, after listing the records whose tier would change ([cases](../reference/cases.md#pinned-rules)).
+
+## FM-4.9 Benchmark targets and declared testing
+
+Two hints bear on how a case is handled rather than on what the agent did. Neither scores, and neither lowers a score.
+
+- **Benchmark targets.** Public sites built to be tested against: intentionally vulnerable demo sites, and the environments agent benchmarks run in. A cluster probing one is likely evaluation or training activity, and reports say so. It keeps its tier, because an agent under evaluation can still misbehave in the same run, and its requests to other hosts are what matter.
+- **Declared testing.** Text in a request announcing a test: "authorized security test" in a user agent, a bug-bounty header, "pentest" next to an email address or bounty handle. It is self-identification, which anyone can write and an agent can copy from its prompt ([FM-14.1](14-limits.md#fm-141-self-identification-is-forgeable)). The admin checks the claim with the owner it names ([FM-10.6](10-disclosure.md#fm-106-authorised-testing)). The declaring text and contact stay in case notes: they never appear in a report to a provider, a notice or a public page, because the claim is unchecked and the contact may be a person.
+
+Toolkit: benchmark targets are listed under `[[benchmark]]` in the rules file, each with its source, and counted per cluster by entry (`benchmarks`). Declared testing is listed per cluster with its contact (`declared`) and appears in internal reports only; the browser workbench does not show it.

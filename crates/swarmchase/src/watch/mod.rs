@@ -183,6 +183,7 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
     let mut reports = Vec::new();
     let mut fresh: Vec<Observation> = Vec::new();
     let mut new_ids = BTreeSet::new();
+    let mut ids_by_source: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut alerts = Vec::new();
 
     for s in &wl.sources {
@@ -201,16 +202,21 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
         }
         let st = state.sources.entry(s.name.clone()).or_default();
         let before = client.requests();
+        let first_or_resumed = st.cursor == 0 || st.pending.is_some();
         let res = pull(&client, s, st, wl.overlap_days * DAY, asn.as_ref());
         st.last_run = Some(stamp.clone());
         let mut rep = SourceReport {
             requests: client.requests() - before,
             ..SourceReport::new(&s.name)
         };
-        alerts.extend(
-            st.health
-                .observe(&s.name, res.as_ref().ok().map(|(pulled, _)| *pulled)),
-        );
+        if res.is_ok() && (first_or_resumed || st.pending.is_some()) {
+            st.health.observe_catch_up();
+        } else {
+            alerts.extend(
+                st.health
+                    .observe(&s.name, res.as_ref().ok().map(|(pulled, _)| *pulled)),
+            );
+        }
         match res {
             Ok((pulled, new)) => {
                 rep.pulled = pulled;
@@ -226,7 +232,9 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
                     let nd = to_ndjson(&new)?;
                     std::fs::write(run_dir.join(format!("{}.ndjson", s.name)), &nd)?;
                     append(&out.join("store").join(format!("{}.ndjson", s.name)), &nd)?;
+                    let ids = ids_by_source.entry(s.name.clone()).or_default();
                     for o in new {
+                        ids.insert(o.id.clone());
                         if new_ids.insert(o.id.clone()) {
                             fresh.push(o);
                         }
@@ -236,7 +244,7 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
             Err(e) => {
                 eprintln!("error: {e:#}");
                 st.last_error = Some(format!("{e:#}"));
-                rep.error = Some(format!("{e:#}"));
+                rep.error = Some(digest::short_reason(&e));
             }
         }
         // Save after every source so an interrupted run keeps its progress.
@@ -263,9 +271,13 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
     .monitor(&fresh, &mut state.cases);
     let recent: Vec<Observation> = stored.into_iter().filter(|o| o.ts >= since).collect();
     let a = analyze(recent, rules);
-    let (drifts, restarted) = state
-        .rules
-        .observe(&a.rules_version, RuleRun::from_analysis(&a, &new_ids));
+    let (drifts, restarted) = state.rules.observe(
+        &a.rules_version,
+        ids_by_source
+            .iter()
+            .map(|(s, ids)| (s.clone(), RuleRun::from_analysis(&a, ids)))
+            .collect(),
+    );
     write_json(&state_path, &state)?;
     alerts.extend(drifts.iter().map(|d| d.line()));
     let mut notes = Vec::new();

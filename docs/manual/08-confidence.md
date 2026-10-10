@@ -38,4 +38,4 @@ Following ICD 203, a sentence carries either a likelihood word or a confidence l
 - Hedges outside the table ("may", "could", "appears", "possibly") are not used for Conclusions. "Possible" appears only as the attribution label.
 - A report says what would change the judgment: the evidence that would raise or lower the likelihood.
 
-Toolkit: report drafts do not yet choose likelihood words; the admin writes them (planned: a check that Conclusions use only table terms).
+Toolkit: a draft's Conclusion line for each developer named through the gate uses the strongest likelihood word its label allows ([FM-7.7](07-attribution.md#fm-77-attribution-labels)); the admin lowers it where the evidence warrants. Other Conclusions are written by the admin. A check that every Conclusion uses only table terms is (planned).
