@@ -376,6 +376,16 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
         if let Some(line) = cut_line(&c.cut_lengths) {
             let _ = writeln!(s, "  - {line}");
         }
+        for (st, n) in c
+            .relay_stacks
+            .iter()
+            .filter(|(st, _)| st.matches(" → ").count() >= 2)
+        {
+            let _ = writeln!(
+                s,
+                "  - relay stack `{st}` on {n} records: one client's habit, not evidence on its own"
+            );
+        }
     }
     // A pair hint names both clusters. Outside case notes it appears only
     // when the report covers both, so a report on one cluster never names

@@ -95,6 +95,11 @@ pub struct Cluster {
     /// ([`crate::dialect::cut_lengths`]). Descriptive.
     #[serde(default, skip_serializing_if = "CutLengths::is_empty")]
     pub cut_lengths: CutLengths,
+    /// Relay chains of members sent through relays or carriers, outermost
+    /// first and ending at the target (`relay.jina → relay.translate_goog →
+    /// target`), with how many members used each. Descriptive.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub relay_stacks: BTreeMap<String, usize>,
     /// Features that joined members together.
     pub link_features: Vec<LinkFeature>,
     pub runs: Vec<Span>,

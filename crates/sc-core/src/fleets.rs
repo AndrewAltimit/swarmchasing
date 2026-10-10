@@ -46,6 +46,8 @@ pub enum SoftLinkKind {
     CommonFeature,
     /// The same redacted secret (`REDACTED-<hash>`) in both clusters' records.
     SharedSecret,
+    /// The same chain of two or more relays and carriers to their targets.
+    RelayStack,
 }
 
 impl SoftLinkKind {
@@ -63,6 +65,7 @@ impl SoftLinkKind {
             SoftLinkKind::Escalation => "route escalation",
             SoftLinkKind::CommonFeature => "common feature",
             SoftLinkKind::SharedSecret => "shared captured secret",
+            SoftLinkKind::RelayStack => "relay stack",
         }
     }
 }
@@ -91,6 +94,7 @@ pub struct SoftLinkOptions {
     pub escalation: f64,
     pub common_feature: f64,
     pub shared_secret: f64,
+    pub relay_stack: f64,
 }
 
 impl Default for SoftLinkOptions {
@@ -110,6 +114,7 @@ impl Default for SoftLinkOptions {
             escalation: 0.6,
             common_feature: 0.3,
             shared_secret: 0.8,
+            relay_stack: 0.3,
         }
     }
 }
@@ -245,6 +250,14 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
         if let Some(w) = c.fanout.modal_width {
             add(SoftLinkKind::FanOut, format!("width {w}"), &c.id);
         }
+        // One hop is every relay user's habit; a stack of two or more is not.
+        for st in c
+            .relay_stacks
+            .keys()
+            .filter(|s| s.matches(" → ").count() >= 2)
+        {
+            add(SoftLinkKind::RelayStack, st.clone(), &c.id);
+        }
         let with_headers: usize = c.header_sets.values().sum();
         if let Some(h) = only_value(&c.header_sets, with_headers) {
             add(SoftLinkKind::HeaderSet, h.clone(), &c.id);
@@ -289,6 +302,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             SoftLinkKind::FanOut => opts.fanout,
             SoftLinkKind::HeaderSet => opts.header_set,
             SoftLinkKind::SharedSecret => opts.shared_secret,
+            SoftLinkKind::RelayStack => opts.relay_stack,
             _ => opts.common_feature,
         };
         for (i, x) in ids.iter().enumerate() {
@@ -574,6 +588,53 @@ mod tests {
                 .all(|l| l.kind != SoftLinkKind::SharedSecret),
             "{:?}",
             b.soft_links
+        );
+    }
+
+    #[test]
+    fn an_uncommon_relay_stack_in_two_clusters_is_a_soft_link() {
+        let fleets = |prefix: &str| {
+            let obs: Vec<Observation> = [
+                "0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a",
+                "7d2e4a10-2222-4b3c-8a66-4e3f2a1b0c9d",
+            ]
+            .iter()
+            .enumerate()
+            .flat_map(|(f, inbox)| {
+                (0..2).map(move |k| {
+                    o(
+                        &format!("{f}{k}"),
+                        1_791_000_000 + f as i64 * 7 * 86_400 + k * 60,
+                        &format!("{prefix}/p{k}?hook=https://webhook.site/{inbox}"),
+                    )
+                })
+            })
+            .collect();
+            analyze(obs, &Rules::default_rules())
+        };
+        let stack = "relay.jina → relay.translate_goog → target";
+        let a = fleets("https://r.jina.ai/https://www-a-example.translate.goog");
+        assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters);
+        for c in &a.clusters {
+            assert_eq!(c.relay_stacks.get(stack), Some(&2), "{:?}", c.relay_stacks);
+        }
+        assert!(
+            a.soft_links
+                .iter()
+                .any(|l| l.kind == SoftLinkKind::RelayStack && l.detail.contains(stack)),
+            "{:?}",
+            a.soft_links
+        );
+        // One relay hop is every relay user's habit: described, not linked.
+        let b = fleets("https://r.jina.ai/https://a.example");
+        assert_eq!(
+            b.clusters[0].relay_stacks.get("relay.jina → target"),
+            Some(&2)
+        );
+        assert!(
+            b.soft_links
+                .iter()
+                .all(|l| l.kind != SoftLinkKind::RelayStack)
         );
     }
 

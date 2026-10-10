@@ -47,8 +47,12 @@ pub(super) fn cluster(
     let mut encodings: BTreeMap<String, usize> = BTreeMap::new();
     let mut header_sets: BTreeMap<String, usize> = BTreeMap::new();
     let mut feats: BTreeMap<&LinkFeature, usize> = BTreeMap::new();
+    let mut relay_stacks: BTreeMap<String, usize> = BTreeMap::new();
     for &i in &members {
         let r = &results[i];
+        if let Some(s) = relay_stack(r) {
+            *relay_stacks.entry(s).or_default() += 1;
+        }
         for h in &r.hits {
             *rules_seen.entry(h.rule_id.clone()).or_default() += 1;
             *kinds.entry(h.kind).or_default() += 1;
@@ -188,6 +192,7 @@ pub(super) fn cluster(
         dialect,
         fanout,
         cut_lengths,
+        relay_stacks,
         link_features: feats
             .into_iter()
             .filter(|&(_, n)| n > 1)
@@ -261,6 +266,30 @@ pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
         }
     }
     runs
+}
+
+/// The relays and carriers one record went through, outermost first, then
+/// `target`: the rule ids of its relay and carrier hits in unwrapping order.
+/// `None` for a direct request.
+pub(crate) fn relay_stack(r: &ObsResult) -> Option<String> {
+    let depth = |l: usize| r.layers.get(l).map_or(0, |x| x.depth);
+    let mut hops: Vec<(usize, usize, &str)> = r
+        .hits
+        .iter()
+        .filter(|h| matches!(h.kind, IndicatorKind::Relay | IndicatorKind::Carrier))
+        .map(|h| (depth(h.layer), h.layer, h.rule_id.as_str()))
+        .collect();
+    if hops.is_empty() {
+        return None;
+    }
+    crate::sort::sort(&mut hops);
+    let mut s = String::new();
+    for (_, _, id) in hops {
+        s.push_str(id);
+        s.push_str(" → ");
+    }
+    s.push_str("target");
+    Some(s)
 }
 
 /// The request on the target host: the layer naming that host, else the
