@@ -100,7 +100,7 @@ swarmchase case verify data/cases/2026-10-portal/bundles/2026-10-12
 swarmchase case status
 ```
 
-Other subcommands: `add`, `claim`, `set`, `note`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), and `evidence add|consent|withdraw|list` for logs an operator sends back.
+Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
 ### Notices
 
@@ -128,18 +128,31 @@ Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../
 
 Non-zero on an error, when `eval` misses a floor, when `case verify` finds a difference, and when `notice lint` or `notice add` finds a problem.
 
+## Tests
+
+```sh
+cargo test -p swarmchase
+```
+
+Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built binary over `samples/eval/` in scratch data directories: scan, clusters, a public report, a case from a cluster key to a verified bundle, notice lint, and an offline watch run. None touches the network.
+
 ## Source
 
 | File | Covers |
 |---|---|
-| [`main.rs`](src/main.rs) | Argument parsing and the analysis, collect and lookup commands. |
-| [`watch.rs`](src/watch.rs) | The incremental watch and its digest. |
+| [`main.rs`](src/main.rs) | Argument parsing and dispatch. |
+| [`commands/`](src/commands/mod.rs) | The analysis, collect and lookup commands, one module each. |
+| [`input.rs`](src/input.rs) | Reading records and rules for the analysis commands. |
+| [`store.rs`](src/store.rs) | The watch record store, retention, JSON and NDJSON files. |
+| [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
+| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review.rs`](src/review.rs) | Interactive labelling. |
 | [`eval.rs`](src/eval.rs) | The `eval` command. |
-| [`case.rs`](src/case.rs) | Case files and their subcommands. |
-| [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup. |
+| [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, and the indicators the watch matches. |
+| [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |
+| [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
-| [`evidence.rs`](src/evidence.rs) | Logs operators send back. |
-| [`stix.rs`](src/stix.rs) | STIX 2.1 export. |
-| [`notice.rs`](src/notice.rs) | Adding, updating, linting and building notices. |
+| [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
+| [`stix/`](src/stix/mod.rs) | STIX 2.1 export: records to observables and indicators, one builder per object type, deterministic ids. |
+| [`notice.rs`](src/notice.rs) | The notice draft (`case notice`); adding, updating, linting and building notices. |

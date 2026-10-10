@@ -7,7 +7,7 @@
 //! up in a similar order. Matches are leads to review; nothing here merges
 //! clusters.
 
-use crate::analyze::{Analysis, ObsResult};
+use crate::analyze::{Analysis, Cluster, ObsResult};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -189,14 +189,27 @@ pub struct ClusterRun {
 /// different cluster, where the later run has a record in `new_ids`. The
 /// matches index into the returned runs.
 pub fn cluster_reruns(a: &Analysis, new_ids: &BTreeSet<String>) -> (Vec<ClusterRun>, Vec<Rerun>) {
+    let (infos, matches) = reruns_across(&a.clusters, &a.results, new_ids);
+    let matches = matches.into_iter().filter(|m| infos[m.later].new).collect();
+    (infos, matches)
+}
+
+/// Every run of `clusters` (over `results`) whose target sequence repeats an
+/// earlier run in a different cluster. `new` marks runs holding a record in
+/// `new_ids`; nothing is filtered on it.
+pub(crate) fn reruns_across(
+    clusters: &[Cluster],
+    results: &[ObsResult],
+    new_ids: &BTreeSet<String>,
+) -> (Vec<ClusterRun>, Vec<Rerun>) {
     let mut infos = Vec::new();
     let mut runs = Vec::new();
-    for c in &a.clusters {
+    for c in clusters {
         for (n, span) in c.runs.iter().enumerate() {
             let members: Vec<&ObsResult> = c
                 .members
                 .iter()
-                .map(|&m| &a.results[m])
+                .map(|&m| &results[m])
                 .filter(|r| r.obs.ts >= span.start && r.obs.ts <= span.end)
                 .collect();
             runs.push(TargetRun {
@@ -217,7 +230,7 @@ pub fn cluster_reruns(a: &Analysis, new_ids: &BTreeSet<String>) -> (Vec<ClusterR
     }
     let matches = reruns(&runs, &RecurrenceOptions::default())
         .into_iter()
-        .filter(|m| infos[m.later].new && infos[m.earlier].cluster != infos[m.later].cluster)
+        .filter(|m| infos[m.earlier].cluster != infos[m.later].cluster)
         .collect();
     (infos, matches)
 }

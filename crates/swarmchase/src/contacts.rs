@@ -6,9 +6,11 @@
 //! was found. These are reads of published contact files on the affected
 //! organisation's own site and the registry, never of agent infrastructure.
 
-use crate::case::Contact;
+use crate::case::{Case, Contact, EndpointState};
+use anyhow::Result;
 use sc_core::SecurityTxt;
 use serde_json::Value;
+use std::io::Write;
 
 /// Second-level labels under which registrations sit one level deeper
 /// (`aihw.gov.au`, `example.co.uk`). A heuristic, not the Public Suffix List.
@@ -122,6 +124,83 @@ fn vcard(e: &Value, prop: &str) -> Vec<String> {
         .filter_map(|p| p.get(3).and_then(Value::as_str))
         .map(str::to_string)
         .collect()
+}
+
+pub(crate) fn find_contacts(
+    c: &mut Case,
+    client: &sc_collect::Client,
+    refresh: bool,
+    today: &str,
+    out: &mut impl Write,
+) -> Result<()> {
+    let hosts: Vec<String> = c
+        .endpoints
+        .iter()
+        .filter(|e| e.state != EndpointState::NotAffected)
+        .filter(|e| {
+            refresh
+                || !c
+                    .contacts
+                    .iter()
+                    .any(|x| x.endpoint.as_ref() == Some(&e.host))
+        })
+        .map(|e| e.host.clone())
+        .collect();
+    for host in hosts {
+        let mut found = Vec::new();
+        let mut how = "nothing found";
+        for d in crate::contacts::domain_candidates(&host) {
+            if let Ok((url, body)) = client.security_txt(&d) {
+                let s = sc_core::parse_security_txt(&body);
+                found = crate::contacts::from_security_txt(&d, &url, &s, today);
+                how = "security.txt";
+                break;
+            }
+        }
+        if found.is_empty() {
+            let domain = crate::contacts::registered_domain(&host);
+            if let Ok((url, body)) = client.rdap_domain(&domain) {
+                found = crate::contacts::rdap_abuse(&body)
+                    .into_iter()
+                    .map(|(org, email)| Contact {
+                        org,
+                        role: "registrar".into(),
+                        endpoint: None,
+                        channel: "email".into(),
+                        address: email,
+                        source: url.clone(),
+                        confidence: "low".into(),
+                        found_on: today.to_string(),
+                    })
+                    .collect();
+                if !found.is_empty() {
+                    how = "RDAP registrar abuse contact (fallback)";
+                }
+            }
+        }
+        let mut added = 0;
+        for mut x in found {
+            x.endpoint = Some(host.clone());
+            if !c
+                .contacts
+                .iter()
+                .any(|y| y.endpoint == x.endpoint && y.address.eq_ignore_ascii_case(&x.address))
+            {
+                writeln!(
+                    out,
+                    "{host}: {} {} ({}, {} confidence)",
+                    x.channel, x.address, x.source, x.confidence
+                )?;
+                c.contacts.push(x);
+                added += 1;
+            }
+        }
+        if added == 0 {
+            writeln!(out, "{host}: {how}, nothing new")?;
+        }
+        c.log(today, format!("contacts for {host}: {added} new ({how})"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

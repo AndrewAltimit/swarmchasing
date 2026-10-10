@@ -276,7 +276,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 truncate(&ch.path, 60),
                 dur(ch.end - ch.start),
                 dur(ch.median_gap_secs),
-                ch.pace.label(),
+                ch.pace.describe(ch.time_basis),
                 if unflagged > 0 {
                     format!("; {unflagged} of its requests matched no rule")
                 } else {
@@ -284,8 +284,26 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 }
             );
         }
+        for e in a.escalations.iter().filter(|e| e.clusters.contains(&c.id)) {
+            if view.as_deref().is_some_and(|v| v.exposed(&e.host)) {
+                continue;
+            }
+            let basis = e
+                .time_basis
+                .note()
+                .map(|n| format!("; {n}"))
+                .unwrap_or_default();
+            let _ = writeln!(
+                s,
+                "  - route escalation on `{}{}`: {} over {}{basis}. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)",
+                defang_host(&e.host),
+                truncate(&e.path, 60),
+                e.route_line(),
+                dur(e.end - e.start)
+            );
+        }
         if let Some(line) = rhythm_line(&c.timing.rhythm) {
-            let _ = writeln!(s, "  - {line}");
+            let _ = writeln!(s, "  - {line}{}", basis_note(c));
         }
         if let Some(line) = stale_dates_line(&c.timing.stale_dates) {
             let _ = writeln!(s, "  - {line}");
@@ -353,7 +371,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             let _ = writeln!(s, "  - {line}");
         }
         if let Some(line) = fanout_line(&c.fanout) {
-            let _ = writeln!(s, "  - {line}");
+            let _ = writeln!(s, "  - {line}{}", basis_note(c));
         }
         if let Some(line) = cut_line(&c.cut_lengths) {
             let _ = writeln!(s, "  - {line}");
@@ -398,6 +416,62 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             p.shared.len(),
             p.jaccard
         );
+    }
+    let fleets: Vec<&crate::fleets::CandidateFleet> = a
+        .candidate_fleets
+        .iter()
+        .filter(|f| f.clusters.iter().any(|id| selected(id)))
+        .collect();
+    if opts.audience == Audience::Internal && !fleets.is_empty() {
+        let _ = writeln!(
+            s,
+            "\n## Candidate fleets\n\nClusters tied by soft links (shared pauses, reruns, recon openings, encoding and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.\n"
+        );
+        for f in fleets {
+            let kinds: Vec<&str> = f.kinds.iter().map(|k| k.label()).collect();
+            let _ = writeln!(
+                s,
+                "- **{}**: {} — {} soft link(s): {} (weakest pair {:.2})",
+                f.id,
+                f.clusters.join(", "),
+                f.links,
+                kinds.join(", "),
+                f.strength
+            );
+            for l in a
+                .soft_links
+                .iter()
+                .filter(|l| f.clusters.contains(&l.a) && f.clusters.contains(&l.b))
+                .take(8)
+            {
+                let _ = writeln!(
+                    s,
+                    "  - {} ↔ {}: {} ({:.2}): {}",
+                    l.a,
+                    l.b,
+                    l.kind.label(),
+                    l.strength,
+                    defang(&truncate(&l.detail, 160))
+                );
+            }
+        }
+    }
+    if opts.audience == Audience::Internal && !a.common_features.is_empty() {
+        let _ = writeln!(
+            s,
+            "\nCommon features, not used to link (a popular or copied value, not one operator's):\n"
+        );
+        for c in a.common_features.iter().take(10) {
+            let _ = writeln!(
+                s,
+                "- `{}`: {} records, {} → {}, {}",
+                defang(&truncate(&c.feature.to_string(), 90)),
+                c.records,
+                fmt_ts(c.start),
+                fmt_ts(c.end),
+                c.reason
+            );
+        }
     }
     if a.date_tags.consistent && a.date_tags.ahead > 0 {
         let _ = writeln!(
@@ -485,6 +559,14 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     let _ = writeln!(s, "## Requested action\n");
     let _ = writeln!(s, "{}", audience::requested_action(opts.audience));
     s
+}
+
+/// What a timing hint's times were, when not plain request times.
+fn basis_note(c: &Cluster) -> String {
+    c.time_basis
+        .note()
+        .map(|n| format!(" ({n})"))
+        .unwrap_or_default()
 }
 
 /// Whether a public notice withholds attack details for any of the cluster's hosts.
