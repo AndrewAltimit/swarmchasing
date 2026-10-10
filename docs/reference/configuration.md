@@ -23,6 +23,7 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | `URLQUERY_APIKEY` | `swarmchase` | urlquery.net collectors and watch sources. |
 | `SWARMCHASE_SITE_URL` | `swarmchase notice build` | `--base-url`. |
 | `SWARMCHASE_UA` | collectors | Overrides the collectors' user agent. |
+| `SWARMCHASE_EVAL_DIR` | `swarmchase case bundle`, `case draft` | The evaluation set whose figures go into bundle stamps. Unset, `samples/eval/` ([evidence bundles](cases.md#evidence-bundles)). |
 | `SMTP_URL`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `MAIL_TO` | [`send-mail.sh`](../../scripts/ci/send-mail.sh) | Digest and alert email to the admin. |
 | `SWARMCHASE_ENV_FILE` | `with-env.sh` | Another file to load instead of `env.list`. |
 | `SWARMCHASE_SKIP_PRECOMMIT` | pre-commit hook | `1` skips the hook for one command. |

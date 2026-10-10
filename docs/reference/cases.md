@@ -64,10 +64,10 @@ An evidence bundle holds:
 
 - the records;
 - their analysis;
-- a stamp with the rules version, the toolkit version and commit, and the tier of every flagged record and cluster;
+- a stamp with the rules version, the toolkit version and commit, the method version it follows (SC-FM), the rules' precision and recall on the committed evaluation set at stamp time, and the tier of every flagged record and cluster;
 - a SHA-256 manifest of those files.
 
-`case verify` checks the manifest, re-runs the analysis and compares both it and the bundle's own `analysis.json` with the stamp. A recipient can run the same check without installing anything, in the browser toolkit's Case tab ([for operators](../guides/for-operators.md#verify-an-evidence-bundle)).
+`case verify` checks the manifest, re-runs the analysis and compares both it and the bundle's own `analysis.json` with the stamp. It prints the method version and evaluation figures the stamp carries; bundles stamped before those fields existed verify the same way. The evaluation set is found at `SWARMCHASE_EVAL_DIR`, else `samples/eval/` in the working directory or the checkout the CLI was built from; without it the stamp has no figures. A recipient can run the same check without installing anything, in the browser toolkit's Case tab ([for operators](../guides/for-operators.md#verify-an-evidence-bundle)).
 
 ## Pinned rules
 
