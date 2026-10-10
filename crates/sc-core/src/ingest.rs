@@ -3,13 +3,16 @@
 //! Supported shapes (auto-detected):
 //! - NDJSON, one object per line
 //! - a JSON array of objects, or an object with an array under `results`/`data`/`items`/`reports`
-//! - CDX JSON (array of arrays, header row first), as returned by Wayback `output=json`
+//! - CDX JSON (array of arrays, header row first), as returned by Wayback `output=json`,
+//!   and CDX objects one per line, as Arquivo.pt returns them; both become the
+//!   same captures the collectors produce (see [`crate::capture`])
 //! - urlquery.net search responses and reports (see [`crate::urlquery`])
 //! - plain text: one URL per line, optionally preceded by a timestamp
 //!
 //! Field names are guessed from common spellings; override them with a
 //! [`FieldMap`] using dotted paths (`page.url`, `meta.submitted_at`).
 
+use crate::capture::{Archive, capture};
 use crate::model::{Observation, parse_ts};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -176,6 +179,11 @@ fn obj_to_obs(v: &Value, map: &FieldMap, default_source: &str) -> Option<Observa
     if map.is_empty() && crate::urlquery::is_report(v) {
         return crate::urlquery::report_to_obs(v);
     }
+    if map.is_empty()
+        && let Some(o) = cdx_object(v)
+    {
+        return Some(o);
+    }
     let url = pick(v, &map.url, URL_KEYS).and_then(as_string)?;
     let ts = pick(v, &map.ts, TS_KEYS)
         .and_then(as_string)
@@ -227,32 +235,48 @@ fn cdx_table(rows: &[Value], out: &mut Parsed) {
             .push("array-of-arrays without timestamp/original header".into());
         return;
     };
-    let si = col("statuscode");
+    let si = col("statuscode").or_else(|| col("status"));
     let di = col("digest");
+    let named: Vec<usize> = ["filename", "collection"]
+        .iter()
+        .filter_map(|c| col(c))
+        .collect();
     for row in &rows[1..] {
         let Some(r) = row.as_array() else { continue };
         let (Some(t), Some(u)) = (r.get(ti).and_then(as_string), r.get(ui).and_then(as_string))
         else {
             continue;
         };
-        out.observations.push(Observation {
-            id: format!(
-                "{t}-{}",
-                di.and_then(|d| r.get(d))
-                    .and_then(as_string)
-                    .unwrap_or_default()
-            ),
-            source: "cdx".into(),
-            ts: parse_ts(&t).unwrap_or(0),
-            status: si
-                .and_then(|s| r.get(s))
-                .and_then(as_string)
-                .and_then(|s| s.parse().ok()),
-            reference: Some(format!("https://web.archive.org/web/{t}/{u}")),
-            url: u,
-            ..Default::default()
-        });
+        let field = |i: Option<usize>| i.and_then(|i| r.get(i)).and_then(as_string);
+        let names: Vec<String> = named.iter().filter_map(|&i| field(Some(i))).collect();
+        out.observations.push(capture(
+            Archive::detect(names.iter().map(String::as_str)),
+            &t,
+            &u,
+            field(si).and_then(|s| s.parse().ok()),
+            &field(di).unwrap_or_default(),
+        ));
     }
+}
+
+/// A CDX record as an object (Arquivo.pt's and pywb's NDJSON output): a
+/// 14-digit `timestamp`, a `digest` and a `urlkey` beside the URL.
+fn cdx_object(v: &Value) -> Option<Observation> {
+    let s = |k: &str| v.get(k).and_then(as_string);
+    let ts = s("timestamp").filter(|t| t.len() == 14 && t.bytes().all(|b| b.is_ascii_digit()))?;
+    let digest = s("digest")?;
+    s("urlkey")?;
+    let url = s("url").or_else(|| s("original"))?;
+    let names = [s("filename"), s("collection")];
+    Some(capture(
+        Archive::detect(names.iter().flatten().map(String::as_str)),
+        &ts,
+        &url,
+        s("status")
+            .or_else(|| s("statuscode"))
+            .and_then(|x| x.parse().ok()),
+        &digest,
+    ))
 }
 
 fn json_value(v: &Value, map: &FieldMap, out: &mut Parsed) {
@@ -510,11 +534,35 @@ garbage"#;
         let p = parse_input(cdx, Format::Auto, &FieldMap::default());
         assert_eq!(p.observations[0].ts, 1791101400);
         assert_eq!(p.observations[0].status, Some(200));
+        assert_eq!(p.observations[0].id, "wayback:20261004081000:");
+        assert_eq!(p.observations[0].source, "wayback");
 
         let lines = "2026-10-04 08:10:00 https://d.example/?a=1\nhttps://e.example/\n# comment";
         let p = parse_input(lines, Format::Auto, &FieldMap::default());
         assert_eq!(p.observations.len(), 2);
         assert_eq!(p.observations[0].ts, 1791101400);
+    }
+
+    #[test]
+    fn cdx_imports_match_collector_ids() {
+        let wayback = r#"[["urlkey","timestamp","original","statuscode","digest"],["x","20261004081000","https://c.example/","200","AAA"]]"#;
+        let o = &parse_input(wayback, Format::Auto, &FieldMap::default()).observations[0];
+        assert_eq!(o.id, "wayback:20261004081000:AAA");
+        assert_eq!(
+            o.reference.as_deref(),
+            Some("https://web.archive.org/web/20261004081000/https://c.example/")
+        );
+        let arquivo = r#"{"urlkey":"example,c)/","timestamp":"20261004081000","url":"https://c.example/","mime":"text/html","status":"200","digest":"D","filename":"AWP29-20261004.warc.gz","collection":"AWP29"}"#;
+        let o = &parse_input(arquivo, Format::Auto, &FieldMap::default()).observations[0];
+        assert_eq!(o.id, "arquivo:20261004081000:D");
+        assert_eq!(o.source, "arquivo");
+        assert_eq!(o.status, Some(200));
+        assert!(
+            o.reference
+                .as_deref()
+                .unwrap()
+                .starts_with("https://arquivo.pt/wayback/")
+        );
     }
 
     #[test]

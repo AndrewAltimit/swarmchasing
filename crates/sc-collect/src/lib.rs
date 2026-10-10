@@ -10,6 +10,7 @@
 //! - Redact secrets before records leave this crate (see `sc_core::redact`).
 
 use anyhow::{Context, Result};
+use sc_core::capture::{Archive, capture};
 use sc_core::{Observation, parse_ts, redact_observation};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -475,16 +476,7 @@ pub fn parse_wayback_cdx(body: &str) -> Result<CdxPage> {
                 .unwrap_or_default()
                 .to_string()
         };
-        let (ts, orig) = (s(0), s(1));
-        let mut o = Observation {
-            id: format!("wayback:{ts}:{}", s(4)),
-            source: "wayback".into(),
-            ts: parse_ts(&ts).unwrap_or(0),
-            status: s(2).parse().ok(),
-            reference: Some(format!("https://web.archive.org/web/{ts}/{orig}")),
-            url: orig,
-            ..Default::default()
-        };
+        let mut o = capture(Archive::Wayback, &s(0), &s(1), s(2).parse().ok(), &s(4));
         redact_observation(&mut o);
         page.records.push(o);
     }
@@ -502,15 +494,13 @@ pub fn parse_arquivo_cdx(body: &str) -> Vec<Observation> {
         let (Some(ts), Some(orig)) = (gs("timestamp"), gs("url")) else {
             continue;
         };
-        let mut o = Observation {
-            id: format!("arquivo:{ts}:{}", gs("digest").unwrap_or_default()),
-            source: "arquivo".into(),
-            ts: parse_ts(&ts).unwrap_or(0),
-            status: gs("status").and_then(|s| s.parse().ok()),
-            reference: Some(format!("https://arquivo.pt/wayback/{ts}/{orig}")),
-            url: orig,
-            ..Default::default()
-        };
+        let mut o = capture(
+            Archive::Arquivo,
+            &ts,
+            &orig,
+            gs("status").and_then(|s| s.parse().ok()),
+            &gs("digest").unwrap_or_default(),
+        );
         redact_observation(&mut o);
         out.push(o);
     }

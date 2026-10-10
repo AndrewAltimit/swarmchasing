@@ -5,6 +5,7 @@
 
 pub mod analyze;
 pub mod attribution;
+pub mod capture;
 pub mod chains;
 pub mod dialect;
 pub mod endpoints;
