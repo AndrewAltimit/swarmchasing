@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 /// One publicly recorded request/scan/capture. Everything we analyse is
 /// normalised into this shape regardless of where it was collected.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(from = "StoredObservation")]
 pub struct Observation {
     /// Source-specific identifier (scan UUID, CDX timestamp+digest, ...).
     #[serde(default)]
@@ -17,12 +18,21 @@ pub struct Observation {
     /// Unix seconds, UTC. `0` means unknown.
     #[serde(default, deserialize_with = "de_ts")]
     pub ts: i64,
+    /// What `ts` is the time of.
+    #[serde(default, skip_serializing_if = "TsKind::is_unknown")]
+    pub ts_kind: TsKind,
     /// The URL that was requested / submitted.
     pub url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ip: Option<String>,
+    /// The network the request came from (the client's).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asn: Option<u32>,
+    /// The target's network, where a source records it (a scan service's
+    /// scanner reaching the submitted URL). Says nothing about who sent the
+    /// request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_asn: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_agent: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -37,11 +47,107 @@ pub struct Observation {
     pub reference: Option<String>,
 }
 
+/// What an observation's timestamp is the time of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TsKind {
+    /// When the request reached a server (an access log line).
+    Request,
+    /// When an archive captured the URL (Wayback, Arquivo.pt).
+    Capture,
+    /// When the URL was submitted to a scan service (urlquery).
+    Submit,
+    #[default]
+    Unknown,
+}
+
+impl TsKind {
+    pub fn is_unknown(&self) -> bool {
+        *self == Self::Unknown
+    }
+
+    /// The kind a record from `source` carries, for records stored before
+    /// they said.
+    pub fn of_source(source: &str) -> Self {
+        match source {
+            "wayback" | "arquivo" => Self::Capture,
+            "urlquery" => Self::Submit,
+            "access_log" => Self::Request,
+            s if s.starts_with("operator:") => Self::Request,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// An observation as stored, which may predate `ts_kind` and `target_asn`.
+#[derive(Deserialize)]
+struct StoredObservation {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default, deserialize_with = "de_ts")]
+    pub ts: i64,
+    #[serde(default)]
+    pub ts_kind: TsKind,
+    pub url: String,
+    #[serde(default)]
+    pub ip: Option<String>,
+    #[serde(default)]
+    pub asn: Option<u32>,
+    #[serde(default)]
+    pub target_asn: Option<u32>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    #[serde(default)]
+    pub status: Option<u16>,
+    #[serde(default)]
+    pub final_url: Option<String>,
+    #[serde(default)]
+    pub reference: Option<String>,
+}
+
+impl From<StoredObservation> for Observation {
+    fn from(o: StoredObservation) -> Self {
+        let mut out = Observation {
+            id: o.id,
+            source: o.source,
+            ts: o.ts,
+            ts_kind: o.ts_kind,
+            url: o.url,
+            ip: o.ip,
+            asn: o.asn,
+            target_asn: o.target_asn,
+            user_agent: o.user_agent,
+            headers: o.headers,
+            status: o.status,
+            final_url: o.final_url,
+            reference: o.reference,
+        };
+        out.upgrade();
+        out
+    }
+}
+
 /// `Observation::source` of logs an affected operator sent us, as
 /// `operator:<evidence id>`. They are case evidence, not public records.
 pub const OPERATOR_SOURCE: &str = "operator";
 
 impl Observation {
+    /// Bring a record stored before `ts_kind` and `target_asn` up to date:
+    /// the timestamp kind follows from the source, and a urlquery record's
+    /// `asn` was its target's network, never the client's.
+    pub fn upgrade(&mut self) {
+        if self.ts_kind.is_unknown() {
+            self.ts_kind = TsKind::of_source(&self.source);
+        }
+        if self.source == crate::urlquery::SOURCE && self.target_asn.is_none() {
+            self.target_asn = self.asn.take();
+        }
+    }
+
     pub fn operator_supplied(&self) -> bool {
         self.source
             .split(':')

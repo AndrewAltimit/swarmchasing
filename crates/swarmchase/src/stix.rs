@@ -214,9 +214,11 @@ fn build(a: &Analysis, rules: &Rules, o: &Options) -> Result<Value> {
             {
                 refs.insert(add_sco(&mut scos, "domain-name", json!({ "value": h })));
             }
-            if let Some(asn) = r.obs.asn {
+            // The network observed in the record: the client's, or the
+            // target's where a scan service recorded only that.
+            if let Some(asn) = r.obs.asn.or(r.obs.target_asn) {
                 let mut v = json!({ "number": asn });
-                if let Some(n) = asn_names.get(&asn) {
+                if let Some(n) = asn_names.get(&asn).copied().or_else(|| rules.asn_org(asn)) {
                     v["name"] = json!(n);
                 }
                 refs.insert(add_sco(&mut scos, "autonomous-system", v));

@@ -13,7 +13,7 @@
 //! [`FieldMap`] using dotted paths (`page.url`, `meta.submitted_at`).
 
 use crate::capture::{Archive, capture};
-use crate::model::{Observation, parse_ts};
+use crate::model::{Observation, TsKind, parse_ts};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -205,7 +205,7 @@ fn obj_to_obs(v: &Value, map: &FieldMap, default_source: &str) -> Option<Observa
         .or_else(|| v.get("statuscode"))
         .and_then(as_string)
         .and_then(|s| s.parse().ok());
-    Some(Observation {
+    let mut o = Observation {
         id: pick(v, &map.id, ID_KEYS)
             .and_then(as_string)
             .unwrap_or_default(),
@@ -213,15 +213,27 @@ fn obj_to_obs(v: &Value, map: &FieldMap, default_source: &str) -> Option<Observa
             .and_then(as_string)
             .unwrap_or_else(|| default_source.to_string()),
         ts,
+        // Records this toolkit wrote say what their timestamp is.
+        ts_kind: v
+            .get("ts_kind")
+            .cloned()
+            .and_then(|k| serde_json::from_value(k).ok())
+            .unwrap_or_default(),
         url,
         ip: pick(v, &map.ip, IP_KEYS).and_then(as_string),
         asn,
+        target_asn: v
+            .get("target_asn")
+            .and_then(Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok()),
         user_agent: pick(v, &map.user_agent, UA_KEYS).and_then(as_string),
         headers,
         status,
         final_url: pick(v, &map.final_url, FINAL_KEYS).and_then(as_string),
         reference: pick(v, &map.reference, REF_KEYS).and_then(as_string),
-    })
+    };
+    o.upgrade();
+    Some(o)
 }
 
 fn cdx_table(rows: &[Value], out: &mut Parsed) {
@@ -466,6 +478,7 @@ fn access_log(text: &str, map: &FieldMap, out: &mut Parsed) {
         }
         out.observations.push(Observation {
             id: format!("log-{}", n + 1),
+            ts_kind: TsKind::Request,
             source: map.source.clone().unwrap_or_else(|| "access_log".into()),
             ts,
             url,
@@ -511,6 +524,7 @@ garbage"#;
             Some("https://r.jina.ai/")
         );
         assert_eq!(o[1].status, Some(302));
+        assert_eq!(o[1].ts_kind, TsKind::Request);
         assert_eq!(o[2].ip.as_deref(), Some("2001:db8::1"));
         assert_eq!(o[2].user_agent, None);
         assert!(!looks_like_access_log(
@@ -555,6 +569,7 @@ garbage"#;
         let arquivo = r#"{"urlkey":"example,c)/","timestamp":"20261004081000","url":"https://c.example/","mime":"text/html","status":"200","digest":"D","filename":"AWP29-20261004.warc.gz","collection":"AWP29"}"#;
         let o = &parse_input(arquivo, Format::Auto, &FieldMap::default()).observations[0];
         assert_eq!(o.id, "arquivo:20261004081000:D");
+        assert_eq!(o.ts_kind, TsKind::Capture);
         assert_eq!(o.source, "arquivo");
         assert_eq!(o.status, Some(200));
         assert!(
@@ -587,6 +602,27 @@ garbage"#;
     }
 
     #[test]
+    fn stored_records_round_trip_their_timestamp_kind() {
+        let nd = r#"{"id":"a","source":"wayback","ts":1791101400,"url":"https://a.example/"}
+{"id":"b","source":"urlquery","ts":1791101400,"url":"https://b.example/","asn":64500}
+{"id":"c","source":"import","ts":1791101400,"ts_kind":"request","url":"https://c.example/","target_asn":64501}"#;
+        let o = parse_input(nd, Format::Ndjson, &FieldMap::default()).observations;
+        let kinds: Vec<TsKind> = o.iter().map(|o| o.ts_kind).collect();
+        assert_eq!(kinds, [TsKind::Capture, TsKind::Submit, TsKind::Request]);
+        assert_eq!((o[1].asn, o[1].target_asn), (None, Some(64500)));
+        assert_eq!(o[2].target_asn, Some(64501));
+        for (line, o) in nd.lines().zip(&o) {
+            let back: Observation = serde_json::from_str(line).unwrap();
+            assert_eq!(&back, o);
+        }
+        let plain = serde_json::to_string(&Observation::default()).unwrap();
+        assert!(
+            !plain.contains("ts_kind") && !plain.contains("target_asn"),
+            "{plain}"
+        );
+    }
+
+    #[test]
     fn urlquery_search_response() {
         let body = r#"{"query":"r.jina.ai","total_hits":2,"limit":2,"offset":0,"reports":[
           {"report_id":"a1","date":"2026-10-04T08:10:00Z","url":{"schema":"https","addr":"https://r.jina.ai/https://x.example/?access_token=abc123secret"},"ip":{"addr":"203.0.113.7","asn":64500}},
@@ -594,7 +630,8 @@ garbage"#;
         let p = parse_input(body, Format::Auto, &FieldMap::default());
         assert_eq!(p.observations.len(), 2, "{:?}", p.warnings);
         assert_eq!(p.observations[0].id, "urlquery:a1");
-        assert_eq!(p.observations[0].asn, Some(64500));
+        assert_eq!(p.observations[0].target_asn, Some(64500));
+        assert_eq!(p.observations[0].asn, None);
         assert_eq!(p.redacted, 1);
         assert!(!p.observations[0].url.contains("abc123secret"));
     }

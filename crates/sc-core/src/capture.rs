@@ -6,7 +6,7 @@
 //! `<archive>:<timestamp>:<digest>`, so the same capture deduplicates across
 //! both paths.
 
-use crate::model::{Observation, parse_ts};
+use crate::model::{Observation, TsKind, parse_ts};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Archive {
@@ -63,6 +63,7 @@ pub fn capture(
         source: archive.source().into(),
         ts: parse_ts(ts).unwrap_or(0),
         status,
+        ts_kind: TsKind::Capture,
         reference: Some(archive.link(ts, original)),
         url: original.to_string(),
         ..Default::default()
