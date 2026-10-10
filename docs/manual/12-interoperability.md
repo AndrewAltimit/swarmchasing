@@ -26,7 +26,7 @@ Rules of the profile:
 
 The toolkit implements this profile ([STIX export](../reference/cases.md#stix-export)).
 
-## FM-12.2 The `x-sc-agent-run` extension (planned)
+## FM-12.2 The `x-sc-agent-run` extension
 
 STIX has no object for "a run of an autonomous agent". The planned extension defines one as a new STIX Domain Object, through an `extension-definition` with extension type `new-sdo` (STIX 2.1 §7.3). The type name keeps the `x-` prefix, which the specification recommends for objects outside the standard so a future version cannot collide with them.
 
@@ -47,7 +47,7 @@ A fleet is a STIX `grouping` whose `object_refs` list its runs. Soft links betwe
 
 ## FM-12.3 AI incident databases
 
-Confirmed incidents may also be submitted to AI incident databases, so they enter the public record on AI harms. The toolkit drafts (planned); the admin submits. A submission links to the published notice, carries only what the notice carries, and is made after the notice is public.
+Confirmed incidents may also be submitted to AI incident databases, so they enter the public record on AI harms. The toolkit drafts (`case export --format aiid` and `--format oecd`); the admin submits. A submission links to the published notice, carries only what the notice carries, and is made after the notice is public.
 
 | Database | Its format | What a draft maps |
 |---|---|---|
