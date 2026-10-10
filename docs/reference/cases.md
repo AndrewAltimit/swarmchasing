@@ -66,7 +66,7 @@ swarmchase case fleet split <id> k-77d0e2aa [--why "…"]
 
 Clusters are named by stable key (or C-number in the case's analysis) and stored as keys under `[[fleet]]` in `case.toml`. A merge takes in any fleet already holding one of the clusters. The decision log records the clusters, the soft links between them with their strength and detail, the candidate fleet that proposed it, the reason, and the command that reverses it. A merge with no soft link between the clusters needs `--why`. A split takes one cluster out; a fleet left with one cluster is dissolved.
 
-Reports then carry a *Fleets* section, with soft-link details in case notes only. `case status` shows each cluster's key and fleet.
+Reports then carry a *Fleets* section, with soft-link details in case notes only, and STIX exports a `grouping` per fleet ([STIX export](#stix-export)). `case status` shows each cluster's key and fleet.
 
 ## Contacts
 
@@ -114,7 +114,9 @@ Each case keeps the rules it was opened with in `<data>/rules/<version>.toml`. I
 
 Ids are deterministic.
 
-Each exported cluster is also an `x-sc-agent-run` object: its cluster key, span and timestamp kind, the SC-T tactics its indicators are evidence of, the artifact families seen, how wide its parallel batches were, its tier, attribution per layer and its `observed-data`. The bundle carries the `extension-definition` (type `new-sdo`) that defines it; the schema is [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json). A public export's runs carry developers through the naming gate and hosts only.
+Each exported cluster is also an `x-sc-agent-run` object: its cluster key, span and timestamp kind, the SC-T tactics of the rules its records hit (each rule's `tactic`), the artifact families seen, how wide its parallel batches were, its tier, attribution per layer and its `observed-data`. The bundle carries the `extension-definition` (type `new-sdo`) that defines it; the schema is [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json). A public export's runs carry developers through the naming gate and hosts only.
+
+Each case fleet with at least two exported runs is a `grouping` (context `suspicious-activity`) whose `object_refs` are its runs and their `observed-data`, plus a `related-to` relationship between two of its runs for each soft link, named by kind ([SC-FM 12.2](../manual/12-interoperability.md)). Candidate fleets the admin has not merged are not exported.
 
 ## Incident database drafts
 

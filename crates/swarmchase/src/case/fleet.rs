@@ -333,7 +333,7 @@ pub(crate) fn with_fleets(md: String, section: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::case::test_support::*;
     use crate::case::{case_records, load, new_case, update};
@@ -343,7 +343,7 @@ mod tests {
 
     /// Two runs with different inboxes, a day apart, opening every host
     /// with the same recon requests: two clusters, soft-linked.
-    fn two_runs() -> Vec<Observation> {
+    pub(crate) fn two_runs() -> Vec<Observation> {
         let mut obs = Vec::new();
         for (f, inbox) in [
             "0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a",
