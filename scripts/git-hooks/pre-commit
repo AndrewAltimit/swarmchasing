@@ -9,7 +9,7 @@
 #
 #   every commit      check-committed-data.py --staged (no raw dumps, no
 #                     unredacted secrets - the one hard rule)
-#   *.md              check-md-links.py --staged
+#   *.md              check-md-links.py --staged, check-doc-density.py --staged
 #   site/             check-site.py (CSP, no HTML sinks)
 #   notices/          swarmchase notice lint (nothing a notice withholds)
 #   Cargo.lock,       cargo-deny (scripts/ci/deny.sh); skipped with a warning
@@ -57,6 +57,12 @@ if grep -q '\.md$' <<<"$STAGED"; then
     printf '[pre-commit] doc link + anchor check\n'
     if ! "$PY" scripts/ci/check-md-links.py --staged --quiet; then
         printf '[pre-commit] fix the link target (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+    # Over-long lines and paragraphs in table cells, in the staged docs only.
+    printf '[pre-commit] doc density check\n'
+    if ! "$PY" scripts/ci/check-doc-density.py --staged --quiet; then
+        printf '[pre-commit] split the paragraph or move the cell into a section (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
         exit 1
     fi
 fi

@@ -2,13 +2,13 @@
 
 How swarmchasing collects, reports and publishes. These apply to every tool in this repository and to everyone who operates it.
 
-How the analysis works is in [methodology.md](methodology.md). What an operator who receives a report can do is in [for-operators.md](for-operators.md).
+How the analysis works is in [methodology.md](methodology.md). What an operator who receives a report can do is in [for-operators.md](guides/for-operators.md).
 
 ## Collection
 
 - **Passive only.** We read indexes and public records. We never open URLs that agents submitted, never read from or post to their callback channels (inboxes, notification topics, paste sites), and never probe suspected agent infrastructure.
 - **Public records only.** No authenticated, account-linked or otherwise non-public data. Public records include scan services, web archives, certificate logs, package registry metadata and GitHub's public event stream. The toolkit also reads web server access logs, so operators can check their own logs in the browser or the CLI. Those logs are never a watch source.
-- **Operator-supplied logs.** An operator's own logs, sent to us after a report, may become evidence in its case and in the private reports. Logs are the operator's to publish, so a notice uses them only after we ask and the operator agrees. A notice cites them as provided by the operator. A report to one operator never carries another operator's logs. See [for-operators.md](for-operators.md#send-logs-back).
+- **Operator-supplied logs.** An operator's own logs, sent to us after a report, may become evidence in its case and in the private reports. Logs are the operator's to publish, so a notice uses them only after we ask and the operator agrees. A notice cites them as provided by the operator. A report to one operator never carries another operator's logs. See [for-operators.md](guides/for-operators.md#send-logs-back).
 - **Redact at ingest.** Records can carry exfiltrated cookies, tokens and keys. Secret-looking values are replaced with hashes before anything is stored, so links between records survive and the secrets do not.
 - **Raw data stays out of git.** Collector output, watch runs and case working files live in gitignored directories. Only curated, redacted samples and published notices are committed. Case files, including the reports drafted in them, stay in the data directory.
 - **Retention.** Watch data (run directories and the record store) is deleted after 180 days by capture time; `swarmchase watch` enforces this on every run (`retain_days` in [`watchlist.toml`](../watchlist.toml)). Records a case needs are copied into the case first (`swarmchase case new` / `case add`). Case files live with the watch data, outside git: an open case names organisations on unconfirmed evidence. A case's records are kept while the case is open, plus one year. Reviewed records (`swarmchase review`) are kept as the evaluation set.
@@ -35,8 +35,17 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
 | **Admin gate** | Tools and agents draft reports, find contacts and prepare notices. Only the admin decides when evidence is sufficient, which endpoints are compromised or targeted, and sends reports and publishes notices. |
 | **Channels** | Email is preferred. When an organisation has no email contact, the admin uses its web form or CERT portal. |
 | **Naming** | Public notices name the affected organisations. |
-| **What notices withhold** | Anything that lets a reader take over or reuse the swarm's channels: live inbox or topic identifiers, captured credentials and cookies, and details of a weakness at an affected endpoint that is not yet fixed. The notice draft withholds whatever it cannot classify and flags it for the admin. Endpoints marked compromised have their attack details withheld. Every committed notice is checked for channel identifiers, addresses and credential shapes. Reports sent privately to the affected parties include everything. |
+| **What notices withhold** | Anything that lets a reader take over or reuse the swarm's channels, or exploit an unfixed weakness. See [What notices withhold](#what-notices-withhold). |
 | **Corrections** | Notices are versioned. Corrections and retractions are appended as dated updates on the notice and in the feed. Earlier entries are never rewritten. |
-| **Right of reply** | A provider's or affected operator's statement is appended verbatim to the notice as a dated update when they ask. It never delays publication. See [for-operators.md](for-operators.md#right-of-reply-and-corrections). |
+| **Right of reply** | A provider's or affected operator's statement is appended verbatim to the notice as a dated update when they ask. It never delays publication. See [for-operators.md](guides/for-operators.md#right-of-reply-and-corrections). |
 | **Authorised testing** | A cluster that declares itself an authorised red-team or research evaluation is handled as a normal incident, and its declared owner is contacted at the same time as the provider. If the owner confirms it was authorised and in scope, the notice is published as "authorised test, closed". It is not withheld. |
 | **Independence** | We work independently and do not depend on other groups or services for permission to publish. |
+
+### What notices withhold
+
+- **Channels.** Live inbox or topic identifiers, and anything else that lets a reader take over or reuse the swarm's channels.
+- **Secrets.** Captured credentials and cookies.
+- **Unfixed weaknesses.** Details of a weakness at an affected endpoint that is not yet fixed. Endpoints marked compromised have their attack details withheld.
+- **Anything unclassified.** The notice draft withholds whatever it cannot classify and flags it for the admin.
+
+Every committed notice is checked for channel identifiers, addresses and credential shapes. Reports sent privately to the affected parties include everything. The full list of what the tooling withholds is in [the notices reference](reference/notices.md#what-a-notice-withholds).
