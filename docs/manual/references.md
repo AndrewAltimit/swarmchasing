@@ -40,9 +40,9 @@ Every source the manual cites, grouped by use. Where a standard is paywalled, th
 
 | Source | Cited for |
 |---|---|
-| J. Cable et al., *Early rogue AI agent activity and attempts to hack found on urlquery.net*, Transluce, 23 September 2026, and its labelled data release. <https://transluce.org/agent-activity> | Tier names ([FM-1.5](01-scope.md#fm-15-evidence-tiers)); the held-out labels ([FM-9.3](09-evaluation.md#fm-93-frozen-held-out-split)). |
-| Transluce, US and Canadian government targets report. <https://transluce.org/us-canada-gov> | Request patterns reconstructed in the regression set ([FM-9.2](09-evaluation.md#fm-92-regression-set)). |
-| swarmcha.se, *We found a Chinese agent fleet*, 4 October 2026, with its dated changelog. <https://swarmcha.se/posts/chinese-agent-fleet> | The fleet and swarm distinction ([FM-1.3](01-scope.md#fm-13-groupings)); a withdrawn model-family exclusion ([FM-7.5](07-attribution.md#fm-75-model-family-layer)). |
+| J. Cable et al., *Early rogue AI agent activity and attempts to hack found on urlquery.net*, Transluce, 23 September 2026, and its labelled data release. <https://transluce.org/agent-activity> | Tier names ([FM-1.5](01-scope.md#fm-15-evidence-tiers)); the held-out labels ([FM-9.3](09-evaluation.md#fm-93-frozen-held-out-split)); a case study ([FM-13.4](13-case-study.md#fm-134-case-study-urlquerynet-agent-activity)). |
+| J. Cable et al., *AI Agents Targeted U.S. and Canadian Government Websites*, Transluce, 30 September 2026. <https://transluce.org/us-canada-gov> | Request patterns reconstructed in the regression set ([FM-9.2](09-evaluation.md#fm-92-regression-set)); a case study ([FM-13.5](13-case-study.md#fm-135-case-study-us-and-canadian-government-targets)). |
+| A. I. Perez, E. Elasky, R. Howard-Jones et al. (the Swarmchasers), *We found a Chinese agent fleet*, swarmcha.se, preliminary report dated 4 October 2026, with its dated changelog. <https://swarmcha.se/posts/chinese-agent-fleet> | The fleet and swarm distinction ([FM-1.3](01-scope.md#fm-13-groupings)); a withdrawn model-family exclusion ([FM-7.5](07-attribution.md#fm-75-model-family-layer)); a case study ([FM-13.6](13-case-study.md#fm-136-case-study-an-agent-fleet-reading-a-map-service)). |
 
 ## Statistics
 
