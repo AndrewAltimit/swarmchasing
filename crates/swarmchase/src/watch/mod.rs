@@ -183,6 +183,7 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
     let mut reports = Vec::new();
     let mut fresh: Vec<Observation> = Vec::new();
     let mut new_ids = BTreeSet::new();
+    let mut ids_by_source: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut alerts = Vec::new();
 
     for s in &wl.sources {
@@ -226,7 +227,9 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
                     let nd = to_ndjson(&new)?;
                     std::fs::write(run_dir.join(format!("{}.ndjson", s.name)), &nd)?;
                     append(&out.join("store").join(format!("{}.ndjson", s.name)), &nd)?;
+                    let ids = ids_by_source.entry(s.name.clone()).or_default();
                     for o in new {
+                        ids.insert(o.id.clone());
                         if new_ids.insert(o.id.clone()) {
                             fresh.push(o);
                         }
@@ -263,9 +266,13 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
     .monitor(&fresh, &mut state.cases);
     let recent: Vec<Observation> = stored.into_iter().filter(|o| o.ts >= since).collect();
     let a = analyze(recent, rules);
-    let (drifts, restarted) = state
-        .rules
-        .observe(&a.rules_version, RuleRun::from_analysis(&a, &new_ids));
+    let (drifts, restarted) = state.rules.observe(
+        &a.rules_version,
+        ids_by_source
+            .iter()
+            .map(|(s, ids)| (s.clone(), RuleRun::from_analysis(&a, ids)))
+            .collect(),
+    );
     write_json(&state_path, &state)?;
     alerts.extend(drifts.iter().map(|d| d.line()));
     let mut notes = Vec::new();

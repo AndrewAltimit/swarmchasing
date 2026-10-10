@@ -101,18 +101,22 @@ impl RuleRun {
     }
 }
 
-/// The rule baseline kept in `state.json`. It restarts when the rules change,
-/// because a changed rule is expected to fire at a different rate.
+/// The rule baseline kept in `state.json`, per watch source: each source has
+/// its own mix of rules (a relay's own rule fires on nearly every record from
+/// it), so a run whose new records come mostly from one source would
+/// otherwise look like drift. It restarts when the rules change, because a
+/// changed rule is expected to fire at a different rate.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RuleHistory {
     #[serde(default)]
     pub rules_version: String,
     #[serde(default)]
-    pub runs: Vec<RuleRun>,
+    pub sources: BTreeMap<String, Vec<RuleRun>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Drift {
+    pub source: String,
     pub rule: String,
     pub hits: usize,
     pub records: usize,
@@ -124,10 +128,11 @@ impl Drift {
     pub fn line(&self) -> String {
         let pct = |h: usize, n: usize| 100.0 * h as f64 / n.max(1) as f64;
         format!(
-            "`{}` fired on {} of {} new records ({:.1}%) against {:.1}% over the previous {} records",
+            "`{}` fired on {} of {} new records from {} ({:.1}%) against {:.1}% over its previous {} records",
             self.rule,
             self.hits,
             self.records,
+            self.source,
             pct(self.hits, self.records),
             pct(self.baseline_hits, self.baseline_records),
             self.baseline_records
@@ -136,21 +141,34 @@ impl Drift {
 }
 
 impl RuleHistory {
-    /// Compare `run` with the baseline, then add it. Returns the drifting
-    /// rules, and whether the baseline restarted because the rules changed.
-    pub fn observe(&mut self, version: &str, run: RuleRun) -> (Vec<Drift>, bool) {
+    /// Compare each source's run with that source's baseline, then add it.
+    /// Returns the drifting rules, and whether the baseline restarted
+    /// because the rules changed.
+    pub fn observe(
+        &mut self,
+        version: &str,
+        runs: BTreeMap<String, RuleRun>,
+    ) -> (Vec<Drift>, bool) {
         let restarted = !self.rules_version.is_empty() && self.rules_version != version;
         if self.rules_version != version {
             self.rules_version = version.to_string();
-            self.runs.clear();
+            self.sources.clear();
         }
-        let drifts = drift(&self.runs, &run);
-        if run.records > 0 {
-            self.runs.push(run);
-            if self.runs.len() > HISTORY {
-                self.runs.remove(0);
+        let mut drifts = Vec::new();
+        for (source, run) in runs {
+            let history = self.sources.entry(source.clone()).or_default();
+            drifts.extend(drift(history, &run).into_iter().map(|d| Drift {
+                source: source.clone(),
+                ..d
+            }));
+            if run.records > 0 {
+                history.push(run);
+                if history.len() > HISTORY {
+                    history.remove(0);
+                }
             }
         }
+        drifts.sort_by(|a, b| b.hits.cmp(&a.hits).then_with(|| a.rule.cmp(&b.rule)));
         (drifts, restarted)
     }
 }
@@ -167,6 +185,7 @@ fn drift(baseline: &[RuleRun], run: &RuleRun) -> Vec<Drift> {
         let base = base_hits as f64 / base_records as f64;
         if hits >= MIN_DRIFT_HITS && rate >= base * DRIFT_FACTOR && rate - base >= DRIFT_MIN_DELTA {
             out.push(Drift {
+                source: String::new(),
                 rule: rule.clone(),
                 hits,
                 records: run.records,
@@ -175,7 +194,6 @@ fn drift(baseline: &[RuleRun], run: &RuleRun) -> Vec<Drift> {
             });
         }
     }
-    out.sort_by(|a, b| b.hits.cmp(&a.hits).then_with(|| a.rule.cmp(&b.rule)));
     out
 }
 
@@ -220,31 +238,52 @@ mod tests {
         }
     }
 
+    fn one(source: &str, r: RuleRun) -> BTreeMap<String, RuleRun> {
+        BTreeMap::from([(source.to_string(), r)])
+    }
+
     #[test]
     fn rule_drift_needs_a_baseline_and_restarts_on_new_rules() {
         let mut h = RuleHistory::default();
         for _ in 0..3 {
-            let (d, restarted) = h.observe("v1", run(50, &[("a", 1), ("b", 10)]));
+            let (d, restarted) = h.observe("v1", one("s", run(50, &[("a", 1), ("b", 10)])));
             assert!(d.is_empty() && !restarted);
         }
         // `a` jumps from 2% to 20%; `b` stays at 20%.
-        let (d, _) = h.observe("v1", run(50, &[("a", 10), ("b", 10)]));
+        let (d, _) = h.observe("v1", one("s", run(50, &[("a", 10), ("b", 10)])));
         assert_eq!(d.len(), 1);
-        assert_eq!(d[0].rule, "a");
+        assert_eq!((d[0].source.as_str(), d[0].rule.as_str()), ("s", "a"));
         assert_eq!((d[0].baseline_hits, d[0].baseline_records), (3, 150));
         assert!(d[0].line().contains("20.0%"), "{}", d[0].line());
 
         // A brand-new rule with no baseline hits drifts too.
-        let (d, _) = h.observe("v1", run(40, &[("c", 6)]));
+        let (d, _) = h.observe("v1", one("s", run(40, &[("c", 6)])));
         assert_eq!(d[0].rule, "c");
 
         // Small runs are not judged.
-        let (d, _) = h.observe("v1", run(10, &[("d", 9)]));
+        let (d, _) = h.observe("v1", one("s", run(10, &[("d", 9)])));
         assert!(d.is_empty());
 
-        let (d, restarted) = h.observe("v2", run(50, &[("a", 40)]));
+        let (d, restarted) = h.observe("v2", one("s", run(50, &[("a", 40)])));
         assert!(d.is_empty() && restarted);
-        assert_eq!(h.runs.len(), 1);
+        assert_eq!(h.sources["s"].len(), 1);
+    }
+
+    #[test]
+    fn a_run_dominated_by_one_source_is_not_drift() {
+        let mut h = RuleHistory::default();
+        // A relay's own rule fires on every record from it, and on none
+        // from the other source.
+        for _ in 0..3 {
+            let runs = BTreeMap::from([
+                ("relay".to_string(), run(40, &[("relay.x", 40)])),
+                ("other".to_string(), run(160, &[])),
+            ]);
+            assert!(h.observe("v1", runs).0.is_empty());
+        }
+        // This run's new records are all from the relay.
+        let (d, _) = h.observe("v1", one("relay", run(500, &[("relay.x", 500)])));
+        assert!(d.is_empty(), "{d:?}");
     }
 
     #[test]
