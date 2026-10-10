@@ -330,28 +330,25 @@ pub fn parse_input(text: &str, format: Format, map: &FieldMap) -> Parsed {
                 if line.is_empty() || line.starts_with('#') {
                     continue;
                 }
-                let toks: Vec<&str> = line
-                    .split(['\t', ',', ' '])
-                    .filter(|t| !t.is_empty())
-                    .collect();
-                let Some(ui) = toks
-                    .iter()
-                    .position(|t| t.contains("://") || t.starts_with("data:"))
-                else {
+                let Some((prefix, url)) = split_url_line(line) else {
                     out.warnings.push(format!("line {}: no URL", n + 1));
                     continue;
                 };
                 // Timestamp: everything before the URL, joined (handles "2026-10-04 08:10:00 https://...").
-                let ts = if ui > 0 {
-                    parse_ts(&toks[..ui].join(" ")).unwrap_or(0)
-                } else {
+                let prefix: Vec<&str> = prefix
+                    .split(['\t', ',', ' '])
+                    .filter(|t| !t.is_empty())
+                    .collect();
+                let ts = if prefix.is_empty() {
                     0
+                } else {
+                    parse_ts(&prefix.join(" ")).unwrap_or(0)
                 };
                 out.observations.push(Observation {
                     id: format!("line-{}", n + 1),
                     source: "lines".into(),
                     ts,
-                    url: toks[ui..].join(" "),
+                    url: url.to_string(),
                     ..Default::default()
                 });
             }
@@ -361,6 +358,24 @@ pub fn parse_input(text: &str, format: Format, map: &FieldMap) -> Parsed {
         out.redacted += crate::redact::redact_observation(o);
     }
     out
+}
+
+/// Split a URL-list line into what precedes the URL and the URL itself. The
+/// URL starts at the first token (split on tab, comma or space) that has a
+/// scheme, and runs to the end of the line, or to the next tab on a
+/// tab-separated line. It is kept exactly as written: payloads carry spaces
+/// and commas.
+fn split_url_line(line: &str) -> Option<(&str, &str)> {
+    let mut pos = 0;
+    for tok in line.split(['\t', ',', ' ']) {
+        if tok.contains("://") || tok.starts_with("data:") {
+            let rest = &line[pos..];
+            let url = rest.split('\t').next().unwrap_or(rest).trim_end();
+            return Some((&line[..pos], url));
+        }
+        pos += tok.len() + 1;
+    }
+    None
 }
 
 fn access_log_re() -> &'static regex::Regex {
@@ -500,6 +515,27 @@ garbage"#;
         let p = parse_input(lines, Format::Auto, &FieldMap::default());
         assert_eq!(p.observations.len(), 2);
         assert_eq!(p.observations[0].ts, 1791101400);
+    }
+
+    #[test]
+    fn url_lines_keep_the_url_as_written() {
+        let lines = "2026-10-04 08:10:00 https://d.example/?id=1 UNION SELECT 1,2\n\
+                     https://e.example/?q=a,b  c\n\
+                     2026-10-04T08:10:00Z\thttps://f.example/?q=x y,z\tnote\n\
+                     1791101400,https://g.example/?a=1,2";
+        let p = parse_input(lines, Format::Lines, &FieldMap::default());
+        let urls: Vec<&str> = p.observations.iter().map(|o| o.url.as_str()).collect();
+        assert_eq!(
+            urls,
+            [
+                "https://d.example/?id=1 UNION SELECT 1,2",
+                "https://e.example/?q=a,b  c",
+                "https://f.example/?q=x y,z",
+                "https://g.example/?a=1,2",
+            ]
+        );
+        let ts: Vec<i64> = p.observations.iter().map(|o| o.ts).collect();
+        assert_eq!(ts, [1791101400, 0, 1791101400, 1791101400]);
     }
 
     #[test]
