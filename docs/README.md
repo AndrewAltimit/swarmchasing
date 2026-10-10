@@ -10,6 +10,7 @@ Task-oriented: how to do one job end to end.
 |---|---|
 | [`guides/admin-workflow.md`](guides/admin-workflow.md) | The admin's day: watch digest, review, case, contacts, drafts, send, notice, updates. |
 | [`guides/for-operators.md`](guides/for-operators.md) | For a site that received a report: what it means, checking logs, sending logs back, replies, verifying a bundle. |
+| [`guides/writing-rules.md`](guides/writing-rules.md) | Adding or changing a rule: fields, weights, links, hard negatives, the evaluation and the gate. |
 
 ## Reference
 
