@@ -8,8 +8,10 @@
 // page and the index row; the index filters and their URL hash, on the
 // synthetic notices in crates/sc-publish/tests/fixtures/notices/; the
 // bundle viewer with a hostile stamp, manifest and case claims; the workbench with XSS probes, HTML programs, a
-// probe chain and an unusual path set in the records, every view, cluster,
-// record and report audience, and hostile claims; the rules editor and the
+// probe chain, an unusual path set and a cluster with every per-cluster hint
+// in the records, every view, cluster, record and report audience, and
+// hostile claims, and that declared testing reaches no view and no draft but
+// an internal one; the rules editor and the
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
 // defang on the tools page.
 //
@@ -140,9 +142,23 @@ const chain = Array.from({ length: 4 }, (_, i) => ({
 const odd = [`/<img src=x onerror=${fire}>.php`, `/"><script>${fire}</script>`, `/javascript:${fire}`];
 const pathset = ["h1.example", "h2.example", "h3.example"].flatMap((h, j) =>
   odd.map((p, k) => ({ id: `xss:path${j}${k}`, ts: `2026-06-02T17:${j}${k}:00Z`, url: `https://r.jina.ai/https://${h}${p}?uqtag=${tag}` })));
+// One cluster with every per-cluster hint: a benchmark target, stale
+// knowledge, prose, a relay stack, and declared testing, whose contact must
+// never reach the page outside an internal draft.
+const DECLARED = "zz-declared-contact";
+const inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+const declaredUa = `AcmeScan/1.0 (authorized security test; ${DECLARED}@acme.example)`;
+const hinted = [
+  { url: `http://testphp.vulnweb.com/artists.php?artist=1'&cb=${inbox}&q=${encodeURIComponent(`bitte finde die neuesten Berichte und die Zahlen <img src=x onerror=${fire}>`)}`, user_agent: declaredUa },
+  { url: `http://testphp.vulnweb.com/listproducts.php?cat=1&cb=${inbox}`, user_agent: declaredUa },
+  { url: `https://graph.facebook.com/v2.8/me?hook=${inbox}&x=<svg/onload=${fire}>` },
+  { url: `https://graph.facebook.com/v2.9/page?hook=${inbox}` },
+  { url: `https://r.jina.ai/https://www-shop-example.translate.goog/<svg/onload=${fire}>?hook=${inbox}` },
+  { url: `https://r.jina.ai/https://www-shop-example.translate.goog/b?hook=${inbox}` },
+].map((p, i) => ({ id: `xss:hint${i}`, ts: `2026-06-02T18:0${i}:00Z`, ...p }));
 const fixture =
   readFileSync(join(ROOT, "samples/eval/published-patterns.ndjson"), "utf8").trimEnd() + "\n" +
-  [...probes, ...chain, ...pathset].map((p) => JSON.stringify(p)).join("\n") + "\n";
+  [...probes, ...chain, ...pathset, ...hinted].map((p) => JSON.stringify(p)).join("\n") + "\n";
 const badClaims = JSON.stringify([{ party: program, role: `<script>${fire}</script>`, evidence: `javascript:${fire}` }]);
 const claims = JSON.stringify([
   { party: program, role: "developer", evidence: "provider_confirmed", details: [program, `javascript:${fire}`, tag] },
@@ -323,13 +339,16 @@ try {
   await sleep(800);
   const views = await run(`(async () => {
     const wait = (ms = 60) => new Promise((r) => setTimeout(r, ms));
-    let detail = 0, hostile = false, marks = 0;
+    let detail = 0, hostile = false, marks = 0, declared = false;
+    const hints = new Set();
     for (const b of document.querySelectorAll(".cluster-row")) {
       b.click();
       await wait();
       const c = document.getElementById("context");
       detail = Math.max(detail, c.querySelectorAll("dt").length);
       hostile ||= c.textContent.includes("onerror");
+      declared ||= c.textContent.includes(${JSON.stringify(DECLARED)});
+      for (const dt of c.querySelectorAll("dt")) hints.add(dt.textContent);
       for (const t of document.querySelectorAll(".viz-tabs [role=tab]")) {
         t.click();
         await wait(20);
@@ -357,8 +376,10 @@ try {
       aud.dispatchEvent(new Event("change"));
       await wait();
       named ||= document.getElementById("report").textContent.includes("<script>");
+      if (o.value !== "internal") declared ||= document.getElementById("report").textContent.includes(${JSON.stringify(DECLARED)});
     }
-    return { detail, hostile, marks, claimsError, named, links: document.querySelectorAll("#links li").length, records: document.querySelectorAll("table.records tbody tr").length };
+    declared ||= document.getElementById("links").textContent.includes(${JSON.stringify(DECLARED)});
+    return { detail, hostile, marks, claimsError, named, declared, hints: [...hints], links: document.querySelectorAll("#links li").length, records: document.querySelectorAll("table.records tbody tr").length };
   })()`);
   Object.assign(stats, { records: views.records, detailRows: views.detail, chartMarks: views.marks, linkItems: views.links });
   if (!views.detail) failures.push("the context panel rendered nothing for a cluster");
@@ -367,6 +388,9 @@ try {
   if (!views.links) failures.push("the links panel listed nothing (the probe chain should be there)");
   if (!views.claimsError) failures.push("the invalid claims raised no error");
   if (!views.named) failures.push("the hostile claims did not reach the report as text");
+  if (views.declared) failures.push("declared testing reached the page outside an internal draft");
+  for (const h of ["Relay stacks", "Benchmark targets", "Stale knowledge", "Prose in parameters"])
+    if (!views.hints.includes(h)) failures.push(`no cluster showed "${h}": the hint fixture did not exercise it`);
   await audit("workbench");
 
   // Unwrap: every probe URL.

@@ -16,8 +16,9 @@ export const SOFT_KINDS = {
   header_set: "header set",
   escalation: "route escalation",
   common_feature: "common feature",
-  shared_secret: "shared secret",
+  shared_secret: "shared captured secret",
   relay_stack: "relay stack",
+  callback_service: "callback service",
 };
 
 /** A safe class suffix and a label for a soft-link kind id. */
@@ -29,6 +30,15 @@ export const TACTICS = {
   T5: "account or identity acquisition", T6: "credential reuse", T7: "callback or side channels", T8: "off-task targets", T9: "inter-agent coordination",
 };
 export const tactic = (t) => `${t} ${TACTICS[t] ?? ""}`.trim();
+
+// Languages the engine's prose guess names (ISO 639-1). An unknown code is
+// shown as itself.
+export const LANGUAGES = {
+  en: "English", de: "German", fr: "French", es: "Spanish", it: "Italian", pt: "Portuguese", nl: "Dutch",
+  ru: "Russian", uk: "Ukrainian", el: "Greek", he: "Hebrew", ar: "Arabic", th: "Thai", hi: "Hindi",
+  ko: "Korean", ja: "Japanese", zh: "Chinese",
+};
+export const language = (l) => LANGUAGES[l] ?? (trunc(String(l ?? "?"), 20) || "?");
 
 export const ROUTES = { direct: "direct", relay: "relay", program: "program carrier", remote_browser: "remote browser" };
 export const route = (r) => ROUTES[r] ?? trunc(String(r ?? "?").replace(/_/g, " "), 30);

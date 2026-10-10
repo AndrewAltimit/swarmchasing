@@ -7,7 +7,7 @@ import { $, el, activate, download, fetchRoot, showError } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
 import { engine, host as hostOf, pageRules } from "../lib/wasm.js";
 import { figure, legend, legendKey, edgeKey, tierLegend, rampLegend, swimlanes, fleetGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
-import { kindClass, kindLabel, tactic, route, fleetItems } from "../lib/hints.js";
+import { kindClass, kindLabel, tactic, route, fleetItems, language } from "../lib/hints.js";
 
 const VIEWS = ["runs", "fleet", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
@@ -119,6 +119,11 @@ function runAnalysis() {
     warn.textContent = notes.join(" ");
   }
   a = out.analysis;
+  // Declared testing (the declaring text and the contact it names) is for
+  // case notes only, never a public page: the page drops it on receipt, so
+  // no view and no download shows it. The report draft follows the engine's
+  // audience gate, as the CLI does.
+  for (const c of arr(a.clusters)) delete c.declared;
   dateTags = obj(out.cluster_date_tags);
   endpointsCache = null;
   const h = readHash();
@@ -559,6 +564,26 @@ function clusterContext(c) {
   };
   const cuts = [cut(cl.url, "truncated URLs were cut at"), cut(cl.value, "cut parameter values were")].filter(Boolean);
   if (cuts.length) row("Cut lengths", cuts.join("; "), el("div", { class: "hint" }, "consistent with a model or tool output limit, not evidence on its own (rule out the source's own display limit first)"));
+  const stacks = topEntries(c.relay_stacks, 6);
+  if (stacks.length)
+    row("Relay stacks", chips(stacks.map(([st, n]) => `${safe(st, 120)} ×${n}`)),
+      el("div", { class: "hint" }, "relays and carriers each record went through, outermost first; a stack of two or more hops is one client's habit, not evidence on its own"));
+  const bench = topEntries(c.benchmarks, 8);
+  if (bench.length)
+    row("Benchmark targets", chips(bench.map(([id, n]) => `${safe(id, 60)} ×${n}`)),
+      el("div", { class: "hint" }, "public practice or benchmark targets: evaluation or training activity is likely, not malice (a hint; the score is unchanged)"));
+  const stale = arr(c.stale_knowledge);
+  if (stale.length)
+    row("Stale knowledge", el("ul", {}, stale.slice(0, 8).map((u) => el("li", {}, el("code", {}, safe(u.id, 60)),
+      ` on ${num(u.records) ?? "?"} records, ${num(u.hosts) ?? "?"} hosts${u.note ? `: ${safe(u.note, 120)}` : ""}`))),
+      el("div", { class: "hint" }, "retired endpoints or old clients, consistent with a model writing from old training data; old scripts do the same (a hint)"));
+  const prose = obj(c.prose);
+  if (num(prose.values)) {
+    const langs = topEntries(prose.languages, 8);
+    row("Prose in parameters", `${plural(prose.values, "distinct value")} `, langs.length ? chips(langs.map(([l, n]) => `${language(l)} ×${n}`)) : el("span", { class: "hint" }, "language unclear"),
+      num(prose.mismatched) ? el("div", {}, `${prose.mismatched} in a language other than their target's country domain`) : null,
+      el("div", { class: "hint" }, "an agent prompted in one language often searches a foreign site in it; travellers do too (a hint, not evidence)"));
+  }
   const lf = arr(c.link_features);
   if (lf.length) row("Linked by", chips(lf.slice(0, 10).map((x) => safe(typeof x === "string" ? x : JSON.stringify(x), 90))), lf.length > 10 ? el("span", { class: "hint" }, ` ${lf.length - 10} more`) : null);
   const mine = new Set(arr(c.members));

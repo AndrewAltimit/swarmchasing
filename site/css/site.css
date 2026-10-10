@@ -413,6 +413,7 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
 .chart .edge.soft.sk-common-feature { stroke: var(--axis); stroke-dasharray: 1 4; stroke-linecap: round; }
 .chart .edge.soft.sk-shared-secret { stroke: var(--critical); stroke-dasharray: 8 3; }
 .chart .edge.soft.sk-relay-stack { stroke: var(--series-1); stroke-dasharray: 2 4; stroke-linecap: round; }
+.chart .edge.soft.sk-callback-service { stroke: var(--series-3); stroke-dasharray: 3 3; }
 svg.chart.key-line { display: inline-block; width: 26px; height: 10px; margin-right: 5px; vertical-align: -1px; overflow: visible; }
 .chart .edge-hit { stroke: transparent; stroke-width: 12; fill: none; cursor: pointer; }
 .chart .cell { stroke: var(--surface-1); stroke-width: 2; }

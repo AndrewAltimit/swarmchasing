@@ -54,7 +54,7 @@ On a wide screen it has three panes: the records and clusters, the views, and th
 - **Rhythm**: records by weekday and hour, UTC;
 - **Endpoints × time** and **Hourly**.
 
-The context panel shows a selected cluster's tactics as a small bar chart, its timing, and the hints the analysis found; the links panel lists shared pauses, dialects, probe chains, common features, escalations, candidate fleets and soft links. Chains and escalations timed by archive captures show no pace.
+The context panel shows a selected cluster's tactics as a small bar chart, its timing, and the hints the analysis found, among them relay stacks, benchmark targets, stale knowledge and the languages of prose in parameters. Declared testing is left out: the page drops it on receipt, and it reaches only an *Internal case notes* draft, as in the CLI. The links panel lists shared pauses, dialects, probe chains, common features, escalations, candidate fleets and soft links. Chains and escalations timed by archive captures show no pace.
 
 Every view has a table view. Every mark that selects something is a keyboard button (Enter or Space), focus stays on it after the views redraw, and Escape clears the selection. Edges, shared pauses and rhythms are hints to check, not evidence ([methodology](../methodology.md#descriptive-hints)). The selection is kept in the URL hash as ids only (a cluster key, a record number, a rule id), never hosts or URLs.
 
