@@ -15,6 +15,7 @@
 //! uses it for a hostile fixture, and a deploy never passes it.
 
 use sc_publish::{SiteInputs, build_pages, check_notice, parse_notice};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -33,6 +34,9 @@ const INPUTS: &[(&str, &str)] = &[
 struct Reader {
     root: PathBuf,
     data_dirs: Vec<PathBuf>,
+    /// Files git tracks, when the root is a checkout. Content listings skip
+    /// anything else, so ignored local files never become pages.
+    tracked: Option<HashSet<String>>,
     log: Vec<String>,
 }
 
@@ -47,9 +51,11 @@ impl Reader {
             let p = if p.is_absolute() { p } else { root.join(p) };
             data_dirs.push(p.canonicalize().unwrap_or(p));
         }
+        let tracked = git_tracked(&root);
         Ok(Self {
             root,
             data_dirs,
+            tracked,
             log: Vec::new(),
         })
     }
@@ -83,8 +89,8 @@ impl Reader {
     }
 
     /// Files under `dir` (repository-relative) with `ext`, sorted;
-    /// recursive when `deep`.
-    fn list(&self, dir: &str, ext: &str, deep: bool) -> Vec<String> {
+    /// recursive when `deep`; only files git tracks when `tracked_only`.
+    fn list(&self, dir: &str, ext: &str, deep: bool, tracked_only: bool) -> Vec<String> {
         let mut out = Vec::new();
         let mut stack = vec![dir.trim_end_matches('/').to_string()];
         while let Some(d) = stack.pop() {
@@ -97,7 +103,10 @@ impl Reader {
                 let Ok(ft) = e.file_type() else { continue };
                 if ft.is_dir() && deep && !name.starts_with('.') {
                     stack.push(rel);
-                } else if ft.is_file() && name.ends_with(ext) {
+                } else if ft.is_file()
+                    && name.ends_with(ext)
+                    && (!tracked_only || self.tracked.as_ref().is_none_or(|t| t.contains(&rel)))
+                {
                     out.push(rel);
                 }
             }
@@ -107,9 +116,30 @@ impl Reader {
     }
 }
 
+/// Repository-relative paths git tracks under `root`, or `None` when `root`
+/// is not a checkout or git is unavailable.
+fn git_tracked(root: &Path) -> Option<HashSet<String>> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "-z"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(
+        String::from_utf8_lossy(&out.stdout)
+            .split('\0')
+            .filter(|p| !p.is_empty())
+            .map(str::to_string)
+            .collect(),
+    )
+}
+
 fn copy_static(r: &mut Reader, out: &Path) -> Result<usize, String> {
     let mut n = 0;
-    for rel in r.list("site", "", true) {
+    for rel in r.list("site", "", true, false) {
         let sub = &rel["site/".len()..];
         // Notice files from an older `notice build --out site/notices`.
         if sub.starts_with("notices/") {
@@ -160,7 +190,7 @@ fn run() -> Result<(), String> {
     let mut notices = Vec::new();
     let rules_toml = r.read("rules/default.toml")?;
     let rules = sc_core::Rules::from_toml(&rules_toml)?;
-    for rel in r.list("notices", ".md", false) {
+    for rel in r.list("notices", ".md", false, true) {
         if rel.eq_ignore_ascii_case("notices/README.md") {
             continue;
         }
@@ -188,12 +218,12 @@ fn run() -> Result<(), String> {
         }
     }
     let mut docs = Vec::new();
-    for rel in r.list("docs", ".md", true) {
+    for rel in r.list("docs", ".md", true, true) {
         let text = r.read(&rel)?;
         docs.push((rel, text));
     }
     let mut eval_set = Vec::new();
-    for rel in r.list("samples/eval", ".ndjson", false) {
+    for rel in r.list("samples/eval", ".ndjson", false, true) {
         let text = r.read(&rel)?;
         eval_set.push((rel.trim_start_matches("samples/eval/").to_string(), text));
     }
