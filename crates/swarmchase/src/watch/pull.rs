@@ -138,6 +138,9 @@ fn keep_fresh(
         Some(p) => sc_core::parse_ts(&p.from).unwrap_or(0),
         None => st.cursor - overlap,
     };
+    // From the start of that UTC day: some sources (urlquery) take whole
+    // days only, so the next pull returns the whole day again.
+    let keep_from = keep_from - keep_from.rem_euclid(86_400);
     st.seen.retain(|_, ts| *ts >= keep_from);
     fresh
 }
@@ -188,6 +191,27 @@ mod tests {
         assert_eq!(ids, ["c"]);
         // `a` is older than the overlap window now, so it is forgotten.
         assert!(!st.seen.contains_key("a") && st.seen.contains_key("b"));
+    }
+
+    #[test]
+    fn a_source_that_takes_whole_days_does_not_repeat_records() {
+        let rec = |id: &str, ts: i64| Observation {
+            id: id.into(),
+            ts,
+            ..Default::default()
+        };
+        let (day, hour) = (86_400, 3_600);
+        let mut st = SourceState::default();
+        let early = rec("early", 9 * day + hour);
+        keep_fresh(
+            &mut st,
+            vec![early.clone(), rec("late", 12 * day + 17 * hour)],
+            3 * day,
+            None,
+        );
+        // The next pull asks from day 9 17:00 but gets all of day 9.
+        let fresh = keep_fresh(&mut st, vec![early], 3 * day, None);
+        assert!(fresh.is_empty());
     }
 
     #[test]
