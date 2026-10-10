@@ -19,6 +19,7 @@ pub mod fanout;
 pub mod fingerprint;
 pub mod fleets;
 pub mod ingest;
+pub mod knowledge;
 pub mod model;
 pub mod notice;
 pub mod paths;

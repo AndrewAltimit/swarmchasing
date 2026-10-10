@@ -183,6 +183,12 @@ pub struct RuleSet {
     pub rules: Vec<RuleDef>,
     #[serde(default, rename = "asn")]
     pub asns: Vec<AsnDef>,
+    /// Public benchmark and practice targets ([`crate::knowledge`]).
+    #[serde(default, rename = "benchmark", skip_serializing_if = "Vec::is_empty")]
+    pub benchmarks: Vec<crate::knowledge::KnownPattern>,
+    /// Retired endpoints and old client versions ([`crate::knowledge`]).
+    #[serde(default, rename = "stale", skip_serializing_if = "Vec::is_empty")]
+    pub stale: Vec<crate::knowledge::KnownPattern>,
 }
 
 pub(crate) enum Matcher {
@@ -214,6 +220,8 @@ pub struct Rules {
     /// Host suffixes and URL patterns of relay, carrier and callback rules.
     intermediary_suffixes: Vec<String>,
     intermediary_urls: Option<RegexSet>,
+    pub(crate) benchmarks: crate::knowledge::KnownSet,
+    pub(crate) stale: crate::knowledge::KnownSet,
 }
 
 impl Rules {
@@ -282,6 +290,8 @@ impl Rules {
                 .filter(|r| r.def.target == Target::Url)
                 .map(|r| r.def.pattern.as_str()),
         );
+        let benchmarks = crate::knowledge::KnownSet::compile(&set.benchmarks, "benchmark")?;
+        let stale = crate::knowledge::KnownSet::compile(&set.stale, "stale")?;
         let asn_orgs = set.asns.iter().map(|a| (a.asn, a.org.clone())).collect();
         Ok(Self {
             set,
@@ -291,6 +301,8 @@ impl Rules {
             by_id,
             intermediary_suffixes,
             intermediary_urls,
+            benchmarks,
+            stale,
         })
     }
 

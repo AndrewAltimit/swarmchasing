@@ -201,6 +201,8 @@ pub(super) fn cluster(
         fanout,
         cut_lengths,
         relay_stacks,
+        benchmarks: BTreeMap::new(),
+        stale_knowledge: Vec::new(),
         declared: declared
             .into_iter()
             .take(MAX_DECLARED)

@@ -386,6 +386,25 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 "  - relay stack `{st}` on {n} records: one client's habit, not evidence on its own"
             );
         }
+        if !c.benchmarks.is_empty() {
+            let shown: Vec<String> = c
+                .benchmarks
+                .iter()
+                .map(|(id, n)| format!("`{id}` ×{n}"))
+                .collect();
+            let _ = writeln!(
+                s,
+                "  - benchmark or practice targets: {}. Evaluation or training activity is likely, not malice (a hint)",
+                shown.join(", ")
+            );
+        }
+        for u in &c.stale_knowledge {
+            let _ = writeln!(
+                s,
+                "  - stale knowledge `{}` on {} records, {} hosts ({}): consistent with a model writing from old training data; old scripts do the same (a hint)",
+                u.id, u.records, u.hosts, u.note
+            );
+        }
         // A named contact is for the admin to check, not for a recipient.
         if opts.audience == Audience::Internal {
             for d in &c.declared {

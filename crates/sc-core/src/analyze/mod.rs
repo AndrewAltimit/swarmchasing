@@ -105,6 +105,15 @@ pub struct Cluster {
     /// handling of authorised testing; never scored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub declared: Vec<crate::declared::Declared>,
+    /// Public benchmark or practice targets the members hit, by
+    /// `[[benchmark]]` id: evaluation or training activity, not malice.
+    /// Descriptive.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub benchmarks: BTreeMap<String, usize>,
+    /// Retired endpoints, old client versions and older API versions
+    /// repeated across members ([`crate::knowledge`]). Descriptive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stale_knowledge: Vec<crate::knowledge::StaleUse>,
     /// Features that joined members together.
     pub link_features: Vec<LinkFeature>,
     pub runs: Vec<Span>,
@@ -242,6 +251,11 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         .into_iter()
         .map(|members| hints::cluster(&results, members, &links.joined, &unflagged_by_host, rules))
         .collect();
+    let newest = crate::knowledge::newest_versions(&results);
+    for c in clusters.iter_mut() {
+        c.benchmarks = crate::knowledge::benchmarks(&results, &c.members, &rules.benchmarks);
+        c.stale_knowledge = crate::knowledge::stale(&results, &c.members, &rules.stale, &newest);
+    }
     let chains = links.chains;
     let common_features = links.common;
     link::number(&mut clusters, &mut results);
@@ -497,6 +511,73 @@ mod tests {
                 && md.matches("(submit times, close to request times)").count() == 2,
             "{md}"
         );
+    }
+
+    #[test]
+    fn benchmark_targets_and_stale_knowledge_are_hints() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let obs = vec![
+            o(
+                1000,
+                &format!("http://testphp.vulnweb.com/artists.php?artist=1'&cb={inbox}"),
+            ),
+            o(
+                1030,
+                &format!("http://testphp.vulnweb.com/listproducts.php?cat=1&cb={inbox}"),
+            ),
+            // An agent reading two APIs through retired or older endpoints,
+            // while v3 is in use on the same host family.
+            o(
+                2000,
+                &format!("https://api.data.example/v1/items?hook={inbox}"),
+            ),
+            o(
+                2030,
+                &format!("https://www.data.example/api/v1/stats?hook={inbox}"),
+            ),
+            o(
+                2060,
+                &format!("https://graph.facebook.com/v2.8/me?hook={inbox}"),
+            ),
+            o(
+                2090,
+                &format!("https://graph.facebook.com/v2.9/page?hook={inbox}"),
+            ),
+            o(99_000, "https://api.data.example/v3/items"),
+        ];
+        let a = analyze(obs, &Rules::default_rules());
+        let bench: Vec<&Cluster> = a
+            .clusters
+            .iter()
+            .filter(|c| !c.benchmarks.is_empty())
+            .collect();
+        assert_eq!(bench.len(), 1, "{:?}", a.clusters);
+        assert_eq!(bench[0].benchmarks.get("acunetix_vulnweb"), Some(&2));
+        let stale: Vec<(&str, usize, usize)> = a
+            .clusters
+            .iter()
+            .flat_map(|c| &c.stale_knowledge)
+            .map(|u| (u.id.as_str(), u.records, u.hosts))
+            .collect();
+        assert!(stale.contains(&("facebook_graph_v2", 2, 1)), "{stale:?}");
+        assert!(
+            stale.contains(&(crate::knowledge::OLDER_API_VERSION, 2, 2)),
+            "{stale:?}"
+        );
+        let md = report_of(&a);
+        assert!(md.contains("benchmark or practice targets"), "{md}");
+        assert!(md.contains("stale knowledge `facebook_graph_v2`"), "{md}");
+        // Hints change nothing: same clusters and scores without the lists.
+        let mut bare = Rules::default_rules().set;
+        bare.benchmarks.clear();
+        bare.stale.clear();
+        let b = analyze(
+            a.results.iter().map(|r| r.obs.clone()).collect(),
+            &Rules::compile(bare).unwrap(),
+        );
+        for (x, y) in a.clusters.iter().zip(&b.clusters) {
+            assert_eq!((&x.members, x.score, x.tier), (&y.members, y.score, y.tier));
+        }
     }
 
     #[test]

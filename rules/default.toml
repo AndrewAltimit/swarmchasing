@@ -906,3 +906,123 @@ org = "Hetzner"
 [[asn]]
 asn = 16276
 org = "OVH"
+
+# ── Benchmark and practice targets ─────────────────────────────────────────
+# Public sites and environments built to be tested against: intentionally
+# vulnerable demo sites, and benchmark environments agents are evaluated in.
+# A cluster hitting them gets a `benchmarks` hint: evaluation or training
+# activity, not malice. A hint only; it never scores or lowers a score.
+#   id       unique name, shown in reports
+#   target   url (default: the request on the target host) or user_agent
+#   pattern  case-insensitive regex
+#   note     what a match means
+
+[[benchmark]]
+id = "acunetix_vulnweb"
+# http://www.vulnweb.com/ (Acunetix test sites)
+pattern = "://(testphp|testhtml5|testasp|testaspnet|rest)\\.vulnweb\\.com\\b"
+note = "Acunetix's intentionally vulnerable test sites"
+
+[[benchmark]]
+id = "altoro_mutual"
+# https://github.com/HCL-TECH-SOFTWARE/AltoroJ (the demo.testfire.net bank)
+pattern = "://(demo\\.)?testfire\\.net\\b"
+note = "Altoro Mutual, a deliberately vulnerable demo bank"
+
+[[benchmark]]
+id = "owasp_juice_shop"
+# https://github.com/juice-shop/juice-shop (public demo instances)
+pattern = "://(demo\\.owasp-juice\\.shop|juice-shop\\.herokuapp\\.com)\\b"
+note = "OWASP Juice Shop, a deliberately insecure training shop"
+
+[[benchmark]]
+id = "google_firing_range"
+# https://github.com/google/firing-range
+pattern = "://public-firing-range\\.appspot\\.com\\b"
+note = "Google Firing Range, a test bed for web scanners"
+
+[[benchmark]]
+id = "hack_yourself_first"
+# https://hack-yourself-first.com/ (Troy Hunt's training site)
+pattern = "://(www\\.)?hack-yourself-first\\.com\\b"
+note = "Hack Yourself First, a deliberately vulnerable training site"
+
+[[benchmark]]
+id = "webarena"
+# https://github.com/web-arena-x/webarena and
+# https://github.com/web-arena-x/visualwebarena (environment URLs)
+pattern = "://metis\\.lti\\.cs\\.cmu\\.edu:(3000|4399|7770|7780|8023|8888|9980|9999)\\b"
+note = "WebArena or VisualWebArena benchmark environment"
+
+[[benchmark]]
+id = "miniwob"
+# https://github.com/Farama-Foundation/miniwob-plusplus (task pages)
+pattern = "/miniwob/[a-z0-9-]+\\.html\\b"
+note = "MiniWoB++ web-agent benchmark task"
+
+[[benchmark]]
+id = "picoctf"
+# https://picoctf.org/ (challenge hosts); InterCode-CTF and other agent
+# benchmarks draw tasks from it: https://intercode-benchmark.github.io/
+pattern = "://(mercury|saturn|jupiter|titan)\\.picoctf\\.net\\b"
+note = "picoCTF challenge host, used by CTF agent benchmarks"
+
+# ── Stale knowledge ────────────────────────────────────────────────────────
+# Retired API endpoints and old client versions. A model writes requests
+# from what its training data knew; an agent repeating one across its targets
+# shows that. Reported per cluster when at least two members carry one, with
+# API path versions below the newest one seen on the same host family
+# (`older_api_version`). A hint only: old scripts and pinned clients do the
+# same. Fields as for [[benchmark]].
+
+[[stale]]
+id = "openai_engines_api"
+# https://platform.openai.com/docs/deprecations (Engines endpoints, 2022)
+pattern = "api\\.openai\\.com/v1/engines\\b"
+note = "OpenAI Engines endpoints, deprecated in 2022"
+
+[[stale]]
+id = "openai_python_0x"
+target = "user_agent"
+# https://github.com/openai/openai-python/releases/tag/v1.0.0 (November 2023)
+pattern = "\\bOpenAI/Python 0\\."
+note = "openai-python before 1.0, superseded in 2023"
+
+[[stale]]
+id = "twitter_api_v1_1"
+# https://developer.x.com/en/docs/x-api/v1 (v1.1 retired for most uses, 2023)
+pattern = "api\\.twitter\\.com/1\\.1/"
+note = "Twitter API v1.1, retired for most uses in 2023"
+
+[[stale]]
+id = "google_ajax_search"
+# https://developers.google.com/custom-search/v1/overview (replaced the
+# Web Search API, shut down in 2016)
+pattern = "ajax\\.googleapis\\.com/ajax/services/search/"
+note = "Google Web Search API, shut down in 2016"
+
+[[stale]]
+id = "yahoo_yql"
+# https://developer.yahoo.com/yql/ (retired in January 2019)
+pattern = "query\\.yahooapis\\.com/v1/public/yql"
+note = "Yahoo Query Language, retired in 2019"
+
+[[stale]]
+id = "facebook_graph_v2"
+# https://developers.facebook.com/docs/graph-api/changelog/versions (every
+# v2.x version expired by 2020)
+pattern = "graph\\.facebook\\.com/v2\\.\\d+/"
+note = "Facebook Graph API v2.x, expired by 2020"
+
+[[stale]]
+id = "github_query_token"
+# https://developer.github.com/changes/2020-02-10-deprecating-auth-through-query-param/
+pattern = "api\\.github\\.com/[^?#]*\\?([^#]*&)?access_token="
+note = "GitHub API token in the query string, removed in 2021"
+
+[[stale]]
+id = "python_requests_old"
+target = "user_agent"
+# https://pypi.org/project/requests/#history (2.10 released in 2016)
+pattern = "\\bpython-requests/(1\\.|2\\.[0-9]\\.)"
+note = "python-requests before 2.10 (2016)"
