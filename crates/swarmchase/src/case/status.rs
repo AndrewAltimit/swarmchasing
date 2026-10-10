@@ -114,7 +114,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
     for cl in &claims {
         writeln!(
             out,
-            "  {:<3} {} ({:?}) — {}",
+            "  {:<3} {} ({:?}) — {} · {} · {}",
             if cl.nameable(c.min_named) {
                 "✓"
             } else {
@@ -122,7 +122,9 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
             },
             cl.party,
             cl.role,
-            cl.evidence.describe()
+            cl.evidence.describe(),
+            cl.label().label(),
+            cl.tag().label()
         )?;
     }
     if !c.evidence.is_empty() {

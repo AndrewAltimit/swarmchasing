@@ -25,6 +25,8 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
   5. confirmation by the provider.
 
   Reports and notices name a developer only at or above the level the admin sets for the case (`swarmchase report --min-named`, default: shared identifiers), and never on self-identification alone. Case notes list every claim.
+- **Four layers.** Developer, hosting network, harness and model family are attributed separately ([SC-FM 7](manual/07-attribution.md)). A host is named as a host. Harness and model-family candidates are ranked in private reports and never named in public; a model-family claim needs a held-out measurement of its method.
+- **Tags and labels.** Every attribution claim is tagged Observed, Documented, Inference or Conclusion, and labelled Confirmed, Suspected, Possible or Unattributed by its evidence. No statement uses a likelihood word stronger than its label allows.
 
 ## Reporting and publication
 

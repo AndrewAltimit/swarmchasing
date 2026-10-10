@@ -421,10 +421,8 @@ mod tests {
 
         update(&root, "t-1", |c| {
             c.claims.push(Claim {
-                party: "Tencent".into(),
-                role: Role::Developer,
-                evidence: Evidence::SharedIdentifiers,
                 details: vec!["uqtag zz9 also in a confirmed incident".into()],
+                ..Claim::new("Tencent", Role::Developer, Evidence::SharedIdentifiers)
             });
             c.endpoints[0].state = EndpointState::Targeted;
             Ok(())

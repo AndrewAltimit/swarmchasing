@@ -51,10 +51,11 @@ Details: [case files](../reference/cases.md#opening-a-case).
 ```sh
 swarmchase case endpoint 2026-10-portal portal.example.gov targeted --note "payloads reflected, no sign of success"
 swarmchase case claim 2026-10-portal --party … --evidence provider_confirmed --detail …
+swarmchase case claim 2026-10-portal --layer harness --party … --detail …
 swarmchase case note 2026-10-portal "Rerun of C4 from last week; same host order."
 ```
 
-Every endpoint needs a decision (`compromised`, `targeted`, `historical`, `not-affected`) before a notice can be added. Attribution claims carry their evidence level; a developer is named only at or above the case's naming threshold ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
+Every endpoint needs a decision (`compromised`, `targeted`, `historical`, `not-affected`) before a notice can be added. Attribution claims carry their layer, evidence level and tag; a developer is named only at or above the case's naming threshold, and harness and model-family candidates never ([attribution claims](../reference/cases.md#attribution-claims)).
 
 ## 5. Find contacts and draft reports
 

@@ -28,7 +28,7 @@ pub mod timing;
 pub mod urlquery;
 
 pub use analyze::{Analysis, Cluster, ObsResult, analyze};
-pub use attribution::{Claim, Evidence, Role, attribute};
+pub use attribution::{AttributionLabel, Claim, Evidence, Role, Tag, attribute};
 pub use bursts::{ArchiveBurst, archive_bursts};
 pub use chains::{Chain, Pace};
 pub use dialect::{CutLengths, Dialect, DialectPair};

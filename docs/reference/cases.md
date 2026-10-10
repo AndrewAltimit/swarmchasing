@@ -14,7 +14,7 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 
 - the case status (`open`, `reported`, `published`, `closed`) and the notice status (`active`, `contained`, `historical`);
 - each endpoint and the admin's decision on it: `compromised`, `targeted`, `historical`, `not-affected`, or still `unreviewed`;
-- attribution claims established by case work;
+- attribution claims established by case work, each with its layer, evidence and tag;
 - contacts;
 - a dated decision log;
 - the reports sent.
@@ -28,7 +28,7 @@ Each change is logged with its date.
 | `case status [<id>]` | Lists cases, or shows one case and what it still needs. |
 | `case endpoint <id> <host>... <state> [--note …]` | Classifies one or more endpoints; a host not in the case changes nothing. |
 | `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits. Refused once its notice is published. |
-| `case claim <id> --party … --evidence provider_confirmed --detail …` | Records an attribution claim. |
+| `case claim <id> --party … [--layer …] --evidence … [--tag …] --detail …` | Records an attribution claim ([attribution claims](#attribution-claims)). |
 | `case set <id> --status … --notice … --min-named …` | Changes the status or the naming threshold. |
 | `case note <id> "…"` | Adds a dated entry to the decision log. |
 | `case add <id> …` | Adds new records. |
@@ -43,6 +43,12 @@ Each change is logged with its date.
 | `case export <id> --format stix --audience … [--to <contact>]` | Writes the case as a STIX 2.1 bundle ([STIX export](#stix-export)). |
 | `case evidence add <id> <log> --org … --host …` | Adds logs an affected operator sent back ([operator evidence](#operator-evidence)). |
 | `case evidence consent <id> <eid> --how …` | Records the operator's agreement to the notice using its logs; `withdraw` reverses it. |
+
+## Attribution claims
+
+A claim is about one of four layers ([SC-FM 7.1](../manual/07-attribution.md#fm-71-four-layers)): `developer` (the default), `host`, `harness` or `model_family`. Developer and host claims need `--evidence` on the ladder; `--tag observed|documented|inference|conclusion` overrides the derived tag. A model-family claim needs `--likelihood`, `--accuracy` (the method's, on a held-out set) and `--corpus-size`, and is refused without them.
+
+Each claim's label (Confirmed, Suspected, Possible, Unattributed) follows from its layer and evidence ([SC-FM 7.7](../manual/07-attribution.md#fm-77-attribution-labels)). The records add their own claims on every report: self-identified developers, client networks and runtime markers as hosts, and harness candidates from user agents and header and encoding fingerprints. Harness and model-family candidates are ranked in private reports and never named in a notice or a public export, whatever their evidence. Case files written before layers and tags existed read unchanged.
 
 ## Contacts
 

@@ -10,7 +10,7 @@ use crate::pinning::{RulesText, bundle_rules, case_rules, rules_cmd};
 use crate::util::audience_id;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
-use sc_core::{Audience, Claim, Evidence, Role};
+use sc_core::{Audience, Claim, Evidence, Role, Tag};
 use std::path::PathBuf;
 
 #[derive(Args)]
@@ -85,12 +85,26 @@ pub enum CaseCmd {
         id: String,
         #[arg(long)]
         party: String,
-        /// developer | host
-        #[arg(long, default_value = "developer")]
-        role: String,
+        /// developer | host | harness | model_family
+        #[arg(long, alias = "role", default_value = "developer")]
+        layer: Role,
         /// shared_identifiers | provider_infrastructure | provider_confirmed | …
+        /// Required for developer and host claims.
         #[arg(long)]
-        evidence: Evidence,
+        evidence: Option<Evidence>,
+        /// observed | documented | inference | conclusion. Default: derived
+        /// from the layer and evidence.
+        #[arg(long)]
+        tag: Option<Tag>,
+        /// Model family: the method's likelihood for this family (0..1).
+        #[arg(long)]
+        likelihood: Option<f64>,
+        /// Model family: the method's accuracy on a held-out set (0..1).
+        #[arg(long)]
+        accuracy: Option<f64>,
+        /// Model family: the size of the corpus the method was tuned on.
+        #[arg(long)]
+        corpus_size: Option<usize>,
         /// What the evidence is, with a link. Repeatable.
         #[arg(long = "detail", required = true)]
         details: Vec<String>,
@@ -272,25 +286,45 @@ pub fn run(args: CaseArgs) -> Result<()> {
         CaseCmd::Claim {
             id,
             party,
-            role,
+            layer,
             evidence,
+            tag,
+            likelihood,
+            accuracy,
+            corpus_size,
             details,
         } => update(&root, &id, |c| {
-            let role = match role.as_str() {
-                "developer" => Role::Developer,
-                "host" => Role::Host,
-                r => bail!("unknown role `{r}` (developer|host)"),
+            let evidence = match (evidence, layer) {
+                (Some(e), _) => e,
+                (None, Role::Harness | Role::ModelFamily) => Evidence::SelfId,
+                (None, _) => bail!("a {} claim needs --evidence", layer.id()),
             };
-            c.log(
-                &today,
-                format!("claim: {party} ({role:?}) on {}", evidence.describe()),
-            );
-            c.claims.push(Claim {
+            let claim = Claim {
                 party: party.clone(),
-                role,
+                role: layer,
                 evidence,
                 details: details.clone(),
-            });
+                tag,
+                records: 0,
+                likelihood,
+                accuracy,
+                corpus_size,
+            };
+            let problems = claim.problems();
+            if !problems.is_empty() {
+                bail!("claim not recorded: {}", problems.join("; "));
+            }
+            c.log(
+                &today,
+                format!(
+                    "claim: {party} ({} layer, {}, {}) on {}",
+                    layer.id(),
+                    claim.label().label(),
+                    claim.tag().label(),
+                    evidence.describe()
+                ),
+            );
+            c.claims.push(claim);
             Ok(())
         }),
         CaseCmd::Set {
