@@ -88,6 +88,7 @@ pub fn read_inputs(args: &InputArgs) -> Result<Vec<Observation>> {
         }
         all.extend(parsed.observations);
     }
+    crate::commands::asn::enrich(&mut all);
     Ok(all)
 }
 

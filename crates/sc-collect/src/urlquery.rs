@@ -57,6 +57,7 @@ impl Source for Urlquery {
         Ok(Page {
             records: p.records,
             next,
+            truncated: false,
         })
     }
 }

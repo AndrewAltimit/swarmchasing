@@ -32,6 +32,8 @@ anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 wasm-bindgen = "0.2"
+flate2 = "1"
+psl = "2"
 
 [profile.release]
 lto = true
