@@ -29,6 +29,7 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. Every change passes the eval gate. |
 | [`samples/eval/`](samples/eval/README.md) | Labelled evaluation set behind the CI eval gate; the held-out Transluce steps. |
 | [`watchlist.toml`](watchlist.toml) | Sources the scheduled watch pulls, each with its rationale. |
+| [`contacts/providers.toml`](contacts/providers.toml) | Providers' security and abuse channels, each with its source and verified date; `swarmchase contacts verify` re-checks them. |
 | [`scripts/`](scripts/README.md) | CI gates, helpers and the pre-commit hook; the README says what runs where. |
 | [`.github/workflows/`](.github/workflows/main-ci.yml) | `main-ci.yml` (gates, then build/test, then Pages) and `watch.yml` (6-hourly watch, digest email). |
 | [`.claude/skills/verify/`](.claude/skills/verify/SKILL.md) | How to verify a change: gates, eval, site build, headless browser checks. |
