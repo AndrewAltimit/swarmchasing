@@ -41,6 +41,8 @@ pub struct SiteInputs {
     pub rules_toml: String,
     /// (file name, NDJSON) of every `samples/eval/*.ndjson`.
     pub eval_set: Vec<(String, String)>,
+    /// `samples/eval/coverage-allow.txt`, or empty.
+    pub coverage_allow: String,
     /// The site's public URL.
     pub base_url: String,
     /// `https://github.com/<owner>/<repo>`.
@@ -226,7 +228,16 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         sc_core::parse_input(&set, Format::Ndjson, &FieldMap::default()).observations,
         &rules,
     );
-    let report = sc_core::evaluate(&eval_analysis, &labels);
+    let (report, _, summary) = sc_core::summarize(
+        &eval_analysis,
+        &labels,
+        &inp.rules_toml,
+        &inp.coverage_allow,
+    )?;
+    out.push((
+        "assets/eval-summary.json".into(),
+        serde_json::to_string(&summary).map_err(|e| e.to_string())?,
+    ));
     out.push((
         "assets/eval-set.json".into(),
         serde_json::json!({ "files": files, "ndjson": set }).to_string(),
@@ -327,7 +338,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "eval",
         "Evaluation",
         "Precision and recall of the bundled rules on the committed labelled set.",
-        evalpage::body(&report, &files),
+        evalpage::body(&summary, &files),
     );
     p.scripts.push("js/pages/eval.js");
     pages.push(p);
@@ -400,4 +411,130 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     );
     out.push(("404.html".into(), render(&nf, &ctx, &root_path)));
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::file::{NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind};
+
+    const P: &str = "<script>alert(1)</script><img src=x onerror=alert(2)>";
+
+    fn inputs() -> SiteInputs {
+        let notice = NoticeFile {
+            meta: NoticeMeta {
+                id: "n-xss".into(),
+                title: P.into(),
+                status: NoticeStatus::Active,
+                published: "2026-10-16".into(),
+                updated: "2026-10-17".into(),
+                providers: vec![P.into()],
+                affected: vec![format!("a.example\"{P}")],
+                rules_version: P.into(),
+                toolkit: P.into(),
+                updates: vec![
+                    NoticeUpdate {
+                        date: "2026-10-16".into(),
+                        kind: UpdateKind::Published,
+                        from: None,
+                        text: P.into(),
+                    },
+                    NoticeUpdate {
+                        date: "2026-10-17".into(),
+                        kind: UpdateKind::Reply,
+                        from: Some(P.into()),
+                        text: P.into(),
+                    },
+                ],
+            },
+            body: format!("# {P}\n\n- **{P}** `{P}`\n\n> {P}\n\n| {P} |\n|---|\n| {P} |\n"),
+        };
+        SiteInputs {
+            notices: vec![notice],
+            docs: vec![
+                (
+                    "docs/README.md".into(),
+                    format!(
+                        "# Docs\n\nSee [m](methodology.md) and [x](javascript:alert(1)). {P}\n"
+                    ),
+                ),
+                (
+                    "docs/methodology.md".into(),
+                    format!("# Method\n\n## A\n\n## B\n\n## C {P}\n"),
+                ),
+            ],
+            rules_toml: sc_core::DEFAULT_RULES.into(),
+            eval_set: vec![
+                (
+                    EXAMPLE_FILE.into(),
+                    include_str!("../../../../samples/eval/llm-residue.ndjson").into(),
+                ),
+                (
+                    "published-patterns.ndjson".into(),
+                    include_str!("../../../../samples/eval/published-patterns.ndjson").into(),
+                ),
+            ],
+            coverage_allow: String::new(),
+            base_url: "https://example.github.io/swarmchasing".into(),
+            repo: "https://github.com/o/r".into(),
+            version: "0.1.0".into(),
+            engine_bytes: Some(1_500_000),
+        }
+    }
+
+    #[test]
+    fn every_page_carries_the_policy_and_no_content_markup() {
+        let files = build_pages(&mut inputs()).unwrap();
+        let pages: Vec<_> = files.iter().filter(|(p, _)| p.ends_with(".html")).collect();
+        for want in [
+            "index.html",
+            "notices/index.html",
+            "notices/n-xss/index.html",
+            "docs/index.html",
+            "methodology/index.html",
+            "rules/index.html",
+            "eval/index.html",
+            "analyze/index.html",
+            "404.html",
+        ] {
+            assert!(pages.iter().any(|(p, _)| p == want), "{want} missing");
+        }
+        for (path, html) in &pages {
+            assert!(html.contains(layout::CSP), "{path}: no CSP");
+            assert!(
+                !html.contains("<img") && !html.contains("<script>"),
+                "{path}: markup from content"
+            );
+            assert!(
+                !html.contains("javascript:alert(1)\""),
+                "{path}: a javascript: link"
+            );
+            assert!(!html.contains(" style="), "{path}: a style attribute");
+        }
+        let notice = &files
+            .iter()
+            .find(|(p, _)| p == "notices/n-xss/index.html")
+            .unwrap()
+            .1;
+        assert!(notice.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(notice.contains("a[.]example&quot;"));
+        let sitemap = &files.iter().find(|(p, _)| p == "sitemap.xml").unwrap().1;
+        assert!(sitemap.contains("https://example.github.io/swarmchasing/notices/n-xss/"));
+        let nf = &files.iter().find(|(p, _)| p == "404.html").unwrap().1;
+        assert!(nf.contains("href=\"/swarmchasing/css/site.css\""));
+        assert!(files.iter().any(|(p, _)| p == "assets/eval-summary.json"));
+    }
+
+    #[test]
+    fn the_example_is_synthetic_and_unlabelled() {
+        let ex =
+            example_records(include_str!("../../../../samples/eval/llm-residue.ndjson")).unwrap();
+        for l in ex.lines() {
+            let v: serde_json::Value = serde_json::from_str(l).unwrap();
+            for k in LABEL_FIELDS {
+                assert!(v.get(k).is_none(), "{k} left in {l}");
+            }
+        }
+        assert!(example_records("{\"id\":\"x\",\"url\":\"u\"}").is_err());
+    }
 }

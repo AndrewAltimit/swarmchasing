@@ -489,3 +489,4 @@ table.records td:last-child { min-width: 150px; }
 table.records td.url { min-width: 180px; }
 svg.chart.heat, svg.chart.rhythm { width: auto; max-width: none; }
 .flag.artifact::before { content: "✎ "; color: var(--text-muted); }
+.stats.wide { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }

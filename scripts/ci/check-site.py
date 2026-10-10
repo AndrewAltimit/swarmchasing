@@ -79,7 +79,14 @@ JS_BAD = [
 ]
 
 # What the generator may read (crates/sc-publish/src/bin/sc-site.rs INPUTS).
-INPUT_PREFIXES = {"notices/", "docs/", "rules/default.toml", "samples/eval/", "site/"}
+INPUT_PREFIXES = {
+    "notices/",
+    "docs/",
+    "rules/default.toml",
+    "samples/eval/",
+    "samples/eval/coverage-allow.txt",
+    "site/",
+}
 # Inputs that are built, not committed: the WASM package.
 GENERATED_INPUTS = ("site/pkg/", "site/pkg-rules/")
 BANNED_TAGS = {"iframe", "object", "embed", "base", "frame", "frameset", "applet"}

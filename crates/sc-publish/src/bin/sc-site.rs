@@ -6,7 +6,7 @@
 //! ```
 //!
 //! Reads only `notices/*.md`, `docs/**/*.md`, `rules/default.toml`,
-//! `samples/eval/*.ndjson` and the static files in `site/` (with the WASM
+//! `samples/eval/*.ndjson`, `samples/eval/coverage-allow.txt` and the static files in `site/` (with the WASM
 //! package `scripts/ci/build-site.sh` builds into `site/pkg`). It refuses any
 //! path under `data/` or `$SWARMCHASE_DATA`: watch data and case files never
 //! reach the site. `--inputs-log` lists every file read, for
@@ -26,6 +26,7 @@ const INPUTS: &[(&str, &str)] = &[
     ("docs/", ".md"),
     ("rules/default.toml", ".toml"),
     ("samples/eval/", ".ndjson"),
+    ("samples/eval/coverage-allow.txt", ".txt"),
     ("site/", ""),
 ];
 
@@ -196,6 +197,11 @@ fn run() -> Result<(), String> {
         let text = r.read(&rel)?;
         eval_set.push((rel.trim_start_matches("samples/eval/").to_string(), text));
     }
+    let coverage_allow = if r.root.join("samples/eval/coverage-allow.txt").is_file() {
+        r.read("samples/eval/coverage-allow.txt")?
+    } else {
+        String::new()
+    };
     let engine_bytes = fs::metadata(r.root.join("site/pkg/sc_wasm_bg.wasm"))
         .ok()
         .map(|m| m.len());
@@ -204,6 +210,7 @@ fn run() -> Result<(), String> {
         docs,
         rules_toml,
         eval_set,
+        coverage_allow,
         base_url: base,
         repo: env!("CARGO_PKG_REPOSITORY").to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
