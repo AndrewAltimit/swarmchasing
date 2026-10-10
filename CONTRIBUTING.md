@@ -1,6 +1,6 @@
 # Contributing
 
-This page covers the rules of engagement: what will never land, which gates a change has to pass, and the conventions that keep a change reviewable. [`CLAUDE.md`](CLAUDE.md) is the repository map.
+This page covers the rules of engagement: what will never land, which gates a change has to pass, and the conventions that keep a change reviewable. [`CLAUDE.md`](CLAUDE.md) is the repository map, [`docs/README.md`](docs/README.md) indexes the docs, and [`scripts/README.md`](scripts/README.md) says which gate runs where.
 
 ## The one hard rule: no raw data, no live secrets
 
@@ -41,6 +41,7 @@ scripts/ci/check-wasm-target.sh
 scripts/ci/eval-gate.sh
 python3 scripts/ci/check-committed-data.py
 python3 scripts/ci/check-md-links.py
+python3 scripts/ci/check-doc-density.py
 python3 scripts/ci/check-site.py
 cargo run -p swarmchase -- notice lint
 scripts/ci/deny.sh
@@ -54,9 +55,13 @@ If you change `site/`, also build it and run the browser check, which loads reco
 scripts/ci/build-site.sh && node scripts/site-xss-check.mjs
 ```
 
+The [verify skill](.claude/skills/verify/SKILL.md) covers serving the site and checking pages in headless Chrome.
+
 `release-test` is CI's test profile: release optimisation without fat LTO, so a relink after a small change stays fast.
 
-The full build and test pass runs on push to `main` and manual dispatch. Pull requests get the repo gates and a lint pass only, so opening a PR does not prove the tests pass. Pull requests from forks run nothing on the self-hosted runner.
+CI runs the repo gates first, then fmt, clippy, the tests, the eval gate, notice lint and the wasm32 type-check, on pull requests and on pushes to `main`. Pushes to `main` then build and deploy the site. Pull requests from forks run nothing on the self-hosted runner. The jobs and runner setup are in [`docs/reference/runner.md`](docs/reference/runner.md).
+
+`check-doc-density.py` keeps docs readable: no line over 800 characters and no table cell over 60 words (tighter in `CLAUDE.md`). Committed docs describe what is, in the present tense; the why of a change, and a rule change's eval numbers, go in the commit message.
 
 ### What the pre-commit hook runs
 
@@ -65,7 +70,7 @@ The hook is scoped to what you staged ([the hook](scripts/git-hooks/pre-commit) 
 | Staged | Gates |
 |---|---|
 | every commit | `check-committed-data.py --staged` |
-| any `*.md` | `check-md-links.py --staged` |
+| any `*.md` | `check-md-links.py --staged`, `check-doc-density.py --staged` |
 | anything in `site/` | `check-site.py` |
 | anything in `notices/` | `swarmchase notice lint` |
 | `crates/`, `Cargo.*`, `rules/`, `rust-toolchain*` | `cargo fmt --check` (auto-fixed and re-staged), `cargo clippy -D warnings` |
