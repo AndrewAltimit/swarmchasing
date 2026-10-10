@@ -51,7 +51,8 @@ pub struct RuleDef {
     /// to load.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tactic: Option<Tactic>,
-    /// A match only shows that a model wrote the request.
+    /// A match is a trace of how the agent was built (model-output residue,
+    /// run tags, client headers), not an action.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub artifact: bool,
     #[serde(default)]
@@ -373,6 +374,72 @@ mod tests {
         let exploit = r.rule("exploit.sqli_union").unwrap();
         assert_eq!(exploit.tactic, Some(Tactic::VulnerabilityProbing));
         assert!(r.rule("marker.md_link").unwrap().artifact);
+    }
+
+    /// The Field Manual's default tactic for each rule kind (FM-4.4); `None`
+    /// for kinds whose matches are artifacts or attribution evidence.
+    fn kind_default(k: IndicatorKind) -> Option<Tactic> {
+        use IndicatorKind as K;
+        match k {
+            K::Relay | K::CacheBuster => Some(Tactic::TaskRetrieval),
+            K::Carrier => Some(Tactic::ToolEscalation),
+            K::AntiBot | K::Outcome => Some(Tactic::AccessControlCircumvention),
+            K::Exploit => Some(Tactic::VulnerabilityProbing),
+            K::Exfil => Some(Tactic::CallbackChannels),
+            K::AgentMarker | K::Header | K::SelfId | K::Infra => None,
+        }
+    }
+
+    /// Bundled rules whose tactic is not their kind's default, and why.
+    const TACTIC_EXCEPTIONS: &[(&str, &str)] = &[
+        (
+            "marker.callback_seq",
+            "numbered callback reports: a side channel (T7)",
+        ),
+        (
+            "marker.title_write",
+            "a program writing a fetched page into the title a scan service shows: a side channel (T7)",
+        ),
+        (
+            "marker.placeholder_identity",
+            "stock identities in sign-up fields: identity acquisition (T5, FM-4.3)",
+        ),
+        (
+            "exfil.cookie",
+            "a captured cookie sent on: credential reuse (T6, FM-4.3)",
+        ),
+        (
+            "exfil.disposable_mail",
+            "disposable inboxes for sign-ups: account acquisition (T5, FM-4.3)",
+        ),
+    ];
+
+    #[test]
+    fn bundled_tactics_follow_the_kind_defaults() {
+        let r = Rules::default_rules();
+        for d in &r.set.rules {
+            let want = kind_default(d.kind);
+            if let Some((_, why)) = TACTIC_EXCEPTIONS.iter().find(|(id, _)| *id == d.id) {
+                assert!(d.tactic.is_some() && d.tactic != want, "{}: {why}", d.id);
+                continue;
+            }
+            assert_eq!(d.tactic, want, "{} ({:?})", d.id, d.kind);
+            if want.is_none() {
+                assert!(d.artifact, "{}: no tactic, so an artifact", d.id);
+            }
+            // Inter-agent coordination and off-task targets are never one match.
+            assert!(
+                !matches!(
+                    d.tactic,
+                    Some(Tactic::InterAgentCoordination | Tactic::OffTaskTargets)
+                ),
+                "{}",
+                d.id
+            );
+        }
+        for (id, _) in TACTIC_EXCEPTIONS {
+            assert!(r.rule(id).is_some(), "exception names no rule: {id}");
+        }
     }
 
     #[test]

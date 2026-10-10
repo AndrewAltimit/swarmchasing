@@ -643,16 +643,20 @@ mod tests {
                 .find(|h| h.rule_id == id)
                 .unwrap()
         };
-        assert_eq!(hit("relay.jina").tactic, Some(Tactic::ToolEscalation));
+        assert_eq!(hit("relay.jina").tactic, Some(Tactic::TaskRetrieval));
         assert!(hit("marker.md_url_wrapper").artifact);
         assert_eq!(hit("marker.md_url_wrapper").tactic, None);
         let c = &a.clusters[0];
         assert_eq!(c.tactics.get(&Tactic::CallbackChannels), Some(&3));
-        assert_eq!(c.tactics.get(&Tactic::ToolEscalation), Some(&1));
+        assert_eq!(
+            c.tactics.get(&Tactic::TaskRetrieval),
+            Some(&2),
+            "relay and cache buster"
+        );
         assert_eq!(c.artifacts, 1);
         let json = serde_json::to_value(&a).unwrap();
         assert_eq!(json["clusters"][0]["tactics"]["T7"], 3);
-        assert_eq!(json["results"][1]["hits"][0]["tactic"], "T2");
+        assert_eq!(json["results"][1]["hits"][0]["tactic"], "T1");
     }
 
     #[test]

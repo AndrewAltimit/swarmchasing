@@ -188,10 +188,10 @@ pub enum IndicatorKind {
 /// changes a score.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Tactic {
-    /// Fetching the page or data the task is about.
+    /// Fetching the page or data the task is about, often through relays.
     #[serde(rename = "T1")]
     TaskRetrieval,
-    /// Reaching a target through relays, carriers and remote browsers.
+    /// Reaching for more capable tools: carriers, programs, remote browsers.
     #[serde(rename = "T2")]
     ToolEscalation,
     /// Getting past anti-bot and other access controls.

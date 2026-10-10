@@ -23,13 +23,20 @@
 #   link        true = the matched text links observations into one cluster
 #               (use for inbox IDs, unique tags - things only one operator would share)
 #   tactic      what the match shows the agent doing (descriptive, never scored):
-#               T1 task retrieval            T2 tool escalation (relays, carriers)
-#               T3 access-control circumvention (anti-bot)
+#               T1 task retrieval (relays)   T2 tool escalation (carriers, programs)
+#               T3 access-control circumvention (anti-bot, outcomes)
 #               T4 vulnerability probing     T5 account or identity acquisition
 #               T6 credential reuse          T7 callback or side channels
 #               T8 off-task targets          T9 inter-agent coordination
-#   artifact    true = the match only shows that a model wrote the request
-#               (model-output residue, self-identification)
+#               Each kind has a default tactic (Field Manual FM-4.4): relay and
+#               cache_buster T1, carrier T2, anti_bot and outcome T3, exploit T4,
+#               exfil T7; agent_marker, header, self_id and infra none. A rule
+#               on another tactic is listed with its reason in rules.rs
+#               (TACTIC_EXCEPTIONS). T8 and T9 are cluster-level judgments,
+#               never a rule match.
+#   artifact    true = the match is a trace of how the agent was built, not an
+#               action (model-output residue, run tags, self-identification,
+#               client headers, sandbox hosts)
 #
 # A single relay hit is NOT evidence of an agent: people use these services too.
 # Weights are tuned so evidence must stack up.
@@ -163,7 +170,7 @@ common = [
 [[rule]]
 id = "relay.jina"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "r.jina.ai"
 weight = 2
@@ -172,7 +179,7 @@ description = "Jina Reader: fetches a page server-side and returns Markdown"
 [[rule]]
 id = "relay.markdown_new"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "markdown.new"
 weight = 2
@@ -181,7 +188,7 @@ description = "URL-to-Markdown converter"
 [[rule]]
 id = "relay.microlink"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "api.microlink.io"
 weight = 2
@@ -190,7 +197,7 @@ description = "Microlink headless fetch API"
 [[rule]]
 id = "relay.hrefli"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "href.li"
 weight = 1
@@ -199,7 +206,7 @@ description = "Referrer-stripping redirector"
 [[rule]]
 id = "relay.translate_goog"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "translate.goog"
 weight = 2
@@ -208,7 +215,7 @@ description = "Google Translate proxy host rewriting"
 [[rule]]
 id = "relay.allorigins"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "host"
 pattern = "allorigins.win"
 weight = 2
@@ -217,7 +224,7 @@ description = "CORS proxy"
 [[rule]]
 id = "relay.corsproxy"
 kind = "relay"
-tactic = "T2"
+tactic = "T1"
 target = "url"
 pattern = "corsproxy\\.io|cors-anywhere|thingproxy|codetabs\\.com/v1/proxy"
 weight = 2
@@ -393,7 +400,7 @@ description = "Out-of-range ID values (often precede injection probes)"
 [[rule]]
 id = "marker.uq_tags"
 kind = "agent_marker"
-tactic = "T9"
+artifact = true
 target = "param_name"
 pattern = "^(uqscan|uqtag|uq_tag|uq)$"
 weight = 3
@@ -402,7 +409,7 @@ description = "urlquery cache-busting / tracking tags seen in agent fleets"
 [[rule]]
 id = "marker.test_tag"
 kind = "agent_marker"
-tactic = "T9"
+artifact = true
 target = "url"
 pattern = "chatgpttest\\d*|agenttest\\d*|tok=expt|archive_test="
 weight = 3
@@ -412,7 +419,7 @@ description = "Test tags agents add to URLs"
 [[rule]]
 id = "marker.oai_tag"
 kind = "agent_marker"
-tactic = "T9"
+artifact = true
 target = "url"
 pattern = "[?&]zz=oai\\d{6,}"
 weight = 3
@@ -746,7 +753,7 @@ description = "General-purpose OCR API pointed at a CAPTCHA image"
 [[rule]]
 id = "header.via_hysandbox"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "header"
 pattern = "^via:.*hysandbox"
 weight = 4
@@ -756,7 +763,7 @@ description = "Via header from a hysandbox Apache Traffic Server proxy"
 [[rule]]
 id = "header.via_ats"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "header"
 pattern = "^via:.*(ApacheTrafficServer|\\(ats\\)|-ats\\))"
 weight = 1
@@ -765,7 +772,7 @@ description = "Request passed through Apache Traffic Server"
 [[rule]]
 id = "header.gzip_only_requests"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "header"
 pattern = "^accept-encoding:\\s*gzip\\s*$"
 weight = 1
@@ -774,7 +781,7 @@ description = "Accept-Encoding normalised to bare gzip (ATS normalize_ae), unusu
 [[rule]]
 id = "header.scripted_ua"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "user_agent"
 pattern = "python-requests|python-httpx|aiohttp|node-fetch|undici|Go-http-client|curl/|axios/"
 weight = 1
@@ -783,7 +790,7 @@ description = "Scripted HTTP client user agent"
 [[rule]]
 id = "header.headless_ua"
 kind = "header"
-tactic = "T2"
+artifact = true
 target = "user_agent"
 pattern = "HeadlessChrome|PhantomJS|Playwright"
 weight = 1
@@ -793,7 +800,7 @@ description = "Headless browser user agent"
 [[rule]]
 id = "outcome.neterror"
 kind = "outcome"
-tactic = "T2"
+tactic = "T3"
 target = "final_url"
 pattern = "^about:(neterror|privatebrowsing|blank#blocked)"
 weight = 1
@@ -812,7 +819,7 @@ description = "Ended on a bot challenge"
 [[rule]]
 id = "infra.hysandbox_host"
 kind = "infra"
-tactic = "T2"
+artifact = true
 target = "url"
 pattern = "hysandbox\\.tencent-cloud\\.com"
 weight = 3

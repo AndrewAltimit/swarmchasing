@@ -23,8 +23,9 @@ pub struct RuleMeta {
     pub id: String,
     /// `T1`..`T9`, or [`UNTAGGED`]. A rule may list several.
     pub tactics: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub artifact: Option<String>,
+    /// The rule only shows how the agent was built (`artifact = true`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub artifact: bool,
 }
 
 /// Every `[[rule]]` in `rules_toml`, in file order. Errors on TOML that does
@@ -52,10 +53,12 @@ pub fn rule_meta(rules_toml: &str) -> Result<Vec<RuleMeta>, String> {
         out.push(RuleMeta {
             id: id.to_string(),
             tactics,
-            artifact: r
-                .get("artifact")
-                .and_then(|x| x.as_str())
-                .map(str::to_string),
+            artifact: match r.get("artifact") {
+                Some(toml::Value::Boolean(b)) => *b,
+                // An older spelling: any value but an empty or `false` string.
+                Some(toml::Value::String(s)) => !s.is_empty() && s != "false",
+                _ => false,
+            },
         });
     }
     Ok(out)
@@ -89,8 +92,9 @@ impl AllowList {
 pub struct RuleCoverage {
     pub rule_id: String,
     pub tactics: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub artifact: Option<String>,
+    /// The rule only shows how the agent was built (`artifact = true`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub artifact: bool,
     /// Agent-labelled records it fired on.
     pub positives: usize,
     /// Benign-labelled records it fired on.
@@ -136,7 +140,7 @@ pub fn coverage(report: &EvalReport, meta: &[RuleMeta], allow: &AllowList) -> Co
         let c = RuleCoverage {
             rule_id: m.id.clone(),
             tactics: m.tactics.clone(),
-            artifact: m.artifact.clone(),
+            artifact: m.artifact,
             positives: s.map_or(0, |s| s.on_agent),
             on_benign: s.map_or(0, |s| s.on_benign),
             hard_negatives: hn.records,
@@ -199,19 +203,35 @@ mod tests {
             [[rule]]
             id = "a.one"
             tactic = "T3"
-            artifact = "relay"
+            artifact = true
             [[rule]]
             id = "a.two"
             tactic = ["T1", "T4"]
+            artifact = false
             [[rule]]
             id = "a.three"
+            artifact = "yes"
         "#;
         let m = rule_meta(toml).unwrap();
         assert_eq!(m.len(), 3);
         assert_eq!(m[0].tactics, ["T3"]);
-        assert_eq!(m[0].artifact.as_deref(), Some("relay"));
+        assert!(m[0].artifact);
         assert_eq!(m[1].tactics, ["T1", "T4"]);
+        assert!(!m[1].artifact);
         assert_eq!(m[2].tactics, [UNTAGGED]);
+        assert!(m[2].artifact);
+        // The bundled rules mark their artifacts with a boolean.
+        let bundled = rule_meta(crate::DEFAULT_RULES).unwrap();
+        assert!(
+            bundled
+                .iter()
+                .any(|r| r.id == "marker.md_link" && r.artifact)
+        );
+        assert!(
+            bundled
+                .iter()
+                .any(|r| r.id == "exploit.sqli_union" && !r.artifact)
+        );
         assert!(rule_meta("not [ toml").is_err());
         assert!(!rule_meta(crate::DEFAULT_RULES).unwrap().is_empty());
     }
