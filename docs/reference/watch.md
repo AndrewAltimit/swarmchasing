@@ -22,7 +22,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 - **Cursors.** Each source keeps a time cursor in `state.json`. New records are deduplicated by ID and appended to the source's store file.
 - **Wayback paging.** Wayback's index is sorted by URL rather than time, so a pull cut short by `limit` resumes from its resume key on the next run.
 - **Overlap.** Each pull overlaps the last by `overlap_days` to catch late-indexed captures.
-- **Analysis window.** Every run analyses the last `analysis_window_days` of stored records together, so clusters can span runs.
+- **Analysis window.** Every run analyses the last `analysis_window_days` of stored records together, so clusters can span runs. It reads only that window plus the overlap from the store, and this run's new records whatever their capture time.
 - **urlquery.** urlquery sources need `URLQUERY_APIKEY`. Without it they are skipped and the digest says so ([configuration](configuration.md#urlquerynet)).
 
 ## The digest
@@ -42,7 +42,7 @@ It also shows the HTTP requests each source made. Any health warning gets the di
 ### Possible reruns and archive bursts
 
 - **Possible reruns.** A new run whose target hosts, and their order, repeat an earlier run in a different cluster on another day. Hosts common to many runs count for little. The thresholds are in [methodology](../methodology.md#descriptive-hints).
-- **Archive bursts.** Many Wayback or Arquivo captures of one host within minutes, on a host the store otherwise holds few captures of. The `archive_burst_*` settings in the rules file set the thresholds.
+- **Archive bursts.** Many Wayback or Arquivo captures of one host within minutes, on a host the store otherwise holds few captures of, measured over the span the run reads. The `archive_burst_*` settings in the rules file set the thresholds.
 
 Both are leads to review; neither merges clusters.
 

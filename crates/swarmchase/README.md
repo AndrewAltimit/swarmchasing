@@ -137,7 +137,7 @@ Non-zero on an error, when `eval` misses a floor, when `case verify` finds a dif
 | [`input.rs`](src/input.rs) | Reading records and rules for the analysis commands. |
 | [`store.rs`](src/store.rs) | The watch record store, retention, JSON and NDJSON files. |
 | [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
-| [`watch.rs`](src/watch.rs) | The incremental watch and its digest. |
+| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review.rs`](src/review.rs) | Interactive labelling. |
 | [`eval.rs`](src/eval.rs) | The `eval` command. |
