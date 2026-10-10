@@ -151,6 +151,8 @@ pub struct RuleSet {
     pub paths: crate::paths::PathOptions,
     #[serde(default)]
     pub escalation: crate::escalation::EscalationOptions,
+    #[serde(default)]
+    pub soft_links: crate::fleets::SoftLinkOptions,
     #[serde(default, rename = "rule")]
     pub rules: Vec<RuleDef>,
     #[serde(default, rename = "asn")]
@@ -355,6 +357,7 @@ mod tests {
             s.escalation,
             crate::escalation::EscalationOptions::default()
         );
+        assert_eq!(s.soft_links, crate::fleets::SoftLinkOptions::default());
     }
 
     #[test]

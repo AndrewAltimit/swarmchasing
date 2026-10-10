@@ -72,6 +72,10 @@ pub struct Cluster {
     /// it never links records.
     #[serde(default)]
     pub encodings: BTreeMap<String, usize>,
+    /// Header-set fingerprints of members that carry request headers
+    /// ([`crate::fingerprint::HeaderSet::hash`]). Descriptive.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub header_sets: BTreeMap<String, usize>,
     /// Path hints ([`crate::paths`]) over the requests on the cluster's hosts
     /// during its span. Descriptive: never scored, never linked on.
     #[serde(default, skip_serializing_if = "PathStats::is_empty")]
@@ -134,6 +138,16 @@ pub struct Analysis {
     /// remote browser) within a window: a hint on the clusters they touch.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub escalations: Vec<crate::escalation::Escalation>,
+    /// Descriptive ties between clusters above noise (shared pauses, payload
+    /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
+    /// lengths, header sets, escalations, common features), strongest
+    /// first. They never merge clusters or change a score.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub soft_links: Vec<crate::fleets::SoftLink>,
+    /// Clusters whose combined soft links are strong: proposals for the
+    /// admin, never findings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidate_fleets: Vec<crate::fleets::CandidateFleet>,
 }
 
 /// A linking feature whose carriers were not joined because it is common:
@@ -270,6 +284,19 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
             .map(|c| (c.id.as_str(), &c.dialect))
             .collect::<Vec<_>>(),
     );
+    let soft_links = crate::fleets::soft_links(
+        &crate::fleets::Signals {
+            clusters: &clusters,
+            results: &results,
+            shared_pauses: &shared_pauses,
+            dialect_pairs: &dialect_pairs,
+            escalations: &escalations,
+            common_features: &common_features,
+        },
+        &rules.set.soft_links,
+    );
+    let candidate_fleets =
+        crate::fleets::candidate_fleets(&soft_links, &cluster_ids, &rules.set.soft_links);
 
     Analysis {
         rules_version: rules.set.meta.version.clone(),
@@ -291,6 +318,8 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         dialect_pairs,
         common_features,
         escalations,
+        soft_links,
+        candidate_fleets,
         results,
         clusters,
     }

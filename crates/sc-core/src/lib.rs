@@ -15,6 +15,7 @@ pub mod eval;
 pub mod extract;
 pub mod fanout;
 pub mod fingerprint;
+pub mod fleets;
 pub mod ingest;
 pub mod model;
 pub mod notice;
@@ -39,6 +40,7 @@ pub use eval::{EvalReport, Label, LabelSet, evaluate, parse_labels};
 pub use extract::{Extracted, Layer, defang, defang_host, extract, unwrap_layers};
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
+pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
     Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tactic, Tier, TsKind, fmt_ts,

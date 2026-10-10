@@ -45,6 +45,7 @@ pub(super) fn cluster(
     let mut asns: BTreeMap<u32, usize> = BTreeMap::new();
     let mut uas: BTreeMap<String, usize> = BTreeMap::new();
     let mut encodings: BTreeMap<String, usize> = BTreeMap::new();
+    let mut header_sets: BTreeMap<String, usize> = BTreeMap::new();
     let mut feats: BTreeMap<&LinkFeature, usize> = BTreeMap::new();
     for &i in &members {
         let r = &results[i];
@@ -70,6 +71,9 @@ pub(super) fn cluster(
         let enc = crate::fingerprint::encoding(&r.obs.url);
         if enc.informative() {
             *encodings.entry(enc.style).or_default() += 1;
+        }
+        if let Some(h) = crate::fingerprint::header_set(&r.obs.headers) {
+            *header_sets.entry(h.hash).or_default() += 1;
         }
         for f in r.features.iter().filter(|f| joined.contains(&(i, *f))) {
             *feats.entry(f).or_default() += 1;
@@ -176,6 +180,7 @@ pub(super) fn cluster(
         asns,
         user_agents: uas,
         encodings,
+        header_sets,
         paths,
         dialect,
         fanout,

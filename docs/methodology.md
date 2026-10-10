@@ -173,6 +173,10 @@ Several features describe a cluster without changing its score, its tier or its 
 - **Parallel fan-out width.** How many alike requests land in the same second, as when an agent issues tool calls in parallel (the `[fanout]` settings).
 - **Repeated cut lengths.** Truncated URLs cut at nearly the same length, as a model or tool output limit would (the `[cut_lengths]` settings). A scan service's own display limit can do the same.
 
+**Soft links and candidate fleets** ([`fleets.rs`](../crates/sc-core/src/fleets.rs)). The hints that relate two clusters are collected as soft links (`soft_links` in the analysis): shared pauses, payload dialects, reruns of one target list, the same recon opening, overlapping unusual path sets, one encoding style across every member, the same fan-out width, the same cut length, the same request header set, steps of one route escalation, and a linking feature too common to link on. Each has a strength from 0 to 1: its weight in `[soft_links]`, times its own similarity where it has one. A value shared by more than `soft_links.max_shared` clusters links none of them.
+
+For each pair of clusters the strengths combine as `1 - Π(1 - strength)`, so several weak ties can add up and one cannot. Pairs that reach `soft_links.fleet_min_strength` are grouped into connected components, the **candidate fleets** (`candidate_fleets`), listed in internal reports. A candidate fleet is a proposal for the admin: it never merges clusters, changes a tier, or appears in a report to a provider, an operator or the public.
+
 **Why they never score or link.** Each of these is shared by many unrelated clients. Encoding styles are mostly library defaults. Polite crawlers and security scanners share recon openings. Popular targets attract the same paths. Cron jobs share pause times. Letting any of them raise a score would flag ordinary clients. Letting any of them link records would merge unrelated clusters, and every later step would inherit that error. They are also not measured by the evaluation set. So they appear in reports as hints, labelled as hints, for the admin to weigh.
 
 ## Endpoints

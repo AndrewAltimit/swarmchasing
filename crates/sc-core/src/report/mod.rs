@@ -417,6 +417,45 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             p.jaccard
         );
     }
+    let fleets: Vec<&crate::fleets::CandidateFleet> = a
+        .candidate_fleets
+        .iter()
+        .filter(|f| f.clusters.iter().any(|id| selected(id)))
+        .collect();
+    if opts.audience == Audience::Internal && !fleets.is_empty() {
+        let _ = writeln!(
+            s,
+            "\n## Candidate fleets\n\nClusters tied by soft links (shared pauses, reruns, recon openings, encoding and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.\n"
+        );
+        for f in fleets {
+            let kinds: Vec<&str> = f.kinds.iter().map(|k| k.label()).collect();
+            let _ = writeln!(
+                s,
+                "- **{}**: {} — {} soft link(s): {} (weakest pair {:.2})",
+                f.id,
+                f.clusters.join(", "),
+                f.links,
+                kinds.join(", "),
+                f.strength
+            );
+            for l in a
+                .soft_links
+                .iter()
+                .filter(|l| f.clusters.contains(&l.a) && f.clusters.contains(&l.b))
+                .take(8)
+            {
+                let _ = writeln!(
+                    s,
+                    "  - {} ↔ {}: {} ({:.2}): {}",
+                    l.a,
+                    l.b,
+                    l.kind.label(),
+                    l.strength,
+                    defang(&truncate(&l.detail, 160))
+                );
+            }
+        }
+    }
     if opts.audience == Audience::Internal && !a.common_features.is_empty() {
         let _ = writeln!(
             s,
