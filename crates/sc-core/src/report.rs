@@ -363,7 +363,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 .take(5)
                 .map(|f| match view.as_deref_mut() {
                     Some(v) => v.feature(f),
-                    None => f.clone(),
+                    None => f.to_string(),
                 })
                 .map(|f| format!("`{}`", defang(&truncate(&f, 90))))
                 .collect();

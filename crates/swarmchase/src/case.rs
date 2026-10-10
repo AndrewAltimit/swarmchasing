@@ -31,8 +31,8 @@ use clap::{Args, Subcommand};
 pub use sc_core::NoticeStatus;
 use sc_core::notice::{NoticeFile, NoticeMeta, lint_public, write_notice};
 use sc_core::{
-    Analysis, Audience, Claim, EndpointOptions, Evidence, Observation, ReportOptions, Role, Tier,
-    analyze, endpoints, fmt_ts, render_markdown, render_notice,
+    Analysis, Audience, Claim, EndpointOptions, Evidence, LinkFeature, Observation, ReportOptions,
+    Role, Tier, analyze, endpoints, fmt_ts, render_markdown, render_notice,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -1215,7 +1215,7 @@ pub(crate) fn tier_changes(
 /// agent markers) and the endpoints it hit, as its pinned rules extract them.
 pub(crate) struct CaseIndicators {
     /// Linking feature -> what it names (see [`crate::stix::feature_kind`]).
-    pub features: BTreeMap<String, &'static str>,
+    pub features: BTreeMap<LinkFeature, &'static str>,
     /// Endpoints, except those classified as not affected.
     pub endpoints: BTreeSet<String>,
     /// The case's own records, which never count as new activity.
@@ -1240,9 +1240,11 @@ impl CaseIndicators {
             .iter()
             .filter_map(|f| {
                 let what = self.features.get(f)?;
-                let value = f.strip_prefix("param:").unwrap_or(f);
-                let value = value.split_once(':').map_or(value, |(_, v)| v);
-                Some(format!("{what} {value}"))
+                let value = match f {
+                    LinkFeature::Param { .. } => f.to_string(),
+                    LinkFeature::Rule { value, .. } => value.clone(),
+                };
+                Some(format!("{what} {}", value.trim_start_matches("param:")))
             })
             .collect();
         if let Some(h) = x.target_host.filter(|h| self.endpoints.contains(h)) {

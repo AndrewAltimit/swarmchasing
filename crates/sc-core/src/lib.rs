@@ -36,7 +36,9 @@ pub use extract::{Extracted, Layer, defang, extract, unwrap_layers};
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
-pub use model::{Hit, IndicatorKind, OPERATOR_SOURCE, Observation, Tier, fmt_ts, parse_ts};
+pub use model::{
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tier, fmt_ts, parse_ts,
+};
 pub use notice::{NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind};
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use recurrence::{RecurrenceOptions, Rerun, TargetRun, reruns};

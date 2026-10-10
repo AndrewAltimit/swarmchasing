@@ -5,7 +5,7 @@
 //! `data:` URLs carrying fetch programs, or base64 parameters. We peel
 //! those layers so rules can see every hop and the real target.
 
-use crate::model::{Hit, IndicatorKind, Observation, truncate};
+use crate::model::{Hit, IndicatorKind, LinkFeature, Observation, truncate};
 use crate::rules::{Matcher, Rules, Target, host_matches};
 use base64::Engine;
 use regex::Regex;
@@ -276,7 +276,7 @@ pub struct Extracted {
     /// The innermost host that is not a known relay/carrier/inbox.
     pub target_host: Option<String>,
     /// Linking features (inbox IDs, unique tags).
-    pub features: Vec<String>,
+    pub features: Vec<LinkFeature>,
 }
 
 pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
@@ -289,12 +289,12 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     let mut intermediary = vec![false; layers.len()];
 
     let mut push = |hits: &mut Vec<Hit>,
-                    features: &mut BTreeSet<String>,
+                    features: &mut BTreeSet<LinkFeature>,
                     r: &crate::rules::CompiledRule,
                     m: &str,
                     layer: usize| {
         if r.def.link {
-            features.insert(format!("{}:{}", r.def.id, m.to_ascii_lowercase()));
+            features.insert(LinkFeature::rule(&r.def.id, m));
         }
         if fired.insert(r.def.id.clone()) {
             hits.push(Hit {
@@ -364,7 +364,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
                 .any(|p| p.eq_ignore_ascii_case(k))
                 && v.len() >= 3
             {
-                features.insert(format!("param:{}={}", k.to_ascii_lowercase(), v));
+                features.insert(LinkFeature::param(k, v));
             }
         }
     }
@@ -506,11 +506,7 @@ mod tests {
             &rules,
         );
         assert!(x.significant_hit);
-        assert!(
-            x.features
-                .iter()
-                .any(|f| f.starts_with("exfil.webhook_site:"))
-        );
+        assert!(x.features.iter().any(|f| f.name() == "exfil.webhook_site"));
         assert_eq!(x.target_host.as_deref(), Some("data.portal.example"));
     }
 

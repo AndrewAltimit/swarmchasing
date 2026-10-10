@@ -1611,7 +1611,8 @@ mod tests {
         let c = case::load(&data.join("cases"), "p-1").unwrap();
         let ind = case::indicators(&data.join("cases"), &c, &rules.rules).unwrap();
         assert!(
-            ind.features.contains_key("param:uqtag=zz9"),
+            ind.features
+                .contains_key(&"param:uqtag=zz9".parse::<sc_core::LinkFeature>().unwrap()),
             "{:?}",
             ind.features
         );

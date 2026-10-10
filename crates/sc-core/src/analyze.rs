@@ -3,7 +3,7 @@
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::{Layer, extract};
 use crate::fanout::{FanOut, FanRequest};
-use crate::model::{Hit, IndicatorKind, Observation, Tier};
+use crate::model::{Hit, IndicatorKind, LinkFeature, Observation, Tier};
 use crate::paths::PathStats;
 use crate::rules::Rules;
 use crate::timing::{
@@ -21,7 +21,7 @@ pub struct ObsResult {
     pub hits: Vec<Hit>,
     pub layers: Vec<Layer>,
     pub target_host: Option<String>,
-    pub features: Vec<String>,
+    pub features: Vec<LinkFeature>,
     /// Index into `Analysis::clusters`.
     pub cluster: Option<usize>,
 }
@@ -68,7 +68,7 @@ pub struct Cluster {
     #[serde(default, skip_serializing_if = "CutLengths::is_empty")]
     pub cut_lengths: CutLengths,
     /// Features that joined members together.
-    pub link_features: Vec<String>,
+    pub link_features: Vec<LinkFeature>,
     pub runs: Vec<Span>,
     pub timing: TimingStats,
 }
@@ -216,15 +216,15 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         .collect();
     let mut dsu = Dsu((0..results.len()).collect());
 
-    let mut by_feature: HashMap<&str, usize> = HashMap::new();
-    let mut feature_count: HashMap<&str, usize> = HashMap::new();
+    let mut by_feature: HashMap<&LinkFeature, usize> = HashMap::new();
+    let mut feature_count: HashMap<&LinkFeature, usize> = HashMap::new();
     for &i in &flagged {
         for f in &results[i].features {
-            *feature_count.entry(f.as_str()).or_default() += 1;
-            match by_feature.get(f.as_str()) {
+            *feature_count.entry(f).or_default() += 1;
+            match by_feature.get(f) {
                 Some(&j) => dsu.union(i, j),
                 None => {
-                    by_feature.insert(f.as_str(), i);
+                    by_feature.insert(f, i);
                 }
             }
         }
@@ -297,7 +297,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         let mut asns: BTreeMap<u32, usize> = BTreeMap::new();
         let mut uas: BTreeMap<String, usize> = BTreeMap::new();
         let mut encodings: BTreeMap<String, usize> = BTreeMap::new();
-        let mut feats: BTreeSet<String> = BTreeSet::new();
+        let mut feats: BTreeSet<LinkFeature> = BTreeSet::new();
         let mut any_sig = false;
         for &i in &members {
             let r = &results[i];
@@ -321,7 +321,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
                 *encodings.entry(enc.style).or_default() += 1;
             }
             for f in &r.features {
-                if feature_count.get(f.as_str()).copied().unwrap_or(0) > 1 {
+                if feature_count.get(f).copied().unwrap_or(0) > 1 {
                     feats.insert(f.clone());
                 }
             }
@@ -736,7 +736,7 @@ mod tests {
             a.results[0]
                 .features
                 .iter()
-                .any(|f| f.ends_with("yyyyyyb.oast.fun")),
+                .any(|f| f.value().ends_with("yyyyyyb.oast.fun")),
             "{:?}",
             a.results[0].features
         );

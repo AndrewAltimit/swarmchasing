@@ -14,7 +14,7 @@
 //!   with one entry per update ([`atom_feed`]).
 
 use crate::analyze::{Analysis, ObsResult};
-use crate::model::IndicatorKind;
+use crate::model::{IndicatorKind, LinkFeature};
 use crate::rules::{Matcher, Rules, Target};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -128,58 +128,56 @@ impl PublicView {
         ));
     }
 
-    /// The value to show for a linking feature, or `None` to withhold it.
-    fn feature_value<'f>(&mut self, f: &'f str) -> Option<&'f str> {
+    /// Whether a notice may show a linking feature; a withheld one's value
+    /// is remembered for [`PublicView::leaks`].
+    fn shown(&mut self, f: &LinkFeature) -> bool {
         let shown = self.classify(f);
-        if shown.is_none() {
-            let value = feature_secret(f);
-            if !value.is_empty() {
-                self.hidden.insert(value.to_string());
-            }
+        if !shown && !f.value().is_empty() {
+            self.hidden.insert(f.value().to_string());
         }
         shown
     }
 
-    fn classify<'f>(&mut self, f: &'f str) -> Option<&'f str> {
-        if let Some(rest) = f.strip_prefix("param:") {
-            let (name, value) = rest.split_once('=').unwrap_or((rest, ""));
-            if TAG_PARAMS.contains(&name) {
-                return Some(f);
-            }
-            self.withheld
-                .insert(format!("value of linking parameter `{name}`"));
-            self.flags.insert(format!(
-                "linking parameter `{name}` (value {} chars) could be a credential, so it was withheld; if it is a plain run tag, add it back by hand",
-                value.chars().count()
-            ));
-            return None;
-        }
-        let (rule, _) = f.split_once(':').unwrap_or((f, ""));
-        match self.kinds.get(rule) {
-            Some(IndicatorKind::AgentMarker) => Some(f),
-            Some(IndicatorKind::Exfil) => {
+    fn classify(&mut self, f: &LinkFeature) -> bool {
+        match f {
+            LinkFeature::Param { name, value } => {
+                if TAG_PARAMS.contains(&name.as_str()) {
+                    return true;
+                }
                 self.withheld
-                    .insert(format!("callback channel identifiers (`{rule}`)"));
-                None
-            }
-            _ => {
-                self.withheld.insert(format!("linking identifier `{rule}`"));
+                    .insert(format!("value of linking parameter `{name}`"));
                 self.flags.insert(format!(
-                    "linking identifier from `{rule}` is neither a tag nor a callback channel, so it was withheld"
+                    "linking parameter `{name}` (value {} chars) could be a credential, so it was withheld; if it is a plain run tag, add it back by hand",
+                    value.chars().count()
                 ));
-                None
+                false
             }
+            LinkFeature::Rule { rule, .. } => match self.kinds.get(rule) {
+                Some(IndicatorKind::AgentMarker) => true,
+                Some(IndicatorKind::Exfil) => {
+                    self.withheld
+                        .insert(format!("callback channel identifiers (`{rule}`)"));
+                    false
+                }
+                _ => {
+                    self.withheld.insert(format!("linking identifier `{rule}`"));
+                    self.flags.insert(format!(
+                        "linking identifier from `{rule}` is neither a tag nor a callback channel, so it was withheld"
+                    ));
+                    false
+                }
+            },
         }
     }
 
     /// A linking feature as a notice may show it.
-    pub fn feature(&mut self, f: &str) -> String {
-        match self.feature_value(f) {
-            Some(v) => mask_emails(v),
-            None => match f.strip_prefix("param:") {
-                Some(p) => format!("param:{}={WITHHELD}", p.split('=').next().unwrap_or(p)),
-                None => format!("{}:{WITHHELD}", f.split(':').next().unwrap_or(f)),
-            },
+    pub fn feature(&mut self, f: &LinkFeature) -> String {
+        if self.shown(f) {
+            return mask_emails(&f.to_string());
+        }
+        match f {
+            LinkFeature::Param { name, .. } => format!("param:{name}={WITHHELD}"),
+            LinkFeature::Rule { rule, .. } => format!("{rule}:{WITHHELD}"),
         }
     }
 
@@ -200,11 +198,11 @@ impl PublicView {
         }
         let mut url = r.obs.url.clone();
         for f in &r.features {
-            if self.feature_value(f).is_some() {
+            if self.shown(f) {
                 continue;
             }
             // Every occurrence, in whatever encoding it was written.
-            let value = feature_secret(f);
+            let value = f.value();
             match written_forms(value) {
                 Some(re) if !value.is_empty() && re.is_match(&url) => {
                     url = re.replace_all(&url, WITHHELD).into_owned();
@@ -238,15 +236,6 @@ impl PublicView {
         out.extend(self.leaks(text));
         out
     }
-}
-
-/// The identifying part of a linking feature: the parameter value of
-/// `param:<name>=<value>`, the matched text of `<rule>:<match>`.
-fn feature_secret(f: &str) -> &str {
-    f.strip_prefix("param:")
-        .and_then(|p| p.split_once('=').map(|x| x.1))
-        .or_else(|| f.split_once(':').map(|x| x.1))
-        .unwrap_or("")
 }
 
 /// Undo `defang` so the lint sees what a reader could rebuild.
@@ -842,11 +831,14 @@ mod tests {
         assert!(v.record_url(by("b")).is_none(), "callback channel");
         assert!(v.record_url(by("c")).is_none(), "exposed endpoint");
 
-        assert_eq!(v.feature("param:uqtag=zz9"), "param:uqtag=zz9");
-        assert_eq!(v.feature("param:tok=abcdef123"), "param:tok=[withheld]");
+        let f = |s: &str| s.parse::<LinkFeature>().unwrap();
+        assert_eq!(v.feature(&f("param:uqtag=zz9")), "param:uqtag=zz9");
+        assert_eq!(v.feature(&f("param:tok=abcdef123")), "param:tok=[withheld]");
         assert!(
-            v.feature("exfil.webhook_site:webhook.site/0f8fad5b-d9cb-469f-a165-70867728950e")
-                .ends_with(WITHHELD)
+            v.feature(&f(
+                "exfil.webhook_site:webhook.site/0f8fad5b-d9cb-469f-a165-70867728950e"
+            ))
+            .ends_with(WITHHELD)
         );
         assert!(v.flags.iter().any(|f| f.contains("`tok`")), "{:?}", v.flags);
         assert!(v.withheld.iter().any(|w| w.contains("hit[.]example[.]org")));
