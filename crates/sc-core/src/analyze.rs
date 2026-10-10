@@ -103,14 +103,20 @@ pub struct Analysis {
 
 struct Dsu(Vec<usize>);
 impl Dsu {
+    /// The set's root, compressing the path on the way. Iterative: a long
+    /// chain must not exhaust the stack (the browser's is small).
     fn find(&mut self, x: usize) -> usize {
-        let p = self.0[x];
-        if p == x {
-            return x;
+        let mut root = x;
+        while self.0[root] != root {
+            root = self.0[root];
         }
-        let r = self.find(p);
-        self.0[x] = r;
-        r
+        let mut x = x;
+        while self.0[x] != root {
+            let next = self.0[x];
+            self.0[x] = root;
+            x = next;
+        }
+        root
     }
     fn union(&mut self, a: usize, b: usize) {
         let (a, b) = (self.find(a), self.find(b));
@@ -576,6 +582,18 @@ mod tests {
             url: url.into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn union_find_survives_a_long_chain() {
+        let n = 1_000_000;
+        let mut d = Dsu((0..n).collect());
+        // Each union hangs the previous root under a new one: a chain n deep.
+        for i in (0..n - 1).rev() {
+            d.union(i, i + 1);
+        }
+        assert_eq!(d.find(n - 1), 0);
+        assert_eq!(d.0[n - 1], 0, "path compressed");
     }
 
     #[test]
