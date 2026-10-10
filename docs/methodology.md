@@ -106,7 +106,7 @@ A rule's target says what it reads: the host of each layer (suffix match), each 
 
 Each rule kind has a default tactic, the Field Manual's [FM-4.4](manual/04-indicators.md#fm-44-default-tactics-by-rule-kind) table; a rule on another tactic is listed with its reason in a test (`TACTIC_EXCEPTIONS` in [`rules.rs`](../crates/sc-core/src/rules.rs)). `T8` and `T9` are cluster-level judgments and never a rule's tactic. A rule marked `artifact = true` is a trace of how the agent was built, not an action: model-output residue, run tags, self-identification, client headers, sandbox hosts.
 
-Every hit carries its rule's tactic and artifact flag, and each cluster counts hits per tactic (`tactics`) and members with an artifact hit (`artifacts`). Tactics describe; they never change a score.
+Every hit carries its rule's tactic and artifact flag, and each cluster counts hits per tactic (`tactics`) and members with an artifact hit (`artifacts`). Case notes and provider reports print the artifact count per cluster; affected-operator reports and public notices do not. Tactics describe; they never change a score.
 
 **ASN hints.** The `[[asn]]` table maps autonomous system numbers to the organisations that run them. It is context for attribution, never proof.
 
@@ -148,7 +148,9 @@ Probe chains also carry descriptive detail that changes nothing: their **pace** 
 
 [`timing.rs`](../crates/sc-core/src/timing/mod.rs) describes each cluster and the whole analysis. None of it changes a score or links records.
 
-**What the times measure.** Each record says what its timestamp is (`ts_kind`): a request (access and operator logs), a submission to a scan service (urlquery), or an archive capture (Wayback, Arquivo.pt). Each cluster and probe chain carries the result as `time_basis`: `request`, `submit`, `capture`, or `mixed` when capture times sit alongside the others. Hints that read request timing (chain pace, fan-out width and the hour-of-day rhythm) never use capture times: rhythm and fan-out leave capture-time records out, and a chain timed by captures reports "capture times, not request times: pace not read". Submit times are close to request times and are used, labelled "submit times". Cadence, bursts and pauses describe whatever the times are.
+**What the times measure.** Each record says what its timestamp is (`ts_kind`): a request or the event a public log recorded (access and operator logs; a GH Archive event, an npm or PyPI publication, a certificate log accepting an entry), a submission to a scan service (urlquery), or an archive capture (Wayback, Arquivo.pt, Common Crawl, Memento archives). Each cluster and probe chain carries the result as `time_basis`: `request`, `submit`, `capture`, or `mixed` when capture times sit alongside the others.
+
+Hints that read request timing (chain pace, fan-out width and the hour-of-day rhythm) never use capture times: rhythm and fan-out leave capture-time records out, and a chain timed by captures reports "capture times, not request times: pace not read". Submit times are close to request times and are used, labelled "submit times". Cadence, bursts and pauses describe whatever the times are.
 
 **Cadence, bursts and pauses.** The median and 90th-percentile gap between records. A burst is at least `linking.burst_min` records, each within `linking.burst_gap_secs` of the last. A pause is a gap at least `linking.pause_min_secs` long and at least ten times the median gap, so a slow but steady cadence does not read as a string of pauses. The analysis also reports how many cluster runs were active at the same instant.
 

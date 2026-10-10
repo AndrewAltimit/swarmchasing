@@ -286,6 +286,14 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 dur(p.end - p.start)
             );
         }
+        if c.artifacts > 0 && matches!(opts.audience, Audience::Internal | Audience::Provider) {
+            let _ = writeln!(
+                s,
+                "  - artifacts: {} of {} records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)",
+                c.artifacts,
+                c.members.len()
+            );
+        }
         for ch in a
             .chains
             .iter()
@@ -949,6 +957,38 @@ mod tests {
         );
         assert_eq!(md.matches("payload dialect `").count(), 1, "{md}");
         assert!(md.contains("favour the same canonical test payloads: 4 shared variants, Jaccard"));
+    }
+
+    #[test]
+    fn artifacts_count_is_in_private_reports_only() {
+        let obs = (0..3)
+            .map(|i| Observation {
+                ts: 1_791_000_000 + i * 60,
+                url: format!(
+                    "https://r.jina.ai/https://p.example/%60https://p.example/x{i}%60?uqtag=zz9&id=1'%20OR%201=1--"
+                ),
+                ..Default::default()
+            })
+            .collect();
+        let a = analyze(obs, &Rules::default_rules());
+        let n = a.clusters[0].artifacts;
+        assert!(n > 0, "{:?}", a.clusters[0]);
+        let line = format!("artifacts: {n} of 3 records carry a trace");
+        for (audience, shown) in [
+            (Audience::Internal, true),
+            (Audience::Provider, true),
+            (Audience::Affected, false),
+            (Audience::Public, false),
+        ] {
+            let md = render_markdown(
+                &a,
+                &ReportOptions {
+                    audience,
+                    ..Default::default()
+                },
+            );
+            assert_eq!(md.contains(&line), shown, "{audience:?}: {md}");
+        }
     }
 
     #[test]
