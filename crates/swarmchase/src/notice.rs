@@ -460,19 +460,7 @@ pub(crate) fn notice_draft(
             published: today.to_string(),
             updated: today.to_string(),
             providers,
-            affected: c
-                .endpoints
-                .iter()
-                .filter(|e| {
-                    matches!(
-                        e.state,
-                        EndpointState::Compromised
-                            | EndpointState::Targeted
-                            | EndpointState::Historical
-                    )
-                })
-                .map(|e| e.host.clone())
-                .collect(),
+            affected: case::affected_hosts(&c),
             sector: None,
             rules_version: a.rules_version.clone(),
             toolkit: env!("CARGO_PKG_VERSION").to_string(),

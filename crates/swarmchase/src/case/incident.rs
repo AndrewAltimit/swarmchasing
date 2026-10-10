@@ -140,24 +140,14 @@ fn gather(
             )
         })
         .collect();
-    let affected: Vec<String> = c
-        .endpoints
-        .iter()
-        .filter(|e| {
-            matches!(
-                e.state,
-                EndpointState::Compromised | EndpointState::Targeted | EndpointState::Historical
-            )
-        })
-        .map(|e| e.host.clone())
-        .collect();
+    let affected = super::affected_hosts(c);
     let compromised = c
         .endpoints
         .iter()
         .any(|e| e.state == EndpointState::Compromised);
 
     // Public record links, for records a notice may show.
-    let mut view = PublicView::new(&a, &opts.exposed_hosts);
+    let mut view = PublicView::new(&a, &opts.exposed_hosts).with_affected(Some(&affected));
     let mut sources = Vec::new();
     for cl in &clusters {
         for &m in &cl.members {

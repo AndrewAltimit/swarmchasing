@@ -4,7 +4,9 @@
 //!   webhook and topic identifiers, paste links), e-mail addresses, run
 //!   identifiers that cannot be told apart from credentials, and the request
 //!   details for endpoints the admin marked compromised. Anything the view
-//!   cannot classify is withheld and flagged for the admin.
+//!   cannot classify is withheld and flagged for the admin. When a case
+//!   classifies its endpoints, hosts not classified as affected are counted,
+//!   not named.
 //! - A last check over finished text ([`lint_public`]), run on every notice
 //!   before it is published and on every committed notice in CI.
 //!
@@ -82,6 +84,8 @@ fn written_forms(value: &str) -> Option<Regex> {
 pub struct PublicView {
     kinds: HashMap<String, IndicatorKind>,
     exposed: BTreeSet<String>,
+    /// Hosts a notice may name, when a case classified its endpoints.
+    affected: Option<BTreeSet<String>>,
     /// Values withheld from the output, so a finished text can be checked
     /// for any that survived ([`PublicView::leaks`]). Never shown.
     hidden: BTreeSet<String>,
@@ -105,9 +109,33 @@ impl PublicView {
                 .iter()
                 .map(|h| h.to_ascii_lowercase())
                 .collect(),
+            affected: None,
             hidden: BTreeSet::new(),
             withheld: BTreeSet::new(),
             flags: BTreeSet::new(),
+        }
+    }
+
+    /// Name only these hosts (the case's affected endpoints); `None` names
+    /// every host.
+    pub fn with_affected(mut self, hosts: Option<&[String]>) -> Self {
+        self.affected = hosts.map(|h| h.iter().map(|x| x.to_ascii_lowercase()).collect());
+        self
+    }
+
+    /// Whether a notice may name this host: no classification was given, or
+    /// the admin classified it affected.
+    pub fn named(&self, host: &str) -> bool {
+        self.affected
+            .as_ref()
+            .is_none_or(|s| s.contains(&host.to_ascii_lowercase()))
+    }
+
+    /// Record that `n` hosts were counted instead of named.
+    pub fn note_unnamed(&mut self, n: usize) {
+        if n > 0 {
+            self.withheld
+                .insert(format!("names of {n} host(s) not classified as affected"));
         }
     }
 
@@ -179,7 +207,8 @@ impl PublicView {
 
     /// A record's URL as a notice may show it, or `None` when it must be
     /// withheld entirely: it reaches a callback channel, it targets an exposed
-    /// endpoint, or a withheld identifier in it could not be located.
+    /// endpoint or a host the notice does not name, or a withheld identifier
+    /// in it could not be located.
     pub fn record_url(&mut self, r: &ObsResult) -> Option<String> {
         if let Some(h) = r.hits.iter().find(|h| h.kind == IndicatorKind::Exfil) {
             self.withheld
@@ -190,6 +219,9 @@ impl PublicView {
             && self.exposed(h)
         {
             self.note_exposed(h);
+            return None;
+        }
+        if r.target_host.as_deref().is_some_and(|h| !self.named(h)) {
             return None;
         }
         let mut url = r.obs.url.clone();

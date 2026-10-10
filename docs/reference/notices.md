@@ -42,6 +42,7 @@ Each update appends a dated entry and never rewrites an earlier one.
 | Linking parameters that could be credentials | `tok`, `sid`, `session`, `nonce`. Run tags such as `uqtag` stay. |
 | E-mail addresses | The local part of every address. |
 | Compromised endpoints | Their attack details and request URLs. |
+| Hosts not classified as affected | Not named: the summary and endpoint table give a count, and their records, chains and escalations are left out. |
 | Operator-supplied logs | Everything from them, until the operator agrees to publication ([operator evidence](cases.md#operator-evidence)). |
 
 A report to one operator never carries another operator's logs. Records used with agreement are marked as provided by the operator.

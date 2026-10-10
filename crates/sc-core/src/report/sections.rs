@@ -140,17 +140,19 @@ fn candidate_lists(s: &mut String, claims: &[Claim]) {
 
 /// Every flagged hit on the hosts these clusters touched, including hits
 /// outside the clusters: an operator checks its logs per host, not per cluster.
+/// `unnamed` hosts (not classified as affected) are counted, not listed.
 pub(super) fn endpoint_table(
     s: &mut String,
     a: &Analysis,
     hosts: &BTreeMap<String, usize>,
+    unnamed: usize,
     mut view: Option<&mut PublicView>,
 ) {
     let views: Vec<EndpointView> = endpoints(a, &EndpointOptions::default())
         .into_iter()
         .filter(|v| hosts.contains_key(&v.host))
         .collect();
-    if views.is_empty() {
+    if views.is_empty() && unnamed == 0 {
         return;
     }
     let _ = writeln!(s, "## Endpoints\n");
@@ -158,10 +160,12 @@ pub(super) fn endpoint_table(
         s,
         "Every flagged request to each host, including requests outside the linked clusters. \"Ongoing\" means hit within 7 days of the newest record reviewed.\n"
     );
-    let _ = writeln!(
-        s,
-        "| Host | Hits | First seen | Last seen | Status | Attack payloads |\n|---|---|---|---|---|---|"
-    );
+    if !views.is_empty() {
+        let _ = writeln!(
+            s,
+            "| Host | Hits | First seen | Last seen | Status | Attack payloads |\n|---|---|---|---|---|---|"
+        );
+    }
     for v in &views {
         let exposed = view.as_deref().is_some_and(|p| p.exposed(&v.host));
         if exposed && let Some(p) = view.as_deref_mut() {
@@ -186,6 +190,13 @@ pub(super) fn endpoint_table(
             fmt_ts(v.first_seen),
             fmt_ts(v.last_seen),
             v.activity.label()
+        );
+    }
+    if unnamed > 0 {
+        let _ = writeln!(
+            s,
+            "\n{} (not classified as affected).",
+            super::hosts_not_named(unnamed)
         );
     }
     let _ = writeln!(s);

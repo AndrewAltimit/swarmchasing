@@ -25,8 +25,24 @@ pub(crate) fn report_options(
             .filter(|e| e.state == EndpointState::Compromised)
             .map(|e| e.host.clone())
             .collect(),
+        affected_hosts: Some(affected_hosts(c)),
         ..Default::default()
     }
+}
+
+/// The endpoints the admin classified as affected: compromised, targeted or
+/// historical. A public notice names these hosts and no others.
+pub(crate) fn affected_hosts(c: &Case) -> Vec<String> {
+    c.endpoints
+        .iter()
+        .filter(|e| {
+            matches!(
+                e.state,
+                EndpointState::Compromised | EndpointState::Targeted | EndpointState::Historical
+            )
+        })
+        .map(|e| e.host.clone())
+        .collect()
 }
 
 pub(crate) fn report(
