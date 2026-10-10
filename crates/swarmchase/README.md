@@ -83,7 +83,7 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 | Command | What it does |
 |---|---|
 | `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`. Details: [Watch runs](../../docs/reference/watch.md). |
-| `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
+| `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest` shows a local model's suggestion. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
 | `eval <input>…` | Precision and recall of the rules on labelled records. Labels come from a `label` field or `--labels` (NDJSON or CSV). With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. |
 
 ```sh
@@ -157,6 +157,7 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review.rs`](src/review.rs) | Interactive labelling. |
+| [`suggest.rs`](src/suggest.rs) | Label suggestions from a local model (`review --suggest`), local hosts only. |
 | [`eval.rs`](src/eval.rs) | The `eval` command. |
 | [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, and the indicators the watch matches. |
 | [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |

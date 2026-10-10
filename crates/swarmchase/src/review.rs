@@ -30,7 +30,12 @@
 //! it has none), pinned to the rules the session analysed with; `c <case-id>`
 //! adds the cluster's records to that case instead. Either way the record
 //! stays on screen to be labelled.
+//!
+//! With `--suggest`, a model running locally ([`crate::suggest`]) proposes a
+//! label before each prompt; it is saved beside the admin's label as
+//! `suggested`, never as the label.
 
+use crate::suggest::Suggestion;
 use crate::util::truncate;
 use anyhow::{Context, Result, bail};
 use sc_core::{Analysis, Observation, Tier, defang, fmt_ts};
@@ -70,6 +75,11 @@ pub struct ReviewArgs {
     /// inter-rater agreement. Letters, digits, `-` and `_`.
     #[arg(long)]
     labeller: Option<String>,
+    /// Show a label suggestion from a model running locally
+    /// (`SWARMCHASE_LLM_URL`, loopback or private addresses only) before
+    /// each prompt. Saved beside the label as `suggested`, never as it.
+    #[arg(long)]
+    suggest: bool,
 }
 
 pub fn run(args: ReviewArgs) -> Result<()> {
@@ -130,19 +140,35 @@ pub fn run(args: ReviewArgs) -> Result<()> {
     if items.is_empty() {
         return Ok(());
     }
+    let suggester = if args.suggest {
+        let s = crate::suggest::Suggester::from_env()?;
+        println!(
+            "label suggestions from the local model at {} (suggestions only; the label is yours)",
+            s.url()
+        );
+        Some(s)
+    } else {
+        None
+    };
+    let suggest = |a: &Analysis, idx: usize| suggester.as_ref().and_then(|s| s.suggest(a, idx));
     let stdin = std::io::stdin();
+    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let cases = CaseSink {
+        root: data.join("cases"),
+        rules,
+        from,
+        today: crate::util::today(),
+    };
     let t = session(
         &a,
         &items,
         &mut store,
         stdin.lock(),
         &mut std::io::stdout(),
-        &chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-        &CaseSink {
-            root: data.join("cases"),
-            rules,
-            from,
-            today: crate::util::today(),
+        &Session {
+            now: &now,
+            cases: &cases,
+            suggest: &suggest,
         },
     )?;
     let labelled: Vec<String> = t.labelled.iter().map(|(k, v)| format!("{v} {k}")).collect();
@@ -180,6 +206,10 @@ pub struct Review {
     #[serde(default)]
     pub rules: Vec<String>,
     pub rules_version: String,
+    /// A local model's suggestion shown before the admin labelled the
+    /// record (`review --suggest`). Never the label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggested: Option<crate::suggest::Suggestion>,
 }
 
 /// The review file, keyed by record ID. Saving rewrites it, so a re-review
@@ -531,6 +561,16 @@ pub struct Tally {
     pub quit: bool,
 }
 
+/// What a review session works with besides the queue: the time stamped on
+/// each answer, where `c` opens cases, and the label suggester (`--suggest`;
+/// `|_, _| None` without it).
+#[derive(Clone, Copy)]
+pub struct Session<'a> {
+    pub now: &'a str,
+    pub cases: &'a CaseSink,
+    pub suggest: &'a dyn Fn(&Analysis, usize) -> Option<Suggestion>,
+}
+
 /// Step through `items`, reading answers from `input`. Each answer is saved
 /// before the next record is shown, so quitting or a crash loses nothing.
 pub fn session(
@@ -539,9 +579,13 @@ pub fn session(
     store: &mut ReviewStore,
     mut input: impl BufRead,
     out: &mut impl Write,
-    now: &str,
-    cases: &CaseSink,
+    ctx: &Session,
 ) -> Result<Tally> {
+    let Session {
+        now,
+        cases,
+        suggest,
+    } = *ctx;
     let mut tally = Tally::default();
     let total = items.len();
     let mut pos = 0;
@@ -553,6 +597,16 @@ pub fn session(
             continue;
         }
         show(out, a, item, pos + 1, total)?;
+        let suggestion = suggest(a, item.idx);
+        if let Some(s) = &suggestion {
+            writeln!(
+                out,
+                "  suggestion: {} — {} ({}; a suggestion only)",
+                s.label,
+                defang(&s.reason),
+                s.model
+            )?;
+        }
         let answer = loop {
             write!(out, "label> ")?;
             out.flush()?;
@@ -605,6 +659,8 @@ pub fn session(
                             score: r.score,
                             rules: r.hits.iter().map(|h| h.rule_id.clone()).collect(),
                             rules_version: a.rules_version.clone(),
+                            // Only the shown record had a suggestion.
+                            suggested: suggestion.clone().filter(|_| it.idx == item.idx),
                         },
                     );
                     *tally.labelled.entry(label).or_default() += 1;
@@ -854,6 +910,7 @@ mod tests {
                         score: r.score,
                         rules: Vec::new(),
                         rules_version: a.rules_version.clone(),
+                        suggested: None,
                     },
                 );
             }
@@ -945,18 +1002,38 @@ mod tests {
         let mut out = Vec::new();
         // First record: help, then a cluster-wide agent label; the rest benign; then quit.
         let input = "?\nA run of the webhook cluster\nb\nb\nb\nb\nq\n";
+        // A model that always says benign: shown, saved beside the label,
+        // never taken as it.
+        let suggest = |_: &Analysis, _: usize| {
+            Some(Suggestion {
+                label: "benign".into(),
+                reason: "looks like a reader".into(),
+                model: "m".into(),
+            })
+        };
         let t = session(
             &a,
             &q,
             &mut store,
             input.as_bytes(),
             &mut out,
-            "2026-10-12",
-            &cases,
+            &Session {
+                now: "2026-10-12",
+                cases: &cases,
+                suggest: &suggest,
+            },
         )
         .unwrap();
-        assert!(String::from_utf8(out).unwrap().contains("a = agent"));
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("a = agent"));
+        assert!(
+            out.contains("suggestion: benign — looks like a reader (m; a suggestion only)"),
+            "{out}"
+        );
         assert!(t.labelled.values().sum::<usize>() >= 2);
+        let shown = &store.entries[&a.results[q[0].idx].obs.id];
+        assert_eq!(shown.label, "agent");
+        assert_eq!(shown.suggested.as_ref().unwrap().label, "benign");
 
         let reopened = ReviewStore::open(store.path.clone()).unwrap();
         assert_eq!(reopened.entries.len(), store.entries.len());
@@ -973,9 +1050,17 @@ mod tests {
         let first = &a.results[q[0].idx];
         if let Some(c) = first.cluster {
             for &m in &a.clusters[c].members {
-                assert_eq!(reopened.entries[&a.results[m].obs.id].label, "agent");
+                let r = &reopened.entries[&a.results[m].obs.id];
+                assert_eq!(r.label, "agent");
+                // Only the record on screen had a suggestion.
+                assert_eq!(r.suggested.is_some(), m == q[0].idx);
             }
         }
+        assert_eq!(
+            labels.labels[&first.obs.id].label,
+            sc_core::Label::Agent,
+            "eval reads the admin's label"
+        );
         std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
     }
 
@@ -991,8 +1076,11 @@ mod tests {
             &mut store,
             "".as_bytes(),
             &mut Vec::new(),
-            "x",
-            &cases,
+            &Session {
+                now: "x",
+                cases: &cases,
+                suggest: &|_, _| None,
+            },
         )
         .unwrap();
         assert!(t.quit);
@@ -1057,8 +1145,11 @@ mod tests {
             &mut store,
             "c\nc no-such-case\na\nq\n".as_bytes(),
             &mut out,
-            "2026-10-12",
-            &sink,
+            &Session {
+                now: "2026-10-12",
+                cases: &sink,
+                suggest: &|_, _| None,
+            },
         )
         .unwrap();
         let out = String::from_utf8(out).unwrap();

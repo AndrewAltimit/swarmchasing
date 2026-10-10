@@ -23,6 +23,7 @@ mod pinning;
 mod review;
 mod stix;
 mod store;
+mod suggest;
 mod util;
 mod watch;
 
