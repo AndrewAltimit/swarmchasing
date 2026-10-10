@@ -12,6 +12,7 @@
 # Local secrets (API keys, SMTP credentials). Copy env.list.example to start.
 /env.list
 
-# Local tool state.
-/.claude/
+# Local tool state (settings, worktrees). Committed skills are the exception.
+/.claude/*
+!/.claude/skills/
 __pycache__/
