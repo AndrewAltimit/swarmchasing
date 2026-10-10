@@ -1761,7 +1761,7 @@ version = "0.1.0"
 dependencies = [
  "sc-core",
  "serde_json",
- "toml",
+ "toml 0.8.23",
  "wasm-bindgen",
 ]
 
@@ -1773,7 +1773,7 @@ dependencies = [
  "sc-rules-wasm",
  "serde",
  "serde_json",
- "toml",
+ "toml 0.8.23",
  "wasm-bindgen",
 ]
 
