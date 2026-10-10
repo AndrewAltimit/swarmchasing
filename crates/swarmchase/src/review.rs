@@ -15,6 +15,11 @@
 //! swarmchase eval data/labels/reviewed.ndjson
 //! ```
 //!
+//! With `--labeller <name>` reviews go to `<data>/labels/reviewed-<name>.ndjson`
+//! instead, so two people can label the same queue independently.
+//! `review --stats` then also reports Cohen's κ between every pair of review
+//! files over the records both labelled, and lists where they disagree.
+//!
 //! It lives in the data directory, outside the checkout, and is never committed:
 //! the records are urlquery and archive content, and unpublished leads. It is
 //! kept past the watch's retention window because it is the evaluation set,
@@ -61,6 +66,10 @@ pub struct ReviewArgs {
     stats: bool,
     #[arg(long)]
     rules: Option<PathBuf>,
+    /// Save reviews as this labeller (`reviewed-<name>.ndjson`), for
+    /// inter-rater agreement. Letters, digits, `-` and `_`.
+    #[arg(long)]
+    labeller: Option<String>,
 }
 
 pub fn run(args: ReviewArgs) -> Result<()> {
@@ -68,9 +77,11 @@ pub fn run(args: ReviewArgs) -> Result<()> {
     if args.input.is_empty() || args.stats {
         crate::store::hint_if_empty(data);
     }
-    let mut store = ReviewStore::open(ReviewStore::path_in(data))?;
+    let path = ReviewStore::path_for(data, args.labeller.as_deref())?;
+    let mut store = ReviewStore::open(path)?;
     if args.stats {
-        return stats(&store, &mut std::io::stdout());
+        stats(&store, &mut std::io::stdout())?;
+        return agreement_report(&data.join("labels"), &mut std::io::stdout());
     }
     let min = check_min_tier(crate::input::parse_tier(&args.min_tier)?)?;
     let rules = crate::pinning::RulesText::load(args.rules.as_deref())?;
@@ -181,6 +192,21 @@ pub struct ReviewStore {
 impl ReviewStore {
     pub fn path_in(data: &Path) -> PathBuf {
         data.join("labels").join("reviewed.ndjson")
+    }
+
+    /// The default review file, or labeller `name`'s.
+    pub fn path_for(data: &Path, labeller: Option<&str>) -> Result<PathBuf> {
+        let Some(name) = labeller else {
+            return Ok(Self::path_in(data));
+        };
+        if name.is_empty()
+            || !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            bail!("--labeller `{name}`: use letters, digits, `-` and `_` only");
+        }
+        Ok(data.join("labels").join(format!("reviewed-{name}.ndjson")))
     }
 
     pub fn open(path: PathBuf) -> Result<Self> {
@@ -634,6 +660,106 @@ pub fn stats(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
     Ok(())
 }
 
+/// Every review file in `dir` with its labeller: `default` for
+/// `reviewed.ndjson`, else the name in `reviewed-<name>.ndjson`.
+fn labeller_files(dir: &Path) -> Result<Vec<(String, PathBuf)>> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return Ok(out);
+    };
+    for e in rd {
+        let p = e?.path();
+        let Some(name) = p.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let who = if name == "reviewed.ndjson" {
+            "default".to_string()
+        } else if let Some(n) = name
+            .strip_prefix("reviewed-")
+            .and_then(|n| n.strip_suffix(".ndjson"))
+        {
+            n.to_string()
+        } else {
+            continue;
+        };
+        out.push((who, p));
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// Agreement between two labellers over the records both reviewed.
+#[derive(Debug, PartialEq)]
+pub struct PairAgreement {
+    pub a: String,
+    pub b: String,
+    pub overlap: usize,
+    pub agree: usize,
+    pub kappa: Option<f64>,
+    /// (record id, a's label, b's label).
+    pub disagreements: Vec<(String, String, String)>,
+}
+
+pub fn pair_agreement(a: (&str, &ReviewStore), b: (&str, &ReviewStore)) -> PairAgreement {
+    let mut pairs = Vec::new();
+    let mut disagreements = Vec::new();
+    for (id, ra) in &a.1.entries {
+        if let Some(rb) = b.1.entries.get(id) {
+            pairs.push((ra.label.as_str(), rb.label.as_str()));
+            if ra.label != rb.label {
+                disagreements.push((id.clone(), ra.label.clone(), rb.label.clone()));
+            }
+        }
+    }
+    PairAgreement {
+        a: a.0.to_string(),
+        b: b.0.to_string(),
+        overlap: pairs.len(),
+        agree: pairs.len() - disagreements.len(),
+        kappa: sc_core::eval::stats::cohen_kappa(&pairs),
+        disagreements,
+    }
+}
+
+/// Cohen's κ for every pair of review files in `dir`.
+pub fn agreement_report(dir: &Path, out: &mut impl Write) -> Result<()> {
+    let files = labeller_files(dir)?;
+    if files.len() < 2 {
+        return Ok(());
+    }
+    let stores: Vec<(String, ReviewStore)> = files
+        .into_iter()
+        .map(|(who, p)| Ok((who, ReviewStore::open(p)?)))
+        .collect::<Result<_>>()?;
+    writeln!(
+        out,
+        "\ninter-rater agreement (Cohen's κ over records both labelled; labels agent / benign / unsure):"
+    )?;
+    for i in 0..stores.len() {
+        for j in i + 1..stores.len() {
+            let p = pair_agreement((&stores[i].0, &stores[i].1), (&stores[j].0, &stores[j].1));
+            if p.overlap == 0 {
+                writeln!(out, "  {} vs {}: no records in common", p.a, p.b)?;
+                continue;
+            }
+            let kappa = p
+                .kappa
+                .map_or("undefined (one label throughout)".into(), |k| {
+                    format!("{k:.3}")
+                });
+            writeln!(
+                out,
+                "  {} vs {}: n {} · agree {} · κ {kappa}",
+                p.a, p.b, p.overlap, p.agree
+            )?;
+            for (id, la, lb) in &p.disagreements {
+                writeln!(out, "    {id}: {} {la} · {} {lb}", p.a, p.b)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn check_min_tier(t: Tier) -> Result<Tier> {
     if t == Tier::Noise {
         bail!(
@@ -698,6 +824,74 @@ mod tests {
             from: "leads.ndjson".into(),
             today: "2026-10-12".into(),
         }
+    }
+
+    #[test]
+    fn labeller_files_and_kappa() {
+        let dir =
+            std::env::temp_dir().join(format!("swarmchase-review-kappa-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            ReviewStore::path_for(&dir, None).unwrap(),
+            ReviewStore::path_in(&dir)
+        );
+        assert!(ReviewStore::path_for(&dir, Some("../x")).is_err());
+        let a = analysis();
+        let mk = |who: &str, labels: &[(&str, &str)]| {
+            let path = ReviewStore::path_for(&dir, Some(who)).unwrap();
+            let mut s = ReviewStore::open(path).unwrap();
+            for (id, l) in labels {
+                let r = a.results.iter().find(|r| r.obs.id == *id).unwrap();
+                s.entries.insert(
+                    id.to_string(),
+                    Review {
+                        record: r.obs.clone(),
+                        label: l.to_string(),
+                        note: None,
+                        class: CLASS_FLAGGED.into(),
+                        reviewed_at: "x".into(),
+                        tier: r.tier,
+                        score: r.score,
+                        rules: Vec::new(),
+                        rules_version: a.rules_version.clone(),
+                    },
+                );
+            }
+            s.save().unwrap();
+            s
+        };
+        let ann = mk(
+            "ann",
+            &[
+                ("c1", "agent"),
+                ("c2", "agent"),
+                ("plain1", "benign"),
+                ("plain2", "benign"),
+            ],
+        );
+        let bob = mk(
+            "bob",
+            &[
+                ("c1", "agent"),
+                ("c2", "benign"),
+                ("plain1", "benign"),
+                ("solo", "agent"),
+            ],
+        );
+        let p = pair_agreement(("ann", &ann), ("bob", &bob));
+        assert_eq!((p.overlap, p.agree), (3, 2));
+        assert_eq!(
+            p.disagreements,
+            [("c2".into(), "agent".into(), "benign".into())]
+        );
+        // po = 2/3; pe = (2/3)(1/3) + (1/3)(2/3) = 4/9; kappa = 0.4.
+        assert!((p.kappa.unwrap() - 0.4).abs() < 1e-9);
+        let mut out = Vec::new();
+        agreement_report(&dir.join("labels"), &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("ann vs bob: n 3 · agree 2 · κ 0.400"), "{out}");
+        assert!(out.contains("c2: ann agent · bob benign"), "{out}");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

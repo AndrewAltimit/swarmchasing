@@ -69,9 +69,10 @@ enum Cmd {
     /// `--labels` (NDJSON or CSV, including Transluce's reports.csv) or, without
     /// it, from a `label` field on each input record. With floors set, exits
     /// non-zero when a floor is not met.
-    Eval(commands::eval::EvalArgs),
+    Eval(Box<commands::eval::EvalArgs>),
     /// Label watch leads as agent, benign or unsure, one record at a time.
-    /// Labels go to `<data>/labels/reviewed.ndjson`, which `swarmchase eval`
+    /// Labels go to `<data>/labels/reviewed.ndjson` (`reviewed-<name>.ndjson`
+    /// with `--labeller`), which `swarmchase eval`
     /// reads directly. Progress is saved after every answer.
     Review(review::ReviewArgs),
     /// Case files: open, classify endpoints, record attribution, draft reports.
@@ -102,7 +103,7 @@ fn main() -> Result<()> {
         Cmd::Certs { query, json } => commands::certs::run(&query, json),
         Cmd::Contact { domain } => commands::contact::run(&domain),
         Cmd::Watch(a) => watch::run(a),
-        Cmd::Eval(a) => commands::eval::run(a),
+        Cmd::Eval(a) => commands::eval::run(*a),
         Cmd::Review(a) => review::run(a),
         Cmd::Case(a) => case::run(a),
         Cmd::Notice(a) => notice::run(a),
