@@ -405,6 +405,30 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 u.id, u.records, u.hosts, u.note
             );
         }
+        if !c.prose.is_empty() {
+            let langs: Vec<String> = c
+                .prose
+                .languages
+                .iter()
+                .map(|(l, n)| format!("{l} ×{n}"))
+                .collect();
+            let off = match c.prose.mismatched {
+                0 => String::new(),
+                n => format!(
+                    "; {n} in a language other than their target's country domain, as an agent working from a prompt in its own language writes"
+                ),
+            };
+            let _ = writeln!(
+                s,
+                "  - prose in parameters: {} values ({}){off} (a hint, not evidence)",
+                c.prose.values,
+                if langs.is_empty() {
+                    "language unclear".to_string()
+                } else {
+                    langs.join(", ")
+                }
+            );
+        }
         // A named contact is for the admin to check, not for a recipient.
         if opts.audience == Audience::Internal {
             for d in &c.declared {

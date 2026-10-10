@@ -114,6 +114,11 @@ pub struct Cluster {
     /// repeated across members ([`crate::knowledge`]). Descriptive.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stale_knowledge: Vec<crate::knowledge::StaleUse>,
+    /// Prose in members' parameter values and its guessed languages,
+    /// against their targets' country domains ([`crate::prose`]).
+    /// Descriptive.
+    #[serde(default, skip_serializing_if = "crate::prose::Prose::is_empty")]
+    pub prose: crate::prose::Prose,
     /// Features that joined members together.
     pub link_features: Vec<LinkFeature>,
     pub runs: Vec<Span>,

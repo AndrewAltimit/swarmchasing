@@ -178,6 +178,15 @@ pub(super) fn cluster(
             .collect::<Vec<_>>(),
         &rules.set.cut_lengths,
     );
+    let prose = crate::prose::prose_stats(members.iter().map(|&i| {
+        let r = &results[i];
+        let values = r
+            .layers
+            .iter()
+            .flat_map(|l| l.params.iter().map(|(_, v)| v.as_str()))
+            .collect();
+        (r.target_host.as_deref(), values)
+    }));
     Cluster {
         id: String::new(),
         key: String::new(),
@@ -201,6 +210,7 @@ pub(super) fn cluster(
         fanout,
         cut_lengths,
         relay_stacks,
+        prose,
         benchmarks: BTreeMap::new(),
         stale_knowledge: Vec::new(),
         declared: declared
