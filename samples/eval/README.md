@@ -22,6 +22,10 @@ Synthetic records for the language-model output residue rules (`marker.md_link`,
 
 The rules were tuned on this set, so it is a **regression floor, not a precision estimate**. A measurement worth quoting needs held-out data.
 
+## `rule-coverage.ndjson`
+
+Synthetic records that give every rule at least one labelled positive, and the significant and link rules hard negatives: benign records that look alike and must not fire. Each is marked `"synthetic": true`, uses reserved `.example` hosts (or the public service the rule names), and was written by hand. Payloads are the canonical textbook test strings. Benign records name the rule they guard in `hard_negative_for`, and records from one synthetic run share a `run` id.
+
 ## Held-out evaluation on the Transluce release
 
 Transluce's [urlquery dataset](https://transluce.org/agent-activity) labels about 38,000 urlquery reports. 6,467 are significant, 31,182 suggestive, and 79 are benign background controls. It ships report IDs and labels, not report contents. To measure against it, fetch the reports and keep them in the gitignored `data/`:
