@@ -28,7 +28,7 @@ Indicators are rules kept as data, versioned, and shared by every tool that grad
 
 A check exists because some shapes need counting or comparing. `repeated_token` wants one word of three characters or more, or a phrase of two or three words, repeated five or more times in a row ([FM-4.5](#fm-45-artifact-families)); short refrains and one long run of a letter fail it.
 
-Toolkit: each rule in the rules file names its tactic (`T1` to `T9`) or is marked `artifact`, and a file naming an unknown tactic fails to load. A check on a rule that does not read parameter values, or an unknown check, also stops the file loading. Evaluation groups recall by the tactics of the rules that fired ([statistics](../reference/evaluation.md#statistics)). The STIX run object derives its `tactics` from each rule's kind, using the defaults in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
+Toolkit: each rule in the rules file names its tactic (`T1` to `T7`) or is marked `artifact`, and a file naming an unknown tactic, or the cluster-level `T8` or `T9`, fails to load. A check on a rule that does not read parameter values, or an unknown check, also stops the file loading. Evaluation groups recall by the tactics of the rules that fired ([statistics](../reference/evaluation.md#statistics)). The STIX run object derives its `tactics` from each rule's kind, using the defaults in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
 
 ## FM-4.3 The SC-T tactic taxonomy
 
