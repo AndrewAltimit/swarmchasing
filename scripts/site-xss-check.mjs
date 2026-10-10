@@ -5,7 +5,9 @@
 // violation or an error.
 //
 // It covers: every page in the sitemap (and 404.html); the hostile notice's
-// page and the index row; the workbench with XSS probes, HTML programs, a
+// page and the index row; the index filters and their URL hash, on the
+// synthetic notices in crates/sc-publish/tests/fixtures/notices/; the
+// bundle viewer with a hostile stamp, manifest and case claims; the workbench with XSS probes, HTML programs, a
 // probe chain and an unusual path set in the records, every view, cluster,
 // record and report audience, and hostile claims; the rules editor and the
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
@@ -159,6 +161,27 @@ weight = 9
 significant = true
 tactic = "T2"
 `;
+// A hostile evidence bundle for the tools page: records from the probes, a
+// stamp and manifest whose every field carries markup, and case claims at
+// every attribution layer.
+const bundleDir = join(tmp, "bundle");
+mkdirSync(bundleDir);
+const bundleRecords = [...probes, ...chain].map((p) => JSON.stringify({ ...p, ts: Math.floor(Date.parse(p.ts) / 1000), source: program })).join("\n") + "\n";
+const bundleStamp = {
+  case: program, generated: program, toolkit_version: program, toolkit_commit: program, rules_version: program, records: 1,
+  flagged: { [program]: "significant" }, clusters: [{ tier: "significant", members: [program] }], method: program,
+  eval: { rules_version: program, labelled: 3, suggestive_precision: 0.5, suggestive_recall: 0.5 },
+};
+const bundleClaims = ["developer", "host", "harness", "model_family"].map((role) => ({ party: program, role, evidence: "provider_confirmed", details: [program, `javascript:${fire}`] }));
+for (const [name, text] of [
+  ["records.ndjson", bundleRecords],
+  ["analysis.json", JSON.stringify({ total: program })],
+  ["stamp.json", JSON.stringify(bundleStamp)],
+  ["claims.json", JSON.stringify(bundleClaims)],
+  ["MANIFEST.sha256", `${"0".repeat(64)}  records.ndjson\n${program}  stamp.json\n`],
+]) writeFileSync(join(bundleDir, name), text);
+const bundleFiles = ["records.ndjson", "analysis.json", "stamp.json", "claims.json", "MANIFEST.sha256"].map((n) => join(bundleDir, n));
+
 const sectxt = `Contact: mailto:${program}\nContact: javascript:${fire}\nPolicy: ${tag}\nExpires: ${program}\n`;
 
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".svg": "image/svg+xml", ".json": "application/json", ".xml": "application/xml" };
@@ -375,6 +398,23 @@ try {
   if (!tools.sectxt) failures.push("the hostile security.txt did not render as text");
   if (!tools.defang) failures.push("defang did not defang");
   await audit("tools");
+
+  // The bundle viewer: a hostile bundle (stamp, manifest and case claims
+  // carry probes), picked through the file input as a visitor would.
+  await send("DOM.enable");
+  const doc = await send("DOM.getDocument");
+  const input = await send("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: "#case-files" });
+  await send("DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: bundleFiles });
+  for (let i = 0; i < 40 && !(await run(`document.querySelectorAll("#case-out table.layers tbody tr").length`)); i++) await sleep(150);
+  const bundle = await run(`(() => {
+    const out = document.getElementById("case-out");
+    return { layers: out.querySelectorAll("table.layers tbody tr").length, text: out.textContent.includes("<script>"), verdict: out.querySelector(".verdict")?.textContent ?? "", method: out.textContent.includes("onerror") };
+  })()`);
+  stats.bundleLayers = bundle.layers;
+  if (bundle.layers < 4) failures.push(`the bundle viewer showed ${bundle.layers} attribution row(s), expected one per layer at least`);
+  if (!bundle.text) failures.push("the hostile bundle did not render as text");
+  if (!/Does not verify/.test(bundle.verdict)) failures.push(`the tampered bundle verified: ${bundle.verdict}`);
+  await audit("bundle viewer");
 
   // Hostile edited rules: the rules editor's evaluation, then every page that runs them.
   await open("rules/");

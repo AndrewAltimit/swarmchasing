@@ -493,3 +493,12 @@ table.records td.url { min-width: 180px; }
 svg.chart.heat, svg.chart.rhythm { width: auto; max-width: none; }
 .flag.artifact::before { content: "✎ "; color: var(--text-muted); }
 .stats.wide { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+/* ── Bundle viewer: attribution labels and claim tags ────────────────── */
+.conf { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.conf::before { content: ""; width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--axis); background: var(--conf, transparent); flex: none; }
+.conf.confirmed { --conf: var(--q5); }
+.conf.suspected { --conf: var(--q3); }
+.conf.possible { --conf: var(--q1); }
+.claim-tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); white-space: nowrap; }
+table.layers th[scope="row"] { white-space: nowrap; color: var(--text-primary); }

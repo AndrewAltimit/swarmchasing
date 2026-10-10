@@ -1,14 +1,30 @@
 // Tools: check an evidence bundle (`swarmchase case bundle`), read a
 // security.txt, defang. Files are read in this page: the manifest hashes
 // are checked with Web Crypto and the analysis is re-run by the engine.
-// Record contents are untrusted: inserted as text, URLs defanged.
+// Record contents, stamps and claims are untrusted: inserted as text, URLs
+// defanged.
 import { $, el, showError } from "../lib/dom.js";
-import { fmtTs, topEntries, trunc } from "../lib/fmt.js";
+import { arr, obj, num, pct, dur, fmtTs, topEntries, trunc } from "../lib/fmt.js";
 import { engine, host, pageRules } from "../lib/wasm.js";
 import { figure, swimlanes, tierLegend } from "../lib/charts.js";
+import { fleetItems, route } from "../lib/hints.js";
 
 const FILES = ["records.ndjson", "analysis.json", "stamp.json"];
 const MANIFEST = "MANIFEST.sha256";
+// Optional: the claims from case work, as `report --claims` reads them.
+const CLAIMS = "claims.json";
+const LAYERS = [
+  ["developer", "Developer and operator"],
+  ["host", "Hosting and runtime"],
+  ["harness", "Harness and framework"],
+  ["model_family", "Model family"],
+];
+const EVIDENCE = {
+  self_id: "self-identification", hosting_asn: "hosting network (ASN)", shared_identifiers: "identifiers shared with a confirmed incident",
+  provider_infrastructure: "provider infrastructure", provider_confirmed: "confirmed by the provider",
+};
+const word = (s) => String(s ?? "").replace(/[^a-z_]/g, "");
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const MAX_ROWS = 500;
 const pill = (t) => el("span", { class: `pill ${t}` }, t);
 
@@ -48,15 +64,17 @@ async function checkManifest(byName) {
 async function load(files) {
   const out = $("case-out");
   const byName = new Map([...files].map((f) => [f.name, f]));
-  $("case-picked").textContent = [...byName.keys()].filter((n) => FILES.includes(n) || n === MANIFEST).join(", ");
+  $("case-picked").textContent = [...byName.keys()].filter((n) => FILES.includes(n) || n === MANIFEST || n === CLAIMS).join(", ");
   const missing = ["records.ndjson", "stamp.json"].filter((f) => !byName.has(f));
   if (missing.length) return showError(out, `Pick ${missing.join(" and ")} (and the rest of the bundle).`);
   let res;
   try {
     const text = (f) => (byName.has(f) ? byName.get(f).text() : "");
     const [records, analysis, stamp] = await Promise.all(FILES.map(text));
+    const claims = byName.has(CLAIMS) ? await byName.get(CLAIMS).text() : "";
     const hashDiffs = await checkManifest(byName);
-    res = JSON.parse(sc.verify_bundle(records, analysis, stamp, rules));
+    res = JSON.parse(sc.verify_bundle(records, analysis, stamp, rules, claims));
+    res.claimsFile = byName.has(CLAIMS);
     res.differences = [...hashDiffs, ...res.differences];
   } catch (e) {
     return showError(out, e);
@@ -74,6 +92,8 @@ function render(res) {
     ["Rules", `${st.rules_version}${st.rules_version === res.rules_version ? "" : ` (checked with ${res.rules_version})`}`],
     ["Toolkit", `${st.toolkit_version}${st.toolkit_commit ? ` (${st.toolkit_commit})` : ""}`],
     ["Records", `${st.records} · ${Object.keys(st.flagged).length} flagged · ${st.clusters.length} cluster(s)`],
+    ["Method", st.method ? String(st.method) : el("span", { class: "hint" }, "not stated (a bundle from before stamps cited the method)")],
+    ["Evaluation at stamp time", evalText(st.eval)],
   ];
   const lanes = a.clusters
     .filter((c) => c.runs.some((r) => r.start > 0))
@@ -85,6 +105,8 @@ function render(res) {
     ok ? null : el("ul", { class: "diffs" }, res.differences.map((d) => el("li", {}, d))),
     res.notes.length ? el("ul", { class: "hint" }, res.notes.map((n) => el("li", {}, n))) : null,
     el("dl", { class: "kv" }, kv.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
+    el("h3", {}, "Attribution"),
+    ...attribution(res),
     el("h3", {}, "Runs per cluster (UTC)"),
     figure({ chart, legend: tierLegend(), caption: "Each bar is one run: a stretch of a cluster's activity without a long pause.", head: ["Cluster", "Tier", "Start", "End", "Records"], rows: runRows }),
     el("h3", {}, "Clusters"),
@@ -94,9 +116,62 @@ function render(res) {
         el("td", {}, c.id), el("td", {}, pill(c.tier)), el("td", { class: "num" }, c.members.length), el("td", { class: "num" }, c.runs.length),
         el("td", {}, fmtTs(c.start)), el("td", {}, fmtTs(c.end)),
         el("td", {}, topEntries(c.target_hosts, 3).map(([h, n]) => el("span", { class: "chip" }, `${host(sc, h)} ×${n}`))))) : el("tr", {}, el("td", { colspan: 7, class: "hint" }, "No clusters."))))),
+    ...hints(a),
     el("h3", {}, "Records"),
     recordTable(a),
   );
+}
+
+/** The stamp's evaluation snapshot, or why there is none. */
+function evalText(ev) {
+  ev = obj(ev);
+  if (!num(ev.labelled)) return el("span", { class: "hint" }, "not recorded (the maker had no labelled set, or an older toolkit)");
+  const at = (t) => `${t}: precision ${pct(ev[`${t}_precision`])}, recall ${pct(ev[`${t}_recall`])}`;
+  return [`rules ${trunc(String(ev.rules_version ?? "?"), 40)} on ${ev.labelled} labelled records; ${at("suggestive")}; ${at("significant")}`,
+    el("div", { class: "hint" }, "a regression floor on the committed set, not an estimate for this case")];
+}
+
+/** The attribution layers the re-run supports, with claims from case work. */
+function attribution(res) {
+  const layers = arr(res.layers);
+  const rows = LAYERS.flatMap(([id, heading]) => {
+    const mine = layers.filter((l) => l.layer === id);
+    if (!mine.length) return [el("tr", {}, el("th", { scope: "row" }, heading), el("td", { colspan: 4, class: "hint" }, "no candidate"))];
+    return mine.map((l, i) => el("tr", {},
+      i === 0 ? el("th", { scope: "row", rowspan: mine.length }, heading) : null,
+      el("td", {}, trunc(String(l.party ?? ""), 80), l.nameable ? null : el("span", { class: "hint" }, " (never named on this alone)")),
+      el("td", {}, el("span", { class: `conf ${word(l.label)}` }, cap(word(l.label))), l.likelihood_word ? el("span", { class: "hint" }, ` ${trunc(String(l.likelihood_word), 30)}`) : null),
+      el("td", {}, EVIDENCE[l.evidence] ?? trunc(String(l.evidence ?? ""), 40)),
+      el("td", {}, el("span", { class: `claim-tag ${word(l.tag)}` }, cap(word(l.tag)))),
+    ));
+  });
+  return [
+    el("p", { class: "hint" }, `What the records support at each layer${res.claimsFile ? ", with the claims from claims.json" : " (pick the case's claims.json too to include case work)"}. The label follows the evidence; the word after it is the strongest likelihood a report may use.${res.withheld ? ` ${res.withheld} developer candidate(s) below the naming gate are not shown.` : ""}`),
+    el("div", { class: "scroll" }, el("table", { class: "layers" },
+      el("thead", {}, el("tr", {}, ["Layer", "Party or candidate", "Label", "Evidence", "Tag"].map((h) => el("th", { scope: "col" }, h)))),
+      el("tbody", {}, rows))),
+  ];
+}
+
+/** Candidate fleets and escalations, when the analysis has them. */
+function hints(a) {
+  const out = [];
+  const fleets = arr(a.candidate_fleets);
+  if (fleets.length) {
+    out.push(el("h3", {}, `Candidate fleets (${fleets.length})`),
+      el("p", { class: "hint" }, "Clusters joined by soft links: hints to check, not a merge, and never part of the stamp."),
+      el("ul", {}, fleetItems(fleets.slice(0, 20))));
+  }
+  const esc = arr(a.escalations);
+  if (esc.length) {
+    out.push(el("h3", {}, `Escalations (${esc.length})`),
+      el("ul", {}, esc.slice(0, 20).map((e) => el("li", {},
+        el("code", {}, host(sc, `${e.host ?? ""}${e.path ?? ""}`).slice(0, 90)),
+        `: ${arr(e.steps).map((s) => route(s.route)).join(" → ")} over ${dur(Math.max(0, (e.end ?? 0) - (e.start ?? 0)))}`,
+        arr(e.clusters).length ? ` (clusters ${arr(e.clusters).map((x) => trunc(String(x), 20)).join(", ")})` : "",
+        e.time_basis === "capture" ? el("span", { class: "hint" }, " capture-timed") : null))));
+  }
+  return out;
 }
 
 function recordTable(a) {
