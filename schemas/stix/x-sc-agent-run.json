@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/stix/x-sc-agent-run.json",
+  "title": "x-sc-agent-run",
+  "description": "A STIX 2.1 Domain Object, defined by an extension-definition of type new-sdo: one run of an autonomous agent, a linked cluster of requests (Swarmchasing Field Manual 12.2). Version 1.0.0.",
+  "type": "object",
+  "required": [
+    "type",
+    "spec_version",
+    "id",
+    "created_by_ref",
+    "created",
+    "modified",
+    "cluster_key",
+    "first_seen",
+    "last_seen",
+    "timestamp_kind",
+    "tactics",
+    "artifact_families",
+    "concurrency",
+    "tier",
+    "attribution",
+    "observed_data_refs",
+    "extensions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "type": { "const": "x-sc-agent-run" },
+    "spec_version": { "const": "2.1" },
+    "id": { "type": "string", "pattern": "^x-sc-agent-run--[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "created_by_ref": { "type": "string", "pattern": "^identity--" },
+    "created": { "type": "string", "format": "date-time" },
+    "modified": { "type": "string", "format": "date-time" },
+    "name": { "type": "string" },
+    "cluster_key": {
+      "description": "The stable cluster key the run belongs to (k- and 8 hex digits).",
+      "type": "string",
+      "pattern": "^k-[0-9a-f]+$"
+    },
+    "first_seen": { "type": "string", "format": "date-time" },
+    "last_seen": { "type": "string", "format": "date-time" },
+    "timestamp_kind": {
+      "description": "What the records' timestamps are the time of (SC-FM 6.1); mixed when members differ.",
+      "enum": ["request", "submit", "capture", "unknown", "mixed"]
+    },
+    "tactics": {
+      "description": "SC-T tactic ids observed, in order of first appearance (SC-FM 4.3, 5.9).",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^SC-T[0-9]+$" },
+      "uniqueItems": true
+    },
+    "artifact_families": {
+      "description": "Artifact (residue) families observed (SC-FM 4.5).",
+      "type": "array",
+      "items": {
+        "enum": [
+          "model_output_residue",
+          "tool_call_residue",
+          "fabricated_identifiers",
+          "stale_dates",
+          "payload_dialect",
+          "cut_lengths",
+          "encodings"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "concurrency": {
+      "description": "How the run's requests were batched: one-second batches of alike requests, their modal and largest width, and the run's bursts.",
+      "type": "object",
+      "required": ["batches", "modal_width", "max_width", "runs"],
+      "additionalProperties": false,
+      "properties": {
+        "batches": { "type": "integer", "minimum": 0 },
+        "modal_width": { "type": "integer", "minimum": 1 },
+        "max_width": { "type": "integer", "minimum": 1 },
+        "runs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "tier": { "enum": ["noise", "suggestive", "significant"] },
+    "record_count": { "type": "integer", "minimum": 1 },
+    "attribution": {
+      "description": "Attribution per layer (SC-FM 7). Harness and model-family entries are ranked candidates and never naming-eligible; public exports carry developer and host entries only.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["layer", "party", "label", "evidence", "tag", "nameable"],
+        "additionalProperties": false,
+        "properties": {
+          "layer": { "enum": ["developer", "host", "harness", "model_family"] },
+          "party": { "type": "string" },
+          "label": { "enum": ["confirmed", "suspected", "possible", "unattributed"] },
+          "likelihood_word": { "enum": ["almost certain", "very likely", "likely"] },
+          "evidence": {
+            "enum": ["self_id", "hosting_asn", "shared_identifiers", "provider_infrastructure", "provider_confirmed"]
+          },
+          "tag": { "enum": ["observed", "documented", "inference", "conclusion"] },
+          "nameable": { "type": "boolean" }
+        }
+      }
+    },
+    "observed_data_refs": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^observed-data--" },
+      "minItems": 1
+    },
+    "object_marking_refs": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^marking-definition--" }
+    },
+    "extensions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["extension_type"],
+        "properties": { "extension_type": { "const": "new-sdo" } }
+      }
+    }
+  }
+}

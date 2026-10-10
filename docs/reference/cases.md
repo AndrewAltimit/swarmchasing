@@ -89,6 +89,8 @@ Each case keeps the rules it was opened with in `<data>/rules/<version>.toml`. I
 
 Ids are deterministic.
 
+Each exported cluster is also an `x-sc-agent-run` object: its cluster key, span and timestamp kind, the SC-T tactics its indicators are evidence of, the artifact families seen, how wide its parallel batches were, its tier, attribution per layer and its `observed-data`. The bundle carries the `extension-definition` (type `new-sdo`) that defines it; the schema is [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json). A public export's runs carry developers through the naming gate and hosts only.
+
 ## Operator evidence
 
 `case evidence add` adds logs an affected operator sent back. Only flagged requests, the same clients' other requests and probe chains are kept, redacted; the file itself is not kept, only its SHA-256. Until `case evidence consent` records the operator's agreement, those records appear in private reports only. The operator's side is in [for operators](../guides/for-operators.md#send-logs-back).
