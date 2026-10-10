@@ -36,6 +36,9 @@ pub struct Page {
     pub scripts: Vec<&'static str>,
     /// Full-width main area (the workbench) instead of the reading width.
     pub wide: bool,
+    /// The page loads the analysis module on arrival: preload it with the
+    /// stylesheet so it downloads alongside the scripts.
+    pub engine: bool,
 }
 
 /// The relative prefix from a page to the site root (`./`, `../`, ...).
@@ -73,6 +76,14 @@ pub fn render(p: &Page, ctx: &Ctx, root: &str) -> String {
         esc(&title),
         esc(&p.description),
     );
+    if p.engine {
+        // Matches the module's own fetch (same-origin, CORS mode), so the
+        // browser reuses the preloaded response.
+        let _ = writeln!(
+            s,
+            "<link rel=\"preload\" href=\"{root}pkg/sc_wasm_bg.wasm\" as=\"fetch\" type=\"application/wasm\" crossorigin>"
+        );
+    }
     let _ = writeln!(
         s,
         "<script type=\"module\" src=\"{root}js/site.js\"></script>"

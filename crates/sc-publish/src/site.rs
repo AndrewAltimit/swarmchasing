@@ -17,6 +17,8 @@ pub struct IndexEntry<'a> {
     pub updated: &'a str,
     pub providers: &'a [String],
     pub affected: &'a [String],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sector: Option<&'a str>,
     pub corrected: bool,
     pub retracted: bool,
 }
@@ -31,6 +33,7 @@ pub fn index_entry(n: &NoticeFile) -> IndexEntry<'_> {
         updated: &n.meta.updated,
         providers: &n.meta.providers,
         affected: &n.meta.affected,
+        sector: n.meta.sector.as_deref(),
         corrected: has(UpdateKind::Correction),
         retracted: has(UpdateKind::Retraction),
     }

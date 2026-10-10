@@ -10,7 +10,7 @@
 //! the network.
 
 use crate::{SiteInputs, build_pages, check_notice, parse_notice};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -169,25 +169,30 @@ fn git_tracked(root: &Path) -> Option<HashSet<String>> {
     )
 }
 
-fn copy_static(r: &mut Reader, out: &Path) -> Result<usize, String> {
-    let mut n = 0;
+/// Copy `site/` into the output with content-hashed script, style and WASM
+/// names ([`crate::assets`]); returns the file count and the renames.
+fn copy_static(r: &mut Reader, out: &Path) -> Result<(usize, BTreeMap<String, String>), String> {
+    let mut files = Vec::new();
     for rel in r.list("site", "", true, false) {
-        let sub = &rel["site/".len()..];
+        let sub = rel["site/".len()..].to_string();
         // Notice files from an older `notice build --out site/notices`.
         if sub.starts_with("notices/") {
             continue;
         }
         let abs = r.root.join(&rel);
         r.allow(&rel, &abs)?;
+        files.push((sub, fs::read(&abs).map_err(|e| format!("{rel}: {e}"))?));
+        r.log.push(rel);
+    }
+    let (files, names) = crate::assets::fingerprint(files);
+    for (sub, bytes) in &files {
         let dest = out.join(sub);
         if let Some(p) = dest.parent() {
             fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
         }
-        fs::copy(&abs, &dest).map_err(|e| format!("{rel}: {e}"))?;
-        r.log.push(rel);
-        n += 1;
+        fs::write(&dest, bytes).map_err(|e| format!("{}: {e}", dest.display()))?;
     }
-    Ok(n)
+    Ok((files.len(), names))
 }
 
 /// Build the site from the committed inputs under `o.root` into `o.out`.
@@ -288,12 +293,17 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         fs::remove_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     }
     fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let copied = copy_static(&mut r, &out)?;
+    let (copied, names) = copy_static(&mut r, &out)?;
     for (path, text) in &files {
         let dest = out.join(path);
         if let Some(p) = dest.parent() {
             fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
         }
+        let text = if path.ends_with(".html") {
+            crate::assets::rewrite_page(text, &names)
+        } else {
+            text.clone()
+        };
         fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;
     }
     let mut warnings = Vec::new();

@@ -10,6 +10,21 @@ A notice is the public page for one incident. It is drafted inside its case and 
 4. The admin commits and pushes the file, which publishes it.
 5. `notice published <id>` finds the file on the remote (`origin/HEAD` or `origin/main`, from local refs only: it never fetches or pushes) and moves the case to `published`. `--force` marks it without the check.
 
+## Front matter
+
+| Field | Holds |
+|---|---|
+| `id`, `title` | The slug the file is named after, and the headline. |
+| `status` | `active`, `contained` or `historical`. |
+| `published`, `updated` | Dates; `updated` is the last update's date. |
+| `providers` | Developers named, at or above the case's naming threshold. May be empty. |
+| `affected` | Affected hosts, shown defanged. |
+| `sector` | Optional: the affected operators' sector, one of `government`, `health`, `education`, `research`, `finance`, `energy`, `water`, `telecom`, `transport`, `technology`, `media`, `nonprofit`, `retail`, `manufacturing`, `other`. Any other value fails the lint. |
+| `rules_version`, `toolkit` | What the analysis ran with. |
+| `[[update]]` | The dated updates, oldest first. |
+
+The notices index filters on status, provider, sector, affected host and update date.
+
 ## Updates
 
 Later changes go through `notice update <id> --kind update|status|correction|reply|retraction --text …`.

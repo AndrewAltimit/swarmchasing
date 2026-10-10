@@ -97,6 +97,7 @@ fn page(path: &str, nav: &'static str, title: &str, description: &str, body: Str
         body,
         scripts: Vec::new(),
         wide: false,
+        engine: false,
     }
 }
 
@@ -350,6 +351,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         shells::ANALYZE.to_string(),
     );
     p.scripts.push("js/pages/analyze.js");
+    p.engine = true;
     p.wide = true;
     pages.push(p);
     let mut p = page(
@@ -360,6 +362,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         shells::UNWRAP.to_string(),
     );
     p.scripts.push("js/pages/unwrap.js");
+    p.engine = true;
     pages.push(p);
     let mut p = page(
         "tools/index.html",
@@ -369,6 +372,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         shells::TOOLS.to_string(),
     );
     p.scripts.push("js/pages/tools.js");
+    p.engine = true;
     pages.push(p);
 
     let mut sitemap = String::from(
@@ -430,6 +434,7 @@ mod tests {
                 updated: "2026-10-17".into(),
                 providers: vec![P.into()],
                 affected: vec![format!("a.example\"{P}")],
+                sector: None,
                 rules_version: P.into(),
                 toolkit: P.into(),
                 updates: vec![
@@ -523,6 +528,76 @@ mod tests {
         let nf = &files.iter().find(|(p, _)| p == "404.html").unwrap().1;
         assert!(nf.contains("href=\"/swarmchasing/css/site.css\""));
         assert!(files.iter().any(|(p, _)| p == "assets/eval-summary.json"));
+    }
+
+    /// The synthetic notices in `tests/fixtures/notices/` (never under
+    /// `notices/`): one per status, three sectors, two providers.
+    fn synthetic_notices() -> Vec<NoticeFile> {
+        [
+            include_str!("../../tests/fixtures/notices/synthetic-portal-probe.md"),
+            include_str!("../../tests/fixtures/notices/synthetic-clinic-scan.md"),
+            include_str!("../../tests/fixtures/notices/synthetic-course-relay.md"),
+        ]
+        .iter()
+        .map(|t| crate::parse_notice(t).unwrap())
+        .collect()
+    }
+
+    #[test]
+    fn the_notice_index_carries_every_filter() {
+        let rules = Rules::default_rules();
+        for n in synthetic_notices() {
+            assert!(crate::check_notice(&n, &rules).is_empty(), "{}", n.meta.id);
+        }
+        let mut inp = inputs();
+        inp.notices = synthetic_notices();
+        let files = build_pages(&mut inp).unwrap();
+        let get = |p: &str| &files.iter().find(|(f, _)| f == p).unwrap().1;
+        let idx = get("notices/index.html");
+        for want in [
+            "name=\"status\"",
+            "name=\"provider\"",
+            "name=\"sector\"",
+            "name=\"host\"",
+            "name=\"from\"",
+            "name=\"to\"",
+            "<option value=\"health\">Health</option>",
+            "<option value=\"Placeholder Models\">",
+            "data-sector=\"education\"",
+            "booking[.]clinic[.]example",
+        ] {
+            assert!(idx.contains(want), "{want} missing from the index");
+        }
+        // Newest update first.
+        let at = |id: &str| idx.find(&format!("href=\"{id}/\"")).unwrap();
+        assert!(at("synthetic-portal-probe") < at("synthetic-clinic-scan"));
+        assert!(at("synthetic-clinic-scan") < at("synthetic-course-relay"));
+        assert!(
+            get("notices/synthetic-clinic-scan/index.html")
+                .contains("<dt>Sector</dt><dd>Health</dd>")
+        );
+        let json = get("notices/index.json");
+        assert!(json.contains("\"sector\":\"government\""), "{json}");
+
+        // Without sectors there is no sector filter.
+        let mut inp = inputs();
+        let idx = build_pages(&mut inp)
+            .unwrap()
+            .into_iter()
+            .find(|(f, _)| f == "notices/index.html")
+            .unwrap()
+            .1;
+        assert!(!idx.contains("name=\"sector\""));
+    }
+
+    #[test]
+    fn an_unknown_sector_fails_the_check() {
+        let mut n = synthetic_notices().remove(0);
+        n.meta.sector = Some("Government".into());
+        let p = crate::check_notice(&n, &Rules::default_rules());
+        assert!(p.iter().any(|x| x.starts_with("unknown sector")), "{p:?}");
+        let text = crate::write_notice(&synthetic_notices()[0]);
+        assert!(text.contains("sector = \"government\""), "{text}");
     }
 
     #[test]

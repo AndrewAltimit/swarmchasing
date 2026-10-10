@@ -1,8 +1,10 @@
 //! Evidence bundle check for the Case tab. The page checks the manifest
 //! hashes itself (Web Crypto); this re-runs the analysis and compares it with
-//! the stamp, as `swarmchase case verify` does.
+//! the stamp, as `swarmchase case verify` does, and lists the attribution
+//! layers the re-run supports, with any claims from case work merged in.
 
-use sc_core::{Rules, Stamp, StampCluster, Tier, analyze};
+use sc_core::attribution::{LayerSummary, merge, summaries};
+use sc_core::{Claim, Evidence, Rules, Stamp, StampCluster, Tier, analyze};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use wasm_bindgen::prelude::*;
@@ -91,20 +93,25 @@ fn stored_differences(st: &Stamp, text: &str) -> Result<Vec<String>, String> {
 }
 
 /// Re-run a bundle's analysis and compare it with its stamp. `rules_json`
-/// empty means the bundled rules. Returns `{"stamp": Stamp, "differences":
-/// [...], "notes": [...], "rules_version": "...", "analysis": Analysis}`;
-/// no differences means the bundle verifies. `analysis` is the re-run, not
-/// the bundle's copy.
+/// empty means the bundled rules; `claims_json` is the claims array from
+/// case work (as `report --claims` reads it), or empty. Returns `{"stamp":
+/// Stamp, "differences": [...], "notes": [...], "rules_version": "...",
+/// "analysis": Analysis, "layers": [LayerSummary], "withheld": n}`; no
+/// differences means the bundle verifies. `analysis` is the re-run, not the
+/// bundle's copy. `layers` is gated as a report at the default naming level
+/// is: `withheld` counts the developer candidates below it.
 #[wasm_bindgen]
 pub fn verify_bundle(
     records_ndjson: &str,
     analysis_json: &str,
     stamp_json: &str,
     rules_json: &str,
+    claims_json: &str,
 ) -> Result<String, JsError> {
     let rules = super::rules_from(rules_json)?;
-    let out =
-        check(records_ndjson, analysis_json, stamp_json, &rules).map_err(|e| JsError::new(&e))?;
+    let claims = super::parse_claims(claims_json).map_err(|e| JsError::new(&e))?;
+    let out = check(records_ndjson, analysis_json, stamp_json, &rules, &claims)
+        .map_err(|e| JsError::new(&e))?;
     serde_json::to_string(&out).map_err(|e| JsError::new(&e.to_string()))
 }
 
@@ -113,6 +120,7 @@ fn check(
     analysis_json: &str,
     stamp_json: &str,
     rules: &Rules,
+    case_claims: &[Claim],
 ) -> Result<Checked, String> {
     let st: Stamp = serde_json::from_str(stamp_json).map_err(|e| format!("stamp.json: {e}"))?;
     let records = sc_core::stamp::parse_records(records_ndjson)
@@ -143,12 +151,24 @@ fn check(
             env!("CARGO_PKG_VERSION")
         ));
     }
+    // The claims every report on this bundle would see: case work's, then
+    // each cluster's own, merged as the CLI merges them.
+    let claims = a.clusters.iter().fold(case_claims.to_vec(), |acc, c| {
+        merge(acc, &sc_core::attribute(&a, c))
+    });
+    let layers = summaries(&claims, Evidence::default());
+    let withheld = claims
+        .iter()
+        .filter(|c| c.role == sc_core::Role::Developer && !c.nameable(Evidence::default()))
+        .count();
     Ok(Checked {
         stamp: st,
         differences,
         notes,
         rules_version: rules.set.meta.version.clone(),
         analysis: a,
+        layers,
+        withheld,
     })
 }
 
@@ -161,6 +181,8 @@ struct Checked {
     notes: Vec<String>,
     rules_version: String,
     analysis: sc_core::Analysis,
+    layers: Vec<LayerSummary>,
+    withheld: usize,
 }
 
 #[cfg(test)]
@@ -193,7 +215,7 @@ mod tests {
     }
 
     fn checkv(r: &str, a: &str, st: &str, rules: &Rules) -> Result<serde_json::Value, String> {
-        check(r, a, st, rules).map(|c| serde_json::to_value(c).unwrap())
+        check(r, a, st, rules, &[]).map(|c| serde_json::to_value(c).unwrap())
     }
 
     fn diffs(v: &serde_json::Value) -> Vec<String> {
@@ -210,7 +232,22 @@ mod tests {
         assert_eq!(v["analysis"]["total"], 4);
         assert_eq!(v["notes"].as_array().unwrap().len(), 0);
         // The binding's own path, with bundled rules.
-        assert!(verify_bundle(&nd, &a, &st, "").is_ok());
+        assert!(verify_bundle(&nd, &a, &st, "", "").is_ok());
+        // Case claims join the layers; a bad array is an error.
+        let claims = r#"[{"party":"Example AI","role":"developer","evidence":"provider_confirmed","details":["confirmed in writing"]}]"#;
+        let v: serde_json::Value =
+            serde_json::from_str(&verify_bundle(&nd, &a, &st, "", claims).unwrap()).unwrap();
+        let dev = v["layers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l["layer"] == "developer")
+            .unwrap();
+        assert_eq!(dev["party"], "Example AI");
+        assert_eq!(dev["label"], "confirmed");
+        assert_eq!(dev["tag"], "documented");
+        assert!(v["withheld"].is_number());
+        assert!(check(&nd, &a, &st, &rules, &[]).is_ok());
     }
 
     #[test]

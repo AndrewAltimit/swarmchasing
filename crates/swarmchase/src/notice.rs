@@ -473,6 +473,7 @@ pub(crate) fn notice_draft(
                 })
                 .map(|e| e.host.clone())
                 .collect(),
+            sector: None,
             rules_version: a.rules_version.clone(),
             toolkit: env!("CARGO_PKG_VERSION").to_string(),
             updates: Vec::new(),
