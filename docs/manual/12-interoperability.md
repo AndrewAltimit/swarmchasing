@@ -28,7 +28,7 @@ The toolkit implements this profile ([STIX export](../reference/cases.md#stix-ex
 
 ## FM-12.2 The `x-sc-agent-run` extension
 
-STIX has no object for "a run of an autonomous agent". The planned extension defines one as a new STIX Domain Object, through an `extension-definition` with extension type `new-sdo` (STIX 2.1 §7.3). The type name keeps the `x-` prefix, which the specification recommends for objects outside the standard so a future version cannot collide with them.
+STIX has no object for "a run of an autonomous agent". The extension defines one as a new STIX Domain Object, through an `extension-definition` with extension type `new-sdo` (STIX 2.1 §7.3). The type name keeps the `x-` prefix, which the specification recommends for objects outside the standard so a future version cannot collide with them.
 
 Planned properties:
 
