@@ -31,6 +31,7 @@ What each part does and how it is configured.
 |---|---|
 | [`methodology.md`](methodology.md) | How records become tiers, clusters, hints and claims, and the known limits. |
 | [`policies.md`](policies.md) | Collection, attribution, reporting and publication. |
+| [`manual/README.md`](manual/README.md) | The Swarmchasing Field Manual (SC-FM): the method as a citable standard, with stable section ids. |
 
 ## Elsewhere
 

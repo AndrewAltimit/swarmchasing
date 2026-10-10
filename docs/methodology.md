@@ -6,6 +6,8 @@ The short version: the toolkit reads public indexes, redacts secrets, unwraps ea
 
 Policies (what we collect, how we name, what notices withhold) are in [policies.md](policies.md). Guidance for operators is in [for-operators.md](guides/for-operators.md).
 
+This page is the toolkit's implementation. The method as a standard, which other groups can apply with their own tools and cite by section, is the [Swarmchasing Field Manual](manual/README.md).
+
 ## Collection
 
 The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read:

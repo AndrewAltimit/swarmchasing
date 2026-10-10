@@ -49,6 +49,7 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 | [`reference/runner.md`](docs/reference/runner.md) | Workflows, secrets and variables, caches, runner requirements. |
 | [`methodology.md`](docs/methodology.md) | Tiers, clusters, hints, attribution levels, known limits. |
 | [`policies.md`](docs/policies.md) | Collection, attribution, reporting and publication. |
+| [`manual/README.md`](docs/manual/README.md) | Field Manual (SC-FM): the method as a citable standard, section ids `FM-n.m`. |
 
 ## Scripts and gates
 
