@@ -655,6 +655,27 @@ mod tests {
             "https://d.example.gov/s?q=O%27Brien+family",
             "exploit.sqli_quote"
         ));
+        for url in [
+            "https://d.example/q?id=1%20UNION%20SELECT%20null,null--",
+            "https://d.example/q?id=-1+union+all+select+1,2,3",
+            "https://d.example/q?id=1%20UNION/**/SELECT/**/user,password%20FROM%20users",
+            "https://d.example/q?id=1'%20union%20select%20version()--",
+        ] {
+            assert!(has(url, "exploit.sqli_union"), "{url}");
+        }
+        for url in [
+            "https://www.labor.example/search?q=labor+union+selection+process",
+            "https://www.jobs.example/q?t=credit%20union%20selected%20branches",
+            "https://www.example.com/search?q=union+select+a+band",
+        ] {
+            assert!(!has(url, "exploit.sqli_union"), "{url}");
+        }
+        assert!(has("https://ntfy.sh/covrun7results", "exfil.ntfy"));
+        assert!(has(
+            "https://a.example/?cb=ntfy.sh/covrun7results",
+            "exfil.ntfy"
+        ));
+        assert!(!has("https://docs.ntfy.sh/publish/", "exfil.ntfy"));
         assert!(has(
             "https://d.example.gov/api?a=1&zz=oai17816834089056622",
             "marker.oai_tag"

@@ -287,7 +287,11 @@ id = "exploit.sqli_union"
 kind = "exploit"
 tactic = "T4"
 target = "url"
-pattern = "union(\\s|\\+|/\\*.*?\\*/)+(all(\\s|\\+)+)?select"
+# `select` must be a whole word followed by what a column list starts with:
+# null, a number, `*`, `@@`, a bracket, a quote, or a name followed by a comma
+# or FROM. "credit union selected", "union selection process" and "union
+# select a band" are prose.
+pattern = "\\bunion(\\s|\\+|/\\*.*?\\*/)+(all(\\s|\\+|/\\*.*?\\*/)+)?select\\b(\\s|\\+|/\\*.*?\\*/)*(null\\b|-?\\d|\\*|@@|\\(|['\"`]|[a-z_][\\w.]*(\\(|(\\s|\\+)*,|(\\s|\\+)+from\\b))"
 weight = 5
 significant = true
 description = "SQL injection: UNION SELECT"
@@ -666,7 +670,8 @@ id = "exfil.ntfy"
 kind = "exfil"
 tactic = "T7"
 target = "url"
-pattern = "ntfy\\.sh/[A-Za-z0-9_-]{4,}"
+# Not a subdomain: docs.ntfy.sh is the service's own documentation.
+pattern = "(^|[^a-z0-9.-])ntfy\\.sh/[A-Za-z0-9_-]{4,}"
 weight = 3
 link = true
 description = "ntfy topic used as a beacon channel (do not read or post to topics)"
