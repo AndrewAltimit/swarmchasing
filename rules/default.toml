@@ -37,6 +37,9 @@
 #   artifact    true = the match is a trace of how the agent was built, not an
 #               action (model-output residue, run tags, self-identification,
 #               client headers, sandbox hosts)
+#   check       param_value rules only: a test the matched value must also pass,
+#               for what a regex cannot say (repeated_token: a word or phrase
+#               repeated five or more times in a row)
 #
 # A single relay hit is NOT evidence of an agent: people use these services too.
 # Weights are tuned so evidence must stack up.
@@ -631,6 +634,21 @@ target = "param_value"
 pattern = "^(john|jane)[._-]?doe@|^(user|test|foo|someone|name|email|me|you|your[._-]?name|username)@(example|test|domain|your-?domain|company|foo|bar|email)\\.(com|org|net)$|(^|[@./])your-?(domain|website|site|company)\\.(com|org|net)\\b|^test123$|^123\\s+main\\s+st(reet)?\\b|(^|[^\\d])555[-.\\s]?01\\d\\d($|[^\\d])"
 weight = 1
 description = "Placeholder identity (john.doe@, user@example.com, test123, 123 Main St, 555-01xx)"
+
+[[rule]]
+id = "marker.repeated_token"
+kind = "agent_marker"
+artifact = true
+target = "param_value"
+# The pattern finds values of five words or more; the check then wants one
+# word (three characters or more, with a letter) or a phrase of up to three
+# words repeated five or more times in a row, as a model stuck in a generation
+# loop writes. Short refrains ("na na na") and one long run ("aaaa") do not
+# count. People type such strings rarely, but they do, so this stays at weight 1.
+pattern = "(\\S+\\s+){4}\\S"
+check = "repeated_token"
+weight = 1
+description = "A word or phrase repeated five or more times in a row (a model generation loop)"
 
 # ── Cache busters ──────────────────────────────────────────────────────────
 [[rule]]

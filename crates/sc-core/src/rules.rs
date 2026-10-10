@@ -55,8 +55,29 @@ pub struct RuleDef {
     /// run tags, client headers), not an action.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub artifact: bool,
+    /// A test a `param_value` match must also pass: the pattern finds
+    /// candidates, the check decides what regular expressions cannot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<Check>,
     #[serde(default)]
     pub description: String,
+}
+
+/// Tests beyond a regular expression, named by a rule's `check`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Check {
+    /// One word or short phrase repeated five or more times in a row
+    /// ([`crate::prose::repeated_token`]).
+    RepeatedToken,
+}
+
+impl Check {
+    pub(crate) fn passes(self, value: &str) -> bool {
+        match self {
+            Check::RepeatedToken => crate::prose::repeated_token(value),
+        }
+    }
 }
 
 fn one() -> i32 {
@@ -211,6 +232,12 @@ impl Rules {
         for def in &set.rules {
             if !seen.insert(def.id.clone()) {
                 return Err(format!("duplicate rule id `{}`", def.id));
+            }
+            if def.check.is_some() && def.target != Target::ParamValue {
+                return Err(format!(
+                    "rule `{}`: a check needs target = \"param_value\"",
+                    def.id
+                ));
             }
             let matcher = match def.target {
                 Target::Host => Matcher::HostSuffix(def.pattern.to_ascii_lowercase()),
@@ -440,6 +467,39 @@ mod tests {
         for (id, _) in TACTIC_EXCEPTIONS {
             assert!(r.rule(id).is_some(), "exception names no rule: {id}");
         }
+    }
+
+    #[test]
+    fn checks_need_a_param_value_target_and_a_known_name() {
+        let rule = |target: &str, check: &str| {
+            format!(
+                "[[rule]]\nid = \"x.y\"\nkind = \"agent_marker\"\ntarget = \"{target}\"\npattern = \"a\"\ncheck = \"{check}\"\n"
+            )
+        };
+        assert!(Rules::from_toml(&rule("param_value", "repeated_token")).is_ok());
+        let e = Rules::from_toml(&rule("url", "repeated_token"))
+            .err()
+            .unwrap();
+        assert!(e.contains("param_value"), "{e}");
+        let e = Rules::from_toml(&rule("param_value", "palindrome"))
+            .err()
+            .unwrap();
+        assert!(e.contains("unknown variant"), "{e}");
+        let has = |url: &str| {
+            let o = crate::model::Observation {
+                url: url.into(),
+                ..Default::default()
+            };
+            crate::extract::extract(&o, &Rules::default_rules())
+                .hits
+                .iter()
+                .any(|h| h.rule_id == "marker.repeated_token")
+        };
+        assert!(has(
+            "https://a.example/s?q=permit+permit+permit+permit+permit+x"
+        ));
+        assert!(!has("https://a.example/s?q=na+na+na+na+na+na+na+na+batman"));
+        assert!(!has("https://a.example/s?q=one+two+three+four+five+six"));
     }
 
     #[test]

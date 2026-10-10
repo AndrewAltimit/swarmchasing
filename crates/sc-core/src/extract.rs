@@ -372,6 +372,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             for r in rules.matching(Target::ParamValue, v) {
                 if let Matcher::Re(re) = &r.matcher
                     && let Some(m) = re.find(v)
+                    && r.def.check.is_none_or(|c| c.passes(v))
                 {
                     push(
                         &mut hits,
