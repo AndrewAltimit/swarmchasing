@@ -16,6 +16,7 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 - each endpoint and the admin's decision on it: `compromised`, `targeted`, `historical`, `not-affected`, or still `unreviewed`;
 - attribution claims established by case work, each with its layer, evidence and tag;
 - contacts;
+- fleets: clusters the admin treats as one operator's, by stable key;
 - a dated decision log;
 - the reports sent.
 
@@ -31,6 +32,7 @@ Each change is logged with its date.
 | `case claim <id> --party … [--layer …] --evidence … [--tag …] --detail …` | Records an attribution claim ([attribution claims](#attribution-claims)). |
 | `case set <id> --status … --notice … --min-named …` | Changes the status or the naming threshold. |
 | `case note <id> "…"` | Adds a dated entry to the decision log. |
+| `case fleet merge\|split\|show <id> …` | Groups soft-linked clusters into one fleet, splits one off, or lists fleets and candidates ([fleets](#fleets)). |
 | `case add <id> …` | Adds new records. |
 | `case contacts <id> [--providers-only]` | Adds provider contacts from the directory, then finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
@@ -51,6 +53,20 @@ Each change is logged with its date.
 A claim is about one of four layers ([SC-FM 7.1](../manual/07-attribution.md#fm-71-four-layers)): `developer` (the default), `host`, `harness` or `model_family`. Developer and host claims need `--evidence` on the ladder; `--tag observed|documented|inference|conclusion` overrides the derived tag. A model-family claim needs `--likelihood`, `--accuracy` (the method's, on a held-out set) and `--corpus-size`, and is refused without them.
 
 Each claim's label (Confirmed, Suspected, Possible, Unattributed) follows from its layer and evidence ([SC-FM 7.7](../manual/07-attribution.md#fm-77-attribution-labels)). The records add their own claims on every report: self-identified developers, client networks and runtime markers as hosts, and harness candidates from user agents and header and encoding fingerprints. Harness and model-family candidates are ranked in private reports and never named in a notice or a public export, whatever their evidence. Case files written before layers and tags existed read unchanged.
+
+## Fleets
+
+The analysis proposes candidate fleets from soft links between clusters and never merges them ([SC-FM 5.8](../manual/05-linking.md#fm-58-candidate-fleets-merge-and-split)). The admin decides:
+
+```sh
+swarmchase case fleet show <id>                          # fleets, and candidates with the command that merges them
+swarmchase case fleet merge <id> k-3f9a2c1b k-77d0e2aa [--why "…"]
+swarmchase case fleet split <id> k-77d0e2aa [--why "…"]
+```
+
+Clusters are named by stable key (or C-number in the case's analysis) and stored as keys under `[[fleet]]` in `case.toml`. A merge takes in any fleet already holding one of the clusters. The decision log records the clusters, the soft links between them with their strength and detail, the candidate fleet that proposed it, the reason, and the command that reverses it. A merge with no soft link between the clusters needs `--why`. A split takes one cluster out; a fleet left with one cluster is dissolved.
+
+Reports then carry a *Fleets* section, with soft-link details in case notes only. `case status` shows each cluster's key and fleet.
 
 ## Contacts
 

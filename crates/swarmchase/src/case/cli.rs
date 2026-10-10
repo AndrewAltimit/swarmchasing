@@ -188,6 +188,13 @@ pub enum CaseCmd {
     },
     /// Append a dated entry to the decision log.
     Note { id: String, text: String },
+    /// Treat soft-linked clusters as one fleet, or split one off again: the
+    /// admin's decision, logged with the soft links it rests on. Reports and
+    /// exports then group the clusters. Never automatic.
+    Fleet {
+        #[command(subcommand)]
+        cmd: FleetCmd,
+    },
     /// Show the rules the case is pinned to, the current rules, and which
     /// records would change tier; with --update, re-pin to the current rules.
     Rules {
@@ -222,6 +229,30 @@ pub enum CaseCmd {
     /// Export the case for the recipients' tooling (`--format stix`: a STIX
     /// 2.1 bundle), scoped to an audience. Written to a file; nothing is sent.
     Export(crate::stix::ExportArgs),
+}
+
+#[derive(Subcommand)]
+pub enum FleetCmd {
+    /// Merge clusters (by stable key, or C-number in the case's analysis),
+    /// and any fleets already holding them, into one fleet.
+    Merge {
+        id: String,
+        #[arg(required = true, num_args = 2..)]
+        clusters: Vec<String>,
+        /// The admin's reason. Required when no soft link joins the clusters.
+        #[arg(long)]
+        why: Option<String>,
+    },
+    /// Take one cluster out of its fleet; a fleet left with one cluster is
+    /// dissolved.
+    Split {
+        id: String,
+        cluster: String,
+        #[arg(long)]
+        why: Option<String>,
+    },
+    /// The case's fleets, and the candidate fleets the analysis proposes.
+    Show { id: String },
 }
 
 /// Who a hand-added contact is for.
@@ -281,7 +312,7 @@ pub enum ContactCmd {
 
 /// The case's claims together with the records' own, as reports see them.
 pub(crate) fn all_claims(root: &std::path::Path, c: &Case) -> Result<Vec<Claim>> {
-    let a = sc_core::analyze(case_records(root, c, &Scope::All)?, &case_rules(root, c)?);
+    let a = case_analysis(root, c)?;
     Ok(a.clusters.iter().fold(c.claims.clone(), |acc, cl| {
         sc_core::attribution::merge(acc, &sc_core::attribute(&a, cl))
     }))
@@ -352,6 +383,45 @@ fn contact_cmd(root: &std::path::Path, cmd: ContactCmd, today: &str) -> Result<(
             c.log(today, format!("contact removed: {address}"));
             Ok(())
         }),
+    }
+}
+
+/// The case's analysis over all its records, under its pinned rules.
+pub(crate) fn case_analysis(root: &std::path::Path, c: &Case) -> Result<sc_core::Analysis> {
+    Ok(sc_core::analyze(
+        case_records(root, c, &Scope::All)?,
+        &case_rules(root, c)?,
+    ))
+}
+
+fn fleet_cmd(
+    root: &std::path::Path,
+    cmd: FleetCmd,
+    today: &str,
+    out: &mut impl std::io::Write,
+) -> Result<()> {
+    match cmd {
+        FleetCmd::Merge { id, clusters, why } => {
+            let a = case_analysis(root, &load(root, &id)?)?;
+            update(root, &id, |c| {
+                let f = super::fleet::merge(c, &a, &clusters, why.as_deref(), today)?;
+                println!("{}", c.decisions.last().map_or("", |d| d.text.as_str()));
+                println!("merged into {f}");
+                Ok(())
+            })
+        }
+        FleetCmd::Split { id, cluster, why } => {
+            let a = case_analysis(root, &load(root, &id)?)?;
+            update(root, &id, |c| {
+                super::fleet::split(c, &a, &cluster, why.as_deref(), today)?;
+                println!("{}", c.decisions.last().map_or("", |d| d.text.as_str()));
+                Ok(())
+            })
+        }
+        FleetCmd::Show { id } => {
+            let c = load(root, &id)?;
+            super::fleet::show(&c, &case_analysis(root, &c)?, out)
+        }
     }
 }
 
@@ -577,6 +647,7 @@ pub fn run(args: CaseArgs) -> Result<()> {
             Ok(())
         }),
         CaseCmd::Evidence { cmd } => crate::evidence::run_evidence(&root, cmd, &today),
+        CaseCmd::Fleet { cmd } => fleet_cmd(&root, cmd, &today, &mut out),
         CaseCmd::Note { id, text } => update(&root, &id, |c| {
             c.log(&today, text.clone());
             Ok(())

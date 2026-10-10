@@ -94,6 +94,18 @@ pub struct Sent {
     pub report: Option<String>,
 }
 
+/// Clusters the admin decided to treat as one fleet (`case fleet merge`):
+/// one operator behind several runs. Never set by the analysis itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Fleet {
+    /// `fleet-1`, `fleet-2`, ... within the case.
+    pub id: String,
+    /// Stable cluster keys (`k-3f9a2c1b`), sorted.
+    pub clusters: Vec<String>,
+    /// When the grouping last changed.
+    pub since: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Case {
     pub id: String,
@@ -129,6 +141,9 @@ pub struct Case {
     /// Logs affected operators sent us (`case evidence`).
     #[serde(default, rename = "evidence", skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<OperatorEvidence>,
+    /// The admin's fleet grouping of the case's clusters, by stable key.
+    #[serde(default, rename = "fleet", skip_serializing_if = "Vec::is_empty")]
+    pub fleets: Vec<Fleet>,
 }
 
 impl Case {
@@ -137,6 +152,13 @@ impl Case {
             date: today.to_string(),
             text: text.into(),
         });
+    }
+
+    /// The fleet holding cluster `key`, if the admin grouped it.
+    pub fn fleet_of(&self, key: &str) -> Option<&Fleet> {
+        self.fleets
+            .iter()
+            .find(|f| f.clusters.iter().any(|k| k == key))
     }
 
     /// Add every flagged target host not yet listed, as unreviewed.
