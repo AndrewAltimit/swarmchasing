@@ -62,6 +62,12 @@ enum Cmd {
     },
     /// Find the security contact for an affected domain (RFC 9116 security.txt).
     Contact { domain: String },
+    /// The provider directory (contacts/providers.toml): list it, or re-read
+    /// every entry's source and draft the changes.
+    Contacts {
+        #[command(subcommand)]
+        cmd: contacts::ContactsCmd,
+    },
     /// Collect new records from every source in a watchlist, analyse the recent
     /// window, and write a digest of what changed since the last run.
     Watch(watch::WatchArgs),
@@ -101,6 +107,7 @@ fn main() -> Result<()> {
         Cmd::Collect { source } => collect::run(source),
         Cmd::Certs { query, json } => commands::certs::run(&query, json),
         Cmd::Contact { domain } => commands::contact::run(&domain),
+        Cmd::Contacts { cmd } => contacts::run_contacts(cmd),
         Cmd::Watch(a) => watch::run(a),
         Cmd::Eval(a) => commands::eval::run(a),
         Cmd::Review(a) => review::run(a),

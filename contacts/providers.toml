@@ -1,0 +1,337 @@
+# Security and abuse channels of AI providers and agent hosts.
+#
+# `swarmchase case contacts` adds a provider's entries to a case when one of
+# the case's developer or host claims names it (by `name` or an alias, case
+# insensitive). `swarmchase contacts verify` re-reads every source and drafts
+# the changes; nothing here is ever used to send anything.
+#
+# Every contact was read, address and all, from its `source` on the
+# `verified` date. Add an entry only the same way, and never guess an
+# address. `purpose` is `security` (vulnerabilities, incidents) or `abuse`
+# (misuse of the service); reports about a provider's agents go to abuse
+# first where there is one.
+
+[[provider]]
+name = "OpenAI"
+aliases = ["openai", "chatgpt", "gpt", "codex"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "disclosure@openai.com"
+purpose = "security"
+source = "https://openai.com/.well-known/security.txt"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "portal"
+address = "https://bugcrowd.com/openai"
+purpose = "security"
+source = "https://openai.com/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Anthropic"
+aliases = ["anthropic", "claude"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "usersafety@anthropic.com"
+purpose = "abuse"
+source = "https://www.anthropic.com/responsible-disclosure-policy"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "form"
+address = "https://hackerone.com/4f1f16ba-10d3-4d09-9ecc-c721aad90f24/embedded_submissions/new"
+purpose = "security"
+source = "https://www.anthropic.com/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Google"
+aliases = ["google", "google deepmind", "deepmind", "gemini", "google cloud", "gcp", "vertex ai"]
+kind = "cloud"
+[[provider.contact]]
+channel = "form"
+address = "https://support.google.com/code/contact/cloud_platform_report"
+purpose = "abuse"
+source = "https://support.google.com/code/contact/cloud_platform_report"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "email"
+address = "security@google.com"
+purpose = "security"
+source = "https://www.google.com/.well-known/security.txt"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "portal"
+address = "https://g.co/vulnz"
+purpose = "security"
+source = "https://www.google.com/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Microsoft"
+aliases = ["microsoft", "azure", "azure openai", "copilot", "msft"]
+kind = "cloud"
+note = "security.txt carried an Expires date already past when verified"
+[[provider.contact]]
+channel = "portal"
+address = "https://msrc.microsoft.com/report/abuse"
+purpose = "abuse"
+source = "https://www.microsoft.com/en-us/msrc/blog/2021/02/new-and-improved-report-abuse-portal-and-api"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "portal"
+address = "https://msrc.microsoft.com/report/vulnerability/new"
+purpose = "security"
+source = "https://www.microsoft.com/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Meta"
+aliases = ["meta", "llama", "meta ai", "facebook"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "LlamaUseReport@meta.com"
+purpose = "abuse"
+source = "https://dev.meta.ai/llama/llama4/use-policy/"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "form"
+address = "https://www.facebook.com/whitehat/report/"
+purpose = "security"
+source = "https://www.facebook.com/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Mistral AI"
+aliases = ["mistral", "mistral ai", "le chat"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "security@mistral.ai"
+purpose = "security"
+source = "https://mistral.ai/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "xAI"
+aliases = ["xai", "x.ai", "grok"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "abuse@x.ai"
+purpose = "abuse"
+source = "https://x.ai/.well-known/security.txt"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "email"
+address = "safety@x.ai"
+purpose = "abuse"
+source = "https://x.ai/.well-known/security.txt"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "email"
+address = "vulnerabilities@x.ai"
+purpose = "security"
+source = "https://x.ai/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Alibaba Cloud"
+aliases = ["alibaba", "alibaba cloud", "aliyun", "qwen", "tongyi", "dashscope"]
+kind = "cloud"
+[[provider.contact]]
+channel = "email"
+address = "domainabuse@service.aliyun.com"
+purpose = "abuse"
+source = "https://www.alibabacloud.com/help/en/dws/security-and-compliance/handling-of-copyright-infringements-and-domain-name-abuse"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "portal"
+address = "https://report.alibabacloud.com/#/reportCenter/home"
+purpose = "abuse"
+source = "https://www.alibabacloud.com/help/en/dws/security-and-compliance/handling-of-copyright-infringements-and-domain-name-abuse"
+verified = "2026-10-10"
+
+[[provider]]
+name = "DeepSeek"
+aliases = ["deepseek"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "service@deepseek.com"
+purpose = "abuse"
+source = "https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Zhipu AI"
+aliases = ["zhipu", "zhipu ai", "z.ai", "zai", "glm", "chatglm"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "user_feedback@z.ai"
+purpose = "abuse"
+source = "https://docs.z.ai/legal-agreement/terms-of-use"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Tencent Cloud"
+aliases = ["tencent", "tencent cloud", "hunyuan", "dnspod"]
+kind = "cloud"
+note = "abuse channels cover domains at Tencent Cloud registrars only"
+[[provider.contact]]
+channel = "form"
+address = "https://www.tencentcloud.com/report-platform/dnsabuse"
+purpose = "abuse"
+source = "https://www.tencentcloud.com/document/product/242/72664"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "email"
+address = "dnsabuse_complaint@tencent.com"
+purpose = "abuse"
+source = "https://www.tencentcloud.com/document/product/242/72664"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Amazon Web Services"
+aliases = ["aws", "amazon", "amazon aws", "amazon web services", "bedrock", "amazon bedrock"]
+kind = "cloud"
+note = "security.txt carried an Expires date already past when verified"
+[[provider.contact]]
+channel = "email"
+address = "trustandsafety@support.aws.com"
+purpose = "abuse"
+source = "https://aws.amazon.com/security/vulnerability-reporting/"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "form"
+address = "https://repost.aws/knowledge-center/report-aws-abuse"
+purpose = "abuse"
+source = "https://aws.amazon.com/security/vulnerability-reporting/"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "email"
+address = "aws-security@amazon.com"
+purpose = "security"
+source = "https://aws.amazon.com/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Cloudflare"
+aliases = ["cloudflare", "workers ai", "cloudflare workers", "workers.dev", "pages.dev"]
+kind = "cloud"
+[[provider.contact]]
+channel = "form"
+address = "https://www.cloudflare.com/abuse/"
+purpose = "abuse"
+source = "https://www.cloudflare.com/.well-known/security.txt"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "portal"
+address = "https://hackerone.com/cloudflare"
+purpose = "security"
+source = "https://www.cloudflare.com/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Hugging Face"
+aliases = ["hugging face", "huggingface", "hf", "hf spaces"]
+kind = "host"
+[[provider.contact]]
+channel = "email"
+address = "safety@huggingface.co"
+purpose = "abuse"
+source = "https://huggingface.co/content-policy"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "email"
+address = "security@huggingface.co"
+purpose = "security"
+source = "https://huggingface.co/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Jina AI"
+aliases = ["jina", "jina ai", "r.jina.ai", "s.jina.ai"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "security@jina.ai"
+purpose = "security"
+source = "https://github.com/jina-ai/serve/security/policy"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Vercel"
+aliases = ["vercel", "vercel.app", "v0"]
+kind = "host"
+[[provider.contact]]
+channel = "form"
+address = "https://vercel.com/abuse"
+purpose = "abuse"
+source = "https://vercel.com/abuse"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "email"
+address = "responsible.disclosure@vercel.com"
+purpose = "security"
+source = "https://vercel.com/.well-known/security.txt"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "portal"
+address = "https://hackerone.com/vercel"
+purpose = "security"
+source = "https://vercel.com/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Replit"
+aliases = ["replit", "repl.it", "replit agent", "replit.app"]
+kind = "host"
+[[provider.contact]]
+channel = "email"
+address = "abuse@replit.com"
+purpose = "abuse"
+source = "https://docs.replit.com/legal-and-security-info/abuse-report"
+verified = "2026-10-10"
+[[provider.contact]]
+channel = "email"
+address = "security@replit.com"
+purpose = "security"
+source = "https://docs.replit.com/misc/security"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Perplexity"
+aliases = ["perplexity", "perplexity ai", "comet"]
+kind = "model"
+[[provider.contact]]
+channel = "email"
+address = "security@perplexity.ai"
+purpose = "security"
+source = "https://www.perplexity.ai/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Together AI"
+aliases = ["together", "together ai", "together.ai"]
+kind = "host"
+[[provider.contact]]
+channel = "portal"
+address = "https://hackerone.com/together_ai"
+purpose = "security"
+source = "https://www.together.ai/.well-known/security.txt"
+verified = "2026-10-10"
+
+[[provider]]
+name = "Browserbase"
+aliases = ["browserbase", "stagehand"]
+kind = "host"
+[[provider.contact]]
+channel = "email"
+address = "security@browserbase.com"
+purpose = "security"
+source = "https://www.browserbase.com/.well-known/security.txt"
+verified = "2026-10-10"

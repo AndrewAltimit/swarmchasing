@@ -440,6 +440,7 @@ mod tests {
             source: String::new(),
             confidence: "low".into(),
             found_on: "d".into(),
+            purpose: None,
         };
         let md = report(&root, "t-2", Audience::Affected, None, Some(&other), "d").unwrap();
         assert!(!md.contains(marker), "another operator's logs: {md}");

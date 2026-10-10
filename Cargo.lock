@@ -1159,6 +1159,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "clap",
+ "reqwest",
  "sc-collect",
  "sc-core",
  "sc-publish",

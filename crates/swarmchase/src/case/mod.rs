@@ -443,6 +443,7 @@ mod tests {
                 source: "https://portal.example.gov/.well-known/security.txt".into(),
                 confidence: "medium".into(),
                 found_on: "2026-10-14".into(),
+                purpose: None,
             });
             Ok(())
         })

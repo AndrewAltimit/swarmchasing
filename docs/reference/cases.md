@@ -32,7 +32,8 @@ Each change is logged with its date.
 | `case set <id> --status … --notice … --min-named …` | Changes the status or the naming threshold. |
 | `case note <id> "…"` | Adds a dated entry to the decision log. |
 | `case add <id> …` | Adds new records. |
-| `case contacts <id>` | Finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
+| `case contacts <id> [--providers-only]` | Adds provider contacts from the directory, then finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
+| `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
 | `case report <id> --audience …` | Drafts a report into `reports/`, applying the case's claims and naming threshold. |
 | `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
 | `case bundle <id>` | Writes an evidence bundle without drafting a report. |
@@ -52,7 +53,13 @@ Each claim's label (Confirmed, Suspected, Possible, Unattributed) follows from i
 
 ## Contacts
 
-`case contacts` looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each contact has a source link, a confidence and a date.
+`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. `--providers-only` skips the lookups. Each contact has a source link, a confidence and a date.
+
+`case contact add <id> --party provider|operator|csirt|declared-owner --org … --channel email|form|portal --address … --source <link>` adds a contact found by hand, such as a CSIRT from the [FIRST directory](../manual/references.md#disclosure) or an authorised test's declared owner; `case contact rm <id> <address>` removes one. `case status` lists a missing provider contact and a missing notice draft under *Needs*.
+
+### The provider directory
+
+[`contacts/providers.toml`](../../contacts/providers.toml) lists the security and abuse channels of AI providers and agent hosts. Each entry records the page its address was read from and the date. `swarmchase contacts list` prints it. `swarmchase contacts verify [--draft <file>]` re-reads every source, reports addresses its source no longer lists, sources that cannot be read and new security.txt contacts, and writes an updated copy for the admin to review and commit. It never changes the directory itself.
 
 ## Drafts
 

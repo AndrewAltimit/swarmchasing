@@ -119,14 +119,23 @@ pub enum CaseCmd {
         #[arg(long)]
         min_named: Option<Evidence>,
     },
-    /// Find contacts for the case's endpoints: security.txt on the host or
-    /// its parent domains, else the registrar's abuse contact from RDAP.
-    /// Endpoints marked not-affected are skipped.
+    /// Find contacts: the provider directory's channels for every provider a
+    /// developer or host claim names, then for the case's endpoints the
+    /// security.txt on the host or its parent domains, else the registrar's
+    /// abuse contact from RDAP. Endpoints marked not-affected are skipped.
     Contacts {
         id: String,
         /// Look up endpoints that already have contacts too.
         #[arg(long)]
         refresh: bool,
+        /// Only add provider contacts from the directory; no network lookups.
+        #[arg(long)]
+        providers_only: bool,
+    },
+    /// Add or remove a contact by hand.
+    Contact {
+        #[command(subcommand)]
+        cmd: ContactCmd,
     },
     /// Write an evidence bundle: records, analysis, reproducibility stamp and
     /// a SHA-256 manifest.
@@ -213,6 +222,137 @@ pub enum CaseCmd {
     /// Export the case for the recipients' tooling (`--format stix`: a STIX
     /// 2.1 bundle), scoped to an audience. Written to a file; nothing is sent.
     Export(crate::stix::ExportArgs),
+}
+
+/// Who a hand-added contact is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Party {
+    /// The AI provider or agent host.
+    Provider,
+    /// An affected operator.
+    Operator,
+    /// A national or sector CSIRT.
+    Csirt,
+    /// The declared owner of an "authorised test".
+    DeclaredOwner,
+}
+
+impl Party {
+    /// The contact role case.toml uses.
+    pub fn role(self) -> &'static str {
+        match self {
+            Self::Provider => "provider",
+            Self::Operator => "affected",
+            Self::Csirt => "csirt",
+            Self::DeclaredOwner => "declared_owner",
+        }
+    }
+}
+
+#[derive(Subcommand)]
+pub enum ContactCmd {
+    /// Add a contact found by hand (a provider's abuse form, a CSIRT, a
+    /// declared owner). Every contact needs the link it was found at.
+    Add {
+        id: String,
+        #[arg(long)]
+        party: Party,
+        #[arg(long)]
+        org: String,
+        /// email | form | portal
+        #[arg(long, default_value = "email")]
+        channel: String,
+        /// The e-mail address, or the form or portal URL.
+        #[arg(long)]
+        address: String,
+        /// Where the contact was found (a link).
+        #[arg(long)]
+        source: String,
+        /// low | medium | high
+        #[arg(long, default_value = "medium")]
+        confidence: String,
+        /// The endpoint this contact is for, for an operator.
+        #[arg(long)]
+        endpoint: Option<String>,
+    },
+    /// Remove a contact by address.
+    Rm { id: String, address: String },
+}
+
+/// The case's claims together with the records' own, as reports see them.
+pub(crate) fn all_claims(root: &std::path::Path, c: &Case) -> Result<Vec<Claim>> {
+    let a = sc_core::analyze(case_records(root, c, &Scope::All)?, &case_rules(root, c)?);
+    Ok(a.clusters.iter().fold(c.claims.clone(), |acc, cl| {
+        sc_core::attribution::merge(acc, &sc_core::attribute(&a, cl))
+    }))
+}
+
+fn contact_cmd(root: &std::path::Path, cmd: ContactCmd, today: &str) -> Result<()> {
+    match cmd {
+        ContactCmd::Add {
+            id,
+            party,
+            org,
+            channel,
+            address,
+            source,
+            confidence,
+            endpoint,
+        } => update(root, &id, |c| {
+            let channel = crate::contacts::case_channel(&channel)?;
+            if !matches!(confidence.as_str(), "low" | "medium" | "high") {
+                bail!("confidence `{confidence}`: low|medium|high");
+            }
+            if !(source.starts_with("https://") || source.starts_with("http://")) {
+                bail!("--source must be the link the contact was found at");
+            }
+            let is_email = address.contains('@') && !address.contains('/');
+            if (channel == "email") != is_email {
+                bail!("`{address}` does not fit channel {channel}");
+            }
+            if let Some(h) = &endpoint
+                && !c.endpoints.iter().any(|e| e.host.eq_ignore_ascii_case(h))
+            {
+                bail!("no endpoint `{h}` in case {id}");
+            }
+            if c.contacts
+                .iter()
+                .any(|x| x.address.eq_ignore_ascii_case(&address) && x.endpoint == endpoint)
+            {
+                bail!("`{address}` is already a contact in case {id}");
+            }
+            c.contacts.push(Contact {
+                org: org.clone(),
+                role: party.role().into(),
+                endpoint: endpoint.clone(),
+                channel: channel.into(),
+                address: address.clone(),
+                source: source.clone(),
+                confidence: confidence.clone(),
+                found_on: today.to_string(),
+                purpose: None,
+            });
+            c.log(
+                today,
+                format!(
+                    "contact added: {org} ({}) {channel} {address}",
+                    party.role()
+                ),
+            );
+            Ok(())
+        }),
+        ContactCmd::Rm { id, address } => update(root, &id, |c| {
+            let before = c.contacts.len();
+            c.contacts
+                .retain(|x| !x.address.eq_ignore_ascii_case(&address));
+            let n = before - c.contacts.len();
+            if n == 0 {
+                bail!("`{address}` is not a contact in case {id}");
+            }
+            c.log(today, format!("contact removed: {address}"));
+            Ok(())
+        }),
+    }
 }
 
 pub fn run(args: CaseArgs) -> Result<()> {
@@ -348,12 +488,26 @@ pub fn run(args: CaseArgs) -> Result<()> {
             }
             Ok(())
         }),
-        CaseCmd::Contacts { id, refresh } => {
-            let client = sc_collect::Client::new(std::time::Duration::from_millis(500))?;
+        CaseCmd::Contacts {
+            id,
+            refresh,
+            providers_only,
+        } => {
+            let claims = all_claims(&root, &load(&root, &id)?)?;
+            let dir = crate::contacts::Directory::builtin();
             update(&root, &id, |c| {
+                let n = crate::contacts::seed_providers(c, &claims, &dir, &today, &mut out)?;
+                if n == 0 {
+                    println!("provider directory: nothing new for this case's claims");
+                }
+                if providers_only {
+                    return Ok(());
+                }
+                let client = sc_collect::Client::new(std::time::Duration::from_millis(500))?;
                 crate::contacts::find_contacts(c, &client, refresh, &today, &mut std::io::stdout())
             })
         }
+        CaseCmd::Contact { cmd } => contact_cmd(&root, cmd, &today),
         CaseCmd::Bundle { id, rules } => {
             let c = load(&root, &id)?;
             let rules = match rules {

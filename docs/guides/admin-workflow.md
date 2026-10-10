@@ -65,7 +65,7 @@ swarmchase case draft 2026-10-portal --audience affected --to security@example.g
 swarmchase case draft 2026-10-portal --audience provider --to <provider contact>
 ```
 
-`case contacts` reads security.txt, then RDAP abuse addresses. `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form. Read every draft before sending it.
+`case contacts` adds the provider's channels from the [provider directory](../reference/cases.md#the-provider-directory) when a claim names it, then reads security.txt, then RDAP abuse addresses. Add anything else by hand with `case contact add` (a CSIRT, a declared owner). `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form. Read every draft before sending it.
 
 Details: [contacts](../reference/cases.md#contacts), [drafts](../reference/cases.md#drafts).
 
