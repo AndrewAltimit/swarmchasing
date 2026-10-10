@@ -163,7 +163,7 @@ fn gather(
     }
     let notice_url = site_url.map(|u| format!("{}/#notice={}", u.trim_end_matches('/'), c.id));
     let description = format!(
-        "Automated AI agent activity: {} linked run(s) of {} public record(s) between {} and {}, against {} affected endpoint(s){}. Reported to the AI provider and the affected operators at the same time as the public notice.",
+        "Automated AI agent activity: {} linked run(s) of {} public record(s) between {} and {}, against {} affected endpoint(s){}.{}",
         clusters.len(),
         clusters.iter().map(|x| x.members.len()).sum::<usize>(),
         first.map(date).unwrap_or_else(|| "an unknown date".into()),
@@ -173,7 +173,11 @@ fn gather(
             ", at least one with evidence the attack succeeded"
         } else {
             ", with no evidence any attack succeeded"
-        }
+        },
+        super::reported(c)
+            .parties()
+            .map(|p| format!(" Reported to {p} at the same time as the public notice."))
+            .unwrap_or_default()
     );
     Ok(Public {
         title: c.title.clone(),

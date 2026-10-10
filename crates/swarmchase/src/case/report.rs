@@ -4,7 +4,7 @@ use super::*;
 use crate::pinning::case_rules;
 use crate::util::audience_id;
 use anyhow::{Result, bail};
-use sc_core::{Audience, ReportOptions, analyze, render_markdown};
+use sc_core::{Audience, ReportOptions, Reported, analyze, render_markdown};
 use std::path::{Path, PathBuf};
 
 pub(crate) fn report_options(
@@ -26,6 +26,7 @@ pub(crate) fn report_options(
             .map(|e| e.host.clone())
             .collect(),
         affected_hosts: Some(affected_hosts(c)),
+        reported: Some(reported(c)),
         ..Default::default()
     }
 }
@@ -43,6 +44,33 @@ pub(crate) fn affected_hosts(c: &Case) -> Vec<String> {
         })
         .map(|e| e.host.clone())
         .collect()
+}
+
+/// Which parties the case's recorded sends reached. A send's recipient is
+/// matched to a contact by address or organisation; failing that, the draft
+/// it names says its audience. Anything else counts as another responder.
+pub(crate) fn reported(c: &Case) -> Reported {
+    let mut r = Reported::default();
+    for s in &c.sent {
+        let role = c
+            .contacts
+            .iter()
+            .find(|x| {
+                x.address.eq_ignore_ascii_case(&s.recipient)
+                    || x.org.eq_ignore_ascii_case(&s.recipient)
+            })
+            .map(|x| x.role.as_str());
+        let draft = s.report.as_deref().unwrap_or_default();
+        match role {
+            Some("provider") => r.provider = true,
+            Some("affected") => r.operators = true,
+            Some(_) => r.others = true,
+            None if draft.contains("-provider-") => r.provider = true,
+            None if draft.contains("-affected-") => r.operators = true,
+            None => r.others = true,
+        }
+    }
+    r
 }
 
 pub(crate) fn report(

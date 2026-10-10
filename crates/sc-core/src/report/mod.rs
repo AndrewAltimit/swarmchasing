@@ -8,7 +8,7 @@ mod audience;
 mod hints;
 mod sections;
 
-pub use audience::Audience;
+pub use audience::{Audience, Reported};
 
 use hints::{cut_line, dialect_line, fanout_line, rhythm_line, stale_dates_line};
 use sections::{attribution_section, endpoint_table};
@@ -53,6 +53,10 @@ pub struct ReportOptions {
     /// counts the rest; `None` names every host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub affected_hosts: Option<Vec<String>>,
+    /// Who the case's recorded sends reached. The public notice says reports
+    /// went out only to these parties, and says nothing about sends without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reported: Option<Reported>,
 }
 
 /// A public notice draft and what the admin must look at before publishing.
@@ -85,6 +89,7 @@ impl Default for ReportOptions {
             claims: Vec::new(),
             exposed_hosts: Vec::new(),
             affected_hosts: None,
+            reported: None,
         }
     }
 }
@@ -218,7 +223,11 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     if unnamed > 0 {
         host_list.push(hosts_not_named(unnamed));
     }
-    let _ = writeln!(s, "{}", audience::summary(opts.audience, &host_list));
+    let _ = writeln!(
+        s,
+        "{}",
+        audience::summary(opts.audience, &host_list, opts.reported.as_ref())
+    );
     if kinds.contains_key(&IndicatorKind::Exploit) {
         let _ = writeln!(
             s,
@@ -958,6 +967,24 @@ mod tests {
         let a = analyze(obs, &Rules::default_rules());
         let all = render_notice(&a, &ReportOptions::default());
         assert!(all.markdown.contains("`e[.]example`"), "{}", all.markdown);
+        // Without recorded sends the notice claims none.
+        assert!(!all.markdown.contains("Reports went"), "{}", all.markdown);
+        let sent = render_notice(
+            &a,
+            &ReportOptions {
+                reported: Some(Reported {
+                    operators: true,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        assert!(
+            sent.markdown
+                .contains("Reports went to the affected operators when this notice was published."),
+            "{}",
+            sent.markdown
+        );
 
         let n = render_notice(
             &a,

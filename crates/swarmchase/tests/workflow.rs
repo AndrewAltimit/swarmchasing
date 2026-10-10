@@ -242,7 +242,21 @@ fn from_a_watch_digest_to_a_linted_notice() {
         "{}",
         r.stdout
     );
-    assert!(dir.join("notices/wf-1.md").is_file());
+    // Only the operator was sent a report, so the notice says only that.
+    let notice = std::fs::read_to_string(dir.join("notices/wf-1.md")).unwrap();
+    assert!(
+        notice
+            .contains("Notice published. Reports went to the affected operators at the same time."),
+        "{notice}"
+    );
+    assert!(
+        notice.contains("Reports went to the affected operators when this notice was published."),
+        "{notice}"
+    );
+    assert!(
+        !notice.contains("Reports went to the AI provider"),
+        "{notice}"
+    );
     let r = ok(dir, &["notice", "--dir", "notices", "lint"]);
     assert!(r.stdout.contains("notices OK (1 checked)"), "{}", r.stdout);
     let r = ok(dir, &["case", "--data", data, "status", "wf-1"]);
