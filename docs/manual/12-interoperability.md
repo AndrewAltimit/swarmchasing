@@ -47,7 +47,7 @@ Properties:
 
 The toolkit writes one run object per exported cluster, so `concurrency.runs` counts the runs inside it. The JSON schema is committed at [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json), and every export carries the `extension-definition` that points to it. A public export's `attribution` carries developers through the naming gate and hosts only.
 
-A merged fleet as a STIX `grouping` whose `object_refs` list its runs, and soft links between runs as `related-to` relationships whose description names the link type ([FM-5.7](05-linking.md#fm-57-soft-links)), are (planned).
+A merged fleet as a STIX `grouping` whose `object_refs` list its runs, and soft links between runs as `related-to` relationships whose description names the link type ([FM-5.7](05-linking.md#fm-57-soft-links)), are built.
 
 ## FM-12.3 AI incident databases
 
