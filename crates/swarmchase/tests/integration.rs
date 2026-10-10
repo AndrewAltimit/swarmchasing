@@ -9,5 +9,6 @@
 mod analysis;
 mod cases;
 mod common;
+mod eval;
 mod notices;
 mod watch;
