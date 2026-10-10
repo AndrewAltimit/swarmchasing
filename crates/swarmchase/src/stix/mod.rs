@@ -46,6 +46,11 @@ use std::path::{Path, PathBuf};
 pub enum ExportFormat {
     /// A STIX 2.1 bundle (JSON).
     Stix,
+    /// A draft for the OECD AI incident common reporting framework (JSON,
+    /// public scope), with the mandatory criteria it cannot fill listed.
+    Oecd,
+    /// A draft AI Incident Database submission (JSON, public scope).
+    Aiid,
 }
 
 #[derive(Args)]
@@ -63,13 +68,48 @@ pub struct ExportArgs {
     /// Name for the reporter identity.
     #[arg(long)]
     reporter: Option<String>,
-    /// Default: <case>/exports/<audience>-<date>.stix.json
+    /// The site's URL, for the notice link in incident database drafts.
+    #[arg(long, env = "SWARMCHASE_SITE_URL")]
+    site_url: Option<String>,
+    /// The committed notices directory, for incident database drafts.
+    #[arg(long, default_value = "notices")]
+    notices: PathBuf,
+    /// Default: <case>/exports/<audience>-<date>.stix.json, or
+    /// <case>/exports/<format>-<date>.json for incident database drafts.
     #[arg(short, long)]
     out: Option<PathBuf>,
 }
 
 pub fn run(root: &Path, args: ExportArgs, today: &str) -> Result<()> {
-    let ExportFormat::Stix = args.format;
+    let db = match args.format {
+        ExportFormat::Stix => None,
+        ExportFormat::Oecd => Some((case::incident::Database::Oecd, "oecd")),
+        ExportFormat::Aiid => Some((case::incident::Database::Aiid, "aiid")),
+    };
+    if let Some((db, name)) = db {
+        if args.audience != Audience::Public && args.audience != Audience::Provider {
+            bail!("incident database drafts are public; they take no --audience");
+        }
+        let text = case::incident::draft(
+            root,
+            &args.notices,
+            &args.id,
+            db,
+            args.reporter.as_deref().unwrap_or("swarmchasing"),
+            args.site_url.as_deref(),
+            today,
+        )?;
+        let path = args.out.unwrap_or_else(|| {
+            root.join(&args.id)
+                .join("exports")
+                .join(format!("{name}-{today}.json"))
+        });
+        crate::util::write_out(Some(&path), &text)?;
+        println!(
+            "draft only; nothing was submitted. Submit it by hand after the notice is public."
+        );
+        return Ok(());
+    }
     let text = export(
         root,
         &args.id,

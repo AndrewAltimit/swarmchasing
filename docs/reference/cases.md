@@ -42,6 +42,7 @@ Each change is logged with its date.
 | `case notice <id>` | Drafts the public notice into `notice.md` ([notices](notices.md)). |
 | `case rules <id> [--update]` | Shows the pinned rules version against the current one and the records whose tier would change. |
 | `case export <id> --format stix --audience … [--to <contact>]` | Writes the case as a STIX 2.1 bundle ([STIX export](#stix-export)). |
+| `case export <id> --format oecd\|aiid [--site-url …]` | Writes a draft for an AI incident database ([incident database drafts](#incident-database-drafts)). |
 | `case evidence add <id> <log> --org … --host …` | Adds logs an affected operator sent back ([operator evidence](#operator-evidence)). |
 | `case evidence consent <id> <eid> --how …` | Records the operator's agreement to the notice using its logs; `withdraw` reverses it. |
 
@@ -90,6 +91,12 @@ Each case keeps the rules it was opened with in `<data>/rules/<version>.toml`. I
 Ids are deterministic.
 
 Each exported cluster is also an `x-sc-agent-run` object: its cluster key, span and timestamp kind, the SC-T tactics its indicators are evidence of, the artifact families seen, how wide its parallel batches were, its tier, attribution per layer and its `observed-data`. The bundle carries the `extension-definition` (type `new-sdo`) that defines it; the schema is [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json). A public export's runs carry developers through the naming gate and hosts only.
+
+## Incident database drafts
+
+`case export --format aiid` drafts an AI Incident Database submission (title, description, date, alleged developer, deployer and harmed parties, the notice as the report, public record links). `--format oecd` drafts the OECD common reporting framework's criteria the case can fill and lists the mandatory ones it cannot (`missing_mandatory`: harm type and severity are the admin's judgment). Both are JSON files in `exports/` for the admin to complete and submit by hand after the notice is public ([SC-FM 12.3](../manual/12-interoperability.md#fm-123-ai-incident-databases)); the tool never submits anything.
+
+Both take the public scope: the notice's withholding, developers only through the naming gate with their label and likelihood word, no harness or model-family candidates. They are refused while an endpoint is unreviewed or when the lint finds anything a notice must not carry. The notice link needs `--site-url` (or `SWARMCHASE_SITE_URL`); the text is the committed notice, else the case's draft.
 
 ## Operator evidence
 

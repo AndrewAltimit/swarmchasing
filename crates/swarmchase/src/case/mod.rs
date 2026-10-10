@@ -29,6 +29,7 @@
 //! [`crate::contacts`], [`crate::evidence`] and [`crate::notice`].
 
 mod cli;
+pub(crate) mod incident;
 mod indicators;
 mod model;
 mod report;
