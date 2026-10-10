@@ -82,4 +82,6 @@ Rule changes go in `rules/default.toml`, not in code, and must pass the eval gat
 cargo test -p sc-core
 ```
 
+Unit tests sit beside the code. [`tests/integration.rs`](tests/integration.rs) gathers the integration tests into one binary; [`tests/golden.rs`](tests/golden.rs) analyses the labelled set in `samples/eval/` end to end and holds the eval gate's numbers, so a change that moves them fails `cargo test` as well as the gate.
+
 `scripts/ci/check-wasm-target.sh` checks that the crate still builds for `wasm32-unknown-unknown`, so anything that needs the OS (files, network, the clock) stays out of it.
