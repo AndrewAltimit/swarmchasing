@@ -100,7 +100,7 @@ function render(res) {
     .map((c) => ({ key: c.key || c.id, label: c.id, tier: c.tier, runs: c.runs.filter((r) => r.start > 0) }));
   const chart = swimlanes({ lanes, pauses: a.timing?.pauses ?? [], width: $("case-out").clientWidth - 8, label: "Runs per cluster over time, UTC" });
   const runRows = lanes.flatMap((l) => l.runs.map((r) => [l.label, pill(l.tier), fmtTs(r.start), fmtTs(r.end), String(r.count)]));
-  $("case-out").replaceChildren(
+  $("case-out").replaceChildren(...[
     el("p", { class: `verdict ${ok ? "ok" : "bad"}`, role: "status" }, ok ? "Verified: manifest, tiers and clusters match the stamp." : `Does not verify: ${res.differences.length} difference(s).`),
     ok ? null : el("ul", { class: "diffs" }, res.differences.map((d) => el("li", {}, d))),
     res.notes.length ? el("ul", { class: "hint" }, res.notes.map((n) => el("li", {}, n))) : null,
@@ -111,7 +111,7 @@ function render(res) {
     figure({ chart, legend: tierLegend(), caption: "Each bar is one run: a stretch of a cluster's activity without a long pause.", head: ["Cluster", "Tier", "Start", "End", "Records"], rows: runRows }),
     el("h3", {}, "Clusters"),
     el("div", { class: "scroll" }, el("table", {},
-      el("thead", {}, el("tr", {}, ["", "Tier", "Records", "Runs", "First seen", "Last seen", "Targets"].map((h) => el("th", { scope: "col" }, h)))),
+      el("thead", {}, el("tr", {}, ["Cluster", "Tier", "Records", "Runs", "First seen", "Last seen", "Targets"].map((h) => el("th", { scope: "col" }, h)))),
       el("tbody", {}, a.clusters.length ? a.clusters.map((c) => el("tr", {},
         el("td", {}, c.id), el("td", {}, pill(c.tier)), el("td", { class: "num" }, c.members.length), el("td", { class: "num" }, c.runs.length),
         el("td", {}, fmtTs(c.start)), el("td", {}, fmtTs(c.end)),
@@ -119,7 +119,7 @@ function render(res) {
     ...hints(a),
     el("h3", {}, "Records"),
     recordTable(a),
-  );
+  ].filter((x) => x != null));
 }
 
 /** The stamp's evaluation snapshot, or why there is none. */

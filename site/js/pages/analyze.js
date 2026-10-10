@@ -6,7 +6,8 @@
 import { $, el, activate, download, fetchRoot, showError } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
 import { engine, host as hostOf, pageRules } from "../lib/wasm.js";
-import { figure, legend, legendKey, tierLegend, rampLegend, swimlanes, fleetGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
+import { figure, legend, legendKey, edgeKey, tierLegend, rampLegend, swimlanes, fleetGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
+import { kindClass, kindLabel, tactic, route, fleetItems } from "../lib/hints.js";
 
 const VIEWS = ["runs", "fleet", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
@@ -138,8 +139,17 @@ function renderAll() {
   writeHash();
 }
 
+/** The focused element's key, to focus its replacement after a re-render. */
+const focusKey = () => document.activeElement?.closest?.("[data-focus-key]")?.dataset.focusKey ?? null;
+function refocus(key) {
+  if (!key) return;
+  const n = [...document.querySelectorAll("[data-focus-key]")].find((e) => e.dataset.focusKey === key);
+  if (n && n.getClientRects().length) n.focus({ preventScroll: true });
+}
+
 /** Change the selection; `step` moves phones to that step. */
 function select(next, step = "context") {
+  const key = focusKey();
   sel = { ...sel, ...next };
   renderClusterList();
   renderView();
@@ -149,7 +159,14 @@ function select(next, step = "context") {
   renderReport();
   writeHash();
   if (mobile() && step) goStep(step);
+  else refocus(key);
 }
+
+// Escape clears the selection, from anywhere but a text field.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !a || e.target.closest?.("input, textarea, select")) return;
+  if (sel.c || sel.r != null || sel.rule) select({ c: null, r: null, rule: null }, null);
+});
 
 function renderSummary() {
   const t = (k) => obj(a.tier_counts)[k] ?? 0;
@@ -178,7 +195,7 @@ function renderClusterList() {
   if (!a.clusters.length) return box.replaceChildren(el("p", { class: "hint" }, "No clusters. Records need shared identifiers or close timing to link."));
   box.replaceChildren(...a.clusters.slice(0, 200).map((c) => {
     const k = keyOf(c);
-    const b = el("button", { type: "button", class: "cluster-row", "aria-pressed": String(sel.c === k) },
+    const b = el("button", { type: "button", class: "cluster-row", "aria-pressed": String(sel.c === k), "data-focus-key": `cl:${k}` },
       el("span", { class: "cid" }, c.id), pill(c.tier), el("span", { class: "crecs" }, `${c.members.length} rec · ${c.runs.length} run${c.runs.length === 1 ? "" : "s"}`),
       el("span", { class: "ctargets" }, topEntries(c.target_hosts, 2).map(([h]) => host(h)).join(", ") || "–"));
     b.addEventListener("click", () => select({ c: sel.c === k ? null : k, r: null, rule: null }));
@@ -232,6 +249,8 @@ function viewRuns() {
   });
 }
 
+const EDGE_NAMES = { pause: "shared pauses", chain: "probe chain", dialect: "payload dialect", soft: "soft link", fleet: "candidate fleet" };
+
 /** Cluster pairs a hint connects, as graph edges. Unknown shapes are skipped. */
 function fleetEdges(keys) {
   const k = (x) => {
@@ -239,9 +258,9 @@ function fleetEdges(keys) {
     return c ? keyOf(c) : null;
   };
   const edges = [];
-  const add = (x, y, kind, label) => {
+  const add = (x, y, kind, label, sub = "", name = EDGE_NAMES[kind]) => {
     const p = k(x), q = k(y);
-    if (p && q && p !== q && keys.has(p) && keys.has(q)) edges.push({ a: p, b: q, kind, label });
+    if (p && q && p !== q && keys.has(p) && keys.has(q)) edges.push({ a: p, b: q, kind, sub, name, label });
   };
   for (const sp of arr(a.shared_pauses)) add(sp.a, sp.b, "pause", `Shared pauses: ${sp.a} and ${sp.b} went quiet together${num(sp.p_chance) != null ? ` (chance ${sp.p_chance.toExponential(1)})` : ""}`);
   for (const p of arr(a.dialect_pairs)) add(p.a, p.b, "dialect", `Payload dialect: ${p.a} and ${p.b} share an uncommon mix of test payloads (Jaccard ${(num(p.jaccard) ?? 0).toFixed(2)})`);
@@ -249,13 +268,17 @@ function fleetEdges(keys) {
     const ids = [...new Set(arr(ch.members).map((m) => a.results[m]?.cluster).filter((x) => x != null))].map((i) => a.clusters[i]?.id);
     for (let i = 1; i < ids.length; i++) add(ids[0], ids[i], "chain", `Probe chain: ${ids[0]} and ${ids[i]} sent variants of one request on ${host(ch.host)}`);
   }
-  // Optional fields some analyses carry: soft links and candidate fleets.
+  // Soft links, one edge style per kind. Shared pauses and dialects are
+  // drawn above from their own lists; a kind this page does not know is
+  // drawn in the generic soft-link style under its own name.
   for (const s of arr(a.soft_links)) {
     const o = obj(s);
+    if (o.kind === "shared_pause" || o.kind === "dialect") continue;
     const ends = arr(o.clusters).length >= 2 ? o.clusters : [o.a ?? o.from ?? o.a_key, o.b ?? o.to ?? o.b_key];
-    const why = [o.kind, o.detail ?? o.reason].filter(Boolean).map(String).join(": ") || "soft link";
+    const name = kindLabel(o.kind);
     const score = num(o.strength ?? o.score);
-    add(ends[0], ends[1], "soft", `Soft link (${trunc(why, 140)})${score != null ? `, strength ${score.toFixed(2)}` : ""}: a hint, not evidence`);
+    const detail = o.detail ?? o.reason;
+    add(ends[0], ends[1], "soft", `Soft link, ${name}${detail ? ` (${trunc(String(detail), 140)})` : ""}${score != null ? `, strength ${score.toFixed(2)}` : ""}: a hint, not evidence`, `sk-${kindClass(o.kind)}`, name);
   }
   for (const f of arr(a.candidate_fleets)) {
     const o = Array.isArray(f) ? { clusters: f } : obj(f);
@@ -273,15 +296,16 @@ function viewFleet() {
   const keys = new Set(cl.map(keyOf));
   const nodes = cl.map((c) => ({ key: keyOf(c), label: c.id, tier: c.tier, size: c.members.length, sub: `${c.tier}, ${c.members.length} records, ${c.runs.length} runs` }));
   const edges = fleetEdges(keys);
-  const kinds = new Set(edges.map((e) => e.kind));
-  const names = { pause: "shared pauses", chain: "probe chain", dialect: "payload dialect", soft: "soft link", fleet: "candidate fleet" };
+  // One legend entry per edge style present: each soft-link kind has its own.
+  const styles = new Map();
+  for (const e of edges) styles.set(`${e.kind} ${e.sub}`.trim(), e.name);
   const chart = fleetGraph({ nodes, edges, selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth() });
   return figure({
     chart,
-    legend: legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"), ...[...kinds].map((k) => legendKey(`e-${k}`, names[k]))),
+    legend: legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"), ...[...styles].map(([cls, name]) => edgeKey(cls, name))),
     caption: `Hints, not evidence: no edge changes a score or merges clusters. Node area is the cluster's record count; clusters sit in order of first activity.${edges.length ? "" : " No hints connect these clusters."}`,
     head: ["Hint", "From", "To", "Detail"],
-    rows: edges.map((e) => [names[e.kind], idOf(e.a), idOf(e.b), e.label]),
+    rows: edges.map((e) => [e.name, idOf(e.a), idOf(e.b), e.label]),
   });
 }
 
@@ -389,7 +413,7 @@ function renderRecords() {
   const shown = idx.slice(0, MAX_ROWS);
   const body = el("tbody", {}, shown.map((i) => {
     const r = a.results[i];
-    const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, tabindex: 0, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}` },
+    const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, tabindex: 0, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}`, "data-focus-key": `rec:${i}` },
       el("td", {}, pill(r.tier)), el("td", { class: "num" }, r.score), el("td", { class: "nowrap", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
       el("td", {}, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"),
       el("td", { class: "url" }, safe(r.obs.url, 300)),
@@ -426,11 +450,16 @@ function renderEndpoints() {
 // Wording follows the CLI report (sc-core report). Every hint is descriptive:
 // none changes a score or links records. Unknown fields are ignored.
 const PACE = { tool: "tool pace", model: "model pace", slow: "slow pace" };
-const TACTICS = {
-  T1: "task retrieval", T2: "tool escalation", T3: "access-control circumvention", T4: "vulnerability probing",
-  T5: "account or identity acquisition", T6: "credential reuse", T7: "callback or side channels", T8: "off-task targets", T9: "inter-agent coordination",
-};
-const tactic = (t) => `${t} ${TACTICS[t] ?? ""}`.trim();
+
+/** Tactic counts as a small bar chart; the counts are in the text. */
+function tacticBars(entries) {
+  const max = Math.max(1, ...entries.map(([, n]) => n));
+  return el("ul", { class: "mini-bars" }, entries.map(([t, n]) => {
+    const fill = el("span", { class: "fill" });
+    fill.style.width = `${Math.max(4, Math.round((n / max) * 100))}%`;
+    return el("li", {}, el("span", { class: "mb-label" }, tactic(t)), el("span", { class: "mb-track", "aria-hidden": "true" }, fill), el("span", { class: "mb-n" }, String(n)));
+  }));
+}
 const BASIS = { request: "request times", submit: "submission times", capture: "archive capture times", mixed: "mixed time sources" };
 const span = (s) => `${fmtTs(s.start)} → ${fmtTs(s.end)} (${dur(Math.max(0, s.end - s.start))})`;
 
@@ -486,7 +515,7 @@ function clusterContext(c) {
   row("Targets", chips(topEntries(c.target_hosts, 6).map(([h, n]) => `${host(h)} ×${n}`)));
   row("Top rules", chips(topEntries(c.rules, 8).map(([r, n]) => `${r} ×${n}`)));
   const tac = topEntries(c.tactics, 9);
-  if (tac.length) row("Tactics", chips(tac.map(([t, n]) => `${tactic(t)} ×${n}`)), el("div", { class: "hint" }, "what the matches show the agent doing; descriptive, never scored"));
+  if (tac.length) row("Tactics", tacticBars(tac), el("div", { class: "hint" }, "records per tactic: what the matches show the agent doing; descriptive, never scored"));
   if (num(c.artifacts)) row("Model artifacts", `${c.artifacts} match(es) show only that a model wrote the request (residue, self-identification)`);
   else if (Object.keys(obj(c.artifacts)).length) row("Model artifacts", chips(topEntries(c.artifacts, 8).map(([k, n]) => `${safe(k, 40)} ×${n}`)));
   if (c.time_basis) row("Times are", BASIS[c.time_basis] ?? String(c.time_basis), c.time_basis === "capture" ? el("div", { class: "hint" }, "when an archive saw the requests, not when they were sent: pace and rhythm are weak here") : null);
@@ -603,15 +632,19 @@ function renderLinks() {
     out.push(el("h4", {}, `Escalations (${esc.length})`));
     out.push(el("p", { class: "hint" }, "One target asked for again by another route (direct, then through a relay or carrier): tool escalation, a hint to check."));
     out.push(el("ul", {}, esc.slice(0, 20).map((e) => el("li", {}, el("code", {}, safe(`https://${e.host ?? ""}${e.path ?? ""}`, 90).replace(/^hxxps:\/\//, "")),
-      `: ${arr(e.steps).map((s) => safe(s.route, 20)).join(" → ")} over ${dur(Math.max(0, (e.end ?? 0) - (e.start ?? 0)))}`,
+      `: ${arr(e.steps).map((s) => route(s.route)).join(" → ")} over ${dur(Math.max(0, (e.end ?? 0) - (e.start ?? 0)))}`,
       arr(e.clusters).length ? ` (clusters ${arr(e.clusters).map((x) => safe(x, 20)).join(", ")})` : "",
       e.time_basis === "capture" ? el("span", { class: "hint" }, " capture-timed") : null))));
   }
   const soft = arr(a.soft_links), fleets = arr(a.candidate_fleets);
   if (soft.length || fleets.length) {
-    const edges = fleetEdges(new Set(a.clusters.map(keyOf))).filter((e) => e.kind === "soft" || e.kind === "fleet");
-    out.push(el("h4", {}, "Soft links and candidate fleets"));
-    out.push(edges.length ? el("ul", {}, edges.slice(0, 40).map((e) => el("li", {}, el("strong", {}, `${idOf(e.a)} and ${idOf(e.b)}`), ` ${e.label}`))) : el("p", { class: "hint" }, "None between the clusters shown."));
+    const edges = fleetEdges(new Set(a.clusters.map(keyOf))).filter((e) => e.kind === "soft");
+    if (fleets.length) {
+      out.push(el("h4", {}, `Candidate fleets (${fleets.length})`));
+      out.push(el("ul", {}, fleetItems(fleets.slice(0, 20), idOf)));
+    }
+    out.push(el("h4", {}, `Soft links (${edges.length})`));
+    out.push(edges.length ? el("ul", {}, edges.slice(0, 40).map((e) => el("li", {}, el("strong", {}, `${idOf(e.a)} and ${idOf(e.b)}`), ` ${e.label}`))) : el("p", { class: "hint" }, "None between these clusters beyond the shared pauses and dialects above."));
   }
   $("links").replaceChildren(...out);
 }

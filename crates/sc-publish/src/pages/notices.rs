@@ -163,7 +163,7 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
         let _ = write!(
             s,
             "<tr data-status=\"{}\" data-sector=\"{}\" data-providers=\"{}\" data-hosts=\"{}\" data-text=\"{}\" data-updated=\"{}\">\
-<td><a href=\"{}/\">{}</a> {flag}<div class=\"hint\">{}</div></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"nowrap\">{}</td></tr>",
+<td><a href=\"{}/\">{}</a> {flag}<div class=\"hint\">{}</div></td><td data-label=\"Status\">{}</td><td data-label=\"Provider\">{}</td><td data-label=\"Affected\">{}</td><td data-label=\"Sector\">{}</td><td class=\"nowrap\" data-label=\"Updated\">{}</td></tr>",
             esc(m.status.label()),
             esc(m.sector.as_deref().unwrap_or("")),
             esc(&m.providers.join("\n")),
