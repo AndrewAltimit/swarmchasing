@@ -65,6 +65,9 @@ pub struct ReviewArgs {
 
 pub fn run(args: ReviewArgs) -> Result<()> {
     let data = &args.data;
+    if args.input.is_empty() || args.stats {
+        crate::store::hint_if_empty(data);
+    }
     let mut store = ReviewStore::open(ReviewStore::path_in(data))?;
     if args.stats {
         return stats(&store, &mut std::io::stdout());

@@ -86,6 +86,7 @@ pub fn run(args: NoticeArgs) -> Result<()> {
     let rules = Rules::default_rules();
     match args.cmd {
         NoticeCmd::Add { case: id, data } => {
+            crate::store::hint_if_empty(&data);
             let p = add(&data.join("cases"), &id, &args.dir, &rules, &today)?;
             println!(
                 "wrote {}; it is not public until you commit and push it",

@@ -100,7 +100,7 @@ swarmchase case verify data/cases/2026-10-portal/bundles/2026-10-12
 swarmchase case status
 ```
 
-Other subcommands: `add`, `claim`, `set`, `note`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), and `evidence add|consent|withdraw|list` for logs an operator sends back.
+Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
 ### Notices
 

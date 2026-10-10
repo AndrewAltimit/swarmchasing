@@ -149,6 +149,12 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
     let now = chrono::Utc::now();
     let stamp = now.format("%Y%m%dT%H%M%SZ").to_string();
     let run_dir = out.join("runs").join(&stamp);
+    if !crate::store::has_data(out) {
+        eprintln!(
+            "note: starting a new data directory at {}",
+            crate::store::describe_data(out)
+        );
+    }
     std::fs::create_dir_all(&run_dir)?;
     std::fs::create_dir_all(out.join("store"))?;
 

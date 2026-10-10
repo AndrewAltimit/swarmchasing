@@ -172,7 +172,7 @@ fn todo(c: &Case, claims: &[Claim]) -> Vec<String> {
         .count();
     if unreviewed > 0 {
         t.push(format!(
-            "classify {unreviewed} endpoint(s): `swarmchase case endpoint {} <host> compromised|targeted|historical|not-affected`",
+            "classify {unreviewed} endpoint(s): `swarmchase case endpoint {} <host>... compromised|targeted|historical|not-affected`",
             c.id
         ));
     }

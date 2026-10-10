@@ -8,6 +8,35 @@ use std::collections::BTreeSet;
 use std::io::Write as _;
 use std::path::Path;
 
+/// Whether `data` holds anything a data directory holds: `state.json`, the
+/// watch store, labels or cases.
+pub fn has_data(data: &Path) -> bool {
+    ["state.json", "store", "labels", "cases"]
+        .iter()
+        .any(|p| data.join(p).exists())
+}
+
+/// Which directory `data` is, as an absolute path, and how it was chosen.
+pub fn describe_data(data: &Path) -> String {
+    let abs = std::path::absolute(data).unwrap_or_else(|_| data.to_path_buf());
+    let env = match std::env::var("SWARMCHASE_DATA") {
+        Ok(v) if !v.is_empty() => format!("SWARMCHASE_DATA is {v}"),
+        _ => "SWARMCHASE_DATA is not set".into(),
+    };
+    format!(
+        "{} (the data directory is --data, else SWARMCHASE_DATA, else ./data; {env})",
+        abs.display()
+    )
+}
+
+/// For a command that reads existing data: say so when `data` holds none,
+/// which usually means the wrong directory.
+pub fn hint_if_empty(data: &Path) {
+    if !has_data(data) {
+        eprintln!("hint: no watch data or cases in {}", describe_data(data));
+    }
+}
+
 /// Stored records captured at or after `since`, deduplicated by ID (the
 /// first copy wins). Records with no timestamp count as captured at 0.
 pub fn load_store(dir: &Path, since: i64) -> Result<Vec<Observation>> {

@@ -46,7 +46,7 @@ pub(crate) use status::status;
 
 use crate::evidence::{self, Scope};
 use crate::pinning::{RulesText, case_rules, pin_rules};
-use crate::store::to_ndjson;
+use crate::store::{read_json, to_ndjson, write_json};
 use anyhow::{Context, Result, bail};
 use sc_core::{Analysis, Audience, Evidence, Observation, analyze};
 use std::collections::BTreeSet;
@@ -246,6 +246,36 @@ pub(crate) fn add_records(
     Ok((n, hosts))
 }
 
+/// Give case `old` the ID `new`: move its directory, change the ID in
+/// case.toml, log it, and carry the watch's hits for it over in
+/// `<data>/state.json`. Refused once a notice is published, because the
+/// notice's ID is public.
+pub(crate) fn rename(root: &Path, old: &str, new: &str, today: &str) -> Result<()> {
+    let mut c = load(root, old)?;
+    let to = case_dir(root, new)?;
+    if to.exists() {
+        bail!("{} exists already", to.display());
+    }
+    if c.status == CaseStatus::Published {
+        bail!("case {old} has a published notice; its ID stays");
+    }
+    std::fs::rename(case_dir(root, old)?, &to)
+        .with_context(|| format!("moving case {old} to {}", to.display()))?;
+    c.id = new.to_string();
+    c.log(today, format!("renamed from {old}"));
+    save(root, &c)?;
+
+    let state = root.parent().unwrap_or(root).join("state.json");
+    if let Some(mut s) = read_json::<serde_json::Value>(&state)?
+        && let Some(cases) = s.get_mut("cases").and_then(|v| v.as_object_mut())
+        && let Some(w) = cases.remove(old)
+    {
+        cases.insert(new.to_string(), w);
+        write_json(&state, &s)?;
+    }
+    Ok(())
+}
+
 /// Fixtures the case tests share.
 #[cfg(test)]
 pub(crate) mod test_support {
@@ -298,6 +328,48 @@ mod tests {
     use super::*;
     use crate::notice::notice_draft;
     use sc_core::{Claim, Role};
+
+    #[test]
+    fn rename_moves_the_case_and_its_watch_hits() {
+        let root = scratch("rename");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        new_case(
+            &root,
+            "old-1",
+            "Portal",
+            records.clone(),
+            &rules,
+            "2026-10-12",
+        )
+        .unwrap();
+        new_case(&root, "taken", "Other", records, &rules, "2026-10-12").unwrap();
+        let state = root.parent().unwrap().join("state.json");
+        std::fs::write(
+            &state,
+            r#"{"sources":{},"cases":{"old-1":{"proposed":["x"]}}}"#,
+        )
+        .unwrap();
+
+        assert!(rename(&root, "old-1", "taken", "2026-10-13").is_err());
+        assert!(rename(&root, "old-1", "Bad Id", "2026-10-13").is_err());
+        rename(&root, "old-1", "new-1", "2026-10-13").unwrap();
+        assert!(!root.join("old-1").exists());
+        let c = load(&root, "new-1").unwrap();
+        assert_eq!(c.id, "new-1");
+        assert_eq!(c.decisions.last().unwrap().text, "renamed from old-1");
+        let s = std::fs::read_to_string(&state).unwrap();
+        assert!(s.contains("\"new-1\"") && !s.contains("\"old-1\""), "{s}");
+
+        // A published notice's ID is public, so its case keeps it.
+        update(&root, "new-1", |c| {
+            c.status = CaseStatus::Published;
+            Ok(())
+        })
+        .unwrap();
+        assert!(rename(&root, "new-1", "newer-1", "2026-10-14").is_err());
+        cleanup(&root);
+    }
 
     #[test]
     fn ids_are_slugs() {

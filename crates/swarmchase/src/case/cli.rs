@@ -69,14 +69,17 @@ pub enum CaseCmd {
     },
     /// List cases, or show one with what it still needs.
     Status { id: Option<String> },
-    /// Classify an affected endpoint.
+    /// Classify affected endpoints, one or more hosts at a time.
     Endpoint {
         id: String,
-        host: String,
+        #[arg(required = true, num_args = 1..)]
+        hosts: Vec<String>,
         state: EndpointState,
         #[arg(long)]
         note: Option<String>,
     },
+    /// Give a case a new ID. A case with a published notice keeps its ID.
+    Rename { id: String, new_id: String },
     /// Record an attribution claim established by case work.
     Claim {
         id: String,
@@ -203,6 +206,15 @@ pub fn run(args: CaseArgs) -> Result<()> {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let now = chrono::Utc::now().timestamp();
     let mut out = std::io::stdout();
+    let reads_data = match &args.cmd {
+        CaseCmd::Verify { .. } => false,
+        // A case opened from record files needs nothing there yet.
+        CaseCmd::New { sel, .. } => sel.input.is_empty(),
+        _ => true,
+    };
+    if reads_data {
+        crate::store::hint_if_empty(&args.data);
+    }
     match args.cmd {
         CaseCmd::New { id, title, sel } => {
             let (rules, records) = select(&args.data, &sel, now)?;
@@ -220,27 +232,43 @@ pub fn run(args: CaseArgs) -> Result<()> {
         CaseCmd::Status { id: Some(id) } => status(&root, &id, &mut out),
         CaseCmd::Endpoint {
             id,
-            host,
+            hosts,
             state,
             note,
         } => update(&root, &id, |c| {
-            let e = c
-                .endpoints
-                .iter_mut()
-                .find(|e| e.host.eq_ignore_ascii_case(&host))
-                .with_context(|| format!("no endpoint `{host}` in case {id}"))?;
-            e.state = state;
-            e.note = note.clone().or(e.note.take());
-            let text = format!(
-                "endpoint {host}: {}{}",
-                state.label(),
-                note.as_deref()
-                    .map(|n| format!(" ({n})"))
-                    .unwrap_or_default()
-            );
-            c.log(&today, text);
+            // Every host is found before anything changes, so a typo changes nothing.
+            let found = hosts
+                .iter()
+                .map(|host| {
+                    c.endpoints
+                        .iter()
+                        .position(|e| e.host.eq_ignore_ascii_case(host))
+                        .with_context(|| format!("no endpoint `{host}` in case {id}"))
+                })
+                .collect::<Result<Vec<usize>>>()?;
+            for (host, i) in hosts.iter().zip(found) {
+                let e = &mut c.endpoints[i];
+                e.state = state;
+                e.note = note.clone().or(e.note.take());
+                let text = format!(
+                    "endpoint {host}: {}{}",
+                    state.label(),
+                    note.as_deref()
+                        .map(|n| format!(" ({n})"))
+                        .unwrap_or_default()
+                );
+                c.log(&today, text);
+            }
             Ok(())
         }),
+        CaseCmd::Rename { id, new_id } => {
+            rename(&root, &id, &new_id, &today)?;
+            println!(
+                "renamed case {id} to {new_id} ({})",
+                root.join(&new_id).display()
+            );
+            Ok(())
+        }
         CaseCmd::Claim {
             id,
             party,
