@@ -60,5 +60,5 @@ fn evaluation_set_numbers_hold() {
         [60, 25, 18],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 9, "clusters");
+    assert_eq!(a.clusters.len(), 8, "clusters");
 }

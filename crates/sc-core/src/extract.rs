@@ -18,7 +18,7 @@ const MAX_DEPTH: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Layer {
-    /// How this layer was found: `submitted`, `path`, `param:<name>`, `base64:<name>`, `data-url`, `embedded`, `translate.goog`.
+    /// How this layer was found: `submitted`, `path`, `param:<name>`, `base64:<name>`, `data-url`, `embedded`, `translate.goog`, `doubled-scheme`.
     pub via: String,
     pub depth: usize,
     /// Host if this layer is a URL.
@@ -98,6 +98,20 @@ fn untranslate_host(host: &str) -> Option<String> {
     Some(out)
 }
 
+/// A host that is really a URL scheme left over from a doubled scheme.
+fn is_scheme_name(host: &str) -> bool {
+    matches!(host, "http" | "https" | "hxxp" | "hxxps")
+}
+
+/// The URL after a doubled scheme: `https://https://a.example/x` and
+/// `http://https//a.example/x` give `https://a.example/x`.
+fn after_doubled_scheme(decoded: &str) -> Option<String> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?i)^[a-z]+:/*(https?)[:/]+(.+)$").unwrap());
+    let c = re.captures(decoded.trim())?;
+    Some(format!("{}://{}", c[1].to_ascii_lowercase(), &c[2]))
+}
+
 /// Peel every layer we can find, breadth first.
 ///
 /// Decoding can expose secrets ingest never saw (a token inside a base64
@@ -121,6 +135,13 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
             continue;
         }
         let mut children: Vec<(String, String)> = Vec::new();
+        let inner = (!raw.starts_with("data:"))
+            .then(|| after_doubled_scheme(&pct_decode(&raw)))
+            .flatten();
+        let doubled = inner.is_some();
+        if let Some(inner) = inner {
+            children.push((inner, "doubled-scheme".into()));
+        }
 
         if let Some(rest) = raw.strip_prefix("data:") {
             let (meta, body) = rest.split_once(',').unwrap_or(("", rest));
@@ -140,7 +161,12 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
                 params: vec![],
             });
         } else if let Ok(parsed) = url::Url::parse(&raw) {
-            let host = parsed.host_str().map(|h| h.to_ascii_lowercase());
+            // `https://https://a.example/` parses with the host `https`: a
+            // scheme written twice. The URL after it is the real one.
+            let host = parsed
+                .host_str()
+                .map(|h| h.to_ascii_lowercase())
+                .filter(|h| !doubled || !is_scheme_name(h.trim_end_matches("%3a")));
             let sas = parsed.query_pairs().any(|(k, _)| k == "sv");
             let params: Vec<(String, String)> = parsed
                 .query_pairs()
@@ -464,6 +490,47 @@ mod tests {
             hosts,
             vec!["r.jina.ai", "api.allorigins.win", "data.portal.example"]
         );
+    }
+
+    #[test]
+    fn a_doubled_scheme_is_not_a_host() {
+        let rules = Rules::default_rules();
+        for (url, target) in [
+            (
+                "https://r.jina.ai/https://https://records.a.example/staff?uqtag=r7k2",
+                "records.a.example",
+            ),
+            (
+                "https://api.microlink.io/?url=http%3A%2F%2Fhttps%3A%2F%2Fdata.b.example%2Fapi",
+                "data.b.example",
+            ),
+            ("https://https//c.example/x", "c.example"),
+            ("http://https%3A//d.example/", "d.example"),
+        ] {
+            let x = extract(&obs(url), &rules);
+            assert_eq!(x.target_host.as_deref(), Some(target), "{url}");
+            assert!(
+                x.layers.iter().all(|l| l.host.as_deref() != Some("https")),
+                "{url}: {:?}",
+                x.layers
+            );
+            // The last one does not parse as a URL, so its text is not decoded.
+            assert!(
+                url.starts_with("http://https%3A")
+                    || x.hits.iter().any(|h| h.rule_id == "marker.doubled_scheme"),
+                "{url}: {:?}",
+                x.layers
+            );
+        }
+        // Two records on different real hosts no longer share the host `https`.
+        let a = crate::analyze(
+            vec![
+                obs("https://r.jina.ai/https://https://e.example/p?q=%5Bx%5D(https://e.example)"),
+                obs("https://r.jina.ai/https://https://f.example/p?q=%5Bx%5D(https://f.example)"),
+            ],
+            &rules,
+        );
+        assert!(a.clusters.is_empty(), "{:?}", a.clusters);
     }
 
     #[test]
