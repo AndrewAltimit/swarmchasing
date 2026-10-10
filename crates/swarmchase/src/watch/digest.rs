@@ -72,6 +72,67 @@ impl SourceReport {
     }
 }
 
+/// A failed source's reason in a few words, for its status cell: the HTTP
+/// status or the root cause, and the attempts made (`HTTP 504 after 3
+/// attempts`). Request URLs are left out: they are long, and a watch query
+/// can carry text the digest has no business repeating. The full error goes
+/// to the run's log and the watch state.
+pub fn short_reason(e: &anyhow::Error) -> String {
+    let msgs: Vec<String> = e.chain().map(|c| c.to_string()).collect();
+    let attempts = msgs.iter().find_map(|m| {
+        m.strip_prefix("gave up after ")
+            .and_then(|r| r.strip_suffix(" attempts"))
+            .map(str::to_string)
+    });
+    // The messages that say what went wrong, without the retry wrapper and
+    // without contexts that only name the request (`GET <url>`).
+    let causes: Vec<String> = msgs
+        .iter()
+        .filter(|m| !m.starts_with("gave up after "))
+        .map(|m| without_urls(m))
+        .filter(|m| !m.is_empty() && m != "GET")
+        .collect();
+    let what = causes
+        .iter()
+        .find_map(|m| http_status(m))
+        .or_else(|| match causes.as_slice() {
+            [] => None,
+            [only] => Some(only.clone()),
+            [first, .., last] => Some(format!("{first}: {last}")),
+        })
+        .unwrap_or_else(|| "unknown error".into());
+    let what = one_line(&what, 120);
+    match attempts {
+        Some(n) => format!("{what} after {n} attempts"),
+        None => what,
+    }
+}
+
+/// `HTTP <code>` when `m` reports a response status.
+fn http_status(m: &str) -> Option<String> {
+    m.match_indices("HTTP ").find_map(|(i, _)| {
+        let code = m.get(i + 5..i + 8)?;
+        let next = m[i + 8..].chars().next();
+        (code.bytes().all(|b| b.is_ascii_digit()) && !next.is_some_and(|c| c.is_ascii_digit()))
+            .then(|| format!("HTTP {code}"))
+    })
+}
+
+/// `m` with every word that holds a URL removed, and a request method left
+/// in front of one (`GET https://a/b: reading body` is `reading body`).
+fn without_urls(m: &str) -> String {
+    let mut words: Vec<&str> = m.split_whitespace().collect();
+    if words.len() > 1 && words[0] == "GET" && words[1].contains("://") {
+        words.remove(0);
+    }
+    let s = words
+        .into_iter()
+        .filter(|w| !w.contains("://"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    s.trim_end_matches([':', ' ']).to_string()
+}
+
 /// How the run's sources fared, with warnings. Any alert or source error
 /// makes the run count as changed, so it is emailed.
 #[derive(Default)]
@@ -534,6 +595,50 @@ mod tests {
             "{}",
             d3.text
         );
+    }
+
+    #[test]
+    fn a_failed_source_shows_a_short_reason() {
+        let url = "https://web.archive.org/cdx/search/cdx?url=r.jina.ai/*&from=20261001&output=json&limit=5000";
+        let gave_up =
+            anyhow::anyhow!("GET {url}: HTTP 504 Gateway Timeout: <html>upstream timed out</html>")
+                .context("gave up after 3 attempts");
+        assert_eq!(short_reason(&gave_up), "HTTP 504 after 3 attempts");
+        let refused = anyhow::anyhow!("tcp connect error: Connection refused")
+            .context(format!("error sending request for url ({url})"))
+            .context(format!("GET {url}"))
+            .context("gave up after 2 attempts");
+        assert_eq!(
+            short_reason(&refused),
+            "error sending request for url: tcp connect error: Connection refused after 2 attempts"
+        );
+        let fatal = anyhow::anyhow!("GET {url}: HTTP 403 Forbidden: denied");
+        assert_eq!(short_reason(&fatal), "HTTP 403");
+        let parse =
+            anyhow::anyhow!("expected value at line 1 column 1").context("parsing a CDX page");
+        assert_eq!(
+            short_reason(&parse),
+            "parsing a CDX page: expected value at line 1 column 1"
+        );
+
+        // In the digest's status cell, with no part of the URL.
+        let a = analyze(Vec::new(), &Rules::default_rules());
+        let mut rep = SourceReport::new("wayback-jina");
+        rep.requests = 3;
+        rep.error = Some(short_reason(&gave_up));
+        let health = Health {
+            sources: vec![rep],
+            ..Default::default()
+        };
+        let s = summarise(&a, &Summary::default(), "t1".into());
+        let d = write("t1", &a, &s, &s, &BTreeSet::new(), &health, &[]);
+        assert!(
+            d.text
+                .contains("| wayback-jina | 0 | 0 | 3 | error: HTTP 504 after 3 attempts |"),
+            "{}",
+            d.text
+        );
+        assert!(!d.text.contains("web.archive.org"), "{}", d.text);
     }
 
     #[test]

@@ -46,6 +46,8 @@ A provider's or affected operator's statement is appended to the notice verbatim
 
 A cluster that declares itself an authorised red-team or research evaluation is handled as a normal incident: a declaration in a request is self-identification and is not checked by being believed. Its declared owner is contacted at the same time as the provider. If the owner confirms the test was authorised and in scope, the notice is published as "authorised test, closed". It is not withheld: other operators saw the same traffic and need to know what it was.
 
+Toolkit: a cluster whose requests declare a test lists the declaring text and the contact it names, in case notes only ([FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing)). The admin adds the owner it names with `case contact add --party declared-owner`.
+
 ## FM-10.7 Operator-supplied logs
 
 An affected operator may send its own logs after a report. They become evidence in the case and in private reports to the provider. They are the operator's to publish:
