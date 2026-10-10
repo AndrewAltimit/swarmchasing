@@ -20,7 +20,7 @@
 // local server.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
@@ -106,6 +106,10 @@ text = ${lit(`javascript:${fire}`)}
 
 ${program}
 `);
+
+// The synthetic notices the index filters are tested on (never under notices/).
+const FIXTURES = join(ROOT, "crates", "sc-publish", "tests", "fixtures", "notices");
+for (const f of readdirSync(FIXTURES).filter((f) => f.endsWith(".md"))) copyFileSync(join(FIXTURES, f), join(noticesDir, f));
 
 const build = spawnSync("cargo", ["run", "-q", "--profile", "release-test", "-p", "sc-publish", "--bin", "sc-site", "--",
   "--out", siteDir, "--base-url", BASE, "--extra-notices", noticesDir], { cwd: ROOT, stdio: ["ignore", "inherit", "inherit"] });
@@ -264,6 +268,23 @@ try {
   await open("notices/");
   const rows = await run(`(() => { const f = document.querySelector("[data-notice-filters] [name=q]"); f.value = "xss"; f.dispatchEvent(new Event("input", { bubbles: true })); return [...document.querySelectorAll(".notice-table tbody tr")].filter((r) => !r.hidden).length; })()`);
   if (rows !== 1) failures.push(`the notice filter showed ${rows} row(s) for the hostile notice, expected 1`);
+  if (!(await run(`location.hash === "#q=xss"`))) failures.push("the notice filter did not write the URL hash");
+  // Filters from the hash, on the synthetic notices.
+  const shown = `[...document.querySelectorAll(".notice-table tbody tr")].filter((r) => !r.hidden).map((r) => r.querySelector(".hint").textContent)`;
+  for (const [hash, want] of [
+    ["sector=health", ["synthetic-clinic-scan"]],
+    ["provider=Example+AI+Labs", ["synthetic-portal-probe"]],
+    ["status=historical", ["synthetic-course-relay"]],
+    ["host=clinic%5B.%5Dexample", ["synthetic-clinic-scan"]],
+    ["from=2026-08-01&to=2026-08-31", ["synthetic-clinic-scan"]],
+    ["sector=%3Cscript%3E&from=nope", null],
+  ]) {
+    await open(`notices/#${hash}`);
+    const got = await run(shown);
+    const all = await run(`document.querySelectorAll(".notice-table tbody tr").length`);
+    const ok = want ? JSON.stringify(got) === JSON.stringify(want) : got.length === all;
+    if (!ok) failures.push(`notices/#${hash}: showed ${JSON.stringify(got)}`);
+  }
   await audit("notice index");
 
   // The workbench: the synthetic example, then the probes through every view.

@@ -73,6 +73,14 @@ pub fn body_html(blocks: &[Block]) -> String {
     s
 }
 
+/// `research` as "Research".
+fn sector_label(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
 fn host(h: &str) -> String {
     sc_core::defang_host(h)
 }
@@ -109,6 +117,12 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
         .iter()
         .flat_map(|n| n.meta.providers.iter().map(String::as_str))
         .collect();
+    let sectors: BTreeSet<&str> = notices
+        .iter()
+        .filter_map(|n| n.meta.sector.as_deref())
+        .collect();
+    // Progressive enhancement: the table below is the whole index; the form
+    // shows only when the page script runs and keeps its state in the hash.
     s.push_str("<form class=\"filters card\" data-notice-filters role=\"search\" aria-label=\"Filter notices\">");
     s.push_str("<label>Status<select name=\"status\"><option value=\"\">Any</option><option value=\"active\">Active</option><option value=\"contained\">Contained</option><option value=\"historical\">Historical</option></select></label>");
     s.push_str("<label>Provider<select name=\"provider\"><option value=\"\">Any</option>");
@@ -116,12 +130,25 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
         let _ = write!(s, "<option value=\"{0}\">{0}</option>", esc(p));
     }
     s.push_str("</select></label>");
-    s.push_str("<label>Affected host<input name=\"host\" type=\"search\" spellcheck=\"false\" placeholder=\"example[.]org\"></label>");
+    if !sectors.is_empty() {
+        s.push_str("<label>Sector<select name=\"sector\"><option value=\"\">Any</option>");
+        for x in &sectors {
+            let _ = write!(
+                s,
+                "<option value=\"{}\">{}</option>",
+                esc(x),
+                esc(&sector_label(x))
+            );
+        }
+        s.push_str("</select></label>");
+    }
+    s.push_str("<label>Affected organisation or host<input name=\"host\" type=\"search\" spellcheck=\"false\" placeholder=\"example[.]org\"></label>");
     s.push_str("<label>Text<input name=\"q\" type=\"search\" placeholder=\"Title or id\"></label>");
     s.push_str("<label>Updated from<input name=\"from\" type=\"date\"></label>");
     s.push_str("<label>to<input name=\"to\" type=\"date\"></label>");
+    s.push_str("<p class=\"filter-actions\"><button type=\"reset\">Clear filters</button></p>");
     s.push_str("<p class=\"hint\" data-notice-count aria-live=\"polite\"></p></form>\n");
-    s.push_str("<div class=\"scroll\"><table class=\"notice-table\"><thead><tr><th scope=\"col\">Notice</th><th scope=\"col\">Status</th><th scope=\"col\">Provider</th><th scope=\"col\">Affected</th><th scope=\"col\">Updated</th></tr></thead><tbody>");
+    s.push_str("<div class=\"scroll\"><table class=\"notice-table\"><thead><tr><th scope=\"col\">Notice</th><th scope=\"col\">Status</th><th scope=\"col\">Provider</th><th scope=\"col\">Affected</th><th scope=\"col\">Sector</th><th scope=\"col\">Updated</th></tr></thead><tbody>");
     for n in notices {
         let m = &n.meta;
         let has = |k| m.updates.iter().any(|u| u.kind == k);
@@ -135,9 +162,10 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
         let hosts: Vec<String> = m.affected.iter().map(|h| host(h)).collect();
         let _ = write!(
             s,
-            "<tr data-status=\"{}\" data-providers=\"{}\" data-hosts=\"{}\" data-text=\"{}\" data-updated=\"{}\">\
-<td><a href=\"{}/\">{}</a> {flag}<div class=\"hint\">{}</div></td><td>{}</td><td>{}</td><td>{}</td><td class=\"nowrap\">{}</td></tr>",
+            "<tr data-status=\"{}\" data-sector=\"{}\" data-providers=\"{}\" data-hosts=\"{}\" data-text=\"{}\" data-updated=\"{}\">\
+<td><a href=\"{}/\">{}</a> {flag}<div class=\"hint\">{}</div></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"nowrap\">{}</td></tr>",
             esc(m.status.label()),
+            esc(m.sector.as_deref().unwrap_or("")),
             esc(&m.providers.join("\n")),
             esc(&format!("{}\n{}", hosts.join("\n"), m.affected.join("\n"))),
             esc(&format!("{} {}", m.title, m.id)),
@@ -155,6 +183,9 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
                 .iter()
                 .map(|h| format!("<span class=\"chip\">{}</span>", esc(h)))
                 .collect::<String>(),
+            m.sector
+                .as_deref()
+                .map_or_else(|| "–".to_string(), |x| esc(&sector_label(x))),
             esc(&m.updated),
         );
     }
@@ -184,7 +215,7 @@ pub fn page_body(n: &NoticeFile) -> String {
     s.push_str("<dl class=\"kv\">");
     let _ = write!(
         s,
-        "<dt>Provider</dt><dd>{}</dd><dt>Affected</dt><dd>{}</dd><dt>Method</dt><dd>rules {} · toolkit {} · <a href=\"../../methodology/\">methodology</a></dd>",
+        "<dt>Provider</dt><dd>{}</dd><dt>Affected</dt><dd>{}</dd>{}<dt>Method</dt><dd>rules {} · toolkit {} · <a href=\"../../methodology/\">methodology</a></dd>",
         if m.providers.is_empty() {
             "not named (the evidence has not reached the naming threshold)".to_string()
         } else {
@@ -198,6 +229,10 @@ pub fn page_body(n: &NoticeFile) -> String {
                 .map(|h| format!("<span class=\"chip\">{}</span>", esc(&host(h))))
                 .collect()
         },
+        m.sector.as_deref().map_or_else(String::new, |x| format!(
+            "<dt>Sector</dt><dd>{}</dd>",
+            esc(&sector_label(x))
+        )),
         esc(&m.rules_version),
         esc(&m.toolkit),
     );

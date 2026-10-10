@@ -19,7 +19,7 @@ pub mod site;
 
 pub use feed::atom_feed;
 pub use file::{
-    NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind, check_notice, is_slug,
+    NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, SECTORS, UpdateKind, check_notice, is_slug,
     parse_notice, strip_draft_banner, write_notice,
 };
 pub use markdown::{Block, Inline, ListItem, md_blocks, md_inline};
@@ -41,6 +41,7 @@ mod tests {
                 updated: "2026-10-22".into(),
                 providers: vec![],
                 affected: vec!["portal.example.gov".into()],
+                sector: None,
                 rules_version: "2026-10-12".into(),
                 toolkit: "0.1.0".into(),
                 updates: vec![
