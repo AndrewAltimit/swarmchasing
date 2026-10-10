@@ -52,6 +52,12 @@ let records = client.wayback_cdx(&q)?;
 
 `parse_wayback_cdx`, `parse_arquivo_cdx` and `parse_urlquery_search` parse a saved response without the network.
 
+### Sources and paging
+
+The record sources (`Wayback`, `Arquivo`, `Urlquery`, or `source(kind, query, key)`) implement the `Source` trait. `pull(client, since, cursor, limit)` fetches pages through the shared [`pager`](src/pager.rs) until the limit or the end, and returns a `Pull`: the records, the cursor to continue from, whether the source is exhausted, and the requests made. `pull_each` also shows each page as it arrives, so a caller can save progress page by page.
+
+A pull that fails after its first page keeps what it has and says so in `Pull::stopped`; `Pull::strict` turns that back into an error. Wayback's resume key stays valid across runs (`Source::resumable`), so the watch continues a cut-short pull on its next run. A urlquery offset is valid only within one pull.
+
 ## Retries
 
 Timeouts, dropped connections, HTTP 429 and 5xx are retried with exponential backoff (5 retries from 5 seconds, each wait capped at 5 minutes), honouring `Retry-After`. Other errors fail at once. Change the policy with `Client::with_retry`. `Client::requests` counts the requests sent, retries included, for sources with a quota.
@@ -72,4 +78,14 @@ The urlquery API key is passed in by the caller; the CLI reads it from `URLQUERY
 cargo test -p sc-collect
 ```
 
-The tests parse saved responses; none touches the network.
+The tests parse saved responses and feed the pager canned pages; none touches the network.
+
+## Source
+
+| File | Covers |
+|---|---|
+| [`lib.rs`](src/lib.rs) | `CdxQuery`, `Kind`, the `Source` trait. |
+| [`client.rs`](src/client.rs) | The HTTP client: pacing, retries, `Retry-After`, user agent, request count. |
+| [`pager.rs`](src/pager.rs) | Paging, cursors and `Pull`. |
+| [`wayback.rs`](src/wayback.rs), [`arquivo.rs`](src/arquivo.rs), [`urlquery.rs`](src/urlquery.rs) | The record sources. |
+| [`crtsh.rs`](src/crtsh.rs), [`securitytxt.rs`](src/securitytxt.rs), [`rdap.rs`](src/rdap.rs) | Lookups: certificates, security.txt, RDAP. |

@@ -18,13 +18,13 @@ Synthetic records for the language-model output residue rules (`marker.md_link`,
 - **Agent records (26)**, class `llm_residue`: Markdown links and code spans around URLs, unfilled placeholders (`YOUR_API_KEY`, `{{target}}`), function-call markup and tool-call JSON in parameters, JSON string tails, escaped newlines, and output cut off mid escape or with an ellipsis. Also chat reply openers in front of a URL (`Sure, here is the page: https://...`, `As an AI, I cannot open ...`), doubled, colon-less and defanged schemes (`https://https://`, `?url=https//`, `hxxps://` sent to a relay), impossible dates in date parameters (February 30, June 31, month 13), and stock example identities (`john.doe@example.com`, `test123`, `555-0142`). Most pair the residue with a relay, carrier, tag or probe, as agents do.
 - **Benign records (30)** are hard negatives: JSON in the query string of ordinary GET APIs (Elasticsearch query DSL, GraphQL variables, REST filters), parentheses in page titles, backticks and Markdown in searches, `example.com` in search text and OAuth documentation links, unrendered front-end templates captured by crawlers, Windows paths, and an encoded `%` at the end of a URL. Further hard negatives cover the newer rules: searches that start like a chat reply (`here is the news`, `I'll be there for you`, `as an AI language model`), a blog slug read through a relay, a redirect parameter carrying an encoded URL, a host named `https-portal`, an analyst searching for a defanged indicator, a crawled `href` missing its colon, version and build strings shaped like impossible dates, real leap-day and month-end dates in both day/month orders, and an example address in a documentation link, a QA test login and a `123 Main St` map search. The last three match `marker.placeholder_identity` on purpose; at weight 1 they stay noise.
 
-## `hard-negatives.ndjson`
-
-Synthetic benign records, each built to trip one rule, which it names in `hard_negative_for`: SQL keywords as words in a search (`labor union selection process`, `credit union selected branches`) for `exploit.sqli_union`, and the notification service's own documentation (`docs.ntfy.sh`) for `exfil.ntfy`.
-
 ### What the numbers mean
 
 The rules were tuned on this set, so it is a **regression floor, not a precision estimate**. A measurement worth quoting needs held-out data.
+
+## `rule-coverage.ndjson`
+
+Synthetic records that give every rule at least one labelled positive, and the significant and link rules hard negatives: benign records that look alike and must not fire. Each is marked `"synthetic": true`, uses reserved `.example` hosts (or the public service the rule names), and was written by hand. Payloads are the canonical textbook test strings. Benign records name the rule they guard in `hard_negative_for`, and records from one synthetic run share a `run` id.
 
 ## Held-out evaluation on the Transluce release
 
