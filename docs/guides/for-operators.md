@@ -30,13 +30,13 @@ Your access logs see requests the public records cannot. You can run the same ru
 
 The browser toolkit runs the analysis entirely on your machine. Records are parsed and analysed in WebAssembly in the page; nothing is uploaded.
 
-1. Open the toolkit's **Analyze** tab.
+1. Open the toolkit's workbench (**Analyze**); its access-log preset sets the format for you.
 2. Paste the log, or use **Load file**.
 3. Pick **Access log** as the format (auto-detect usually finds it).
 4. In the field map, name your host: `host=www.example.org`. Lines that do not name a virtual host are otherwise shown under `log.invalid`.
 5. Press **Analyze**. The page shows flagged records, clusters, an hourly chart and the **Endpoints** table.
 
-To run the toolkit locally instead of from the published site, build it with `scripts/ci/build-site.sh` and serve it with `python -m http.server -d site 8080`.
+To run the toolkit locally instead of from the published site, build it with `scripts/ci/build-site.sh` and serve it with `python -m http.server -d _site 8080`.
 
 ### With the CLI
 
@@ -119,7 +119,7 @@ It checks each file against the manifest, re-runs the analysis on `records.ndjso
 
 The check must use the rules the bundle was made with. If the rules version in `stamp.json` differs from your checkout's, the check says so. Check out the commit named in `stamp.json` (`toolkit_commit`, when present), or pass that commit's rules file with `--rules path/to/default.toml`.
 
-**In the browser.** The Case tab in the browser toolkit loads a bundle and re-runs the check locally.
+**In the browser.** The toolkit's **Tools** page loads a bundle and re-runs the check locally.
 
 **What verifying shows, and what it does not.** A bundle that verifies shows that the tiers and clusters in the report follow from the records under the stated rules, and that the files are the ones the manifest lists. It does not show that the records are genuine. For that, follow each record's `reference` link to the public record it was taken from: an archive capture or a scan report. The manifest is not signed, so it proves the files agree with each other, not who produced them.
 

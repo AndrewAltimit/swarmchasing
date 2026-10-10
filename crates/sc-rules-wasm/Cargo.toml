@@ -1,0 +1,21 @@
+[package]
+name = "sc-rules-wasm"
+description = "Rules TOML to JSON in the browser, loaded only when a page has edited rules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde_json.workspace = true
+toml.workspace = true
+wasm-bindgen.workspace = true
+
+[dev-dependencies]
+sc-core.workspace = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz"]

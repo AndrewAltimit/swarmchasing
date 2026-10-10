@@ -16,3 +16,5 @@
 /.claude/*
 !/.claude/skills/
 __pycache__/
+/_site/
+/site/pkg-rules

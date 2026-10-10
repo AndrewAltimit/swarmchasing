@@ -25,7 +25,7 @@ cargo run -p swarmchase -- clusters records.ndjson            # linked runs
 cargo run -p swarmchase -- report access.log --map host=www.example.org --audience affected   # your own server's log
 cargo run -p swarmchase -- unwrap 'https://r.jina.ai/https://…'
 cargo run -p swarmchase -- collect wayback 'r.jina.ai/*' --from 20260901 -o data/jina.ndjson
-scripts/ci/build-site.sh && python -m http.server -d site 8080   # the browser toolkit
+scripts/ci/build-site.sh && python -m http.server -d _site 8080  # the public site
 ```
 
 The [CLI README](crates/swarmchase/README.md) covers input formats and every command. Keys and SMTP settings go in `env.list` ([configuration](docs/reference/configuration.md)).
@@ -39,9 +39,10 @@ The [CLI README](crates/swarmchase/README.md) covers input formats and every com
 | [`crates/swarmchase`](crates/swarmchase/README.md) | The CLI: analysis, collection, watch, review, cases and notices. |
 | [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, their Markdown blocks, the Atom feed and the generated site pages. |
 | [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit. |
+| [`crates/sc-rules-wasm`](crates/sc-rules-wasm/README.md) | Edited rules (TOML) to JSON in the browser, loaded only when needed. |
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. |
 | [`samples/eval/`](samples/eval/README.md) | Labelled evaluation set behind the CI eval gate. |
-| [`site/`](site/index.html) | The GitHub Pages toolkit; `site/pkg` and `site/notices` are built at deploy. |
+| [`site/`](site/js/site.js) | The site's styles and page scripts; the pages are generated into `_site/` at deploy. |
 | `notices/` | Published notices, one `<id>.md` per incident. |
 | [`watchlist.toml`](watchlist.toml) | Sources the scheduled watch pulls, each with its rationale. |
 | [`scripts/`](scripts/README.md) | CI gates, the pre-commit hook and helpers. |

@@ -14,7 +14,7 @@ All workflows use `runs-on: self-hosted`. The runner is Ubuntu Linux arm64 (DGX 
 - **Order.** The `gates` job runs first and the cargo job `ci` needs it, so a committed dump or a broken link fails in seconds.
 - **Pull requests** run the same jobs as `main`, except the deploy. A superseded push to a PR cancels its earlier run; runs on `main` never cancel.
 - **Pull requests from forks run nothing**, because a self-hosted runner would otherwise run untrusted code on the machine. Also enable *Settings → Actions → Require approval for all outside collaborators*.
-- **Deploy.** On `main`, after `gates` and `ci` pass, `deploy-pages` builds the browser toolkit and the notice pages, checks the bundle size (advisory) and runs the site XSS check, then deploys `site/` to Pages. Set *Settings → Pages → Source* to **GitHub Actions**.
+- **Deploy.** On `main`, after `gates` and `ci` pass, `deploy-pages` builds the site with `scripts/ci/build-site.sh` (it fails on a WASM module over budget, a page that breaks the site policy, or an input that is not committed), runs the site XSS check, then deploys `_site/` to Pages. Set *Settings → Pages → Source* to **GitHub Actions**.
 
 ### watch.yml
 

@@ -1748,6 +1748,7 @@ dependencies = [
 name = "sc-publish"
 version = "0.1.0"
 dependencies = [
+ "regex",
  "sc-core",
  "serde",
  "serde_json",
@@ -1755,12 +1756,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-rules-wasm"
+version = "0.1.0"
+dependencies = [
+ "sc-core",
+ "serde_json",
+ "toml",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "sc-wasm"
 version = "0.1.0"
 dependencies = [
  "sc-core",
+ "sc-rules-wasm",
  "serde",
  "serde_json",
+ "toml",
  "wasm-bindgen",
 ]
 
