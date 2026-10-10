@@ -18,6 +18,7 @@
 //! attack that no rule flagged.
 
 use crate::analyze::ObsResult;
+use crate::timing::TimeBasis;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -68,6 +69,17 @@ impl Pace {
         }
     }
 
+    /// The pace as a report reads it, given what the times measure.
+    pub fn describe(self, basis: TimeBasis) -> String {
+        match basis {
+            TimeBasis::Capture | TimeBasis::Mixed => {
+                "capture times, not request times: pace not read".into()
+            }
+            TimeBasis::Submit => format!("{}, from submit times", self.label()),
+            TimeBasis::Request | TimeBasis::Unknown => self.label().into(),
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Tool => "tool pace",
@@ -92,7 +104,12 @@ pub struct Chain {
     pub start: i64,
     pub end: i64,
     pub median_gap_secs: i64,
+    /// The pace the median gap falls in. Read it only when `time_basis` is
+    /// request-like: from capture times it says nothing about the client.
     pub pace: Pace,
+    /// What the members' timestamps measure.
+    #[serde(default, skip_serializing_if = "TimeBasis::is_unknown")]
+    pub time_basis: TimeBasis,
     /// Steps where the previous request got an error response (status 400
     /// or above) and this one changed the request.
     #[serde(default)]
@@ -212,6 +229,7 @@ fn chain_of(
         end: *ts.last().unwrap_or(&ts[0]),
         median_gap_secs: median,
         pace: Pace::of(median, opts),
+        time_basis: TimeBasis::of(seg.iter().map(|(i, _)| results[*i].obs.ts_kind)),
         retries_after_error,
     })
 }

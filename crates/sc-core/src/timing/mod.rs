@@ -13,7 +13,73 @@ pub use dates::*;
 pub use pauses::*;
 pub use rhythm::*;
 
+use crate::model::TsKind;
 use serde::{Deserialize, Serialize};
+
+/// What a set of records' timestamps measure, from their `ts_kind`s.
+/// Pace, fan-out and rhythm read request timing: they skip capture times
+/// (when an archive saved a URL, not when anyone requested it) and say so
+/// for submit times (when a URL reached a scan service, close to the
+/// request but not the same).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimeBasis {
+    /// Request times (access logs, operator logs).
+    Request,
+    /// Scan-service submit times.
+    Submit,
+    /// Archive capture times.
+    Capture,
+    /// Capture times alongside request or submit times.
+    Mixed,
+    /// No record says.
+    #[default]
+    Unknown,
+}
+
+impl TimeBasis {
+    /// The basis of records with these timestamp kinds. Unknown kinds only
+    /// decide the basis when no record says.
+    pub fn of(kinds: impl IntoIterator<Item = TsKind>) -> Self {
+        let mut out = TimeBasis::Unknown;
+        for k in kinds {
+            let b = match k {
+                TsKind::Request => TimeBasis::Request,
+                TsKind::Submit => TimeBasis::Submit,
+                TsKind::Capture => TimeBasis::Capture,
+                TsKind::Unknown => continue,
+            };
+            out = match (out, b) {
+                (TimeBasis::Unknown, b) => b,
+                (o, b) if o == b => o,
+                // Request and submit times together read as submit times.
+                (TimeBasis::Request, TimeBasis::Submit)
+                | (TimeBasis::Submit, TimeBasis::Request) => TimeBasis::Submit,
+                _ => TimeBasis::Mixed,
+            };
+        }
+        out
+    }
+
+    pub fn is_unknown(&self) -> bool {
+        *self == TimeBasis::Unknown
+    }
+
+    /// Words a hint adds about its times, or nothing for request times.
+    pub fn note(self) -> Option<&'static str> {
+        match self {
+            TimeBasis::Submit => Some("submit times, close to request times"),
+            TimeBasis::Capture => Some("capture times, not request times"),
+            TimeBasis::Mixed => Some("capture times left out"),
+            TimeBasis::Request | TimeBasis::Unknown => None,
+        }
+    }
+}
+
+/// Whether a record's timestamp can stand for when it was requested.
+pub fn request_like(kind: TsKind) -> bool {
+    kind != TsKind::Capture
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Span {

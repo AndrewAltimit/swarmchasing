@@ -7,7 +7,9 @@ use crate::fanout::FanRequest;
 use crate::model::{IndicatorKind, LinkFeature, Tactic, Tier};
 use crate::paths::PathStats;
 use crate::rules::Rules;
-use crate::timing::{Span, parse_date_tag, stale_dates, timing};
+use crate::timing::{
+    Span, TimeBasis, parse_date_tag, request_like, rhythm_of, stale_dates, timing,
+};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// Unflagged requests by target host: the context path hints read around a
@@ -80,7 +82,22 @@ pub(super) fn cluster(
         .sum();
     let tier = cluster_tier(results, &members);
     let ts: Vec<i64> = members.iter().map(|&i| results[i].obs.ts).collect();
+    let timed = || {
+        members
+            .iter()
+            .map(|&i| &results[i].obs)
+            .filter(|o| o.ts > 0)
+    };
+    let time_basis = TimeBasis::of(timed().map(|o| o.ts_kind));
     let mut t = timing(&ts, cfg);
+    // The hour-of-day profile reads request times; capture times are when
+    // an archive saved a URL.
+    t.rhythm = rhythm_of(
+        &timed()
+            .filter(|o| request_like(o.ts_kind))
+            .map(|o| o.ts)
+            .collect::<Vec<_>>(),
+    );
     t.stale_dates = stale_dates(
         &members
             .iter()
@@ -116,7 +133,11 @@ pub(super) fn cluster(
             .map(|&i| {
                 let r = &results[i];
                 FanRequest {
-                    ts: r.obs.ts,
+                    ts: if request_like(r.obs.ts_kind) {
+                        r.obs.ts
+                    } else {
+                        0
+                    },
                     host: r.target_host.clone(),
                     path: crate::paths::normalize_path(target_text(r)),
                 }
@@ -143,6 +164,7 @@ pub(super) fn cluster(
         key: String::new(),
         start: t.start,
         end: t.end,
+        time_basis,
         members,
         tier,
         score,

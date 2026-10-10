@@ -13,7 +13,7 @@ use crate::model::{Hit, IndicatorKind, LinkFeature, Observation, Tactic, Tier};
 use crate::paths::PathStats;
 use crate::rules::Rules;
 use crate::timing::{
-    DateTagOffset, SharedPause, SharedPauseOptions, Span, TimingStats, infer_offset,
+    DateTagOffset, SharedPause, SharedPauseOptions, Span, TimeBasis, TimingStats, infer_offset,
     max_concurrency, parse_date_tag, shared_pauses, timing,
 };
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,10 @@ pub struct Cluster {
     pub members: Vec<usize>,
     pub start: i64,
     pub end: i64,
+    /// What the members' timestamps measure. Rhythm and fan-out read only
+    /// request-like times (request or submit), never capture times.
+    #[serde(default, skip_serializing_if = "TimeBasis::is_unknown")]
+    pub time_basis: TimeBasis,
     /// The strongest member's tier, raised one step only by corroboration
     /// ([`hints::cluster_tier`]).
     pub tier: Tier,
@@ -362,6 +366,112 @@ mod tests {
         assert_eq!(a.clusters.len(), 1);
         assert_eq!(a.clusters[0].members.len(), 3);
         assert_eq!(a.results[3].cluster, None);
+    }
+
+    /// Every hour for four days, three records a second apart each hour, all
+    /// with one inbox, timestamped as `kind`.
+    fn hourly_fleet(kind: crate::model::TsKind) -> Vec<Observation> {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        (0..96 * 3)
+            .map(|i| Observation {
+                ts_kind: kind,
+                ..o(
+                    1_791_072_000 + (i / 3) * 3600 + (i % 3).min(1) + 7,
+                    &format!("https://h{}.example/q?id={i}&hook={inbox}", i % 3),
+                )
+            })
+            .collect()
+    }
+
+    fn report_of(a: &Analysis) -> String {
+        crate::report::render_markdown(a, &crate::report::ReportOptions::default())
+    }
+
+    #[test]
+    fn capture_times_are_not_read_as_request_timing() {
+        use crate::model::TsKind;
+        use crate::timing::{RhythmVerdict, TimeBasis};
+        let req = analyze(hourly_fleet(TsKind::Request), &Rules::default_rules());
+        let c = &req.clusters[0];
+        assert_eq!(c.time_basis, TimeBasis::Request);
+        assert_eq!(c.timing.rhythm.verdict, RhythmVerdict::RoundTheClock);
+        assert_eq!(c.fanout.modal_width, Some(3));
+        assert!(report_of(&req).contains("active around the clock"));
+
+        let cap = analyze(hourly_fleet(TsKind::Capture), &Rules::default_rules());
+        let c = &cap.clusters[0];
+        assert_eq!(c.time_basis, TimeBasis::Capture);
+        assert_eq!(c.timing.rhythm.verdict, RhythmVerdict::TooShort);
+        assert!(c.fanout.is_empty(), "{:?}", c.fanout);
+        let md = report_of(&cap);
+        assert!(
+            !md.contains("daily rhythm") && !md.contains("fan-out"),
+            "{md}"
+        );
+        // Cadence still describes the captures.
+        assert_eq!(c.timing.count, 96 * 3);
+
+        // Half captures: the rest still give a rhythm, labelled.
+        let mut mixed = hourly_fleet(TsKind::Request);
+        for r in mixed.iter_mut().step_by(2) {
+            r.ts_kind = TsKind::Capture;
+        }
+        let m = analyze(mixed, &Rules::default_rules());
+        assert_eq!(m.clusters[0].time_basis, TimeBasis::Mixed);
+        assert_eq!(
+            m.clusters[0].timing.rhythm.verdict,
+            RhythmVerdict::RoundTheClock
+        );
+        assert!(report_of(&m).contains("(capture times left out)"));
+    }
+
+    #[test]
+    fn submit_times_are_read_as_request_like_and_say_so() {
+        use crate::model::TsKind;
+        use crate::timing::{RhythmVerdict, TimeBasis};
+        let a = analyze(hourly_fleet(TsKind::Submit), &Rules::default_rules());
+        let c = &a.clusters[0];
+        assert_eq!(c.time_basis, TimeBasis::Submit);
+        assert_eq!(c.timing.rhythm.verdict, RhythmVerdict::RoundTheClock);
+        assert_eq!(c.fanout.modal_width, Some(3));
+        let md = report_of(&a);
+        assert!(
+            md.contains("(hour-of-day entropy")
+                && md.matches("(submit times, close to request times)").count() == 2,
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn chain_pace_is_not_read_from_capture_times() {
+        use crate::model::TsKind;
+        let chain = |kind| {
+            let t = 1_791_000_000;
+            let obs: Vec<Observation> = [
+                (0, "?id=1"),
+                (20, "?id=2"),
+                (45, "?id=1'"),
+                (70, "?id=1%20UNION%20SELECT%201"),
+            ]
+            .iter()
+            .map(|&(dt, q)| Observation {
+                ts_kind: kind,
+                ..o(t + dt, &format!("https://portal.example.gov/item{q}"))
+            })
+            .collect();
+            analyze(obs, &Rules::default_rules())
+        };
+        let req = chain(TsKind::Request);
+        assert!(report_of(&req).contains("model pace"));
+        let cap = chain(TsKind::Capture);
+        assert_eq!(cap.chains[0].time_basis, crate::timing::TimeBasis::Capture);
+        let md = report_of(&cap);
+        assert!(
+            md.contains("capture times, not request times: pace not read")
+                && !md.contains("model pace"),
+            "{md}"
+        );
+        assert!(report_of(&chain(TsKind::Submit)).contains("model pace, from submit times"));
     }
 
     #[test]

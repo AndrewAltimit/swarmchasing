@@ -276,7 +276,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 truncate(&ch.path, 60),
                 dur(ch.end - ch.start),
                 dur(ch.median_gap_secs),
-                ch.pace.label(),
+                ch.pace.describe(ch.time_basis),
                 if unflagged > 0 {
                     format!("; {unflagged} of its requests matched no rule")
                 } else {
@@ -285,7 +285,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             );
         }
         if let Some(line) = rhythm_line(&c.timing.rhythm) {
-            let _ = writeln!(s, "  - {line}");
+            let _ = writeln!(s, "  - {line}{}", basis_note(c));
         }
         if let Some(line) = stale_dates_line(&c.timing.stale_dates) {
             let _ = writeln!(s, "  - {line}");
@@ -353,7 +353,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             let _ = writeln!(s, "  - {line}");
         }
         if let Some(line) = fanout_line(&c.fanout) {
-            let _ = writeln!(s, "  - {line}");
+            let _ = writeln!(s, "  - {line}{}", basis_note(c));
         }
         if let Some(line) = cut_line(&c.cut_lengths) {
             let _ = writeln!(s, "  - {line}");
@@ -502,6 +502,14 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     let _ = writeln!(s, "## Requested action\n");
     let _ = writeln!(s, "{}", audience::requested_action(opts.audience));
     s
+}
+
+/// What a timing hint's times were, when not plain request times.
+fn basis_note(c: &Cluster) -> String {
+    c.time_basis
+        .note()
+        .map(|n| format!(" ({n})"))
+        .unwrap_or_default()
 }
 
 /// Whether a public notice withholds attack details for any of the cluster's hosts.

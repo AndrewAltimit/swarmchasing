@@ -135,6 +135,8 @@ Probe chains also carry descriptive detail that changes nothing: their **pace** 
 
 [`timing.rs`](../crates/sc-core/src/timing/mod.rs) describes each cluster and the whole analysis. None of it changes a score or links records.
 
+**What the times measure.** Each record says what its timestamp is (`ts_kind`): a request (access and operator logs), a submission to a scan service (urlquery), or an archive capture (Wayback, Arquivo.pt). Each cluster and probe chain carries the result as `time_basis`: `request`, `submit`, `capture`, or `mixed` when capture times sit alongside the others. Hints that read request timing (chain pace, fan-out width and the hour-of-day rhythm) never use capture times: rhythm and fan-out leave capture-time records out, and a chain timed by captures reports "capture times, not request times: pace not read". Submit times are close to request times and are used, labelled "submit times". Cadence, bursts and pauses describe whatever the times are.
+
 **Cadence, bursts and pauses.** The median and 90th-percentile gap between records. A burst is at least `linking.burst_min` records, each within `linking.burst_gap_secs` of the last. A pause is a gap at least `linking.pause_min_secs` long and at least ten times the median gap, so a slow but steady cadence does not read as a string of pauses. The analysis also reports how many cluster runs were active at the same instant.
 
 **Rhythm.** An hour-of-day profile, counted in distinct active clock hours rather than records, so one burst does not outweigh a day of steady activity. It needs records on at least 3 UTC days, at least 20 records and at least 12 active clock hours (`RHYTHM_MIN_*`). With enough data, the narrowest circular window of the day holding 90% of active hours is found:
@@ -208,7 +210,7 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **What the records cover.** Public scan services and web archives see a fraction of agent activity. Private and account-linked scans are invisible. A record shows that a URL was submitted or captured. It does not show that a request reached the target or succeeded. Reports say so.
 
-**Archive timestamps.** A Wayback or Arquivo timestamp is when the archive captured the URL. That may be the agent's own request or a later crawl of a link to it. Timing on archive records describes captures, not necessarily the agent.
+**Archive timestamps.** A Wayback or Arquivo timestamp is when the archive captured the URL. That may be the agent's own request or a later crawl of a link to it. Cadence on archive records describes captures, not necessarily the agent, and pace, fan-out and rhythm skip them.
 
 **Humans look the same.** The rules detect agent-like activity. A security researcher, a penetration tester or a conventional scanner sending the same payloads through the same services produces the same records. A significant tier means attack payloads were present, not that an AI agent sent them. Context, rhythm, residue and case work separate the two.
 
