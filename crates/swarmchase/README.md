@@ -132,7 +132,11 @@ Non-zero on an error, when `eval` misses a floor, when `case verify` finds a dif
 
 | File | Covers |
 |---|---|
-| [`main.rs`](src/main.rs) | Argument parsing and the analysis, collect and lookup commands. |
+| [`main.rs`](src/main.rs) | Argument parsing and dispatch. |
+| [`commands/`](src/commands/mod.rs) | The analysis, collect and lookup commands, one module each. |
+| [`input.rs`](src/input.rs) | Reading records and rules for the analysis commands. |
+| [`store.rs`](src/store.rs) | The watch record store, retention, JSON and NDJSON files. |
+| [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
 | [`watch.rs`](src/watch.rs) | The incremental watch and its digest. |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review.rs`](src/review.rs) | Interactive labelling. |

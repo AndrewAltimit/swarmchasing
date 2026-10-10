@@ -16,6 +16,7 @@
 //! nothing is sent.
 
 use crate::case::{self, EndpointState};
+use crate::util::audience_id;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use sc_core::notice::{PublicView, TAG_PARAMS, WITHHELD, lint_public};
@@ -67,18 +68,9 @@ pub fn run(root: &Path, args: ExportArgs, today: &str) -> Result<()> {
             .join("exports")
             .join(format!("{}-{today}.stix.json", audience_id(args.audience)))
     });
-    crate::write_out(Some(&path), &text)?;
+    crate::util::write_out(Some(&path), &text)?;
     println!("draft only; nothing was sent");
     Ok(())
-}
-
-fn audience_id(a: Audience) -> &'static str {
-    match a {
-        Audience::Provider => "provider",
-        Audience::Affected => "affected",
-        Audience::Internal => "internal",
-        Audience::Public => "public",
-    }
 }
 
 /// The case as a STIX bundle for `audience`, pretty-printed.

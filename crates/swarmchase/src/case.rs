@@ -25,7 +25,9 @@
 //! that public notices withhold (docs/policies.md).
 
 use crate::evidence::{self, EvidenceCmd, OperatorEvidence, Scope};
-use crate::{InputArgs, load_rules, read_inputs, to_ndjson, watch};
+use crate::input::{InputArgs, load_rules, read_inputs};
+use crate::store::{load_store, to_ndjson};
+use crate::util::audience_id;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_core::notice::lint_public;
@@ -571,7 +573,7 @@ pub fn run(args: CaseArgs) -> Result<()> {
                     .join("reports")
                     .join(format!("{}-{today}.md", audience_id(audience)))
             });
-            crate::write_out(Some(&path), &md)
+            crate::util::write_out(Some(&path), &md)
         }
         CaseCmd::Export(a) => crate::stix::run(&root, a, &today),
     }
@@ -742,15 +744,6 @@ fn draft(
     Ok(p)
 }
 
-fn audience_id(a: Audience) -> &'static str {
-    match a {
-        Audience::Provider => "provider",
-        Audience::Affected => "affected",
-        Audience::Internal => "internal",
-        Audience::Public => "public",
-    }
-}
-
 fn check_id(id: &str) -> Result<()> {
     let ok = !id.is_empty()
         && id.len() <= 64
@@ -780,7 +773,7 @@ fn select(data: &Path, sel: &Selection, now: i64) -> Result<(RulesText, Vec<Obse
                 dir.display()
             );
         }
-        watch::load_store(&dir, now - sel.days * 86_400)?
+        load_store(&dir, now - sel.days * 86_400)?
     } else {
         read_inputs(&InputArgs {
             input: sel.input.clone(),

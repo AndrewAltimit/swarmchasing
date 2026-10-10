@@ -66,7 +66,7 @@ pub fn write(
     let a = analyze(records.to_vec(), rules);
     let st = stamp(case, today, commit, &a);
     let contents = [
-        crate::to_ndjson(records)?,
+        crate::store::to_ndjson(records)?,
         serde_json::to_string(&a)?,
         serde_json::to_string_pretty(&st)?,
     ];

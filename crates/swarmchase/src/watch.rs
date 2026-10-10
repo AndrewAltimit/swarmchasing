@@ -36,6 +36,8 @@
 
 use crate::case::{self, CaseStatus, NoticeStatus};
 use crate::health::{RuleHistory, RuleRun, SourceHealth};
+use crate::store::{append, load_store, prune, read_json, to_ndjson, write_json};
+use crate::util::{URLQUERY_KEY_ENV, one_line, top_keys, urlquery_key};
 use anyhow::{Context, Result, bail};
 use sc_collect::{CdxQuery, Client, Cursor, Kind, cdx_ts};
 use sc_core::bursts::{ArchiveBurst, archive_bursts};
@@ -47,7 +49,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::io::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const DAY: i64 = 86_400;
@@ -207,17 +209,27 @@ struct SourceReport {
     skipped: Option<String>,
 }
 
-/// Environment variable holding the urlquery.net API key (same name as urlquery-cli).
-pub const URLQUERY_KEY_ENV: &str = "URLQUERY_APIKEY";
-
-fn urlquery_key() -> Option<String> {
-    std::env::var(URLQUERY_KEY_ENV)
-        .ok()
-        .map(|k| k.trim().to_string())
-        .filter(|k| !k.is_empty())
+#[derive(clap::Args)]
+pub struct WatchArgs {
+    /// Watchlist TOML (see watchlist.toml).
+    #[arg(default_value = "watchlist.toml")]
+    watchlist: PathBuf,
+    /// Data directory: state, record store, and per-run output.
+    #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+    out: PathBuf,
+    #[arg(long)]
+    rules: Option<PathBuf>,
+    /// Committed notices, for the case status proposals in the digest.
+    #[arg(long, default_value = "notices")]
+    notices: PathBuf,
 }
 
-pub fn run(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<()> {
+pub fn run(args: WatchArgs) -> Result<()> {
+    let rules = crate::input::load_rules(args.rules.as_deref())?;
+    watch(&args.watchlist, &args.out, &args.notices, &rules)
+}
+
+fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<()> {
     let wl: Watchlist = toml::from_str(
         &std::fs::read_to_string(watchlist)
             .with_context(|| format!("reading {}", watchlist.display()))?,
@@ -339,7 +351,7 @@ pub fn run(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Resul
         alerts,
         notes,
     };
-    crate::print_summary(&a);
+    crate::util::print_summary(&a);
     std::fs::write(run_dir.join("analysis.json"), serde_json::to_string(&a)?)?;
     let md = render_markdown(
         &a,
@@ -515,8 +527,8 @@ fn summarise(a: &Analysis, prev: &Summary, generated: String) -> Summary {
                 records: c.members.len(),
                 start: c.start,
                 end: c.end,
-                targets: top(&c.target_hosts, 3),
-                rules: top(&c.rules, 6),
+                targets: top_keys(&c.target_hosts, 3),
+                rules: top_keys(&c.rules, 6),
             },
         );
     }
@@ -1035,166 +1047,9 @@ fn cluster_line(c: &ClusterSummary) -> String {
     )
 }
 
-fn one_line(s: &str, n: usize) -> String {
-    let s = s.replace(['\n', '|'], " ");
-    if s.chars().count() > n {
-        format!("{}…", s.chars().take(n).collect::<String>())
-    } else {
-        s
-    }
-}
-
-fn top<K: ToString>(m: &BTreeMap<K, usize>, n: usize) -> Vec<String> {
-    sc_core::top_counts(m, n)
-        .into_iter()
-        .map(|(k, _)| k)
-        .collect()
-}
-
-/// Delete run directories stamped before `cutoff` and stored records captured
-/// before it. Records with no timestamp are kept: their age is unknown.
-/// Returns (run dirs deleted, records deleted).
-fn prune(out: &Path, cutoff: i64) -> Result<(usize, usize)> {
-    let mut runs = 0;
-    if let Ok(entries) = std::fs::read_dir(out.join("runs")) {
-        for entry in entries {
-            let p = entry?.path();
-            let stamp = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-            let Ok(t) = chrono::NaiveDateTime::parse_from_str(stamp, "%Y%m%dT%H%M%SZ") else {
-                continue; // not a run directory
-            };
-            if p.is_dir() && t.and_utc().timestamp() < cutoff {
-                std::fs::remove_dir_all(&p).with_context(|| format!("deleting {}", p.display()))?;
-                runs += 1;
-            }
-        }
-    }
-    let mut records = 0;
-    if let Ok(entries) = std::fs::read_dir(out.join("store")) {
-        for entry in entries {
-            let p = entry?.path();
-            if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
-                continue;
-            }
-            let text = std::fs::read_to_string(&p)?;
-            let mut kept = String::with_capacity(text.len());
-            let mut dropped = 0;
-            for line in text.lines().filter(|l| !l.trim().is_empty()) {
-                let ts = serde_json::from_str::<Observation>(line).map_or(0, |o| o.ts);
-                if ts > 0 && ts < cutoff {
-                    dropped += 1;
-                } else {
-                    kept.push_str(line);
-                    kept.push('\n');
-                }
-            }
-            if dropped > 0 {
-                let tmp = p.with_extension("ndjson.tmp");
-                std::fs::write(&tmp, kept)?;
-                std::fs::rename(&tmp, &p)?;
-                records += dropped;
-            }
-        }
-    }
-    Ok((runs, records))
-}
-
-pub(crate) fn load_store(dir: &Path, since: i64) -> Result<Vec<Observation>> {
-    let mut out = Vec::new();
-    let mut seen = BTreeSet::new();
-    for entry in std::fs::read_dir(dir)? {
-        let p = entry?.path();
-        if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
-            continue;
-        }
-        let text = std::fs::read_to_string(&p)?;
-        for line in text.lines().filter(|l| !l.trim().is_empty()) {
-            let Ok(o) = serde_json::from_str::<Observation>(line) else {
-                continue;
-            };
-            if o.ts >= since && seen.insert(o.id.clone()) {
-                out.push(o);
-            }
-        }
-    }
-    Ok(out)
-}
-
-pub fn to_ndjson(obs: &[Observation]) -> Result<String> {
-    let mut s = String::new();
-    for o in obs {
-        s.push_str(&serde_json::to_string(o)?);
-        s.push('\n');
-    }
-    Ok(s)
-}
-
-fn append(p: &Path, text: &str) -> Result<()> {
-    let mut f = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(p)
-        .with_context(|| format!("opening {}", p.display()))?;
-    f.write_all(text.as_bytes())?;
-    Ok(())
-}
-
-pub fn read_json<T: for<'de> Deserialize<'de>>(p: &Path) -> Result<Option<T>> {
-    match std::fs::read_to_string(p) {
-        Ok(s) => Ok(Some(
-            serde_json::from_str(&s).with_context(|| format!("parsing {}", p.display()))?,
-        )),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e).with_context(|| format!("reading {}", p.display())),
-    }
-}
-
-/// Write via a temporary file and rename, so a crash never leaves half a file.
-pub fn write_json<T: Serialize>(p: &Path, v: &T) -> Result<()> {
-    let tmp = p.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_string_pretty(v)?)?;
-    std::fs::rename(&tmp, p).with_context(|| format!("writing {}", p.display()))?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn prune_deletes_old_runs_and_records() {
-        let out = std::env::temp_dir().join(format!("swarmchase-prune-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&out);
-        for stamp in ["20260101T000000Z", "20261001T000000Z"] {
-            std::fs::create_dir_all(out.join("runs").join(stamp)).unwrap();
-        }
-        std::fs::create_dir_all(out.join("store")).unwrap();
-        let rec = |id: &str, ts: i64| Observation {
-            id: id.into(),
-            ts,
-            url: "https://a.example/".into(),
-            ..Default::default()
-        };
-        let cutoff = sc_core::parse_ts("2026-06-01").unwrap();
-        let nd = to_ndjson(&[
-            rec("old", cutoff - 1),
-            rec("new", cutoff),
-            rec("undated", 0),
-        ])
-        .unwrap();
-        std::fs::write(out.join("store").join("s.ndjson"), nd).unwrap();
-
-        assert_eq!(prune(&out, cutoff).unwrap(), (1, 1));
-        assert!(!out.join("runs").join("20260101T000000Z").exists());
-        assert!(out.join("runs").join("20261001T000000Z").exists());
-        let kept: Vec<String> = load_store(&out.join("store"), i64::MIN)
-            .unwrap()
-            .into_iter()
-            .map(|o| o.id)
-            .collect();
-        assert_eq!(kept, ["new", "undated"]);
-        std::fs::remove_dir_all(&out).unwrap();
-    }
 
     #[test]
     fn digest_reports_new_clusters_and_endpoints_once() {

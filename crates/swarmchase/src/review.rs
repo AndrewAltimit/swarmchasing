@@ -26,6 +26,7 @@
 //! adds the cluster's records to that case instead. Either way the record
 //! stays on screen to be labelled.
 
+use crate::util::truncate;
 use anyhow::{Context, Result, bail};
 use sc_core::{Analysis, Observation, Tier, defang, fmt_ts};
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,118 @@ use std::path::{Path, PathBuf};
 
 pub const CLASS_FLAGGED: &str = "review:flagged";
 pub const CLASS_SAMPLE: &str = "review:unflagged-sample";
+
+#[derive(clap::Args)]
+pub struct ReviewArgs {
+    /// Records to review. Default: the watch store's last `--days` days.
+    input: Vec<PathBuf>,
+    /// Data directory (the watch's `--out`).
+    #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+    data: PathBuf,
+    #[arg(long, default_value_t = 30)]
+    days: i64,
+    /// Queue records at or above this tier: suggestive | significant
+    #[arg(long, default_value = "suggestive")]
+    min_tier: String,
+    /// Also queue this many unflagged records, a stable pseudo-random
+    /// sample, to grow the benign baseline and catch misses.
+    #[arg(long, default_value_t = 0)]
+    unflagged: usize,
+    /// Print the queue and exit.
+    #[arg(long)]
+    list: bool,
+    /// Print counts of reviewed records and disagreements, and exit.
+    #[arg(long)]
+    stats: bool,
+    #[arg(long)]
+    rules: Option<PathBuf>,
+}
+
+pub fn run(args: ReviewArgs) -> Result<()> {
+    let data = &args.data;
+    let mut store = ReviewStore::open(ReviewStore::path_in(data))?;
+    if args.stats {
+        return stats(&store, &mut std::io::stdout());
+    }
+    let min = check_min_tier(crate::input::parse_tier(&args.min_tier)?)?;
+    let rules = crate::case::RulesText::load(args.rules.as_deref())?;
+    let from = if args.input.is_empty() {
+        format!("the watch store's last {} days", args.days)
+    } else {
+        let files: Vec<String> = args.input.iter().map(|p| p.display().to_string()).collect();
+        files.join(", ")
+    };
+    let obs = if args.input.is_empty() {
+        let dir = data.join("store");
+        if !dir.is_dir() {
+            bail!(
+                "no watch store at {} (pass record files, or set --data / SWARMCHASE_DATA)",
+                dir.display()
+            );
+        }
+        crate::store::load_store(&dir, chrono::Utc::now().timestamp() - args.days * 86_400)?
+    } else {
+        crate::input::read_inputs(&crate::input::InputArgs::files(args.input))?
+    };
+    let a = sc_core::analyze(obs, &rules.rules);
+    let done = store.entries.keys().cloned().collect();
+    let items = queue(&a, &done, min, args.unflagged);
+    println!(
+        "{} records · {} reviewed before · {} in the queue ({} flagged, {} unflagged sample)",
+        a.total,
+        store.entries.len(),
+        items.len(),
+        items.iter().filter(|i| i.class == CLASS_FLAGGED).count(),
+        items.iter().filter(|i| i.class == CLASS_SAMPLE).count(),
+    );
+    if args.list {
+        for it in &items {
+            let r = &a.results[it.idx];
+            println!(
+                "{:<11} {:>3}  {}  {}",
+                r.tier.label(),
+                r.score,
+                r.obs.id,
+                defang(&truncate(&r.obs.url, 100))
+            );
+        }
+        return Ok(());
+    }
+    if items.is_empty() {
+        return Ok(());
+    }
+    let stdin = std::io::stdin();
+    let t = session(
+        &a,
+        &items,
+        &mut store,
+        stdin.lock(),
+        &mut std::io::stdout(),
+        &chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+        &CaseSink {
+            root: data.join("cases"),
+            rules,
+            from,
+            today: crate::util::today(),
+        },
+    )?;
+    let labelled: Vec<String> = t.labelled.iter().map(|(k, v)| format!("{v} {k}")).collect();
+    println!(
+        "\nlabelled {} · skipped {}{}",
+        if labelled.is_empty() {
+            "none".into()
+        } else {
+            labelled.join(", ")
+        },
+        t.skipped,
+        if t.quit {
+            " · stopped early, run again to continue"
+        } else {
+            ""
+        }
+    );
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Review {
@@ -239,17 +352,13 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
         fmt_ts(r.obs.ts),
         r.obs.source
     )?;
-    writeln!(
-        out,
-        "  url:     {}",
-        defang(&crate::truncate(&r.obs.url, 300))
-    )?;
+    writeln!(out, "  url:     {}", defang(&truncate(&r.obs.url, 300)))?;
     for l in r.layers.iter().filter(|l| l.via != "submitted").take(5) {
         writeln!(
             out,
             "  {:<8} {}",
             format!("[{}]", l.via),
-            defang(&crate::truncate(
+            defang(&truncate(
                 &l.text.split_whitespace().collect::<Vec<_>>().join(" "),
                 200
             ))
@@ -259,7 +368,7 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
         writeln!(out, "  target:  {}", sc_core::defang_host(h))?;
     }
     if let Some(f) = &r.obs.final_url {
-        writeln!(out, "  final:   {}", defang(&crate::truncate(f, 120)))?;
+        writeln!(out, "  final:   {}", defang(&truncate(f, 120)))?;
     }
     for h in &r.hits {
         writeln!(
@@ -267,7 +376,7 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
             "  rule:    {} (+{}) {}",
             h.rule_id,
             h.weight,
-            defang(&crate::truncate(&h.matched, 80))
+            defang(&truncate(&h.matched, 80))
         )?;
     }
     if let Some(link) = &r.obs.reference {
