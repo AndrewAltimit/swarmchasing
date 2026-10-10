@@ -202,16 +202,21 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
         }
         let st = state.sources.entry(s.name.clone()).or_default();
         let before = client.requests();
+        let first_or_resumed = st.cursor == 0 || st.pending.is_some();
         let res = pull(&client, s, st, wl.overlap_days * DAY, asn.as_ref());
         st.last_run = Some(stamp.clone());
         let mut rep = SourceReport {
             requests: client.requests() - before,
             ..SourceReport::new(&s.name)
         };
-        alerts.extend(
-            st.health
-                .observe(&s.name, res.as_ref().ok().map(|(pulled, _)| *pulled)),
-        );
+        if res.is_ok() && (first_or_resumed || st.pending.is_some()) {
+            st.health.observe_catch_up();
+        } else {
+            alerts.extend(
+                st.health
+                    .observe(&s.name, res.as_ref().ok().map(|(pulled, _)| *pulled)),
+            );
+        }
         match res {
             Ok((pulled, new)) => {
                 rep.pulled = pulled;

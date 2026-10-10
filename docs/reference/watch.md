@@ -58,7 +58,7 @@ Each run writes `runs/<stamp>/digest.md`. It covers new clusters, tier changes a
 
 The health section flags:
 
-- a source whose pull falls below a fifth of its median over recent runs, which usually means an API change, an expired key or a spent quota;
+- a source whose pull falls below a fifth of its median over recent runs, which usually means an API change, an expired key or a spent quota. A source's first pull and a pull spread over several runs are catching up, so they do not count towards the median;
 - a source that has failed two runs in a row;
 - a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it.
 

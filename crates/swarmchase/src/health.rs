@@ -45,9 +45,16 @@ pub struct SourceHealth {
 }
 
 impl SourceHealth {
+    /// A successful pull that is catching up (a source's first pull, or one
+    /// spread over several runs) rather than reading what is new since the
+    /// last run. It ends an error streak but is not history: its count would
+    /// set a median that every ordinary pull after it falls short of.
+    pub fn observe_catch_up(&mut self) {
+        self.errors_in_row = 0;
+    }
+
     /// Check this run against the history, then add it. `pulled` is `None`
-    /// when the pull failed. A pull that stopped at its limit and continues
-    /// next run is recorded like any other.
+    /// when the pull failed.
     pub fn observe(&mut self, name: &str, pulled: Option<usize>) -> Option<String> {
         let Some(n) = pulled else {
             self.errors_in_row += 1;
@@ -224,6 +231,11 @@ mod tests {
         assert_eq!(h.observe("s", Some(40)), None);
         assert_eq!(h.errors_in_row, 0);
         assert_eq!(h.pulled.len(), 6);
+
+        // A catch-up pull ends an error streak without joining the history.
+        assert_eq!(h.observe("s", None), None);
+        h.observe_catch_up();
+        assert_eq!((h.errors_in_row, h.pulled.len()), (0, 6));
 
         let mut small = SourceHealth::default();
         for n in [2, 3, 2, 0] {
