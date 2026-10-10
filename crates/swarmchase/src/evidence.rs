@@ -234,7 +234,7 @@ pub(crate) fn run_evidence(root: &Path, cmd: EvidenceCmd, today: &str) -> Result
                     &date,
                     format!("operator evidence {evidence}: {org} withdrew its agreement"),
                 );
-                published = c.status == CaseStatus::Published;
+                published = c.status == CaseStatus::Published || c.publish_pending.is_some();
                 Ok(())
             })?;
             if published {
@@ -440,6 +440,7 @@ mod tests {
             source: String::new(),
             confidence: "low".into(),
             found_on: "d".into(),
+            purpose: None,
         };
         let md = report(&root, "t-2", Audience::Affected, None, Some(&other), "d").unwrap();
         assert!(!md.contains(marker), "another operator's logs: {md}");

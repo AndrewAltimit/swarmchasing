@@ -36,6 +36,8 @@ anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 wasm-bindgen = "0.2"
+age = "0.11"
+tar = { version = "0.4", default-features = false }
 flate2 = "1"
 psl = "2"
 

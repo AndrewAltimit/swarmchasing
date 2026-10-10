@@ -29,6 +29,7 @@
 //! [`crate::contacts`], [`crate::evidence`] and [`crate::notice`].
 
 mod cli;
+pub(crate) mod incident;
 mod indicators;
 mod model;
 mod report;
@@ -192,6 +193,7 @@ pub(crate) fn new_case(
         status: CaseStatus::Open,
         notice: NoticeStatus::Active,
         opened: today.to_string(),
+        publish_pending: None,
         min_named: Evidence::default(),
         rules_version: Some(pin.clone()),
         endpoints: Vec::new(),
@@ -256,7 +258,7 @@ pub(crate) fn rename(root: &Path, old: &str, new: &str, today: &str) -> Result<(
     if to.exists() {
         bail!("{} exists already", to.display());
     }
-    if c.status == CaseStatus::Published {
+    if c.status == CaseStatus::Published || c.publish_pending.is_some() {
         bail!("case {old} has a published notice; its ID stays");
     }
     std::fs::rename(case_dir(root, old)?, &to)
@@ -421,10 +423,8 @@ mod tests {
 
         update(&root, "t-1", |c| {
             c.claims.push(Claim {
-                party: "Tencent".into(),
-                role: Role::Developer,
-                evidence: Evidence::SharedIdentifiers,
                 details: vec!["uqtag zz9 also in a confirmed incident".into()],
+                ..Claim::new("Tencent", Role::Developer, Evidence::SharedIdentifiers)
             });
             c.endpoints[0].state = EndpointState::Targeted;
             Ok(())
@@ -445,6 +445,7 @@ mod tests {
                 source: "https://portal.example.gov/.well-known/security.txt".into(),
                 confidence: "medium".into(),
                 found_on: "2026-10-14".into(),
+                purpose: None,
             });
             Ok(())
         })
@@ -519,8 +520,22 @@ mod tests {
         let text = std::fs::read_to_string(&added).unwrap();
         assert!(!text.contains("DRAFT"), "{text}");
         assert!(text.contains("kind = \"published\""), "{text}");
-        assert_eq!(load(&root, "t-1").unwrap().status, CaseStatus::Published);
+        // Added is not published: reported, with the push pending.
+        let c = load(&root, "t-1").unwrap();
+        assert_eq!(c.status, CaseStatus::Reported);
+        assert_eq!(c.publish_pending.as_deref(), Some("2026-10-16"));
+        let mut buf = Vec::new();
+        status(&root, "t-1", &mut buf).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+        assert!(s.contains("publish pending"), "{s}");
         assert!(crate::notice::add_for_test(&root, "t-1", &notices, &rules, "2026-10-16").is_err());
+        // Not on any remote (no repository here): refused unless forced.
+        let e = crate::notice::published_for_test(&root, &notices, "t-1", false, "2026-10-17");
+        assert!(e.unwrap_err().to_string().contains("not on origin yet"));
+        crate::notice::published_for_test(&root, &notices, "t-1", true, "2026-10-17").unwrap();
+        let c = load(&root, "t-1").unwrap();
+        assert_eq!((c.status, c.publish_pending), (CaseStatus::Published, None));
+        assert!(crate::notice::published_for_test(&root, &notices, "t-1", true, "d").is_err());
         cleanup(&root);
     }
 }

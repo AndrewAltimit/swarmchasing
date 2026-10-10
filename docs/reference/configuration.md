@@ -24,6 +24,10 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | `URLSCAN_APIKEY` | `swarmchase` | Optional: raises urlscan.io's search quota ([urlscan.io](#urlscanio)). |
 | `SWARMCHASE_SITE_URL` | `swarmchase notice build` | `--base-url`. |
 | `SWARMCHASE_UA` | collectors | Overrides the collectors' user agent. |
+| `SWARMCHASE_BACKUP_DIR` | `swarmchase backup` | Where encrypted backups go, one subdirectory per host ([backups](#backups)). |
+| `SWARMCHASE_BACKUP_RECIPIENT` | `swarmchase backup create` | The age public key backups are encrypted to. |
+| `SWARMCHASE_BACKUP_PASSPHRASE` | `swarmchase backup` | A passphrase instead of a recipient; also what `verify --passphrase` and `restore --passphrase` read. |
+| `SWARMCHASE_EVAL_DIR` | `swarmchase case bundle`, `case draft` | The evaluation set whose figures go into bundle stamps. Unset, `samples/eval/` ([evidence bundles](cases.md#evidence-bundles)). |
 | `SMTP_URL`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `MAIL_TO` | [`send-mail.sh`](../../scripts/ci/send-mail.sh) | Digest and alert email to the admin. |
 | `SWARMCHASE_ENV_FILE` | `with-env.sh` | Another file to load instead of `env.list`. |
 | `SWARMCHASE_SKIP_PRECOMMIT` | pre-commit hook | `1` skips the hook for one command. |
@@ -49,3 +53,21 @@ urlquery's terms allow personal, non-commercial research use and forbid redistri
 `swarmchase asn fetch` downloads [iptoasn.com](https://iptoasn.com/)'s IPv4 table (`ip2asn-v4.tsv.gz`, a few MB) into `<data>/asn/`. The data is public domain (PDDL 1.0) and updated hourly; refreshing weekly is enough. It is never committed.
 
 Once it is there, `watch` and the commands that read record files fill the network of records that carry an IP but no ASN. A scan service's IP is the target's, so it fills `target_asn`; any other record's IP fills `asn`. `swarmchase asn lookup <ip>…` shows single addresses.
+
+## Backups
+
+Cases, reviewed labels and pinned rules cannot be collected again, so `swarmchase backup` keeps encrypted copies of them, with `state.json`. The record store is left out: the sources refill it.
+
+```sh
+swarmchase backup keygen --out swarmchase-backup.key   # once, on the admin's own machine
+swarmchase backup create --keep 30                      # SWARMCHASE_BACKUP_DIR, _RECIPIENT
+swarmchase backup list
+swarmchase backup verify <file> [--identity swarmchase-backup.key]
+swarmchase backup restore <file> --identity swarmchase-backup.key --to restored/
+```
+
+- `create` writes `<SWARMCHASE_BACKUP_DIR>/<hostname>/swarmchase-<UTC stamp>.tar.age`, a tar encrypted with [age](https://age-encryption.org/), and a `.sha256` sidecar. `--keep N` deletes all but this host's newest N.
+- It encrypts to `SWARMCHASE_BACKUP_RECIPIENT`, a public key, so the machine making backups holds no secret; `SWARMCHASE_BACKUP_PASSPHRASE` is the alternative.
+- `keygen` writes the identity file and prints the public key. Keep the identity off the runner and away from the backup drive: anyone holding it reads every backup, and without it none can be restored.
+- `verify` checks the hash; with the identity it also decrypts and reads the archive through, writing nothing.
+- `restore` refuses a directory that is not empty unless `--force`.

@@ -51,10 +51,11 @@ Details: [case files](../reference/cases.md#opening-a-case).
 ```sh
 swarmchase case endpoint 2026-10-portal portal.example.gov targeted --note "payloads reflected, no sign of success"
 swarmchase case claim 2026-10-portal --party … --evidence provider_confirmed --detail …
+swarmchase case claim 2026-10-portal --layer harness --party … --detail …
 swarmchase case note 2026-10-portal "Rerun of C4 from last week; same host order."
 ```
 
-Every endpoint needs a decision (`compromised`, `targeted`, `historical`, `not-affected`) before a notice can be added. Attribution claims carry their evidence level; a developer is named only at or above the case's naming threshold ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
+Every endpoint needs a decision (`compromised`, `targeted`, `historical`, `not-affected`) before a notice can be added. Attribution claims carry their layer, evidence level and tag; a developer is named only at or above the case's naming threshold, and harness and model-family candidates never ([attribution claims](../reference/cases.md#attribution-claims)).
 
 ## 5. Find contacts and draft reports
 
@@ -64,7 +65,7 @@ swarmchase case draft 2026-10-portal --audience affected --to security@example.g
 swarmchase case draft 2026-10-portal --audience provider --to <provider contact>
 ```
 
-`case contacts` reads security.txt, then RDAP abuse addresses. `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form. Read every draft before sending it.
+`case contacts` adds the provider's channels from the [provider directory](../reference/cases.md#the-provider-directory) when a claim names it, then reads security.txt, then RDAP abuse addresses. Add anything else by hand with `case contact add` (a CSIRT, a declared owner). `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form. Read every draft before sending it.
 
 Details: [contacts](../reference/cases.md#contacts), [drafts](../reference/cases.md#drafts).
 
@@ -90,9 +91,10 @@ There is no embargo: the reports and the notice go out at the same time.
    ```sh
    swarmchase notice add 2026-10-portal
    git add notices/2026-10-portal.md && git commit && git push
+   swarmchase notice published 2026-10-portal
    ```
 
-`notice add` refuses while any endpoint is unreviewed. The pre-commit hook and CI lint the notice; the deploy on `main` builds it into the site and the feed.
+`notice add` refuses while any endpoint is unreviewed, and leaves the case `reported` with its publication pending; `notice published` checks the pushed file is on the remote and marks the case `published`. The pre-commit hook and CI lint the notice; the deploy on `main` builds it into the site and the feed.
 
 ## 8. Keep the notice current
 
@@ -111,3 +113,7 @@ There is no embargo: the reports and the notice go out at the same time.
 - **Rules changes.** `case rules <id>` shows records whose tier would change under the current rules; `--update` re-pins.
 
 Close the case with `case set <id> --status closed` when nothing is left to do. Its records stay with the case for the retention period in [policies](../policies.md#collection).
+
+## Backups
+
+Run `swarmchase backup create --keep 30` after case work, or on a schedule, and `swarmchase backup verify <file> --identity <key file>` now and then from your own machine. The key file never goes on the runner ([backups](../reference/configuration.md#backups)).

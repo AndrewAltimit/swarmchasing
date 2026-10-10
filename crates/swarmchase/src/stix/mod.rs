@@ -6,6 +6,9 @@
 //! `observed-data` per cluster with its URLs, domains, addresses and
 //! networks, `based-on` relationships between them, and a `report` wrapping
 //! it all. Values are real (not defanged): STIX patterns are for machines.
+//! Each exported cluster is also an `x-sc-agent-run` object ([`agent_run`]),
+//! defined by the `extension-definition` the bundle carries, whose schema is
+//! committed at `schemas/stix/x-sc-agent-run.json`.
 //!
 //! The export takes the same operator evidence as the report for that
 //! audience ([`crate::evidence::Scope`]); a public export also withholds what
@@ -19,6 +22,7 @@
 //! into patterns, [`objects`] builds each object type, and [`ids`] makes the
 //! ids, markings and timestamps.
 
+pub(crate) mod agent_run;
 mod ids;
 mod indicators;
 mod objects;
@@ -33,7 +37,7 @@ use clap::Args;
 use ids::{TLP_AMBER, TLP_WHITE, sdo_id, stix_ts};
 use objects::Head;
 use sc_core::notice::lint_public;
-use sc_core::{Analysis, Audience, Rules, analyze};
+use sc_core::{Analysis, Audience, Claim, Evidence, Rules, analyze};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -42,6 +46,11 @@ use std::path::{Path, PathBuf};
 pub enum ExportFormat {
     /// A STIX 2.1 bundle (JSON).
     Stix,
+    /// A draft for the OECD AI incident common reporting framework (JSON,
+    /// public scope), with the mandatory criteria it cannot fill listed.
+    Oecd,
+    /// A draft AI Incident Database submission (JSON, public scope).
+    Aiid,
 }
 
 #[derive(Args)]
@@ -59,13 +68,48 @@ pub struct ExportArgs {
     /// Name for the reporter identity.
     #[arg(long)]
     reporter: Option<String>,
-    /// Default: <case>/exports/<audience>-<date>.stix.json
+    /// The site's URL, for the notice link in incident database drafts.
+    #[arg(long, env = "SWARMCHASE_SITE_URL")]
+    site_url: Option<String>,
+    /// The committed notices directory, for incident database drafts.
+    #[arg(long, default_value = "notices")]
+    notices: PathBuf,
+    /// Default: <case>/exports/<audience>-<date>.stix.json, or
+    /// <case>/exports/<format>-<date>.json for incident database drafts.
     #[arg(short, long)]
     out: Option<PathBuf>,
 }
 
 pub fn run(root: &Path, args: ExportArgs, today: &str) -> Result<()> {
-    let ExportFormat::Stix = args.format;
+    let db = match args.format {
+        ExportFormat::Stix => None,
+        ExportFormat::Oecd => Some((case::incident::Database::Oecd, "oecd")),
+        ExportFormat::Aiid => Some((case::incident::Database::Aiid, "aiid")),
+    };
+    if let Some((db, name)) = db {
+        if args.audience != Audience::Public && args.audience != Audience::Provider {
+            bail!("incident database drafts are public; they take no --audience");
+        }
+        let text = case::incident::draft(
+            root,
+            &args.notices,
+            &args.id,
+            db,
+            args.reporter.as_deref().unwrap_or("swarmchasing"),
+            args.site_url.as_deref(),
+            today,
+        )?;
+        let path = args.out.unwrap_or_else(|| {
+            root.join(&args.id)
+                .join("exports")
+                .join(format!("{name}-{today}.json"))
+        });
+        crate::util::write_out(Some(&path), &text)?;
+        println!(
+            "draft only; nothing was submitted. Submit it by hand after the notice is public."
+        );
+        return Ok(());
+    }
     let text = export(
         root,
         &args.id,
@@ -140,6 +184,8 @@ pub fn export(
         reporter: reporter.unwrap_or("swarmchasing"),
         today,
         exposed: &exposed,
+        claims: &c.claims,
+        min_named: c.min_named,
     };
     let bundle = build(&a, &rules, &opts)?;
     Ok(format!("{}\n", serde_json::to_string_pretty(&bundle)?))
@@ -152,6 +198,15 @@ struct Options<'a> {
     reporter: &'a str,
     today: &'a str,
     exposed: &'a [String],
+    /// The case's own attribution claims.
+    claims: &'a [Claim],
+    min_named: Evidence,
+}
+
+impl Options<'_> {
+    fn public(&self) -> bool {
+        self.audience == Audience::Public
+    }
 }
 
 /// The bundle: the reporter and the marking, the indicators, each
@@ -173,8 +228,9 @@ fn build(a: &Analysis, rules: &Rules, o: &Options) -> Result<Value> {
     let mut objects = vec![
         objects::identity(&h, o.reporter),
         objects::marking(h.marking),
+        agent_run::extension_definition(&h),
     ];
-    let mut report_refs = Vec::new();
+    let mut report_refs = vec![agent_run::extension_id()];
     let od_ids: BTreeMap<usize, String> = observed
         .iter()
         .map(|(ci, v)| (*ci, v["id"].as_str().unwrap_or_default().to_string()))
@@ -195,10 +251,16 @@ fn build(a: &Analysis, rules: &Rules, o: &Options) -> Result<Value> {
             "nothing to export for this audience (no non-noise clusters, or everything withheld)"
         );
     }
-    for (_, v) in observed {
-        report_refs.push(v["id"].as_str().unwrap_or_default().to_string());
+    let mut runs = Vec::new();
+    for (ci, v) in observed {
+        let od = v["id"].as_str().unwrap_or_default().to_string();
+        let run = agent_run::agent_run(&h, a, &a.clusters[ci], o, &od);
+        report_refs.push(od);
+        report_refs.push(run["id"].as_str().unwrap_or_default().to_string());
         objects.push(v);
+        runs.push(run);
     }
+    objects.extend(runs);
     objects.extend(relationships);
     report_refs.extend(scos.keys().cloned());
 
@@ -209,6 +271,12 @@ fn build(a: &Analysis, rules: &Rules, o: &Options) -> Result<Value> {
             .chain(
                 scos.values()
                     .filter_map(|v| v["value"].as_str().map(str::to_string)),
+            )
+            .chain(
+                objects
+                    .iter()
+                    .filter(|v| v["type"] == agent_run::TYPE)
+                    .map(|v| v["attribution"].to_string()),
             )
             .collect();
         let leaks = lint_public(&values.join("\n"), rules);
@@ -404,6 +472,147 @@ kept = 1
         fixture(&root);
         let run = || export(&root, "t-1", Audience::Provider, None, None, "2026-10-14").unwrap();
         assert_eq!(run(), run());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Check `v` against the subset of JSON Schema the committed schema uses.
+    fn check(v: &Value, s: &Value, at: &str, errs: &mut Vec<String>) {
+        if let Some(c) = s.get("const")
+            && v != c
+        {
+            errs.push(format!("{at}: {v} is not {c}"));
+        }
+        if let Some(e) = s["enum"].as_array()
+            && !e.contains(v)
+        {
+            errs.push(format!("{at}: {v} not in enum"));
+        }
+        let ok = match s["type"].as_str() {
+            Some("object") => v.is_object(),
+            Some("array") => v.is_array(),
+            Some("string") => v.is_string(),
+            Some("integer") => v.is_u64() || v.is_i64(),
+            Some("boolean") => v.is_boolean(),
+            _ => true,
+        };
+        if !ok {
+            errs.push(format!("{at}: {v} is not a {}", s["type"]));
+        }
+        if let (Some(p), Some(t)) = (s["pattern"].as_str(), v.as_str())
+            && !regex::Regex::new(p).unwrap().is_match(t)
+        {
+            errs.push(format!("{at}: `{t}` does not match {p}"));
+        }
+        if let (Some(m), Some(n)) = (s["minimum"].as_u64(), v.as_u64())
+            && n < m
+        {
+            errs.push(format!("{at}: {n} < {m}"));
+        }
+        if let Some(o) = v.as_object() {
+            for r in s["required"].as_array().into_iter().flatten() {
+                if !o.contains_key(r.as_str().unwrap()) {
+                    errs.push(format!("{at}: missing {r}"));
+                }
+            }
+            if let Some(m) = s["minProperties"].as_u64()
+                && (o.len() as u64) < m
+            {
+                errs.push(format!("{at}: fewer than {m} properties"));
+            }
+            for (k, x) in o {
+                match (s["properties"].get(k), &s["additionalProperties"]) {
+                    (Some(ps), _) => check(x, ps, &format!("{at}.{k}"), errs),
+                    (None, Value::Bool(false)) => errs.push(format!("{at}: unexpected {k}")),
+                    (None, ap) if ap.is_object() => check(x, ap, &format!("{at}.{k}"), errs),
+                    _ => {}
+                }
+            }
+        }
+        if let Some(a) = v.as_array() {
+            if let Some(m) = s["minItems"].as_u64()
+                && (a.len() as u64) < m
+            {
+                errs.push(format!("{at}: fewer than {m} items"));
+            }
+            if s["uniqueItems"] == true {
+                let set: BTreeSet<String> = a.iter().map(|x| x.to_string()).collect();
+                if set.len() != a.len() {
+                    errs.push(format!("{at}: repeated items"));
+                }
+            }
+            for (i, x) in a.iter().enumerate() {
+                check(x, &s["items"], &format!("{at}[{i}]"), errs);
+            }
+        }
+    }
+
+    #[test]
+    fn agent_runs_follow_the_committed_schema() {
+        let schema: Value =
+            serde_json::from_str(include_str!("../../../../schemas/stix/x-sc-agent-run.json"))
+                .unwrap();
+        let root = scratch("ext");
+        fixture(&root);
+        for audience in [Audience::Provider, Audience::Public] {
+            let text = export(&root, "t-1", audience, None, None, "2026-10-14").unwrap();
+            let objs = objects(&text);
+            let defs: Vec<&Value> = objs
+                .iter()
+                .filter(|o| o["type"] == "extension-definition")
+                .collect();
+            assert_eq!(defs.len(), 1);
+            let def = defs[0];
+            assert_eq!(def["id"], agent_run::extension_id());
+            assert_eq!(def["name"], agent_run::TYPE);
+            assert_eq!(def["extension_types"], serde_json::json!(["new-sdo"]));
+            assert_eq!(def["schema"], schema["$id"]);
+            assert!(
+                def["created_by_ref"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("identity--")
+            );
+            let runs: Vec<&Value> = objs
+                .iter()
+                .filter(|o| o["type"] == agent_run::TYPE)
+                .collect();
+            assert!(!runs.is_empty());
+            let ids: BTreeSet<&str> = objs.iter().map(|o| o["id"].as_str().unwrap()).collect();
+            let report = objs.iter().find(|o| o["type"] == "report").unwrap();
+            for r in &runs {
+                let mut errs = Vec::new();
+                check(r, &schema, "run", &mut errs);
+                assert!(errs.is_empty(), "{errs:?}\n{r:#}");
+                assert_eq!(
+                    r["extensions"][agent_run::extension_id()]["extension_type"],
+                    "new-sdo"
+                );
+                for od in r["observed_data_refs"].as_array().unwrap() {
+                    assert!(ids.contains(od.as_str().unwrap()), "dangling {od}");
+                }
+                assert!(report["object_refs"].as_array().unwrap().contains(&r["id"]));
+                assert!(
+                    r["tactics"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|t| t == "SC-T4"),
+                    "{r:#}"
+                );
+                let layers: Vec<&str> = r["attribution"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|x| x["layer"].as_str().unwrap())
+                    .collect();
+                // The harness candidate (python-httpx) is private only.
+                assert_eq!(
+                    layers.contains(&"harness"),
+                    audience == Audience::Provider,
+                    "{audience:?} {layers:?}"
+                );
+            }
+        }
         std::fs::remove_dir_all(&root).unwrap();
     }
 

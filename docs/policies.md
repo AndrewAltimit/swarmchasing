@@ -12,6 +12,7 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
 - **Redact at ingest.** Records can carry exfiltrated cookies, tokens and keys. Secret-looking values are replaced with hashes before anything is stored, so links between records survive and the secrets do not.
 - **Raw data stays out of git.** Collector output, watch runs and case working files live in gitignored directories. Only curated, redacted samples and published notices are committed. Case files, including the reports drafted in them, stay in the data directory.
 - **Retention.** Watch data (run directories and the record store) is deleted after 180 days by capture time; `swarmchase watch` enforces this on every run (`retain_days` in [`watchlist.toml`](../watchlist.toml)). Records a case needs are copied into the case first (`swarmchase case new` / `case add`). Case files live with the watch data, outside git: an open case names organisations on unconfirmed evidence. A case's records are kept while the case is open, plus one year. Reviewed records (`swarmchase review`) are kept as the evaluation set.
+- **Backups.** Cases, reviewed labels, pinned rules and the watch state are backed up encrypted to a public key, so the runner holds no key that can read them ([backups](reference/configuration.md#backups)). The identity that decrypts them is kept off the runner and away from the backup drive. Backups follow the same retention: `--keep` bounds how many exist, and a restored case keeps its own retention clock.
 - **Source terms.** We follow each source's terms of use. urlquery.net reports are cited by link and never quoted or redistributed.
 
 ## Evidence and attribution
@@ -25,6 +26,8 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
   5. confirmation by the provider.
 
   Reports and notices name a developer only at or above the level the admin sets for the case (`swarmchase report --min-named`, default: shared identifiers), and never on self-identification alone. Case notes list every claim.
+- **Four layers.** Developer, hosting network, harness and model family are attributed separately ([SC-FM 7](manual/07-attribution.md)). A host is named as a host. Harness and model-family candidates are ranked in private reports and never named in public; a model-family claim needs a held-out measurement of its method.
+- **Tags and labels.** Every attribution claim is tagged Observed, Documented, Inference or Conclusion, and labelled Confirmed, Suspected, Possible or Unattributed by its evidence. No statement uses a likelihood word stronger than its label allows.
 
 ## Reporting and publication
 

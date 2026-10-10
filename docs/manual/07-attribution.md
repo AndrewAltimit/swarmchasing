@@ -39,7 +39,7 @@ The network fields of a scan-service record usually describe the **target**: whe
 
 The harness is the software around the model: the agent framework, the fetch tool, the browser automation, the product. Its traces include tool-call markup dialects, the user agent of a fetch tool, which relays and carriers it reaches for, fixed fan-out widths, and parameter conventions.
 
-Harness traces are reported as ranked candidates with the traces for each, tagged Inference. A harness is never named as the source in public: open-source frameworks are used by many operators, and their traces are easy to imitate. Toolkit support for harness ranking is (planned).
+Harness traces are reported as ranked candidates with the traces for each, tagged Inference. A harness is never named as the source in public: open-source frameworks are used by many operators, and their traces are easy to imitate. Toolkit: private reports rank one candidate per client product in the records' user agents, by records, with the header fingerprints, header-name sets and URL encoding style they share; public notices leave harness candidates out.
 
 ## FM-7.5 Model family layer
 
@@ -50,7 +50,7 @@ Model-family attribution reads traces of the model itself: output residue, forma
 - **Never naming-eligible.** A model family never names a developer, an operator or a provider in public, whatever its likelihood.
 - **Exclusions are claims too.** "Not family X" needs the same evidence as "family X".
 
-Model-family claims are fragile. One published fleet report removed a model-family exclusion, and a claim about how often one family used its own name in tags, in a dated changelog after publication ([swarmcha.se](references.md#incident-reports)). Small self-identification tests and style comparisons do not support exclusions. Toolkit support for model-family ranking is (planned).
+Model-family claims are fragile. One published fleet report removed a model-family exclusion, and a claim about how often one family used its own name in tags, in a dated changelog after publication ([swarmcha.se](references.md#incident-reports)). Small self-identification tests and style comparisons do not support exclusions. Toolkit: a model-family result is entered as a case claim with its likelihood, the method's held-out accuracy and its corpus size (`case claim --layer model_family`); a claim without the measurement is refused. Reports rank the families by likelihood and never name one. The toolkit has no model-family method of its own.
 
 ## FM-7.6 Claim tags
 
@@ -63,7 +63,7 @@ Every statement in a report or notice that bears on what happened or who did it 
 | **Inference** | Reasoning from Observed and Documented claims. | The claims it rests on, and its assumption. |
 | **Conclusion** | The judgment the report asks the reader to act on. | Its label ([FM-7.7](#fm-77-attribution-labels)) and likelihood words ([chapter 8](08-confidence.md)). |
 
-The tags follow the [ICD 203](references.md#standards-and-guidance) standard of distinguishing underlying information from assumptions and judgments. Toolkit support for tagging claims in drafts is (planned); the case study template applies it by hand ([chapter 13](13-case-study.md)).
+The tags follow the [ICD 203](references.md#standards-and-guidance) standard of distinguishing underlying information from assumptions and judgments. Toolkit: every attribution claim in a draft carries its tag, given with `case claim --tag` or derived (a network seen in the records is Observed, a provider's statement or documented infrastructure is Documented, the rest Inference), and each developer named through the gate gets a Conclusion line with its label and likelihood word. Statements outside the attribution section are tagged by hand, as in the case study template ([chapter 13](13-case-study.md)).
 
 ## FM-7.7 Attribution labels
 
@@ -77,6 +77,8 @@ A developer or operator attribution carries one label, set by the strongest evid
 | **Unattributed** | `self_id` only, or nothing | none; report what the records say ("requests named Claude") without attributing |
 
 The label is about evidence, and the likelihood word about probability. A report gives both ("Suspected: very likely operated by Example AI"), and never a likelihood word stronger than its label allows.
+
+Hosting claims take the same labels, except that a network seen in the records is Suspected (requests can be relayed). Harness and model-family candidates are never stronger than Possible, and a model-family claim without a held-out measurement is Unattributed. The toolkit derives every label from the layer and the evidence.
 
 ## FM-7.8 The naming gate
 

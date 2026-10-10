@@ -60,7 +60,8 @@ pub struct CaseEndpoint {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contact {
     pub org: String,
-    /// provider | affected | registrar | host | cert
+    /// provider | affected (an operator) | registrar | host | csirt |
+    /// declared_owner
     pub role: String,
     /// The endpoint this contact is for, when it is for one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -73,6 +74,9 @@ pub struct Contact {
     /// low | medium | high
     pub confidence: String,
     pub found_on: String,
+    /// security | abuse, for provider contacts from the directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +101,10 @@ pub struct Case {
     pub status: CaseStatus,
     pub notice: NoticeStatus,
     pub opened: String,
+    /// Set by `notice add` (the date) until `notice published` confirms the
+    /// notice reached the repository's remote: added, not yet public.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publish_pending: Option<String>,
     /// Weakest evidence that may name a developer outside case notes.
     #[serde(default)]
     pub min_named: Evidence,

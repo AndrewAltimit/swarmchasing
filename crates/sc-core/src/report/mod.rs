@@ -697,14 +697,49 @@ mod tests {
         assert!(md.contains("Anthropic (developer, **not named outside case notes**)"));
 
         let confirmed = Claim {
-            party: "Anthropic".into(),
-            role: Role::Developer,
-            evidence: Evidence::ProviderConfirmed,
             details: vec!["confirmed in writing".into()],
+            ..Claim::new("Anthropic", Role::Developer, Evidence::ProviderConfirmed)
         };
-        let md = render(Audience::Affected, Evidence::default(), vec![confirmed]);
+        let md = render(
+            Audience::Affected,
+            Evidence::default(),
+            vec![confirmed.clone()],
+        );
         assert!(md.contains("**Anthropic** (developer). Evidence: confirmed by the provider."));
+        assert!(md.contains("Label: Confirmed; tag: Documented"), "{md}");
+        assert!(
+            md.contains("- Confirmed: almost certain operated by **Anthropic**"),
+            "{md}"
+        );
         assert!(!md.contains("Some requests name a model or vendor"));
+
+        // Model-family and harness candidates: ranked in private reports,
+        // never named in public, whatever their evidence.
+        let family = Claim {
+            likelihood: Some(0.7),
+            accuracy: Some(0.8),
+            corpus_size: Some(500),
+            details: vec!["residue match".into()],
+            ..Claim::new("family-q", Role::ModelFamily, Evidence::ProviderConfirmed)
+        };
+        let md = render(
+            Audience::Provider,
+            Evidence::default(),
+            vec![family.clone()],
+        );
+        assert!(md.contains("**Model family candidates**"), "{md}");
+        assert!(
+            md.contains("1. family-q — Label: Possible; tag: Inference."),
+            "{md}"
+        );
+        assert!(
+            md.contains("accuracy 80% on a held-out set, corpus of 500"),
+            "{md}"
+        );
+        assert!(!md.contains("operated by **family-q**"), "{md}");
+        let public = render(Audience::Public, Evidence::SelfId, vec![family, confirmed]);
+        assert!(!public.contains("family-q"), "{public}");
+        assert!(public.contains("operated by **Anthropic**"), "{public}");
     }
 
     #[test]

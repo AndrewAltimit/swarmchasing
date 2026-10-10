@@ -12,3 +12,4 @@ mod common;
 mod eval;
 mod notices;
 mod watch;
+mod workflow;

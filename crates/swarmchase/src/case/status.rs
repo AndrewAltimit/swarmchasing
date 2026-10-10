@@ -114,7 +114,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
     for cl in &claims {
         writeln!(
             out,
-            "  {:<3} {} ({:?}) — {}",
+            "  {:<3} {} ({:?}) — {} · {} · {}",
             if cl.nameable(c.min_named) {
                 "✓"
             } else {
@@ -122,7 +122,9 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
             },
             cl.party,
             cl.role,
-            cl.evidence.describe()
+            cl.evidence.describe(),
+            cl.label().label(),
+            cl.tag().label()
         )?;
     }
     if !c.evidence.is_empty() {
@@ -152,7 +154,8 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
         c.sent.len()
     )?;
 
-    let todo = todo(&c, &claims);
+    let has_draft = case_dir(root, id)?.join(NOTICE_DRAFT).is_file();
+    let todo = todo(&c, &claims, has_draft);
     if !todo.is_empty() {
         writeln!(out, "\nNeeds")?;
         for t in todo {
@@ -163,7 +166,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
 }
 
 /// What the case still needs before reports can go out.
-fn todo(c: &Case, claims: &[Claim]) -> Vec<String> {
+fn todo(c: &Case, claims: &[Claim], has_draft: bool) -> Vec<String> {
     let mut t = Vec::new();
     let unreviewed = c
         .endpoints
@@ -185,6 +188,37 @@ fn todo(c: &Case, claims: &[Claim]) -> Vec<String> {
     if affected && !c.contacts.iter().any(|x| x.role == "affected") {
         t.push(format!(
             "find contacts for the affected operators: `swarmchase case contacts {}`",
+            c.id
+        ));
+    }
+    if !c.contacts.iter().any(|x| x.role == "provider") {
+        let dir = crate::contacts::Directory::builtin();
+        let known: Vec<&str> = claims
+            .iter()
+            .filter(|x| matches!(x.role, Role::Developer | Role::Host))
+            .filter_map(|x| dir.find(&x.party).map(|p| p.name.as_str()))
+            .collect();
+        if known.is_empty() {
+            t.push(format!(
+                "no provider contact: add the provider's security or abuse channel by hand: `swarmchase case contact add {} --party provider --org … --channel email|form|portal --address … --source <link>`",
+                c.id
+            ));
+        } else {
+            t.push(format!(
+                "no provider contact; the directory has {}: `swarmchase case contacts {} --providers-only`",
+                known.join(", "),
+                c.id
+            ));
+        }
+    }
+    if let Some(d) = &c.publish_pending {
+        t.push(format!(
+            "notice added {d}, publish pending: commit and push notices/{0}.md, then `swarmchase notice published {0}`",
+            c.id
+        ));
+    } else if !has_draft && matches!(c.status, CaseStatus::Open | CaseStatus::Reported) {
+        t.push(format!(
+            "no notice draft; reports and the notice go out together: `swarmchase case notice {}`",
             c.id
         ));
     }
