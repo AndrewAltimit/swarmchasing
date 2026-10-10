@@ -7,6 +7,7 @@
 //! up in a similar order. Matches are leads to review; nothing here merges
 //! clusters.
 
+use crate::analyze::{Analysis, ObsResult};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -171,6 +172,56 @@ pub fn reruns(runs: &[TargetRun], opt: &RecurrenceOptions) -> Vec<Rerun> {
     out
 }
 
+/// One run of a cluster (a stretch with no long gap), as
+/// [`cluster_reruns`] sees it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClusterRun {
+    /// The cluster's number and key.
+    pub cluster: String,
+    pub key: String,
+    pub start: i64,
+    pub records: usize,
+    /// Whether the run holds a record in the caller's new set.
+    pub new: bool,
+}
+
+/// Runs in the analysis whose target sequence repeats an earlier run in a
+/// different cluster, where the later run has a record in `new_ids`. The
+/// matches index into the returned runs.
+pub fn cluster_reruns(a: &Analysis, new_ids: &BTreeSet<String>) -> (Vec<ClusterRun>, Vec<Rerun>) {
+    let mut infos = Vec::new();
+    let mut runs = Vec::new();
+    for c in &a.clusters {
+        for (n, span) in c.runs.iter().enumerate() {
+            let members: Vec<&ObsResult> = c
+                .members
+                .iter()
+                .map(|&m| &a.results[m])
+                .filter(|r| r.obs.ts >= span.start && r.obs.ts <= span.end)
+                .collect();
+            runs.push(TargetRun {
+                key: format!("{}#{}", c.id, n + 1),
+                targets: members
+                    .iter()
+                    .filter_map(|r| Some((r.obs.ts, r.target_host.clone()?)))
+                    .collect(),
+            });
+            infos.push(ClusterRun {
+                cluster: c.id.clone(),
+                key: c.key.clone(),
+                start: span.start,
+                records: members.len(),
+                new: members.iter().any(|r| new_ids.contains(&r.obs.id)),
+            });
+        }
+    }
+    let matches = reruns(&runs, &RecurrenceOptions::default())
+        .into_iter()
+        .filter(|m| infos[m.later].new && infos[m.earlier].cluster != infos[m.later].cluster)
+        .collect();
+    (infos, matches)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,5 +311,36 @@ mod tests {
     fn too_few_shared_hosts() {
         let runs = [run("r1", T0, &HOSTS[..3]), run("r2", T0 + DAY, &HOSTS[..3])];
         assert!(reruns(&runs, &RecurrenceOptions::default()).is_empty());
+    }
+
+    #[test]
+    fn cluster_runs_rerun_in_another_cluster() {
+        let rules = crate::Rules::default_rules();
+        let run = |tag: &str, start: i64| -> Vec<crate::Observation> {
+            ["a", "b", "c", "d", "e", "f"]
+                .iter()
+                .enumerate()
+                .map(|(i, h)| crate::Observation {
+                    id: format!("{tag}-{i}"),
+                    ts: start + i as i64 * 40,
+                    url: format!(
+                        "https://r.jina.ai/https://{h}.portal.example/q?id=1'%20OR%201=1--&uqtag={tag}"
+                    ),
+                    ..Default::default()
+                })
+                .collect()
+        };
+        let mut obs = run("first7", 1_791_000_000);
+        obs.extend(run("second9", 1_791_000_000 + 3 * DAY));
+        let a = crate::analyze(obs, &rules);
+        let new_ids: BTreeSet<String> = (0..6).map(|i| format!("second9-{i}")).collect();
+        let (runs, matches) = cluster_reruns(&a, &new_ids);
+        assert_eq!(matches.len(), 1, "{matches:?}");
+        let (e, l) = (&runs[matches[0].earlier], &runs[matches[0].later]);
+        assert!(l.new && !e.new);
+        assert_ne!(e.cluster, l.cluster);
+        assert!(l.key.starts_with("k-"));
+        assert_eq!(matches[0].shared.len(), 6);
+        assert!(cluster_reruns(&a, &BTreeSet::new()).1.is_empty());
     }
 }

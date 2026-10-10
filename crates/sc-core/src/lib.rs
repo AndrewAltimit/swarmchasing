@@ -5,6 +5,7 @@
 
 pub mod analyze;
 pub mod attribution;
+pub mod bursts;
 pub mod capture;
 pub mod chains;
 pub mod dialect;
@@ -28,6 +29,7 @@ pub mod urlquery;
 
 pub use analyze::{Analysis, Cluster, ObsResult, analyze};
 pub use attribution::{Claim, Evidence, Role, attribute};
+pub use bursts::{ArchiveBurst, archive_bursts};
 pub use chains::{Chain, Pace};
 pub use dialect::{CutLengths, Dialect, DialectPair};
 pub use endpoints::{Activity, EndpointOptions, EndpointView, endpoints};
@@ -40,7 +42,7 @@ pub use model::{
     Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tier, fmt_ts, parse_ts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
-pub use recurrence::{RecurrenceOptions, Rerun, TargetRun, reruns};
+pub use recurrence::{ClusterRun, RecurrenceOptions, Rerun, TargetRun, cluster_reruns, reruns};
 pub use redact::{redact_observation, redact_url};
 pub use report::{Audience, Notice, ReportOptions, render_markdown, render_notice};
 pub use rules::{DEFAULT_RULES, RuleSet, Rules};
