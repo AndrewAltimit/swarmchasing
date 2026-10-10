@@ -129,7 +129,7 @@ pub fn print(r: &EvalReport, labels: &LabelSet, show_fp: usize) {
                 m.score,
                 m.id,
                 m.rules.join(", "),
-                crate::truncate(&m.url, 140)
+                crate::util::truncate(&m.url, 140)
             );
         }
     }
@@ -182,7 +182,7 @@ pub fn run(
     let r = sc_core::evaluate(a, labels);
     print(&r, labels, show_fp);
     if let Some(p) = json {
-        crate::write_out(Some(p), &serde_json::to_string_pretty(&r)?)?;
+        crate::util::write_out(Some(p), &serde_json::to_string_pretty(&r)?)?;
     }
     let failures = check(&r, floors);
     if !failures.is_empty() {

@@ -26,7 +26,8 @@ Each change is logged with its date.
 | Command | What it does |
 |---|---|
 | `case status [<id>]` | Lists cases, or shows one case and what it still needs. |
-| `case endpoint <id> <host> <state> [--note …]` | Classifies an endpoint. |
+| `case endpoint <id> <host>... <state> [--note …]` | Classifies one or more endpoints; a host not in the case changes nothing. |
+| `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits. Refused once its notice is published. |
 | `case claim <id> --party … --evidence provider_confirmed --detail …` | Records an attribution claim. |
 | `case set <id> --status … --notice … --min-named …` | Changes the status or the naming threshold. |
 | `case note <id> "…"` | Adds a dated entry to the decision log. |
