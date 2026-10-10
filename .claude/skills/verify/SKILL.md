@@ -25,6 +25,7 @@ python3 scripts/ci/check-committed-data.py
 python3 scripts/ci/check-md-links.py
 python3 scripts/ci/check-doc-density.py --self-test && python3 scripts/ci/check-doc-density.py
 python3 scripts/ci/check-site.py
+python3 scripts/ci/check-published-tags.py --self-test && python3 scripts/ci/check-published-tags.py
 cargo run -q --profile release-test -p swarmchase -- notice lint
 scripts/ci/check-wasm-target.sh          # after touching sc-core or sc-wasm
 scripts/ci/deny.sh                       # after touching Cargo.lock or deny.toml

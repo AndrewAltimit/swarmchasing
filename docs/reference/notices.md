@@ -58,6 +58,10 @@ A report to one operator never carries another operator's logs. Records used wit
 
 CI runs it on every pull request and push, and so does the pre-commit hook when `notices/` is staged ([scripts](../../scripts/README.md)).
 
+## Burned tags
+
+A run tag or marker a notice prints is public: anyone can copy it, so it no longer identifies one operator. [`check-published-tags.py`](../../scripts/ci/check-published-tags.py) fails when a committed notice shows a linking tag (`uqtag`, `run` and the other tag parameters notices keep) or a linking marker value that `[linking] published_tags` in [`rules/default.toml`](../../rules/default.toml) does not list. A listed value never links; its records appear as a common feature instead. Add each value with the notice as its source when the notice is added. The rules change passes the eval gate like any other.
+
 ## Build
 
 `notice build --out <dir> --base-url <url>` turns `notices/` into the notice data: an index, one JSON page per notice and an Atom feed with one entry per update. It refuses to build if any notice fails the lint. At deploy the site build writes the same files under `notices/`, plus a static page per notice and the filterable index ([browser toolkit](browser-toolkit.md#pages)).
