@@ -41,12 +41,11 @@ mod pull;
 
 use crate::health::{RuleHistory, RuleRun};
 use crate::store::{append, load_store, prune, read_json, to_ndjson, write_json};
-use crate::util::{URLQUERY_KEY_ENV, urlquery_key};
 use anyhow::{Context, Result, bail};
 use cases::{CaseCheck, CaseWatch};
 use digest::{DigestInput, Health, SourceReport, Summary, digest, summarise};
 use pull::{SourceState, pull};
-use sc_collect::{CdxQuery, Client};
+use sc_collect::{CdxQuery, Client, Kind};
 use sc_core::bursts::archive_bursts;
 use sc_core::{Observation, ReportOptions, Rules, analyze, render_markdown};
 use serde::{Deserialize, Serialize};
@@ -74,8 +73,16 @@ pub struct Watchlist {
     /// its case for this many days.
     #[serde(default = "default_contained_after")]
     pub contained_after_days: i64,
+    /// Reuse a cached HTTP response for this long before revalidating it
+    /// (`<data>/cache/http/`). 0 turns the cache off.
+    #[serde(default = "default_cache_ttl")]
+    pub http_cache_ttl_secs: u64,
     #[serde(default, rename = "source")]
     pub sources: Vec<WatchSource>,
+}
+
+fn default_cache_ttl() -> u64 {
+    3600
 }
 
 fn default_interval() -> u64 {
@@ -97,7 +104,8 @@ fn default_contained_after() -> i64 {
 #[derive(Deserialize)]
 pub struct WatchSource {
     pub name: String,
-    /// wayback | arquivo | urlquery
+    /// A source kind (`sc_collect::Kind`): wayback, arquivo, urlquery,
+    /// commoncrawl, urlscan, memento, gharchive, npm, pypi or ctlog.
     pub kind: String,
     #[serde(flatten)]
     pub query: CdxQuery,
@@ -145,7 +153,19 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
     if wl.sources.is_empty() {
         bail!("{}: no [[source]] entries", watchlist.display());
     }
-    let client = Client::new(Duration::from_secs(wl.min_interval_secs))?;
+    let mut client = Client::new(Duration::from_secs(wl.min_interval_secs))?;
+    if wl.http_cache_ttl_secs > 0 {
+        client = client.with_cache(
+            &out.join("cache").join("http"),
+            Duration::from_secs(wl.http_cache_ttl_secs),
+        );
+    }
+    let asn = sc_collect::asn::load_from_data(out)
+        .unwrap_or_else(|e| {
+            eprintln!("warning: ASN table not loaded: {e:#}");
+            None
+        })
+        .filter(|t| !t.is_empty());
     let now = chrono::Utc::now();
     let stamp = now.format("%Y%m%dT%H%M%SZ").to_string();
     let run_dir = out.join("runs").join(&stamp);
@@ -167,17 +187,21 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
 
     for s in &wl.sources {
         eprint!("{:<24} {:<8} {} … ", s.name, s.kind, s.query.pattern);
-        if s.kind == "urlquery" && urlquery_key().is_none() {
-            eprintln!("skipped: {URLQUERY_KEY_ENV} not set");
+        if let Ok(kind) = s.kind.parse::<Kind>()
+            && kind.needs_key()
+            && kind.key_from_env().is_none()
+        {
+            let why = format!("skipped: {} not set", kind.key_env().unwrap_or("API key"));
+            eprintln!("{why}");
             reports.push(SourceReport {
-                skipped: Some(format!("skipped: {URLQUERY_KEY_ENV} not set")),
+                skipped: Some(why),
                 ..SourceReport::new(&s.name)
             });
             continue;
         }
         let st = state.sources.entry(s.name.clone()).or_default();
         let before = client.requests();
-        let res = pull(&client, s, st, wl.overlap_days * DAY);
+        let res = pull(&client, s, st, wl.overlap_days * DAY, asn.as_ref());
         st.last_run = Some(stamp.clone());
         let mut rep = SourceReport {
             requests: client.requests() - before,

@@ -52,6 +52,7 @@ impl Source for Wayback {
         Ok(Page {
             records: p.records,
             next: p.resume_key.map(Cursor::Key),
+            truncated: false,
         })
     }
 }

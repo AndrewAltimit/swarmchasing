@@ -1,12 +1,14 @@
 //! Incremental pulls: each source's cursor, the IDs still inside the overlap
-//! window, and a Wayback pull that continues on the next run.
+//! window, and a resumable pull (Wayback, Common Crawl) that continues on the
+//! next run. Records that carry an IP but no network get their ASN from the
+//! offline table when one has been fetched (`swarmchase asn fetch`).
 
 use super::WatchSource;
 use crate::health::SourceHealth;
-use crate::util::{URLQUERY_KEY_ENV, urlquery_key};
 use anyhow::{Context, Result};
 use sc_collect::{Client, Cursor, Kind, cdx_ts};
 use sc_core::Observation;
+use sc_core::asn::AsnTable;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -42,6 +44,7 @@ pub fn pull(
     s: &WatchSource,
     st: &mut SourceState,
     overlap: i64,
+    asn: Option<&AsnTable>,
 ) -> Result<(usize, Vec<Observation>)> {
     let kind: Kind = s.kind.parse()?;
     let mut q = s.query.clone();
@@ -54,11 +57,11 @@ pub fn pull(
     q.from = None;
     let since = sc_core::parse_ts(&from).filter(|&t| t > 0);
     let limit = q.limit;
-    let key = match kind {
-        Kind::Urlquery => {
-            Some(urlquery_key().with_context(|| format!("{URLQUERY_KEY_ENV} not set"))?)
+    let key = match (kind.key_from_env(), kind.key_env()) {
+        (None, Some(env)) if kind.needs_key() => {
+            return Err(anyhow::anyhow!("{env} not set")).context(kind.name());
         }
-        _ => None,
+        (k, _) => k,
     };
     let src = sc_collect::source(kind, q, key)?;
     let resumable = src.resumable();
@@ -83,6 +86,11 @@ pub fn pull(
     };
     if !resumable && res.observations.len() >= limit {
         eprint!("(hit limit {limit}; raise it or narrow the pattern) ");
+    } else if res.truncated {
+        eprint!("(a page was cut short and the source cannot page; narrow the pattern) ");
+    }
+    if let Some(t) = asn {
+        t.enrich(&mut res.observations);
     }
     Ok((
         res.observations.len(),
@@ -113,6 +121,20 @@ fn keep_fresh(st: &mut SourceState, records: Vec<Observation>, overlap: i64) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_committed_watchlist_names_valid_sources() {
+        let wl: super::super::Watchlist =
+            toml::from_str(include_str!("../../../../watchlist.toml")).unwrap();
+        assert!(!wl.sources.is_empty());
+        let mut names = std::collections::BTreeSet::new();
+        for s in &wl.sources {
+            assert!(names.insert(&s.name), "duplicate source {}", s.name);
+            let kind: Kind = s.kind.parse().unwrap();
+            // Builds the source, which checks e.g. a CT log's endpoint.
+            sc_collect::source(kind, s.query.clone(), Some("k".into())).unwrap();
+        }
+    }
 
     #[test]
     fn overlapping_pulls_drop_records_already_seen() {

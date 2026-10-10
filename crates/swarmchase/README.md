@@ -55,13 +55,20 @@ swarmchase unwrap 'https://r.jina.ai/https://portal.example.gov/q?id=1%20UNION%2
 
 ### Collect
 
-Collectors read indexes and public records only. They never open a capture or a URL an agent submitted. Requests go one at a time with an identifying user agent (override with `SWARMCHASE_UA`), and retry on HTTP 429 and 5xx with exponential backoff, honouring `Retry-After`.
+Collectors read indexes and public records only. They never open a capture or a URL an agent submitted. Requests go one at a time per host with an identifying user agent (override with `SWARMCHASE_UA`), and retry on HTTP 429 and 5xx with jittered backoff, honouring `Retry-After`. Every `collect` source also takes `--endpoint`, `--scan` and `--cache` ([source kinds](../../docs/reference/watch.md#source-kinds)).
 
 | Command | What it does |
 |---|---|
 | `collect wayback <pattern>` | Wayback Machine CDX index, e.g. `'r.jina.ai/*'`. `--from`/`--to` (`yyyyMMdd[hhmmss]`), `--match-type`, `--limit`, `--page-size`, `-o`, and `--resume` to continue an interrupted pull. |
 | `collect arquivo <pattern>` | Arquivo.pt CDX index, same options. |
 | `collect urlquery <query>` | urlquery.net report search. Needs `URLQUERY_APIKEY`. |
+| `collect commoncrawl <pattern>` | Common Crawl CDX index rows, newest crawl by default. |
+| `collect urlscan <query>` | urlscan.io public search, per case. `URLSCAN_APIKEY` optional. |
+| `collect memento <url>` | One URL's captures across archives, from a Memento timemap. |
+| `collect gharchive <substrings>` | Public GitHub events matching repo names or payload URLs. |
+| `collect npm <text>`, `collect pypi <substrings>` | Package names, versions and publish times; never code. |
+| `collect ctlog <substrings> --endpoint <log>` | Certificates in a CT log's newest entries whose names match. |
+| `asn fetch`, `asn lookup <ip>…` | The offline IP-to-ASN table in `<data>/asn/`. |
 | `collect urlquery-reports <ids> -o <out>` | Fetches urlquery reports by ID, or every ID in a labels file such as Transluce's `reports.csv`. Appends to `--out` and skips IDs already there; `--sample N` caps the agent-labelled reports. |
 | `certs <query>` | Certificate Transparency lookup via crt.sh, e.g. `'%.example.com'`. |
 | `contact <domain>` | The domain's RFC 9116 security.txt contact. |
@@ -119,6 +126,7 @@ Details: [Notices](../../docs/reference/notices.md).
 |---|---|
 | `SWARMCHASE_DATA` | The data directory (`--out` / `--data`, default `data/`): watch state and store, labels, cases. Gitignored. |
 | `URLQUERY_APIKEY` | urlquery.net collectors. Without it, `watch` skips urlquery sources and says so. |
+| `URLSCAN_APIKEY` | Optional key for `collect urlscan`. |
 | `SWARMCHASE_SITE_URL` | `notice build --base-url`. |
 | `SWARMCHASE_UA` | Overrides the collectors' user agent. |
 
