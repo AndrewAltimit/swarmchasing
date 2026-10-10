@@ -37,6 +37,7 @@ The [CLI README](crates/swarmchase/README.md) covers input formats and every com
 | [`crates/sc-core`](crates/sc-core/README.md) | Platform-independent analysis. No I/O, so it compiles to WASM. |
 | [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors: Wayback and Arquivo.pt CDX, urlquery.net, crt.sh, security.txt. |
 | [`crates/swarmchase`](crates/swarmchase/README.md) | The CLI: analysis, collection, watch, review, cases and notices. |
+| [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, their Markdown blocks, the Atom feed and the generated site pages. |
 | [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit. |
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. |
 | [`samples/eval/`](samples/eval/README.md) | Labelled evaluation set behind the CI eval gate. |
@@ -63,30 +64,6 @@ The [CLI README](crates/swarmchase/README.md) covers input formats and every com
 - **Raw data stays out of git.** The data directory (watch data and case files) is gitignored. Only notices and curated, redacted samples are committed.
 
 The full set is in [docs/policies.md](docs/policies.md).
-
-## Reference
-
-Pointers kept for links into this page; the detail is under [docs/reference/](docs/README.md#reference).
-
-### Local secrets
-
-Keys and SMTP settings live in the gitignored `env.list`, loaded by `scripts/with-env.sh`: [configuration](docs/reference/configuration.md#local-secrets).
-
-### Watch runs
-
-Incremental collection, the digest, case status proposals and retention: [watch runs](docs/reference/watch.md).
-
-### Reviewing leads
-
-Labelling watch leads with `swarmchase review`: [reviewing leads](docs/reference/watch.md#reviewing-leads).
-
-### Case files
-
-`case.toml`, every `case` subcommand, drafts and evidence bundles: [case files](docs/reference/cases.md).
-
-### Notices
-
-Drafting, adding, updating, linting and building notices, and what they withhold: [notices](docs/reference/notices.md).
 
 ## License
 

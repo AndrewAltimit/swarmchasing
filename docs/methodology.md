@@ -98,7 +98,7 @@ A rule's target says what it reads: the host of each layer (suffix match), each 
 
 ## Tiers
 
-Each record is graded by [`analyze.rs`](../crates/sc-core/src/analyze.rs):
+Each record is graded by [`analyze.rs`](../crates/sc-core/src/analyze/mod.rs):
 
 - **significant:** a significant rule fired, or the score reached `thresholds.significant`;
 - **suggestive:** the score reached `thresholds.suggestive`;
@@ -126,7 +126,7 @@ Probe chains also carry descriptive detail that changes nothing: their **pace** 
 
 ## Timing
 
-[`timing.rs`](../crates/sc-core/src/timing.rs) describes each cluster and the whole analysis. None of it changes a score or links records.
+[`timing.rs`](../crates/sc-core/src/timing/mod.rs) describes each cluster and the whole analysis. None of it changes a score or links records.
 
 **Cadence, bursts and pauses.** The median and 90th-percentile gap between records. A burst is at least `linking.burst_min` records, each within `linking.burst_gap_secs` of the last. A pause is a gap at least `linking.pause_min_secs` long and at least ten times the median gap, so a slow but steady cadence does not read as a string of pauses. The analysis also reports how many cluster runs were active at the same instant.
 

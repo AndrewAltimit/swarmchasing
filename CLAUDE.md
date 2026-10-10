@@ -23,6 +23,7 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 | [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, reports. No I/O (compiles to WASM). |
 | [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (Wayback / Arquivo CDX, urlquery.net search and reports, crt.sh, security.txt) with retry and paging. |
 | [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README); [`watch.rs`](crates/swarmchase/src/watch.rs) is the incremental watch pipeline and digest; [`case.rs`](crates/swarmchase/src/case.rs) is case files, contacts, evidence bundles and send drafts; [`evidence.rs`](crates/swarmchase/src/evidence.rs) is logs operators send back; [`stix.rs`](crates/swarmchase/src/stix.rs) is the STIX 2.1 export; [`notice.rs`](crates/swarmchase/src/notice.rs) adds, updates, lints and builds public notices. |
+| [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site page generation. Text in, text out. |
 | [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit in [`site/`](site/index.html). |
 | `notices/` | Published notices (`<id>.md`, front matter + dated updates). Committing one publishes it ([notices](docs/reference/notices.md)). |
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. Every change passes the eval gate. |
