@@ -13,7 +13,7 @@ use super::Options;
 use super::ids::{sdo_id, stix_ts};
 use super::objects::Head;
 use sc_core::attribution::{Claim, Role, merge, summaries};
-use sc_core::{Analysis, Cluster, IndicatorKind, attribute};
+use sc_core::{Analysis, Cluster, attribute};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -49,18 +49,6 @@ pub(super) fn extension_definition(h: &Head) -> Value {
     })
 }
 
-/// The SC-T tactic an indicator kind is evidence of, where there is one.
-fn tactic(kind: IndicatorKind) -> Option<&'static str> {
-    Some(match kind {
-        IndicatorKind::Relay => "SC-T1",
-        IndicatorKind::Carrier => "SC-T2",
-        IndicatorKind::AntiBot | IndicatorKind::Outcome => "SC-T3",
-        IndicatorKind::Exploit => "SC-T4",
-        IndicatorKind::Exfil => "SC-T7",
-        _ => return None,
-    })
-}
-
 /// The artifact family (SC-FM 4.5) a rule's match belongs to.
 fn residue_family(rule: &str) -> Option<&'static str> {
     Some(match rule {
@@ -80,15 +68,20 @@ fn residue_family(rule: &str) -> Option<&'static str> {
     })
 }
 
-/// Tactics in order of first appearance, members taken in time order.
-fn tactics(a: &Analysis, c: &Cluster) -> Vec<&'static str> {
+/// The SC-T tactics the members' rule hits carry (each rule's `tactic`), in
+/// order of first appearance, members taken in time order. A rule with no
+/// tactic adds none.
+fn tactics(a: &Analysis, c: &Cluster) -> Vec<String> {
     let mut members = c.members.clone();
     members.sort_by_key(|&m| (a.results[m].obs.ts, m));
     let mut out = Vec::new();
     for m in members {
         let mut hits: Vec<_> = a.results[m].hits.iter().collect();
         hits.sort_by(|x, y| x.rule_id.cmp(&y.rule_id));
-        for t in hits.into_iter().filter_map(|h| tactic(h.kind)) {
+        for t in hits
+            .into_iter()
+            .filter_map(|h| h.tactic.map(|t| format!("SC-{}", t.id())))
+        {
             if !out.contains(&t) {
                 out.push(t);
             }

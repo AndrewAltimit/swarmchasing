@@ -30,20 +30,24 @@ The toolkit implements this profile ([STIX export](../reference/cases.md#stix-ex
 
 STIX has no object for "a run of an autonomous agent". The extension defines one as a new STIX Domain Object, through an `extension-definition` with extension type `new-sdo` (STIX 2.1 §7.3). The type name keeps the `x-` prefix, which the specification recommends for objects outside the standard so a future version cannot collide with them.
 
-Planned properties:
+Properties:
 
 | Property | Meaning |
 |---|---|
 | `cluster_key` | The stable cluster key the run belongs to. |
 | `first_seen`, `last_seen` | The run's span. |
-| `timestamp_kind` | `request`, `submit` or `capture` ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). |
+| `timestamp_kind` | `request`, `submit`, `capture` or `unknown`, or `mixed` ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). |
 | `tactics` | SC-T ids observed, in order of first appearance ([FM-5.9](05-linking.md#fm-59-escalation-sequences)). |
 | `artifact_families` | Artifact families observed ([FM-4.5](04-indicators.md#fm-45-artifact-families)). |
+| `concurrency` | Parallel batches, their modal and largest width, and the number of runs ([FM-6.3](06-timing.md#fm-63-concurrency-and-fan-out)). |
 | `tier` | The run's evidence tier. |
+| `record_count` | How many records the run holds. |
 | `attribution` | Per layer: party or candidate, label, likelihood word, evidence level. |
 | `observed_data_refs` | The `observed-data` objects holding its records. |
 
-A fleet is a STIX `grouping` whose `object_refs` list its runs. Soft links between runs are `related-to` relationships whose description names the link type ([FM-5.7](05-linking.md#fm-57-soft-links)). The schema will be published with the extension definition; until then, exports use the standard objects above.
+The toolkit writes one run object per exported cluster, so `concurrency.runs` counts the runs inside it. The JSON schema is committed at [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json), and every export carries the `extension-definition` that points to it. A public export's `attribution` carries developers through the naming gate and hosts only.
+
+A merged fleet as a STIX `grouping` whose `object_refs` list its runs, and soft links between runs as `related-to` relationships whose description names the link type ([FM-5.7](05-linking.md#fm-57-soft-links)), are built.
 
 ## FM-12.3 AI incident databases
 

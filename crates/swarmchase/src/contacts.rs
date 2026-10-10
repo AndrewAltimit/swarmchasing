@@ -446,7 +446,7 @@ pub fn draft_update(text: &str, checks: &[(String, String, Check)], today: &str)
     let mut pending = String::new();
     for line in text.lines() {
         let t = line.trim();
-        if t == "[[provider.contact]]" || t == "[[provider]]" {
+        if t == "[[provider.contact]]" || t == "[[provider]]" || t == "[[csirt]]" {
             out.push_str(&pending);
             pending.clear();
             current = None;
@@ -481,19 +481,28 @@ pub fn draft_update(text: &str, checks: &[(String, String, Check)], today: &str)
     out
 }
 
-/// `swarmchase contacts`: the provider directory.
+/// `swarmchase contacts`: the provider directory, or with `--csirts` the
+/// national CSIRT directory.
 #[derive(clap::Subcommand)]
 pub enum ContactsCmd {
     /// List the provider directory.
-    List,
+    List {
+        /// List the national CSIRTs (contacts/csirts.toml) instead.
+        #[arg(long)]
+        csirts: bool,
+    },
     /// Re-read every directory entry's source and report what changed. With
     /// --draft, also write an updated copy of the directory (verified dates
     /// refreshed, unconfirmed entries marked) for the admin to review; the
     /// directory itself is never changed.
     Verify {
-        /// The directory to check. Default: contacts/providers.toml.
-        #[arg(long, default_value = "contacts/providers.toml")]
-        file: std::path::PathBuf,
+        /// The directory to check. Default: contacts/providers.toml, or
+        /// contacts/csirts.toml with --csirts.
+        #[arg(long)]
+        file: Option<std::path::PathBuf>,
+        /// Check the national CSIRT directory.
+        #[arg(long)]
+        csirts: bool,
         #[arg(long)]
         draft: Option<std::path::PathBuf>,
     },
@@ -502,7 +511,16 @@ pub enum ContactsCmd {
 pub fn run_contacts(cmd: ContactsCmd) -> Result<()> {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     match cmd {
-        ContactsCmd::List => {
+        ContactsCmd::List { csirts: true } => {
+            for t in &crate::csirts::Csirts::builtin().teams {
+                println!(
+                    "{}  {:<40} {:<8} {} (verified {})",
+                    t.country, t.name, t.channel, t.address, t.verified
+                );
+            }
+            Ok(())
+        }
+        ContactsCmd::List { csirts: false } => {
             let d = Directory::builtin();
             for p in &d.providers {
                 println!("{} ({})", p.name, p.kind);
@@ -515,10 +533,25 @@ pub fn run_contacts(cmd: ContactsCmd) -> Result<()> {
             }
             Ok(())
         }
-        ContactsCmd::Verify { file, draft } => {
+        ContactsCmd::Verify {
+            file,
+            csirts,
+            draft,
+        } => {
+            let file = file.unwrap_or_else(|| {
+                if csirts {
+                    "contacts/csirts.toml".into()
+                } else {
+                    "contacts/providers.toml".into()
+                }
+            });
             let text = std::fs::read_to_string(&file)
                 .with_context(|| format!("reading {}", file.display()))?;
-            let d = Directory::parse(&text)?;
+            let d = if csirts {
+                crate::csirts::Csirts::parse(&text)?.as_directory()
+            } else {
+                Directory::parse(&text)?
+            };
             let http = reqwest::blocking::Client::builder()
                 .user_agent(
                     std::env::var("SWARMCHASE_UA")

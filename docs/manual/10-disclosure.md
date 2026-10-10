@@ -13,7 +13,7 @@ Each incident is reported to:
 | **National CSIRT**, where relevant | When an affected operator is public-sector or critical infrastructure, or has no reachable security contact. | What the affected operator receives, for the operators in its constituency. |
 | **The public** | Others targeted, other providers and researchers can check their own exposure. | The notice ([chapter 11](11-notices.md)). |
 
-Where the declared owner of an "authorised test" is identified, it is a party too ([FM-10.6](#fm-106-authorised-testing)). Toolkit: the toolkit finds operator contacts; CSIRT lookup is (planned), and the admin uses the national team's published contact, for example through the [FIRST team directory](references.md#disclosure).
+Where the declared owner of an "authorised test" is identified, it is a party too ([FM-10.6](#fm-106-authorised-testing)). Toolkit: the toolkit finds operator contacts and proposes the national team for each affected host's country from a directory built from the [FIRST team directory](references.md#disclosure), each entry with its source and the date it was verified.
 
 ## FM-10.2 Simultaneous release
 

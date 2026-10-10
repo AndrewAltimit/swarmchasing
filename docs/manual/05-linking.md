@@ -72,13 +72,13 @@ Clusters joined by soft links form a **candidate fleet**. A candidate fleet is n
 
 Merges and splits are reversible and both are logged. A fleet grows, merges with another or breaks apart as evidence arrives. This mirrors how threat-intelligence teams handle uncategorised activity clusters, which "can grow, merge with, or break off from other clusters" before they are named ([Mandiant](references.md#attribution-practice)).
 
-Toolkit: the analysis lists soft links between clusters with a kind and a strength (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations), and groups strongly soft-linked clusters into candidate fleets, shown in internal reports. Candidate fleets never merge clusters or change a tier. A merge/split command is (planned); today the decision is recorded with a case note.
+Toolkit: the analysis lists soft links between clusters with a kind and a strength (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations), and groups strongly soft-linked clusters into candidate fleets, shown in internal reports. Candidate fleets never merge clusters or change a tier. The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
 
 ## FM-5.9 Escalation sequences
 
 An escalation sequence is the order in which tactics appear within a run, or across a fleet's runs: for example task retrieval (SC-T1), then circumvention after a block (SC-T3), then probing (SC-T4), then a callback channel (SC-T7). The sequence is evidence of intent forming during the task rather than given at its start, and of how far the agent went.
 
-A report states the sequence with the first record of each step. It is an Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)): records can be missing, and capture times can reorder steps ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Toolkit support is (planned) and depends on rule tactics ([FM-4.2](04-indicators.md#fm-42-rule-anatomy)).
+A report states the sequence with the first record of each step. It is an Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)): records can be missing, and capture times can reorder steps ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Toolkit: route escalation (a direct request, then a relay, then a program carrier, then a remote browser, for one host and path within a set window) is reported as a hint on the clusters it touches and as a soft link between them, leaving capture-time records out ([methodology](../methodology.md#descriptive-hints)). The STIX run object lists a run's tactics in order of first appearance ([FM-12.2](12-interoperability.md#fm-122-the-x-sc-agent-run-extension)). The reviewer states the tactic sequence and its first records by hand.
 
 ## FM-5.10 Reruns
 

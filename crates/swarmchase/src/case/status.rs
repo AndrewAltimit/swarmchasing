@@ -71,12 +71,16 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
     for cl in &a.clusters {
         writeln!(
             out,
-            "  {} [{}] {} records, {} → {}",
+            "  {} {} [{}] {} records, {} → {}{}",
             cl.id,
+            cl.key,
             cl.tier.label(),
             cl.members.len(),
             fmt_ts(cl.start),
-            fmt_ts(cl.end)
+            fmt_ts(cl.end),
+            c.fleet_of(&cl.key)
+                .map(|f| format!(" · {}", f.id))
+                .unwrap_or_default()
         )?;
     }
 

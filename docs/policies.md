@@ -29,6 +29,8 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
 - **Four layers.** Developer, hosting network, harness and model family are attributed separately ([SC-FM 7](manual/07-attribution.md)). A host is named as a host. Harness and model-family candidates are ranked in private reports and never named in public; a model-family claim needs a held-out measurement of its method.
 - **Tags and labels.** Every attribution claim is tagged Observed, Documented, Inference or Conclusion, and labelled Confirmed, Suspected, Possible or Unattributed by its evidence. No statement uses a likelihood word stronger than its label allows.
 
+- **Machine help with labelling.** A language model may suggest labels for leads under review only when it runs on infrastructure the admin controls (a loopback or private-network endpoint). Record content is never sent to a third-party model API, the model never fetches URLs, and a suggestion is stored apart from the admin's label, never as it.
+
 ## Reporting and publication
 
 | Topic | Policy |

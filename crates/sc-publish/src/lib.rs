@@ -9,10 +9,14 @@
 //!
 //! What a notice may carry ([`sc_core::notice::PublicView`],
 //! [`sc_core::notice::lint_public`]) stays in `sc-core`, because reports and
-//! the browser need it. No network I/O and no file I/O: callers read and
-//! write the files.
+//! the browser need it. No network I/O, and no file I/O outside [`build`]:
+//! other callers read and write the files.
+//!
+//! - [`build`]: the site built into a directory from a checkout, the one
+//!   entry `sc-site` and `swarmchase site build` share.
 
 pub mod assets;
+pub mod build;
 pub mod feed;
 pub mod file;
 pub mod markdown;

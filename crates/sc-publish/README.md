@@ -2,7 +2,7 @@
 
 Public notices as files, and the site and feed built from them. The [`swarmchase`](../swarmchase/README.md) CLI's `notice` commands use it to check, update and build notices; committing a notice file is what publishes it.
 
-The library reads and writes no files and opens no connections: it takes text and returns text, and the caller does the I/O. The `sc-site` binary is that caller for the public site: it reads committed inputs only, refuses anything under `data/` or `$SWARMCHASE_DATA`, and writes the site ([browser toolkit](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). What a notice may carry, the withholding view and the leak lint, is in [`sc-core`](../sc-core/README.md#modules) (`notice`), because reports and the browser need it too.
+The library opens no connections, and outside its `build` module it reads and writes no files: it takes text and returns text, and the caller does the I/O. `build` is that caller for the public site, shared by the `sc-site` binary and `swarmchase site build`: it reads committed inputs only, refuses anything under `data/` or `$SWARMCHASE_DATA`, and writes the site ([browser toolkit](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). What a notice may carry, the withholding view and the leak lint, is in [`sc-core`](../sc-core/README.md#modules) (`notice`), because reports and the browser need it too.
 
 ## Use
 
@@ -30,7 +30,8 @@ for (path, contents) in files {
 | [`feed`](src/feed.rs) | The Atom feed, one entry per update, newest first. |
 | [`site`](src/site.rs) | The notice index and per-notice JSON, and the feed, as files to write (`notice build`). |
 | [`pages`](src/pages/mod.rs) | Every page of the public site, from notices, docs, the rules and the labelled set: layout, Markdown docs, notices, rules explorer, evaluation, charts. |
-| [`sc-site`](src/bin/sc-site.rs) | The binary that reads the committed inputs and writes the site. |
+| [`build`](src/build.rs) | Reads the committed inputs and writes the site into a directory (`build_site_dir`). |
+| [`sc-site`](src/bin/sc-site.rs) | The binary around `build`; `swarmchase site build` calls the same entry. |
 
 ## Tests
 

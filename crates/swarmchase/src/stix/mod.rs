@@ -8,7 +8,8 @@
 //! it all. Values are real (not defanged): STIX patterns are for machines.
 //! Each exported cluster is also an `x-sc-agent-run` object ([`agent_run`]),
 //! defined by the `extension-definition` the bundle carries, whose schema is
-//! committed at `schemas/stix/x-sc-agent-run.json`.
+//! committed at `schemas/stix/x-sc-agent-run.json`. Each fleet the admin
+//! merged is a `grouping` of its runs ([`fleet`]).
 //!
 //! The export takes the same operator evidence as the report for that
 //! audience ([`crate::evidence::Scope`]); a public export also withholds what
@@ -23,6 +24,7 @@
 //! ids, markings and timestamps.
 
 pub(crate) mod agent_run;
+mod fleet;
 mod ids;
 mod indicators;
 mod objects;
@@ -186,6 +188,7 @@ pub fn export(
         exposed: &exposed,
         claims: &c.claims,
         min_named: c.min_named,
+        fleets: &c.fleets,
     };
     let bundle = build(&a, &rules, &opts)?;
     Ok(format!("{}\n", serde_json::to_string_pretty(&bundle)?))
@@ -201,6 +204,8 @@ struct Options<'a> {
     /// The case's own attribution claims.
     claims: &'a [Claim],
     min_named: Evidence,
+    /// The admin's fleets (`case fleet merge`).
+    fleets: &'a [case::Fleet],
 }
 
 impl Options<'_> {
@@ -252,15 +257,30 @@ fn build(a: &Analysis, rules: &Rules, o: &Options) -> Result<Value> {
         );
     }
     let mut runs = Vec::new();
+    let mut exported = BTreeMap::new();
     for (ci, v) in observed {
         let od = v["id"].as_str().unwrap_or_default().to_string();
         let run = agent_run::agent_run(&h, a, &a.clusters[ci], o, &od);
-        report_refs.push(od);
-        report_refs.push(run["id"].as_str().unwrap_or_default().to_string());
+        let run_id = run["id"].as_str().unwrap_or_default().to_string();
+        report_refs.push(od.clone());
+        report_refs.push(run_id.clone());
+        exported.insert(
+            ci,
+            fleet::Exported {
+                run: run_id,
+                observed: od,
+            },
+        );
         objects.push(v);
         runs.push(run);
     }
     objects.extend(runs);
+    for f in o.fleets {
+        for v in fleet::fleet_objects(&h, a, o.case_id, f, &exported) {
+            report_refs.push(v["id"].as_str().unwrap_or_default().to_string());
+            objects.push(v);
+        }
+    }
     objects.extend(relationships);
     report_refs.extend(scos.keys().cloned());
 
@@ -614,6 +634,110 @@ kept = 1
             }
         }
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn run_tactics_come_from_the_rules() {
+        let root = scratch("tactics");
+        fixture(&root);
+        let c = case::load(&root, "t-1").unwrap();
+        let rules = crate::pinning::case_rules(&root, &c).unwrap();
+        let a = analyze(
+            case::case_records(&root, &c, &crate::evidence::Scope::All).unwrap(),
+            &rules,
+        );
+        let text = export(&root, "t-1", Audience::Provider, None, None, "2026-10-14").unwrap();
+        for r in objects(&text)
+            .iter()
+            .filter(|o| o["type"] == agent_run::TYPE)
+        {
+            let cl = a
+                .clusters
+                .iter()
+                .find(|c| c.key == r["cluster_key"].as_str().unwrap())
+                .unwrap();
+            let want: BTreeSet<String> = cl
+                .members
+                .iter()
+                .flat_map(|&m| &a.results[m].hits)
+                .filter_map(|h| h.tactic.map(|t| format!("SC-{}", t.id())))
+                .collect();
+            let got: BTreeSet<String> = r["tactics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|t| t.as_str().unwrap().to_string())
+                .collect();
+            assert!(!got.is_empty());
+            assert_eq!(got, want, "{r:#}");
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn fleets_export_as_groupings() {
+        let root = scratch("fleet").join("cases");
+        let rules = crate::pinning::RulesText::load(None).unwrap();
+        let records = crate::case::fleet::tests::two_runs();
+        case::new_case(&root, "f-1", "Two runs", records, &rules, "2026-10-12").unwrap();
+        let run = || export(&root, "f-1", Audience::Provider, None, None, "2026-10-14").unwrap();
+        // No fleet yet: no grouping, whatever the analysis proposes.
+        assert!(!objects(&run()).iter().any(|o| o["type"] == "grouping"));
+
+        let c = case::load(&root, "f-1").unwrap();
+        let a = analyze(
+            case::case_records(&root, &c, &crate::evidence::Scope::All).unwrap(),
+            &rules.rules,
+        );
+        let keys: Vec<String> = a.clusters.iter().map(|c| c.key.clone()).collect();
+        case::update(&root, "f-1", |c| {
+            crate::case::fleet::merge(c, &a, &keys, None, "2026-10-13").map(|_| ())
+        })
+        .unwrap();
+        let text = run();
+        assert_eq!(text, run(), "deterministic");
+        let objs = objects(&text);
+        let groups: Vec<&Value> = objs.iter().filter(|o| o["type"] == "grouping").collect();
+        assert_eq!(groups.len(), 1);
+        let g = groups[0];
+        assert_eq!(g["context"], "suspicious-activity");
+        assert!(g["id"].as_str().unwrap().starts_with("grouping--"));
+        let refs: BTreeSet<&str> = g["object_refs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r.as_str().unwrap())
+            .collect();
+        let runs: Vec<&Value> = objs
+            .iter()
+            .filter(|o| o["type"] == agent_run::TYPE)
+            .collect();
+        assert_eq!(runs.len(), 2);
+        for r in &runs {
+            assert!(refs.contains(r["id"].as_str().unwrap()));
+            assert!(refs.contains(r["observed_data_refs"][0].as_str().unwrap()));
+        }
+        let related: Vec<&Value> = objs
+            .iter()
+            .filter(|o| o["relationship_type"] == "related-to")
+            .collect();
+        assert!(!related.is_empty());
+        for rel in &related {
+            assert!(refs.contains(rel["id"].as_str().unwrap()));
+            assert!(
+                rel["description"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("soft link: ")
+            );
+        }
+        let ids: BTreeSet<&str> = objs.iter().map(|o| o["id"].as_str().unwrap()).collect();
+        for r in &refs {
+            assert!(ids.contains(r), "dangling {r}");
+        }
+        let report = objs.iter().find(|o| o["type"] == "report").unwrap();
+        assert!(report["object_refs"].as_array().unwrap().contains(&g["id"]));
+        std::fs::remove_dir_all(root.parent().unwrap()).unwrap();
     }
 
     #[test]

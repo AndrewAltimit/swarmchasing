@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SITE = ROOT / "site"
 PAGES = ROOT / "crates" / "sc-publish" / "src" / "pages"
-GENERATOR = ROOT / "crates" / "sc-publish" / "src" / "bin" / "sc-site.rs"
+GENERATOR = ROOT / "crates" / "sc-publish" / "src" / "build.rs"
 
 CSP_META = re.compile(
     r"""<meta\s+http-equiv=["']Content-Security-Policy["']\s+content="([^"]+)\"""",
@@ -78,7 +78,7 @@ JS_BAD = [
     (re.compile(r"""setAttribute\(\s*["']style|\bstyle\s*:\s*["'`]"""), "style attribute string"),
 ]
 
-# What the generator may read (crates/sc-publish/src/bin/sc-site.rs INPUTS).
+# What the generator may read (crates/sc-publish/src/build.rs INPUTS).
 INPUT_PREFIXES = {
     "notices/",
     "docs/",
@@ -208,7 +208,7 @@ def check_sources(files: dict[str, str]) -> list[str]:
 
 
 def generator_inputs(text: str) -> set[str]:
-    """The INPUTS allow-list of sc-site.rs: the first string of each pair."""
+    """The INPUTS allow-list of build.rs: the first string of each pair."""
     m = re.search(r"const INPUTS[^=]*=\s*&\[(.*?)\];", text, re.S)
     return set(re.findall(r'\(\s*"([^"]*)"', m.group(1))) if m else set()
 
@@ -217,11 +217,11 @@ def check_generator(text: str) -> list[str]:
     found = generator_inputs(text)
     errors = []
     if not found:
-        errors.append("sc-site.rs: no INPUTS allow-list found")
+        errors.append("build.rs: no INPUTS allow-list found")
     for p in sorted(found - INPUT_PREFIXES):
-        errors.append(f"sc-site.rs: INPUTS allows {p!r}, which is not a committed site input")
+        errors.append(f"build.rs: INPUTS allows {p!r}, which is not a committed site input")
     if "SWARMCHASE_DATA" not in text:
-        errors.append("sc-site.rs: no longer refuses $SWARMCHASE_DATA")
+        errors.append("build.rs: no longer refuses $SWARMCHASE_DATA")
     return errors
 
 
