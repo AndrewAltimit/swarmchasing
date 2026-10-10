@@ -1014,6 +1014,7 @@ dependencies = [
 name = "sc-publish"
 version = "0.1.0"
 dependencies = [
+ "regex",
  "sc-core",
  "serde",
  "serde_json",
