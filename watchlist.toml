@@ -9,6 +9,11 @@ overlap_days = 3            # re-check this far back for late-indexed captures
 analysis_window_days = 30
 retain_days = 180           # delete runs and stored records older than this (docs/policies.md)
 contained_after_days = 14   # digest proposes "contained" for an active notice after this long with no matching record
+http_cache_ttl_secs = 3600  # reuse cached responses (<data>/cache/http) this long, then revalidate; 0 = off
+#
+# Kinds: wayback | arquivo | urlquery | commoncrawl | urlscan | memento |
+# gharchive | npm | pypi | ctlog (docs/reference/watch.md#source-kinds).
+# Every source's terms of use are summarised in its rationale, with the URL.
 
 # ── Relays: agents wrap targets so the request comes from someone else's server ──
 # Archives capture these wrapped URLs when the relay's output is saved or linked,
@@ -20,7 +25,7 @@ contained_after_days = 14   # digest proposes "contained" for an active notice a
 # articles through Jina; scoring needs a second indicator to flag those.
 [[source]]
 name = "jina-reader"
-kind = "wayback"          # wayback | arquivo | urlquery
+kind = "wayback"          # see Kinds above
 pattern = "r.jina.ai/*"
 from = "20260901"         # first run starts here; later runs continue from the cursor
 limit = 5000              # max records per run; the rest continue next run
@@ -61,6 +66,22 @@ limit = 2000
 name = "corsproxy-io"
 kind = "wayback"
 pattern = "corsproxy.io/*"
+from = "20260901"
+limit = 2000
+
+# Rationale: a second crawler's view of the same relay URLs. Common Crawl's
+# monthly crawls follow links found on pages, so a relay URL an agent posted
+# somewhere public shows up with its full target and tags. Feeds relay.jina and
+# the marker rules. Noise: as for jina-reader, and a crawl lands only monthly,
+# so most runs add nothing. Index rows only, never WARC content. Terms
+# (https://commoncrawl.org/terms-of-use): a limited licence to use the service
+# and data; no disrupting the servers, harvesting personal data or disguising
+# the requester.
+[[source]]
+name = "cc-jina-reader"
+kind = "commoncrawl"
+pattern = "r.jina.ai/*"
+endpoint = "latest"       # the newest crawl; `latest:2` or a crawl id also work
 from = "20260901"
 limit = 2000
 
@@ -121,6 +142,84 @@ pattern = "r.jina.ai"
 from = "20260901"
 limit = 1000
 page_size = 100
+
+# ── Code hosts, registries and certificates ───────────────────────────────────
+
+# Rationale: agents that work through GitHub (issues, comments, new repos)
+# paste the relay URLs and run tags they use, and swarms create repos named
+# after their runs. Keeps public events whose repo name or payload URLs match;
+# the record is the event's public link, so the URL rules do not fire on it:
+# these are leads for review, linked by time and name. Noise: developers
+# discussing Jina Reader or proxies. Reads the newest hour of the GH Archive
+# stream per run (~10 MB, streamed). Terms: GH Archive republishes GitHub's
+# public API events with no further terms; GitHub's Acceptable Use Policies
+# section 7 (https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)
+# allow research use of public, non-personal information with open-access
+# publications, and forbid spam or selling personal information.
+[[source]]
+name = "gharchive-relays"
+kind = "gharchive"
+pattern = "r.jina.ai/http|api.allorigins.win/get|uqtag="
+scan = 1                  # hours per run
+limit = 500
+
+# Rationale: swarms told to "ship" or prove reach publish throwaway packages
+# whose names or summaries carry run tags. Keeps the newest PyPI releases
+# matching the tags; leads for review (the record is the package page). Noise:
+# low, mostly unrelated packages that happen to contain the tag text. One
+# request per run, revalidated with its ETag. Terms
+# (https://policies.python.org/pypi.org/Terms-of-Service/): API use within
+# rate limits; no excessive requests, spam or selling personal information.
+[[source]]
+name = "pypi-tags"
+kind = "pypi"
+pattern = "uqtag|uqscan"
+endpoint = "updates"
+limit = 200
+
+# Rationale: the same behaviour on npm, through its search API (names,
+# versions and publish times; maintainer details are dropped). Noise: packages
+# whose descriptions mention the tag text. Terms
+# (https://docs.npmjs.com/policies/open-source-terms): programmatic access
+# through the documented public APIs; no automating the website, no
+# unreasonable volume, no use as a general-purpose database.
+[[source]]
+name = "npm-tags"
+kind = "npm"
+pattern = "uqtag"
+limit = 250
+page_size = 250
+
+# Rationale: new certificates for relay look-alikes and mirrors (self-hosted
+# allorigins and corsproxy copies, Jina Reader clones) that agents switch to
+# when a public relay blocks them. Reads the newest 512 entries of one log
+# per run, so it is a small sample, not a monitor; crt.sh stays the per-name
+# lookup (`swarmchase certs`). The record is the certificate's name, a lead for
+# review. Noise: legitimate self-hosted proxies. Terms: CT logs are public by
+# design (RFC 6962, RFC 9162) and publish no restrictions beyond fair rates.
+[[source]]
+name = "ct-relay-lookalikes"
+kind = "ctlog"
+endpoint = "https://ct.googleapis.com/logs/us1/argon2026h2/"
+pattern = "allorigins|corsproxy|jina-reader|r-jina"
+scan = 512
+limit = 200
+
+# ── Per-case sources (not scheduled) ─────────────────────────────────────────
+# - urlscan.io public search (`swarmchase collect urlscan`, URLSCAN_APIKEY
+#   optional): its terms (https://urlscan.io/terms/) license personal,
+#   non-commercial use and need written permission for systematic retrieval
+#   into a database, so it is a per-case lookup, cited by report link. With
+#   that permission, a scheduled entry would read:
+# [[source]]
+# name = "urlscan-jina"
+# kind = "urlscan"
+# pattern = "task.domain:r.jina.ai"
+# from = "20260901"
+# limit = 500
+# page_size = 100
+# - Memento timemaps (`swarmchase collect memento <url>`): one exact URL across
+#   archives beyond the Wayback Machine, for an endpoint's history in a case.
 
 # ── Deliberately not watched ───────────────────────────────────────────────────
 # - Callback channels (webhook.site, requestbin, ntfy.sh, paste sites): listing

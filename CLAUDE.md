@@ -21,7 +21,7 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 | Path | Covers |
 |---|---|
 | [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, reports. No I/O (compiles to WASM). |
-| [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (Wayback / Arquivo CDX, urlquery.net search and reports, crt.sh, security.txt) with retry and paging. |
+| [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (archive CDX, scan services, GH Archive, registries, CT logs, security.txt), HTTP cache, PSL, ASN table. |
 | [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README); [`watch/`](crates/swarmchase/src/watch/mod.rs) is the incremental watch pipeline and digest; [`case/`](crates/swarmchase/src/case/mod.rs) is case files and send drafts; [`pinning.rs`](crates/swarmchase/src/pinning.rs) is the rules a case is pinned to; [`evidence.rs`](crates/swarmchase/src/evidence.rs) is logs operators send back; [`stix/`](crates/swarmchase/src/stix/mod.rs) is the STIX 2.1 export; [`notice.rs`](crates/swarmchase/src/notice.rs) adds, updates, lints and builds public notices. |
 | [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site page generation. Text in, text out. |
 | [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit in [`site/`](site/index.html). |
