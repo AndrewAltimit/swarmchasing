@@ -28,7 +28,13 @@ pub struct ObsResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cluster {
+    /// Position in this analysis (`C1` is the strongest). Another run over
+    /// more records can give the same cluster another number.
     pub id: String,
+    /// Stable name (`k-3f9a2c1b`): a hash of the smallest member record id,
+    /// so the cluster keeps it while its earliest-named record stays in it.
+    #[serde(default)]
+    pub key: String,
     pub members: Vec<usize>,
     pub start: i64,
     pub end: i64,
@@ -99,6 +105,53 @@ pub struct Analysis {
     /// a link to check, never a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dialect_pairs: Vec<DialectPair>,
+}
+
+impl Cluster {
+    /// Whether `sel` names this cluster: its id (`C3`, any case) or its key.
+    pub fn matches(&self, sel: &str) -> bool {
+        let sel = sel.trim();
+        self.id.eq_ignore_ascii_case(sel) || (!self.key.is_empty() && self.key == sel)
+    }
+}
+
+impl Analysis {
+    /// The index of the cluster `sel` names, by id or key.
+    pub fn cluster_index(&self, sel: &str) -> Option<usize> {
+        self.clusters.iter().position(|c| c.matches(sel))
+    }
+
+    /// The cluster `sel` names, by id or key.
+    pub fn cluster(&self, sel: &str) -> Option<&Cluster> {
+        self.cluster_index(sel).map(|i| &self.clusters[i])
+    }
+}
+
+/// `k-` and the first 8 hex digits of the SHA-256 of `seed`.
+fn cluster_key(seed: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(seed.as_bytes());
+    let hex: String = d.iter().take(4).map(|b| format!("{b:02x}")).collect();
+    format!("k-{hex}")
+}
+
+/// What a cluster's key is made from: the smallest non-empty member record
+/// id, or, when no member has an id, the earliest timestamp and URL.
+fn key_seed(results: &[ObsResult], members: &[usize]) -> String {
+    members
+        .iter()
+        .map(|&m| results[m].obs.id.as_str())
+        .filter(|id| !id.is_empty())
+        .min()
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            members
+                .iter()
+                .map(|&m| (results[m].obs.ts, results[m].obs.url.as_str()))
+                .min()
+                .map(|(ts, url)| format!("{ts}\n{url}"))
+                .unwrap_or_default()
+        })
 }
 
 struct Dsu(Vec<usize>);
@@ -349,6 +402,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         );
         clusters.push(Cluster {
             id: String::new(),
+            key: String::new(),
             start: t.start,
             end: t.end,
             members,
@@ -375,8 +429,17 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
             .then(b.members.len().cmp(&a.members.len()))
             .then(a.start.cmp(&b.start))
     });
+    let mut keys = BTreeSet::new();
     for (ci, c) in clusters.iter_mut().enumerate() {
         c.id = format!("C{}", ci + 1);
+        // Records that share an id can seed two clusters alike.
+        let base = cluster_key(&key_seed(&results, &c.members));
+        c.key = base.clone();
+        let mut n = 1;
+        while !keys.insert(c.key.clone()) {
+            n += 1;
+            c.key = format!("{base}-{n}");
+        }
         for &m in &c.members {
             results[m].cluster = Some(ci);
         }
@@ -594,6 +657,43 @@ mod tests {
         }
         assert_eq!(d.find(n - 1), 0);
         assert_eq!(d.0[n - 1], 0, "path compressed");
+    }
+
+    #[test]
+    fn cluster_keys_outlive_cluster_numbers() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let rec = |id: &str, ts: i64, url: &str| Observation {
+            id: id.into(),
+            ..o(ts, url)
+        };
+        let small = vec![
+            rec("w:2", 1000, &format!("{inbox}?kind=headers0")),
+            rec("w:1", 1040, &format!("{inbox}?kind=body0-0")),
+        ];
+        let a = analyze(small.clone(), &Rules::default_rules());
+        assert_eq!(a.clusters.len(), 1);
+        let key = a.clusters[0].key.clone();
+        assert!(key.starts_with("k-") && key.len() == 10, "{key}");
+        assert_eq!(key, cluster_key("w:1"));
+
+        // A stronger cluster arrives and takes C1; the first keeps its key.
+        let mut more = small;
+        for i in 0..4 {
+            more.push(rec(
+                &format!("x:{i}"),
+                5000 + i * 30,
+                &format!(
+                    "https://r.jina.ai/https://p.example/q?id={i}%20UNION%20SELECT%201&uqtag=zz9"
+                ),
+            ));
+        }
+        let b = analyze(more, &Rules::default_rules());
+        assert_eq!(b.clusters.len(), 2);
+        let c = b.cluster(&key).unwrap();
+        assert_eq!(c.id, "C2");
+        assert_eq!(b.cluster("c2").unwrap().key, key);
+        assert_eq!(b.cluster_index(" C1 "), Some(0));
+        assert!(b.cluster("k-00000000").is_none());
     }
 
     #[test]

@@ -214,8 +214,9 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
         .map(|c| {
             let c = &a.clusters[c];
             format!(
-                "  cluster {} ({}, {} records)",
+                "  cluster {} {} ({}, {} records)",
                 c.id,
+                c.key,
                 c.tier.label(),
                 c.members.len()
             )
@@ -319,7 +320,11 @@ pub fn case_from_cluster(
                         }
                     })
                     .collect();
-            (c.members.clone(), format!("cluster {}", c.id), slug)
+            (
+                c.members.clone(),
+                format!("cluster {} ({})", c.id, c.key),
+                slug,
+            )
         }
         None => (vec![idx], format!("record {}", r.obs.id), "record".into()),
     };
@@ -709,7 +714,10 @@ mod tests {
         assert!(c.rules_version.is_some(), "pinned");
         assert_eq!(
             c.decisions.last().unwrap().text,
-            format!("opened from review of leads.ndjson, cluster {}", cluster.id)
+            format!(
+                "opened from review of leads.ndjson, cluster {} ({})",
+                cluster.id, cluster.key
+            )
         );
         let again = case_from_cluster(&a, idx, None, &sink).unwrap();
         assert_eq!(again.id, format!("{}-2", opened.id), "never overwrites");

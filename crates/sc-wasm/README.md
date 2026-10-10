@@ -31,7 +31,7 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 | `check_rules(rules_toml)` | `{"rules", "asns", "version"}`, or throws on an invalid file. |
 | `analyze(input, format, map, rules_toml)` | `{"analysis", "warnings", "redacted", "cluster_date_tags"}`. `format` is `auto`, `ndjson`, `json`, `lines` or `access_log`; `map` is a field mapping such as `ts=a.b,url=c`, or empty. Secrets are redacted before analysis. |
 | `unwrap(url, rules_toml)` | The layers inside one URL and the rules that fired. |
-| `report(analysis_json, opts_json)` | A Markdown draft. `opts_json` takes `audience`, `cluster`, `reporter`, `generated`, `min_named` and `claims`, as the CLI's `report` does. |
+| `report(analysis_json, opts_json)` | A Markdown draft. `opts_json` takes `audience`, `cluster` (a cluster `id` or `key`), `reporter`, `generated`, `min_named` and `claims`, as the CLI's `report` does. |
 | `endpoints(analysis_json, opts_json)` | Flagged activity per target host. `opts_json`: `{"min_tier", "now", "active_days"}`, or empty. |
 | `evidence_levels()` | The evidence levels that may name a developer, weakest first, and the default. |
 | `check_claims(claims_json)` | The claims re-serialised after validation. |

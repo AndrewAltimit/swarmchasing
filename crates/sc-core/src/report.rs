@@ -47,7 +47,7 @@ impl std::str::FromStr for Audience {
 pub struct ReportOptions {
     #[serde(default)]
     pub audience: Audience,
-    /// Cluster id (`C1`); `None` = every non-noise cluster.
+    /// Cluster id (`C1`) or key (`k-3f9a2c1b`); `None` = every non-noise cluster.
     #[serde(default)]
     pub cluster: Option<String>,
     #[serde(default)]
@@ -160,11 +160,7 @@ pub fn render_notice(a: &Analysis, opts: &ReportOptions) -> Notice {
 
 fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>) -> String {
     let clusters: Vec<&Cluster> = match &opts.cluster {
-        Some(id) => a
-            .clusters
-            .iter()
-            .filter(|c| c.id.eq_ignore_ascii_case(id))
-            .collect(),
+        Some(id) => a.clusters.iter().filter(|c| c.matches(id)).collect(),
         None => a.clusters.iter().filter(|c| c.tier > Tier::Noise).collect(),
     };
     let mut s = String::new();

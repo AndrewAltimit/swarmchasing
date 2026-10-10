@@ -177,6 +177,9 @@ pub struct Summary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterSummary {
     pub id: String,
+    /// The cluster's stable key ([`sc_core::Cluster::key`]).
+    #[serde(default)]
+    pub key: String,
     pub tier: Tier,
     pub score: i32,
     pub records: usize,
@@ -517,6 +520,7 @@ fn summarise(a: &Analysis, prev: &Summary, generated: String) -> Summary {
             first.id.clone(),
             ClusterSummary {
                 id: c.id.clone(),
+                key: c.key.clone(),
                 tier: c.tier,
                 score: c.score,
                 records: c.members.len(),
@@ -1152,8 +1156,13 @@ fn archive_bursts(
 
 fn cluster_line(c: &ClusterSummary) -> String {
     format!(
-        "{} [{}] score {}, {} records, {} → {}; targets {}; rules {}",
+        "{}{} [{}] score {}, {} records, {} → {}; targets {}; rules {}",
         c.id,
+        if c.key.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", c.key)
+        },
         c.tier.label(),
         c.score,
         c.records,

@@ -37,10 +37,10 @@ For an export with other field names, map them: `--map ts=submitted_at,url=page.
 | Command | What it does |
 |---|---|
 | `scan <input>…` | Lists flagged records, strongest first. `--min-tier noise\|suggestive\|significant`, `--limit`. |
-| `clusters <input>…` | Summarises the clusters: linked runs of records. |
+| `clusters <input>…` | Summarises the clusters: linked runs of records. Each has a number (`C1`, strongest first, which can change as records arrive) and a stable key (`k-3f9a2c1b`); every `--cluster` option takes either. |
 | `endpoints <input>…` | Per target host: hits, first and last seen, payloads, clusters, and whether the hits are ongoing or historical. `--active-days`, `--from-now`, `--json`. |
 | `analyze <input>…` | The full analysis as JSON (`-o` to write a file, `--flagged-only` to drop the rest). |
-| `report <input>…` | A Markdown draft. `--audience provider\|affected\|internal\|public`, `--cluster C1`, `--min-named` (the weakest evidence that may name a developer), `--claims` (JSON claims from case work), `-o`. |
+| `report <input>…` | A Markdown draft. `--audience provider\|affected\|internal\|public`, `--cluster C1` (or its key), `--min-named` (the weakest evidence that may name a developer), `--claims` (JSON claims from case work), `-o`. |
 | `unwrap <url>` | Shows the relay and carrier layers inside one URL and the rules each layer triggers. |
 | `defang <url>…` | Defangs URLs for sharing (`hxxps://host[.]example`). |
 | `rules [file]` | Validates a rules file; `--dump` prints the bundled rules. |

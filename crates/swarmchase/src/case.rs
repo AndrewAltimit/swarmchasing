@@ -204,7 +204,8 @@ pub struct Selection {
     input: Vec<PathBuf>,
     #[arg(long, default_value_t = 30)]
     days: i64,
-    /// Clusters to take, as numbered by this analysis (see `swarmchase clusters`).
+    /// Clusters to take, by number in this analysis (C1) or stable key
+    /// (k-3f9a2c1b); `swarmchase clusters` lists both.
     #[arg(long = "cluster")]
     clusters: Vec<String>,
     /// Individual records to take, by ID.
@@ -801,9 +802,7 @@ fn pick(
     let mut idx = BTreeSet::new();
     for id in clusters {
         let c = a
-            .clusters
-            .iter()
-            .find(|c| c.id.eq_ignore_ascii_case(id))
+            .cluster(id)
             .with_context(|| format!("no cluster `{id}` in this analysis"))?;
         idx.extend(c.members.iter().copied());
     }
