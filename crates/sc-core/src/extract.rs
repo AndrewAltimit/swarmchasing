@@ -305,6 +305,8 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
                 weight: r.def.weight,
                 matched: truncate(m, 160),
                 layer,
+                tactic: r.def.tactic,
+                artifact: r.def.artifact,
             });
         }
     };

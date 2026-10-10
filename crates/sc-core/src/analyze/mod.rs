@@ -9,7 +9,7 @@ mod link;
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::{Layer, extract};
 use crate::fanout::FanOut;
-use crate::model::{Hit, IndicatorKind, LinkFeature, Observation, Tier};
+use crate::model::{Hit, IndicatorKind, LinkFeature, Observation, Tactic, Tier};
 use crate::paths::PathStats;
 use crate::rules::Rules;
 use crate::timing::{
@@ -49,6 +49,12 @@ pub struct Cluster {
     pub score: i32,
     pub rules: BTreeMap<String, usize>,
     pub kinds: BTreeMap<IndicatorKind, usize>,
+    /// Hits per tactic (`T1`..`T9`) over the members.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tactics: BTreeMap<Tactic, usize>,
+    /// Members with a hit that only shows a model wrote the request.
+    #[serde(default)]
+    pub artifacts: usize,
     pub target_hosts: BTreeMap<String, usize>,
     pub asns: BTreeMap<u32, usize>,
     pub user_agents: BTreeMap<String, usize>,
@@ -339,6 +345,36 @@ mod tests {
         assert_eq!(a.clusters.len(), 1);
         assert_eq!(a.clusters[0].members.len(), 3);
         assert_eq!(a.results[3].cluster, None);
+    }
+
+    #[test]
+    fn hits_carry_tactics_and_clusters_count_them() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let obs = vec![
+            o(1000, &format!("{inbox}?kind=headers0")),
+            o(
+                1040,
+                &format!("https://r.jina.ai/https://p.example/%60https://p.example/x%60?cb={inbox}"),
+            ),
+        ];
+        let a = analyze(obs, &Rules::default_rules());
+        let hit = |id: &str| {
+            a.results
+                .iter()
+                .flat_map(|r| &r.hits)
+                .find(|h| h.rule_id == id)
+                .unwrap()
+        };
+        assert_eq!(hit("relay.jina").tactic, Some(Tactic::ToolEscalation));
+        assert!(hit("marker.md_url_wrapper").artifact);
+        assert_eq!(hit("marker.md_url_wrapper").tactic, None);
+        let c = &a.clusters[0];
+        assert_eq!(c.tactics.get(&Tactic::CallbackChannels), Some(&3));
+        assert_eq!(c.tactics.get(&Tactic::ToolEscalation), Some(&1));
+        assert_eq!(c.artifacts, 1);
+        let json = serde_json::to_value(&a).unwrap();
+        assert_eq!(json["clusters"][0]["tactics"]["T7"], 3);
+        assert_eq!(json["results"][1]["hits"][0]["tactic"], "T2");
     }
 
     #[test]

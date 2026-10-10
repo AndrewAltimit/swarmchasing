@@ -183,6 +183,89 @@ pub enum IndicatorKind {
     Infra,
 }
 
+/// What an indicator shows an agent doing: the swarmchasing tactic
+/// vocabulary, `T1` to `T9` in rules files and JSON. Descriptive; it never
+/// changes a score.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Tactic {
+    /// Fetching the page or data the task is about.
+    #[serde(rename = "T1")]
+    TaskRetrieval,
+    /// Reaching a target through relays, carriers and remote browsers.
+    #[serde(rename = "T2")]
+    ToolEscalation,
+    /// Getting past anti-bot and other access controls.
+    #[serde(rename = "T3")]
+    AccessControlCircumvention,
+    /// Probing for vulnerabilities with attack payloads.
+    #[serde(rename = "T4")]
+    VulnerabilityProbing,
+    /// Acquiring accounts, inboxes or identities.
+    #[serde(rename = "T5")]
+    AccountAcquisition,
+    /// Reusing credentials, cookies or tokens.
+    #[serde(rename = "T6")]
+    CredentialReuse,
+    /// Sending results out through callbacks or side channels.
+    #[serde(rename = "T7")]
+    CallbackChannels,
+    /// Reaching targets outside the task.
+    #[serde(rename = "T8")]
+    OffTaskTargets,
+    /// Coordinating with other agents of a fleet.
+    #[serde(rename = "T9")]
+    InterAgentCoordination,
+}
+
+impl Tactic {
+    pub const ALL: [Tactic; 9] = [
+        Tactic::TaskRetrieval,
+        Tactic::ToolEscalation,
+        Tactic::AccessControlCircumvention,
+        Tactic::VulnerabilityProbing,
+        Tactic::AccountAcquisition,
+        Tactic::CredentialReuse,
+        Tactic::CallbackChannels,
+        Tactic::OffTaskTargets,
+        Tactic::InterAgentCoordination,
+    ];
+
+    /// `T1` to `T9`.
+    pub fn id(self) -> &'static str {
+        match self {
+            Tactic::TaskRetrieval => "T1",
+            Tactic::ToolEscalation => "T2",
+            Tactic::AccessControlCircumvention => "T3",
+            Tactic::VulnerabilityProbing => "T4",
+            Tactic::AccountAcquisition => "T5",
+            Tactic::CredentialReuse => "T6",
+            Tactic::CallbackChannels => "T7",
+            Tactic::OffTaskTargets => "T8",
+            Tactic::InterAgentCoordination => "T9",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Tactic::TaskRetrieval => "task retrieval",
+            Tactic::ToolEscalation => "tool escalation",
+            Tactic::AccessControlCircumvention => "access-control circumvention",
+            Tactic::VulnerabilityProbing => "vulnerability probing",
+            Tactic::AccountAcquisition => "account or identity acquisition",
+            Tactic::CredentialReuse => "credential reuse",
+            Tactic::CallbackChannels => "callback or side channels",
+            Tactic::OffTaskTargets => "off-task targets",
+            Tactic::InterAgentCoordination => "inter-agent coordination",
+        }
+    }
+}
+
+impl std::fmt::Display for Tactic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.id())
+    }
+}
+
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Default,
 )]
@@ -214,6 +297,12 @@ pub struct Hit {
     pub matched: String,
     /// 0 = the submitted URL; higher = an unwrapped inner layer.
     pub layer: usize,
+    /// The rule's tactic, if it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tactic: Option<Tactic>,
+    /// The rule only shows that a model wrote the request.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub artifact: bool,
 }
 
 /// Something only one operator would hold, which links the records that

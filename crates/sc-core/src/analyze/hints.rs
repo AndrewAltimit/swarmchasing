@@ -4,7 +4,7 @@
 
 use super::{Cluster, ObsResult};
 use crate::fanout::FanRequest;
-use crate::model::{IndicatorKind, LinkFeature, Tier};
+use crate::model::{IndicatorKind, LinkFeature, Tactic, Tier};
 use crate::paths::PathStats;
 use crate::rules::Rules;
 use crate::timing::{Span, parse_date_tag, stale_dates, timing};
@@ -37,6 +37,8 @@ pub(super) fn cluster(
     members.sort_by_key(|&i| results[i].obs.ts);
     let mut rules_seen: BTreeMap<String, usize> = BTreeMap::new();
     let mut kinds: BTreeMap<IndicatorKind, usize> = BTreeMap::new();
+    let mut tactics: BTreeMap<Tactic, usize> = BTreeMap::new();
+    let mut artifacts = 0;
     let mut hosts: BTreeMap<String, usize> = BTreeMap::new();
     let mut asns: BTreeMap<u32, usize> = BTreeMap::new();
     let mut uas: BTreeMap<String, usize> = BTreeMap::new();
@@ -50,6 +52,12 @@ pub(super) fn cluster(
         for h in &r.hits {
             *rules_seen.entry(h.rule_id.clone()).or_default() += 1;
             *kinds.entry(h.kind).or_default() += 1;
+            if let Some(t) = h.tactic {
+                *tactics.entry(t).or_default() += 1;
+            }
+        }
+        if r.hits.iter().any(|h| h.artifact) {
+            artifacts += 1;
         }
         if let Some(h) = &r.target_host {
             *hosts.entry(h.clone()).or_default() += 1;
@@ -159,6 +167,8 @@ pub(super) fn cluster(
         score,
         rules: rules_seen,
         kinds,
+        tactics,
+        artifacts,
         target_hosts: hosts,
         asns,
         user_agents: uas,

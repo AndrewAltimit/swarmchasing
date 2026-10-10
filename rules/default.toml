@@ -22,6 +22,14 @@
 #   significant true = a single match is enough for the "significant" tier
 #   link        true = the matched text links observations into one cluster
 #               (use for inbox IDs, unique tags - things only one operator would share)
+#   tactic      what the match shows the agent doing (descriptive, never scored):
+#               T1 task retrieval            T2 tool escalation (relays, carriers)
+#               T3 access-control circumvention (anti-bot)
+#               T4 vulnerability probing     T5 account or identity acquisition
+#               T6 credential reuse          T7 callback or side channels
+#               T8 off-task targets          T9 inter-agent coordination
+#   artifact    true = the match only shows that a model wrote the request
+#               (model-output residue, self-identification)
 #
 # A single relay hit is NOT evidence of an agent: people use these services too.
 # Weights are tuned so evidence must stack up.
@@ -103,6 +111,7 @@ common = [
 [[rule]]
 id = "relay.jina"
 kind = "relay"
+tactic = "T2"
 target = "host"
 pattern = "r.jina.ai"
 weight = 2
@@ -111,6 +120,7 @@ description = "Jina Reader: fetches a page server-side and returns Markdown"
 [[rule]]
 id = "relay.markdown_new"
 kind = "relay"
+tactic = "T2"
 target = "host"
 pattern = "markdown.new"
 weight = 2
@@ -119,6 +129,7 @@ description = "URL-to-Markdown converter"
 [[rule]]
 id = "relay.microlink"
 kind = "relay"
+tactic = "T2"
 target = "host"
 pattern = "api.microlink.io"
 weight = 2
@@ -127,6 +138,7 @@ description = "Microlink headless fetch API"
 [[rule]]
 id = "relay.hrefli"
 kind = "relay"
+tactic = "T2"
 target = "host"
 pattern = "href.li"
 weight = 1
@@ -135,6 +147,7 @@ description = "Referrer-stripping redirector"
 [[rule]]
 id = "relay.translate_goog"
 kind = "relay"
+tactic = "T2"
 target = "host"
 pattern = "translate.goog"
 weight = 2
@@ -143,6 +156,7 @@ description = "Google Translate proxy host rewriting"
 [[rule]]
 id = "relay.allorigins"
 kind = "relay"
+tactic = "T2"
 target = "host"
 pattern = "allorigins.win"
 weight = 2
@@ -151,6 +165,7 @@ description = "CORS proxy"
 [[rule]]
 id = "relay.corsproxy"
 kind = "relay"
+tactic = "T2"
 target = "url"
 pattern = "corsproxy\\.io|cors-anywhere|thingproxy|codetabs\\.com/v1/proxy"
 weight = 2
@@ -160,6 +175,7 @@ description = "Public CORS proxies"
 [[rule]]
 id = "carrier.httpbin"
 kind = "carrier"
+tactic = "T2"
 target = "url"
 pattern = "httpbin\\.org|httpbun\\.(com|org)"
 weight = 2
@@ -168,6 +184,7 @@ description = "Request echo service, used to turn GETs into POSTs or inspect hea
 [[rule]]
 id = "carrier.livecodes"
 kind = "carrier"
+tactic = "T2"
 target = "host"
 pattern = "livecodes.io"
 weight = 2
@@ -176,6 +193,7 @@ description = "In-browser code playground used to run fetch programs"
 [[rule]]
 id = "carrier.codesandbox"
 kind = "carrier"
+tactic = "T2"
 target = "url"
 pattern = "codesandbox\\.io|csb\\.app"
 weight = 1
@@ -184,6 +202,7 @@ description = "CodeSandbox"
 [[rule]]
 id = "carrier.data_url_script"
 kind = "carrier"
+tactic = "T2"
 target = "url"
 pattern = "^data:text/html.*(<script|fetch\\(|XMLHttpRequest)"
 weight = 3
@@ -192,6 +211,7 @@ description = "data: URL carrying an HTML program that makes requests"
 [[rule]]
 id = "carrier.inline_fetch_program"
 kind = "carrier"
+tactic = "T2"
 target = "url"
 # `(https?:)?//`: programs also fetch scheme-relative (`fetch('//r.jina.ai/...')`).
 pattern = "fetch\\(\\s*['\"`](https?:)?//|new XMLHttpRequest|navigator\\.sendBeacon"
@@ -201,6 +221,7 @@ description = "Inline program fetching other URLs from inside a remote browser"
 [[rule]]
 id = "carrier.form_post_program"
 kind = "carrier"
+tactic = "T2"
 target = "url"
 # An HTML form that POSTs to another site, usually submitted on load. Used to
 # turn a GET-only fetch into a POST against an API (Transluce, agent activity).
@@ -211,6 +232,7 @@ description = "Self-submitting POST form delivered as a program"
 [[rule]]
 id = "carrier.html_program"
 kind = "carrier"
+tactic = "T2"
 target = "url"
 # Script markup inside a URL or a decoded payload: a page built to run in a
 # remote browser, not a link to one.
@@ -222,6 +244,7 @@ description = "HTML page with script carried inside the request"
 [[rule]]
 id = "exploit.sqli_union"
 kind = "exploit"
+tactic = "T4"
 target = "url"
 pattern = "union(\\s|\\+|/\\*.*?\\*/)+(all(\\s|\\+)+)?select"
 weight = 5
@@ -231,6 +254,7 @@ description = "SQL injection: UNION SELECT"
 [[rule]]
 id = "exploit.sqli_boolean"
 kind = "exploit"
+tactic = "T4"
 target = "param_value"
 # The second alternative is the unquoted numeric probe (`State_Id=1 OR 1=1`),
 # which Transluce documented at scale against civilrightsdata.ed.gov.
@@ -242,6 +266,7 @@ description = "SQL injection: boolean / time-based probe"
 [[rule]]
 id = "exploit.traversal"
 kind = "exploit"
+tactic = "T4"
 target = "url"
 pattern = "(\\.\\./|\\.\\.%2f|%2e%2e/){2,}|/etc/passwd|win\\.ini|boot\\.ini"
 weight = 5
@@ -251,6 +276,7 @@ description = "Path traversal / sensitive file probe"
 [[rule]]
 id = "exploit.traversal_single"
 kind = "exploit"
+tactic = "T4"
 target = "url"
 # One `../` step that survived into the submitted URL. Clients normalise `/../`
 # out of paths, so a surviving one was usually encoded (`..%2F`) on purpose.
@@ -261,6 +287,7 @@ description = "Single path-traversal step (often encoded as ..%2F)"
 [[rule]]
 id = "exploit.sqli_quote"
 kind = "exploit"
+tactic = "T4"
 target = "param_value"
 # A value that is, or ends in, a bare quote: the first probe for SQL injection.
 pattern = "^[^'\"]{0,20}['\"]\\)?$"
@@ -270,6 +297,7 @@ description = "Lone quote in a parameter value (SQL injection probe)"
 [[rule]]
 id = "exploit.xss"
 kind = "exploit"
+tactic = "T4"
 target = "param_value"
 pattern = "<script|javascript:|onerror\\s*=|onload\\s*=|<svg[^>]*on\\w+="
 weight = 4
@@ -279,6 +307,7 @@ description = "Cross-site scripting probe"
 [[rule]]
 id = "exploit.ssti"
 kind = "exploit"
+tactic = "T4"
 target = "param_value"
 pattern = "\\{\\{\\s*\\d+\\s*\\*\\s*\\d+\\s*\\}\\}|\\$\\{\\s*\\d+\\s*\\*\\s*\\d+\\s*\\}|<%=\\s*\\d+\\s*\\*"
 weight = 4
@@ -288,6 +317,7 @@ description = "Template injection probe ({{7*7}})"
 [[rule]]
 id = "exploit.cmdi"
 kind = "exploit"
+tactic = "T4"
 target = "param_value"
 pattern = "[;|`]\\s*(id|whoami|uname|cat\\s+/etc)\\b|\\$\\((id|whoami)\\)"
 weight = 4
@@ -297,6 +327,7 @@ description = "Command injection probe"
 [[rule]]
 id = "exploit.boundary_ids"
 kind = "exploit"
+tactic = "T4"
 target = "param_value"
 pattern = "^-\\d+$|^9{6,}$|^0{4,}$|^(2147483648|4294967296|9223372036854775808)$"
 weight = 1
@@ -306,6 +337,7 @@ description = "Out-of-range ID values (often precede injection probes)"
 [[rule]]
 id = "marker.uq_tags"
 kind = "agent_marker"
+tactic = "T9"
 target = "param_name"
 pattern = "^(uqscan|uqtag|uq_tag|uq)$"
 weight = 3
@@ -314,6 +346,7 @@ description = "urlquery cache-busting / tracking tags seen in agent fleets"
 [[rule]]
 id = "marker.test_tag"
 kind = "agent_marker"
+tactic = "T9"
 target = "url"
 pattern = "chatgpttest\\d*|agenttest\\d*|tok=expt|archive_test="
 weight = 3
@@ -323,6 +356,7 @@ description = "Test tags agents add to URLs"
 [[rule]]
 id = "marker.oai_tag"
 kind = "agent_marker"
+tactic = "T9"
 target = "url"
 pattern = "[?&]zz=oai\\d{6,}"
 weight = 3
@@ -331,6 +365,7 @@ description = "`zz=oai<digits>` request tag (Transluce, US/Canada government rep
 [[rule]]
 id = "marker.callback_seq"
 kind = "agent_marker"
+tactic = "T7"
 target = "param_value"
 pattern = "^(headers\\d+|body\\d+-\\d+|done|chunk\\d+|part\\d+of\\d+)$"
 weight = 3
@@ -339,6 +374,7 @@ description = "Sequenced callback labels (headers0, body0-0, done)"
 [[rule]]
 id = "marker.title_write"
 kind = "agent_marker"
+tactic = "T7"
 target = "url"
 pattern = "document\\.title\\s*="
 weight = 2
@@ -354,6 +390,7 @@ description = "Program writes its result into the page title"
 [[rule]]
 id = "marker.md_link"
 kind = "agent_marker"
+artifact = true
 target = "url"
 pattern = "\\]\\(https?://"
 weight = 2
@@ -362,6 +399,7 @@ description = "Markdown link syntax `[text](https://...)` inside a request URL"
 [[rule]]
 id = "marker.md_url_wrapper"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # A URL opened by a backtick, `**` or `<` (after `=`, `/` or `(`), or one that
 # ends in a backtick, `**`, or a `)` with no `(` anywhere before it: the
@@ -374,6 +412,7 @@ description = "URL wrapped in Markdown code, emphasis or autolink markup"
 [[rule]]
 id = "marker.placeholder"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # Upper-case constants are matched case-sensitively; `your-api-key` in a docs
 # page slug is ordinary prose.
@@ -384,6 +423,7 @@ description = "Unfilled template placeholder (YOUR_API_KEY, <your-token>, INSERT
 [[rule]]
 id = "marker.template_unrendered"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # Web crawls also capture unrendered front-end templates (`/p/{{item.slug}}`),
 # so this stays at weight 1.
@@ -394,6 +434,7 @@ description = "Unrendered template variable ({{target}}, ${HOST})"
 [[rule]]
 id = "marker.example_host_value"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # Only a redirect or callback parameter set to the reserved example domain.
 # Fetching example.com through a relay (`?url=https://example.com/`) is how
@@ -406,6 +447,7 @@ description = "Redirect or callback parameter left pointing at example.com (temp
 [[rule]]
 id = "marker.tool_call_markup"
 kind = "agent_marker"
+artifact = true
 target = "url"
 pattern = "</?(tool_call|tool_use|function_calls|invoke|parameter)\\b|<function=|<\\|(im_start|im_end|tool_call|python_tag)\\|>|\"(tool_calls|function_call|tool_use)\"\\s*:"
 weight = 4
@@ -414,6 +456,7 @@ description = "Function-call wrapper markup or tool-call fields from a model's o
 [[rule]]
 id = "marker.tool_call_json"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # Tool arguments as JSON: an object opening on a URL or command key, an
 # `"arguments":` field, or JSON escaped inside a JSON string. Generic keys that
@@ -426,6 +469,7 @@ description = "Tool-call JSON arguments inside a request ({\"url\": ..., \"argum
 [[rule]]
 id = "marker.json_quote_residue"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # The tail of a JSON string (`..."}`, `...",`) left on a URL, or a parameter
 # whose value is a quoted URL, opened or closed: an argument copied with its
@@ -437,6 +481,7 @@ description = "JSON or string quoting left around a URL or a URL parameter"
 [[rule]]
 id = "marker.escaped_newline"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # A literal backslash-n (`%5Cn`) not followed by a letter, so Windows paths
 # such as `C:\notes` do not match.
@@ -447,6 +492,7 @@ description = "Escaped newline (\\n) from a model's string output left in the UR
 [[rule]]
 id = "marker.truncated_output"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # Ends in half a percent escape (`%2`) or the ellipsis character. A decoded
 # `%` alone is not matched: `50%25` decodes to `50%`.
@@ -457,6 +503,7 @@ description = "URL cut off mid escape or ending in an ellipsis (truncated model 
 [[rule]]
 id = "marker.chat_opener"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # A chat reply's opening words ("Sure, here is", "Certainly!", "I'll ",
 # "As an AI") at the start of a parameter value or path segment, followed in
@@ -470,6 +517,7 @@ description = "Chat reply opener (\"Sure, here is\", \"Certainly!\", \"As an AI\
 [[rule]]
 id = "marker.doubled_scheme"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # Two schemes back to back (`https://https://`, `http://https%3A//`). A
 # redirect parameter carrying an encoded URL has one scheme after `=`, not two
@@ -481,6 +529,7 @@ description = "Doubled scheme (https://https://) in a request a model built"
 [[rule]]
 id = "marker.garbled_scheme"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # A parameter set to a URL missing its colon (`?url=https//`), or a defanged
 # `hxxps://` URL passed to a relay path or a URL parameter. Analysts search
@@ -494,6 +543,7 @@ description = "Garbled or defanged scheme (https//, hxxps://) in a request URL"
 [[rule]]
 id = "marker.impossible_date"
 kind = "agent_marker"
+artifact = true
 target = "url"
 # A date parameter (name contains date, day, from, to, since, until, start,
 # end, dt, after, before, when or time) set to a date no calendar has: Feb 30
@@ -507,6 +557,8 @@ description = "Impossible calendar date (2026-02-30, 2026-13-01) in a date param
 [[rule]]
 id = "marker.placeholder_identity"
 kind = "agent_marker"
+tactic = "T5"
+artifact = true
 target = "param_value"
 # Stock example identities a model fills forms with. Real forms, documentation
 # links and QA environments use them too, so this stays at weight 1.
@@ -518,6 +570,7 @@ description = "Placeholder identity (john.doe@, user@example.com, test123, 123 M
 [[rule]]
 id = "cache.buster"
 kind = "cache_buster"
+tactic = "T1"
 target = "param_name"
 pattern = "^(_|cb|cachebust|cache_bust|nocache|bust|_t|ts|rnd|rand|uniq\\d*)$"
 weight = 1
@@ -527,6 +580,7 @@ description = "Cache-busting parameter"
 [[rule]]
 id = "selfid.vendor_name"
 kind = "self_id"
+artifact = true
 # Parameter values only: a vendor name in the target host (reading claude.ai
 # through a relay) is ordinary browsing, not an agent naming itself.
 target = "param_value"
@@ -538,6 +592,7 @@ description = "Model/vendor name in a request parameter (e.g. ?agent=claude). Un
 [[rule]]
 id = "exfil.webhook_site"
 kind = "exfil"
+tactic = "T7"
 target = "url"
 pattern = "webhook\\.site/(token/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 weight = 3
@@ -547,6 +602,7 @@ description = "webhook.site inbox (callback / exfil channel)"
 [[rule]]
 id = "exfil.requestbin"
 kind = "exfil"
+tactic = "T7"
 target = "url"
 pattern = "[a-z0-9]+\\.(m\\.pipedream\\.net|requestcatcher\\.com|requestbin\\.net|beeceptor\\.com|interact\\.sh|oast\\.(fun|me|pro|live|site|online))"
 weight = 3
@@ -556,6 +612,7 @@ description = "Request-catcher / OAST inbox (a per-user subdomain on the service
 [[rule]]
 id = "exfil.oast_service"
 kind = "exfil"
+tactic = "T7"
 target = "url"
 # The bare service name, not preceded by a subdomain. Many unrelated users
 # share it, so it scores but never links records.
@@ -566,6 +623,7 @@ description = "OAST service named without an inbox subdomain"
 [[rule]]
 id = "exfil.ntfy"
 kind = "exfil"
+tactic = "T7"
 target = "url"
 pattern = "ntfy\\.sh/[A-Za-z0-9_-]{4,}"
 weight = 3
@@ -575,6 +633,7 @@ description = "ntfy topic used as a beacon channel (do not read or post to topic
 [[rule]]
 id = "exfil.paste"
 kind = "exfil"
+tactic = "T7"
 target = "url"
 pattern = "catbox\\.moe|litterbox\\.catbox|bytebin\\.lucko\\.me|paste\\.rs|dpaste|transfer\\.sh|0x0\\.st"
 weight = 2
@@ -583,6 +642,7 @@ description = "Paste / file drop used as an output channel"
 [[rule]]
 id = "exfil.cookie"
 kind = "exfil"
+tactic = "T6"
 target = "url"
 pattern = "document\\.cookie|[?&](cookie|cookies|ck)=[^&]{20,}"
 weight = 3
@@ -591,6 +651,7 @@ description = "Cookie values sent onward"
 [[rule]]
 id = "exfil.disposable_mail"
 kind = "exfil"
+tactic = "T5"
 target = "url"
 pattern = "mail\\.tm|guerrillamail|10minutemail|temp-mail|tempmail|mailinator|maildrop\\.cc|1secmail"
 weight = 2
@@ -600,6 +661,7 @@ description = "Disposable inbox (account/API key acquisition)"
 [[rule]]
 id = "antibot.baxia"
 kind = "anti_bot"
+tactic = "T3"
 target = "param_name"
 pattern = "^(bx-ua|bx_et|bx-umidtoken|umidtoken|x5sec)$"
 weight = 3
@@ -608,6 +670,7 @@ description = "Alibaba Baxia anti-bot tokens"
 [[rule]]
 id = "antibot.captcha_solver"
 kind = "anti_bot"
+tactic = "T3"
 target = "url"
 pattern = "2captcha\\.com|anti-captcha\\.com|capsolver\\.com|capmonster"
 weight = 3
@@ -616,6 +679,7 @@ description = "CAPTCHA-solving service"
 [[rule]]
 id = "antibot.ocr_captcha"
 kind = "anti_bot"
+tactic = "T3"
 target = "url"
 pattern = "ocr\\.space.*captcha|captcha.*ocr\\.space"
 weight = 3
@@ -625,6 +689,7 @@ description = "General-purpose OCR API pointed at a CAPTCHA image"
 [[rule]]
 id = "header.via_hysandbox"
 kind = "header"
+tactic = "T2"
 target = "header"
 pattern = "^via:.*hysandbox"
 weight = 4
@@ -634,6 +699,7 @@ description = "Via header from a hysandbox Apache Traffic Server proxy"
 [[rule]]
 id = "header.via_ats"
 kind = "header"
+tactic = "T2"
 target = "header"
 pattern = "^via:.*(ApacheTrafficServer|\\(ats\\)|-ats\\))"
 weight = 1
@@ -642,6 +708,7 @@ description = "Request passed through Apache Traffic Server"
 [[rule]]
 id = "header.gzip_only_requests"
 kind = "header"
+tactic = "T2"
 target = "header"
 pattern = "^accept-encoding:\\s*gzip\\s*$"
 weight = 1
@@ -650,6 +717,7 @@ description = "Accept-Encoding normalised to bare gzip (ATS normalize_ae), unusu
 [[rule]]
 id = "header.scripted_ua"
 kind = "header"
+tactic = "T2"
 target = "user_agent"
 pattern = "python-requests|python-httpx|aiohttp|node-fetch|undici|Go-http-client|curl/|axios/"
 weight = 1
@@ -658,6 +726,7 @@ description = "Scripted HTTP client user agent"
 [[rule]]
 id = "header.headless_ua"
 kind = "header"
+tactic = "T2"
 target = "user_agent"
 pattern = "HeadlessChrome|PhantomJS|Playwright"
 weight = 1
@@ -667,6 +736,7 @@ description = "Headless browser user agent"
 [[rule]]
 id = "outcome.neterror"
 kind = "outcome"
+tactic = "T2"
 target = "final_url"
 pattern = "^about:(neterror|privatebrowsing|blank#blocked)"
 weight = 1
@@ -675,6 +745,7 @@ description = "Remote browser ended on an error/blank page"
 [[rule]]
 id = "outcome.challenge"
 kind = "outcome"
+tactic = "T3"
 target = "final_url"
 pattern = "challenges\\.cloudflare\\.com|/cdn-cgi/challenge|captcha|/_incapsula_|perimeterx"
 weight = 1
@@ -684,6 +755,7 @@ description = "Ended on a bot challenge"
 [[rule]]
 id = "infra.hysandbox_host"
 kind = "infra"
+tactic = "T2"
 target = "url"
 pattern = "hysandbox\\.tencent-cloud\\.com"
 weight = 3

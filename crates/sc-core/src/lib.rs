@@ -39,8 +39,8 @@ pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tier, TsKind, fmt_ts, parse_ts,
-    top_counts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tactic, Tier, TsKind, fmt_ts,
+    parse_ts, top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use recurrence::{ClusterRun, RecurrenceOptions, Rerun, TargetRun, cluster_reruns, reruns};

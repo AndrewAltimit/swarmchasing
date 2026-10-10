@@ -1,6 +1,6 @@
 //! Data-driven indicator rules (see `rules/default.toml`).
 
-use crate::model::IndicatorKind;
+use crate::model::{IndicatorKind, Tactic};
 use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -47,6 +47,13 @@ pub struct RuleDef {
     pub significant: bool,
     #[serde(default)]
     pub link: bool,
+    /// What a match shows the agent doing. An id outside `T1`..`T9` fails
+    /// to load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tactic: Option<Tactic>,
+    /// A match only shows that a model wrote the request.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub artifact: bool,
     #[serde(default)]
     pub description: String,
 }
@@ -328,6 +335,32 @@ mod tests {
         assert_eq!(s.fanout, crate::fanout::FanOutOptions::default());
         assert_eq!(s.cut_lengths, crate::dialect::CutOptions::default());
         assert_eq!(s.paths, crate::paths::PathOptions::default());
+    }
+
+    #[test]
+    fn every_bundled_rule_has_a_tactic_or_is_an_artifact() {
+        let r = Rules::default_rules();
+        for d in &r.set.rules {
+            assert!(d.tactic.is_some() || d.artifact, "{}", d.id);
+        }
+        let exploit = r.rule("exploit.sqli_union").unwrap();
+        assert_eq!(exploit.tactic, Some(Tactic::VulnerabilityProbing));
+        assert!(r.rule("marker.md_link").unwrap().artifact);
+    }
+
+    #[test]
+    fn unknown_tactics_are_rejected() {
+        let rule = |t: &str| {
+            format!(
+                "[[rule]]\nid = \"x.y\"\nkind = \"relay\"\ntarget = \"host\"\npattern = \"a.example\"\ntactic = \"{t}\"\n"
+            )
+        };
+        let ok = Rules::from_toml(&rule("T9")).unwrap();
+        assert_eq!(ok.set.rules[0].tactic, Some(Tactic::InterAgentCoordination));
+        for bad in ["T0", "T10", "t1", "exfil"] {
+            let e = Rules::from_toml(&rule(bad)).err().unwrap();
+            assert!(e.contains("unknown variant"), "{bad}: {e}");
+        }
     }
 
     #[test]
