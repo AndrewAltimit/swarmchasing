@@ -91,9 +91,10 @@ There is no embargo: the reports and the notice go out at the same time.
    ```sh
    swarmchase notice add 2026-10-portal
    git add notices/2026-10-portal.md && git commit && git push
+   swarmchase notice published 2026-10-portal
    ```
 
-`notice add` refuses while any endpoint is unreviewed. The pre-commit hook and CI lint the notice; the deploy on `main` builds it into the site and the feed.
+`notice add` refuses while any endpoint is unreviewed, and leaves the case `reported` with its publication pending; `notice published` checks the pushed file is on the remote and marks the case `published`. The pre-commit hook and CI lint the notice; the deploy on `main` builds it into the site and the feed.
 
 ## 8. Keep the notice current
 

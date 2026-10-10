@@ -234,7 +234,7 @@ pub(crate) fn run_evidence(root: &Path, cmd: EvidenceCmd, today: &str) -> Result
                     &date,
                     format!("operator evidence {evidence}: {org} withdrew its agreement"),
                 );
-                published = c.status == CaseStatus::Published;
+                published = c.status == CaseStatus::Published || c.publish_pending.is_some();
                 Ok(())
             })?;
             if published {

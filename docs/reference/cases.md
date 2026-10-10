@@ -12,7 +12,7 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 
 ## What `case.toml` holds
 
-- the case status (`open`, `reported`, `published`, `closed`) and the notice status (`active`, `contained`, `historical`);
+- the case status (`open`, `reported`, `published`, `closed`), the notice status (`active`, `contained`, `historical`), and the date a notice was added while its publication is pending;
 - each endpoint and the admin's decision on it: `compromised`, `targeted`, `historical`, `not-affected`, or still `unreviewed`;
 - attribution claims established by case work, each with its layer, evidence and tag;
 - contacts;

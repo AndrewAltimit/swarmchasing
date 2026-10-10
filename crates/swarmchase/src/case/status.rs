@@ -211,7 +211,12 @@ fn todo(c: &Case, claims: &[Claim], has_draft: bool) -> Vec<String> {
             ));
         }
     }
-    if !has_draft && matches!(c.status, CaseStatus::Open | CaseStatus::Reported) {
+    if let Some(d) = &c.publish_pending {
+        t.push(format!(
+            "notice added {d}, publish pending: commit and push notices/{0}.md, then `swarmchase notice published {0}`",
+            c.id
+        ));
+    } else if !has_draft && matches!(c.status, CaseStatus::Open | CaseStatus::Reported) {
         t.push(format!(
             "no notice draft; reports and the notice go out together: `swarmchase case notice {}`",
             c.id

@@ -101,6 +101,10 @@ pub struct Case {
     pub status: CaseStatus,
     pub notice: NoticeStatus,
     pub opened: String,
+    /// Set by `notice add` (the date) until `notice published` confirms the
+    /// notice reached the repository's remote: added, not yet public.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publish_pending: Option<String>,
     /// Weakest evidence that may name a developer outside case notes.
     #[serde(default)]
     pub min_named: Evidence,
