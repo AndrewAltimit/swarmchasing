@@ -22,7 +22,7 @@ What this crate does and does not implement keeps collection passive:
 - It is polite: one request at a time with a minimum interval per host, an identifying user agent, and jittered backoff when a server is overloaded.
 - Records are redacted before they leave the crate.
 
-Archive captures get the id `<archive>:<timestamp>:<digest>` from [`sc_core::capture`](../sc-core/src/capture.rs), the same id an imported CDX export gets, and record their timestamp as a capture time.
+Archive captures get the id `<archive>:<timestamp>:<digest>:<url hash>` from [`sc_core::capture`](../sc-core/src/capture.rs), the same id an imported CDX export gets, and record their timestamp as a capture time.
 
 A new collector must keep to these. Its module docs record the source's terms of use, with their URL, and what they allow. See [docs/policies.md](../../docs/policies.md) for the collection policy.
 
@@ -87,7 +87,7 @@ Streamed sources read a bounded sample each pull: the newest `scan` hours of GH 
 
 ## Retries, limits and the cache
 
-- **Retries.** Timeouts, dropped connections, HTTP 429 and 5xx are retried with exponential backoff: 5 retries from 5 seconds, spread ±25%, each wait capped at 5 minutes. Other errors fail at once. Change the policy with `Client::with_retry`.
+- **Retries.** Dropped connections, HTTP 429 and 5xx are retried with exponential backoff: 5 retries from 5 seconds, spread ±25%, each wait capped at 5 minutes. A gateway timeout (HTTP 504) or a request that timed out is retried only twice, because an index query too heavy for the server times out the same way every time. Other errors fail at once. Change the policy with `Client::with_retry`.
 - **Retry-After.** A server's `Retry-After`, in seconds or as an HTTP date, is honoured as given.
 - **Pacing.** The minimum interval applies per host, so sources on different hosts do not slow each other.
 - **Size cap.** A response read into memory is capped at 64 MiB (`Client::with_max_body`). Large files are streamed with their own cap.

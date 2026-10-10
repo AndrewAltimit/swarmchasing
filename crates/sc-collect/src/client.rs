@@ -26,6 +26,10 @@ pub const DEFAULT_MAX_BODY: usize = 64 << 20;
 pub struct Retry {
     /// Retries after the first attempt.
     pub max_retries: u32,
+    /// Of those, retries after a gateway timeout (HTTP 504) or a request
+    /// that timed out. An index query too heavy for the server times out the
+    /// same way every time, and each attempt takes a minute or more.
+    pub max_timeout_retries: u32,
     /// First wait; doubles after each retry.
     pub base: Duration,
     /// Cap on any single wait, including a server's `Retry-After`.
@@ -40,6 +44,7 @@ impl Default for Retry {
     fn default() -> Self {
         Self {
             max_retries: 5,
+            max_timeout_retries: 2,
             base: Duration::from_secs(5),
             max_wait: Duration::from_secs(300),
             jitter: 0.25,
@@ -125,6 +130,8 @@ pub struct Client {
 /// Why a request failed, and whether trying again could help.
 enum Failure {
     Transient(anyhow::Error, Option<Duration>),
+    /// A gateway or client timeout: retried at most `max_timeout_retries` times.
+    TimedOut(anyhow::Error),
     Fatal(anyhow::Error),
 }
 
@@ -254,21 +261,24 @@ impl Client {
     }
 
     fn with_retries<T>(&self, mut f: impl FnMut() -> std::result::Result<T, Failure>) -> Result<T> {
-        let mut attempt = 0;
+        let (mut attempt, mut timeouts) = (0, 0);
         loop {
-            match f() {
+            let (e, retry_after) = match f() {
                 Ok(v) => return Ok(v),
                 Err(Failure::Fatal(e)) => return Err(e),
-                Err(Failure::Transient(e, retry_after)) => {
-                    if attempt >= self.retry.max_retries {
-                        return Err(e.context(format!("gave up after {} attempts", attempt + 1)));
-                    }
-                    let wait = self.retry.wait_jittered(attempt, retry_after, self.unit());
-                    eprintln!("  {e:#}; retrying in {}s", wait.as_secs());
-                    std::thread::sleep(wait);
-                    attempt += 1;
+                Err(Failure::Transient(e, retry_after)) => (e, retry_after),
+                Err(Failure::TimedOut(e)) => {
+                    timeouts += 1;
+                    (e, None)
                 }
+            };
+            if attempt >= self.retry.max_retries || timeouts > self.retry.max_timeout_retries {
+                return Err(e.context(format!("gave up after {} attempts", attempt + 1)));
             }
+            let wait = self.retry.wait_jittered(attempt, retry_after, self.unit());
+            eprintln!("  {e:#}; retrying in {}s", wait.as_secs());
+            std::thread::sleep(wait);
+            attempt += 1;
         }
     }
 
@@ -320,8 +330,11 @@ impl Client {
             Err(e) => {
                 let transient =
                     !e.is_redirect() && (e.is_timeout() || e.is_connect() || e.is_request());
+                let timed_out = e.is_timeout();
                 let e = anyhow::Error::new(e).context(format!("GET {url}"));
-                Err(if transient {
+                Err(if timed_out {
+                    Failure::TimedOut(e)
+                } else if transient {
                     Failure::Transient(e, None)
                 } else {
                     Failure::Fatal(e)
@@ -388,7 +401,9 @@ impl Client {
             });
         }
         let e = anyhow::anyhow!("GET {url}: HTTP {status}: {}", error_excerpt(&body));
-        if code == 429 || status.is_server_error() {
+        if code == 504 {
+            Err(Failure::TimedOut(e))
+        } else if code == 429 || status.is_server_error() {
             Err(Failure::Transient(e, retry_after))
         } else {
             Err(Failure::Fatal(e))
@@ -405,7 +420,9 @@ impl Client {
                 return Ok(r);
             }
             let e = anyhow::anyhow!("GET {url}: HTTP {status}");
-            if status.as_u16() == 429 || status.is_server_error() {
+            if status.as_u16() == 504 {
+                Err(Failure::TimedOut(e))
+            } else if status.as_u16() == 429 || status.is_server_error() {
                 Err(Failure::Transient(e, None))
             } else {
                 Err(Failure::Fatal(e))
@@ -527,6 +544,28 @@ mod tests {
             Some(Duration::ZERO)
         );
         assert_eq!(parse_retry_after("soon", now), None);
+    }
+
+    #[test]
+    fn timeouts_get_fewer_retries_than_other_transient_failures() {
+        let c = Client::new(Duration::ZERO).unwrap().with_retry(Retry {
+            base: Duration::ZERO,
+            ..Retry::default()
+        });
+        let calls = Cell::new(0);
+        let r: Result<()> = c.with_retries(|| {
+            calls.set(calls.get() + 1);
+            Err(Failure::TimedOut(anyhow::anyhow!("HTTP 504")))
+        });
+        assert!(r.is_err());
+        assert_eq!(calls.get(), 3);
+        calls.set(0);
+        let r: Result<()> = c.with_retries(|| {
+            calls.set(calls.get() + 1);
+            Err(Failure::Transient(anyhow::anyhow!("HTTP 503"), None))
+        });
+        assert!(r.is_err());
+        assert_eq!(calls.get(), 6);
     }
 
     #[test]

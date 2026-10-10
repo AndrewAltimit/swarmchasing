@@ -548,7 +548,7 @@ garbage"#;
         let p = parse_input(cdx, Format::Auto, &FieldMap::default());
         assert_eq!(p.observations[0].ts, 1791101400);
         assert_eq!(p.observations[0].status, Some(200));
-        assert_eq!(p.observations[0].id, "wayback:20261004081000:");
+        assert!(p.observations[0].id.starts_with("wayback:20261004081000::"));
         assert_eq!(p.observations[0].source, "wayback");
 
         let lines = "2026-10-04 08:10:00 https://d.example/?a=1\nhttps://e.example/\n# comment";
@@ -561,14 +561,14 @@ garbage"#;
     fn cdx_imports_match_collector_ids() {
         let wayback = r#"[["urlkey","timestamp","original","statuscode","digest"],["x","20261004081000","https://c.example/","200","AAA"]]"#;
         let o = &parse_input(wayback, Format::Auto, &FieldMap::default()).observations[0];
-        assert_eq!(o.id, "wayback:20261004081000:AAA");
+        assert!(o.id.starts_with("wayback:20261004081000:AAA:"), "{}", o.id);
         assert_eq!(
             o.reference.as_deref(),
             Some("https://web.archive.org/web/20261004081000/https://c.example/")
         );
         let arquivo = r#"{"urlkey":"example,c)/","timestamp":"20261004081000","url":"https://c.example/","mime":"text/html","status":"200","digest":"D","filename":"AWP29-20261004.warc.gz","collection":"AWP29"}"#;
         let o = &parse_input(arquivo, Format::Auto, &FieldMap::default()).observations[0];
-        assert_eq!(o.id, "arquivo:20261004081000:D");
+        assert!(o.id.starts_with("arquivo:20261004081000:D:"), "{}", o.id);
         assert_eq!(o.ts_kind, TsKind::Capture);
         assert_eq!(o.source, "arquivo");
         assert_eq!(o.status, Some(200));
