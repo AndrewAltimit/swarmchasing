@@ -45,7 +45,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-15"
+version = "2026-10-10"
 
 [thresholds]
 suggestive = 3
@@ -143,6 +143,10 @@ shared_secret = 0.8
 # The same chain of two or more relays and carriers (jina, then a translate
 # proxy, then the target). A single relay is every relay user's habit.
 relay_stack = 0.3
+# Inboxes on the same callback service (webhook.site, a request catcher, an
+# ntfy server) in both clusters. The same inbox links outright; a fresh inbox
+# per run on one service is a habit worth a look, shared by many clients.
+callback_service = 0.3
 
 # Repeated cut lengths: at least `min_records` truncated URLs within
 # `tolerance` characters of a common length. `rule` marks a URL as cut off.

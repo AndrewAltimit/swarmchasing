@@ -48,6 +48,9 @@ pub enum SoftLinkKind {
     SharedSecret,
     /// The same chain of two or more relays and carriers to their targets.
     RelayStack,
+    /// Inboxes on the same callback service (different inboxes; one inbox
+    /// links outright).
+    CallbackService,
 }
 
 impl SoftLinkKind {
@@ -66,6 +69,7 @@ impl SoftLinkKind {
             SoftLinkKind::CommonFeature => "common feature",
             SoftLinkKind::SharedSecret => "shared captured secret",
             SoftLinkKind::RelayStack => "relay stack",
+            SoftLinkKind::CallbackService => "callback service",
         }
     }
 }
@@ -95,6 +99,7 @@ pub struct SoftLinkOptions {
     pub common_feature: f64,
     pub shared_secret: f64,
     pub relay_stack: f64,
+    pub callback_service: f64,
 }
 
 impl Default for SoftLinkOptions {
@@ -115,6 +120,7 @@ impl Default for SoftLinkOptions {
             common_feature: 0.3,
             shared_secret: 0.8,
             relay_stack: 0.3,
+            callback_service: 0.3,
         }
     }
 }
@@ -258,6 +264,18 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
         {
             add(SoftLinkKind::RelayStack, st.clone(), &c.id);
         }
+        // Inboxes on one callback service: a link rule's id names the
+        // service (`exfil.webhook_site`).
+        let services: BTreeSet<&str> = c
+            .members
+            .iter()
+            .flat_map(|&m| &s.results[m].features)
+            .map(LinkFeature::name)
+            .filter(|n| n.starts_with("exfil."))
+            .collect();
+        for svc in services {
+            add(SoftLinkKind::CallbackService, svc.to_string(), &c.id);
+        }
         let with_headers: usize = c.header_sets.values().sum();
         if let Some(h) = only_value(&c.header_sets, with_headers) {
             add(SoftLinkKind::HeaderSet, h.clone(), &c.id);
@@ -303,6 +321,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             SoftLinkKind::HeaderSet => opts.header_set,
             SoftLinkKind::SharedSecret => opts.shared_secret,
             SoftLinkKind::RelayStack => opts.relay_stack,
+            SoftLinkKind::CallbackService => opts.callback_service,
             _ => opts.common_feature,
         };
         for (i, x) in ids.iter().enumerate() {
@@ -670,7 +689,10 @@ mod tests {
                 ));
             }
         }
-        let a = analyze(obs.clone(), &Rules::default_rules());
+        // Both use webhook.site; set that tie aside to test the preamble.
+        let mut base = Rules::default_rules();
+        base.set.soft_links.callback_service = 0.0;
+        let a = analyze(obs.clone(), &base);
         assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters);
         assert!(
             a.soft_links.iter().any(|l| l.kind == SoftLinkKind::Preamble
@@ -681,7 +703,16 @@ mod tests {
         // A preamble alone is not enough for a fleet.
         assert!(a.candidate_fleets.is_empty(), "{:?}", a.candidate_fleets);
 
-        let mut rules = Rules::default_rules();
+        // With the callback service too, the pair reaches a fleet.
+        let both = analyze(obs.clone(), &Rules::default_rules());
+        assert_eq!(both.candidate_fleets.len(), 1, "{:?}", both.soft_links);
+        assert!(
+            both.candidate_fleets[0]
+                .kinds
+                .contains(&SoftLinkKind::CallbackService)
+        );
+
+        let mut rules = base;
         rules.set.soft_links.fleet_min_strength = 0.3;
         let b = analyze(obs, &rules);
         assert_eq!(b.candidate_fleets.len(), 1);

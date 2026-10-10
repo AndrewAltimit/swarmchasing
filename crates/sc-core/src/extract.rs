@@ -18,7 +18,7 @@ const MAX_DEPTH: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Layer {
-    /// How this layer was found: `submitted`, `path`, `param:<name>`, `base64:<name>`, `data-url`, `embedded`, `translate.goog`, `doubled-scheme`.
+    /// How this layer was found: `submitted`, `path`, `query`, `param:<name>`, `base64:<name>`, `data-url`, `embedded`, `translate.goog`, `doubled-scheme`.
     pub via: String,
     pub depth: usize,
     /// Host if this layer is a URL.
@@ -163,9 +163,15 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
         } else if let Ok(parsed) = url::Url::parse(&raw) {
             // `https://https://a.example/` parses with the host `https`: a
             // scheme written twice. The URL after it is the real one.
+            // Quotes and backticks a model wrote around the URL are not part
+            // of the host (`https://a.example%60` parses as `a.example``).
             let host = parsed
                 .host_str()
-                .map(|h| h.to_ascii_lowercase())
+                .map(|h| {
+                    h.trim_matches(|c| matches!(c, '`' | '"' | '\''))
+                        .to_ascii_lowercase()
+                })
+                .filter(|h| !h.is_empty())
                 .filter(|h| !doubled || !is_scheme_name(h.trim_end_matches("%3a")));
             let sas = parsed.query_pairs().any(|(k, _)| k == "sv");
             let params: Vec<(String, String)> = parsed
@@ -224,6 +230,12 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
                     }
                     break;
                 }
+            }
+            // A whole query that is a URL: `corsproxy.io/?https://target/...`.
+            if let Some(q) = parsed.query().map(pct_decode)
+                && (q.starts_with("http://") || q.starts_with("https://"))
+            {
+                children.push((q, "query".into()));
             }
             if let Some(h) = host.as_deref().and_then(untranslate_host) {
                 let mut inner = format!("https://{h}{}", parsed.path());
@@ -532,6 +544,19 @@ mod tests {
             &rules,
         );
         assert!(a.clusters.is_empty(), "{:?}", a.clusters);
+    }
+
+    #[test]
+    fn quotes_around_a_url_are_not_part_of_its_host() {
+        let rules = Rules::default_rules();
+        for url in [
+            "https://r.jina.ai/https://example.com%60",
+            "https://r.jina.ai/https://example.com%22/x",
+            "https://r.jina.ai/https://example.com'",
+        ] {
+            let x = extract(&obs(url), &rules);
+            assert_eq!(x.target_host.as_deref(), Some("example.com"), "{url}");
+        }
     }
 
     #[test]

@@ -59,13 +59,13 @@ Agents rarely request a target directly. They wrap it in a relay, send a program
 - **Relays in the path:** `r.jina.ai/https://target/…` yields the inner URL, with the outer query string carried along.
 - **Translate proxies:** `www-example-com.translate.goog` yields `www.example.com` (a doubled hyphen is a literal hyphen).
 - **Doubled schemes:** `https://https://example.org/…` (or `http://https%3A//…`) parses with the host `https`. That is not a host: the URL after the second scheme becomes a layer, and the outer layer has no host, so it can never be a target.
-- **URL parameters:** a parameter value that is a URL or a `data:` URL becomes a layer.
+- **URL parameters:** a parameter value that is a URL or a `data:` URL becomes a layer, and so does a whole query string that is a URL (`corsproxy.io/?https://target/...`).
 - **`data:` URLs:** the body is decoded (base64 or percent-encoded), kept as a layer of its own, and searched for embedded URLs.
 - **Base64:** a parameter value, or a run of path segments (as in `httpbin.org/base64/<payload>`), is decoded when it looks like base64 of at least 16 characters. Either alphabet is accepted, padded or not, and a truncated payload decodes up to its last whole block, because scan services cut long URLs. A decoding counts only if it is at least 90% printable and contains letters, so random IDs are left alone. A decoded URL becomes a layer. Decoded program text is kept as a layer and searched for embedded URLs.
 
 Unwrapping stops at 16 layers or 6 levels deep (`MAX_LAYERS`, `MAX_DEPTH`). `swarmchase unwrap '<url>'` and the browser's Unwrap tab show the layers of one URL and the rules each triggers.
 
-The record's **target host** is the innermost layer whose host is not itself a relay, carrier or callback service.
+The record's **target host** is the innermost layer whose host is not itself a relay, carrier or callback service. Quotes and backticks a model wrote around a URL are trimmed from its host (`https://example.com%60` targets `example.com`).
 
 ## Rules
 
@@ -175,7 +175,7 @@ Several features describe a cluster without changing its score, its tier or its 
 - **Fabricated identifiers.** UUID-shaped values no generator produces (wrong version or variant digit, repeated groups, sequential or low-diversity digits) and hex "hashes" that are obviously typed by hand. Language models write such values when they invent a resource. The nil and max UUIDs are not reported.
 - **Probe chain pace and retries**, as above.
 - **Reruns** ([`recurrence.rs`](../crates/sc-core/src/recurrence.rs)), in the watch digest. A later run whose target hosts, and their order, repeat an earlier run in a different cluster on another day, at least 6 hours later. Runs must share at least 4 hosts, overlap with a weighted Jaccard of at least 0.5 (hosts common to many runs are down-weighted), and agree on order for at least 70% of shared hosts.
-- **Archive bursts**, in the watch digest. Many archive captures of one host within minutes, on a host the store otherwise holds few captures of (the `linking.archive_burst_*` settings).
+- **Archive bursts**, in the watch digest. Many archive captures of one target host within minutes, on a host the store otherwise holds few captures of (the `linking.archive_burst_*` settings). A capture with no target behind its relay or carrier (the service's own page) is left out, so a burst never names the relay.
 - **Payload dialect.** Which canonical test payloads a cluster uses, such as `<script>alert(1)</script>` or `<svg onload>`, `' OR 1=1--` or `' OR '1'='1`, and how deep its `../` runs go. Clusters that use the same uncommon mix of payloads are listed as a link to check.
 - **Route escalation** ([`escalation.rs`](../crates/sc-core/src/escalation.rs)). Requests for one host and path, each at most `escalation.window_secs` (30 minutes) after the last, whose route climbs: a direct request, then a relay (Jina Reader, allorigins, markdown.new, a translate proxy), then a program carrier (httpbin, a `data:` or base64 program), then a remote browser (a code playground). The route lists in `[escalation]` name the rules for each level. An agent that cannot read a page tends to try harder like this; two people reading the same page by different routes look the same. Capture-time records are left out, because their order is the archive's.
 - **Parallel fan-out width.** How many alike requests land in the same second, as when an agent issues tool calls in parallel (the `[fanout]` settings).
@@ -187,7 +187,7 @@ Several features describe a cluster without changing its score, its tier or its 
 
 - timing and habit: shared pauses, payload dialects, reruns of one target list;
 - how requests were written: the same recon opening, overlapping unusual path sets, one encoding style across every member, the same fan-out width, the same cut length, the same request header set;
-- routes and features: steps of one route escalation, the same relay stack of two or more hops (`relay_stack`), and a linking feature too common to link on;
+- routes and features: steps of one route escalation, the same relay stack of two or more hops (`relay_stack`), inboxes on the same callback service (`callback_service`: different webhook.site inboxes, say; one inbox links outright), and a linking feature too common to link on;
 - **captured secrets** (`shared_secret`): one `REDACTED-<hash>` value in records of both clusters. It is the strongest kind, because a token one client captured rarely reaches another by chance.
 
 For each pair of clusters the strengths combine as `1 - Π(1 - strength)`, so several weak ties can add up and one cannot. Pairs that reach `soft_links.fleet_min_strength` are grouped into connected components, the **candidate fleets** (`candidate_fleets`), listed in internal reports. A candidate fleet is a proposal for the admin: it never merges clusters, changes a tier, or appears in a report to a provider, an operator or the public.
