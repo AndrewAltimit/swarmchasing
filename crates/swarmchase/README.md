@@ -117,6 +117,7 @@ Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, 
 | `notice update <id> --kind …` | Appends a dated update, status change, correction, reply or retraction. |
 | `notice lint [files]` | Checks front matter, update order and that nothing withheld got through. CI and the pre-commit hook run it. |
 | `notice build --out <dir> --base-url <url>` | Writes the site's notice index, pages and Atom feed. |
+| `site build [--out _site] [--base-url <url>]` | Builds the whole public site from the checkout, as `sc-site` does ([how the site is built](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). |
 
 Details: [Notices](../../docs/reference/notices.md).
 
