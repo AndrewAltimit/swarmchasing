@@ -99,13 +99,24 @@ fn untranslate_host(host: &str) -> Option<String> {
 }
 
 /// Peel every layer we can find, breadth first.
+///
+/// Decoding can expose secrets ingest never saw (a token inside a base64
+/// program, an API key in a percent-encoded inner URL), so every layer's
+/// text and parameters are redacted as they are decoded
+/// ([`crate::redact::redact_decoded`]), before any rule or output sees them.
 pub fn unwrap_layers(url: &str) -> Vec<Layer> {
+    use crate::redact::{redact_decoded, redact_param, redact_url};
     let mut layers: Vec<Layer> = Vec::new();
     let mut queue: std::collections::VecDeque<(String, String, usize)> = Default::default();
     let mut seen = BTreeSet::new();
     queue.push_back((url.trim().to_string(), "submitted".into(), 0));
 
     while let Some((raw, via, depth)) = queue.pop_front() {
+        let raw = if raw.starts_with("data:") {
+            raw
+        } else {
+            redact_url(&raw, &mut 0)
+        };
         if layers.len() >= MAX_LAYERS || !seen.insert(raw.clone()) {
             continue;
         }
@@ -113,11 +124,11 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
 
         if let Some(rest) = raw.strip_prefix("data:") {
             let (meta, body) = rest.split_once(',').unwrap_or(("", rest));
-            let content = if meta.ends_with(";base64") {
+            let content = redact_decoded(&if meta.ends_with(";base64") {
                 try_b64(body.trim()).unwrap_or_else(|| pct_decode(body))
             } else {
                 pct_decode(body)
-            };
+            });
             for m in embedded_url_re().find_iter(&content) {
                 children.push((m.as_str().to_string(), "embedded".into()));
             }
@@ -130,9 +141,13 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
             });
         } else if let Ok(parsed) = url::Url::parse(&raw) {
             let host = parsed.host_str().map(|h| h.to_ascii_lowercase());
+            let sas = parsed.query_pairs().any(|(k, _)| k == "sv");
             let params: Vec<(String, String)> = parsed
                 .query_pairs()
-                .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                .map(|(k, v)| {
+                    let v = redact_param(&k, v.into_owned(), sas);
+                    (k.into_owned(), v)
+                })
                 .collect();
 
             // Embedded URL in the path: r.jina.ai/https://target/...
@@ -159,7 +174,8 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
                 .map(pct_decode)
                 .collect();
             for i in 0..segs.len() {
-                let Some(decoded) = try_b64(&segs[i..].join("/")) else {
+                let Some(decoded) = try_b64(&segs[i..].join("/")).map(|d| redact_decoded(&d))
+                else {
                     continue;
                 };
                 let d = decoded.trim();
@@ -195,7 +211,7 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
                 let v = v.trim();
                 if v.starts_with("http://") || v.starts_with("https://") || v.starts_with("data:") {
                     children.push((v.to_string(), format!("param:{k}")));
-                } else if let Some(decoded) = try_b64(v) {
+                } else if let Some(decoded) = try_b64(v).map(|d| redact_decoded(&d)) {
                     let d = decoded.trim();
                     if d.starts_with("http://")
                         || d.starts_with("https://")
@@ -223,19 +239,20 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
                 via,
                 depth,
                 host,
-                text: pct_decode(&raw),
+                text: redact_decoded(&pct_decode(&raw)),
                 params,
             });
         } else {
             // Not a URL we can parse; still scan it as text.
-            for m in embedded_url_re().find_iter(&raw) {
+            let text = redact_decoded(&raw);
+            for m in embedded_url_re().find_iter(&text) {
                 children.push((m.as_str().to_string(), "embedded".into()));
             }
             layers.push(Layer {
                 via,
                 depth,
                 host: None,
-                text: raw.clone(),
+                text,
                 params: vec![],
             });
         }
@@ -624,6 +641,48 @@ mod tests {
         );
         // A search form on an ordinary page link is not a program.
         assert!(rule_ids("https://www.example.com/?q=how+to+submit+a+form").is_empty());
+    }
+
+    #[test]
+    fn secrets_in_decoded_layers_are_redacted() {
+        use base64::Engine;
+        let b64 = |s: &str| base64::engine::general_purpose::STANDARD.encode(s);
+        let key = "sk-abcdefghijklmnopqrstuvwxyz0123"; // secret-scan: fixture (fake key)
+        let prog = format!(
+            "<script>fetch('https://api.target.example/v1?access_token=s3cr3tvalue&q=1',{{headers:{{a:'{key}'}}}}).then(r=>r.text()).then(t=>document.title=t)</script>"
+        );
+        let urls = [
+            format!("https://httpbin.org/base64/{}", b64(&prog)),
+            format!("data:text/html;base64,{}", b64(&prog)),
+            format!("https://r.jina.ai/https://a.example/?p={}", b64(&prog)),
+            "https://r.jina.ai/https://a.example/?next=https%3A%2F%2Fb.example%2F%3Ftoken%3D9f8e7d6c5b4a3f2e1d0c%26api_key%3Dzz9secret".to_string(),
+            "https://a.example/?next=%3Fpassword%3Dhunter2xyz".to_string(),
+        ];
+        for url in urls {
+            let rules = Rules::default_rules();
+            let a = crate::analyze(vec![obs(&url)], &rules);
+            let json = serde_json::to_string(&a).unwrap();
+            for secret in [
+                "s3cr3tvalue",
+                key,
+                "9f8e7d6c5b4a3f2e1d0c",
+                "zz9secret",
+                "hunter2xyz",
+            ] {
+                // The submitted URL is the caller's; ingest redacts it.
+                let shown = json.replacen(&serde_json::to_string(&url).unwrap(), "", 1);
+                assert!(!shown.contains(secret), "{secret} in {shown}");
+            }
+        }
+        // Placeholders a model left in a program are evidence, not secrets.
+        let l = unwrap_layers(&format!(
+            "https://httpbin.org/base64/{}",
+            b64("<script>fetch('https://api.example/?api_key=YOUR_API_KEY')</script>")
+        ));
+        assert!(
+            l.iter().any(|l| l.text.contains("api_key=YOUR_API_KEY")),
+            "{l:?}"
+        );
     }
 
     #[test]
