@@ -1,0 +1,80 @@
+# Case files
+
+A case is one incident's working directory under `<data>/cases/<id>/`: its records, `case.toml`, reports, drafts, evidence bundles and exports. Cases never go into git, because an open case names organisations on unconfirmed evidence and private reports carry details that public notices withhold. The day-to-day flow is in the [admin workflow](../guides/admin-workflow.md).
+
+## Opening a case
+
+```sh
+swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] [files…]
+```
+
+`case new` copies the selected records into `raw/records.ndjson`, so watch retention cannot delete them, and writes `case.toml`. Records come from the watch store, or from files given as arguments. `--host-hits` also takes every flagged record on the same hosts, including other clusters. `review` can open a case from a lead too ([review](watch.md#reviewing-leads)).
+
+## What `case.toml` holds
+
+- the case status (`open`, `reported`, `published`, `closed`) and the notice status (`active`, `contained`, `historical`);
+- each endpoint and the admin's decision on it: `compromised`, `targeted`, `historical`, `not-affected`, or still `unreviewed`;
+- attribution claims established by case work;
+- contacts;
+- a dated decision log;
+- the reports sent.
+
+Each change is logged with its date.
+
+## Subcommands
+
+| Command | What it does |
+|---|---|
+| `case status [<id>]` | Lists cases, or shows one case and what it still needs. |
+| `case endpoint <id> <host> <state> [--note …]` | Classifies an endpoint. |
+| `case claim <id> --party … --evidence provider_confirmed --detail …` | Records an attribution claim. |
+| `case set <id> --status … --notice … --min-named …` | Changes the status or the naming threshold. |
+| `case note <id> "…"` | Adds a dated entry to the decision log. |
+| `case add <id> …` | Adds new records. |
+| `case contacts <id>` | Finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
+| `case report <id> --audience …` | Drafts a report into `reports/`, applying the case's claims and naming threshold. |
+| `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
+| `case bundle <id>` | Writes an evidence bundle without drafting a report. |
+| `case verify <bundle>` | Checks the manifest, re-runs the analysis and fails if any tier or cluster differs. |
+| `case sent <id> --to … --channel …` | Records a send the admin made, and moves an open case to reported. |
+| `case notice <id>` | Drafts the public notice into `notice.md` ([notices](notices.md)). |
+| `case rules <id> [--update]` | Shows the pinned rules version against the current one and the records whose tier would change. |
+| `case export <id> --format stix --audience … [--to <contact>]` | Writes the case as a STIX 2.1 bundle ([STIX export](#stix-export)). |
+| `case evidence add <id> <log> --org … --host …` | Adds logs an affected operator sent back ([operator evidence](#operator-evidence)). |
+| `case evidence consent <id> <eid> --how …` | Records the operator's agreement to the notice using its logs; `withdraw` reverses it. |
+
+## Contacts
+
+`case contacts` looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each contact has a source link, a confidence and a date.
+
+## Drafts
+
+`case draft` writes the report for one listed contact into `outbox/`. For an email contact it is an unsent `.eml` with a fresh evidence bundle attached; otherwise it is paste-ready text for a web form or CERT portal. Nothing is ever sent by the tool. After the admin sends a draft, `case sent` records it.
+
+## Evidence bundles
+
+An evidence bundle holds:
+
+- the records;
+- their analysis;
+- a stamp with the rules version, the toolkit version and commit, and the tier of every flagged record and cluster;
+- a SHA-256 manifest of those files.
+
+`case verify` checks the manifest, re-runs the analysis and compares both it and the bundle's own `analysis.json` with the stamp. A recipient can run the same check without installing anything, in the browser toolkit's Case tab ([for operators](../guides/for-operators.md#verify-an-evidence-bundle)).
+
+## Pinned rules
+
+Each case keeps the rules it was opened with in `<data>/rules/<version>.toml`. Its reports, notice draft, exports and bundles use those rules rather than the current ones, so a rules change between drafting and sending cannot silently change a tier. `case rules <id>` shows which records would change tier under the current rules; `--update` re-pins and logs the change.
+
+## STIX export
+
+`case export --format stix` writes the case as a STIX 2.1 bundle (indicators, observed data per cluster, relationships, report) for recipients' tooling. It is scoped like the matching report:
+
+- an affected export carries only that operator's own logs;
+- a public export withholds what the notice withholds and is linted.
+
+Ids are deterministic.
+
+## Operator evidence
+
+`case evidence add` adds logs an affected operator sent back. Only flagged requests, the same clients' other requests and probe chains are kept, redacted; the file itself is not kept, only its SHA-256. Until `case evidence consent` records the operator's agreement, those records appear in private reports only. The operator's side is in [for operators](../guides/for-operators.md#send-logs-back).

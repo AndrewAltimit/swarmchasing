@@ -4,7 +4,7 @@ This page describes how swarmchasing turns public records into the claims in a r
 
 The short version: the toolkit reads public indexes, redacts secrets, unwraps each recorded URL, matches indicator rules, grades each record, links flagged records into clusters, and describes their timing. The admin reviews the result, decides what is true, and sends and publishes. No step is automatic past drafting.
 
-Policies (what we collect, how we name, what notices withhold) are in [policies.md](policies.md). Guidance for operators is in [for-operators.md](for-operators.md).
+Policies (what we collect, how we name, what notices withhold) are in [policies.md](policies.md). Guidance for operators is in [for-operators.md](guides/for-operators.md).
 
 ## Collection
 
@@ -159,8 +159,15 @@ Several features describe a cluster without changing its score, its tier or its 
 - **Probe chain pace and retries**, as above.
 - **Reruns** ([`recurrence.rs`](../crates/sc-core/src/recurrence.rs)), in the watch digest. A later run whose target hosts, and their order, repeat an earlier run in a different cluster on another day, at least 6 hours later. Runs must share at least 4 hosts, overlap with a weighted Jaccard of at least 0.5 (hosts common to many runs are down-weighted), and agree on order for at least 70% of shared hosts.
 - **Archive bursts**, in the watch digest. Many archive captures of one host within minutes, on a host the store otherwise holds few captures of (the `linking.archive_burst_*` settings).
+- **Payload dialect.** Which canonical test payloads a cluster uses, such as `<script>alert(1)</script>` or `<svg onload>`, `' OR 1=1--` or `' OR '1'='1`, and how deep its `../` runs go. Clusters that use the same uncommon mix of payloads are listed as a link to check.
+- **Parallel fan-out width.** How many alike requests land in the same second, as when an agent issues tool calls in parallel.
+- **Repeated cut lengths.** Truncated URLs cut at nearly the same length, as a model or tool output limit would. A scan service's own display limit can do the same.
 
 **Why they never score or link.** Each of these is shared by many unrelated clients. Encoding styles are mostly library defaults. Polite crawlers and security scanners share recon openings. Popular targets attract the same paths. Cron jobs share pause times. Letting any of them raise a score would flag ordinary clients. Letting any of them link records would merge unrelated clusters, and every later step would inherit that error. They are also not measured by the evaluation set. So they appear in reports as hints, labelled as hints, for the admin to weigh.
+
+## Endpoints
+
+Flagged requests are also grouped per target host: hits, first and last seen, attack payloads, the clusters involved, and whether the hits are ongoing or historical. `swarmchase endpoints` prints this table, and a report to an affected operator carries it for that operator's hosts. In a case, the admin classifies each endpoint ([case files](reference/cases.md#what-casetoml-holds)).
 
 ## Attribution levels and the naming gate
 
@@ -184,7 +191,9 @@ Levels 1 and 2 come from the records. Levels 3 to 5 come from case work and are 
 
 **What it is not.** The rules were tuned on this set. Its numbers are a regression floor, not an estimate of precision on real traffic. A number worth quoting needs held-out data.
 
-**The held-out measurement.** Transluce's [urlquery dataset](https://transluce.org/agent-activity) labels tens of thousands of urlquery reports as significant, suggestive or benign background. It ships report IDs and labels, not report contents, and urlquery's terms forbid redistributing the contents. To measure against it, anyone with a urlquery API key fetches the reports into a gitignored directory with `swarmchase collect urlquery-reports --sample N` and runs `eval` with Transluce's labels and our [label overrides](../samples/eval/overrides/transluce-labels.ndjson), each override with its reason. The steps are in [samples/eval/README.md](../samples/eval/README.md#held-out-evaluation-on-the-transluce-release). Read the per-class table, not just the overall recall: Transluce labelled some reports from context a single record cannot show. The benign controls are too few to estimate precision on their own, so add a sample of unflagged reports from a generic urlquery search, labelled benign.
+**The held-out measurement.** Transluce's [urlquery dataset](https://transluce.org/agent-activity) labels tens of thousands of urlquery reports as significant, suggestive or benign background. It ships report IDs and labels, not report contents, and urlquery's terms forbid redistributing the contents. To measure against it, anyone with a urlquery API key fetches the reports into a gitignored directory with `swarmchase collect urlquery-reports --sample N` and runs `eval` with Transluce's labels and our [label overrides](../samples/eval/overrides/transluce-labels.ndjson), each override with its reason. The steps are in [samples/eval/README.md](../samples/eval/README.md#held-out-evaluation-on-the-transluce-release).
+
+Read the per-class table, not just the overall recall: Transluce labelled some reports from context a single record cannot show. The benign controls are too few to estimate precision on their own, so add a sample of unflagged reports from a generic urlquery search, labelled benign.
 
 Records the admin reviews with `swarmchase review` are saved with their labels and can be measured the same way. That file stays in the data directory and is never committed.
 
@@ -214,4 +223,4 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **Headers are rarely recorded.** Most public records carry no request headers, and none keep their order. Header rules mostly apply to operator logs and the few sources that keep headers.
 
-**Rules change.** A new rules version can move a record between tiers. Each case pins the rules it was opened with, and its reports, notices and evidence bundles use that version. `swarmchase case rules <id>` shows which records would change tier under the current rules. An evidence bundle records the rules version, and `swarmchase case verify` re-runs the analysis to show the tiers follow from the records (see [for-operators.md](for-operators.md#verify-an-evidence-bundle)).
+**Rules change.** A new rules version can move a record between tiers. Each case pins the rules it was opened with, and its reports, notices and evidence bundles use that version. `swarmchase case rules <id>` shows which records would change tier under the current rules. An evidence bundle records the rules version, and `swarmchase case verify` re-runs the analysis to show the tiers follow from the records (see [for-operators.md](guides/for-operators.md#verify-an-evidence-bundle)).

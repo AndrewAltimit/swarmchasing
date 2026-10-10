@@ -2,7 +2,7 @@
 
 This page is for you if you run a website or service and either received a report from swarmchasing or found your host named in a published notice. It explains what the report means, how to check your own logs, how to send logs back, how to reply or ask for a correction, and how to check the evidence we sent.
 
-How the analysis works is in [methodology.md](methodology.md). The policies behind reports and notices are in [policies.md](policies.md).
+How the analysis works is in [methodology.md](../methodology.md). The policies behind reports and notices are in [policies.md](../policies.md).
 
 ## What the report means
 
@@ -16,11 +16,11 @@ A report to an affected operator says that public records, from scan services an
 **What it does not mean:**
 
 - **It does not say you were compromised.** Public records show that a request was submitted or captured. We did not test whether any request reached you or succeeded, and we never contact the affected system to find out.
-- **It does not say who sent the requests.** A report names an AI developer only when the evidence reaches the level set for the case. A model name inside a request never names one on its own. See [attribution levels](methodology.md#attribution-levels-and-the-naming-gate).
-- **It does not prove an AI agent sent every request.** The rules detect agent-like activity. A penetration tester or conventional scanner using the same payloads and services produces the same records. See [known limits](methodology.md#known-limits-and-false-positive-traps).
+- **It does not say who sent the requests.** A report names an AI developer only when the evidence reaches the level set for the case. A model name inside a request never names one on its own. See [attribution levels](../methodology.md#attribution-levels-and-the-naming-gate).
+- **It does not prove an AI agent sent every request.** The rules detect agent-like activity. A penetration tester or conventional scanner using the same payloads and services produces the same records. See [known limits](../methodology.md#known-limits-and-false-positive-traps).
 - **It is not an accusation.** You are the target, not the subject.
 
-The report and the public notice go out at the same time. There is no embargo, because a swarm is an active incident. The notice names your organisation as affected. If an endpoint was marked compromised, the notice withholds the attack details and request URLs for it. What notices withhold is listed in [policies.md](policies.md#reporting-and-publication).
+The report and the public notice go out at the same time. There is no embargo, because a swarm is an active incident. The notice names your organisation as affected. If an endpoint was marked compromised, the notice withholds the attack details and request URLs for it. What notices withhold is listed in [policies.md](../policies.md#reporting-and-publication).
 
 ## Check your own logs
 
@@ -57,7 +57,7 @@ Through cargo, replace `swarmchase` with `cargo run --release -p swarmchase --`.
 - **Common and Combined Log Format**, as written by Apache, nginx and most proxies, optionally with a leading virtual host (`vhost_combined`). The client IP, time, method, request target, status, referer and user agent are read.
 - **JSON or NDJSON** logs work if a field holds the full request URL. Name the fields with `--map`, for example `--map ts=time,url=request.url,ip=client.ip,ua=headers.user_agent`.
 
-Secrets in query strings (session tokens, API keys) are replaced with hashes at ingest, as for every other source. See [redaction](methodology.md#redaction-at-ingest).
+Secrets in query strings (session tokens, API keys) are replaced with hashes at ingest, as for every other source. See [redaction](../methodology.md#redaction-at-ingest).
 
 ### What to expect in your own logs
 

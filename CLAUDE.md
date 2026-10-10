@@ -30,7 +30,7 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 | [`watchlist.toml`](watchlist.toml) | Sources the scheduled watch pulls. |
 | [`scripts/ci/`](scripts/ci/select-ci-target-dir.sh) | CI gates and helpers; the [pre-commit hook](scripts/git-hooks/pre-commit) mirrors them. |
 | [`.github/workflows/`](.github/workflows/main-ci.yml) | `main-ci.yml` (gates, lint, test, Pages) and `watch.yml` (6-hourly watch, digest email). |
-| [`docs/`](docs/methodology.md) | [Methodology](docs/methodology.md), [for operators](docs/for-operators.md), and [policies](docs/policies.md) for collection, attribution, reporting and publication. |
+| [`docs/`](docs/methodology.md) | [Methodology](docs/methodology.md), [for operators](docs/guides/for-operators.md), and [policies](docs/policies.md) for collection, attribution, reporting and publication. |
 
 ## Gates
 
