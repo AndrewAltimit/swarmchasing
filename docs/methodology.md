@@ -16,8 +16,13 @@ The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read
 |---|---|---|
 | Wayback Machine CDX | Index rows: capture time, captured URL, status, digest | Scheduled watch, per-case pulls |
 | Arquivo.pt CDX | Index rows, as above | Per-case pulls only; its index lags too far for the watch window |
+| Common Crawl CDX | Index rows of one crawl, never WARC content | Scheduled watch, per-case pulls |
+| Memento timemaps | One URL's captures across archives | Per-case pulls |
 | urlquery.net | Search results and reports by ID (needs an API key) | Scheduled watch; the held-out evaluation |
-| crt.sh | Certificate Transparency entries | Case work (`swarmchase certs`) |
+| urlscan.io | Public search results | Per-case lookups only; its terms need permission for systematic retrieval |
+| GH Archive | Public GitHub events whose repository name or URLs match | Scheduled watch, as leads for review |
+| npm, PyPI | Package names, versions and publish times matching run tags | Scheduled watch, as leads for review |
+| CT logs, crt.sh | Certificate Transparency entries | Watch sample of one log (relay look-alikes); case work (`swarmchase certs`) |
 | security.txt, RDAP | The affected organisation's published security contact, or its registrar's abuse address | Finding who to report to |
 
 The scheduled watch pulls the sources in [`watchlist.toml`](../watchlist.toml). Each source there carries a rationale: which agent behaviour it catches, which rule it feeds, and what its noise looks like. The same file lists what is deliberately not watched, such as callback channels.
@@ -199,11 +204,15 @@ Levels 1 and 2 come from the records. Levels 3 to 5 come from case work and are 
 
 **The naming gate.** A report or notice names a developer only at or above the level set for the case (`--min-named`, or `case set --min-named`). The default is `shared_identifiers`. Whatever is set, a developer is never named on self-identification alone: the floor is the hosting level. A network operator may always be named as a host, because that is what an ASN shows. Case notes for the admin list every claim, with the evidence for each.
 
+**Layers, labels and tags.** Each claim belongs to one of four layers ([FM-7.1](manual/07-attribution.md#fm-71-four-layers)): `developer`, `host`, `harness` or `model_family` (`case claim --layer`). The code derives its label from the layer and the evidence: Confirmed, Suspected, Possible or Unattributed ([FM-7.7](manual/07-attribution.md#fm-77-attribution-labels)). Each claim also carries a tag, given with `--tag` or derived: a network seen in the records is Observed, a provider's confirmation or documented infrastructure is Documented, and the rest is Inference.
+
+Reports list each claim with its layer, label and tag, and add a Conclusion line for each developer named through the gate, with the strongest likelihood word its label allows. Harness and model-family candidates appear ranked in private reports and never in public. A model-family claim needs the method's held-out accuracy and corpus size, or it is refused.
+
 ## Evaluation
 
-`swarmchase eval` scores the rules against labelled records ([`eval.rs`](../crates/sc-core/src/eval.rs)). It reports precision and recall at the significant tier and at suggestive-or-above, precision per rule, and recall per class of activity. With no embargo, a false positive is published the moment the admin acts on it, so precision matters most.
+`swarmchase eval` scores the rules against labelled records ([`eval.rs`](../crates/sc-core/src/eval.rs)). It reports precision and recall at the significant tier and at suggestive-or-above, precision per rule with its hard negatives, recall per class of activity and per tactic, and false positives per benign class. Every proportion carries a 95% Wilson interval. Records labelled with their true run also measure linking: B-cubed precision and recall, false merges and split runs, reported but not gated. Two reviewers' labels give Cohen's κ (`review --stats`). Details are in [evaluation](reference/evaluation.md). With no embargo, a false positive is published the moment the admin acts on it, so precision matters most.
 
-**The committed set** is in [`samples/eval/`](../samples/eval/README.md). It holds records reconstructed from request patterns quoted in published Transluce reports, synthetic records for the model-output residue rules, and benign records, including hard negatives built to trip the rules: SQL words in search text, JSON in ordinary API queries, unrendered front-end templates, reading `claude.ai` through a relay. CI runs [`eval-gate.sh`](../scripts/ci/eval-gate.sh) on it and fails when precision or recall falls below the floors in that script. The floors only go up.
+**The committed set** is in [`samples/eval/`](../samples/eval/README.md). It holds records reconstructed from request patterns quoted in published Transluce reports, synthetic records for the model-output residue rules, and benign records, including hard negatives built to trip the rules: SQL words in search text, JSON in ordinary API queries, unrendered front-end templates, reading `claude.ai` through a relay. CI runs [`eval-gate.sh`](../scripts/ci/eval-gate.sh) on it and fails when precision or recall, or the lower end of a precision interval, falls below the floors in that script, or when a rule has no labelled positive and is not on the coverage allow-list. The floors only go up.
 
 **What it is not.** The rules were tuned on this set. Its numbers are a regression floor, not an estimate of precision on real traffic. A number worth quoting needs held-out data.
 

@@ -90,7 +90,7 @@ The hook does not run the tests. Set `SWARMCHASE_SKIP_PRECOMMIT=1` to bypass it 
 
 ## Contributing a rule
 
-Rules decide what gets reported and published, so a rule change needs more than a pattern that matches. [`docs/methodology.md`](docs/methodology.md#rules) explains kinds, weights, tiers and linking.
+Rules decide what gets reported and published, so a rule change needs more than a pattern that matches. [`docs/methodology.md`](docs/methodology.md#rules) explains kinds, weights, tiers and linking. [Writing rules](docs/guides/writing-rules.md) walks through a change step by step: the fields, choosing a weight, hard negatives, and running the evaluation.
 
 A new rule, or a change to an existing rule's pattern, weight, `significant` or `link` flag, needs all of the following:
 
