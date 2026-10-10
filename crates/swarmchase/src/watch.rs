@@ -40,7 +40,9 @@ use anyhow::{Context, Result, bail};
 use sc_collect::{CdxQuery, Client};
 use sc_core::bursts::{ArchiveBurst, archive_bursts};
 use sc_core::recurrence::{ClusterRun, cluster_reruns};
-use sc_core::{Analysis, Observation, ReportOptions, Rules, Tier, analyze, render_markdown};
+use sc_core::{
+    Analysis, Observation, ReportOptions, Rules, Tier, analyze, defang_host, render_markdown,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -1043,10 +1045,6 @@ fn cluster_line(c: &ClusterSummary) -> String {
     )
 }
 
-fn defang_host(h: &str) -> String {
-    h.replace('.', "[.]")
-}
-
 fn one_line(s: &str, n: usize) -> String {
     let s = s.replace(['\n', '|'], " ");
     if s.chars().count() > n {
@@ -1057,9 +1055,10 @@ fn one_line(s: &str, n: usize) -> String {
 }
 
 fn top<K: ToString>(m: &BTreeMap<K, usize>, n: usize) -> Vec<String> {
-    let mut v: Vec<(String, usize)> = m.iter().map(|(k, c)| (k.to_string(), *c)).collect();
-    v.sort_by_key(|x| std::cmp::Reverse(x.1));
-    v.into_iter().take(n).map(|(k, _)| k).collect()
+    sc_core::top_counts(m, n)
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect()
 }
 
 /// CDX timestamp (`yyyyMMddhhmmss`).

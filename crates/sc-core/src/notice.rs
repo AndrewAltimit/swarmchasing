@@ -120,7 +120,7 @@ impl PublicView {
     pub fn note_exposed(&mut self, host: &str) {
         self.withheld.insert(format!(
             "attack details for {} (endpoint marked compromised)",
-            host.replace('.', "[.]")
+            crate::extract::defang_host(host)
         ));
     }
 

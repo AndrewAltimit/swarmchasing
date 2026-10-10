@@ -256,7 +256,7 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
         )?;
     }
     if let Some(h) = &r.target_host {
-        writeln!(out, "  target:  {}", h.replace('.', "[.]"))?;
+        writeln!(out, "  target:  {}", sc_core::defang_host(h))?;
     }
     if let Some(f) = &r.obs.final_url {
         writeln!(out, "  final:   {}", defang(&crate::truncate(f, 120)))?;

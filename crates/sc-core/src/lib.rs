@@ -34,12 +34,13 @@ pub use chains::{Chain, Pace};
 pub use dialect::{CutLengths, Dialect, DialectPair};
 pub use endpoints::{Activity, EndpointOptions, EndpointView, endpoints};
 pub use eval::{EvalReport, Label, LabelSet, evaluate, parse_labels};
-pub use extract::{Extracted, Layer, defang, extract, unwrap_layers};
+pub use extract::{Extracted, Layer, defang, defang_host, extract, unwrap_layers};
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tier, fmt_ts, parse_ts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tier, TsKind, fmt_ts, parse_ts,
+    top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use recurrence::{ClusterRun, RecurrenceOptions, Rerun, TargetRun, cluster_reruns, reruns};

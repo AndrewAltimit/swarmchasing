@@ -5,6 +5,7 @@ use super::{Audience, ReportOptions};
 use crate::analyze::Analysis;
 use crate::attribution::{Claim, Evidence, Role};
 use crate::endpoints::{EndpointOptions, EndpointView, endpoints};
+use crate::extract::defang_host;
 use crate::model::fmt_ts;
 use crate::notice::PublicView;
 use std::collections::BTreeMap;
@@ -107,7 +108,7 @@ pub(super) fn endpoint_table(
         let _ = writeln!(
             s,
             "| `{}` | {} | {} | {} | {} | {payloads} |",
-            v.host.replace('.', "[.]"),
+            defang_host(&v.host),
             v.hits,
             fmt_ts(v.first_seen),
             fmt_ts(v.last_seen),

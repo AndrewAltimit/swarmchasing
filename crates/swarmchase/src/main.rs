@@ -922,10 +922,8 @@ fn print_summary(a: &Analysis) {
 }
 
 fn top<K: ToString>(m: &std::collections::BTreeMap<K, usize>, n: usize) -> Vec<String> {
-    let mut v: Vec<(String, usize)> = m.iter().map(|(k, c)| (k.to_string(), *c)).collect();
-    v.sort_by_key(|x| std::cmp::Reverse(x.1));
-    v.into_iter()
-        .take(n)
+    sc_core::top_counts(m, n)
+        .into_iter()
         .map(|(k, c)| format!("{k}×{c}"))
         .collect()
 }

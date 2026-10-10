@@ -439,6 +439,11 @@ fn is_intermediary_kind(k: IndicatorKind) -> bool {
     )
 }
 
+/// A host name made safe to print: `example[.]com`.
+pub fn defang_host(host: &str) -> String {
+    host.replace('.', "[.]")
+}
+
 /// Make URLs safe to paste into a report: `hxxps://example[.]com/...`.
 /// Every embedded URL is defanged, not just the outermost.
 pub fn defang(s: &str) -> String {

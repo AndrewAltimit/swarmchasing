@@ -15,8 +15,8 @@ use sections::{attribution_section, endpoint_table};
 
 use crate::analyze::{Analysis, Cluster};
 use crate::attribution::{Claim, Evidence, attribute, merge};
-use crate::extract::defang;
-use crate::model::{IndicatorKind, Tier, fmt_ts, truncate};
+use crate::extract::{defang, defang_host};
+use crate::model::{IndicatorKind, Tier, fmt_ts, top_counts, truncate};
 use crate::notice::PublicView;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -97,13 +97,6 @@ fn kind_label(k: IndicatorKind) -> &'static str {
         IndicatorKind::AntiBot => "Anti-bot bypass",
         IndicatorKind::Infra => "Infrastructure",
     }
-}
-
-fn top<K: ToString + Clone>(m: &BTreeMap<K, usize>, n: usize) -> Vec<(String, usize)> {
-    let mut v: Vec<(String, usize)> = m.iter().map(|(k, c)| (k.to_string(), *c)).collect();
-    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    v.truncate(n);
-    v
 }
 
 fn dur(secs: i64) -> String {
@@ -191,7 +184,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             *kinds.entry(*k).or_default() += n;
         }
     }
-    let host_list: Vec<String> = top(&hosts, 5)
+    let host_list: Vec<String> = top_counts(&hosts, 5)
         .into_iter()
         .map(|(h, n)| {
             format!(
@@ -279,7 +272,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 "  - iterative probing: {} variants of {} on `{}{}` over {} (median gap {}, {}){}{retries}",
                 ch.variants,
                 varied.join(", "),
-                ch.host.replace('.', "[.]"),
+                defang_host(&ch.host),
                 truncate(&ch.path, 60),
                 dur(ch.end - ch.start),
                 dur(ch.median_gap_secs),
@@ -455,10 +448,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                     s,
                     "1. {} — `{}` — request withheld from the public notice (sent to the affected parties)",
                     fmt_ts(r.obs.ts),
-                    r.target_host
-                        .as_deref()
-                        .unwrap_or("unknown host")
-                        .replace('.', "[.]")
+                    defang_host(r.target_host.as_deref().unwrap_or("unknown host"))
                 );
             }
         }
