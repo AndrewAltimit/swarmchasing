@@ -1,0 +1,73 @@
+# 11. Notice standard
+
+[Manual index](README.md) · Previous: [10. Disclosure](10-disclosure.md) · Next: [12. Interoperability](12-interoperability.md)
+
+## FM-11.1 Purpose
+
+A notice is the public page for one incident. It lets anyone targeted by the same agents recognise the activity in their own logs, tells the public which organisations were affected and whose agents were involved at the stated strength, and keeps a permanent, dated record of what was known when. One incident has one notice.
+
+## FM-11.2 Structure
+
+A notice has machine-readable front matter and a body.
+
+**Front matter:** the notice id, the status ([FM-11.3](#fm-113-status-lifecycle)), the providers named (with label), the affected hosts, and the dated updates.
+
+**Body**, in this order:
+
+1. **Summary.** What happened, to whom, when, and the attribution Conclusion with its label and likelihood words.
+2. **Affected organisations.** Each with what its endpoints saw: compromised, targeted or historical.
+3. **Attribution.** Each layer that has a claim ([FM-7.1](07-attribution.md#fm-71-four-layers)), with tagged claims ([FM-7.6](07-attribution.md#fm-76-claim-tags)).
+4. **Timeline.** Clusters and runs with first and last seen, naming the timestamp kind.
+5. **What to look for.** Indicators safe to publish: relays, carriers, tactics, payload families, run tags that are not credentials, defanged target hosts.
+6. **Withheld.** What was withheld, by category, and why ([FM-11.4](#fm-114-what-a-notice-withholds)).
+7. **Method and limits.** The method version (cite this manual), the rules version, and the limits that bear on the claims ([chapter 14](14-limits.md)).
+8. **Updates.** Dated entries, oldest first, never rewritten.
+
+Hosts are defanged (`a[.]b`) and no URL from a record is a link.
+
+Toolkit: `case notice` drafts the body from the case, and the admin edits it; per-layer attribution sections and claim tags in the draft are (planned).
+
+## FM-11.3 Status lifecycle
+
+| Status | Meaning | Moves to |
+|---|---|---|
+| **Active** | Matching activity seen recently, or no evidence it stopped. | Contained, when no matching record has been seen for a set period and the admin agrees. |
+| **Contained** | No matching activity for the set period, or the provider confirms it stopped the agents. | Active, if matching activity returns; historical, when the case closes. |
+| **Historical** | Activity ended before discovery, or the case is closed. | Active, if matching activity returns. |
+
+Every status change is a dated update with its reason. Toolkit: the watch matches new records against each case's indicators and proposes status changes; the admin applies them ([watch](../reference/watch.md#case-status)).
+
+## FM-11.4 What a notice withholds
+
+| Withheld | Why |
+|---|---|
+| Live callback channel identifiers: inbox, webhook, request-catcher, topic and paste identifiers | A reader could take over, read or feed the swarm's channel. |
+| Captured credentials and cookies, and linking values that could be credentials (`tok`, `session`) | They are secrets, even when redacted to a hash. |
+| Attack details and request URLs for endpoints marked compromised | They describe how to exploit a weakness that may still be open. |
+| The local part of e-mail addresses, except role mailboxes | Personal data with no public value. |
+| Operator-supplied logs without consent | They are the operator's to publish ([FM-10.7](10-disclosure.md#fm-107-operator-supplied-logs)). |
+| Anything the drafting tool cannot classify | Withheld until the admin decides. |
+
+Content from a source whose terms forbid redistribution is never quoted; the notice links the record and gives derived indicators ([FM-3.4](03-sources.md#fm-34-terms-of-use)). Private reports carry what the recipient needs, including what the notice withholds ([FM-10.1](10-disclosure.md#fm-101-parties)).
+
+## FM-11.5 Lint
+
+Every notice is checked by a program before publication and on every later change, for: callback channel identifiers, e-mail addresses other than role mailboxes, credential shapes, and well-formed front matter with updates in date order. A notice that fails is not published. The lint is a last check, not the withholding itself: the draft is built from a withholding view, and the lint catches what got through ([notices](../reference/notices.md#lint)).
+
+## FM-11.6 Corrections and retractions
+
+A published notice is never rewritten. Each change is an appended, dated update of one kind:
+
+| Kind | Use |
+|---|---|
+| **Update** | New facts: more clusters, more affected hosts, a provider statement summarised. |
+| **Status** | A lifecycle change ([FM-11.3](#fm-113-status-lifecycle)). |
+| **Correction** | A published claim was wrong. States the claim, what is now believed, and why. |
+| **Reply** | A party's statement, verbatim ([FM-10.5](10-disclosure.md#fm-105-right-of-reply)). |
+| **Retraction** | The notice's central claim no longer holds. The notice stays, marked retracted, with the reason. |
+
+The feed carries every update, so a reader who saw the original sees the correction. A withdrawn attribution stays visible as withdrawn ([FM-2.6](02-principles.md#fm-26-correct-in-public)).
+
+## FM-11.7 Permanence
+
+A notice id, once published, keeps its address. Notices are published from a version-controlled repository, so every state of every notice is recoverable. Committing a notice publishes it; nothing else does ([notices](../reference/notices.md#from-draft-to-published)).
