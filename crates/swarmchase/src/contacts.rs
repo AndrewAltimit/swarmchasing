@@ -19,13 +19,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::Write;
 
-/// Second-level labels under which registrations sit one level deeper
-/// (`aihw.gov.au`, `example.co.uk`). A heuristic, not the Public Suffix List.
-const SECOND_LEVEL: &[&str] = &[
-    "ac", "co", "com", "edu", "gob", "gov", "govt", "go", "mil", "net", "nic", "or", "org", "ne",
-];
-
-/// The host, then each parent down to the registered domain.
+/// The host, then each parent down to the registered domain (by the Public
+/// Suffix List: `aihw.gov.au`, `agency.gov.uk`, `foo.co.jp`).
 pub fn domain_candidates(host: &str) -> Vec<String> {
     let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
     let labels: Vec<&str> = host.split('.').filter(|l| !l.is_empty()).collect();
@@ -33,11 +28,9 @@ pub fn domain_candidates(host: &str) -> Vec<String> {
     if n < 2 {
         return vec![host];
     }
-    let min = if n >= 3 && labels[n - 1].len() == 2 && SECOND_LEVEL.contains(&labels[n - 2]) {
-        3
-    } else {
-        2
-    };
+    let min = sc_collect::psl::registrable_domain(&host)
+        .map_or(2, |d| d.split('.').count())
+        .clamp(1, n);
     (min..=n).rev().map(|k| labels[n - k..].join(".")).collect()
 }
 
@@ -681,6 +674,16 @@ mod tests {
             ["vizprod.aihw.gov.au", "aihw.gov.au"]
         );
         assert_eq!(domain_candidates("example.co.uk"), ["example.co.uk"]);
+        // Multi-label public suffixes, from the Public Suffix List.
+        assert_eq!(
+            domain_candidates("www.agency.gov.uk"),
+            ["www.agency.gov.uk", "agency.gov.uk"]
+        );
+        assert_eq!(
+            domain_candidates("a.foo.co.jp"),
+            ["a.foo.co.jp", "foo.co.jp"]
+        );
+        assert_eq!(registered_domain("x.y.foo.co.jp"), "foo.co.jp");
         assert_eq!(registered_domain("a.b.example.org"), "example.org");
         assert_eq!(domain_candidates("localhost"), ["localhost"]);
     }
