@@ -27,6 +27,9 @@ pub(super) fn unflagged_by_host(results: &[ObsResult]) -> HashMap<&str, Vec<usiz
     unflagged_by_host
 }
 
+/// Distinct declarations kept per cluster.
+const MAX_DECLARED: usize = 8;
+
 /// One cluster of `members` (indexes into `results`), not yet numbered.
 pub(super) fn cluster(
     results: &[ObsResult],
@@ -48,8 +51,13 @@ pub(super) fn cluster(
     let mut header_sets: BTreeMap<String, usize> = BTreeMap::new();
     let mut feats: BTreeMap<&LinkFeature, usize> = BTreeMap::new();
     let mut relay_stacks: BTreeMap<String, usize> = BTreeMap::new();
+    let mut declared: BTreeMap<(String, Option<String>), usize> = BTreeMap::new();
     for &i in &members {
         let r = &results[i];
+        let params = r.layers.iter().flat_map(|l| l.params.iter());
+        if let Some(d) = crate::declared::declared(&r.obs, params) {
+            *declared.entry(d).or_default() += 1;
+        }
         if let Some(s) = relay_stack(r) {
             *relay_stacks.entry(s).or_default() += 1;
         }
@@ -193,6 +201,15 @@ pub(super) fn cluster(
         fanout,
         cut_lengths,
         relay_stacks,
+        declared: declared
+            .into_iter()
+            .take(MAX_DECLARED)
+            .map(|((text, contact), records)| crate::declared::Declared {
+                text,
+                contact,
+                records,
+            })
+            .collect(),
         link_features: feats
             .into_iter()
             .filter(|&(_, n)| n > 1)

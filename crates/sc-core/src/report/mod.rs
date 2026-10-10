@@ -386,6 +386,22 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 "  - relay stack `{st}` on {n} records: one client's habit, not evidence on its own"
             );
         }
+        // A named contact is for the admin to check, not for a recipient.
+        if opts.audience == Audience::Internal {
+            for d in &c.declared {
+                let contact = d
+                    .contact
+                    .as_ref()
+                    .map(|x| format!(", contact `{x}`"))
+                    .unwrap_or_default();
+                let _ = writeln!(
+                    s,
+                    "  - declares testing on {} records: `{}`{contact}. Check it with its owner before treating the cluster as authorised; anyone can write this",
+                    d.records,
+                    defang(&d.text)
+                );
+            }
+        }
     }
     // A pair hint names both clusters. Outside case notes it appears only
     // when the report covers both, so a report on one cluster never names

@@ -100,6 +100,11 @@ pub struct Cluster {
     /// target`), with how many members used each. Descriptive.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub relay_stacks: BTreeMap<String, usize>,
+    /// Members announcing themselves as testing or research, with the
+    /// contact they name ([`crate::declared`]). A hint for the case's
+    /// handling of authorised testing; never scored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declared: Vec<crate::declared::Declared>,
     /// Features that joined members together.
     pub link_features: Vec<LinkFeature>,
     pub runs: Vec<Span>,
@@ -492,6 +497,46 @@ mod tests {
                 && md.matches("(submit times, close to request times)").count() == 2,
             "{md}"
         );
+    }
+
+    #[test]
+    fn declared_testing_is_extracted_but_never_scored() {
+        let ua = "AcmeScan/1.0 (authorized security test; sec@acme.example)";
+        let obs = |ua: Option<&str>| -> Vec<Observation> {
+            (0..2)
+                .map(|i| Observation {
+                    user_agent: ua.map(str::to_string),
+                    ..o(
+                        1000 + 30 * i,
+                        &format!("https://a.example/item?id={i}%20UNION%20SELECT%20null--"),
+                    )
+                })
+                .collect()
+        };
+        let a = analyze(obs(Some(ua)), &Rules::default_rules());
+        let b = analyze(obs(None), &Rules::default_rules());
+        let c = &a.clusters[0];
+        assert_eq!(c.declared.len(), 1, "{:?}", c.declared);
+        assert_eq!(c.declared[0].records, 2);
+        assert_eq!(c.declared[0].contact.as_deref(), Some("sec@acme.example"));
+        assert!(b.clusters[0].declared.is_empty());
+        assert_eq!((c.score, c.tier), (b.clusters[0].score, b.clusters[0].tier));
+        let json = serde_json::to_value(&a).unwrap();
+        assert_eq!(
+            json["clusters"][0]["declared"][0]["contact"],
+            "sec@acme.example"
+        );
+        let report = |audience| {
+            crate::report::render_markdown(
+                &a,
+                &crate::report::ReportOptions {
+                    audience,
+                    ..Default::default()
+                },
+            )
+        };
+        assert!(report(crate::report::Audience::Internal).contains("sec@acme.example"));
+        assert!(!report(crate::report::Audience::Provider).contains("declares testing"));
     }
 
     #[test]
