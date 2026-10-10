@@ -22,7 +22,7 @@ What this crate does and does not implement keeps collection passive:
 - It is polite: one request at a time with a minimum interval per host, an identifying user agent, and jittered backoff when a server is overloaded.
 - Records are redacted before they leave the crate.
 
-Archive captures get the id `<archive>:<timestamp>:<digest>` from [`sc_core::capture`](../sc-core/src/capture.rs), the same id an imported CDX export gets, and record their timestamp as a capture time.
+Archive captures get the id `<archive>:<timestamp>:<digest>:<url hash>` from [`sc_core::capture`](../sc-core/src/capture.rs), the same id an imported CDX export gets, and record their timestamp as a capture time.
 
 A new collector must keep to these. Its module docs record the source's terms of use, with their URL, and what they allow. See [docs/policies.md](../../docs/policies.md) for the collection policy.
 
