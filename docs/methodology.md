@@ -43,7 +43,7 @@ What is replaced:
 - secret request headers: `Cookie`, `Authorization`, `X-API-Key` and similar (`SECRET_HEADER`);
 - well-known credential shapes anywhere in the record: JWTs, AWS access key IDs, GitHub, GitLab and Slack tokens, `sk-` style model API keys, Google API keys (`SECRET_VALUE`).
 
-Each secret becomes `REDACTED-` followed by the first 12 hex digits of its SHA-256. The hash is deterministic, so two records that carried the same secret still link. It is unsalted. An operator holding a token can therefore check whether that token appears in a record. A short or guessable secret could be recovered from its hash by brute force.
+Each secret becomes `REDACTED-` followed by the first 12 hex digits of its SHA-256. The hash is deterministic, so two records that carried the same secret can still be tied together: the same redacted value in two clusters is a strong soft link (`shared_secret`, see [soft links](#descriptive-hints)). Hashes of stock passwords (`password`, `admin`, `123456` and the like) do not count, because unrelated clients send them alike. It is unsalted. An operator holding a token can therefore check whether that token appears in a record. A short or guessable secret could be recovered from its hash by brute force.
 
 What is kept:
 
@@ -177,7 +177,12 @@ Several features describe a cluster without changing its score, its tier or its 
 - **Parallel fan-out width.** How many alike requests land in the same second, as when an agent issues tool calls in parallel (the `[fanout]` settings).
 - **Repeated cut lengths.** Truncated URLs cut at nearly the same length, as a model or tool output limit would (the `[cut_lengths]` settings). A scan service's own display limit can do the same.
 
-**Soft links and candidate fleets** ([`fleets.rs`](../crates/sc-core/src/fleets.rs)). The hints that relate two clusters are collected as soft links (`soft_links` in the analysis): shared pauses, payload dialects, reruns of one target list, the same recon opening, overlapping unusual path sets, one encoding style across every member, the same fan-out width, the same cut length, the same request header set, steps of one route escalation, and a linking feature too common to link on. Each has a strength from 0 to 1: its weight in `[soft_links]`, times its own similarity where it has one. A value shared by more than `soft_links.max_shared` clusters links none of them.
+**Soft links and candidate fleets** ([`fleets.rs`](../crates/sc-core/src/fleets.rs)). The hints that relate two clusters are collected as soft links (`soft_links` in the analysis). Each has a strength from 0 to 1: its weight in `[soft_links]`, times its own similarity where it has one. A value shared by more than `soft_links.max_shared` clusters links none of them. The kinds:
+
+- timing and habit: shared pauses, payload dialects, reruns of one target list;
+- how requests were written: the same recon opening, overlapping unusual path sets, one encoding style across every member, the same fan-out width, the same cut length, the same request header set;
+- routes and features: steps of one route escalation, and a linking feature too common to link on;
+- **captured secrets** (`shared_secret`): one `REDACTED-<hash>` value in records of both clusters. It is the strongest kind, because a token one client captured rarely reaches another by chance.
 
 For each pair of clusters the strengths combine as `1 - Π(1 - strength)`, so several weak ties can add up and one cannot. Pairs that reach `soft_links.fleet_min_strength` are grouped into connected components, the **candidate fleets** (`candidate_fleets`), listed in internal reports. A candidate fleet is a proposal for the admin: it never merges clusters, changes a tier, or appears in a report to a provider, an operator or the public.
 

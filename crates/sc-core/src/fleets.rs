@@ -44,6 +44,8 @@ pub enum SoftLinkKind {
     Escalation,
     /// A linking feature too common to link on.
     CommonFeature,
+    /// The same redacted secret (`REDACTED-<hash>`) in both clusters' records.
+    SharedSecret,
 }
 
 impl SoftLinkKind {
@@ -60,6 +62,7 @@ impl SoftLinkKind {
             SoftLinkKind::HeaderSet => "header set",
             SoftLinkKind::Escalation => "route escalation",
             SoftLinkKind::CommonFeature => "common feature",
+            SoftLinkKind::SharedSecret => "shared captured secret",
         }
     }
 }
@@ -87,6 +90,7 @@ pub struct SoftLinkOptions {
     pub header_set: f64,
     pub escalation: f64,
     pub common_feature: f64,
+    pub shared_secret: f64,
 }
 
 impl Default for SoftLinkOptions {
@@ -105,6 +109,7 @@ impl Default for SoftLinkOptions {
             header_set: 0.3,
             escalation: 0.6,
             common_feature: 0.3,
+            shared_secret: 0.8,
         }
     }
 }
@@ -257,6 +262,23 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             add(SoftLinkKind::CommonFeature, f.to_string(), &c.id);
         }
     }
+    let stock = stock_secrets();
+    for c in &shown {
+        let mut found = BTreeSet::new();
+        for &m in &c.members {
+            let r = &s.results[m];
+            let o = &r.obs;
+            let texts = [o.url.as_str(), o.final_url.as_deref().unwrap_or("")];
+            let layers = r.layers.iter().map(|l| l.text.as_str());
+            let headers = o.headers.values().map(String::as_str);
+            for t in texts.into_iter().chain(layers).chain(headers) {
+                redacted_in(t, &mut found);
+            }
+        }
+        for h in found.into_iter().filter(|h| !stock.contains(*h)) {
+            add(SoftLinkKind::SharedSecret, h.to_string(), &c.id);
+        }
+    }
     for ((kind, value), ids) in &shared {
         if ids.len() < 2 || ids.len() > opts.max_shared {
             continue;
@@ -266,6 +288,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             SoftLinkKind::Encoding => opts.encoding,
             SoftLinkKind::FanOut => opts.fanout,
             SoftLinkKind::HeaderSet => opts.header_set,
+            SoftLinkKind::SharedSecret => opts.shared_secret,
             _ => opts.common_feature,
         };
         for (i, x) in ids.iter().enumerate() {
@@ -333,6 +356,33 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             .then(p.kind.cmp(&q.kind))
     });
     out
+}
+
+/// Every `REDACTED-<12 hex>` replacement in `text`.
+fn redacted_in<'t>(text: &'t str, out: &mut BTreeSet<&'t str>) {
+    use crate::redact::MARK;
+    let mut rest = text;
+    while let Some(i) = rest.find(MARK) {
+        let end = i + MARK.len() + 12;
+        if let Some(tok) = rest.get(i..end)
+            && tok[MARK.len()..].bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            out.insert(tok);
+        }
+        rest = &rest[i + MARK.len()..];
+    }
+}
+
+/// Hashes of stock passwords and test values that unrelated clients send
+/// alike: a match on one of these is no tie.
+fn stock_secrets() -> BTreeSet<String> {
+    [
+        "password", "admin", "123456", "12345678", "test", "secret", "changeme", "root", "guest",
+        "demo", "letmein", "qwerty",
+    ]
+    .iter()
+    .map(|s| crate::redact::hash_token(s))
+    .collect()
 }
 
 /// The single value every one of `total` items has, when `total` is at
@@ -475,6 +525,56 @@ mod tests {
             url: url.into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn a_captured_secret_in_two_clusters_is_a_strong_soft_link() {
+        // Two inboxes a week apart, both replaying one captured token.
+        let pair = |secret: &str| {
+            let obs: Vec<Observation> = [
+                "0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a",
+                "7d2e4a10-2222-4b3c-8a66-4e3f2a1b0c9d",
+            ]
+            .iter()
+            .enumerate()
+            .flat_map(|(f, inbox)| {
+                (0..2).map(move |k| {
+                    o(
+                        &format!("{f}{k}"),
+                        1_791_000_000 + f as i64 * 7 * 86_400 + k * 60,
+                        &format!(
+                            "https://h{k}.example/api?{secret}&hook=https://webhook.site/{inbox}"
+                        ),
+                    )
+                })
+            })
+            .map(|mut o| {
+                crate::redact::redact_observation(&mut o);
+                o
+            })
+            .collect();
+            analyze(obs, &Rules::default_rules())
+        };
+        let a = pair("access_token=9f8e7d6c5b4a3f2e1d0c");
+        assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters);
+        let l: Vec<&SoftLink> = a
+            .soft_links
+            .iter()
+            .filter(|l| l.kind == SoftLinkKind::SharedSecret)
+            .collect();
+        assert_eq!(l.len(), 1, "{:?}", a.soft_links);
+        assert!(l[0].detail.contains("REDACTED-"), "{}", l[0].detail);
+        assert!((l[0].strength - 0.8).abs() < 1e-9);
+        assert_eq!(a.candidate_fleets.len(), 1);
+        // A stock password is sent by everyone.
+        let b = pair("password=admin");
+        assert!(
+            b.soft_links
+                .iter()
+                .all(|l| l.kind != SoftLinkKind::SharedSecret),
+            "{:?}",
+            b.soft_links
+        );
     }
 
     #[test]

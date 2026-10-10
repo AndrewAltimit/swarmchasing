@@ -143,7 +143,8 @@ pub struct Analysis {
     pub escalations: Vec<crate::escalation::Escalation>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
-    /// lengths, header sets, escalations, common features), strongest
+    /// lengths, header sets, escalations, common features, captured
+    /// secrets), strongest
     /// first. They never merge clusters or change a score.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub soft_links: Vec<crate::fleets::SoftLink>,
