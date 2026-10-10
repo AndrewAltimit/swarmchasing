@@ -97,6 +97,7 @@ fn page(path: &str, nav: &'static str, title: &str, description: &str, body: Str
         body,
         scripts: Vec::new(),
         wide: false,
+        engine: false,
     }
 }
 
@@ -350,6 +351,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         shells::ANALYZE.to_string(),
     );
     p.scripts.push("js/pages/analyze.js");
+    p.engine = true;
     p.wide = true;
     pages.push(p);
     let mut p = page(
@@ -360,6 +362,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         shells::UNWRAP.to_string(),
     );
     p.scripts.push("js/pages/unwrap.js");
+    p.engine = true;
     pages.push(p);
     let mut p = page(
         "tools/index.html",
@@ -369,6 +372,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         shells::TOOLS.to_string(),
     );
     p.scripts.push("js/pages/tools.js");
+    p.engine = true;
     pages.push(p);
 
     let mut sitemap = String::from(

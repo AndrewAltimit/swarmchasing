@@ -4,6 +4,7 @@
 //!   dated updates, and the check that gates publication.
 //! - [`markdown`]: a notice body as plain blocks the page renders as text.
 //! - [`feed`]: the Atom feed, one entry per update.
+//! - [`assets`]: content-hashed names for scripts, styles and WASM modules.
 //! - [`site`]: the index and per-notice JSON the site loads, and the feed.
 //!
 //! What a notice may carry ([`sc_core::notice::PublicView`],
@@ -11,6 +12,7 @@
 //! the browser need it. No network I/O and no file I/O: callers read and
 //! write the files.
 
+pub mod assets;
 pub mod feed;
 pub mod file;
 pub mod markdown;

@@ -157,6 +157,24 @@ class PageCheck(HTMLParser):
                     err(f"stylesheet from another origin: {v[:80]}")
 
 
+ASSET_REF = re.compile(r"""\b(?:src|href)="([^"]+\.(?:js|css|wasm))\"""")
+HASHED_NAME = re.compile(r"\.[0-9a-f]{10}\.(?:js|css|wasm)$")
+
+
+def check_asset_refs(text: str, page: Path) -> list[str]:
+    """Built pages load scripts, styles and WASM by content-hashed names
+    (GitHub Pages' cache headers are not ours to set), and each exists."""
+    errors = []
+    for ref in ASSET_REF.findall(text):
+        if not HASHED_NAME.search(ref):
+            errors.append(f"asset {ref} is not content-hashed")
+            continue
+        # The 404 page reaches assets by absolute path; the rest relatively.
+        if not ref.startswith("/") and not (page.parent / ref).resolve().is_file():
+            errors.append(f"asset {ref} does not exist")
+    return errors
+
+
 def check_page(text: str) -> list[str]:
     errors = check_csp(text)
     p = PageCheck()
@@ -290,6 +308,9 @@ def selftest() -> list[str]:
         errors.append("selftest: missed a generator allow-list naming data/")
     gen_ok = 'const INPUTS: &[(&str, &str)] = &[("docs/", ".md"), ("site/", "")]; SWARMCHASE_DATA'
     errors += [f"selftest: false positive {e}" for e in check_generator(gen_ok)]
+    if not check_asset_refs('<script type="module" src="/js/site.js"></script>', ROOT / "index.html"):
+        errors.append("selftest: missed an asset without a content hash")
+    errors += [f"selftest: false positive {e}" for e in check_asset_refs('<link href="/css/site.0123456789.css">', ROOT / "index.html")]
     if not check_inputs(["data/watch/records.ndjson"], None):
         errors.append("selftest: missed an input under data/")
     if not check_inputs(["docs/x.md"], set()):
@@ -330,7 +351,9 @@ def main(argv: list[str]) -> int:
                 errors.append(f"{built}: no pages")
             for p in pages:
                 rel = p.relative_to(out).as_posix()
-                errors += [f"{built}/{rel}: {e}" for e in check_page(p.read_text(encoding="utf-8"))]
+                text = p.read_text(encoding="utf-8")
+                errors += [f"{built}/{rel}: {e}" for e in check_page(text)]
+                errors += [f"{built}/{rel}: {e}" for e in check_asset_refs(text, p)]
             for p in sorted(out.rglob("*.js")):
                 if "pkg" in p.relative_to(out).parts:
                     continue
