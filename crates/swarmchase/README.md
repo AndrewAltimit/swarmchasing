@@ -37,10 +37,10 @@ For an export with other field names, map them: `--map ts=submitted_at,url=page.
 | Command | What it does |
 |---|---|
 | `scan <input>…` | Lists flagged records, strongest first. `--min-tier noise\|suggestive\|significant`, `--limit`. |
-| `clusters <input>…` | Summarises the clusters: linked runs of records. |
+| `clusters <input>…` | Summarises the clusters: linked runs of records. Each has a number (`C1`, strongest first, which can change as records arrive) and a stable key (`k-3f9a2c1b`); every `--cluster` option takes either. |
 | `endpoints <input>…` | Per target host: hits, first and last seen, payloads, clusters, and whether the hits are ongoing or historical. `--active-days`, `--from-now`, `--json`. |
 | `analyze <input>…` | The full analysis as JSON (`-o` to write a file, `--flagged-only` to drop the rest). |
-| `report <input>…` | A Markdown draft. `--audience provider\|affected\|internal\|public`, `--cluster C1`, `--min-named` (the weakest evidence that may name a developer), `--claims` (JSON claims from case work), `-o`. |
+| `report <input>…` | A Markdown draft. `--audience provider\|affected\|internal\|public`, `--cluster C1` (or its key), `--min-named` (the weakest evidence that may name a developer), `--claims` (JSON claims from case work), `-o`. |
 | `unwrap <url>` | Shows the relay and carrier layers inside one URL and the rules each layer triggers. |
 | `defang <url>…` | Defangs URLs for sharing (`hxxps://host[.]example`). |
 | `rules [file]` | Validates a rules file; `--dump` prints the bundled rules. |
@@ -55,13 +55,20 @@ swarmchase unwrap 'https://r.jina.ai/https://portal.example.gov/q?id=1%20UNION%2
 
 ### Collect
 
-Collectors read indexes and public records only. They never open a capture or a URL an agent submitted. Requests go one at a time with an identifying user agent (override with `SWARMCHASE_UA`), and retry on HTTP 429 and 5xx with exponential backoff, honouring `Retry-After`.
+Collectors read indexes and public records only. They never open a capture or a URL an agent submitted. Requests go one at a time per host with an identifying user agent (override with `SWARMCHASE_UA`), and retry on HTTP 429 and 5xx with jittered backoff, honouring `Retry-After`. Every `collect` source also takes `--endpoint`, `--scan` and `--cache` ([source kinds](../../docs/reference/watch.md#source-kinds)).
 
 | Command | What it does |
 |---|---|
 | `collect wayback <pattern>` | Wayback Machine CDX index, e.g. `'r.jina.ai/*'`. `--from`/`--to` (`yyyyMMdd[hhmmss]`), `--match-type`, `--limit`, `--page-size`, `-o`, and `--resume` to continue an interrupted pull. |
 | `collect arquivo <pattern>` | Arquivo.pt CDX index, same options. |
 | `collect urlquery <query>` | urlquery.net report search. Needs `URLQUERY_APIKEY`. |
+| `collect commoncrawl <pattern>` | Common Crawl CDX index rows, newest crawl by default. |
+| `collect urlscan <query>` | urlscan.io public search, per case. `URLSCAN_APIKEY` optional. |
+| `collect memento <url>` | One URL's captures across archives, from a Memento timemap. |
+| `collect gharchive <substrings>` | Public GitHub events matching repo names or payload URLs. |
+| `collect npm <text>`, `collect pypi <substrings>` | Package names, versions and publish times; never code. |
+| `collect ctlog <substrings> --endpoint <log>` | Certificates in a CT log's newest entries whose names match. |
+| `asn fetch`, `asn lookup <ip>…` | The offline IP-to-ASN table in `<data>/asn/`. |
 | `collect urlquery-reports <ids> -o <out>` | Fetches urlquery reports by ID, or every ID in a labels file such as Transluce's `reports.csv`. Appends to `--out` and skips IDs already there; `--sample N` caps the agent-labelled reports. |
 | `certs <query>` | Certificate Transparency lookup via crt.sh, e.g. `'%.example.com'`. |
 | `contact <domain>` | The domain's RFC 9116 security.txt contact. |
@@ -75,8 +82,8 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 
 | Command | What it does |
 |---|---|
-| `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`. Details: [Watch runs](../../README.md#watch-runs). |
-| `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements. Details: [Reviewing leads](../../README.md#reviewing-leads). |
+| `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`. Details: [Watch runs](../../docs/reference/watch.md). |
+| `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
 | `eval <input>…` | Precision and recall of the rules on labelled records. Labels come from a `label` field or `--labels` (NDJSON or CSV). With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. |
 
 ```sh
@@ -88,7 +95,7 @@ swarmchase eval data/labels/reviewed.ndjson   # everything reviewed so far
 
 ### Cases
 
-`case` keeps one directory per incident under `<data>/cases/<id>/`, with its records, `case.toml`, reports, drafts, bundles and exports. Cases never go into git. The table of subcommands and what a case holds are in [Case files](../../README.md#case-files); in brief:
+`case` keeps one directory per incident under `<data>/cases/<id>/`, with its records, `case.toml`, reports, drafts, bundles and exports. Cases never go into git. The table of subcommands and what a case holds are in [Case files](../../docs/reference/cases.md); in brief:
 
 ```sh
 swarmchase case new 2026-10-portal --title "Portal SQLi" --cluster C1 --host-hits
@@ -100,7 +107,7 @@ swarmchase case verify data/cases/2026-10-portal/bundles/2026-10-12
 swarmchase case status
 ```
 
-Other subcommands: `add`, `claim`, `set`, `note`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), and `evidence add|consent|withdraw|list` for logs an operator sends back.
+Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
 ### Notices
 
@@ -111,7 +118,7 @@ Other subcommands: `add`, `claim`, `set`, `note`, `bundle`, `report`, `rules`, `
 | `notice lint [files]` | Checks front matter, update order and that nothing withheld got through. CI and the pre-commit hook run it. |
 | `notice build --out <dir> --base-url <url>` | Writes the site's notice index, pages and Atom feed. |
 
-Details: [Notices](../../README.md#notices).
+Details: [Notices](../../docs/reference/notices.md).
 
 ## Environment
 
@@ -119,27 +126,41 @@ Details: [Notices](../../README.md#notices).
 |---|---|
 | `SWARMCHASE_DATA` | The data directory (`--out` / `--data`, default `data/`): watch state and store, labels, cases. Gitignored. |
 | `URLQUERY_APIKEY` | urlquery.net collectors. Without it, `watch` skips urlquery sources and says so. |
+| `URLSCAN_APIKEY` | Optional key for `collect urlscan`. |
 | `SWARMCHASE_SITE_URL` | `notice build --base-url`. |
 | `SWARMCHASE_UA` | Overrides the collectors' user agent. |
 
-Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../../scripts/with-env.sh); see [Local secrets](../../README.md#local-secrets).
+Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../../scripts/with-env.sh); see [Local secrets](../../docs/reference/configuration.md#local-secrets).
 
 ## Exit status
 
 Non-zero on an error, when `eval` misses a floor, when `case verify` finds a difference, and when `notice lint` or `notice add` finds a problem.
 
+## Tests
+
+```sh
+cargo test -p swarmchase
+```
+
+Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built binary over `samples/eval/` in scratch data directories: scan, clusters, a public report, a case from a cluster key to a verified bundle, notice lint, and an offline watch run. None touches the network.
+
 ## Source
 
 | File | Covers |
 |---|---|
-| [`main.rs`](src/main.rs) | Argument parsing and the analysis, collect and lookup commands. |
-| [`watch.rs`](src/watch.rs) | The incremental watch and its digest. |
+| [`main.rs`](src/main.rs) | Argument parsing and dispatch. |
+| [`commands/`](src/commands/mod.rs) | The analysis, collect and lookup commands, one module each. |
+| [`input.rs`](src/input.rs) | Reading records and rules for the analysis commands. |
+| [`store.rs`](src/store.rs) | The watch record store, retention, JSON and NDJSON files. |
+| [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
+| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review.rs`](src/review.rs) | Interactive labelling. |
 | [`eval.rs`](src/eval.rs) | The `eval` command. |
-| [`case.rs`](src/case.rs) | Case files and their subcommands. |
-| [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup. |
+| [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, and the indicators the watch matches. |
+| [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |
+| [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
-| [`evidence.rs`](src/evidence.rs) | Logs operators send back. |
-| [`stix.rs`](src/stix.rs) | STIX 2.1 export. |
-| [`notice.rs`](src/notice.rs) | Adding, updating, linting and building notices. |
+| [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
+| [`stix/`](src/stix/mod.rs) | STIX 2.1 export: records to observables and indicators, one builder per object type, deterministic ids. |
+| [`notice.rs`](src/notice.rs) | The notice draft (`case notice`); adding, updating, linting and building notices. |

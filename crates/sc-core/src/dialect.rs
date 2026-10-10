@@ -28,10 +28,28 @@ pub const PAIR_MIN_SHARED: usize = 3;
 pub const PAIR_MIN_JACCARD: f64 = 0.6;
 /// Deepest `../` run named on its own; deeper runs share one variant.
 pub const MAX_TRAVERSAL_DEPTH: usize = 12;
-/// Truncated records that must share a cut length before it is reported.
-pub const CUT_MIN_RECORDS: usize = 3;
-/// Lengths within this many characters of each other count as one cut length.
-pub const CUT_TOLERANCE: usize = 2;
+/// Cut-length settings (`[cut_lengths]` in the rules file).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CutOptions {
+    /// Truncated records that must share a cut length before it is reported.
+    pub min_records: usize,
+    /// Lengths within this many characters of a common centre count as one
+    /// cut length.
+    pub tolerance: usize,
+    /// The rule whose hit marks a URL as cut off.
+    pub rule: String,
+}
+
+impl Default for CutOptions {
+    fn default() -> Self {
+        Self {
+            min_records: 3,
+            tolerance: 2,
+            rule: "marker.truncated_output".into(),
+        }
+    }
+}
 
 /// Canonical test payloads a cluster's records carry.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -280,7 +298,7 @@ pub struct CutLengths {
     #[serde(default)]
     pub truncated: usize,
     /// The largest group of whole-URL lengths, when it has at least
-    /// [`CUT_MIN_RECORDS`] records.
+    /// `min_records` records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<CutGroup>,
     /// The same over the length of the last (cut) parameter value, as recorded.
@@ -305,7 +323,7 @@ pub fn looks_truncated(url: &str) -> bool {
 
 /// `urls`: (URL as recorded, whether the truncation rule fired on it). URLs
 /// that look truncated by either test are measured, each distinct URL once.
-pub fn cut_lengths(urls: &[(&str, bool)]) -> CutLengths {
+pub fn cut_lengths(urls: &[(&str, bool)], opts: &CutOptions) -> CutLengths {
     let distinct: BTreeSet<&str> = urls
         .iter()
         .filter(|&&(u, fired)| fired || looks_truncated(u))
@@ -327,19 +345,19 @@ pub fn cut_lengths(urls: &[(&str, bool)]) -> CutLengths {
         .collect();
     CutLengths {
         truncated: distinct.len(),
-        url: cut_group(url_lens),
-        value: cut_group(value_lens),
+        url: cut_group(url_lens, opts),
+        value: cut_group(value_lens, opts),
     }
 }
 
-/// The largest set of lengths within [`CUT_TOLERANCE`] of a common centre.
-fn cut_group(mut lens: Vec<usize>) -> Option<CutGroup> {
-    lens.sort_unstable();
+/// The largest set of lengths within `tolerance` of a common centre.
+fn cut_group(mut lens: Vec<usize>, opts: &CutOptions) -> Option<CutGroup> {
+    crate::sort::sort(&mut lens);
     let mut best: Option<CutGroup> = None;
     for (i, &lo) in lens.iter().enumerate() {
         let n = lens[i..]
             .iter()
-            .take_while(|&&l| l - lo <= 2 * CUT_TOLERANCE)
+            .take_while(|&&l| l - lo <= 2 * opts.tolerance)
             .count();
         if best.is_none_or(|b| n > b.records) {
             best = Some(CutGroup {
@@ -349,7 +367,7 @@ fn cut_group(mut lens: Vec<usize>) -> Option<CutGroup> {
             });
         }
     }
-    best.filter(|b| b.records >= CUT_MIN_RECORDS)
+    best.filter(|b| b.records >= opts.min_records)
 }
 
 #[cfg(test)]
@@ -537,7 +555,7 @@ mod tests {
         let mut input: Vec<(&str, bool)> = urls.iter().map(|u| (u.as_str(), false)).collect();
         input.push(("https://a.example/ok?q=1", false));
         input.push((urls[0].as_str(), true)); // the same URL twice counts once
-        let c = cut_lengths(&input);
+        let c = cut_lengths(&input, &CutOptions::default());
         assert_eq!(c.truncated, 4);
         let v = c.value.unwrap();
         assert_eq!((v.min, v.max, v.records), (42, 45, 3));
@@ -549,12 +567,14 @@ mod tests {
             .map(|&n| format!("{base}{}\u{2026}", "x".repeat(n)))
             .collect();
         let input: Vec<(&str, bool)> = spread.iter().map(|u| (u.as_str(), false)).collect();
-        let c = cut_lengths(&input);
+        let c = cut_lengths(&input, &CutOptions::default());
         assert_eq!(c.truncated, 3);
         assert_eq!((c.url, c.value), (None, None));
 
         assert!(looks_truncated("https://a.example/?q=a%"));
         assert!(!looks_truncated("https://a.example/?q=50%25"));
-        assert!(cut_lengths(&[("https://a.example/?q=1", false)]).is_empty());
+        assert!(
+            cut_lengths(&[("https://a.example/?q=1", false)], &CutOptions::default()).is_empty()
+        );
     }
 }

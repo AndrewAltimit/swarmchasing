@@ -1,22 +1,26 @@
-//! Contact discovery for affected operators.
+//! Contact discovery for affected operators, and the provider directory.
 //!
 //! For each affected endpoint, the first security.txt (RFC 9116) found on the
 //! host or its parent domains, else the registrar's abuse contact from RDAP.
 //! Every contact carries its source link, a confidence level and the date it
 //! was found. These are reads of published contact files on the affected
 //! organisation's own site and the registry, never of agent infrastructure.
+//!
+//! Providers' channels come from the committed directory
+//! (`contacts/providers.toml`, [`Directory`]): `case contacts` adds a
+//! provider's entries when a developer or host claim names it, and
+//! `swarmchase contacts verify` re-reads each entry's source and drafts the
+//! changes for the admin.
 
-use crate::case::Contact;
+use crate::case::{Case, Contact, EndpointState};
+use anyhow::{Context, Result};
 use sc_core::SecurityTxt;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::io::Write;
 
-/// Second-level labels under which registrations sit one level deeper
-/// (`aihw.gov.au`, `example.co.uk`). A heuristic, not the Public Suffix List.
-const SECOND_LEVEL: &[&str] = &[
-    "ac", "co", "com", "edu", "gob", "gov", "govt", "go", "mil", "net", "nic", "or", "org", "ne",
-];
-
-/// The host, then each parent down to the registered domain.
+/// The host, then each parent down to the registered domain (by the Public
+/// Suffix List: `aihw.gov.au`, `agency.gov.uk`, `foo.co.jp`).
 pub fn domain_candidates(host: &str) -> Vec<String> {
     let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
     let labels: Vec<&str> = host.split('.').filter(|l| !l.is_empty()).collect();
@@ -24,11 +28,9 @@ pub fn domain_candidates(host: &str) -> Vec<String> {
     if n < 2 {
         return vec![host];
     }
-    let min = if n >= 3 && labels[n - 1].len() == 2 && SECOND_LEVEL.contains(&labels[n - 2]) {
-        3
-    } else {
-        2
-    };
+    let min = sc_collect::psl::registrable_domain(&host)
+        .map_or(2, |d| d.split('.').count())
+        .clamp(1, n);
     (min..=n).rev().map(|k| labels[n - k..].join(".")).collect()
 }
 
@@ -71,6 +73,7 @@ pub fn from_security_txt(org: &str, url: &str, s: &SecurityTxt, today: &str) -> 
                 },
                 confidence: confidence.into(),
                 found_on: today.to_string(),
+                purpose: None,
             }
         })
         .collect()
@@ -124,9 +127,541 @@ fn vcard(e: &Value, prop: &str) -> Vec<String> {
         .collect()
 }
 
+pub(crate) fn find_contacts(
+    c: &mut Case,
+    client: &sc_collect::Client,
+    refresh: bool,
+    today: &str,
+    out: &mut impl Write,
+) -> Result<()> {
+    let hosts: Vec<String> = c
+        .endpoints
+        .iter()
+        .filter(|e| e.state != EndpointState::NotAffected)
+        .filter(|e| {
+            refresh
+                || !c
+                    .contacts
+                    .iter()
+                    .any(|x| x.endpoint.as_ref() == Some(&e.host))
+        })
+        .map(|e| e.host.clone())
+        .collect();
+    for host in hosts {
+        let mut found = Vec::new();
+        let mut how = "nothing found";
+        for d in crate::contacts::domain_candidates(&host) {
+            if let Ok((url, body)) = client.security_txt(&d) {
+                let s = sc_core::parse_security_txt(&body);
+                found = crate::contacts::from_security_txt(&d, &url, &s, today);
+                how = "security.txt";
+                break;
+            }
+        }
+        if found.is_empty() {
+            let domain = crate::contacts::registered_domain(&host);
+            if let Ok((url, body)) = client.rdap_domain(&domain) {
+                found = crate::contacts::rdap_abuse(&body)
+                    .into_iter()
+                    .map(|(org, email)| Contact {
+                        org,
+                        role: "registrar".into(),
+                        endpoint: None,
+                        channel: "email".into(),
+                        address: email,
+                        source: url.clone(),
+                        confidence: "low".into(),
+                        found_on: today.to_string(),
+                        purpose: None,
+                    })
+                    .collect();
+                if !found.is_empty() {
+                    how = "RDAP registrar abuse contact (fallback)";
+                }
+            }
+        }
+        let mut added = 0;
+        for mut x in found {
+            x.endpoint = Some(host.clone());
+            if !c
+                .contacts
+                .iter()
+                .any(|y| y.endpoint == x.endpoint && y.address.eq_ignore_ascii_case(&x.address))
+            {
+                writeln!(
+                    out,
+                    "{host}: {} {} ({}, {} confidence)",
+                    x.channel, x.address, x.source, x.confidence
+                )?;
+                c.contacts.push(x);
+                added += 1;
+            }
+        }
+        if added == 0 {
+            writeln!(out, "{host}: {how}, nothing new")?;
+        }
+        c.log(today, format!("contacts for {host}: {added} new ({how})"));
+    }
+    Ok(())
+}
+
+/// The provider directory committed at `contacts/providers.toml`, built in.
+pub const PROVIDERS: &str = include_str!("../../../contacts/providers.toml");
+
+/// Security and abuse channels of AI providers and agent hosts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Directory {
+    #[serde(default, rename = "provider")]
+    pub providers: Vec<Provider>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Provider {
+    pub name: String,
+    /// Other names a claim's party may use for this provider.
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    /// model | host | cloud
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    #[serde(default, rename = "contact")]
+    pub contacts: Vec<DirContact>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DirContact {
+    /// email | form | portal
+    pub channel: String,
+    pub address: String,
+    /// security | abuse
+    pub purpose: String,
+    /// The page the address was read from.
+    pub source: String,
+    /// When it was last read there.
+    pub verified: String,
+}
+
+impl Directory {
+    pub fn parse(text: &str) -> Result<Directory> {
+        let d: Directory = toml::from_str(text).context("parsing the provider directory")?;
+        let problems = d.problems();
+        if !problems.is_empty() {
+            anyhow::bail!("provider directory: {}", problems.join("; "));
+        }
+        Ok(d)
+    }
+
+    /// The built-in directory.
+    pub fn builtin() -> Directory {
+        Directory::parse(PROVIDERS).expect("contacts/providers.toml is checked by its tests")
+    }
+
+    /// The provider a claim's party names, by name or alias.
+    pub fn find(&self, party: &str) -> Option<&Provider> {
+        let p = party.trim();
+        self.providers.iter().find(|x| {
+            x.name.eq_ignore_ascii_case(p) || x.aliases.iter().any(|a| a.eq_ignore_ascii_case(p))
+        })
+    }
+
+    /// Entries that break the directory's rules: every contact has an https
+    /// source, a verified date, a known channel and purpose.
+    pub fn problems(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for p in &self.providers {
+            if p.contacts.is_empty() {
+                out.push(format!("{}: no contacts", p.name));
+            }
+            for c in &p.contacts {
+                let at = format!("{} {}", p.name, c.address);
+                if !c.source.starts_with("https://") {
+                    out.push(format!("{at}: source is not an https link"));
+                }
+                if sc_core::parse_ts(&c.verified).is_none() {
+                    out.push(format!("{at}: verified `{}` is not a date", c.verified));
+                }
+                if !matches!(c.channel.as_str(), "email" | "form" | "portal") {
+                    out.push(format!("{at}: channel `{}`", c.channel));
+                }
+                if !matches!(c.purpose.as_str(), "security" | "abuse") {
+                    out.push(format!("{at}: purpose `{}`", c.purpose));
+                }
+                if (c.channel == "email") != (c.address.contains('@') && !c.address.contains('/')) {
+                    out.push(format!("{at}: address does not fit channel {}", c.channel));
+                }
+            }
+        }
+        out
+    }
+}
+
+/// The case.toml channel for a directory or command-line channel.
+pub fn case_channel(channel: &str) -> Result<&'static str> {
+    Ok(match channel {
+        "email" => "email",
+        "form" | "web_form" => "web_form",
+        "portal" => "portal",
+        "phone" => "phone",
+        c => anyhow::bail!("unknown channel `{c}` (email|form|portal)"),
+    })
+}
+
+/// Add the directory's contacts for every provider a developer or host claim
+/// names. Returns how many were added.
+pub(crate) fn seed_providers(
+    c: &mut Case,
+    claims: &[sc_core::Claim],
+    dir: &Directory,
+    today: &str,
+    out: &mut impl Write,
+) -> Result<usize> {
+    let mut added = 0;
+    let mut seen = std::collections::BTreeSet::new();
+    for cl in claims
+        .iter()
+        .filter(|x| matches!(x.role, sc_core::Role::Developer | sc_core::Role::Host))
+    {
+        let Some(p) = dir.find(&cl.party) else {
+            continue;
+        };
+        if !seen.insert(p.name.clone()) {
+            continue;
+        }
+        for d in &p.contacts {
+            if c.contacts
+                .iter()
+                .any(|y| y.address.eq_ignore_ascii_case(&d.address))
+            {
+                continue;
+            }
+            writeln!(
+                out,
+                "{} (provider, {} claim): {} {} for {} ({}, verified {})",
+                p.name,
+                cl.role.id(),
+                d.channel,
+                d.address,
+                d.purpose,
+                d.source,
+                d.verified
+            )?;
+            c.contacts.push(Contact {
+                org: p.name.clone(),
+                role: "provider".into(),
+                endpoint: None,
+                channel: case_channel(&d.channel)?.into(),
+                address: d.address.clone(),
+                source: d.source.clone(),
+                confidence: "medium".into(),
+                found_on: d.verified.clone(),
+                purpose: Some(d.purpose.clone()),
+            });
+            added += 1;
+        }
+        if let Some(n) = &p.note {
+            writeln!(out, "{}: note: {n}", p.name)?;
+        }
+    }
+    if added > 0 {
+        c.log(
+            today,
+            format!("provider contacts: {added} added from the provider directory"),
+        );
+    }
+    Ok(added)
+}
+
+/// Whether a fetched page still lists `address`.
+fn lists(body: &str, address: &str) -> bool {
+    let body = body.to_ascii_lowercase();
+    let a = address.to_ascii_lowercase();
+    let bare = a
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/');
+    body.contains(&a) || body.contains(bare)
+}
+
+/// What a re-read of one directory contact found.
+#[derive(Debug, PartialEq)]
+pub enum Check {
+    /// The source still lists the address.
+    Listed,
+    /// The source was read but no longer lists the address.
+    Missing,
+    /// The source could not be read.
+    Unreachable(String),
+}
+
+/// Check every directory contact against `fetch(source)`, each source read
+/// once. Returns (provider, address, result) in directory order, and any
+/// Contact lines of a security.txt source that the directory lacks.
+pub fn verify_directory(
+    dir: &Directory,
+    mut fetch: impl FnMut(&str) -> std::result::Result<String, String>,
+) -> (Vec<(String, String, Check)>, Vec<String>) {
+    let mut bodies: std::collections::BTreeMap<String, std::result::Result<String, String>> =
+        Default::default();
+    let mut out = Vec::new();
+    let mut new = Vec::new();
+    for p in &dir.providers {
+        for c in &p.contacts {
+            let body = bodies
+                .entry(c.source.clone())
+                .or_insert_with(|| fetch(&c.source));
+            let check = match body {
+                Ok(b) if lists(b, &c.address) => Check::Listed,
+                Ok(_) => Check::Missing,
+                Err(e) => Check::Unreachable(e.clone()),
+            };
+            out.push((p.name.clone(), c.address.clone(), check));
+        }
+        for c in p
+            .contacts
+            .iter()
+            .filter(|c| c.source.ends_with("security.txt"))
+        {
+            if let Some(Ok(b)) = bodies.get(&c.source) {
+                for listed in sc_core::parse_security_txt(b).contact {
+                    let a = listed.trim_start_matches("mailto:").to_string();
+                    let known = p.contacts.iter().any(|x| lists(&a, &x.address))
+                        || new.iter().any(|n: &String| n.ends_with(&format!(" {a}")));
+                    if !known {
+                        new.push(format!("{}: {} also lists {a}", p.name, c.source));
+                    }
+                }
+            }
+        }
+    }
+    (out, new)
+}
+
+/// The directory text with `verified` set to `today` for every contact whose
+/// address was confirmed, and a comment above each one that was not. A
+/// draft for the admin to review and commit; the file itself is not touched.
+pub fn draft_update(text: &str, checks: &[(String, String, Check)], today: &str) -> String {
+    let mut out = String::new();
+    let mut current: Option<&Check> = None;
+    let mut pending = String::new();
+    for line in text.lines() {
+        let t = line.trim();
+        if t == "[[provider.contact]]" || t == "[[provider]]" {
+            out.push_str(&pending);
+            pending.clear();
+            current = None;
+            pending.push_str(line);
+            pending.push('\n');
+            continue;
+        }
+        if let Some(a) = t
+            .strip_prefix("address = \"")
+            .and_then(|r| r.strip_suffix('"'))
+        {
+            current = checks.iter().find(|(_, x, _)| x == a).map(|(_, _, c)| c);
+            if let Some(c) = current
+                && *c != Check::Listed
+            {
+                let why = match c {
+                    Check::Missing => "the source no longer lists this address".to_string(),
+                    Check::Unreachable(e) => format!("the source could not be read: {e}"),
+                    Check::Listed => unreachable!(),
+                };
+                pending.push_str(&format!("# NOT CONFIRMED {today}: {why}\n"));
+            }
+        }
+        if t.starts_with("verified = ") && current == Some(&Check::Listed) {
+            pending.push_str(&format!("verified = \"{today}\"\n"));
+        } else {
+            pending.push_str(line);
+            pending.push('\n');
+        }
+    }
+    out.push_str(&pending);
+    out
+}
+
+/// `swarmchase contacts`: the provider directory.
+#[derive(clap::Subcommand)]
+pub enum ContactsCmd {
+    /// List the provider directory.
+    List,
+    /// Re-read every directory entry's source and report what changed. With
+    /// --draft, also write an updated copy of the directory (verified dates
+    /// refreshed, unconfirmed entries marked) for the admin to review; the
+    /// directory itself is never changed.
+    Verify {
+        /// The directory to check. Default: contacts/providers.toml.
+        #[arg(long, default_value = "contacts/providers.toml")]
+        file: std::path::PathBuf,
+        #[arg(long)]
+        draft: Option<std::path::PathBuf>,
+    },
+}
+
+pub fn run_contacts(cmd: ContactsCmd) -> Result<()> {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    match cmd {
+        ContactsCmd::List => {
+            let d = Directory::builtin();
+            for p in &d.providers {
+                println!("{} ({})", p.name, p.kind);
+                for c in &p.contacts {
+                    println!(
+                        "  {:<8} {:<8} {} (verified {})",
+                        c.purpose, c.channel, c.address, c.verified
+                    );
+                }
+            }
+            Ok(())
+        }
+        ContactsCmd::Verify { file, draft } => {
+            let text = std::fs::read_to_string(&file)
+                .with_context(|| format!("reading {}", file.display()))?;
+            let d = Directory::parse(&text)?;
+            let http = reqwest::blocking::Client::builder()
+                .user_agent(
+                    std::env::var("SWARMCHASE_UA")
+                        .unwrap_or_else(|_| "swarmchase-contacts-verify".into()),
+                )
+                .timeout(std::time::Duration::from_secs(30))
+                .build()?;
+            let fetch = |url: &str| -> std::result::Result<String, String> {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let r = http.get(url).send().map_err(|e| e.to_string())?;
+                if !r.status().is_success() {
+                    return Err(format!("HTTP {}", r.status()));
+                }
+                r.text().map_err(|e| e.to_string())
+            };
+            let (checks, new) = verify_directory(&d, fetch);
+            let mut changed = 0;
+            for (p, a, c) in &checks {
+                let s = match c {
+                    Check::Listed => "ok".to_string(),
+                    Check::Missing => {
+                        changed += 1;
+                        "MISSING from its source".to_string()
+                    }
+                    Check::Unreachable(e) => {
+                        changed += 1;
+                        format!("UNREACHABLE ({e})")
+                    }
+                };
+                println!("{p:<22} {a:<50} {s}");
+            }
+            for n in &new {
+                println!("new: {n}");
+            }
+            if let Some(out) = draft {
+                std::fs::write(&out, draft_update(&text, &checks, &today))?;
+                println!(
+                    "wrote a draft to {} (review it, then copy it over {} yourself)",
+                    out.display(),
+                    file.display()
+                );
+            }
+            println!(
+                "{} contact(s) checked, {changed} need a look, {} new listing(s)",
+                checks.len(),
+                new.len()
+            );
+            Ok(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_core::{Claim, Evidence, Role};
+
+    #[test]
+    fn the_directory_is_well_formed_and_found_by_alias() {
+        let d = Directory::builtin();
+        assert!(d.problems().is_empty(), "{:?}", d.problems());
+        assert!(d.providers.len() >= 10);
+        for p in &d.providers {
+            for c in &p.contacts {
+                assert!(c.source.starts_with("https://"), "{}", p.name);
+                assert!(sc_core::parse_ts(&c.verified).is_some(), "{}", p.name);
+            }
+        }
+        assert_eq!(d.find("tencent").unwrap().name, "Tencent Cloud");
+        assert_eq!(d.find("Anthropic").unwrap().name, "Anthropic");
+        assert_eq!(d.find("Amazon AWS").unwrap().name, "Amazon Web Services");
+        assert!(d.find("nobody").is_none());
+        let bad = Directory::parse(
+            "[[provider]]\nname = \"X\"\nkind = \"model\"\n[[provider.contact]]\nchannel = \"email\"\naddress = \"https://x.example/form\"\npurpose = \"abuse\"\nsource = \"http://x.example\"\nverified = \"soon\"\n",
+        );
+        let e = bad.unwrap_err().to_string();
+        assert!(
+            e.contains("https") && e.contains("not a date") && e.contains("fit"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn provider_contacts_are_seeded_from_claims() {
+        let mut c: Case = toml::from_str(
+            "id = \"t\"\ntitle = \"T\"\nstatus = \"open\"\nnotice = \"active\"\nopened = \"2026-10-12\"\n",
+        )
+        .unwrap();
+        let claims = vec![
+            Claim::new("Tencent", Role::Developer, Evidence::SelfId),
+            Claim::new("Amazon AWS", Role::Host, Evidence::HostingAsn),
+            Claim::new("python-httpx", Role::Harness, Evidence::SelfId),
+        ];
+        let d = Directory::builtin();
+        let mut out = Vec::new();
+        let n = seed_providers(&mut c, &claims, &d, "2026-10-13", &mut out).unwrap();
+        assert!(n >= 3, "{}", String::from_utf8_lossy(&out));
+        assert!(c.contacts.iter().all(|x| x.role == "provider"));
+        assert!(c.contacts.iter().any(|x| x.org == "Tencent Cloud"));
+        assert!(c.contacts.iter().any(|x| x.org == "Amazon Web Services"));
+        assert!(
+            c.contacts
+                .iter()
+                .any(|x| x.channel == "web_form" && x.purpose.as_deref() == Some("abuse"))
+        );
+        // Seeding again adds nothing.
+        assert_eq!(
+            seed_providers(&mut c, &claims, &d, "2026-10-13", &mut out).unwrap(),
+            0
+        );
+        assert_eq!(c.decisions.len(), 1);
+    }
+
+    #[test]
+    fn verify_reports_changes_and_drafts_an_update() {
+        let text = "[[provider]]\nname = \"A\"\nkind = \"model\"\n[[provider.contact]]\nchannel = \"email\"\naddress = \"security@a.example\"\npurpose = \"security\"\nsource = \"https://a.example/.well-known/security.txt\"\nverified = \"2026-01-01\"\n[[provider.contact]]\nchannel = \"form\"\naddress = \"https://a.example/abuse\"\npurpose = \"abuse\"\nsource = \"https://a.example/policy\"\nverified = \"2026-01-01\"\n";
+        let d = Directory::parse(text).unwrap();
+        let mut fetched = Vec::new();
+        let (checks, new) = verify_directory(&d, |u| {
+            fetched.push(u.to_string());
+            match u {
+                "https://a.example/.well-known/security.txt" => Ok(
+                    "Contact: mailto:security@a.example\nContact: mailto:psirt@a.example\n".into(),
+                ),
+                _ => Err("HTTP 404".into()),
+            }
+        });
+        assert_eq!(fetched.len(), 2);
+        assert_eq!(checks[0].2, Check::Listed);
+        assert_eq!(checks[1].2, Check::Unreachable("HTTP 404".into()));
+        assert_eq!(
+            new,
+            ["A: https://a.example/.well-known/security.txt also lists psirt@a.example"]
+        );
+        let draft = draft_update(text, &checks, "2026-10-13");
+        assert_eq!(
+            draft.matches("verified = \"2026-10-13\"").count(),
+            1,
+            "{draft}"
+        );
+        assert!(draft.contains("# NOT CONFIRMED 2026-10-13: the source could not be read: HTTP 404\naddress = \"https://a.example/abuse\""), "{draft}");
+        assert!(Directory::parse(&draft).is_ok());
+    }
 
     #[test]
     fn candidates_stop_at_the_registered_domain() {
@@ -139,6 +674,16 @@ mod tests {
             ["vizprod.aihw.gov.au", "aihw.gov.au"]
         );
         assert_eq!(domain_candidates("example.co.uk"), ["example.co.uk"]);
+        // Multi-label public suffixes, from the Public Suffix List.
+        assert_eq!(
+            domain_candidates("www.agency.gov.uk"),
+            ["www.agency.gov.uk", "agency.gov.uk"]
+        );
+        assert_eq!(
+            domain_candidates("a.foo.co.jp"),
+            ["a.foo.co.jp", "foo.co.jp"]
+        );
+        assert_eq!(registered_domain("x.y.foo.co.jp"), "foo.co.jp");
         assert_eq!(registered_domain("a.b.example.org"), "example.org");
         assert_eq!(domain_candidates("localhost"), ["localhost"]);
     }

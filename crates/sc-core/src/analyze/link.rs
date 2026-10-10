@@ -1,0 +1,275 @@
+//! Linking: which flagged records belong together, and the clusters'
+//! numbers and stable keys.
+//!
+//! Records are joined by a shared linking feature (within a time window, and
+//! only while the feature is not common), by close timing against the same
+//! target with a rule in common, and by a probe chain. Everything else about
+//! a cluster is description ([`super::hints`]).
+
+use super::{Cluster, CommonFeature, ObsResult};
+use crate::chains::Chain;
+use crate::model::LinkFeature;
+use crate::rules::{Linking, Rules};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+/// What linking found.
+pub(super) struct Links<'a> {
+    /// Groups of two or more flagged records (indexes into the results).
+    pub groups: Vec<Vec<usize>>,
+    /// (record, feature) for every record a shared feature joined to another.
+    pub joined: HashSet<(usize, &'a LinkFeature)>,
+    /// Features shared too widely to link, by group.
+    pub common: Vec<CommonFeature>,
+    /// Probe chains, linked or not.
+    pub chains: Vec<Chain>,
+}
+
+/// Link the `flagged` records among `results`.
+pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rules) -> Links<'a> {
+    let cfg = &rules.set.linking;
+    let mut dsu = Dsu((0..results.len()).collect());
+
+    // A shared feature joins its carriers in groups: consecutive carriers at
+    // most `feature_link_window_secs` apart. A group whose feature is common
+    // (too many hosts, or too large a share of the records around it) does
+    // not link and is reported instead.
+    let mut carriers: HashMap<&LinkFeature, Vec<usize>> = HashMap::new();
+    for &i in flagged {
+        for f in &results[i].features {
+            carriers.entry(f).or_default().push(i);
+        }
+    }
+    let mut all_ts: Vec<i64> = results
+        .iter()
+        .map(|r| r.obs.ts)
+        .filter(|&t| t > 0)
+        .collect();
+    crate::sort::sort(&mut all_ts);
+    let mut joined = HashSet::new();
+    let mut common = Vec::new();
+    for (&f, idxs) in &carriers {
+        if idxs.len() < 2 {
+            continue;
+        }
+        for group in feature_groups(results, idxs, cfg.feature_link_window_secs) {
+            if group.len() < 2 {
+                continue;
+            }
+            if let Some(c) = common_feature(results, f, &group, cfg, &all_ts) {
+                common.push(c);
+                continue;
+            }
+            for w in group.windows(2) {
+                dsu.union(w[0], w[1]);
+            }
+            joined.extend(group.iter().map(|&i| (i, f)));
+        }
+    }
+    crate::sort::by(&mut common, |a, b| {
+        a.start.cmp(&b.start).then(a.feature.cmp(&b.feature))
+    });
+
+    // Same target host, close in time, and sharing at least one rule.
+    let mut by_host: HashMap<&str, Vec<usize>> = HashMap::new();
+    for &i in flagged {
+        if let Some(h) = results[i].target_host.as_deref() {
+            by_host.entry(h).or_default().push(i);
+        }
+    }
+    for idxs in by_host.values_mut() {
+        crate::sort::by_key(idxs, |&i| results[i].obs.ts);
+        for w in idxs.windows(2) {
+            let (a, b) = (&results[w[0]], &results[w[1]]);
+            let close = a.obs.ts > 0 && b.obs.ts > 0 && b.obs.ts - a.obs.ts <= cfg.window_secs;
+            let shared = a
+                .hits
+                .iter()
+                .any(|h| b.hits.iter().any(|g| g.rule_id == h.rule_id));
+            if close && shared {
+                dsu.union(w[0], w[1]);
+            }
+        }
+    }
+
+    // Flagged requests in one probe chain (variants of one request to the
+    // same host and path, minutes apart) are one client working an endpoint,
+    // even when different rules fired on each.
+    let chains = crate::chains::chains(results, &rules.set.chains);
+    for ch in &chains {
+        let f: Vec<usize> = ch
+            .members
+            .iter()
+            .copied()
+            .filter(|&m| results[m].score > 0)
+            .collect();
+        for w in f.windows(2) {
+            dsu.union(w[0], w[1]);
+        }
+    }
+
+    let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for &i in flagged {
+        groups.entry(dsu.find(i)).or_default().push(i);
+    }
+    Links {
+        groups: groups.into_values().filter(|g| g.len() > 1).collect(),
+        joined,
+        common,
+        chains,
+    }
+}
+
+/// The carriers of one feature in linking groups: in time order, a gap over
+/// `window` seconds (when `window` is positive) starts a new group. Carriers
+/// with no timestamp join the only timed group, or form their own.
+fn feature_groups(results: &[ObsResult], idxs: &[usize], window: i64) -> Vec<Vec<usize>> {
+    let (mut timed, untimed): (Vec<usize>, Vec<usize>) =
+        idxs.iter().partition(|&&i| results[i].obs.ts > 0);
+    crate::sort::by_key(&mut timed, |&i| (results[i].obs.ts, i));
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for i in timed {
+        let ts = results[i].obs.ts;
+        match groups.last_mut() {
+            Some(g) if window <= 0 || ts - results[g[g.len() - 1]].obs.ts <= window => g.push(i),
+            _ => groups.push(vec![i]),
+        }
+    }
+    if !untimed.is_empty() {
+        match groups.as_mut_slice() {
+            [only] => only.extend(untimed),
+            _ => groups.push(untimed),
+        }
+    }
+    groups
+}
+
+/// Whether one group of a feature's carriers is too widespread to link it:
+/// more than `feature_max_hosts` target hosts, or (when `feature_max_share`
+/// is set and its time span holds at least `feature_share_min_records`
+/// records) more than that share of the records in its span. `all_ts` is
+/// every record's timestamp, sorted.
+fn common_feature(
+    results: &[ObsResult],
+    f: &LinkFeature,
+    group: &[usize],
+    cfg: &Linking,
+    all_ts: &[i64],
+) -> Option<CommonFeature> {
+    let hosts: BTreeSet<&str> = group
+        .iter()
+        .filter_map(|&i| results[i].target_host.as_deref())
+        .collect();
+    let ts = group.iter().map(|&i| results[i].obs.ts).filter(|&t| t > 0);
+    let (start, end) = (ts.clone().min().unwrap_or(0), ts.max().unwrap_or(0));
+    let records = group.len();
+    let reason = if cfg.feature_max_hosts > 0 && hosts.len() > cfg.feature_max_hosts {
+        format!(
+            "on {} target hosts, more than linking.feature_max_hosts ({})",
+            hosts.len(),
+            cfg.feature_max_hosts
+        )
+    } else {
+        let in_span =
+            all_ts.partition_point(|&t| t <= end) - all_ts.partition_point(|&t| t < start);
+        let share = records as f64 / in_span.max(1) as f64;
+        if cfg.feature_max_share > 0.0
+            && start > 0
+            && in_span >= cfg.feature_share_min_records
+            && share > cfg.feature_max_share
+        {
+            format!(
+                "on {records} of the {in_span} records in its span ({:.0}%), more than linking.feature_max_share ({:.0}%)",
+                share * 100.0,
+                cfg.feature_max_share * 100.0
+            )
+        } else {
+            return None;
+        }
+    };
+    Some(CommonFeature {
+        feature: f.clone(),
+        records,
+        hosts: hosts.len(),
+        start,
+        end,
+        reason,
+    })
+}
+
+/// Order clusters strongest first, number them `C1..`, give each its key,
+/// and point every member record at its cluster.
+pub(super) fn number(clusters: &mut [Cluster], results: &mut [ObsResult]) {
+    crate::sort::by(clusters, |a, b| {
+        b.tier
+            .cmp(&a.tier)
+            .then(b.members.len().cmp(&a.members.len()))
+            .then(a.start.cmp(&b.start))
+    });
+    let mut keys = BTreeSet::new();
+    for (ci, c) in clusters.iter_mut().enumerate() {
+        c.id = format!("C{}", ci + 1);
+        // Records that share an id can seed two clusters alike.
+        let base = cluster_key(&key_seed(results, &c.members));
+        c.key = base.clone();
+        let mut n = 1;
+        while !keys.insert(c.key.clone()) {
+            n += 1;
+            c.key = format!("{base}-{n}");
+        }
+        for &m in &c.members {
+            results[m].cluster = Some(ci);
+        }
+    }
+}
+
+/// `k-` and the first 8 hex digits of the SHA-256 of `seed`.
+pub(super) fn cluster_key(seed: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(seed.as_bytes());
+    let hex: String = d.iter().take(4).map(|b| format!("{b:02x}")).collect();
+    format!("k-{hex}")
+}
+
+/// What a cluster's key is made from: the smallest non-empty member record
+/// id, or, when no member has an id, the earliest timestamp and URL.
+fn key_seed(results: &[ObsResult], members: &[usize]) -> String {
+    members
+        .iter()
+        .map(|&m| results[m].obs.id.as_str())
+        .filter(|id| !id.is_empty())
+        .min()
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            members
+                .iter()
+                .map(|&m| (results[m].obs.ts, results[m].obs.url.as_str()))
+                .min()
+                .map(|(ts, url)| format!("{ts}\n{url}"))
+                .unwrap_or_default()
+        })
+}
+
+pub(super) struct Dsu(pub(super) Vec<usize>);
+impl Dsu {
+    /// The set's root, compressing the path on the way. Iterative: a long
+    /// chain must not exhaust the stack (the browser's is small).
+    pub(super) fn find(&mut self, x: usize) -> usize {
+        let mut root = x;
+        while self.0[root] != root {
+            root = self.0[root];
+        }
+        let mut x = x;
+        while self.0[x] != root {
+            let next = self.0[x];
+            self.0[x] = root;
+            x = next;
+        }
+        root
+    }
+    pub(super) fn union(&mut self, a: usize, b: usize) {
+        let (a, b) = (self.find(a), self.find(b));
+        if a != b {
+            self.0[a.max(b)] = a.min(b);
+        }
+    }
+}

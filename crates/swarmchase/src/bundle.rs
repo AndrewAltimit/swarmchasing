@@ -5,8 +5,9 @@
 //! ```text
 //! records.ndjson    the redacted records the report rests on
 //! analysis.json     the analysis of those records
-//! stamp.json        rules version, toolkit version and commit, and the tier of
-//!                   every flagged record and cluster at the time
+//! stamp.json        rules version, toolkit version and commit, method version,
+//!                   the rules' figures on the committed evaluation set, and
+//!                   the tier of every flagged record and cluster at the time
 //! MANIFEST.sha256   SHA-256 of each file above
 //! ```
 //!
@@ -23,9 +24,52 @@ use std::path::{Path, PathBuf};
 
 const FILES: [&str; 3] = ["records.ndjson", "analysis.json", "stamp.json"];
 
-/// The stamp of an analysis, with this toolkit's version.
-pub fn stamp(case: &str, generated: &str, commit: Option<String>, a: &Analysis) -> Stamp {
-    Stamp::new(case, generated, env!("CARGO_PKG_VERSION"), commit, a)
+/// The stamp of an analysis, with this toolkit's version and, when the
+/// committed evaluation set can be found, the rules' figures on it.
+pub fn stamp(
+    case: &str,
+    generated: &str,
+    commit: Option<String>,
+    a: &Analysis,
+    rules: &Rules,
+) -> Stamp {
+    let mut st = Stamp::new(case, generated, env!("CARGO_PKG_VERSION"), commit, a);
+    st.eval = eval_dir().and_then(|d| eval_snapshot(&d, rules));
+    st
+}
+
+/// The committed evaluation set: `SWARMCHASE_EVAL_DIR`, else `samples/eval`
+/// in the working directory, else the one in the checkout this was built from.
+pub(crate) fn eval_dir() -> Option<PathBuf> {
+    let built = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples/eval");
+    std::env::var_os("SWARMCHASE_EVAL_DIR")
+        .map(PathBuf::from)
+        .into_iter()
+        .chain([PathBuf::from("samples/eval"), built])
+        .find(|p| p.is_dir())
+}
+
+/// Precision and recall of `rules` on the labelled records in `dir`
+/// (`*.ndjson` carrying `label`). `None` when there are none.
+pub(crate) fn eval_snapshot(dir: &Path, rules: &Rules) -> Option<sc_core::EvalSnapshot> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| Some(e.ok()?.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "ndjson"))
+        .collect();
+    files.sort();
+    let (mut records, mut labels) = (Vec::new(), sc_core::LabelSet::default());
+    for p in &files {
+        let text = std::fs::read_to_string(p).ok()?;
+        let parsed = sc_core::parse_input(&text, sc_core::Format::Ndjson, &Default::default());
+        records.extend(parsed.observations);
+        labels.labels.extend(sc_core::parse_labels(&text).labels);
+    }
+    if labels.labels.is_empty() {
+        return None;
+    }
+    let r = sc_core::evaluate(&analyze(records, rules), &labels);
+    Some(sc_core::EvalSnapshot::of(&r))
 }
 
 /// The commit of the checkout the CLI runs in, when there is one.
@@ -64,9 +108,9 @@ pub fn write(
     }
     std::fs::create_dir_all(&dir)?;
     let a = analyze(records.to_vec(), rules);
-    let st = stamp(case, today, commit, &a);
+    let st = stamp(case, today, commit, &a, rules);
     let contents = [
-        crate::to_ndjson(records)?,
+        crate::store::to_ndjson(records)?,
         serde_json::to_string(&a)?,
         serde_json::to_string_pretty(&st)?,
     ];
@@ -196,6 +240,27 @@ pub fn attachments(dir: &Path) -> Result<Vec<(String, Vec<u8>)>> {
 /// Fail with the differences, or say it verified.
 pub fn report_verify(dir: &Path, rules: &Rules) -> Result<()> {
     let diffs = verify(dir, rules)?;
+    if let Ok(st) = read_stamp(dir) {
+        let pct = |x: Option<f64>| x.map_or("n/a".into(), |v| format!("{:.1}%", v * 100.0));
+        println!(
+            "stamped {} with rules {} following {}",
+            st.generated,
+            st.rules_version,
+            st.method
+                .as_deref()
+                .unwrap_or("no method version (older stamp)")
+        );
+        if let Some(e) = &st.eval {
+            println!(
+                "evaluation at stamp time ({} labelled records): suggestive precision {} recall {}, significant precision {} recall {}",
+                e.labelled,
+                pct(e.suggestive_precision),
+                pct(e.suggestive_recall),
+                pct(e.significant_precision),
+                pct(e.significant_recall)
+            );
+        }
+    }
     if diffs.is_empty() {
         println!(
             "{}: verified (manifest, tiers and clusters match)",
@@ -233,6 +298,32 @@ mod tests {
         let rules = Rules::default_rules();
         let dir = write(&parent, "t", &records(), &rules, "2026-10-12", None).unwrap();
         assert!(verify(&dir, &rules).unwrap().is_empty());
+        let st = read_stamp(&dir).unwrap();
+        assert_eq!(st.method.as_deref(), Some(sc_core::stamp::METHOD));
+        let snap = st.eval.expect("the committed evaluation set is found");
+        assert_eq!(snap.rules_version, rules.set.meta.version);
+        assert!(snap.labelled > 0 && snap.suggestive_precision.is_some());
+
+        // A bundle stamped before the method and eval fields still verifies.
+        let old = parent.join("old");
+        std::fs::create_dir_all(&old).unwrap();
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("stamp.json")).unwrap())
+                .unwrap();
+        v.as_object_mut().unwrap().remove("method");
+        v.as_object_mut().unwrap().remove("eval");
+        let files = [
+            std::fs::read_to_string(dir.join("records.ndjson")).unwrap(),
+            std::fs::read_to_string(dir.join("analysis.json")).unwrap(),
+            serde_json::to_string_pretty(&v).unwrap(),
+        ];
+        let mut manifest = String::new();
+        for (name, text) in FILES.iter().zip(&files) {
+            std::fs::write(old.join(name), text).unwrap();
+            manifest.push_str(&format!("{}  {name}\n", sha256_hex(text.as_bytes())));
+        }
+        std::fs::write(old.join("MANIFEST.sha256"), manifest).unwrap();
+        assert!(verify(&old, &rules).unwrap().is_empty());
         let second = write(&parent, "t", &records(), &rules, "2026-10-12", None).unwrap();
         assert!(second.ends_with("2026-10-12-2"));
 

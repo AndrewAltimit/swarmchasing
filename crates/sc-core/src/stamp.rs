@@ -5,10 +5,51 @@
 //! bundle re-runs the analysis on its records and compares the result with
 //! the stamp. The CLI reads and hashes the files; the browser does the same
 //! from files the user picks. Both call into this module for the comparison.
+//!
+//! A stamp also cites the method version it follows ([`METHOD`]) and, when
+//! the maker had the committed evaluation set, the rules' precision and
+//! recall on it at stamp time ([`EvalSnapshot`]). Neither is compared on
+//! verification; stamps without them (older bundles) verify as before.
 
 use crate::{Analysis, Observation, Tier};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+
+/// The method version stamps cite: the Swarmchasing Field Manual.
+pub const METHOD: &str = "SC-FM 1.0";
+
+/// Precision and recall of the stamp's rules on the committed evaluation set,
+/// computed when the stamp was made. A regression floor, not a field estimate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvalSnapshot {
+    pub rules_version: String,
+    /// Labelled records the figures rest on.
+    pub labelled: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggestive_precision: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggestive_recall: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub significant_precision: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub significant_recall: Option<f64>,
+}
+
+impl EvalSnapshot {
+    /// The snapshot of an evaluation report.
+    pub fn of(r: &crate::EvalReport) -> EvalSnapshot {
+        let at = |t: Tier| r.thresholds.iter().find(|x| x.tier == t);
+        let (sug, sig) = (at(Tier::Suggestive), at(Tier::Significant));
+        EvalSnapshot {
+            rules_version: r.rules_version.clone(),
+            labelled: r.labelled,
+            suggestive_precision: sug.and_then(|t| t.precision),
+            suggestive_recall: sug.and_then(|t| t.recall),
+            significant_precision: sig.and_then(|t| t.precision),
+            significant_recall: sig.and_then(|t| t.recall),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stamp {
@@ -22,6 +63,12 @@ pub struct Stamp {
     /// Flagged record ID -> tier.
     pub flagged: BTreeMap<String, Tier>,
     pub clusters: Vec<StampCluster>,
+    /// The method version followed ([`METHOD`]). Absent in older stamps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// The rules' figures on the committed evaluation set at stamp time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eval: Option<EvalSnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -49,14 +96,14 @@ impl Stamp {
                     .iter()
                     .map(|&m| a.results[m].obs.id.clone())
                     .collect();
-                members.sort();
+                crate::sort::sort(&mut members);
                 StampCluster {
                     tier: c.tier,
                     members,
                 }
             })
             .collect();
-        clusters.sort_by(|x, y| x.members.cmp(&y.members));
+        crate::sort::by(&mut clusters, |x, y| x.members.cmp(&y.members));
         Stamp {
             case: case.to_string(),
             generated: generated.to_string(),
@@ -71,6 +118,8 @@ impl Stamp {
                 .map(|r| (r.obs.id.clone(), r.tier))
                 .collect(),
             clusters,
+            method: Some(METHOD.to_string()),
+            eval: None,
         }
     }
 
@@ -165,6 +214,29 @@ mod tests {
             diffs.iter().any(|d| d.starts_with("clusters differ")),
             "{diffs:?}"
         );
+    }
+
+    #[test]
+    fn older_stamps_parse_and_snapshots_round_trip() {
+        let old = r#"{"case":"t","generated":"d","toolkit_version":"0.1.0","rules_version":"r","records":0,"flagged":{},"clusters":[]}"#;
+        let st: Stamp = serde_json::from_str(old).unwrap();
+        assert_eq!((st.method, st.eval), (None, None));
+
+        let rules = Rules::default_rules();
+        let mut st = Stamp::new("t", "d", "0.1.0", None, &analyze(records(), &rules));
+        assert_eq!(st.method.as_deref(), Some(METHOD));
+        st.eval = Some(EvalSnapshot {
+            rules_version: "r".into(),
+            labelled: 10,
+            suggestive_precision: Some(0.95),
+            suggestive_recall: Some(0.9),
+            significant_precision: None,
+            significant_recall: Some(0.4),
+        });
+        let text = serde_json::to_string(&st).unwrap();
+        assert!(!text.contains("significant_precision"), "{text}");
+        assert_eq!(serde_json::from_str::<Stamp>(&text).unwrap(), st);
+        assert!(st.differences(&analyze(records(), &rules)).is_empty());
     }
 
     #[test]

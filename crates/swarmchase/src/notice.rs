@@ -7,13 +7,19 @@
 //! lint` is the CI check that no committed notice carries what notices
 //! withhold, and `notice build` writes the site's notice pages and feed.
 
-use crate::case;
+use crate::case::{
+    self, EndpointState, NOTICE_DRAFT, case_dir, case_records, load, report_options, update,
+};
+use crate::evidence::Scope;
+use crate::pinning::{case_rules, leak_check};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_core::Rules;
-use sc_core::notice::{
-    NoticeFile, NoticePage, NoticeStatus, NoticeUpdate, UpdateKind, atom_feed, check_notice,
-    index_entry, md_blocks, parse_notice, write_notice,
+use sc_core::notice::lint_public;
+use sc_core::{Audience, Role, analyze, render_notice};
+use sc_publish::{
+    NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind, build_site, check_notice,
+    parse_notice, strip_draft_banner, write_notice,
 };
 use std::path::{Path, PathBuf};
 
@@ -32,6 +38,17 @@ enum NoticeCmd {
     /// directory. Commit and push the file to publish it.
     Add {
         case: String,
+        #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+        data: PathBuf,
+    },
+    /// Mark a case's added notice as published once it is on the remote
+    /// (checked read-only against origin's refs), moving the case from
+    /// reported to published.
+    Published {
+        case: String,
+        /// Mark it without finding it on the remote (published another way).
+        #[arg(long)]
+        force: bool,
         #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
         data: PathBuf,
     },
@@ -80,11 +97,21 @@ pub fn run(args: NoticeArgs) -> Result<()> {
     let rules = Rules::default_rules();
     match args.cmd {
         NoticeCmd::Add { case: id, data } => {
+            crate::store::hint_if_empty(&data);
             let p = add(&data.join("cases"), &id, &args.dir, &rules, &today)?;
             println!(
-                "wrote {}; it is not public until you commit and push it",
+                "wrote {}; it is not public until you commit and push it, then `swarmchase notice published {id}`",
                 p.display()
             );
+            Ok(())
+        }
+        NoticeCmd::Published {
+            case: id,
+            force,
+            data,
+        } => {
+            let at = published(&data.join("cases"), &args.dir, &id, force, &today)?;
+            println!("case {id}: published ({at})");
             Ok(())
         }
         NoticeCmd::Update {
@@ -175,7 +202,7 @@ pub fn run(args: NoticeArgs) -> Result<()> {
 }
 
 fn notice_path(dir: &Path, id: &str) -> Result<PathBuf> {
-    if !sc_core::notice::is_slug(id) {
+    if !sc_publish::is_slug(id) {
         bail!("notice id `{id}` is not a slug");
     }
     Ok(dir.join(format!("{id}.md")))
@@ -226,26 +253,7 @@ fn lint_file(p: &Path, rules: &Rules) -> Vec<String> {
 }
 
 fn append(n: &mut NoticeFile, u: NoticeUpdate, status: Option<NoticeStatus>) -> Result<()> {
-    if let Some(last) = n.meta.updates.last()
-        && u.date < last.date
-    {
-        bail!("{} is before the last update ({})", u.date, last.date);
-    }
-    if u.kind == UpdateKind::Reply && u.from.is_none() {
-        bail!("a statement needs --from (who it is from)");
-    }
-    if u.kind == UpdateKind::Status && status.is_none() {
-        bail!("a status update needs --status");
-    }
-    if u.kind == UpdateKind::Published {
-        bail!("`published` is added by `notice add`");
-    }
-    if let Some(s) = status {
-        n.meta.status = s;
-    }
-    n.meta.updated = u.date.clone();
-    n.meta.updates.push(u);
-    Ok(())
+    n.append(u, status).map_err(anyhow::Error::msg)
 }
 
 /// Turn the case's reviewed draft into a notice file in `dir`.
@@ -287,7 +295,7 @@ fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result
             "Notice published. Reports went to the AI provider and the affected operators at the same time.".into()
         },
     }];
-    let mut problems = case::leak_check(cases, &c, |r| check_notice(&n, r))?;
+    let mut problems = leak_check(cases, &c, |r| check_notice(&n, r))?;
     for p in check_notice(&n, rules) {
         if !problems.contains(&p) {
             problems.push(p);
@@ -307,33 +315,84 @@ fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result
     std::fs::create_dir_all(dir)?;
     std::fs::write(&target, write_notice(&n))?;
     case::update(cases, id, |c| {
-        c.status = case::CaseStatus::Published;
+        // Added is not published: the notice is public once it is pushed.
+        if c.status == case::CaseStatus::Open {
+            c.status = case::CaseStatus::Reported;
+            c.log(today, "status: reported");
+        }
+        c.publish_pending = Some(today.to_string());
         c.log(
             today,
-            format!("notice added as {} (public once pushed)", target.display()),
+            format!(
+                "notice added as {} (publish pending: public once pushed; then `swarmchase notice published {id}`)",
+                target.display()
+            ),
         );
         Ok(())
     })?;
     Ok(target)
 }
 
-fn strip_draft_banner(body: &str) -> String {
-    let mut out = String::new();
-    let mut skip_blank = false;
-    for line in body.lines() {
-        if line.starts_with("> **DRAFT**") {
-            skip_blank = true;
-            continue;
-        }
-        if skip_blank && line.trim().is_empty() {
-            skip_blank = false;
-            continue;
-        }
-        skip_blank = false;
-        out.push_str(line);
-        out.push('\n');
+/// Where a committed notice is on the remote, if it is there: the first of
+/// `origin/HEAD`, `origin/main` that holds `<dir>/<id>.md`. Reads local refs
+/// only; it never fetches or pushes.
+pub(crate) fn on_remote(dir: &Path, id: &str) -> Option<String> {
+    let file = notice_path(dir, id).ok()?;
+    let top = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(
+            dir.parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new(".")),
+        )
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let top = PathBuf::from(String::from_utf8_lossy(&top.stdout).trim());
+    let abs = std::path::absolute(&file).ok()?;
+    let top = std::fs::canonicalize(&top).ok()?;
+    let parent = std::fs::canonicalize(abs.parent()?).ok()?;
+    let rel = parent.strip_prefix(&top).ok()?.join(abs.file_name()?);
+    let rel = rel.to_string_lossy().replace('\\', "/");
+    ["origin/HEAD", "origin/main"].into_iter().find_map(|r| {
+        let ok = std::process::Command::new("git")
+            .args(["cat-file", "-e", &format!("{r}:{rel}")])
+            .current_dir(&top)
+            .output()
+            .ok()?
+            .status
+            .success();
+        ok.then(|| format!("{r}:{rel}"))
+    })
+}
+
+/// Mark a case's notice published: it must be added, and (unless `force`)
+/// found on the remote by [`on_remote`].
+fn published(cases: &Path, dir: &Path, id: &str, force: bool, today: &str) -> Result<String> {
+    let c = case::load(cases, id)?;
+    if c.status == case::CaseStatus::Published && c.publish_pending.is_none() {
+        bail!("case {id} is already marked published");
     }
-    out
+    if !notice_path(dir, id)?.is_file() {
+        bail!(
+            "no notice {id} in {}; `swarmchase notice add {id}` first",
+            dir.display()
+        );
+    }
+    let seen = match (on_remote(dir, id), force) {
+        (Some(at), _) => at,
+        (None, true) => "marked by hand (--force)".to_string(),
+        (None, false) => bail!(
+            "notices/{id}.md is not on origin yet (local refs; run `git fetch` after pushing), or pass --force"
+        ),
+    };
+    case::update(cases, id, |c| {
+        c.status = case::CaseStatus::Published;
+        c.publish_pending = None;
+        c.log(today, format!("notice published ({seen})"));
+        Ok(())
+    })?;
+    Ok(seen)
 }
 
 /// Write `index.json`, `<id>.json` and `feed.xml` into `out`. Refuses when
@@ -347,32 +406,118 @@ fn build(dir: &Path, out: &Path, base_url: &str, rules: &Rules) -> Result<usize>
         }
         notices.push(read(&p)?);
     }
-    notices.sort_by(|a, b| {
-        b.meta
-            .updated
-            .cmp(&a.meta.updated)
-            .then(a.meta.id.cmp(&b.meta.id))
-    });
+    let files = build_site(&mut notices, base_url, rules).map_err(anyhow::Error::msg)?;
     std::fs::create_dir_all(out)?;
-    let index: Vec<_> = notices.iter().map(index_entry).collect();
-    std::fs::write(out.join("index.json"), serde_json::to_string(&index)?)?;
-    for n in &notices {
-        let page = NoticePage {
-            meta: &n.meta,
-            blocks: md_blocks(&n.body),
-        };
-        std::fs::write(
-            out.join(format!("{}.json", n.meta.id)),
-            serde_json::to_string(&page)?,
-        )?;
+    for (name, text) in files {
+        std::fs::write(out.join(name), text)?;
     }
-    let base = if base_url.ends_with('/') {
-        base_url.to_string()
-    } else {
-        format!("{base_url}/")
-    };
-    std::fs::write(out.join("feed.xml"), atom_feed(&notices, &base))?;
     Ok(notices.len())
+}
+
+/// What the admin reviews in a notice draft.
+pub struct NoticeReview {
+    pub withheld: Vec<String>,
+    pub flags: Vec<String>,
+    /// Anything a notice must not carry that got through anyway.
+    pub lint: Vec<String>,
+    pub unreviewed: Vec<String>,
+}
+
+pub(crate) fn notice_draft(
+    root: &Path,
+    id: &str,
+    force: bool,
+    today: &str,
+) -> Result<(PathBuf, NoticeReview)> {
+    let c = load(root, id)?;
+    let path = case_dir(root, id)?.join(NOTICE_DRAFT);
+    if path.exists() && !force {
+        bail!(
+            "{} exists and may hold your edits; pass --force to replace it",
+            path.display()
+        );
+    }
+    let a = analyze(
+        case_records(root, &c, &Scope::Public)?,
+        &case_rules(root, &c)?,
+    );
+    let opts = report_options(&c, Audience::Public, None, today);
+    let notice = render_notice(&a, &opts);
+    let claims = a.clusters.iter().fold(c.claims.clone(), |acc, cl| {
+        sc_core::attribution::merge(acc, &sc_core::attribute(&a, cl))
+    });
+    let mut providers: Vec<String> = claims
+        .iter()
+        .filter(|x| x.role == Role::Developer && x.nameable(c.min_named))
+        .map(|x| x.party.clone())
+        .collect();
+    providers.dedup();
+    let n = NoticeFile {
+        meta: NoticeMeta {
+            id: id.to_string(),
+            title: c.title.clone(),
+            status: c.notice,
+            published: today.to_string(),
+            updated: today.to_string(),
+            providers,
+            affected: c
+                .endpoints
+                .iter()
+                .filter(|e| {
+                    matches!(
+                        e.state,
+                        EndpointState::Compromised
+                            | EndpointState::Targeted
+                            | EndpointState::Historical
+                    )
+                })
+                .map(|e| e.host.clone())
+                .collect(),
+            rules_version: a.rules_version.clone(),
+            toolkit: env!("CARGO_PKG_VERSION").to_string(),
+            updates: Vec::new(),
+        },
+        body: notice.markdown.clone(),
+    };
+    std::fs::write(&path, write_notice(&n))?;
+    let mut withheld = notice.withheld;
+    for e in c
+        .evidence
+        .iter()
+        .filter(|e| e.public.is_none() && e.kept > 0)
+    {
+        withheld.push(format!(
+            "operator logs {} from {} (no agreement recorded; `swarmchase case evidence consent {id} {}`)",
+            e.id, e.org, e.id
+        ));
+    }
+    let mut lint = leak_check(root, &c, |r| {
+        lint_public(&format!("{}\n{}", n.meta.title, n.body), r)
+    })?;
+    lint.extend(notice.leaks);
+    let review = NoticeReview {
+        lint,
+        withheld,
+        flags: notice.flags,
+        unreviewed: c
+            .endpoints
+            .iter()
+            .filter(|e| e.state == EndpointState::Unreviewed)
+            .map(|e| e.host.clone())
+            .collect(),
+    };
+    update(root, id, |c| {
+        c.log(
+            today,
+            format!(
+                "notice drafted ({} withheld, {} to decide)",
+                review.withheld.len(),
+                review.flags.len()
+            ),
+        );
+        Ok(())
+    })?;
+    Ok((path, review))
 }
 
 #[cfg(test)]
@@ -384,6 +529,17 @@ pub fn add_for_test(
     today: &str,
 ) -> Result<PathBuf> {
     add(cases, id, dir, rules, today)
+}
+
+#[cfg(test)]
+pub fn published_for_test(
+    cases: &Path,
+    dir: &Path,
+    id: &str,
+    force: bool,
+    today: &str,
+) -> Result<String> {
+    published(cases, dir, id, force, today)
 }
 
 #[cfg(test)]
@@ -428,7 +584,7 @@ mod tests {
         let page = std::fs::read_to_string(out.join("n-1.json")).unwrap();
         assert!(page.contains("\"t\":\"heading\""), "{page}");
         let feed = std::fs::read_to_string(out.join("feed.xml")).unwrap();
-        assert!(feed.contains("https://x.example/s/#notice=n-1"), "{feed}");
+        assert!(feed.contains("https://x.example/s/notices/n-1/"), "{feed}");
 
         // A leak in any notice stops the build.
         std::fs::write(
@@ -440,6 +596,59 @@ mod tests {
         .unwrap();
         assert!(build(&dir, &out, "https://x.example/s", &rules).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_pushed_notice_is_found_on_the_remote() {
+        let root = std::env::temp_dir().join(format!("swarmchase-remote-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (origin, work) = (root.join("origin.git"), root.join("work"));
+        std::fs::create_dir_all(work.join("notices")).unwrap();
+        let git = |dir: &Path, args: &[&str]| {
+            let o = std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir)
+                .output()
+                .unwrap();
+            assert!(
+                o.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&o.stderr)
+            );
+        };
+        git(&root, &["init", "-q", "--bare", "origin.git"]);
+        git(&work, &["init", "-q", "-b", "main"]);
+        git(
+            &work,
+            &["remote", "add", "origin", &origin.to_string_lossy()],
+        );
+        let dir = work.join("notices");
+        std::fs::write(dir.join("n-1.md"), "x\n").unwrap();
+        assert_eq!(on_remote(&dir, "n-1"), None, "not committed");
+        git(&work, &["add", "notices/n-1.md"]);
+        git(
+            &work,
+            &[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t.example",
+                "commit",
+                "-q",
+                "-m",
+                "n",
+            ],
+        );
+        assert_eq!(on_remote(&dir, "n-1"), None, "committed, not pushed");
+        // What a push leaves behind locally: origin's tracking ref at the
+        // commit. Set it directly so the test needs no push.
+        git(&work, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+        assert_eq!(
+            on_remote(&dir, "n-1").as_deref(),
+            Some("origin/main:notices/n-1.md")
+        );
+        assert_eq!(on_remote(&dir, "n-2"), None);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

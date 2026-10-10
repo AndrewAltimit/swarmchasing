@@ -1,9 +1,9 @@
 //! Data-driven indicator rules (see `rules/default.toml`).
 
-use crate::model::IndicatorKind;
-use regex::{Regex, RegexBuilder};
+use crate::model::{IndicatorKind, Tactic};
+use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub const DEFAULT_RULES: &str = include_str!("../../../rules/default.toml");
 
@@ -19,6 +19,22 @@ pub enum Target {
     FinalUrl,
 }
 
+impl Target {
+    const ALL: [Target; 7] = [
+        Target::Host,
+        Target::Url,
+        Target::ParamName,
+        Target::ParamValue,
+        Target::Header,
+        Target::UserAgent,
+        Target::FinalUrl,
+    ];
+
+    fn slot(self) -> usize {
+        self as usize
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleDef {
     pub id: String,
@@ -31,6 +47,13 @@ pub struct RuleDef {
     pub significant: bool,
     #[serde(default)]
     pub link: bool,
+    /// What a match shows the agent doing. An id outside `T1`..`T9` fails
+    /// to load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tactic: Option<Tactic>,
+    /// A match only shows that a model wrote the request.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub artifact: bool,
     #[serde(default)]
     pub description: String,
 }
@@ -58,6 +81,16 @@ impl Default for Thresholds {
 #[serde(default)]
 pub struct Linking {
     pub strong_params: Vec<String>,
+    /// A shared feature joins records at most this far apart (0: no limit).
+    pub feature_link_window_secs: i64,
+    /// A feature on more than this many target hosts in one group does not
+    /// link (0: no limit).
+    pub feature_max_hosts: usize,
+    /// A feature on more than this share of the records in its group's time
+    /// span does not link (0: off) ...
+    pub feature_max_share: f64,
+    /// ... when that span holds at least this many records.
+    pub feature_share_min_records: usize,
     pub window_secs: i64,
     pub run_gap_secs: i64,
     pub burst_gap_secs: i64,
@@ -72,6 +105,10 @@ impl Default for Linking {
     fn default() -> Self {
         Self {
             strong_params: vec![],
+            feature_link_window_secs: 3 * 86_400,
+            feature_max_hosts: 20,
+            feature_max_share: 0.0,
+            feature_share_min_records: 100,
             window_secs: 600,
             run_gap_secs: 900,
             burst_gap_secs: 5,
@@ -104,6 +141,18 @@ pub struct RuleSet {
     pub thresholds: Thresholds,
     #[serde(default)]
     pub linking: Linking,
+    #[serde(default)]
+    pub chains: crate::chains::ChainOptions,
+    #[serde(default)]
+    pub fanout: crate::fanout::FanOutOptions,
+    #[serde(default)]
+    pub cut_lengths: crate::dialect::CutOptions,
+    #[serde(default)]
+    pub paths: crate::paths::PathOptions,
+    #[serde(default)]
+    pub escalation: crate::escalation::EscalationOptions,
+    #[serde(default)]
+    pub soft_links: crate::fleets::SoftLinkOptions,
     #[serde(default, rename = "rule")]
     pub rules: Vec<RuleDef>,
     #[serde(default, rename = "asn")]
@@ -120,11 +169,25 @@ pub(crate) struct CompiledRule {
     pub matcher: Matcher,
 }
 
+/// The regex rules of one target, compiled once more as a set so one pass
+/// over a text says which of them match.
+pub(crate) struct TargetSet {
+    set: Option<RegexSet>,
+    /// Indexes into `Rules::compiled`, in set order.
+    rules: Vec<usize>,
+}
+
 /// A rule set ready for matching.
 pub struct Rules {
     pub set: RuleSet,
     pub(crate) compiled: Vec<CompiledRule>,
     pub(crate) asn_orgs: BTreeMap<u32, String>,
+    /// Per target ([`Target::slot`]).
+    by_target: Vec<TargetSet>,
+    by_id: HashMap<String, usize>,
+    /// Host suffixes and URL patterns of relay, carrier and callback rules.
+    intermediary_suffixes: Vec<String>,
+    intermediary_urls: Option<RegexSet>,
 }
 
 impl Rules {
@@ -159,12 +222,49 @@ impl Rules {
                 matcher,
             });
         }
+        let by_target = Target::ALL
+            .iter()
+            .map(|&t| {
+                let rules: Vec<usize> = (0..compiled.len())
+                    .filter(|&i| compiled[i].def.target == t && t != Target::Host)
+                    .collect();
+                let patterns = rules.iter().map(|&i| compiled[i].def.pattern.as_str());
+                TargetSet {
+                    set: regex_set(patterns),
+                    rules,
+                }
+            })
+            .collect();
+        let by_id = (0..compiled.len())
+            .map(|i| (compiled[i].def.id.clone(), i))
+            .collect();
+        let intermediary = || compiled.iter().filter(|r| is_intermediary_kind(r.def.kind));
+        let intermediary_suffixes = intermediary()
+            .filter_map(|r| match &r.matcher {
+                Matcher::HostSuffix(s) => Some(s.clone()),
+                Matcher::Re(_) => None,
+            })
+            .collect();
+        let intermediary_urls = regex_set(
+            intermediary()
+                .filter(|r| r.def.target == Target::Url)
+                .map(|r| r.def.pattern.as_str()),
+        );
         let asn_orgs = set.asns.iter().map(|a| (a.asn, a.org.clone())).collect();
         Ok(Self {
             set,
             compiled,
             asn_orgs,
+            by_target,
+            by_id,
+            intermediary_suffixes,
+            intermediary_urls,
         })
+    }
+
+    /// The rule with this id.
+    pub fn rule(&self, id: &str) -> Option<&RuleDef> {
+        self.by_id.get(id).map(|&i| &self.compiled[i].def)
     }
 
     pub fn asn_org(&self, asn: u32) -> Option<&str> {
@@ -175,18 +275,55 @@ impl Rules {
         self.compiled.iter().filter(move |r| r.def.target == t)
     }
 
+    /// The regex rules of target `t` that match `text`, in rule order. The
+    /// set says which rules match in one pass; only those run on their own.
+    pub(crate) fn matching<'a>(
+        &'a self,
+        t: Target,
+        text: &str,
+    ) -> Box<dyn Iterator<Item = &'a CompiledRule> + 'a> {
+        let ts = &self.by_target[t.slot()];
+        match &ts.set {
+            Some(set) => Box::new(
+                set.matches(text)
+                    .into_iter()
+                    .map(move |k| &self.compiled[ts.rules[k]]),
+            ),
+            None => Box::new(ts.rules.iter().map(move |&i| &self.compiled[i])),
+        }
+    }
+
     /// True if `host` is a known relay/carrier host (i.e. not the real target).
     pub(crate) fn is_intermediary_host(&self, host: &str) -> bool {
-        self.compiled.iter().any(|r| {
-            matches!(
-                r.def.kind,
-                IndicatorKind::Relay | IndicatorKind::Carrier | IndicatorKind::Exfil
-            ) && match &r.matcher {
-                Matcher::HostSuffix(s) => host_matches(host, s),
-                Matcher::Re(re) => r.def.target == Target::Url && re.is_match(host),
-            }
-        })
+        self.intermediary_suffixes
+            .iter()
+            .any(|s| host_matches(host, s))
+            || self
+                .intermediary_urls
+                .as_ref()
+                .is_some_and(|set| set.is_match(host))
     }
+}
+
+pub(crate) fn is_intermediary_kind(k: IndicatorKind) -> bool {
+    matches!(
+        k,
+        IndicatorKind::Relay | IndicatorKind::Carrier | IndicatorKind::Exfil
+    )
+}
+
+/// The patterns as one case-insensitive set, or `None` when there are none
+/// or the set is too large to build (callers then try each rule in turn).
+fn regex_set<'a>(patterns: impl IntoIterator<Item = &'a str>) -> Option<RegexSet> {
+    let patterns: Vec<&str> = patterns.into_iter().collect();
+    if patterns.is_empty() {
+        return None;
+    }
+    RegexSetBuilder::new(patterns)
+        .case_insensitive(true)
+        .size_limit(1 << 26)
+        .build()
+        .ok()
 }
 
 pub(crate) fn host_matches(host: &str, suffix: &str) -> bool {
@@ -205,6 +342,48 @@ mod tests {
         let r = Rules::default_rules();
         assert!(r.compiled.len() > 30);
         assert_eq!(r.asn_org(132203), Some("Tencent Cloud"));
+    }
+
+    /// A rules file without these sections (one a case pinned earlier) gets
+    /// the same settings as the bundled file.
+    #[test]
+    fn bundled_settings_match_the_defaults() {
+        let s = Rules::default_rules().set;
+        assert_eq!(s.chains, crate::chains::ChainOptions::default());
+        assert_eq!(s.fanout, crate::fanout::FanOutOptions::default());
+        assert_eq!(s.cut_lengths, crate::dialect::CutOptions::default());
+        assert_eq!(s.paths, crate::paths::PathOptions::default());
+        assert_eq!(
+            s.escalation,
+            crate::escalation::EscalationOptions::default()
+        );
+        assert_eq!(s.soft_links, crate::fleets::SoftLinkOptions::default());
+    }
+
+    #[test]
+    fn every_bundled_rule_has_a_tactic_or_is_an_artifact() {
+        let r = Rules::default_rules();
+        for d in &r.set.rules {
+            assert!(d.tactic.is_some() || d.artifact, "{}", d.id);
+        }
+        let exploit = r.rule("exploit.sqli_union").unwrap();
+        assert_eq!(exploit.tactic, Some(Tactic::VulnerabilityProbing));
+        assert!(r.rule("marker.md_link").unwrap().artifact);
+    }
+
+    #[test]
+    fn unknown_tactics_are_rejected() {
+        let rule = |t: &str| {
+            format!(
+                "[[rule]]\nid = \"x.y\"\nkind = \"relay\"\ntarget = \"host\"\npattern = \"a.example\"\ntactic = \"{t}\"\n"
+            )
+        };
+        let ok = Rules::from_toml(&rule("T9")).unwrap();
+        assert_eq!(ok.set.rules[0].tactic, Some(Tactic::InterAgentCoordination));
+        for bad in ["T0", "T10", "t1", "exfil"] {
+            let e = Rules::from_toml(&rule(bad)).err().unwrap();
+            assert!(e.contains("unknown variant"), "{bad}: {e}");
+        }
     }
 
     #[test]

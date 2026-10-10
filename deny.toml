@@ -19,7 +19,9 @@ unmaintained = "all"
 yanked = "deny"
 # An advisory that does not apply goes here with the reason, e.g.
 # { id = "RUSTSEC-0000-0000", reason = "..." }
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 is unmaintained, not vulnerable; it is a build-time proc-macro dependency of age (via i18n-embed-fl) used only for localised error messages, and runs no code in the shipped binary" },
+]
 
 [licenses]
 version = 2

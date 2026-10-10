@@ -19,7 +19,13 @@ use crate::model::Observation;
 pub const MARK: &str = "REDACTED-";
 
 /// Query/fragment parameter names whose values are always secrets.
-const SECRET_PARAM: &str = r"(?i)^(cookies?|set-cookie|auth|authorization|access_?token|session_?token|access_?key|refresh_?token|id_?token|auth_?token|api_?key|apikey|x-api-key|client_?secret|secret|password|passwd|pwd|pass|jwt|bearer|phpsessid|jsessionid|aspsessionid\w*|asp\.net_sessionid|connect\.sid|sessionid|session_id|csrftoken|csrf_token|xsrf-token|_xsrf|sid_guard|sessionid_ss|x5sec|umidtoken|bx-umidtoken)$";
+const SECRET_PARAM: &str = r"(?i)^(cookies?|set-cookie|auth|authorization|access_?token|session_?token|access_?key|refresh_?token|id_?token|auth_?token|api[_-]?key|x-api-key|subscription-key|client_?secret|secret|secret_?key|private_?key|password|passwd|pwd|pass|jwt|bearer|phpsessid|jsessionid|aspsessionid\w*|asp\.net_sessionid|connect\.sid|sessionid|session_id|csrftoken|csrf_token|xsrf-token|_xsrf|sid_guard|sessionid_ss|x5sec|umidtoken|bx-umidtoken|x-amz-signature|x-amz-credential|x-amz-security-token|x-goog-signature|x-goog-credential)$";
+
+/// Generic parameter names (`token`, `key`, an OAuth `code`, a URL
+/// signature) whose values are secrets when they look like one: an opaque
+/// run of letters and digits ([`opaque`]). Anything else in them, such as an
+/// injection probe, stays for the rules.
+const OPAQUE_PARAM: &str = r"(?i)^(token|key|code|sig|signature)$";
 
 /// Headers whose values are always secrets.
 const SECRET_HEADER: &str = r"(?i)^(cookie|set-cookie|authorization|proxy-authorization|x-api-key|x-auth-token|x-csrf-token|x-xsrf-token)$";
@@ -39,6 +45,33 @@ const SECRET_VALUE: &str = concat!(
 fn secret_param() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| Regex::new(SECRET_PARAM).unwrap())
+}
+
+fn opaque_param() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(OPAQUE_PARAM).unwrap())
+}
+
+/// `name=value` inside decoded text (a program, a `data:` body).
+fn text_pair() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| {
+        // A value stops at `?` and `=` (keeping trailing padding), so the
+        // pairs of a URL nested in a value are seen on their own.
+        Regex::new(r#"\b([A-Za-z][A-Za-z0-9_.-]*)=([^&#\s"'`<>;,(){}\[\]\\?=]+=*)"#).unwrap()
+    })
+}
+
+/// A value shaped like a token: at least 8 characters of letters, digits and
+/// `-_.~+/=`, with both letters and digits, and no `..` (a traversal probe
+/// is not a token).
+fn opaque(v: &str) -> bool {
+    v.len() >= 8
+        && !v.contains("..")
+        && v.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.~+/=".contains(&b))
+        && v.bytes().any(|b| b.is_ascii_alphabetic())
+        && v.bytes().any(|b| b.is_ascii_digit())
 }
 
 fn secret_header() -> &'static Regex {
@@ -133,22 +166,37 @@ pub fn redact_url(url: &str, n: &mut usize) -> String {
     redact_text(&out, n)
 }
 
+/// Whether the decoded `value` of parameter `name` is a secret. `sas` is set
+/// when the same query carries an Azure SAS version (`sv`), whose `sig` is
+/// always a signature.
+fn secret_pair(name: &str, value: &str, sas: bool) -> bool {
+    if value.is_empty() || value.starts_with(MARK) || placeholder().is_match(value) {
+        return false;
+    }
+    secret_param().is_match(name)
+        || cookie_jar().is_match(value)
+        || (sas && name.eq_ignore_ascii_case("sig"))
+        || (opaque_param().is_match(name) && opaque(value))
+}
+
+fn decode(s: &str) -> String {
+    percent_encoding::percent_decode_str(&s.replace('+', " "))
+        .decode_utf8_lossy()
+        .into_owned()
+}
+
 fn redact_pairs(q: &str, n: &mut usize) -> String {
+    let sas = q
+        .split('&')
+        .any(|p| p.split_once('=').is_some_and(|(k, _)| k == "sv"));
     q.split('&')
         .map(|pair| {
             let Some((k, v)) = pair.split_once('=') else {
                 return pair.to_string();
             };
-            if v.is_empty() || v.starts_with(MARK) {
-                return pair.to_string();
-            }
             let name = percent_encoding::percent_decode_str(k).decode_utf8_lossy();
-            let decoded = percent_encoding::percent_decode_str(&v.replace('+', " "))
-                .decode_utf8_lossy()
-                .into_owned();
-            if placeholder().is_match(&decoded) {
-                pair.to_string()
-            } else if secret_param().is_match(&name) || cookie_jar().is_match(&decoded) {
+            let decoded = decode(v);
+            if secret_pair(&name, &decoded, sas) {
                 *n += 1;
                 format!("{k}={}", hash_token(&decoded))
             } else {
@@ -157,6 +205,33 @@ fn redact_pairs(q: &str, n: &mut usize) -> String {
         })
         .collect::<Vec<_>>()
         .join("&")
+}
+
+/// The value to keep for a decoded query parameter of an unwrapped layer:
+/// its hash when it is a secret, else the value itself.
+pub fn redact_param(name: &str, value: String, sas: bool) -> String {
+    if secret_pair(name, &value, sas) {
+        hash_token(&value)
+    } else {
+        value
+    }
+}
+
+/// Redact text decoded out of a record: a base64 program, a `data:` body,
+/// the percent-decoded text of an inner URL. Secret-named `name=value` pairs
+/// anywhere in it and well-known credential shapes are replaced, as at
+/// ingest; placeholders stay.
+pub fn redact_decoded(text: &str) -> String {
+    let mut n = 0;
+    let sas = text.contains("sv=");
+    let out = text_pair().replace_all(text, |c: &regex::Captures| {
+        if secret_pair(&c[1], &decode(&c[2]), sas) {
+            format!("{}={}", &c[1], hash_token(&decode(&c[2])))
+        } else {
+            c[0].to_string()
+        }
+    });
+    redact_text(&out, &mut n)
 }
 
 fn redact_text(s: &str, n: &mut usize) -> String {
@@ -230,6 +305,55 @@ mod tests {
             let (s, n) = r(u);
             assert_eq!((s.as_str(), n), (u, 0));
         }
+    }
+
+    #[test]
+    fn generic_names_signatures_and_cloud_credentials() {
+        for u in [
+            "https://a.example/v1?token=9f8e7d6c5b4a3f2e1d0c",
+            "https://a.example/v1?key=AbCdEf0123456789xyz",
+            "https://a.example/v1?api-key=abc",
+            "https://a.example/oauth/callback?code=4%2F0AfJohXk9q8w7e6r5t4y&state=xyz",
+            "https://a.example/file?signature=b64sig0aB1cD2eF3%3D%3D",
+            "https://acct.blob.core.example/c/f?sv=2022-11-02&se=2026-10-05&sig=abc%2Bdef%3D",
+            "https://b.s3.example/o?X-Amz-Credential=AKIAEXAMPLE%2F20261004%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=f0e1d2c3b4a5",
+            "https://storage.example/o?X-Goog-Signature=0a1b2c3d4e5f",
+        ] {
+            let (s, n) = r(u);
+            assert!(n >= 1, "{u} -> {s}");
+            assert!(s.contains("=REDACTED-"), "{s}");
+        }
+        let (s, n) =
+            r("https://b.s3.example/o?X-Amz-Credential=AKIAEXAMPLE%2Fx&X-Amz-Signature=f0e1");
+        assert_eq!(n, 2, "{s}");
+        // A probe in a generic parameter is not a token: the rules need it.
+        for u in [
+            "https://a.example/?token=1'%20OR%201=1--",
+            "https://a.example/?key=../../../etc/passwd",
+            "https://a.example/?code=<script>alert(1)</script>",
+            "https://a.example/?sig=short",
+            "https://a.example/?code=ABCDEFGHIJ",
+            "https://a.example/?key=$%7BAPI_KEY%7D",
+        ] {
+            let (s, n) = r(u);
+            assert_eq!((s.as_str(), n), (u, 0));
+        }
+    }
+
+    #[test]
+    fn decoded_text_is_redacted_but_placeholders_stay() {
+        let key = "sk-ant-abcdefghijklmnopqrstuvwxyz012345"; // secret-scan: fixture (fake key)
+        let prog = format!(
+            "fetch('https://api.example/v1?access_token=s3cr3tvalue&q=1', {{headers: {{'x-api-key': '{key}'}}}}); fetch('https://b.example/?api_key=YOUR_API_KEY')"
+        );
+        let out = redact_decoded(&prog);
+        assert!(!out.contains("s3cr3tvalue") && !out.contains(key), "{out}");
+        assert!(
+            out.contains("access_token=REDACTED-") && out.contains("&q=1"),
+            "{out}"
+        );
+        assert!(out.contains("api_key=YOUR_API_KEY"), "{out}");
+        assert_eq!(redact_decoded(&out), out, "idempotent");
     }
 
     #[test]

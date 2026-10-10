@@ -19,12 +19,14 @@
 //!
 //! `ip` is where urlquery's scanner reached the target, so it describes the
 //! *target's* hosting, not the agent. It is kept because the target host is what
-//! the endpoint view and operator notices are about. The scanner's own user agent
+//! the endpoint view and operator notices are about, and its ASN goes in
+//! `target_asn`, never `asn` (the client's network). The timestamp is when
+//! the URL was submitted (`TsKind::Submit`). The scanner's own user agent
 //! (`settings.useragent`) is chosen per submission and is recorded as an
 //! `x-urlquery-useragent` header rather than as the record's user agent, so the
 //! header rules do not mistake urlquery's default browser for an agent's.
 
-use crate::model::{Observation, parse_ts};
+use crate::model::{Observation, TsKind, parse_ts};
 use serde_json::Value;
 
 pub const SOURCE: &str = "urlquery";
@@ -88,7 +90,7 @@ pub fn report_to_obs(v: &Value) -> Option<Observation> {
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .map(str::to_string),
-        asn: ip
+        target_asn: ip
             .and_then(|i| i.get("asn"))
             .and_then(Value::as_u64)
             .filter(|&n| n > 0)
@@ -98,6 +100,7 @@ pub fn report_to_obs(v: &Value) -> Option<Observation> {
         reference: Some(format!("{REPORT_BASE}{id}")),
         id: format!("urlquery:{id}"),
         source: SOURCE.to_string(),
+        ts_kind: TsKind::Submit,
         ..Default::default()
     })
 }
@@ -126,7 +129,9 @@ mod tests {
         assert_eq!(o.ts, 1791101400);
         assert_eq!(o.url, "https://r.jina.ai/https://data.portal.example/?q=1");
         assert_eq!(o.ip.as_deref(), Some("203.0.113.7"));
-        assert_eq!(o.asn, Some(64500));
+        assert_eq!(o.target_asn, Some(64500));
+        assert_eq!(o.asn, None);
+        assert_eq!(o.ts_kind, TsKind::Submit);
         assert_eq!(o.final_url.as_deref(), Some("about:neterror"));
         assert_eq!(o.user_agent, None);
         assert!(o.headers.contains_key("x-urlquery-useragent"));

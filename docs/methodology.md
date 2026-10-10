@@ -4,7 +4,9 @@ This page describes how swarmchasing turns public records into the claims in a r
 
 The short version: the toolkit reads public indexes, redacts secrets, unwraps each recorded URL, matches indicator rules, grades each record, links flagged records into clusters, and describes their timing. The admin reviews the result, decides what is true, and sends and publishes. No step is automatic past drafting.
 
-Policies (what we collect, how we name, what notices withhold) are in [policies.md](policies.md). Guidance for operators is in [for-operators.md](for-operators.md).
+Policies (what we collect, how we name, what notices withhold) are in [policies.md](policies.md). Guidance for operators is in [for-operators.md](guides/for-operators.md).
+
+This page is the toolkit's implementation. The method as a standard, which other groups can apply with their own tools and cite by section, is the [Swarmchasing Field Manual](manual/README.md).
 
 ## Collection
 
@@ -56,6 +58,7 @@ Agents rarely request a target directly. They wrap it in a relay, send a program
 
 - **Relays in the path:** `r.jina.ai/https://target/…` yields the inner URL, with the outer query string carried along.
 - **Translate proxies:** `www-example-com.translate.goog` yields `www.example.com` (a doubled hyphen is a literal hyphen).
+- **Doubled schemes:** `https://https://example.org/…` (or `http://https%3A//…`) parses with the host `https`. That is not a host: the URL after the second scheme becomes a layer, and the outer layer has no host, so it can never be a target.
 - **URL parameters:** a parameter value that is a URL or a `data:` URL becomes a layer.
 - **`data:` URLs:** the body is decoded (base64 or percent-encoded), kept as a layer of its own, and searched for embedded URLs.
 - **Base64:** a parameter value, or a run of path segments (as in `httpbin.org/base64/<payload>`), is decoded when it looks like base64 of at least 16 characters. Either alphabet is accepted, padded or not, and a truncated payload decodes up to its last whole block, because scan services cut long URLs. A decoding counts only if it is at least 90% printable and contains letters, so random IDs are left alone. A decoded URL becomes a layer. Decoded program text is kept as a layer and searched for embedded URLs.
@@ -94,11 +97,13 @@ A rule's target says what it reads: the host of each layer (suffix match), each 
 
 **Model-output residue.** Agents built on language models sometimes leave the model's formatting in the URL they send. The residue rules match text a model wrote around a URL: Markdown link and code syntax, unfilled placeholders, tool-call JSON and function-call markup, JSON string tails, escaped newlines, output cut off mid-escape or with an ellipsis, and similar artefacts. A person pasting a chatbot answer into a scan form produces the same residue. These rules therefore carry low weights, and none of them links records.
 
+**Tactics.** Each rule names what a match shows the agent doing, in the swarmchasing tactic vocabulary: `T1` task retrieval, `T2` tool escalation (relays, carriers, remote browsers), `T3` access-control circumvention (anti-bot), `T4` vulnerability probing, `T5` account or identity acquisition, `T6` credential reuse, `T7` callback or side channels, `T8` off-task targets, `T9` inter-agent coordination. A rule marked `artifact = true` only shows that a model wrote the request (model-output residue, self-identification). A rules file naming any other tactic fails to load. Every hit carries its rule's tactic and artifact flag, and each cluster counts hits per tactic (`tactics`) and members with an artifact hit (`artifacts`). Tactics describe; they never change a score.
+
 **ASN hints.** The `[[asn]]` table maps autonomous system numbers to the organisations that run them. It is context for attribution, never proof.
 
 ## Tiers
 
-Each record is graded by [`analyze.rs`](../crates/sc-core/src/analyze.rs):
+Each record is graded by [`analyze.rs`](../crates/sc-core/src/analyze/mod.rs):
 
 - **significant:** a significant rule fired, or the score reached `thresholds.significant`;
 - **suggestive:** the score reached `thresholds.suggestive`;
@@ -108,25 +113,31 @@ Both thresholds are set in the rules file. A tier says the record looks like age
 
 **One relay hit is never enough.** People use relays, CORS proxies and echo services every day. No relay rule weighs as much as the suggestive threshold, so a single relay hit never flags a record. It needs another indicator first: a payload, a tag, a callback channel, a program, or residue.
 
-A cluster gets its own tier. It is at least the highest tier among its members. Evidence also stacks across a cluster: the cluster's score is the sum of the weights of the distinct rules seen in any member, and that score is graded against the same thresholds. A cluster is also significant when a significant member carries an attack payload.
+A cluster gets its own tier: the highest tier among its members, raised one step only by corroboration. A suggestive cluster becomes significant when two of its suggestive-or-above members each carry a kind of evidence the other lacks: one record shows a callback channel and model residue, another the same channel and a carrier program. Context kinds, which ordinary clients produce too, do not count towards that: `relay`, `cache_buster`, `self_id`, `header` and `outcome`. A cluster of noise records stays noise, and weak rules collected across many members never add up to a higher tier.
+
+The cluster's `score`, the sum of the weights of the distinct rules seen in any member, is listed for reference and does not set the tier. Code: `cluster_tier` in [`hints.rs`](../crates/sc-core/src/analyze/hints.rs).
 
 ## Linking into clusters
 
 Only records with a score above zero are linked. Ordinary traffic to the same host is never swept into a cluster. Three things join two flagged records:
 
-1. **A shared linking feature.** Two records that carry the same matched text from a linking rule, or the same value (three characters or more) of a parameter named in `linking.strong_params` (run tags such as `uqtag`, `tok`, `run`, `session`). This link has no time limit: the same inbox ID a month apart still links.
+1. **A shared linking feature.** Two records that carry the same matched text from a linking rule, or the same value (three characters or more) of a parameter named in `linking.strong_params` (run tags such as `uqtag`, `tok`, `run`, `session`). The link is bounded in time: a feature's records, in time order, are joined while each is at most `linking.feature_link_window_secs` (3 days) after the last, and a longer gap starts a new group. The same inbox used again months later starts a new cluster. Records without a timestamp join the feature's only group, or form their own when it has several.
+
+   A feature can also be too common to say anything about one operator: a tag copied from a published report, or a generic parameter value. A group whose feature appears on more than `linking.feature_max_hosts` target hosts does not link, and neither does one carrying more than `linking.feature_max_share` of all records in its time span (when that span holds at least `linking.feature_share_min_records` records; the share is off by default, because in a case file one fleet can be most of the records). Such a group is listed under `common_features` in the analysis and in internal reports, with the limit it passed.
 2. **Close timing against the same target.** Consecutive flagged records to the same target host, at most `linking.window_secs` apart, that share at least one rule.
-3. **Probe chains.** A run of requests to one host and path, each at most 5 minutes after the last (`chains::MAX_GAP_SECS`), with at least 3 distinct parameter sets (`MIN_VARIANTS`) and at least one parameter whose value changes. This is one client trying variants of a request. The flagged requests in a chain are linked even when different rules fired on each. Code: [`chains.rs`](../crates/sc-core/src/chains.rs).
+3. **Probe chains.** A run of requests to one host and path, each at most 5 minutes after the last (`chains.max_gap_secs`), with at least 3 distinct parameter sets (`chains.min_variants`) and at least one parameter whose value changes. This is one client trying variants of a request. The flagged requests in a chain are linked even when different rules fired on each. Code: [`chains.rs`](../crates/sc-core/src/chains.rs).
 
 Links are transitive: if A links to B and B to C, all three form one cluster. A cluster needs at least two records. Each cluster lists the linking features its members share, so a reader can see what joined them.
 
 Within a cluster, a gap longer than `linking.run_gap_secs` starts a new **run**.
 
-Probe chains also carry descriptive detail that changes nothing: their **pace** and the requests in them that no rule flagged. The pace is the chain's median gap. Under 2 seconds reads as a scanner or script. From 2 seconds to 2 minutes is consistent with a model choosing each request. Slower is a person or a model that reasons longer. Chains also count **retries after an error**: a changed request sent right after a response with status 400 or above. A scanner working through a list keeps going regardless; a model reading the error tends to change course. Both are hints, not evidence.
+Probe chains also carry descriptive detail that changes nothing: their **pace** and the requests in them that no rule flagged. The pace is the chain's median gap. Under 2 seconds (`chains.tool_pace_below_secs`) reads as a scanner or script. From 2 seconds to 2 minutes (`chains.model_pace_max_secs`) is consistent with a model choosing each request. Slower is a person or a model that reasons longer. Chains also count **retries after an error**: a changed request sent right after a response with status 400 or above. A scanner working through a list keeps going regardless; a model reading the error tends to change course. Both are hints, not evidence.
 
 ## Timing
 
-[`timing.rs`](../crates/sc-core/src/timing.rs) describes each cluster and the whole analysis. None of it changes a score or links records.
+[`timing.rs`](../crates/sc-core/src/timing/mod.rs) describes each cluster and the whole analysis. None of it changes a score or links records.
+
+**What the times measure.** Each record says what its timestamp is (`ts_kind`): a request (access and operator logs), a submission to a scan service (urlquery), or an archive capture (Wayback, Arquivo.pt). Each cluster and probe chain carries the result as `time_basis`: `request`, `submit`, `capture`, or `mixed` when capture times sit alongside the others. Hints that read request timing (chain pace, fan-out width and the hour-of-day rhythm) never use capture times: rhythm and fan-out leave capture-time records out, and a chain timed by captures reports "capture times, not request times: pace not read". Submit times are close to request times and are used, labelled "submit times". Cadence, bursts and pauses describe whatever the times are.
 
 **Cadence, bursts and pauses.** The median and 90th-percentile gap between records. A burst is at least `linking.burst_min` records, each within `linking.burst_gap_secs` of the last. A pause is a gap at least `linking.pause_min_secs` long and at least ten times the median gap, so a slow but steady cadence does not read as a string of pauses. The analysis also reports how many cluster runs were active at the same instant.
 
@@ -153,14 +164,26 @@ A shared pause is a link to check by hand. It never merges clusters.
 Several features describe a cluster without changing its score, its tier or its membership:
 
 - **Encodings** ([`fingerprint.rs`](../crates/sc-core/src/fingerprint.rs)). How each URL was written: spaces as `%20` or `+`, hex case in escapes, double encoding, unescaped characters, trailing `&`, empty values, sorted parameter names. Only URLs that show at least one such choice are counted.
-- **Recon preambles** ([`paths.rs`](../crates/sc-core/src/paths.rs)). The same opening sequence of well-known files (`/.well-known/security.txt`, `/.env`, `/llms.txt` and similar) on 3 or more hosts. An opening made only of what polite crawlers fetch (`/robots.txt`, `/sitemap.xml`) does not count. Unflagged requests on the cluster's hosts during its span are read too, because a recon opening is rarely flagged itself.
+- **Recon preambles** ([`paths.rs`](../crates/sc-core/src/paths.rs)). The same opening sequence of well-known files (`/.well-known/security.txt`, `/.env`, `/llms.txt` and similar) on 3 or more hosts. An opening made only of what polite crawlers fetch (`/robots.txt`, `/sitemap.xml`) does not count. The path lists and thresholds are the `[paths]` settings. Unflagged requests on the cluster's hosts during its span are read too, because a recon opening is rarely flagged itself.
 - **Unusual path sets.** The same set of at least 3 uncommon paths requested on 3 or more hosts (Jaccard similarity at least 0.6). Records rarely say whether a path existed, so this is "the same unusual path set", not "the same invented paths". Where records carry a status, 404 and 410 responses are counted.
 - **Fabricated identifiers.** UUID-shaped values no generator produces (wrong version or variant digit, repeated groups, sequential or low-diversity digits) and hex "hashes" that are obviously typed by hand. Language models write such values when they invent a resource. The nil and max UUIDs are not reported.
 - **Probe chain pace and retries**, as above.
 - **Reruns** ([`recurrence.rs`](../crates/sc-core/src/recurrence.rs)), in the watch digest. A later run whose target hosts, and their order, repeat an earlier run in a different cluster on another day, at least 6 hours later. Runs must share at least 4 hosts, overlap with a weighted Jaccard of at least 0.5 (hosts common to many runs are down-weighted), and agree on order for at least 70% of shared hosts.
 - **Archive bursts**, in the watch digest. Many archive captures of one host within minutes, on a host the store otherwise holds few captures of (the `linking.archive_burst_*` settings).
+- **Payload dialect.** Which canonical test payloads a cluster uses, such as `<script>alert(1)</script>` or `<svg onload>`, `' OR 1=1--` or `' OR '1'='1`, and how deep its `../` runs go. Clusters that use the same uncommon mix of payloads are listed as a link to check.
+- **Route escalation** ([`escalation.rs`](../crates/sc-core/src/escalation.rs)). Requests for one host and path, each at most `escalation.window_secs` (30 minutes) after the last, whose route climbs: a direct request, then a relay (Jina Reader, allorigins, markdown.new, a translate proxy), then a program carrier (httpbin, a `data:` or base64 program), then a remote browser (a code playground). The route lists in `[escalation]` name the rules for each level. An agent that cannot read a page tends to try harder like this; two people reading the same page by different routes look the same. Capture-time records are left out, because their order is the archive's.
+- **Parallel fan-out width.** How many alike requests land in the same second, as when an agent issues tool calls in parallel (the `[fanout]` settings).
+- **Repeated cut lengths.** Truncated URLs cut at nearly the same length, as a model or tool output limit would (the `[cut_lengths]` settings). A scan service's own display limit can do the same.
+
+**Soft links and candidate fleets** ([`fleets.rs`](../crates/sc-core/src/fleets.rs)). The hints that relate two clusters are collected as soft links (`soft_links` in the analysis): shared pauses, payload dialects, reruns of one target list, the same recon opening, overlapping unusual path sets, one encoding style across every member, the same fan-out width, the same cut length, the same request header set, steps of one route escalation, and a linking feature too common to link on. Each has a strength from 0 to 1: its weight in `[soft_links]`, times its own similarity where it has one. A value shared by more than `soft_links.max_shared` clusters links none of them.
+
+For each pair of clusters the strengths combine as `1 - Π(1 - strength)`, so several weak ties can add up and one cannot. Pairs that reach `soft_links.fleet_min_strength` are grouped into connected components, the **candidate fleets** (`candidate_fleets`), listed in internal reports. A candidate fleet is a proposal for the admin: it never merges clusters, changes a tier, or appears in a report to a provider, an operator or the public.
 
 **Why they never score or link.** Each of these is shared by many unrelated clients. Encoding styles are mostly library defaults. Polite crawlers and security scanners share recon openings. Popular targets attract the same paths. Cron jobs share pause times. Letting any of them raise a score would flag ordinary clients. Letting any of them link records would merge unrelated clusters, and every later step would inherit that error. They are also not measured by the evaluation set. So they appear in reports as hints, labelled as hints, for the admin to weigh.
+
+## Endpoints
+
+Flagged requests are also grouped per target host: hits, first and last seen, attack payloads, the clusters involved, and whether the hits are ongoing or historical. `swarmchase endpoints` prints this table, and a report to an affected operator carries it for that operator's hosts. In a case, the admin classifies each endpoint ([case files](reference/cases.md#what-casetoml-holds)).
 
 ## Attribution levels and the naming gate
 
@@ -184,7 +207,9 @@ Levels 1 and 2 come from the records. Levels 3 to 5 come from case work and are 
 
 **What it is not.** The rules were tuned on this set. Its numbers are a regression floor, not an estimate of precision on real traffic. A number worth quoting needs held-out data.
 
-**The held-out measurement.** Transluce's [urlquery dataset](https://transluce.org/agent-activity) labels tens of thousands of urlquery reports as significant, suggestive or benign background. It ships report IDs and labels, not report contents, and urlquery's terms forbid redistributing the contents. To measure against it, anyone with a urlquery API key fetches the reports into a gitignored directory with `swarmchase collect urlquery-reports --sample N` and runs `eval` with Transluce's labels and our [label overrides](../samples/eval/overrides/transluce-labels.ndjson), each override with its reason. The steps are in [samples/eval/README.md](../samples/eval/README.md#held-out-evaluation-on-the-transluce-release). Read the per-class table, not just the overall recall: Transluce labelled some reports from context a single record cannot show. The benign controls are too few to estimate precision on their own, so add a sample of unflagged reports from a generic urlquery search, labelled benign.
+**The held-out measurement.** Transluce's [urlquery dataset](https://transluce.org/agent-activity) labels tens of thousands of urlquery reports as significant, suggestive or benign background. It ships report IDs and labels, not report contents, and urlquery's terms forbid redistributing the contents. To measure against it, anyone with a urlquery API key fetches the reports into a gitignored directory with `swarmchase collect urlquery-reports --sample N` and runs `eval` with Transluce's labels and our [label overrides](../samples/eval/overrides/transluce-labels.ndjson), each override with its reason. The steps are in [samples/eval/README.md](../samples/eval/README.md#held-out-evaluation-on-the-transluce-release).
+
+Read the per-class table, not just the overall recall: Transluce labelled some reports from context a single record cannot show. The benign controls are too few to estimate precision on their own, so add a sample of unflagged reports from a generic urlquery search, labelled benign.
 
 Records the admin reviews with `swarmchase review` are saved with their labels and can be measured the same way. That file stays in the data directory and is never committed.
 
@@ -192,7 +217,7 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **What the records cover.** Public scan services and web archives see a fraction of agent activity. Private and account-linked scans are invisible. A record shows that a URL was submitted or captured. It does not show that a request reached the target or succeeded. Reports say so.
 
-**Archive timestamps.** A Wayback or Arquivo timestamp is when the archive captured the URL. That may be the agent's own request or a later crawl of a link to it. Timing on archive records describes captures, not necessarily the agent.
+**Archive timestamps.** A Wayback or Arquivo timestamp is when the archive captured the URL. That may be the agent's own request or a later crawl of a link to it. Cadence on archive records describes captures, not necessarily the agent, and pace, fan-out and rhythm skip them.
 
 **Humans look the same.** The rules detect agent-like activity. A security researcher, a penetration tester or a conventional scanner sending the same payloads through the same services produces the same records. A significant tier means attack payloads were present, not that an AI agent sent them. Context, rhythm, residue and case work separate the two.
 
@@ -204,9 +229,9 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **Popular targets read through relays.** Two unrelated people reading the same popular page through the same relay within `linking.window_secs`, each with one more indicator, share a rule and a target host and will be linked. Check a cluster's link features and runs before treating it as one operator.
 
-**Copied tags.** A tag quoted in a published report (such as `CHATGPTTEST1`) can be reused by anyone who read it. A linking tag reused by unrelated operators merges their clusters. Generic parameter names in `strong_params` (`tag`, `run`, `session`) can carry the same value by coincidence.
+**Copied tags.** A tag quoted in a published report (such as `CHATGPTTEST1`) can be reused by anyone who read it. A linking tag reused by unrelated operators within the feature window, on no more than `linking.feature_max_hosts` hosts, still merges their clusters. Generic parameter names in `strong_params` (`tag`, `run`, `session`) can carry the same value by coincidence.
 
-**Stacking across a cluster.** A cluster's score sums distinct rules across all members, so a cluster of individually weak records can reach a tier no member reached. The cluster's member tiers and rules are listed so a reader can see how it got there.
+**Corroboration across a cluster.** A cluster can be one tier above its strongest member when two members bring different kinds of evidence. That rests on the link between them being right. The cluster's member tiers and rules are listed so a reader can see how it got there.
 
 **Heuristic decoding.** Base64 detection and unwrapping are heuristics. Truncated URLs decode partly. An opaque ID that happens to decode to text can, rarely, become a layer.
 
@@ -214,4 +239,4 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **Headers are rarely recorded.** Most public records carry no request headers, and none keep their order. Header rules mostly apply to operator logs and the few sources that keep headers.
 
-**Rules change.** A new rules version can move a record between tiers. Each case pins the rules it was opened with, and its reports, notices and evidence bundles use that version. `swarmchase case rules <id>` shows which records would change tier under the current rules. An evidence bundle records the rules version, and `swarmchase case verify` re-runs the analysis to show the tiers follow from the records (see [for-operators.md](for-operators.md#verify-an-evidence-bundle)).
+**Rules change.** A new rules version can move a record between tiers. Each case pins the rules it was opened with, and its reports, notices and evidence bundles use that version. `swarmchase case rules <id>` shows which records would change tier under the current rules. An evidence bundle records the rules version, and `swarmchase case verify` re-runs the analysis to show the tiers follow from the records (see [for-operators.md](guides/for-operators.md#verify-an-evidence-bundle)).
