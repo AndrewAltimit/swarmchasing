@@ -1,3 +1,9 @@
+---
+# Scheduled watch: every 6 hours (and on demand) pull what is new from the
+# sources in watchlist.toml, analyse the recent window, and email the admin a
+# digest when something changed. Unreviewed leads never leave the runner except
+# in that email (see the note at the end of the job).
+
 name: watch
 
 on:
@@ -36,7 +42,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           clean: true
@@ -46,6 +52,10 @@ jobs:
       - name: Select per-toolchain target dir
         run: scripts/ci/select-ci-target-dir.sh
 
+      # `cargo run --release` builds the release binary here when the code
+      # changed and reuses the cached one otherwise; main-ci.yml does not
+      # prebuild it. The step writes `changed` and `run_dir` to
+      # $GITHUB_OUTPUT for the email steps below.
       - name: Collect and analyse
         id: watch
         run: |

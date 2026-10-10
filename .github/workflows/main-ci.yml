@@ -1,10 +1,15 @@
 ---
 # CI + GitHub Pages deploy for swarmchasing. Modelled on legend-of-legaia-re's
 # main-ci.yml (same self-hosted runner convention):
-#   - Pull requests run the repo gates (`gates`) and a lint pass (`pr-lint`:
-#     fmt, clippy, wasm32 type-check) on every push to the PR. The full build
-#     + test pass (`ci`) runs on push-to-main and workflow_dispatch; run the
-#     tests locally before opening a PR.
+#   - Every run starts with `gates`: the seconds-long repo gates (committed
+#     data, doc links, doc density, site safety, supply chain). The cargo job
+#     `ci` needs it, so a committed dump or a broken link fails the run before
+#     the runner spends minutes on clippy and the tests. Without the `needs`
+#     edge the single-slot runner picks jobs in any order, and the fast gates
+#     can end up queued behind the slow ones.
+#   - `ci` runs the same steps on pull requests, pushes to main and manual
+#     dispatch: fmt, clippy, tests, the detection eval gate, notice lint and a
+#     wasm32 type-check. A green PR means the tests passed.
 #   - Pull requests from forks run NOTHING. The runner is a self-hosted box
 #     shared with other workloads, and a fork PR is arbitrary code. Also turn
 #     on Settings > Actions > "Require approval for all outside collaborators".
@@ -12,7 +17,14 @@
 #   - `deploy-pages` builds the browser toolkit with wasm-pack and publishes
 #     `site/` after `gates` and `ci` pass on main. Settings > Pages > Source
 #     must be "GitHub Actions".
-#   - watch.yml is separate: it is cron-driven and never touches Pages.
+#   - watch.yml is separate: it is cron-driven, never touches Pages, and
+#     builds its own release binary into the shared cargo cache.
+#
+# Repository variables read here (Settings > Secrets and variables > Actions >
+# Variables):
+#   SWARMCHASE_REQUIRE_BROWSER  'true' makes the site XSS check fatal when no
+#                               Chrome is installed on the runner. Unset, a
+#                               missing browser skips the check with a warning.
 
 name: Main CI
 
@@ -27,7 +39,7 @@ permissions:
   contents: read
 
 # A PR push supersedes the previous push's run; pushes to main keep one group
-# per commit and never cancel.
+# per commit and never cancel, so every commit on main gets a full result.
 concurrency:
   group: main-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -51,7 +63,7 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           clean: true
@@ -64,6 +76,14 @@ jobs:
       - name: Doc links + heading anchors
         run: python3 scripts/ci/check-md-links.py
 
+      # Long lines and paragraphs inside table cells, across docs/, the crate
+      # READMEs and the top-level pages (CLAUDE.md included). The self-test
+      # runs first so a broken detector cannot report a vacuous pass.
+      - name: Doc density
+        run: |
+          python3 scripts/ci/check-doc-density.py --self-test
+          python3 scripts/ci/check-doc-density.py
+
       # The site renders attack payloads: strict CSP, no HTML parsing of strings.
       - name: Site safety (CSP, no HTML sinks)
         run: python3 scripts/ci/check-site.py
@@ -74,40 +94,20 @@ jobs:
       - name: Supply chain (cargo-deny)
         run: scripts/ci/deny.sh
 
-  # -- PR Lint ----------------------------------------------------------------
-  pr-lint:
-    name: PR Lint
-    runs-on: self-hosted
-    timeout-minutes: 60
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          clean: true
-
-      - name: Select per-toolchain target dir
-        run: scripts/ci/select-ci-target-dir.sh
-
-      - name: Format check
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets --workspace -- -D warnings
-
-      - name: wasm32 type-check
-        run: scripts/ci/check-wasm-target.sh
-
   # -- Cargo CI ---------------------------------------------------------------
+  # Same steps for pull requests and main. `needs: gates` orders the jobs on
+  # the single-slot runner and skips this job when the gates fail; it also
+  # inherits the gates' fork guard (a skipped need skips the dependant), and
+  # the `if` restates it so the guard does not hang on that implicit rule.
   ci:
     name: Swarmchase CI
+    needs: [gates]
     runs-on: self-hosted
     timeout-minutes: 60
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           clean: true
@@ -122,6 +122,8 @@ jobs:
         run: cargo clippy --all-targets --workspace -- -D warnings
 
       # `release-test` is release optimisation without fat LTO (Cargo.toml).
+      # The eval gate and notice lint below reuse its build, so the profile
+      # is compiled once per run.
       - name: Test
         run: cargo test --workspace --profile release-test
 
@@ -136,11 +138,15 @@ jobs:
       - name: Notices (nothing withheld leaks)
         run: cargo run -q --profile release-test -p swarmchase -- notice lint
 
-      - name: Build
-        run: cargo build --release --workspace
-
+      # The browser half of the toolkit: cfg(wasm32) code and wasm-only
+      # dependency features that no host build compiles.
       - name: wasm32 type-check
         run: scripts/ci/check-wasm-target.sh
+
+      # No `cargo build --release` here. Nothing in this workflow runs a
+      # release binary, and watch.yml's `cargo run --release` builds and
+      # caches its own (the cache is shared), so a warm-up build would only
+      # cost minutes on every push.
 
   # -- Deploy GitHub Pages ----------------------------------------------------
   deploy-pages:
@@ -157,7 +163,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           clean: true
@@ -165,6 +171,10 @@ jobs:
       - name: Select per-toolchain target dir
         run: scripts/ci/select-ci-target-dir.sh
 
+      # wasm-pack builds without optimising; the script runs wasm-opt itself
+      # and caches the result outside the checkout, keyed by the hash of the
+      # unoptimised module, so a deploy that did not change the Rust skips
+      # the multi-minute optimiser pass.
       - name: Build browser toolkit
         run: scripts/ci/build-site.sh
 
@@ -184,31 +194,42 @@ jobs:
           echo "WASM bundle: $(( size / 1024 )) KiB (target < 1536 KiB)" >> "$GITHUB_STEP_SUMMARY"
 
       # The built page must not run anything a record carries. Fatal when a
-      # browser is installed; skipped with a warning when none is.
+      # browser is installed. With no Chrome (exit 2) it is skipped with a
+      # warning, unless the repo variable SWARMCHASE_REQUIRE_BROWSER is
+      # 'true': then a runner that lost its browser fails the deploy instead
+      # of publishing an unchecked page.
       - name: Site XSS check (headless Chrome)
+        env:
+          REQUIRE_BROWSER: ${{ vars.SWARMCHASE_REQUIRE_BROWSER }}
         run: |
           rc=0; node scripts/site-xss-check.mjs || rc=$?
-          if [ "$rc" -eq 2 ]; then echo "::warning::site XSS check skipped: no Chrome on the runner"; exit 0; fi
+          if [ "$rc" -eq 2 ]; then
+            if [ "$REQUIRE_BROWSER" = "true" ]; then
+              echo "::error::site XSS check could not run (no Chrome or no site/pkg) and SWARMCHASE_REQUIRE_BROWSER is true"
+              exit 1
+            fi
+            echo "::warning::site XSS check skipped: no Chrome on the runner"
+            exit 0
+          fi
           exit "$rc"
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site/
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # -- CI Summary -------------------------------------------------------------
   notify:
     name: CI Summary
-    needs: [gates, pr-lint, ci, deploy-pages]
+    needs: [gates, ci, deploy-pages]
     if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: self-hosted
     env:
       GATES: ${{ needs.gates.result }}
-      PR_LINT: ${{ needs.pr-lint.result }}
       CI: ${{ needs.ci.result }}
       PAGES: ${{ needs.deploy-pages.result }}
     steps:
@@ -224,11 +245,10 @@ jobs:
             echo "| Stage | Status |"
             echo "|-------|--------|"
             echo "| Repo Gates | $(status "$GATES") |"
-            echo "| PR Lint | $(status "$PR_LINT") |"
             echo "| CI | $(status "$CI") |"
             echo "| GitHub Pages | $(status "$PAGES") |"
           } >> "$GITHUB_STEP_SUMMARY"
-          for r in "$GATES" "$PR_LINT" "$CI" "$PAGES"; do
+          for r in "$GATES" "$CI" "$PAGES"; do
             if [[ "$r" == failure ]]; then
               echo "CI failed - please review the logs" >> "$GITHUB_STEP_SUMMARY"
               exit 1
