@@ -41,7 +41,7 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 | `defang(text)` | The text with URLs defanged. |
 | `parse_security_txt(text)` | The parsed `security.txt` fields. |
 
-`analysis_json` is the `analysis` field of `analyze`'s result.
+`analysis_json` is the `analysis` field of `analyze`'s result. Its clusters carry a number (`id`, `C1`) and a stable `key` (`k-3f9a2c1b`); its records may carry `ts_kind` and `target_asn` (see [`sc-core`](../sc-core/README.md#concepts)).
 
 ## Site safety
 

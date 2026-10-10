@@ -26,7 +26,7 @@ for r in &analysis.results {
     // r.obs (the record), r.score, r.tier, r.hits (the rules that fired)
 }
 for c in &analysis.clusters {
-    // c.id ("C1"), c.members (indexes into results), timing and descriptive hints
+    // c.id ("C1"), c.key (stable), c.members (indexes into results), timing and hints
 }
 let draft = render_markdown(&analysis, &ReportOptions::default()); // an internal draft
 ```
@@ -35,11 +35,11 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 
 ## Concepts
 
-- **`Observation`**: one public record of a request: `id`, `source`, `ts`, `url`, and optionally IP, ASN, user agent, headers, status, final URL and a link to the public record.
+- **`Observation`**: one public record of a request: `id`, `source`, `ts` and what it is the time of (`ts_kind`: a request, an archive capture, a scan submission), `url`, and optionally IP, the client's ASN, the target's ASN, user agent, headers, status, final URL and a link to the public record. Records stored before `ts_kind` and `target_asn` are upgraded as they are read.
 - **Unwrapping**: relays (`r.jina.ai/https://…`, `*.translate.goog`), URL parameters, `data:` programs and base64 values are peeled into layers until the real target is found.
 - **Rules**: data-driven indicators from [`rules/default.toml`](../../rules/default.toml), each with a weight. A record's score is the sum of the rules it triggers.
 - **Tier**: `significant` (a rule marked significant fired, or score ≥ 6), `suggestive` (score ≥ 3) or `noise`.
-- **Cluster**: records linked by shared identifiers, close timing against the same target, or a probe chain. Clusters carry timing and descriptive hints (encoding style, payload dialect, fan-out width and others). The hints are shown in reports and never change a score or a link.
+- **Cluster**: records linked by shared identifiers (`LinkFeature`, serialised as `param:<name>=<value>` or `<rule>:<text>`), close timing against the same target, or a probe chain. Each has a number by strength (`C1`), which can change between runs, and a stable `key` (`k-` and 8 hex digits) that every cluster selector also accepts. Clusters carry timing and descriptive hints (encoding style, payload dialect, fan-out width and others). The hints are shown in reports and never change a score or a link.
 - **Report**: a Markdown draft for one audience (`provider`, `affected`, `internal`, `public`). The public audience withholds what notices must not carry. Every report is a draft for a person to check.
 
 [docs/methodology.md](../../docs/methodology.md) explains how records become tiers, clusters and claims, and the known limits.
