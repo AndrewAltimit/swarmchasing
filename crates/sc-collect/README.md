@@ -87,7 +87,7 @@ Streamed sources read a bounded sample each pull: the newest `scan` hours of GH 
 
 ## Retries, limits and the cache
 
-- **Retries.** Timeouts, dropped connections, HTTP 429 and 5xx are retried with exponential backoff: 5 retries from 5 seconds, spread ±25%, each wait capped at 5 minutes. Other errors fail at once. Change the policy with `Client::with_retry`.
+- **Retries.** Dropped connections, HTTP 429 and 5xx are retried with exponential backoff: 5 retries from 5 seconds, spread ±25%, each wait capped at 5 minutes. A gateway timeout (HTTP 504) or a request that timed out is retried only twice, because an index query too heavy for the server times out the same way every time. Other errors fail at once. Change the policy with `Client::with_retry`.
 - **Retry-After.** A server's `Retry-After`, in seconds or as an HTTP date, is honoured as given.
 - **Pacing.** The minimum interval applies per host, so sources on different hosts do not slow each other.
 - **Size cap.** A response read into memory is capped at 64 MiB (`Client::with_max_body`). Large files are streamed with their own cap.
