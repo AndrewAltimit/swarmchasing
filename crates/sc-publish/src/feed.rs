@@ -56,7 +56,7 @@ pub fn atom_feed(notices: &[NoticeFile], base: &str) -> String {
     let _ = writeln!(s, "  <updated>{newest}T00:00:00Z</updated>");
     let _ = writeln!(s, "  <author><name>swarmchasing</name></author>");
     for (n, i, u) in entries {
-        let link = format!("{base}#notice={}", n.meta.id);
+        let link = format!("{base}notices/{}/", n.meta.id);
         let _ = writeln!(s, "  <entry>");
         let _ = writeln!(
             s,
