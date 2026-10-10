@@ -27,6 +27,9 @@ pub struct ObsResult {
     pub score: i32,
     pub tier: Tier,
     pub hits: Vec<Hit>,
+    /// Unwrapped layers. Empty for an unflagged record with nothing to
+    /// unwrap: its one layer would only repeat its URL.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<Layer>,
     pub target_host: Option<String>,
     pub features: Vec<LinkFeature>,
@@ -284,6 +287,11 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
             .map(|c| (c.id.as_str(), &c.dialect))
             .collect::<Vec<_>>(),
     );
+    for r in results.iter_mut() {
+        if r.score == 0 && r.layers.len() == 1 && r.layers[0].via == "submitted" {
+            r.layers.clear();
+        }
+    }
     let soft_links = crate::fleets::soft_links(
         &crate::fleets::Signals {
             clusters: &clusters,

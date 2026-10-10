@@ -94,6 +94,9 @@ pub(super) fn cluster(
     };
     let time_basis = TimeBasis::of(timed().map(|o| o.ts_kind));
     let mut t = timing(&ts, cfg);
+    // Per cluster only the hours with records; a long, sparse cluster would
+    // otherwise carry thousands of empty hours.
+    t.hourly.retain(|&(_, n)| n > 0);
     // The hour-of-day profile reads request times; capture times are when
     // an archive saved a URL.
     t.rhythm = rhythm_of(

@@ -98,7 +98,8 @@ pub struct TimingStats {
     pub bursts: Vec<Span>,
     /// Longest silent gaps, longest first. `count` is unused (0).
     pub pauses: Vec<Span>,
-    /// (hour start, count) for every hour between start and end, including empty hours.
+    /// (hour start, count) for every hour between start and end, including
+    /// empty hours. A cluster's timing keeps only the hours with records.
     pub hourly: Vec<(i64, usize)>,
     #[serde(default)]
     pub rhythm: Rhythm,
