@@ -1,6 +1,8 @@
 # For operators
 
-This page is for you if you run a website or service and either received a report from swarmchasing or found your host named in a published notice. It explains what the report means, what becomes public and when, how to check your own logs, how to send logs back, how to reply or ask for a correction, and how to check the evidence we sent.
+This page is for you if you run a website or service and either received a report from swarmchasing or found your host named in a published notice. It explains what the report means, how to tell it is genuine, what becomes public and when, how to check your own logs, how to send logs back, how to reply or ask for a correction, how to check the evidence we sent, and how to [reach us privately](#contact).
+
+If you work at an AI provider, [for-providers.md](for-providers.md) is the page for you.
 
 How the analysis works is in [methodology.md](../methodology.md). The policies behind reports and notices are in [policies.md](../policies.md).
 
@@ -19,6 +21,16 @@ A report to an affected operator says that public records, from scan services an
 - **It does not say who sent the requests.** A report names an AI developer only when the evidence reaches the level set for the case. A model name inside a request never names one on its own. See [attribution levels](../methodology.md#attribution-levels-and-the-naming-gate).
 - **It does not prove an AI agent sent every request.** The rules detect agent-like activity. A penetration tester or conventional scanner using the same payloads and services produces the same records. See [known limits](../methodology.md#known-limits-and-false-positive-traps).
 - **It is not an accusation.** You are the target, not the subject.
+
+## Check that a report is genuine
+
+Anyone can write an email that claims to come from us, so check before you act on one. A genuine report:
+
+- **carries a case id** in square brackets at the end of its subject. The public notice for the incident is published on this site under the same id, at `notices/<case id>/`, so once the notice is out you can match the two. Before then, ask us through the [private channel](#contact) and give the id.
+- **comes with an evidence bundle** that you can check yourself on the site's **Tools** page, in your browser, without installing anything or uploading the files ([verify an evidence bundle](#verify-an-evidence-bundle)).
+- **links only to public records and this site.** Each record links to the archive capture or scan report it was taken from. A report never asks you to sign in, pay, install software or visit a host named in it.
+
+If a message fails any of these, or you are unsure, do not act on it; ask us privately with the id it gave.
 
 ## What happens after the report
 
@@ -138,4 +150,6 @@ The check must use the rules the bundle was made with. If the rules version in `
 
 ## Contact
 
-Reply to the address the report came from. Questions, logs, statements, corrections, consent to earlier naming and requests for more time all go there. If you found your host in a notice but received no report, contact the project through this repository and we will send you the full report.
+- **If you received a report,** reply to the address it came from and keep the case id in the subject. Questions, logs, statements, corrections, consent to earlier naming and requests for more time all go there.
+- **If you received no report,** found your organisation in a notice, or want to reach us privately for any other reason, use [private vulnerability reporting](https://github.com/AndrewAltimit/swarmchasing/security/advisories/new) on this repository. Only the maintainers can read what you send. Give the case or notice id if you have one, and say how to reach you. If a notice concerns you and you received no report, we will send you the full report.
+- **Do not open a public issue or discussion about an affected host or organisation.** Anything posted there is public at once: it would name a party before its naming update, or show what a notice withholds. Public issues are for the toolkit itself.

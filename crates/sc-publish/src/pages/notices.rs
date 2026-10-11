@@ -145,8 +145,8 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
     }
     s.push_str("<label>Affected organisation or host<input name=\"host\" type=\"search\" spellcheck=\"false\" placeholder=\"example[.]org\"></label>");
     s.push_str("<label>Text<input name=\"q\" type=\"search\" placeholder=\"Title or id\"></label>");
-    s.push_str("<label>Updated from<input name=\"from\" type=\"date\"></label>");
-    s.push_str("<label>to<input name=\"to\" type=\"date\"></label>");
+    // The two dates are one control: a fieldset keeps them on one row.
+    s.push_str("<fieldset class=\"dates\"><legend>Updated</legend><label>From<input name=\"from\" type=\"date\"></label><label>To<input name=\"to\" type=\"date\"></label></fieldset>");
     s.push_str("<p class=\"filter-actions\"><button type=\"reset\">Clear filters</button></p>");
     s.push_str("<p class=\"hint\" data-notice-count aria-live=\"polite\"></p></form>\n");
     s.push_str("<div class=\"scroll\"><table class=\"notice-table\"><thead><tr><th scope=\"col\">Notice</th><th scope=\"col\">Status</th><th scope=\"col\">Provider</th><th scope=\"col\">Affected</th><th scope=\"col\">Sector</th><th scope=\"col\">Updated</th></tr></thead><tbody>");
@@ -194,6 +194,15 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
     s
 }
 
+/// What a notice page tells the people it concerns: where operators and
+/// providers start, and the private way to reach the project. Paths are
+/// from `notices/<id>/`.
+const NOTICE_ASIDE: &str = "<aside class=\"notice-aside\" aria-labelledby=\"concerns\"><h2 id=\"concerns\">If this notice concerns you</h2><ul>\
+<li><strong>You run a site or service.</strong> <a href=\"../../operators/\">For operators</a> explains what a notice means, what becomes public and when, and how to check your own logs.</li>\
+<li><strong>You work at an AI provider.</strong> <a href=\"../../providers/\">For providers</a> covers the report you were sent, checking its evidence and how you are named.</li>\
+<li><strong>To ask for the full report, send a statement or point out an error,</strong> use the <a href=\"../../operators/#contact\">private contact</a>. Please do not open a public issue about an affected host or organisation: it would name it before its naming update.</li>\
+</ul></aside>\n";
+
 /// One notice's page body.
 pub fn page_body(n: &NoticeFile) -> String {
     let m = &n.meta;
@@ -238,6 +247,7 @@ pub fn page_body(n: &NoticeFile) -> String {
         esc(&m.toolkit),
     );
     s.push_str("</dl></header>\n");
+    s.push_str(NOTICE_ASIDE);
     s.push_str("<section aria-labelledby=\"timeline\"><h2 id=\"timeline\">Timeline</h2><ol class=\"timeline\">");
     for u in &m.updates {
         let k = kind_class(u.kind);
@@ -271,4 +281,38 @@ pub fn page_body(n: &NoticeFile) -> String {
         esc(&m.id),
     );
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> NoticeFile {
+        crate::parse_notice(include_str!(
+            "../../tests/fixtures/notices/synthetic-portal-probe.md"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_notice_page_tells_the_people_it_concerns_where_to_start() {
+        let p = page_body(&fixture());
+        let aside = p.find("<aside class=\"notice-aside\"").unwrap();
+        assert!(aside < p.find("id=\"timeline\"").unwrap());
+        for href in [
+            "../../operators/",
+            "../../providers/",
+            "../../operators/#contact",
+        ] {
+            assert!(p.contains(&format!("href=\"{href}\"")), "{href}");
+        }
+    }
+
+    #[test]
+    fn the_date_filters_share_one_fieldset() {
+        let idx = index_body(&[fixture()]);
+        assert!(idx.contains(
+            "<fieldset class=\"dates\"><legend>Updated</legend><label>From<input name=\"from\" type=\"date\"></label><label>To<input name=\"to\" type=\"date\"></label></fieldset>"
+        ));
+    }
 }

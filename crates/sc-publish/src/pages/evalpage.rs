@@ -10,7 +10,7 @@
 //! browser with edited rules.
 
 use super::html::{esc, table};
-use super::rules::tactic_label;
+use super::rules::{MIN_HITS_FOR_PRECISION, tactic_label};
 use super::svg::{BarRow, hbars};
 use sc_core::Summary;
 use sc_core::eval::stats::Proportion;
@@ -40,7 +40,7 @@ pub fn body(s: &Summary, files: &[String]) -> String {
         o,
         "<header class=\"page-head\"><h1>Evaluation</h1>\
 <p class=\"lede\">How the bundled rules (version <code>{}</code>) score on the committed labelled set: {} labelled records, {} agent and {} benign, from {}. The numbers are computed when the site is built; the same summary is in <a href=\"../assets/eval-summary.json\">eval-summary.json</a>.</p>\
-<p class=\"callout\" role=\"note\"><strong>A regression floor, not a precision estimate.</strong> The rules were written and tuned against these records, and most of them are synthetic, written to match a rule. The headline counts records, so a cluster of ten flagged records counts ten times; the cluster unit and the non-synthetic rows below are the closer guide. Real-world precision is lower. Intervals are 95% Wilson score intervals. See <a href=\"../docs/reference/evaluation/\">evaluation</a> for the held-out measurement.</p></header>",
+<p class=\"callout\" role=\"note\"><strong>A regression floor, not a precision estimate.</strong> The rules were written and tuned against these records, and most of them are synthetic, written to match a rule. The record unit counts every flagged record, so a cluster of ten flagged records counts ten times; the cluster unit and the non-synthetic rows below are the closer guide. Real-world precision is lower. Intervals are 95% Wilson score intervals. See <a href=\"../docs/reference/evaluation/\">evaluation</a> for the held-out measurement.</p></header>",
         esc(&s.rules_version),
         s.labelled,
         s.agents,
@@ -48,33 +48,27 @@ pub fn body(s: &Summary, files: &[String]) -> String {
         esc(&files.join(", ")),
     );
 
-    o.push_str("<section aria-labelledby=\"tiers\"><h2 id=\"tiers\">Precision and recall by tier</h2><div class=\"tier-grid\">");
+    o.push_str("<section aria-labelledby=\"tiers\"><h2 id=\"tiers\">Precision and recall by tier</h2>\
+<p class=\"hint\">Each rate is given as its 95% interval first, the point estimate under it. The non-synthetic records lead; all records together are the regression floor the gate holds.</p><div class=\"tier-grid\">");
     for t in &s.tiers {
         let tier = t.tier.label();
         let _ = write!(
             o,
-            "<article class=\"card tier-card\"><h3>{} or above</h3>\
-<dl class=\"stats\"><div><dt>Precision</dt><dd class=\"big\">{}</dd><dd class=\"hint\">95% CI {} · {} of {} flagged</dd></div>\
-<div><dt>Recall</dt><dd class=\"big\">{}</dd><dd class=\"hint\">95% CI {} · {} of {} agent records</dd></div></dl>\
-<table class=\"confusion\"><caption>Confusion matrix, {} or above</caption>\
+            "<article class=\"card tier-card\"><h3>{} or above</h3>{}\
+<div class=\"floor\"><h4>Regression floor on the labelled set ({} records)</h4>{}</div>\
+<table class=\"confusion\"><caption>Confusion matrix, {} or above, all records</caption>\
 <thead><tr><td></td><th scope=\"col\">Flagged</th><th scope=\"col\">Not flagged</th></tr></thead>\
 <tbody><tr><th scope=\"row\">Agent</th><td class=\"tp\">{} <span>true positive</span></td><td class=\"fn\">{} <span>false negative</span></td></tr>\
-<tr><th scope=\"row\">Benign</th><td class=\"fp\">{} <span>false positive</span></td><td class=\"tn\">{} <span>true negative</span></td></tr></tbody></table>{}</article>",
+<tr><th scope=\"row\">Benign</th><td class=\"fp\">{} <span>false positive</span></td><td class=\"tn\">{} <span>true negative</span></td></tr></tbody></table></article>",
             esc(tier),
-            pc(&t.precision),
-            ci(&t.precision),
-            t.precision.k,
-            t.precision.n,
-            pc(&t.recall),
-            ci(&t.recall),
-            t.recall.k,
-            t.recall.n,
+            non_synthetic_block(s, t),
+            s.labelled,
+            stats(t, "flagged", "agent records"),
             esc(tier),
             t.tp,
             t.fn_,
             t.fp,
             t.tn,
-            non_synthetic_block(s, t)
         );
     }
     o.push_str("</div></section>\n");
@@ -102,6 +96,7 @@ pub fn body(s: &Summary, files: &[String]) -> String {
                 x.fp,
                 x.precision
                     .value
+                    .filter(|_| x.tp + x.fp >= MIN_HITS_FOR_PRECISION)
                     .map(|p| format!(" · {:.0}%", p * 100.0))
                     .unwrap_or_default()
             ),
@@ -111,7 +106,7 @@ pub fn body(s: &Summary, files: &[String]) -> String {
     let _ = write!(
         o,
         "<section aria-labelledby=\"per-rule\"><h2 id=\"per-rule\">Hits per rule</h2>\
-<p class=\"hint\">Labelled records each rule matched, agent then benign, with the rule's own precision. A rule with benign hits is a candidate for a lower weight. Coverage: {} of {} rules have an agent example{}{}.</p>\
+<p class=\"hint\">Labelled records each rule matched, agent then benign, with the rule's own precision once it has {MIN_HITS_FOR_PRECISION} hits or more. A rule with benign hits is a candidate for a lower weight. Coverage: {} of {} rules have an agent example{}{}.</p>\
 <p class=\"legend\"><span><span class=\"key s-agent\"></span>agent records</span> <span><span class=\"key s-benign\"></span>benign records</span></p>\
 <figure class=\"chart-box\">{}</figure>",
         c.covered,
@@ -387,20 +382,30 @@ fn non_synthetic_block(s: &Summary, t: &TierSummary) -> String {
         return String::new();
     }
     format!(
-        "<div class=\"non-synthetic\"><h4>Non-synthetic records only ({} labelled: {} agent, {} benign)</h4>\
-<dl class=\"stats\"><div><dt>Precision</dt><dd class=\"big\">{}</dd><dd class=\"hint\">95% CI {} · {} of {}</dd></div>\
-<div><dt>Recall</dt><dd class=\"big\">{}</dd><dd class=\"hint\">95% CI {} · {} of {}</dd></div></dl></div>",
+        "<div class=\"non-synthetic\"><h4>Non-synthetic records ({} labelled: {} agent, {} benign)</h4>{}</div>",
         ns.labelled,
         ns.agents,
         ns.benign,
-        pc(&n.precision),
-        ci(&n.precision),
-        n.precision.k,
-        n.precision.n,
-        pc(&n.recall),
-        ci(&n.recall),
-        n.recall.k,
-        n.recall.n
+        stats(n, "flagged", "agent records"),
+    )
+}
+
+/// Precision and recall, interval first: the 95% interval is the figure,
+/// the point estimate and the counts sit under it.
+fn stats(t: &TierSummary, flagged: &str, agents: &str) -> String {
+    let one = |name: &str, p: &Proportion, of: &str| {
+        format!(
+            "<div><dt>{name}</dt><dd class=\"big\">{}</dd><dd class=\"hint\">95% interval · point {} · {} of {} {of}</dd></div>",
+            ci(p),
+            pc(p),
+            p.k,
+            p.n
+        )
+    };
+    format!(
+        "<dl class=\"stats\">{}{}</dl>",
+        one("Precision", &t.precision, flagged),
+        one("Recall", &t.recall, agents)
     )
 }
 
@@ -409,6 +414,17 @@ struct ForestRow {
     group: String,
     label: String,
     p: Proportion,
+}
+
+impl ForestRow {
+    /// "group · label", or the label alone when the plot has one group.
+    fn name(&self) -> String {
+        if self.group.is_empty() {
+            self.label.clone()
+        } else {
+            format!("{} · {}", self.group, self.label)
+        }
+    }
 }
 
 /// A forest plot: a point and its 95% interval per row, 0 to 100%.
@@ -460,7 +476,7 @@ fn forest(rows: &[ForestRow], title: &str) -> String {
             "<text class=\"label\" x=\"{:.1}\" y=\"{:.1}\" text-anchor=\"end\">{}</text>",
             l - 12.0,
             y + 4.0,
-            esc(&format!("{} · {}", row.group, row.label))
+            esc(&row.name())
         );
         if let (Some(v), Some(lo), Some(hi)) = (row.p.value, row.p.lo, row.p.hi) {
             let _ = write!(
@@ -474,11 +490,10 @@ fn forest(rows: &[ForestRow], title: &str) -> String {
                 y + 5.0,
                 x(v),
                 esc(&format!(
-                    "{} · {}: {} (95% CI {}), {} of {}",
-                    row.group,
-                    row.label,
-                    pc(&row.p),
+                    "{}: 95% CI {}, point {}, {} of {}",
+                    row.name(),
                     ci(&row.p),
+                    pc(&row.p),
                     row.p.k,
                     row.p.n
                 ))
@@ -489,7 +504,7 @@ fn forest(rows: &[ForestRow], title: &str) -> String {
             "<text class=\"note\" x=\"{:.1}\" y=\"{:.1}\">{} · n={}</text>",
             w - r + 10.0,
             y + 4.0,
-            esc(&pc(&row.p)),
+            esc(&ci(&row.p)),
             row.p.n
         );
     }
@@ -500,8 +515,8 @@ fn forest(rows: &[ForestRow], title: &str) -> String {
 /// The slices the summary carries, as (name, record-unit tiers,
 /// cluster-unit tiers); empty ones left out.
 fn slices(s: &Summary) -> Vec<(String, &[TierSummary], &[TierSummary])> {
-    let mut out: Vec<(String, &[TierSummary], &[TierSummary])> =
-        vec![("All records".into(), &s.tiers, &s.cluster_tiers)];
+    // The non-synthetic records first: they are the closer guide.
+    let mut out: Vec<(String, &[TierSummary], &[TierSummary])> = Vec::new();
     if s.non_synthetic.labelled > 0 {
         out.push((
             "Non-synthetic".into(),
@@ -509,6 +524,7 @@ fn slices(s: &Summary) -> Vec<(String, &[TierSummary], &[TierSummary])> {
             &s.non_synthetic.cluster_tiers,
         ));
     }
+    out.push(("All records".into(), &s.tiers, &s.cluster_tiers));
     for (kind, list) in [
         ("provenance", &s.by_provenance),
         ("source", &s.by_source),
@@ -563,8 +579,8 @@ fn forest_section(s: &Summary) -> String {
                     vec![
                         esc(&r.group),
                         esc(&r.label),
-                        pc(&r.p),
                         ci(&r.p),
+                        pc(&r.p),
                         format!("{} of {}", r.p.k, r.p.n),
                     ]
                 })
@@ -576,7 +592,7 @@ fn forest_section(s: &Summary) -> String {
                 forest(&rows, &title),
                 table(
                     "",
-                    &["Slice", "Threshold", "Rate", "95% CI", "Count"],
+                    &["Slice", "Threshold", "95% CI", "Point", "Count"],
                     &trows
                 )
             );
@@ -591,7 +607,7 @@ fn forest_section(s: &Summary) -> String {
             .iter()
             .filter(|r| r.precision.n > 0)
             .map(|r| ForestRow {
-                group: "calibration".into(),
+                group: String::new(),
                 label: r.name.clone(),
                 p: r.precision,
             })

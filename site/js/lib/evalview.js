@@ -40,12 +40,13 @@ export function renderComparison(base, edited, files) {
       return el("tr", {},
         el("th", { scope: "row" }, `${t.tier} or above`), el("td", {}, name),
         cell("tp", t.tp ?? 0), cell("fp", t.fp ?? 0), cell("fn", t.fn ?? 0),
-        cell("precision", pct(t.precision)), el("td", { class: "num hint" }, ci(t.tp, t.tp + t.fp)),
-        cell("recall", pct(t.recall)), el("td", { class: "num hint" }, ci(t.tp, t.tp + t.fn)));
+        // Interval first, as on the evaluation page; the point estimate after it.
+        cell("precision", ci(t.tp, t.tp + t.fp)), el("td", { class: "num hint" }, pct(t.precision)),
+        cell("recall", ci(t.tp, t.tp + t.fn)), el("td", { class: "num hint" }, pct(t.recall)));
     });
   };
   parts.push(el("div", { class: "scroll" }, el("table", {},
-    el("thead", {}, el("tr", {}, ["Threshold", "Rules", "TP", "FP", "FN", "Precision", "95% CI", "Recall", "95% CI"].map((h) => el("th", { scope: "col" }, h)))),
+    el("thead", {}, el("tr", {}, ["Threshold", "Rules", "TP", "FP", "FN", "Precision, 95% CI", "Point", "Recall, 95% CI", "Point"].map((h) => el("th", { scope: "col" }, h)))),
     el("tbody", {}, tierRows(`bundled ${base.rules_version ?? ""}`, base, null), tierRows(`edited ${edited.rules_version ?? ""}`, edited, base)))));
 
   // Records whose tier moved. Up on an agent record, or down on a benign one, is better.

@@ -12,6 +12,12 @@ import { swarmKind, levelOf } from "../lib/hints.js";
 import { agentLadder } from "../lib/agent.js";
 import { scopePanel } from "../lib/scope.js";
 
+// On a phone the wide figures (graphs, grids, timelines) scroll sideways;
+// their tables open by default so the step reads without scrolling.
+if (window.matchMedia?.("(max-width: 600px)").matches) {
+  for (const d of document.querySelectorAll(".walk-fig[data-phone-table] > details.as-table")) d.open = true;
+}
+
 const box = document.querySelector("[data-live-box]");
 const out = document.querySelector("[data-live-out]");
 const slot = (id) => document.querySelector(`[data-live-slot="${id}"]`);
