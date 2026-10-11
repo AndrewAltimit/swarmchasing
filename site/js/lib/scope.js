@@ -70,11 +70,13 @@ export function scopePanel(scope, { safe, pick = null, fmLink = null } = {}) {
     });
     return [shown, recs.length > 8 ? el("span", { class: "hint" }, ` +${recs.length - 8} more`) : null];
   };
-  const rows = tests.map((t) => el("tr", { class: `st-${cls(t.outcome)}` },
-    el("th", { scope: "row" }, `${safe(t.id, 4)} `, el("span", { class: "hint" }, words(SCOPE_TESTS, t.id))),
-    el("td", {}, el("span", { class: `outcome o-${cls(t.outcome)}` }, words(OUTCOMES, t.outcome))),
-    el("td", {}, refs(t)),
-    el("td", {}, safe(t.detail ?? "", 200))));
+  // A list, not a table: the context pane is narrow.
+  const items = tests.map((t) => el("li", { class: `st st-${cls(t.outcome)}` },
+    el("div", { class: "st-head" },
+      el("strong", {}, safe(t.id, 4)), ` ${words(SCOPE_TESTS, t.id)} `,
+      el("span", { class: `outcome o-${cls(t.outcome)}` }, words(OUTCOMES, t.outcome))),
+    el("div", { class: "st-detail" }, safe(t.detail ?? "", 200)),
+    arr(t.records).length ? el("div", { class: "st-recs" }, el("span", { class: "hint" }, "Records: "), refs(t)) : null));
   return el("section", { class: "ctx-section scope-box", "aria-label": "Scope" },
     head,
     el("p", { class: "hint" }, "Four separate questions. A payload or a relay is tool use, not misbehaviour: whether the activity went beyond its evident task is judged only by the tests. An inference for review: never scored, never linked on.", fmLink ? [" ", fmLink] : null),
@@ -82,7 +84,5 @@ export function scopePanel(scope, { safe, pick = null, fmLink = null } = {}) {
     el("dl", { class: "kv" },
       el("dt", {}, "Evident task"), el("dd", {}, words(TASKS, s.task_class)),
       el("dt", {}, "Targets reached"), el("dd", {}, targets.length ? targets.map(([k, n]) => el("span", { class: "chip" }, `${words(TARGETS, k)} ×${n}`)) : el("span", { class: "hint" }, "none recorded"))),
-    el("div", { class: "scroll" }, el("table", { class: "scope-tests" },
-      el("thead", {}, el("tr", {}, ["Test", "Outcome", "Records", "Detail"].map((h) => el("th", { scope: "col" }, h)))),
-      el("tbody", {}, rows))));
+    el("ol", { class: "scope-tests", "aria-label": "Scope tests S1 to S7" }, items));
 }

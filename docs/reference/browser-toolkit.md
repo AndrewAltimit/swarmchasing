@@ -49,7 +49,9 @@ Each notice page shows its status, its dated updates as a timeline (corrections 
 
 ## The landing page
 
-The landing page walks one synthetic incident through the method: unwrap, match, link, time, grade agent likelihood, attribute, report. Every step has prose, a figure drawn by the generator, its table and the Field Manual sections it rests on, so the page reads without scripts. *Run it live* loads the engine, re-runs the showcase in the page, and adds an unwrap box for any URL, the runs with zoom, the interaction graph, and each cluster's agent-likelihood ladder.
+The landing page walks one synthetic incident through the method: unwrap, match, link, time, grade agent likelihood, assess scope, attribute, report. Every step has prose, a figure drawn by the generator, its table and the Field Manual sections it rests on, so the page reads without scripts.
+
+The match step draws one record's score as its contributions: each independence group once, context hits under their cap, and weight that fired but does not count as dashed outlines. The scope step draws each cluster's four questions and S1 to S7 tests, with payload present and out of scope in different shapes. *Run it live* loads the engine, re-runs the showcase in the page, and adds an unwrap box for any URL, the runs with zoom, the interaction graph, each cluster's agent-likelihood ladder and each cluster's scope tests.
 
 Until there is a real notice, the notices section shows the public notice the engine drafts from the showcase, marked as a synthetic example. Plant signals and declared testing never appear on the landing page.
 
@@ -67,9 +69,11 @@ On a wide screen it has three panes: the records and clusters, the views, and th
 - **Rhythm**: records by weekday and hour, UTC;
 - **Endpoints × time** and **Hourly**.
 
-The context panel shows a selected cluster's agent-likelihood ladder (every rung from L0 to L5, the signals on each, counter-signals, and any cap that holds the grade below what its signals reach; the grade is labelled unmeasured on held-out data), its sources and corroboration, its tactics as a small bar chart, its timing, and the hints the analysis found, among them relay stacks, benchmark targets, stale knowledge and the languages of prose in parameters.
+The context panel shows a selected cluster's agent-likelihood ladder (every rung from L0 to L5, the signals on each, counter-signals, and any cap that holds the grade below what its signals reach; the grade is labelled unmeasured on held-out data), its scope assessment, its sources and corroboration, its tactics as a small bar chart, its timing, and the hints the analysis found, among them relay stacks, benchmark targets, stale knowledge and the languages of prose in parameters.
 
-*Show attribution layers* lists the developer, host, harness and model-family candidates, gated at the naming level chosen for the report. Plant signals sit in a collapsed *Internal review* section: they concern the visitor's own file and never appear on a generated page. Declared testing is left out: the page drops it on receipt, and it reaches only an *Internal case notes* draft, as in the CLI.
+The scope section ([SC-FM 15](../manual/15-misalignment.md)) answers the four questions as separate chips (payload present, agent present, out of scope, coordinated), states the evident task and the target classes reached, and lists the S1 to S7 tests with their outcome, detail and records; selecting a record shows it. Payload present is observed from the tier and drawn plainly; out of scope is an inference from the tests and drawn in the alert colour, so a payload in scope reads differently from scope exceeded. A selected record whose score is less than its rule weights add to says why (groups and the context cap).
+
+*Show attribution layers* lists the developer, host, harness and model-family candidates, gated at the naming level chosen for the report. Plant signals sit in a collapsed *Internal review* section: they concern the visitor's own file and never appear on a generated page. A signal most clusters in the input carry shows its base rate and is marked as context that does not count toward review. Declared testing is left out: the page drops it on receipt, and it reaches only an *Internal case notes* draft, as in the CLI.
 
 The links panel lists shared pauses, dialects, probe chains, common features, escalations, candidate fleets, soft links and interaction hints. Chains and escalations timed by archive captures show no pace.
 
@@ -83,7 +87,7 @@ The manual's pages link `FM-n.m` section ids and `SC-Tn` tactic ids in running t
 
 ## Rules explorer
 
-Each rule card links its tactic and its Field Manual section. *Test a URL* unwraps a URL with the engine, says whether that rule fires and on which layer, and lists the other rules that fire; the URL is decoded, never opened, and shown defanged. The tactic filter lists SC-T1 to SC-T9; SC-T8 and SC-T9 are cluster- and fleet-level judgments that no rule makes, and the page says so.
+Each rule card links its tactic and its Field Manual section, and names its independence group if it has one. *Test a URL* unwraps a URL with the engine, says whether that rule fires and on which layer, and lists the other rules that fire; the URL is decoded, never opened, and shown defanged. The tactic filter lists SC-T1 to SC-T9; SC-T8 and SC-T9 are cluster- and fleet-level judgments that no rule makes, and the page says so.
 
 ## Edited rules
 

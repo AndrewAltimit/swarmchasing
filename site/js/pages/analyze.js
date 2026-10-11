@@ -12,6 +12,7 @@ import {
 } from "../lib/hints.js";
 import { layersTable } from "../lib/layers.js";
 import { agentLadder as ladderOf } from "../lib/agent.js";
+import { scopePanel } from "../lib/scope.js";
 
 const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
@@ -694,12 +695,16 @@ function clusterContext(c) {
   return [
     el("div", { class: "ctx-head" }, el("h3", {}, `Cluster ${c.id}`), pill(c.tier), el("span", { class: "chip" }, keyOf(c))),
     ladderOf(c.agent, safe),
+    scopePanel(c.scope, { safe, pick: (i) => select({ r: i }), fmLink: fm15() }),
     el("dl", { class: "kv" }, rows),
     attributionPanel(c),
     plantReview(c),
     el("div", { class: "row" }, toReport),
   ];
 }
+
+/** The page's link to FM chapter 15 (a template in the page: scripts make no links). */
+const fm15 = () => $("tpl-fm15")?.content.cloneNode(true) ?? null;
 
 /** Attribution layers, from the tools module (loaded on request). */
 function attributionPanel(c) {
@@ -727,10 +732,15 @@ function plantReview(c) {
   const ps = arr(c.plant_signals);
   return el("details", { class: "internal-review" },
     el("summary", {}, "Internal review: plant signals ", el("span", { class: "badge" }, ps.length ? String(ps.length) : "none")),
-    el("p", { class: "hint" }, "Signs a cluster may have been planted, for whoever reviews this file. A prompt to check, never a finding: never scored, never linked on, never in a public notice or report."),
+    el("p", { class: "hint" }, "Signs a cluster may have been planted, for whoever reviews this file. A prompt to check, never a finding: never scored, never linked on, never in a public notice or report. A signal most clusters in this input carry is shown with its base rate and does not count toward review."),
     ps.length
-      ? el("ul", {}, ps.map((p) => el("li", {}, el("strong", {}, plantLabel(p.kind)), p.detail ? `: ${safe(p.detail, 200)}` : "", el("span", { class: "hint" }, ` (${plural(arr(p.records).length, "record")})`))))
-      : el("p", { class: "hint" }, "No plant signals on this cluster."));
+      ? el("ul", {}, ps.map((p) => {
+        const rate = num(p.base_rate);
+        return el("li", { class: rate != null ? "base-rated" : null }, el("strong", {}, plantLabel(p.kind)), p.detail ? `: ${safe(p.detail, 200)}` : "",
+          el("span", { class: "hint" }, ` (${plural(arr(p.records).length, "record")})`),
+          rate != null ? el("div", { class: "hint" }, `Base rate: ${Math.round(rate * 100)}% of the clusters here carry it. Context, not counted toward review.`) : null);
+      }))
+      :el("p", { class: "hint" }, "No plant signals on this cluster."));
 }
 
 function recordContext(i) {
@@ -751,6 +761,8 @@ function recordContext(i) {
   row("Rules", el("ul", {}, arr(r.hits).map((h) => el("li", {}, el("strong", {}, h.rule_id), ` +${h.weight}`,
     h.tactic ? el("span", { class: "chip" }, tactic(h.tactic)) : null, h.artifact ? el("span", { class: "chip" }, "model artifact") : null,
     h.matched ? [": ", el("code", {}, safe(h.matched, 160))] : null))));
+  const sum = arr(r.hits).reduce((t, h) => t + Math.max(0, num(h.weight) ?? 0), 0);
+  if (sum !== r.score) row("Score", `${r.score}, not the ${sum} the weights add to: rules that read one artifact count once per independence group, and context hits (relays, cache-busters, self-identification, headers, outcomes) together count at most one less than suggestive (FM-4.11).`);
   if (arr(r.layers).length > 1) row("Layers", `${r.layers.length} (see the unwrap tool for each)`);
   return [el("div", { class: "ctx-head" }, el("h3", {}, `Record #${i}`), pill(r.tier), el("span", { class: "hint" }, `score ${r.score}`)), el("dl", { class: "kv" }, rows)];
 }

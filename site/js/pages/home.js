@@ -1,8 +1,8 @@
 // The landing page's walk through the method. Every step is drawn by the
 // server and reads without this script. "Run it live" loads the engine,
 // re-runs the synthetic showcase in this page, and adds to the steps: an
-// unwrap box for any URL, zoomable runs, the interaction graph, and each
-// cluster's agent-likelihood ladder. Record text is shown defanged, never
+// unwrap box for any URL, zoomable runs, the interaction graph, each
+// cluster's agent-likelihood ladder, and each cluster's scope tests. Record text is shown defanged, never
 // as a link.
 import { $, el, activate, fetchRoot, showError } from "../lib/dom.js";
 import { arr, obj, fmtTs, fmtShort, dur, trunc, plural } from "../lib/fmt.js";
@@ -10,6 +10,7 @@ import { engine, host as hostOf } from "../lib/wasm.js";
 import { figure, legend, legendKey, swarmKey, swimlanes, runExtent, zoomWindow, swarmGraph } from "../lib/charts.js";
 import { swarmKind, levelOf } from "../lib/hints.js";
 import { agentLadder } from "../lib/agent.js";
+import { scopePanel } from "../lib/scope.js";
 
 const box = document.querySelector("[data-live-box]");
 const out = document.querySelector("[data-live-out]");
@@ -141,6 +142,30 @@ function gradePicker() {
   if (first) pick(first, buttons[a.clusters.indexOf(first)]);
 }
 
+// ── Step 6: each cluster's scope tests ─────────────────────────────────
+function scopePicker() {
+  const assessed = a.clusters.filter((c) => arr(c.scope?.tests).length);
+  if (!assessed.length) return;
+  const panel = el("div", { class: "ladder-live" });
+  let current = null;
+  const FIND = { in_scope: "in scope", scope_exceeded: "exceeded", not_assessable: "n/a" };
+  const buttons = assessed.map((c) => {
+    const b = el("button", { type: "button", "aria-pressed": "false" }, c.id, el("span", { class: "hint" }, ` ${FIND[c.scope.finding] ?? "?"}`));
+    activate(b, () => pick(c, b));
+    return b;
+  });
+  function pick(c, b) {
+    current?.setAttribute("aria-pressed", "false");
+    b.setAttribute("aria-pressed", "true");
+    current = b;
+    panel.replaceChildren(scopePanel(c.scope, { safe }));
+  }
+  show("scope", el("p", { class: "hint" }, "Pick a cluster to see its four answers and each test with the records it rests on:"), el("div", { class: "row cluster-pick" }, buttons), panel);
+  // Open on a cluster with a payload but in scope, where the two differ.
+  const first = assessed.find((c) => c.scope.payload_present && !c.scope.out_of_scope) ?? assessed[0];
+  pick(first, buttons[assessed.indexOf(first)]);
+}
+
 async function runLive() {
   const btn = document.querySelector("[data-live]");
   btn.disabled = true;
@@ -155,6 +180,7 @@ async function runLive() {
     show("unwrap", ...unwrapBox(deepest?.obs?.url));
     timeFigures();
     gradePicker();
+    scopePicker();
     btn.textContent = "Ran live";
   } catch (e) {
     btn.disabled = false;
