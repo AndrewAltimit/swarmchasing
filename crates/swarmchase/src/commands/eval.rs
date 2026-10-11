@@ -116,6 +116,11 @@ enum EvalCmd {
     /// Write an SC-Bench file from labelled records: ids, labels, splits,
     /// provenance, defanged hosts and what these rules said. No URLs.
     ExportBench(BenchArgs),
+    /// The negative control on real data: sample pre-2022 Wayback index rows
+    /// for the watchlist's relay and carrier sources into
+    /// `<data>/controls/pre-era/`, analyse them, and print aggregate
+    /// false-alarm rates only.
+    PreEra(eval::control::PreEraArgs),
 }
 
 #[derive(Args)]
@@ -226,6 +231,7 @@ pub fn run(args: EvalArgs) -> Result<()> {
         Some(EvalCmd::Repro(r)) => return eval::repro::run(r),
         Some(EvalCmd::CheckResults { dir }) => return eval::repro::check_results(dir),
         Some(EvalCmd::ExportBench(b)) => return eval::bench::export(b),
+        Some(EvalCmd::PreEra(p)) => return eval::control::run(p),
         None => {}
     }
     if let Some(d) = args.before {

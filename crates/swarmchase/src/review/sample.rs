@@ -1,6 +1,8 @@
-//! `review sample`: a stratified, seeded sample of the records the rules
-//! left below suggestive, written as a review queue, to grow a reviewed
-//! benign baseline.
+//! `review sample`: a stratified, seeded sample of the store (every tier by
+//! default, or the records below a tier with `--below`), written as a
+//! review queue, to grow a reviewed benign baseline. Records already in a
+//! review file are left out of the frame, so each new seed tops the
+//! baseline up instead of drawing reviewed records again.
 //!
 //! Records are grouped into strata by the `--stratify` keys (`source`,
 //! `relay`: the first relay or carrier rule that fired, else `direct`,
@@ -16,7 +18,7 @@
 
 use anyhow::{Result, bail};
 use sc_core::{Analysis, Observation, Tier};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -35,9 +37,14 @@ pub struct SampleArgs {
     #[arg(long, default_value_t = 0)]
     seed: u64,
     /// Sample records below this tier: suggestive (the noise tier),
-    /// significant, or `all` for every tier.
-    #[arg(long, default_value = "suggestive")]
+    /// significant, or `all` for every tier. Only a sample of every tier
+    /// estimates the false-positive rate over the store.
+    #[arg(long, default_value = "all")]
     below: String,
+    /// Also sample records already in a review file under `<data>/labels/`.
+    /// By default they are left out, so a new seed tops the baseline up.
+    #[arg(long)]
+    include_reviewed: bool,
     /// Where the queue goes. Default: `<data>/labels/baseline-queue-<seed>.ndjson`.
     #[arg(short, long)]
     out: Option<PathBuf>,
@@ -129,18 +136,23 @@ pub struct Stratum {
     pub taken: usize,
 }
 
-/// The sample: indexes into `a.results`, and the strata.
+/// The sample: indexes into `a.results`, and the strata. Records whose id
+/// is in `skip` (already reviewed) are not in the frame.
 pub fn sample(
     a: &Analysis,
     keys: &[&str],
     below: Option<Tier>,
     n: usize,
     seed: u64,
+    skip: &BTreeSet<String>,
 ) -> (Vec<usize>, Vec<Stratum>) {
     let mut seen = std::collections::HashSet::new();
     let mut by: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (i, r) in a.results.iter().enumerate() {
-        if below.is_none_or(|b| r.tier < b) && seen.insert(r.obs.id.as_str()) {
+        if below.is_none_or(|b| r.tier < b)
+            && !skip.contains(&r.obs.id)
+            && seen.insert(r.obs.id.as_str())
+        {
             by.entry(stratum(a, i, keys)).or_default().push(i);
         }
     }
@@ -205,12 +217,18 @@ pub fn run(args: SampleArgs) -> Result<()> {
         out
     };
     let a = sc_core::analyze(obs, &rules.rules);
-    let (picked, strata) = sample(&a, &keys, below, args.n, args.seed);
+    let skip = if args.include_reviewed {
+        BTreeSet::new()
+    } else {
+        super::reviewed_ids(&args.data.join("labels"))?
+    };
+    let (picked, strata) = sample(&a, &keys, below, args.n, args.seed, &skip);
     let pool: usize = strata.iter().map(|s| s.size).sum();
     println!(
-        "{} records · {pool} {} · {} strata by {} · sampled {} with seed {}",
+        "{} records · {pool} {} · {} already reviewed left out · {} strata by {} · sampled {} with seed {}",
         a.total,
         below.map_or("in all tiers".into(), |t| format!("below {}", t.label())),
+        skip.len(),
         strata.len(),
         keys.join(","),
         picked.len(),
@@ -282,15 +300,21 @@ mod tests {
             "https://t.example/?id=1%20OR%201=1",
         ));
         let a = sc_core::analyze(obs, &sc_core::Rules::default_rules());
+        let none = BTreeSet::new();
         let below = Some(Tier::Suggestive);
-        let (p, strata) = sample(&a, &["source", "month"], below, 10, 7);
+        let (p, strata) = sample(&a, &["source", "month"], below, 10, 7, &none);
         assert_eq!(p.len(), 10);
         assert_eq!(strata.len(), 2);
         assert_eq!(strata.iter().map(|s| s.taken).collect::<Vec<_>>(), [5, 5]);
         assert!(p.iter().all(|&i| a.results[i].obs.id != "hit"));
-        assert_eq!(p, sample(&a, &["source", "month"], below, 10, 7).0);
-        assert_ne!(p, sample(&a, &["source", "month"], below, 10, 8).0);
-        let (all, _) = sample(&a, &["source"], None, 100, 7);
+        assert_eq!(p, sample(&a, &["source", "month"], below, 10, 7, &none).0);
+        assert_ne!(p, sample(&a, &["source", "month"], below, 10, 8, &none).0);
+        let (all, _) = sample(&a, &["source"], None, 100, 7, &none);
         assert_eq!(all.len(), 61);
+        // Records already reviewed are not drawn again.
+        let reviewed: BTreeSet<String> = (0..30).map(|i| format!("a{i}")).collect();
+        let (rest, strata) = sample(&a, &["source"], None, 100, 7, &reviewed);
+        assert_eq!(rest.len(), 31);
+        assert_eq!(strata[0].size, 31);
     }
 }

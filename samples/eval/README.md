@@ -18,6 +18,7 @@ Each record is an ordinary record plus label fields:
 | `synthetic` | written records | `true`: written by hand to exercise the rules. `eval` reports every number again without these ([synthetic and non-synthetic](../../docs/reference/evaluation.md#synthetic-and-non-synthetic-records)). |
 | `reconstructed` | rebuilt records | `true`: rebuilt from a published incident. |
 | `labeller` | optional | Who labelled the record, for [SC-Bench](../../docs/reference/evaluation.md#sc-bench) exports. |
+| `tuned` | reviewed records | `true`: looked at while changing a rule, so left out of the [benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline). |
 
 Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), `mail_gateway` (links a mail gateway or security product submits on its own), and `scanner` (security scanners). False positives are reported per benign class.
 
@@ -88,6 +89,13 @@ Synthetic records for cross-service fan-out ([methodology](../../docs/methodolog
 ## Synthetic and reconstructed records
 
 Every record here is marked `synthetic` or `reconstructed`. The synthetic files exist to give each rule a positive and a hard negative, and the rules catch their agent records almost by construction; the reconstructions in `published-patterns.ndjson` are the closest the set comes to real traffic. `eval` prints the non-synthetic numbers beside the all-records ones, and the gate holds floors on both ([the eval gate](../../docs/reference/evaluation.md#the-eval-gate)).
+
+## Real-data measurement
+
+This set was used to tune the rules, so it is a regression floor, not a precision estimate. Two measurements on real data need no records committed here, and only their aggregate numbers are ever quoted:
+
+- the [pre-era control](../../docs/reference/evaluation.md#the-pre-era-control-on-archive-data) (`swarmchase eval pre-era`): relay and carrier captures from before agents existed, where every flag is a false alarm;
+- the [reviewed benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline) (`swarmchase review sample`, then `swarmchase eval <data>/labels/reviewed.ndjson`): a stratified sample of the watch store, labelled by hand, with the false-positive bound per tier.
 
 ## SC-Bench example
 

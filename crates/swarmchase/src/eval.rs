@@ -6,12 +6,15 @@
 //! write a frozen held-out split, write the summary JSON the site renders,
 //! and save a result file of numbers only (no record content) for
 //! `samples/eval/results/`. [`repro`] measures a saved result again and
-//! checks the committed ones; [`bench`] writes and scores SC-Bench files.
+//! checks the committed ones; [`bench`] writes and scores SC-Bench files;
+//! [`control`] collects and measures the pre-era negative control.
 
 pub mod bench;
+pub mod control;
 pub mod repro;
 
 use anyhow::{Context, Result, bail};
+use sc_core::eval::baseline::Baseline;
 use sc_core::eval::control::{ControlRow, ControlSummary};
 use sc_core::eval::coverage::{AllowList, Coverage, coverage_failures};
 use sc_core::eval::grades::{COLUMNS, GradeTable};
@@ -194,6 +197,9 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
             );
         }
     }
+    if let Some(b) = &s.baseline {
+        print_baseline(b);
+    }
     if !r.agreement.is_empty() {
         println!("\nlabeller tier → our tier");
         for (theirs, ours) in &r.agreement {
@@ -251,6 +257,35 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
     }
 }
 
+/// The reviewed benign baseline: progress toward its target, and the
+/// false-positive rate with its 95% upper bound per tier.
+pub fn print_baseline(b: &Baseline) {
+    println!(
+        "\nreviewed benign baseline (review sample labels, not synthetic, not tuned): {} benign of the {} target ({:.1}%) · {} agent (misses) · {} left out as tuned or synthetic",
+        b.benign,
+        b.target,
+        100.0 * b.benign as f64 / b.target.max(1) as f64,
+        b.agents,
+        b.excluded
+    );
+    for t in &b.tiers {
+        let upper = match (t.upper, t.method.as_str()) {
+            (Some(u), "rule_of_three") => {
+                format!("{:.2}% (rule of three, none flagged)", u * 100.0)
+            }
+            (Some(u), _) => format!("{:.2}% (Wilson)", u * 100.0),
+            (None, _) => "n/a".into(),
+        };
+        println!(
+            "  {:<22} flagged {:>5} of {:>5}  FP rate {:>22}  95% upper bound {upper}",
+            format!("{} or above", t.tier.label()),
+            t.fp_rate.k,
+            t.fp_rate.n,
+            ci(&t.fp_rate)
+        );
+    }
+}
+
 /// The negative control's false-alarm rates.
 pub fn print_control(c: &ControlSummary, all: usize, date: &str, rules: &str) {
     println!(
@@ -280,12 +315,64 @@ pub fn print_control(c: &ControlSummary, all: usize, date: &str, rules: &str) {
         c.clusters_l2_or_above.n,
         ci(&c.clusters_l2_or_above)
     );
+    println!(
+        "records graded above L0: {} of {} · {}",
+        c.records_above_l0.k,
+        c.records_above_l0.n,
+        ci(&c.records_above_l0)
+    );
+    println!(
+        "clusters graded above L0: {} of {} · {}",
+        c.clusters_above_l0.k,
+        c.clusters_above_l0.n,
+        ci(&c.clusters_above_l0)
+    );
     rows("clusters by plant signal", &c.plant_signals);
-    if c.records > 0 {
+    if !c.by_rule.is_empty() {
         println!(
-            "\nwith nothing flagged, the 95% upper bound on the false-alarm rate is about 3/n = {:.2}% (rule of three)",
-            300.0 / c.records as f64
+            "\n{:<32} {:>7} {:>24}  {:>7} {:>24}",
+            "rule (records fired on)", "fired", "rate", "flagged", "flagged rate (sugg+)"
         );
+        for r in &c.by_rule {
+            println!(
+                "{:<32} {:>7} {:>24}  {:>7} {:>24}",
+                r.rule_id,
+                r.fired.k,
+                ci(&r.fired),
+                r.flagged.k,
+                ci(&r.flagged)
+            );
+        }
+    }
+    let kinds: Vec<String> = c
+        .swarm_edges_by_kind
+        .iter()
+        .filter(|k| k.count > 0)
+        .map(|k| format!("{} {}", k.name, k.count))
+        .collect();
+    println!(
+        "\ninteraction edges: {}{}",
+        c.swarm_edges,
+        if kinds.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", kinds.join(", "))
+        }
+    );
+    for t in &c.by_tier {
+        let (upper, method) = sc_core::eval::baseline::upper_bound(t.rate.k, t.rate.n);
+        if let Some(u) = upper {
+            println!(
+                "95% upper bound on the false-alarm rate, {}: {:.2}% ({})",
+                t.name,
+                u * 100.0,
+                if method == "rule_of_three" {
+                    "rule of three, none flagged"
+                } else {
+                    "Wilson"
+                }
+            );
+        }
     }
 }
 
