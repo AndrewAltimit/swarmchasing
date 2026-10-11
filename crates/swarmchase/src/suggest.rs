@@ -10,6 +10,8 @@
 //! text and no tools, so it cannot fetch anything. A timeout, an error or a
 //! reply that is not the asked-for JSON is no suggestion; review carries on.
 
+pub mod claude;
+
 use crate::util::truncate;
 use anyhow::{Result, bail};
 use reqwest::Url;

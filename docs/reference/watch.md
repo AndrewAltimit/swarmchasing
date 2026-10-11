@@ -14,6 +14,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
 | `labels/suggestions-local.ndjson` | The local model's suggestions on new leads ([model triage](#model-triage)). |
+| `labels/suggestions-claude-watch.ndjson` | Claude's suggestions on new leads from hosted sources ([model triage](#model-triage)). |
 | `cases/<id>/` | Case files ([cases](cases.md)). |
 | `rules/<version>.toml` | Rules versions that cases pin. |
 | `cache/http/` | Cached collector responses; safe to delete. |
@@ -119,12 +120,17 @@ Clusters are named by number and stable key throughout (`C3 k-3f9a2c1b`), and ho
 
 ### Model triage
 
-Off by default. With `watch --triage`, or `SWARMCHASE_WATCH_TRIAGE=1`, and `SWARMCHASE_LLM_URL` set, the watch asks the model at that URL for a label on each new lead's strongest record. It uses the client of [label suggestions](#label-suggestions), with the same rules: a loopback, private or link-local endpoint only, defanged text, no IP addresses, no tools, no proxy, no redirect.
+Off by default. The watch asks a model for a label on each new lead's strongest record, through one of two backends:
 
-- **Limits.** Leads are asked strongest first, up to `--triage-max` per run (default 20, `SWARMCHASE_TRIAGE_MAX`) and within `--triage-secs` (default 600, `SWARMCHASE_TRIAGE_SECS`), each ask at most 60 s. After three failed asks in a row the rest are left for the next run.
-- **Failures.** A missing or refused endpoint, a timeout or a reply that is not the asked-for JSON is no suggestion. The run carries on and the digest says how many were asked, answered and left.
-- **Saved.** Answers are appended to `labels/suggestions-local.ndjson`, one `{"id", "label", "reason", "model", "run"}` per line, the format review reads. A record already in the file is not asked again; its earlier suggestion is shown.
-- **Shown.** *Model suggestions* lists each lead's suggestion with its tier and agent grade. An `agent` suggestion on a lead below L2 is marked as against the labelling rule, under which `unsure` is the most that grade allows.
+- **Local.** `watch --triage` (or `--triage=local`, or `SWARMCHASE_WATCH_TRIAGE` set to `local`, `1` or `true`) with `SWARMCHASE_LLM_URL` set asks the model at that URL, one record per ask. It uses the client of [label suggestions](#label-suggestions), with the same rules: a loopback, private or link-local endpoint only, defanged text, no IP addresses, no tools, no proxy, no redirect. It may see any lead.
+- **Claude.** `watch --triage=claude` (or `SWARMCHASE_WATCH_TRIAGE=claude`) asks Claude through Claude Code, logged in as the user running the watch ([runner](runner.md#model-triage-with-claude)). Claude is a hosted model, so it is sent only leads from the [hosted sources](#hosted-suggestions), as the lines `review --export-hosted` writes, with their grade, `agent_allowed`, signals and rules; the rest are counted as withheld. All of a run's leads go in one call, or one per 25 records.
+
+The rest is common to both:
+
+- **Limits.** Leads are asked strongest first, up to `--triage-max` per run (default 20, `SWARMCHASE_TRIAGE_MAX`) and within `--triage-secs` (default 600, `SWARMCHASE_TRIAGE_SECS`). A local ask takes at most 60 s, and after three failed asks in a row the rest are left for the next run. A Claude call takes at most the time left; after two failed calls in a row, or a usage or rate limit, it asks no more that run.
+- **Failures.** A missing or refused endpoint, a missing `claude`, a timeout, a failed call or a reply that is not the asked-for JSON is no suggestion. The run carries on and the digest says how many were asked, answered, left and withheld, and why it stopped.
+- **Saved.** Answers are appended to `labels/suggestions-local.ndjson` or `labels/suggestions-claude-watch.ndjson`, one `{"id", "label", "reason", "model", "run"}` per line, the format review reads; Claude's lines also carry `grade` and `misfires`. A record already in the file is not asked again; its earlier suggestion is shown. Review reads Claude's file as a hosted model's, so a line for a record from any other source is dropped.
+- **Shown.** *Model suggestions* names the backend and lists each lead's suggestion with its tier and agent grade. An `agent` suggestion on a lead below L2 is marked as against the labelling rule, under which `unsure` is the most that grade allows.
 
 A suggestion is never a label: review saves it beside the admin's label as `suggested`, and eval reads only the admin's.
 
@@ -151,7 +157,7 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `priority`, `reasons` | `high`, `medium` or `low`, and the facts behind it ([needs attention](#needs-attention)). |
 | `counts` | `records`, `new_records`, `significant`, `suggestive` and `clusters_above_noise` over the window. |
 | `leads` | The run's new leads, strongest first ([leads](#lead-fields)). |
-| `triage` | `enabled`, `model`, `asked`, `answered`, `reused`, `left` and an optional `note` ([model triage](#model-triage)). |
+| `triage` | `enabled`, `backend`, `model`, `asked`, `answered`, `reused`, `left`, `withheld` and an optional `note` ([model triage](#model-triage)). |
 | `health` | `alerts`, the `lost` capability lines, and `sources` with `name`, `kind`, `pulled`, `new` and `status`. |
 | `cases` | `due` clocks (`case`, `clock`, `since`, `hosts`) and the number of case status `lines`. |
 | `digest` | The digest's file name in the same directory. |
@@ -257,7 +263,7 @@ swarmchase review <queue> --all --export-hosted data/labels/hosted-baseline.ndjs
 
 - **What it writes.** One `{"id", "group", "text", "grade", "grade_basis", "agent_allowed", "signals", "counter", "caps", "rules"}` per record: the text the local model reads, the record's review group, the agent grade it is labelled against and the rules that fired. `--batch-size N` splits the export into numbered files and keeps each group in one. Records from `wayback`, `arquivo`, `memento`, `commoncrawl` and `urlquery` only; operator logs and the rest are counted as withheld. The list is in code, so a new source is withheld until it is added on purpose.
 - **Where.** The file must be inside the data directory, and stays there.
-- **Answers.** The model's suggestions go in `labels/suggestions-<name>.ndjson`, one `{"id", "label", "reason", "model", "grade", "misfires"}` per line (`grade` and `misfires` are optional). `review check-suggestions` validates a file against its export. `review --serve` reads every such file; a line for a record from any other source is dropped, except in `suggestions-local.ndjson`, which a local model writes ([model triage](#model-triage)).
+- **Answers.** The model's suggestions go in `labels/suggestions-<name>.ndjson`, one `{"id", "label", "reason", "model", "grade", "misfires"}` per line (`grade` and `misfires` are optional). `review suggest-claude <export>...` asks Claude through Claude Code, as [model triage](#model-triage) does, and appends its answers to `labels/suggestions-claude-<export name>.ndjson`; records already in that file are skipped, so a run cut short by a usage limit resumes. `review check-suggestions` validates a file against its export. `review --serve` reads every such file; a line for a record from any other source is dropped, except in `suggestions-local.ndjson`, which a local model writes ([model triage](#model-triage)).
 - **The loop.** `review agreement` compares the admin's labels with each model's, and `review misfires` lists rules that keep firing on records labelled benign. How to run it all: [AI assistance](../guides/ai-assistance.md).
 - **No fetching.** Whoever runs the model gives it the file and no web access.
 

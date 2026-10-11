@@ -104,34 +104,46 @@ fn signal_text(s: &sc_core::AgentSignal) -> String {
     t + ")"
 }
 
+/// The export line for record `idx`, or `None` when its source is one a
+/// hosted model may not see. Also what the watch's Claude triage sends.
+pub fn export_line(a: &Analysis, idx: usize) -> Option<ExportLine> {
+    let r = &a.results[idx];
+    if !hosted_ok(&r.obs.source) {
+        return None;
+    }
+    let (g, basis) = grade_of(a, idx);
+    let mut rules: Vec<String> = r.hits.iter().map(|h| h.rule_id.clone()).collect();
+    rules.sort();
+    rules.dedup();
+    Some(ExportLine {
+        id: r.obs.id.clone(),
+        group: super::serve::group_of(a, idx).0,
+        text: crate::suggest::record_text(a, idx),
+        grade: g.map(|g| g.level.code().to_string()),
+        grade_basis: basis.into(),
+        agent_allowed: agent_allowed(g.map(|g| g.level)),
+        signals: g.map_or(Vec::new(), |g| g.signals.iter().map(signal_text).collect()),
+        counter: g.map_or(Vec::new(), |g| g.counter.iter().map(signal_text).collect()),
+        caps: g.map_or(Vec::new(), |g| {
+            g.caps.iter().map(|c| c.label().to_string()).collect()
+        }),
+        rules,
+    })
+}
+
 /// The export of `items`: the allowed records, and the count withheld per source.
 pub fn export_lines(a: &Analysis, items: &[Item]) -> (Vec<ExportLine>, BTreeMap<String, usize>) {
     let mut lines = Vec::new();
     let mut withheld = BTreeMap::new();
     for it in items {
-        let r = &a.results[it.idx];
-        if !hosted_ok(&r.obs.source) {
-            *withheld.entry(r.obs.source.clone()).or_default() += 1;
-            continue;
+        match export_line(a, it.idx) {
+            Some(l) => lines.push(l),
+            None => {
+                *withheld
+                    .entry(a.results[it.idx].obs.source.clone())
+                    .or_default() += 1
+            }
         }
-        let (g, basis) = grade_of(a, it.idx);
-        let mut rules: Vec<String> = r.hits.iter().map(|h| h.rule_id.clone()).collect();
-        rules.sort();
-        rules.dedup();
-        lines.push(ExportLine {
-            id: r.obs.id.clone(),
-            group: super::serve::group_of(a, it.idx).0,
-            text: crate::suggest::record_text(a, it.idx),
-            grade: g.map(|g| g.level.code().to_string()),
-            grade_basis: basis.into(),
-            agent_allowed: agent_allowed(g.map(|g| g.level)),
-            signals: g.map_or(Vec::new(), |g| g.signals.iter().map(signal_text).collect()),
-            counter: g.map_or(Vec::new(), |g| g.counter.iter().map(signal_text).collect()),
-            caps: g.map_or(Vec::new(), |g| {
-                g.caps.iter().map(|c| c.label().to_string()).collect()
-            }),
-            rules,
-        });
     }
     (lines, withheld)
 }
@@ -332,7 +344,8 @@ fn is_suggestion_name(n: &str) -> bool {
 }
 
 /// The file `watch --triage` writes: suggestions from a model on a local or
-/// private-network endpoint, which policy lets see any record.
+/// private-network endpoint, which policy lets see any record. The file
+/// `watch --triage=claude` writes is a hosted model's like any other.
 pub const LOCAL_SUGGESTIONS: &str = crate::watch::triage::FILE;
 
 /// Every suggestions file in `dir`, in name order (a later file wins).

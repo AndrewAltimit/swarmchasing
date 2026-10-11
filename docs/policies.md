@@ -34,6 +34,8 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
 
 - **Machine help with labelling.** A language model may suggest labels for leads under review. A model on infrastructure the admin controls (a loopback or private-network endpoint) may see any record. A hosted model may see only public records from web archive indexes (Wayback, Arquivo, Memento, Common Crawl) and urlquery.net, as `review --export-hosted` writes them: defanged and without IP addresses. This is private labelling, not redistribution: what the model sees is never published, and suggestions stay in the data directory. Operator logs and any other source are never sent to a hosted model. No model fetches URLs, and a suggestion is stored apart from the admin's label, never as it.
 
+  The scheduled watch may ask a hosted model the same way, through the admin's own Claude Code login on the runner, about each run's new leads from those public sources only; its suggestions stay in the data directory and are never labels.
+
 ## Reporting and publication
 
 | Topic | Policy |

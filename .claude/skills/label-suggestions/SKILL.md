@@ -83,6 +83,16 @@ and fix every error. Report only: the file path, counts per label, how many line
 misfire, and the check's summary line. Never quote a URL, host or reason in your report.
 ```
 
+### In one command
+
+`review suggest-claude` runs the same loop without a session: it sends each export file's lines, a batch at a time, to a locked-down headless Claude Code (no tools, no MCP servers, no settings or CLAUDE.md, a fixed prompt carrying the labelling rule of section 2), and appends the answers in the format of section 3. It is the backend the scheduled watch uses for `--triage=claude`.
+
+```sh
+swarmchase review suggest-claude data/labels/hosted-001.ndjson data/labels/hosted-002.ndjson
+```
+
+The answers go in `data/labels/suggestions-claude-<first export's name>.ndjson` (`--out` names another), with `model` set to `SWARMCHASE_CLAUDE_MODEL` (default `claude-opus-5-5`). Records already in that file are skipped, so after a usage limit the same command picks up where it stopped. It uses the login of whoever runs it, never an API key. Validate the file as below.
+
 ## 5. Validate
 
 ```sh

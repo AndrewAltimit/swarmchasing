@@ -32,13 +32,20 @@ env:
   MAIL_TO: ${{ secrets.MAIL_TO }}
   # If it is missing, urlquery sources are skipped and the digest says so.
   URLQUERY_APIKEY: ${{ secrets.URLQUERY_APIKEY }}
-  # Opt-in model triage: `true` asks a model server on the runner or its
-  # private network for a label suggestion on each new lead. The URL must be
-  # loopback, private or link-local; any other host is refused before
-  # anything is sent. Unset, no model is asked.
+  # Opt-in model triage, a label suggestion on each new lead. Unset, no
+  # model is asked.
+  # - `local` (or `true`) asks a model server on the runner or its private
+  #   network. The URL must be loopback, private or link-local; any other
+  #   host is refused before anything is sent.
+  # - `claude` runs Claude Code headless with the runner user's own login
+  #   (the admin's subscription, in ~/.claude); no secret is needed or
+  #   passed. It is sent only leads from public web archive and urlquery
+  #   records, defanged, without IP addresses. Setup: docs/reference/runner.md.
   SWARMCHASE_WATCH_TRIAGE: ${{ vars.SWARMCHASE_WATCH_TRIAGE }}
   SWARMCHASE_LLM_URL: ${{ vars.SWARMCHASE_LLM_URL }}
   SWARMCHASE_LLM_MODEL: ${{ vars.SWARMCHASE_LLM_MODEL }}
+  SWARMCHASE_CLAUDE_MODEL: ${{ vars.SWARMCHASE_CLAUDE_MODEL }}
+  CLAUDE_PATH: ${{ vars.CLAUDE_PATH }}
 
 jobs:
   watch:

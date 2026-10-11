@@ -1,22 +1,33 @@
-//! A run's new leads, and opt-in label suggestions on them from a local model.
+//! A run's new leads, and opt-in label suggestions on them from a model.
 //!
 //! A lead is a cluster above noise that is new since the previous run or
-//! rose a tier, or a new significant record that joined no cluster. With
-//! `--triage` (or `SWARMCHASE_WATCH_TRIAGE=1`) and `SWARMCHASE_LLM_URL` set,
-//! the watch asks the model at that URL for a label on each lead's strongest
-//! record, through the same client as `review --suggest`
-//! ([`crate::suggest`]): local endpoints only, defanged text, no tools. The
-//! leads are asked strongest first, up to a count and a time budget per
-//! run; after three failures in a row the rest are left. Any failure is no
-//! suggestion and the watch carries on.
+//! rose a tier, or a new significant record that joined no cluster. Triage
+//! asks a model for a label on each lead's strongest record, strongest lead
+//! first, up to a count and a time budget per run. Any failure is no
+//! suggestion and the watch carries on. Two backends ([`Backend`]):
 //!
-//! Answers are appended to `<data>/labels/suggestions-local.ndjson`, one
-//! `{"id", "label", "reason", "model", "run"}` per line, the format review
-//! reads suggestions in. A record already in that file is not asked again.
-//! A suggestion is shown beside a lead and never labels it, and it never
-//! sets the run's priority ([`super::priority`]).
+//! - **local** (`--triage`, or `SWARMCHASE_WATCH_TRIAGE=1`): the model at
+//!   `SWARMCHASE_LLM_URL`, through the client of `review --suggest`
+//!   ([`crate::suggest`]): local endpoints only, defanged text, no tools,
+//!   one record per ask; after three failures in a row the rest are left.
+//!   It may see any record. Answers go in `labels/suggestions-local.ndjson`.
+//! - **claude** (`--triage=claude`, or `SWARMCHASE_WATCH_TRIAGE=claude`):
+//!   Claude through the admin's Claude Code login ([`crate::suggest::claude`]),
+//!   many records per call. Claude is a hosted model, so it is sent only
+//!   leads from [`HOSTED_SOURCES`](crate::review::hosted::HOSTED_SOURCES), as
+//!   `review --export-hosted` writes them; the rest are counted as withheld.
+//!   After a usage limit or two failed calls in a row it asks no more this
+//!   run. Answers go in `labels/suggestions-claude-watch.ndjson`, with the
+//!   grade the model saw and any misfires.
+//!
+//! Each line is `{"id", "label", "reason", "model", "run"}`, the format
+//! review reads suggestions in. A record already in the backend's file is
+//! not asked again. A suggestion is shown beside a lead and never labels it,
+//! and it never sets the run's priority ([`super::priority`]).
 
 use super::digest::{ClusterSummary, Summary};
+use crate::review::hosted::{ExportLine, export_line};
+use crate::suggest::claude::{Answer, ClaudeCli, Outcome, SavedLine, append_lines};
 use crate::suggest::{Suggester, Suggestion, defang_all};
 use crate::util::truncate;
 use anyhow::{Context, Result};
@@ -27,13 +38,55 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-/// The file the watch's suggestions go in, under `<data>/labels/`.
+/// The file the local model's suggestions go in, under `<data>/labels/`.
 pub const FILE: &str = "suggestions-local.ndjson";
+/// The file Claude's suggestions go in, under `<data>/labels/`. Review
+/// reads it as a hosted model's: a line for a withheld source is dropped.
+pub const CLAUDE_FILE: &str = "suggestions-claude-watch.ndjson";
 
 /// Failed asks in a row after which the run stops asking.
 const MAX_FAILURES_IN_ROW: usize = 3;
 /// The longest one ask may take.
 const PER_REQUEST: Duration = Duration::from_secs(60);
+/// Records per Claude call: one call covers a usual run's leads.
+const CLAUDE_CHUNK: usize = 25;
+/// The longest one Claude call may take.
+const CLAUDE_PER_CALL: Duration = Duration::from_secs(600);
+/// Failed Claude calls in a row after which the run stops asking.
+const CLAUDE_MAX_FAILURES: usize = 2;
+
+/// Which model triage asks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Backend {
+    /// The model server at `SWARMCHASE_LLM_URL`, on this machine or network.
+    Local,
+    /// Claude through Claude Code, logged in as the user running the watch.
+    Claude,
+}
+
+impl Backend {
+    pub fn label(self) -> &'static str {
+        match self {
+            Backend::Local => "local",
+            Backend::Claude => "claude",
+        }
+    }
+}
+
+/// `SWARMCHASE_WATCH_TRIAGE` read: `claude`, or `local` (also `1`, `true`
+/// or `yes`); unset, empty, `0`, `false`, `no` or `off` is no triage. Any
+/// other value is an error.
+pub fn parse_backend(v: &str) -> std::result::Result<Option<Backend>, String> {
+    match v.trim().to_ascii_lowercase().as_str() {
+        "" | "0" | "false" | "no" | "off" => Ok(None),
+        "1" | "true" | "yes" | "local" => Ok(Some(Backend::Local)),
+        "claude" => Ok(Some(Backend::Claude)),
+        other => Err(format!(
+            "SWARMCHASE_WATCH_TRIAGE `{}`: use local or claude",
+            truncate(other, 20)
+        )),
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -196,6 +249,9 @@ pub struct Limits {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct TriageReport {
     pub enabled: bool,
+    /// `local` or `claude`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub backend: String,
     /// The model the suggestions came from.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub model: String,
@@ -205,11 +261,25 @@ pub struct TriageReport {
     /// Leads whose record already had a suggestion from an earlier run.
     pub reused: usize,
     /// Leads left unasked: over the count or the time budget, or after
-    /// repeated failures.
+    /// repeated failures or a usage limit.
     pub left: usize,
+    /// Leads not sent because a hosted model may not see their source
+    /// (operator logs and any source off the hosted list).
+    pub withheld: usize,
     /// Why triage did not run or stopped early, when it did.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+}
+
+impl TriageReport {
+    /// The suggestions file this report's backend writes, under `labels/`.
+    pub fn file(&self) -> &'static str {
+        if self.backend == Backend::Claude.label() {
+            CLAUDE_FILE
+        } else {
+            FILE
+        }
+    }
 }
 
 /// Ask `ask` about `leads` in order, within `limits`, reusing `known`
@@ -290,7 +360,12 @@ struct Line {
 /// The suggestions already in `labels/suggestions-local.ndjson`; a later
 /// line for a record wins, and a line that does not parse is skipped.
 pub fn load(labels: &Path) -> BTreeMap<String, Suggestion> {
-    let text = std::fs::read_to_string(labels.join(FILE)).unwrap_or_default();
+    load_file(labels, FILE)
+}
+
+/// As [`load`], from `labels/<file>`.
+pub fn load_file(labels: &Path, file: &str) -> BTreeMap<String, Suggestion> {
+    let text = std::fs::read_to_string(labels.join(file)).unwrap_or_default();
     text.lines()
         .filter_map(|l| serde_json::from_str::<Line>(l).ok())
         .filter(|l| matches!(l.label.as_str(), "agent" | "benign" | "unsure"))
@@ -328,29 +403,56 @@ pub fn save(labels: &Path, fresh: &[(String, Suggestion)], stamp: &str) -> Resul
     crate::store::append(&path, &text).with_context(|| format!("writing {}", path.display()))
 }
 
-/// Whether the run triages: the flag, or `SWARMCHASE_WATCH_TRIAGE` set to
-/// `1`, `true` or `yes`.
-pub fn enabled(flag: bool) -> bool {
-    flag || std::env::var("SWARMCHASE_WATCH_TRIAGE")
-        .is_ok_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+/// The backend the run triages with: the flag, else
+/// `SWARMCHASE_WATCH_TRIAGE` ([`parse_backend`]), else none. A value that
+/// does not parse is a warning and no triage.
+pub fn backend(flag: Option<Backend>) -> Option<Backend> {
+    flag.or_else(|| {
+        let v = std::env::var("SWARMCHASE_WATCH_TRIAGE").unwrap_or_default();
+        parse_backend(&v).unwrap_or_else(|e| {
+            eprintln!("warning: {e}; no model triage this run");
+            None
+        })
+    })
 }
 
-/// Triage this run's leads with the model at `SWARMCHASE_LLM_URL`, when
-/// enabled. Never fails the run: a missing or refused endpoint, or a file
+/// Triage this run's leads with `backend`, when there is one. Never fails
+/// the run: a missing or refused endpoint, a missing `claude`, or a file
 /// that cannot be written, is a note in the report.
 pub fn run(
-    enabled: bool,
+    backend: Option<Backend>,
     data: &Path,
     a: &Analysis,
     leads: &mut [Lead],
     stamp: &str,
     limits: Limits,
 ) -> TriageReport {
-    if !enabled {
-        return TriageReport::default();
+    match backend {
+        None => TriageReport::default(),
+        Some(Backend::Local) => run_local(data, a, leads, stamp, limits),
+        Some(Backend::Claude) => match ClaudeCli::from_env() {
+            Ok(cli) => run_claude(data, a, leads, stamp, limits, &cli),
+            Err(e) => TriageReport {
+                enabled: true,
+                backend: Backend::Claude.label().into(),
+                left: leads.len(),
+                note: Some(format!("{}; no model asked", one_line(&e))),
+                ..Default::default()
+            },
+        },
     }
+}
+
+fn run_local(
+    data: &Path,
+    a: &Analysis,
+    leads: &mut [Lead],
+    stamp: &str,
+    limits: Limits,
+) -> TriageReport {
     let off = |note: String| TriageReport {
         enabled: true,
+        backend: Backend::Local.label().into(),
         left: leads.len(),
         note: Some(note),
         ..Default::default()
@@ -374,6 +476,7 @@ pub fn run(
         suggester.suggest_within(a, idx, t)
     });
     rep.model = suggester.model().to_string();
+    rep.backend = Backend::Local.label().into();
     if let Err(e) = save(&labels, &fresh, stamp) {
         eprintln!("warning: triage suggestions not saved: {e:#}");
         rep.note = Some(format!("suggestions not saved: {}", one_line(&e)));
@@ -383,6 +486,153 @@ pub fn run(
         rep.asked, rep.answered, rep.reused, rep.left
     );
     rep
+}
+
+/// Triage with Claude through `cli`: hosted-source leads only.
+pub fn run_claude(
+    data: &Path,
+    a: &Analysis,
+    leads: &mut [Lead],
+    stamp: &str,
+    limits: Limits,
+    cli: &ClaudeCli,
+) -> TriageReport {
+    let labels = data.join("labels");
+    let known = load_file(&labels, CLAUDE_FILE);
+    let (mut rep, fresh) = ask_claude(a, leads, &known, limits, &mut |lines, t| {
+        cli.suggest(lines, t)
+    });
+    rep.model = cli.model().to_string();
+    for l in leads.iter_mut() {
+        if let Some(s) = l.suggestion.as_mut().filter(|s| s.model.is_empty()) {
+            s.model = rep.model.clone();
+        }
+    }
+    let saved: Vec<SavedLine> = fresh
+        .iter()
+        .map(|x| SavedLine::new(x, cli.model(), stamp))
+        .collect();
+    if let Err(e) = append_lines(&labels.join(CLAUDE_FILE), &saved) {
+        eprintln!("warning: triage suggestions not saved: {e:#}");
+        rep.note = Some(format!("suggestions not saved: {}", one_line(&e)));
+    }
+    eprintln!(
+        "triage (claude): {} record(s) asked, {} answered, {} reused, {} withheld, {} left",
+        rep.asked, rep.answered, rep.reused, rep.withheld, rep.left
+    );
+    rep
+}
+
+/// Ask Claude about `leads` through `ask`, a chunk of export lines per
+/// call, within `limits`, reusing `known` suggestions. A lead whose record
+/// comes from a source a hosted model may not see is never put in a chunk:
+/// it is counted as withheld. Returns the report and the new answers.
+pub fn ask_claude(
+    a: &Analysis,
+    leads: &mut [Lead],
+    known: &BTreeMap<String, Suggestion>,
+    limits: Limits,
+    ask: &mut dyn FnMut(&[ExportLine], Duration) -> Outcome,
+) -> (TriageReport, Vec<Answer>) {
+    let start = Instant::now();
+    let mut rep = TriageReport {
+        enabled: true,
+        backend: Backend::Claude.label().into(),
+        ..Default::default()
+    };
+    let mut lines: Vec<ExportLine> = Vec::new();
+    for l in leads.iter_mut() {
+        let Some(line) = export_line(a, l.idx) else {
+            rep.withheld += 1;
+            continue;
+        };
+        if let Some(s) = known.get(&l.record) {
+            l.suggestion = Some(s.clone());
+            rep.reused += 1;
+            continue;
+        }
+        if lines.iter().any(|x| x.id == line.id) {
+            continue;
+        }
+        if lines.len() >= limits.max {
+            rep.left += 1;
+            continue;
+        }
+        lines.push(line);
+    }
+    let mut fresh = Vec::new();
+    let mut failures = 0;
+    let mut stop: Option<String> = None;
+    let mut last_failure = None;
+    for chunk in lines.chunks(CLAUDE_CHUNK) {
+        let left = limits.budget.saturating_sub(start.elapsed());
+        if stop.is_some() || left.is_zero() {
+            rep.left += chunk.len();
+            continue;
+        }
+        rep.asked += chunk.len();
+        match ask(chunk, left.min(CLAUDE_PER_CALL)) {
+            Outcome::Answered(ans) => {
+                failures = 0;
+                for x in ans {
+                    let s = Suggestion {
+                        label: x.label.clone(),
+                        reason: x.reason.clone(),
+                        model: String::new(),
+                    };
+                    let mut hit = false;
+                    for l in leads.iter_mut().filter(|l| l.record == x.id) {
+                        l.suggestion = Some(s.clone());
+                        hit = true;
+                    }
+                    if hit {
+                        rep.answered += 1;
+                        fresh.push(x);
+                    }
+                }
+            }
+            Outcome::Failed(why) => {
+                failures += 1;
+                last_failure = Some(why);
+                if failures >= CLAUDE_MAX_FAILURES {
+                    stop = Some(format!(
+                        "stopped after {CLAUDE_MAX_FAILURES} failed calls in a row"
+                    ));
+                }
+            }
+            Outcome::Limited(why) => {
+                stop = Some(format!("{why}; no more asks this run"));
+            }
+        }
+    }
+    let mut notes = Vec::new();
+    if rep.withheld > 0 {
+        notes.push(format!(
+            "{} lead(s) withheld: their source is not one a hosted model may see",
+            rep.withheld
+        ));
+    }
+    if let Some(s) = stop {
+        notes.push(s);
+    }
+    if let Some(w) = last_failure {
+        notes.push(w);
+    }
+    if rep.left > 0 {
+        notes.push(format!(
+            "{} lead(s) not asked: over this run's limit of {} asks or {} s, or after a stop",
+            rep.left,
+            limits.max,
+            limits.budget.as_secs()
+        ));
+    }
+    if rep.asked > 0 && rep.answered == 0 && notes.is_empty() {
+        notes.push("the model gave no usable answer".into());
+    }
+    if !notes.is_empty() {
+        rep.note = Some(notes.join("; "));
+    }
+    (rep, fresh)
 }
 
 fn one_line(e: &anyhow::Error) -> String {
@@ -583,11 +833,168 @@ pub(crate) mod tests {
             max: 5,
             budget: Duration::from_secs(5),
         };
-        let rep = run(false, &d, &a, &mut l, "t", limits);
+        let rep = run(None, &d, &a, &mut l, "t", limits);
         assert!(!rep.enabled && rep.asked == 0);
         assert!(l.iter().all(|l| l.suggestion.is_none()));
         assert!(!d.join("labels").exists());
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn the_backend_comes_from_the_flag_or_the_variable() {
+        for (v, want) in [
+            ("", None),
+            ("0", None),
+            ("false", None),
+            ("1", Some(Backend::Local)),
+            ("TRUE", Some(Backend::Local)),
+            ("yes", Some(Backend::Local)),
+            ("local", Some(Backend::Local)),
+            (" claude ", Some(Backend::Claude)),
+        ] {
+            assert_eq!(parse_backend(v), Ok(want), "{v}");
+        }
+        assert!(parse_backend("gpt").is_err());
+        assert_eq!(backend(Some(Backend::Claude)), Some(Backend::Claude));
+    }
+
+    #[test]
+    fn claude_is_sent_hosted_sources_only_and_answers_are_saved_for_review() {
+        use crate::suggest::claude::tests::{cli_json, fake_claude};
+        let (a, ids) = analysis();
+        let next = super::super::digest::summarise(&a, &Summary::default(), "t".into());
+        let mut l = leads(&a, &Summary::default(), &next, &ids);
+        let cluster = l
+            .iter()
+            .find(|l| l.kind == LeadKind::Cluster)
+            .unwrap()
+            .record
+            .clone();
+        assert!(
+            l.iter().any(|l| l.source == "lines"),
+            "an operator-log lead"
+        );
+        let reply = cli_json(&format!(
+            r#"[{{"id":"{cluster}","label":"unsure","reason":"relayed SQLi on portal.example.gov, payload only","misfires":["nope"]}},{{"id":"lone","label":"agent","reason":"not asked"}}]"#
+        ));
+        let fake = fake_claude("triage", &reply, 0, false);
+        let cli = ClaudeCli::new(fake.clone(), "claude-opus-5-5");
+        let d = tmp("claude");
+        let limits = Limits {
+            max: 20,
+            budget: Duration::from_secs(60),
+        };
+        let rep = run_claude(&d, &a, &mut l, "20261011T000000Z", limits, &cli);
+        let sent = std::fs::read_to_string(fake.parent().unwrap().join("prompt.txt")).unwrap();
+        // The operator-log lead never reaches the prompt.
+        assert!(!sent.contains("\"id\":\"lone\""), "{sent}");
+        assert!(!sent.contains("other[.]example[.]org"), "{sent}");
+        assert!(sent.contains(&format!("\"id\":\"{cluster}\"")), "{sent}");
+        assert!(sent.contains("\"agent_allowed\""), "{sent}");
+        assert_eq!((rep.asked, rep.answered, rep.withheld), (1, 1, 1));
+        assert_eq!(rep.backend, "claude");
+        assert_eq!(rep.file(), CLAUDE_FILE);
+        assert!(rep.note.as_deref().unwrap().contains("withheld"));
+        let lone = l.iter().find(|l| l.record == "lone").unwrap();
+        assert!(lone.suggestion.is_none());
+        let got = l.iter().find(|l| l.record == cluster).unwrap();
+        assert_eq!(got.suggestion.as_ref().unwrap().model, "claude-opus-5-5");
+
+        let labels = d.join("labels");
+        let text = std::fs::read_to_string(labels.join(CLAUDE_FILE)).unwrap();
+        assert_eq!(text.lines().count(), 1);
+        let v: serde_json::Value = serde_json::from_str(text.lines().next().unwrap()).unwrap();
+        for k in ["id", "label", "reason", "model", "grade", "misfires", "run"] {
+            assert!(v.get(k).is_some(), "{k} in {v}");
+        }
+        assert_eq!(v["misfires"], serde_json::json!([]));
+        assert!(
+            v["reason"]
+                .as_str()
+                .unwrap()
+                .contains("portal[.]example[.]gov")
+        );
+
+        // Review reads the file as a hosted model's: a line for an
+        // operator-log record is dropped as withheld.
+        let mut f = text.clone();
+        f += "{\"id\":\"lone\",\"label\":\"agent\",\"reason\":\"x\",\"model\":\"m\"}\n";
+        std::fs::write(labels.join(CLAUDE_FILE), f).unwrap();
+        let loaded = crate::review::hosted::load_suggestions(&labels, &a).unwrap();
+        assert!(loaded.by_id.contains_key(&cluster));
+        assert_eq!(loaded.withheld, 1);
+
+        // The next run reuses the answer and asks nothing.
+        let mut l2 = leads(&a, &Summary::default(), &next, &ids);
+        let rep = run_claude(&d, &a, &mut l2, "t2", limits, &cli);
+        assert_eq!((rep.asked, rep.reused), (0, 1));
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_usage_limit_stops_claude_for_the_run() {
+        let obs: Vec<Observation> = (0..60)
+            .map(|i| Observation {
+                id: format!("w{i}"),
+                source: "wayback".into(),
+                ts: 1_791_000_000 + i * 30,
+                url: format!(
+                    "https://r.jina.ai/https://portal.example.gov/q?id=1'%20OR%201=1--&n={i}"
+                ),
+                ..Default::default()
+            })
+            .collect();
+        let a = analyze(obs, &Rules::default_rules());
+        let ids: BTreeSet<String> = a.results.iter().map(|r| r.obs.id.clone()).collect();
+        let next = super::super::digest::summarise(&a, &Summary::default(), "t".into());
+        let one = leads(&a, &Summary::default(), &next, &ids).remove(0);
+        let mut l: Vec<Lead> = (0..a.results.len())
+            .map(|i| Lead {
+                idx: i,
+                record: a.results[i].obs.id.clone(),
+                ..one.clone()
+            })
+            .collect();
+        let mut calls = 0;
+        let (rep, fresh) = ask_claude(
+            &a,
+            &mut l,
+            &BTreeMap::new(),
+            Limits {
+                max: 50,
+                budget: Duration::from_secs(60),
+            },
+            &mut |lines, _| {
+                calls += 1;
+                assert_eq!(lines.len(), CLAUDE_CHUNK);
+                Outcome::Limited("Claude usage limit: resets 3pm".into())
+            },
+        );
+        assert_eq!(calls, 1);
+        assert!(fresh.is_empty());
+        assert_eq!(
+            (rep.asked, rep.answered, rep.left),
+            (CLAUDE_CHUNK, 0, 60 - CLAUDE_CHUNK)
+        );
+        assert!(rep.note.unwrap().contains("no more asks this run"));
+
+        // Two failed calls in a row also stop it.
+        let mut calls = 0;
+        let (rep, _) = ask_claude(
+            &a,
+            &mut l,
+            &BTreeMap::new(),
+            Limits {
+                max: 80,
+                budget: Duration::from_secs(60),
+            },
+            &mut |_, _| {
+                calls += 1;
+                Outcome::Failed("Claude Code failed: boom".into())
+            },
+        );
+        assert_eq!(calls, 2);
+        assert!(rep.note.unwrap().contains("boom"));
     }
 
     #[test]

@@ -173,9 +173,11 @@ mod tests {
         let priority = super::super::priority::assess(&l, &health.alerts, &cases.due);
         let triage = TriageReport {
             enabled: true,
+            backend: "claude".into(),
             model: "m".into(),
             asked: 1,
             answered: 1,
+            withheld: 1,
             ..Default::default()
         };
         let s = build(&Input {
@@ -223,6 +225,8 @@ mod tests {
         assert_eq!(v["health"]["alerts"][0]["kind"], "source_failed");
         assert_eq!(v["health"]["sources"][0]["status"], "error");
         assert_eq!(v["triage"]["enabled"], true);
+        assert_eq!(v["triage"]["backend"], "claude");
+        assert_eq!(v["triage"]["withheld"], 1);
         assert_eq!(v["counts"]["new_records"], ids.len());
         // Hosts defanged, no URL or IP.
         let text = v.to_string();

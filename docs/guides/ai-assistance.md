@@ -9,7 +9,7 @@ Every part here suggests or drafts. None of it labels, sends, files or publishes
 Two kinds of model are treated differently, by where they run, not by how capable they are.
 
 - **A local model** runs on infrastructure the admin controls: a loopback, private-network or link-local endpoint (`SWARMCHASE_LLM_URL`). It may see any record, operator logs included, because nothing leaves that infrastructure.
-- **A hosted model** runs on a provider's servers. That includes Claude in a Claude Code session and any subagent it starts. It may see only what `review --export-hosted` writes: records from web archive indexes (Wayback, Arquivo, Memento, Common Crawl) and urlquery.net, defanged, without IP addresses. Operator logs and every other source are withheld by a list in code, so a new collector is withheld until someone adds it on purpose.
+- **A hosted model** runs on a provider's servers. That includes Claude in a Claude Code session, any subagent it starts, and Claude Code run headless by the watch or `review suggest-claude`. It may see only what `review --export-hosted` writes: records from web archive indexes (Wayback, Arquivo, Memento, Common Crawl) and urlquery.net, defanged, without IP addresses. Operator logs and every other source are withheld by a list in code, so a new collector is withheld until someone adds it on purpose.
 
 For both, the same rules hold:
 
@@ -26,7 +26,8 @@ A model reads each record of the review queue and proposes `agent`, `benign` or 
 The labelling rule binds suggestions as it binds labels: `agent` needs an agent grade of L2 or higher. The export carries the grade, whether it is the cluster's or the record's own, an `agent_allowed` flag, the signals, counter-signals and caps, and the rules that fired. `review check-suggestions` fails a line that breaks the rule, and the review page flags an `agent` suggestion on a record now graded below L2 as against the rule.
 
 - **Local**, one record at a time while labelling in the terminal: `review --suggest` ([label suggestions](../reference/watch.md#label-suggestions)).
-- **Hosted**, in batches: the [label-suggestions skill](../../.claude/skills/label-suggestions/SKILL.md) gives a Claude Code session the full procedure, from export to validated files.
+- **Hosted**, in batches: the [label-suggestions skill](../../.claude/skills/label-suggestions/SKILL.md) gives a Claude Code session the full procedure, from export to validated files. `review suggest-claude <export>` does the same in one command, through a locked-down headless Claude Code.
+- **On the runner**, for each run's new leads: [model triage](../reference/watch.md#model-triage), with a local model (`watch --triage`) or with Claude through the admin's Claude Code login (`watch --triage=claude`), which sends only the leads an export would hold. The digest lists the suggestions, and the queue arrives pre-suggested.
 
 ```sh
 swarmchase review --export-hosted data/labels/hosted.ndjson --batch-size 120
@@ -84,7 +85,5 @@ The watch's health block and digest stay on the runner and reach the admin by em
 
 These are open for the admin's decision; none runs today.
 
-- **Local suggestions on the runner.** The watch could ask a model served on the self-hosted runner for a suggestion on each new lead and write `suggestions-local-<stamp>.ndjson` to the data directory, so the queue arrives pre-suggested. Policy already allows a local model to see every record. It needs a model server on the runner, GPU time shared with its other workloads, and a batch form of `--suggest` that writes the same line format with `grade`.
-- **A hosted API in the watch workflow.** The watch could send each run's export to a hosted model's API with a key held as a secret. That moves records off the runner without anyone present, so it needs a policy decision first: which provider and terms (retention, training use), whether unattended sending is acceptable, and where the key lives (`env.list` on the runner, a repository secret). It also means a secret in a workflow on a public repository.
 - **Model drafting of case reports.** A local model could propose the free-text parts of a report from the case file. The admin still reads and sends every draft.
 - **Automatic rule proposals.** A model could turn `review misfires` output into a rule change on a branch. A pull request on the public repository would carry evidence from unreviewed leads, so this needs a way to keep the branch private, or stays manual.

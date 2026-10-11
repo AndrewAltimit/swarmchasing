@@ -22,7 +22,7 @@ Results are not uploaded as artifacts: a public repo's artifacts are downloadabl
 
 A source failure, an unavailable host or a failed canary is a health alert, which makes the run count as changed, so the digest reporting it is mailed the same run ([health](watch.md#health)). The mail's subject starts with the run's priority, which the watch step writes to its outputs beside `changed` ([needs attention](watch.md#needs-attention)).
 
-Model triage is opt-in through the variables below, and only for a model server the runner reaches on loopback or a private network; the watch refuses any other host before sending anything. The workflow wires no hosted model API. The job's timeout leaves room for one host's ten minutes of retries on HTTP 503: after those the run stops sending to that host, and its sources continue from their checkpoints next run.
+Model triage is opt-in through the variables below: a model server the runner reaches on loopback or a private network (the watch refuses any other host before sending anything), or Claude through the runner user's Claude Code login ([model triage with Claude](#model-triage-with-claude)). The workflow holds no model API key. The job's timeout leaves room for one host's ten minutes of retries on HTTP 503: after those the run stops sending to that host, and its sources continue from their checkpoints next run.
 
 ## Secrets and variables
 
@@ -33,11 +33,25 @@ Model triage is opt-in through the variables below, and only for a model server 
 | `MAIL_FROM`, `MAIL_TO` | secret | `watch.yml` | Sender and the admin's address. |
 | `URLQUERY_APIKEY` | secret | `watch.yml` | Enables the urlquery sources. |
 | `SWARMCHASE_DATA` | variable | `watch.yml` | Data directory on the runner; default `~/swarmchase-data`. |
-| `SWARMCHASE_WATCH_TRIAGE` | variable | `watch.yml` | `true` turns on [model triage](watch.md#model-triage) of new leads. Unset, no model is asked. |
-| `SWARMCHASE_LLM_URL`, `SWARMCHASE_LLM_MODEL` | variable | `watch.yml` | The model server triage asks, on the runner or its private network, and the model name. |
+| `SWARMCHASE_WATCH_TRIAGE` | variable | `watch.yml` | `local` (or `true`) or `claude` turns on [model triage](watch.md#model-triage) of new leads. Unset, no model is asked. |
+| `SWARMCHASE_LLM_URL`, `SWARMCHASE_LLM_MODEL` | variable | `watch.yml` | The model server local triage asks, on the runner or its private network, and the model name. |
+| `SWARMCHASE_CLAUDE_MODEL`, `CLAUDE_PATH` | variable | `watch.yml` | The model Claude triage asks (default `claude-opus-5-5`) and the `claude` binary, when not on `PATH`. |
 | `SWARMCHASE_REQUIRE_BROWSER` | variable | `main-ci.yml` | `true` makes the deploy fail when the site XSS check cannot find Chrome, instead of skipping it with a warning. |
 
 Email goes out through [`send-mail.sh`](../../scripts/ci/send-mail.sh) (`curl` over SMTP), to the admin only.
+
+## Model triage with Claude
+
+With `SWARMCHASE_WATCH_TRIAGE` set to `claude`, the watch runs Claude Code headless on the runner to suggest labels on each run's new leads. The credential is the runner user's own Claude Code login on the admin's subscription; the workflow holds no secret for it, and the watch removes `ANTHROPIC_API_KEY` from the call's environment so no API key is used. Claude sees only leads from the hosted sources, defanged and without IP addresses ([policies](../policies.md#evidence-and-attribution)).
+
+Set it up once, as the user the runner service runs as:
+
+1. Install Claude Code for that user, so `claude` is on its `PATH` or in `~/.local/bin` (otherwise set `CLAUDE_PATH`).
+2. Log in with the subscription: run `claude`, then `/login`, and follow the prompts. The login is kept in `~/.claude`.
+3. Check it with one headless call: `claude -p --model claude-opus-5-5 --tools "" "Reply with OK"` should print `OK`.
+4. Set the repository variable `SWARMCHASE_WATCH_TRIAGE` to `claude`.
+
+Each call runs with no tools, no MCP servers, no settings files, no CLAUDE.md, no saved session and a fixed system prompt, in an empty temporary directory, and never skips permission checks. One run makes one call for up to 25 leads. Calls count against the subscription's usage limits, which the runner's other workloads may share: when a limit is hit, the run asks no more, the digest says so, and the leads are asked again next run.
 
 ## What lives outside the checkout
 

@@ -13,8 +13,10 @@
 //! The digest opens with the run's priority ([`priority`]), set from
 //! deterministic facts only, and `run.json` ([`run_summary`]) says the same
 //! in a stable JSON for scripts. With `--triage`, a model on the admin's own
-//! machine or network suggests a label for each new lead ([`triage`]); the
-//! suggestions are shown in the digest and saved for review, never as labels.
+//! machine or network, or with `--triage=claude` Claude through the admin's
+//! Claude Code login (hosted-source leads only), suggests a label for each
+//! new lead ([`triage`]); the suggestions are shown in the digest and saved
+//! for review, never as labels.
 //!
 //! Every run also checks source health and rule drift against the trailing
 //! history in `state.json` (see `health.rs`) and reports both in the digest.
@@ -147,11 +149,20 @@ pub struct WatchArgs {
     /// Committed notices, for the case status proposals in the digest.
     #[arg(long, default_value = "notices")]
     notices: PathBuf,
-    /// Ask the local model at SWARMCHASE_LLM_URL for a label suggestion on
-    /// each new lead (also on with SWARMCHASE_WATCH_TRIAGE=1). Suggestions
-    /// only: shown in the digest and saved beside labels, never as them.
-    #[arg(long)]
-    triage: bool,
+    /// Ask a model for a label suggestion on each new lead: `--triage` or
+    /// `--triage=local` asks the model server at SWARMCHASE_LLM_URL;
+    /// `--triage=claude` asks Claude through Claude Code, about leads from
+    /// hosted sources only. Also set by SWARMCHASE_WATCH_TRIAGE (`local`,
+    /// `1`, `true`, or `claude`). Suggestions only: shown in the digest and
+    /// saved beside labels, never as them.
+    #[arg(
+        long,
+        value_name = "BACKEND",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "local"
+    )]
+    triage: Option<triage::Backend>,
     /// Most leads triage asks about per run.
     #[arg(long, default_value_t = 20, env = "SWARMCHASE_TRIAGE_MAX")]
     triage_max: usize,
@@ -162,9 +173,14 @@ pub struct WatchArgs {
 
 pub fn run(args: WatchArgs) -> Result<()> {
     let rules = crate::input::load_rules(args.rules.as_deref())?;
-    let triage = triage::enabled(args.triage).then_some(triage::Limits {
-        max: args.triage_max,
-        budget: Duration::from_secs(args.triage_secs),
+    let triage = triage::backend(args.triage).map(|b| {
+        (
+            b,
+            triage::Limits {
+                max: args.triage_max,
+                budget: Duration::from_secs(args.triage_secs),
+            },
+        )
     });
     watch(&args.watchlist, &args.out, &args.notices, &rules, triage)
 }
@@ -174,7 +190,7 @@ fn watch(
     out: &Path,
     notices: &Path,
     rules: &Rules,
-    triage_limits: Option<triage::Limits>,
+    triage_with: Option<(triage::Backend, triage::Limits)>,
 ) -> Result<()> {
     let wl: Watchlist = toml::from_str(
         &std::fs::read_to_string(watchlist)
@@ -392,8 +408,8 @@ fn watch(
     let generated = now.format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let next = summarise(&a, &prev, generated.clone());
     let mut leads = triage::leads(&a, &prev, &next, &new_ids);
-    let triaged = match triage_limits {
-        Some(limits) => triage::run(true, out, &a, &mut leads, &stamp, limits),
+    let triaged = match triage_with {
+        Some((backend, limits)) => triage::run(Some(backend), out, &a, &mut leads, &stamp, limits),
         None => triage::TriageReport::default(),
     };
     let priority = priority::assess(&leads, &health.alerts, &cases.due);

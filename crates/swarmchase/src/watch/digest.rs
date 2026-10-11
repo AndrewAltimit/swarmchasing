@@ -682,7 +682,7 @@ fn needs_attention(t: &mut String, p: &Priority) {
     );
 }
 
-/// The local model's suggestions on this run's leads, when triage is on:
+/// The model's suggestions on this run's leads, when triage is on:
 /// suggestions, never labels.
 fn model_suggestions(t: &mut String, leads: &[Lead], tr: &TriageReport) {
     if !tr.enabled {
@@ -690,15 +690,22 @@ fn model_suggestions(t: &mut String, leads: &[Lead], tr: &TriageReport) {
     }
     let with: Vec<&Lead> = leads.iter().filter(|l| l.suggestion.is_some()).collect();
     let _ = writeln!(t, "\n## Model suggestions ({})\n", with.len());
+    let model = if tr.model.is_empty() {
+        String::new()
+    } else {
+        format!(" (`{}`)", one_line(&tr.model, 60))
+    };
+    let from = if tr.backend == super::triage::Backend::Claude.label() {
+        format!(
+            "From Claude through the admin's Claude Code login on the runner{model}, shown only leads from web archive indexes and urlquery, defanged and without IP addresses"
+        )
+    } else {
+        format!("From a model on the admin's own machine or network{model}")
+    };
     let _ = writeln!(
         t,
-        "From a model on the admin's own machine or network{}: suggestions only, never labels. Review decides; they are saved in `labels/{}`.\n",
-        if tr.model.is_empty() {
-            String::new()
-        } else {
-            format!(" (`{}`)", one_line(&tr.model, 60))
-        },
-        super::triage::FILE
+        "{from}: suggestions only, never labels. Review decides; they are saved in `labels/{}`.\n",
+        tr.file()
     );
     if with.is_empty() {
         let _ = writeln!(t, "None.");
@@ -728,11 +735,16 @@ fn model_suggestions(t: &mut String, leads: &[Lead], tr: &TriageReport) {
     }
     let _ = writeln!(
         t,
-        "\nAsked {}, answered {}, reused {}, not asked {}.{}",
+        "\nAsked {}, answered {}, reused {}, not asked {}{}.{}",
         tr.asked,
         tr.answered,
         tr.reused,
         tr.left,
+        if tr.withheld > 0 {
+            format!(", withheld {} (not a hosted source)", tr.withheld)
+        } else {
+            String::new()
+        },
         tr.note
             .as_ref()
             .map(|n| format!(" {}.", one_line(n, 200)))
@@ -1136,6 +1148,36 @@ mod tests {
             "{line}"
         );
         assert!(d.text.contains("Asked 2, answered 1"), "{}", d.text);
+        assert!(d.text.contains("labels/suggestions-local.ndjson"));
+
+        // Claude through Claude Code: says so, its file, and what was withheld.
+        let claude = TriageReport {
+            backend: "claude".into(),
+            model: "claude-opus-5-5".into(),
+            withheld: 1,
+            ..triage.clone()
+        };
+        let d = digest(&DigestInput {
+            stamp: "t1",
+            analysis: &a,
+            prev: &Summary::default(),
+            next: &next,
+            new_ids: &ids,
+            health: &health,
+            bursts: &[],
+            cases: &CaseReport::default(),
+            window_days: 30,
+            leads: &leads,
+            triage: &claude,
+            priority: &priority,
+        });
+        assert!(d.text.contains("Claude Code login"), "{}", d.text);
+        assert!(d.text.contains("labels/suggestions-claude-watch.ndjson"));
+        assert!(
+            d.text.contains("withheld 1 (not a hosted source)"),
+            "{}",
+            d.text
+        );
 
         // Triage off: no suggestions block; a quiet run is low priority.
         let quiet = write(
