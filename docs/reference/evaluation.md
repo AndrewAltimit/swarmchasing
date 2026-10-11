@@ -113,7 +113,7 @@ No agent of the kind this toolkit looks for sent a request before late 2022. `--
 - clusters carrying each plant signal, of all clusters;
 - interaction edges, by kind.
 
-Each rate has its Wilson interval. With none of `n` records flagged, the 95% upper bound is close to the rule of three, `3/n`, and `eval` prints it. Inputs may be record files or a watch store directory, so a store of archive captures can be measured whole:
+Each rate has its Wilson interval. `eval` also prints the 95% upper bound on the false-alarm rate at each tier: the rule of three, `3/n`, when none of `n` records was flagged, and the Wilson upper bound otherwise. Inputs may be record files or a watch store directory, so a store of archive captures can be measured whole:
 
 ```sh
 swarmchase eval <data>/store --before 2022-11-30

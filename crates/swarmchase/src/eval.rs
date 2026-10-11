@@ -359,11 +359,20 @@ pub fn print_control(c: &ControlSummary, all: usize, date: &str, rules: &str) {
             format!(" ({})", kinds.join(", "))
         }
     );
-    if c.records > 0 {
-        println!(
-            "\nwith nothing flagged, the 95% upper bound on the false-alarm rate is about 3/n = {:.2}% (rule of three)",
-            300.0 / c.records as f64
-        );
+    for t in &c.by_tier {
+        let (upper, method) = sc_core::eval::baseline::upper_bound(t.rate.k, t.rate.n);
+        if let Some(u) = upper {
+            println!(
+                "95% upper bound on the false-alarm rate, {}: {:.2}% ({})",
+                t.name,
+                u * 100.0,
+                if method == "rule_of_three" {
+                    "rule of three, none flagged"
+                } else {
+                    "Wilson"
+                }
+            );
+        }
     }
 }
 
