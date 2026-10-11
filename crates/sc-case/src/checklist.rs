@@ -22,6 +22,12 @@ pub const COOLING_OFF: i64 = 3600;
 /// Plant signals on one cluster that require a recorded review.
 pub const PLANT_SIGNALS: usize = 2;
 
+/// The plant signals on cluster `cl` that count toward a required review
+/// ([`PLANT_SIGNALS`]). Every count of them goes through here.
+pub fn plant_signals(cl: &sc_core::Cluster) -> usize {
+    cl.origin.plant_signals.len()
+}
+
 /// One checklist item.
 #[derive(Debug, Clone)]
 pub struct Item {
@@ -297,14 +303,14 @@ pub fn checklist(x: Inputs) -> Vec<Item> {
         .public
         .clusters
         .iter()
-        .filter(|cl| cl.tier > Tier::Noise && cl.plant_signals.len() >= PLANT_SIGNALS)
+        .filter(|cl| cl.tier > Tier::Noise && plant_signals(cl) >= PLANT_SIGNALS)
         .filter(|cl| !c.plant_reviews.iter().any(|r| r.cluster == cl.key))
         .map(|cl| {
             format!(
                 "{} {} has {} plant signals: `swarmchase case plant-review {} {} --note \"…\"`",
                 cl.id,
                 cl.key,
-                cl.plant_signals.len(),
+                plant_signals(cl),
                 c.id,
                 cl.key
             )

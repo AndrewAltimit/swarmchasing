@@ -61,7 +61,7 @@ impl GradeTable {
 pub fn grade_table(a: &Analysis, labels: &LabelSet, control: Option<&str>) -> GradeTable {
     let mut t = GradeTable::default();
     let mut seen = HashSet::new();
-    for r in &a.results {
+    for (i, r) in a.results.iter().enumerate() {
         if !seen.insert(r.obs.id.as_str()) {
             continue;
         }
@@ -77,11 +77,7 @@ pub fn grade_table(a: &Analysis, labels: &LabelSet, control: Option<&str>) -> Gr
             (None, Some(x)) => x.id(),
             (None, None) => continue,
         };
-        let col = match (r.score, r.cluster) {
-            (0, _) => "unflagged",
-            (_, None) => "unclustered",
-            (_, Some(c)) => a.clusters[c].agent.level.code(),
-        };
+        let col = super::view::grade_column(a, i);
         *t.rows
             .entry(row.to_string())
             .or_default()

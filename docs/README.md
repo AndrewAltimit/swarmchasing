@@ -35,6 +35,17 @@ What each part does and how it is configured.
 | [`policies.md`](policies.md) | Collection, attribution, reporting and publication. |
 | [`manual/README.md`](manual/README.md) | The Swarmchasing Field Manual (SC-FM): the method as a citable standard, with stable section ids. |
 
+## Specs
+
+Formats other groups can implement, each with a JSON Schema under `schemas/`.
+
+| Doc | Covers |
+|---|---|
+| [`specs/README.md`](specs/README.md) | Index of the specs and their versions. |
+| [`specs/rules-v1.md`](specs/rules-v1.md) | SC-Rules v1: the indicator rules file, scoring semantics and conformance vectors. |
+| [`specs/incident-v1.md`](specs/incident-v1.md) | SC-Incident v1: one JSON document per published incident. |
+| [`specs/adopting.md`](specs/adopting.md) | How another group adopts the method and states conformance. |
+
 ## Elsewhere
 
 | Doc | Covers |

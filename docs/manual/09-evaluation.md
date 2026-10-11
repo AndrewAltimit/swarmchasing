@@ -116,3 +116,28 @@ The agent-likelihood grade ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)
 - run a **negative control**: the grade over records captured before capable agents existed, none of which an agent sent. Any grade of L2 or above there is a false grade; archive captures stop at L2, so such a control measures the model-written rung.
 
 A grade is not quoted as performance until a held-out measurement exists ([FM-9.1](#fm-91-three-kinds-of-evaluation)). Toolkit: records may carry `actor`; `eval` prints the table by record, and `eval --before <date>` runs the control over local records ([evaluation](../reference/evaluation.md#agent-grades-by-actor)). Neither is gated.
+
+## FM-9.12 Calibrated public language
+
+Three kinds of word reach a reader: a tier ("significant"), an agent grade ("adaptive") and an attribution label with a likelihood word ("Suspected: very likely"). Each implies a rate of being right, and each may be said in public only as strongly as a measurement supports.
+
+**The calibration rule.** A public statement that a class of finding *is* something (agent activity, an agent, a given operator) uses a likelihood word no stronger than the lower bound of the 95% Wilson interval ([FM-9.5](#fm-95-detection-metrics)) of that class's measured precision, read against the table in [FM-8.1](08-confidence.md#fm-81-likelihood-table).
+
+For example, a significant tier whose held-out precision has a lower bound of 83% supports "very likely agent activity" for records of that tier and kind; one at 70% supports "likely". The measurement is held-out or prospective ([FM-9.1](#fm-91-three-kinds-of-evaluation)), on the same unit as the claim (record or cluster), and on data like the case's: the same source kinds and a comparable class mix ([FM-9.9](#fm-99-what-to-publish-with-a-number)).
+
+| Statement | Measured by | Before a measurement exists | After |
+|---|---|---|---|
+| Tier: "the records contain attack payloads" | Nothing: it is Observed. | Allowed, with the rule ids. | Allowed. |
+| Tier as agent activity: "this is agent activity" | Held-out precision of the tier, by cluster. | Not said. The notice says what the records contain ([FM-14.7](14-limits.md#fm-147-humans-look-the-same)). | The word the lower bound allows. |
+| Agent grade: "an agent sent these" | The actor-by-grade table on a held-out set ([FM-9.11](#fm-911-agent-grade-evaluation)). | Not in a notice ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)). Private reports give the grade as evidence reached, with its competing hypotheses ([FM-7.12](07-attribution.md#fm-712-competing-hypotheses)). | The word the grade's lower bound allows. |
+| Scope: "the agents went beyond their task" | Reviewer agreement on scope findings ([FM-9.8](#fm-98-inter-rater-agreement)). | Allowed as the reviewer's Inference, with the evidence listed ([FM-15.4](15-misalignment.md#fm-154-stating-a-scope-finding)). | As before, with the agreement figure. |
+| Attribution: label and likelihood word | The reliability table of settled attributions ([FM-9.7](#fm-97-attribution-calibration)). | The label is about evidence, not probability, and may be used. The likelihood word is the analyst's judgment, capped by the label, and the report says it is not yet calibrated. | The word may not exceed what the reliability table shows for its band. |
+
+Rules that follow:
+
+- **The regression set calibrates nothing.** It was tuned on, and is mostly synthetic, so its precision is a floor for regressions and never a basis for a word ([FM-9.2](#fm-92-regression-set)).
+- **Agreement is not calibration.** Several groups reaching the same tier with the same rules shows the rules are shared, not that they are right.
+- **Per class, not overall.** A precision measured mostly on one artifact family does not support a word for another. Where per-class counts are too small for an interval, the class has no measurement.
+- **Words move down as well as up.** When a new measurement lowers a bound, later notices use the lower word, and published notices are not rewritten ([FM-2.6](02-principles.md#fm-26-correct-in-public)).
+
+Toolkit: precision with Wilson intervals per tier, per class and per tactic, and the actor-by-grade table, are reported by `eval` ([statistics](../reference/evaluation.md#statistics)). Deriving the allowed word from a saved measurement, and checking it in `notice lint`, are (planned).

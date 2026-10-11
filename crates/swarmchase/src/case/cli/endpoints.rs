@@ -107,7 +107,7 @@ pub(super) fn plant_review(ctx: &Ctx, a: PlantReviewArgs) -> Result<()> {
     let c = load(&ctx.root, &a.id)?;
     let an = analysis(&ctx.root, &c, &Scope::All)?;
     let key = fleet::resolve(&an, &a.cluster)?;
-    let n = fleet::by_key(&an, &key).map_or(0, |cl| cl.plant_signals.len());
+    let n = fleet::by_key(&an, &key).map_or(0, sc_case::checklist::plant_signals);
     update(&ctx.root, &a.id, |c| {
         Ok(actions::plant_review(c, &key, n, &a.note, &ctx.today)?)
     })

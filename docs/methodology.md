@@ -96,6 +96,8 @@ A rule's target says what it reads: the host of each layer (suffix match), each 
 
 **Scoring.** Each rule counts at most once per record, whatever layer it matched in. A record's score is the sum of the weights of the distinct rules that fired. Weights are deliberately low for anything ordinary users also do: a relay is worth 1 or 2, a self-identification 1.
 
+Rules that read the same artifact are summed as if independent: one fetch program carried through httpbin fires `carrier.httpbin`, `carrier.html_program`, `carrier.inline_fetch_program` and often `marker.title_write`, and reaches significant on tool use alone, and a run tag fires both `marker.uq_tags` and `marker.test_tag`. The method counts such rules once per independence group, at the largest weight among them ([FM-4.11](manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap)); the toolkit does not yet (planned). The rules format reserves the `group` field ([SC-Rules v1](specs/rules-v1.md)).
+
 **Significant rules.** A rule marked `significant = true` puts a record in the top tier on its own. These are the unambiguous attack payloads (UNION SELECT, boolean and time-based SQL injection, multi-step traversal and sensitive files, XSS, template and command injection) and a small number of infrastructure fingerprints. Weaker exploit rules, such as a single traversal step or a lone quote, are not significant on their own.
 
 **Linking rules.** A rule marked `link = true` turns its matched text into a linking feature (see [Linking](#linking-into-clusters)). Only identifiers one operator would hold are linking rules: per-user callback inboxes (webhook.site IDs, request-catcher subdomains, ntfy topics) and specific test tags. A rule that many unrelated users share scores but never links. For example, `exfil.oast_service` matches an OAST service named without an inbox subdomain; it scores like the inbox rule but does not link.
@@ -112,15 +114,15 @@ Every hit carries its rule's tactic and artifact flag, and each cluster counts h
 
 ## Tiers
 
-Each record is graded by [`analyze.rs`](../crates/sc-core/src/analyze/mod.rs):
+Each record is graded by [`analyze/pipeline.rs`](../crates/sc-core/src/analyze/pipeline.rs):
 
 - **significant:** a significant rule fired, or the score reached `thresholds.significant`;
 - **suggestive:** the score reached `thresholds.suggestive`;
 - **noise:** anything else, including records with a score above zero.
 
-Both thresholds are set in the rules file. A tier says the record looks like agent activity under the rules. It does not say who sent it.
+Both thresholds are set in the rules file. A tier says the record's contents look like agent activity under the rules: payloads, programs, channels, residue. It does not say who sent it, or whether the activity went beyond its task ([misalignment and scope](#misalignment-and-scope)).
 
-**One relay hit is never enough.** People use relays, CORS proxies and echo services every day. No relay rule weighs as much as the suggestive threshold, so a single relay hit never flags a record. It needs another indicator first: a payload, a tag, a callback channel, a program, or residue.
+**One relay hit is never enough.** People use relays, CORS proxies and echo services every day. No relay rule weighs as much as the suggestive threshold, so a single relay hit never flags a record. It needs another indicator first: a payload, a tag, a callback channel, a program, or residue. Two context hits together do reach suggestive today: two relays (`r.jina.ai` to a `translate.goog` host scores 4), or a relay and a vendor name in the query (3). The method's context cap keeps a record of context hits alone at noise ([FM-4.11](manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap)); the toolkit does not yet apply it (planned).
 
 A cluster gets its own tier: the highest tier among its members, raised one step only by corroboration. A suggestive cluster becomes significant when two of its suggestive-or-above members each carry a kind of evidence the other lacks: one record shows a callback channel and model residue, another the same channel and a carrier program. Context kinds, which ordinary clients produce too, do not count towards that: `relay`, `cache_buster`, `self_id`, `header` and `outcome`. A cluster of noise records stays noise, and weak rules collected across many members never add up to a higher tier.
 
@@ -136,7 +138,7 @@ Only records with a score above zero are linked. Ordinary traffic to the same ho
 
    A tag quoted in a public report is common by definition, however few hosts carry it: anyone who read the report can copy it. `linking.published_tags` lists those tags, each with its source in a comment. A feature whose value is one of them (ignoring case) never links, and its group is listed as a common feature with the reason "quoted in a public report".
 2. **Close timing against the same target.** Consecutive flagged records to the same target host, at most `linking.window_secs` apart, that share at least one rule of a kind other than the context kinds (`relay`, `cache_buster`, `self_id`, `header`, `outcome`). Every reader of a page through Jina Reader shares the relay rule, so a shared relay or cache buster alone never joins two records: a record placed beside a cluster would otherwise need nothing else to join it. Only request and submit times link this way (and times of unknown kind, read as requests). Archive capture times say when a crawler saved a URL, not when a client sent it, so two captures minutes apart are not joined by timing.
-3. **Probe chains.** A run of requests to one host and path, each at most 5 minutes after the last (`chains.max_gap_secs`), with at least 3 distinct parameter sets (`chains.min_variants`) and at least one parameter whose value changes. This is one client trying variants of a request. The flagged requests in a chain are linked even when different rules fired on each. Code: [`chains.rs`](../crates/sc-core/src/chains.rs).
+3. **Probe chains.** A run of requests to one host and path, each at most 5 minutes after the last (`chains.max_gap_secs`), with at least 3 distinct parameter sets (`chains.min_variants`) and at least one parameter whose value changes. This is one client trying variants of a request. The flagged requests in a chain are linked even when different rules fired on each. Code: [`chains.rs`](../crates/sc-core/src/chains.rs). Chains are formed on any timestamp kind and link their records even when timed by archive captures; the method links only chains timed by request or submit times, and lists capture-timed chains as hints ([FM-5.4](manual/05-linking.md#fm-54-probe-chains); planned).
 
 Links are transitive: if A links to B and B to C, all three form one cluster. A cluster needs at least two records. Each cluster lists the linking features its members share, so a reader can see what joined them.
 
@@ -225,7 +227,7 @@ Archive rows count as submitted. A CDX row does not say whether a capture came f
 
 **Plant signals.** Each cluster lists signs that it was planted (`plant_signals`), with the records each rests on. They appear under *Plant review* in case notes and as one line per cluster in `case status`, never in a report to a provider or an operator, and never in a notice:
 
-- **Provenance monoculture**: a cluster above noise whose every record comes from a submit-anywhere source.
+- **Provenance monoculture**: a cluster above noise whose every record comes from a submit-anywhere source. In a collection built from one scan service, nearly every cluster carries it, so it says little about one cluster; the method reports each signal with its base rate over the analysis's clusters and treats one carried by most of them as context ([FM-5.11](manual/05-linking.md#fm-511-provenance-and-planted-records); planned).
 - **Burned identifier**: a member's linking feature is one of `linking.published_tags`. Such a value never links, and is not a soft link either.
 - **Too perfect**: every member significant on three or more kinds of evidence other than context kinds, with no unflagged request on its hosts within `linking.window_secs` of its span, no route escalation and no task retrieval. Real agents read pages no rule flags on their way to a probe; a cluster built from textbook payloads need not.
 - **Habit mismatch**: a linking feature the cluster shares with an earlier cluster (outside the link window, not common and not burned), where the two clusters' relay stacks, URL encodings or payload dialects both exist and share nothing. The identifier may have been copied.
@@ -234,7 +236,7 @@ Each is something ordinary agent activity also produces, which is why they are p
 
 ## Interaction between runs
 
-[`swarm.rs`](../crates/sc-core/src/swarm.rs) lists possible interaction between runs (SC-T9) as edges (`swarm_edges` in the analysis). Each edge names two runs as `C3#2` (cluster and run number) with a few of the records it rests on, a kind, a strength (weak, moderate, strong), a chance where the kind has a model, and a detail line. Edges are hints: they never score, link or merge, and they never make a grouping a swarm. That takes a reviewed record in the case ([cases](reference/cases.md#swarms)). The method and its limits are in [SC-FM 4.10](manual/04-indicators.md#fm-410-interaction-signals) and [SC-FM 5.12](manual/05-linking.md#fm-512-interaction-edges).
+[`swarm.rs`](../crates/sc-core/src/swarm/mod.rs) lists possible interaction between runs (SC-T9) as edges (`swarm_edges` in the analysis). Each edge names two runs as `C3#2` (cluster and run number) with a few of the records it rests on, a kind, a strength (weak, moderate, strong), a chance where the kind has a model, and a detail line. Edges are hints: they never score, link or merge, and they never make a grouping a swarm. That takes a reviewed record in the case ([cases](reference/cases.md#swarms)). The method and its limits are in [SC-FM 4.10](manual/04-indicators.md#fm-410-interaction-signals) and [SC-FM 5.12](manual/05-linking.md#fm-512-interaction-edges).
 
 **Runs and strands.** Runs are the clusters' runs above noise. Each run is split into strands by relay route, user agent, client network and header set, so that two clients joined into one cluster by a shared inbox can still be told apart. Two sides are different clients when their known values differ on a dimension (relay route, user agent, network, header set or encoding style) and they share no user agent, network or header set.
 
@@ -299,7 +301,13 @@ Prose counts when a cluster has at least two prose values, or one in a language 
 
 The grade is descriptive. It changes no score, tier or link, and it has no held-out measurement. Internal and provider reports carry a section, *Why we think this is an agent*, listing each cluster's grade, signals, counter-signals and caps, and the case decision when there is one. A provider report leaves out the decision's basis and the declared-testing counter-signal, which stay in case notes like the declaration itself. Reports to affected operators carry none of it. A public notice never prints a grade: when the strongest grade (or the case decision) is L1 or below, its summary adds that the payloads alone do not show what sent them.
 
-`swarmchase eval` prints the grade against each record's actor ([evaluation](reference/evaluation.md#agent-grades-by-actor)). The committed set's synthetic controls show the ladder's known limit: a person pasting a chatbot's payloads into an intercepting proxy, and retrying after errors, reaches L3.
+`swarmchase eval` prints the grade against each record's actor ([evaluation](reference/evaluation.md#agent-grades-by-actor)). The committed set's synthetic controls show the ladder's known limit: a person pasting a chatbot's payloads into an intercepting proxy, and retrying after errors, reaches L3. The rungs are ordered by kind of evidence, not by measured likelihood, so a report reads the grade with the hypotheses it leaves open ([FM-7.12](manual/07-attribution.md#fm-712-competing-hypotheses)).
+
+## Misalignment and scope
+
+A tier measures payloads and tool use, and the grade measures how likely an agent is. Neither says the agent went beyond its task. The method makes that a third finding, the scope assessment ([SC-FM 15](manual/15-misalignment.md)): the reviewer states the cluster's task class from its ordinary requests, classifies each target (public content, interactive, access-controlled, sensitive, third-party channel, benchmark), and runs seven tests, from off-task targets (S1, SC-T8) and control circumvention (S2) to coordination (S7). Tool use alone, relays and echo-service programs included, fails no test. A cluster is called misaligned only when an agent is present and a test fails with its innocent explanation rejected.
+
+The toolkit supplies the inputs: tactics per cluster, recon and sensitive-path hints, challenge outcomes, escalation sequences, benchmark targets and interaction edges. The assessment itself is the admin's, kept in case notes (planned: a recorded finding in the case).
 
 ## Evaluation
 
@@ -307,7 +315,7 @@ The grade is descriptive. It changes no score, tier or link, and it has no held-
 
 **The committed set** is in [`samples/eval/`](../samples/eval/README.md). It holds records reconstructed from request patterns quoted in published Transluce reports, synthetic records for the model-output residue rules, and benign records, including hard negatives built to trip the rules: SQL words in search text, JSON in ordinary API queries, unrendered front-end templates, reading `claude.ai` through a relay. CI runs [`eval-gate.sh`](../scripts/ci/eval-gate.sh) on it and fails when precision or recall, or the lower end of a precision interval, falls below the floors in that script, or when a rule has no labelled positive and is not on the coverage allow-list. The floors only go up.
 
-**What it is not.** The rules were tuned on this set. Its numbers are a regression floor, not an estimate of precision on real traffic. A number worth quoting needs held-out data.
+**What it is not.** The rules were tuned on this set, and most of it is synthetic. Its numbers are a regression floor, not an estimate of precision on real traffic. A number worth quoting needs held-out data, and the words a public notice may use follow from that measurement ([FM-9.12](manual/09-evaluation.md#fm-912-calibrated-public-language)).
 
 **The held-out measurement.** Transluce's [urlquery dataset](https://transluce.org/agent-activity) labels tens of thousands of urlquery reports as significant, suggestive or benign background. It ships report IDs and labels, not report contents, and urlquery's terms forbid redistributing the contents. To measure against it, anyone with a urlquery API key fetches the reports into a gitignored directory with `swarmchase collect urlquery-reports --sample N` and runs `eval` with Transluce's labels and our [label overrides](../samples/eval/overrides/transluce-labels.ndjson), each override with its reason. The steps are in [samples/eval/README.md](../samples/eval/README.md#held-out-evaluation-on-the-transluce-release).
 
@@ -322,6 +330,8 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 **Archive timestamps.** A Wayback or Arquivo timestamp is when the archive captured the URL. That may be the agent's own request or a later crawl of a link to it. Cadence on archive records describes captures, not necessarily the agent, and pace, fan-out and rhythm skip them.
 
 **Humans look the same.** The rules detect agent-like activity. A security researcher, a penetration tester or a conventional scanner sending the same payloads through the same services produces the same records. A significant tier means attack payloads were present, not that an AI agent sent them. Context, rhythm, residue and case work separate the two; the [agent grade](#agent-likelihood) states which of them a cluster shows.
+
+**A tier is not misalignment.** A benign data task done with fetch programs through an echo service grades significant. Whether activity was out of scope is a separate finding ([FM-14.21](manual/14-limits.md#fm-1421-a-tier-is-not-misalignment)).
 
 **Model-output residue from people.** A person who pastes a chatbot answer into a scan form leaves the same Markdown, placeholders and JSON. This is why residue rules carry low weights and never link.
 

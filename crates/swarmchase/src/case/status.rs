@@ -77,14 +77,18 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
             cl.members.len(),
             fmt_ts(cl.start),
             fmt_ts(cl.end),
-            cl.corroboration.label(),
+            cl.origin.corroboration.label(),
             c.fleet_of(&cl.key)
                 .map(|f| format!(" · {}", f.id))
                 .unwrap_or_default()
         )?;
-        if !cl.plant_signals.is_empty() {
-            let kinds: std::collections::BTreeSet<&str> =
-                cl.plant_signals.iter().map(|p| p.kind.label()).collect();
+        if !cl.origin.plant_signals.is_empty() {
+            let kinds: std::collections::BTreeSet<&str> = cl
+                .origin
+                .plant_signals
+                .iter()
+                .map(|p| p.kind.label())
+                .collect();
             writeln!(
                 out,
                 "      plant review: {} (see the case-notes report)",
