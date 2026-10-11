@@ -39,7 +39,7 @@ pub mod incident;
 mod indicators;
 mod report;
 mod select;
-mod status;
+pub(crate) mod status;
 
 pub use cli::{CaseArgs, run};
 pub(crate) use indicators::{CaseIndicators, indicators};

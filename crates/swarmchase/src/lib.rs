@@ -18,6 +18,7 @@ pub mod case;
 pub mod commands;
 pub mod contacts;
 pub mod csirts;
+pub mod dashboard;
 pub mod eval;
 pub mod evidence;
 pub mod health;
@@ -89,6 +90,11 @@ pub enum Cmd {
     /// with `--labeller`), which `swarmchase eval`
     /// reads directly. Progress is saved after every answer.
     Review(review::ReviewArgs),
+    /// The state of monitoring on a page on 127.0.0.1: what is new since you
+    /// last looked, source health and rule drift, the review queue and open
+    /// cases, and the command for each next step. `--json` prints the same
+    /// overview for a script. Read-only.
+    Dashboard(dashboard::DashboardArgs),
     /// Case files: open, classify endpoints, record attribution, draft reports
     /// and notices, record the second review and the naming decisions.
     Case(case::CaseArgs),
@@ -130,6 +136,7 @@ pub fn run() -> Result<()> {
         Cmd::Watch(a) => watch::run(a),
         Cmd::Eval(a) => commands::eval::run(*a),
         Cmd::Review(a) => review::run(a),
+        Cmd::Dashboard(a) => dashboard::run(a),
         Cmd::Case(a) => case::run(a),
         Cmd::Notice(a) => notice::run(a),
         Cmd::Backup(a) => backup::run(a),

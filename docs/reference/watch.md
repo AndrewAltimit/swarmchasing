@@ -174,6 +174,44 @@ A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the di
 
 At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
 
+## The dashboard
+
+`swarmchase dashboard` shows the state of monitoring on `http://127.0.0.1:8767/` (`--port`), one of the [local pages](#local-pages). It reads the data directory (`-d`, as for `review`) and the watchlist (`--watchlist`, default `watchlist.toml`, for each source's kind) and writes nothing. It reloads when a new run lands, and `r` reloads by hand.
+
+```sh
+swarmchase dashboard -d "$SWARMCHASE_DATA"
+swarmchase dashboard -d "$SWARMCHASE_DATA" --json --since 20261011T060000Z
+```
+
+When the latest run wrote a [run summary](#the-run-summary), the page opens with the digest's priority and its reasons, reads the health alerts from it, and lists the local model's suggestions on the run's leads, flagging an `agent` suggestion below L2 as against the labelling rule.
+
+It answers four questions, in this order:
+
+- **What is new.** Clusters above noise that are new or rose a tier, with their agent grade, and significant records outside any cluster, collected since a baseline run. The baseline is the run before the latest, as in the digest, or the run the admin marked seen (`s` on the page, remembered in that browser only; `--since` for `--json`). When that run was deleted by retention, the nearest kept run before it is used.
+- **Whether monitoring is healthy.** Each source's status from `state.json` (failing, skipped, quiet, catching up, ok), its recent pulls, what its absence loses, the latest digest's health alerts, and rule drift recomputed on the latest run.
+- **What waits on the admin.** The review queue as `review --serve` builds it from the latest run's analysis, with label progress, and each open case's clocks and what `case status` says it still needs.
+- **What to run next.** Each item comes with its command, with the data directory filled in: `review --serve`, `case … new --cluster <key>`, a case's next step, or `scan` on a drifting source's records.
+
+`d` shows the latest digest; `1` to `4` jump to the sections; `?` lists the keys.
+
+### The overview document
+
+The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<stamp>` for another baseline). `--json` prints the same document, for a script or an agent. Hosts in it are defanged and no record URL is included. `schema` names the version; a field changes meaning or goes only with a new one.
+
+| Field | Holds |
+|---|---|
+| `run` | The latest run's stamp, age in hours, `stale` past 12 hours, kept runs, rules version, the digest's path. |
+| `since` | The baseline run's `stamp` and its `basis`: `previous-run`, `requested`, `nearest-kept-run`, `before-kept-runs` or `first-run`. |
+| `new.clusters` | New or escalated clusters: `id`, `cluster_key`, `change`, `tier`, `grade`, `records`, `new_records`, `targets`, `rules`, `open_case`. |
+| `new.lone` | Significant records outside any cluster collected since the baseline: `id`, `host`, `grade`, `score`, `rules`, `source`, `time`. |
+| `new.endpoints` | Target hosts flagged for the first time since the baseline. |
+| `health.sources` | Per source: `status`, `reason`, `pulled` history, `new_latest`, streak counts, and `lost` when failing or skipped. |
+| `health.alerts` | The latest digest's health lines. |
+| `health.drift` | Rules that fired well above their baseline on the latest run, per source, with both rates. |
+| `waiting.review` | `unreviewed`, `groups`, counts by tier and label, `with_suggestion`, and the `command`. |
+| `waiting.cases` | Each open case: status, `clock` lines, `notice_not_before`, `naming_ready`, `watch_hits`, and `needs` with commands. |
+| `actions` | The next steps, most urgent first: `kind`, `title`, `detail`, `command`. |
+
 ## Reviewing leads
 
 `review` steps through the watch store's recent records, strongest cluster first, and asks for a label.
