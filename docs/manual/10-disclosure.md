@@ -15,11 +15,23 @@ Each incident is reported to:
 
 Where the declared owner of an "authorised test" is identified, it is a party too ([FM-10.6](#fm-106-authorised-testing)). Toolkit: the toolkit finds operator contacts and proposes the national team for each affected host's country from a directory built from the [FIRST team directory](references.md#disclosure), each entry with its source and the date it was verified.
 
-## FM-10.2 Simultaneous release
+## FM-10.2 Lead times
 
-Reports to every party and the public notice go out together, as soon as the admin judges the evidence sufficient. There is no embargo.
+Reports go out first. The public notice follows on a fixed clock that starts at the latest report sent to each party:
 
-Why: an agent swarm is an active incident, not a latent vulnerability. Each day of private coordination is a day the agents keep running against the affected operators and against others nobody has found yet. Those others can only protect themselves if the notice is public. The provider can stop its agents within hours, so it does not need a fix window the way a software vendor does. And the notice withholds what would let a reader reuse the swarm's channels or exploit an unfixed weakness ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)), which is the part of an embargo's purpose that still applies.
+| Party | Lead time |
+|---|---|
+| Provider | 0 hours. |
+| Operator of a targeted or historical endpoint | 4 to 12 hours, set per case; 6 by default. |
+| Operator of a compromised endpoint | 24 hours. |
+
+The notice **must not** be published before every party's clock has run. The clock **must not** be lengthened: nothing a recipient says, asks or offers extends it, and a practitioner cannot set it beyond these bounds for any reason. Each report states the publication time.
+
+A party for which no contact can be found after the search in [FM-10.4](#fm-104-contacts-and-channels) does not hold the notice back. The practitioner records what was tried, and the notice says contact was attempted.
+
+Why these times: an agent swarm is an active incident, not a latent vulnerability. Each day of private coordination is a day the agents keep running against the affected operators and against others nobody has found yet, and those others can only protect themselves once the notice is public. The provider can stop its agents within hours and needs no fix window, so it gets none. An operator gets hours: enough to read its logs, block the clients and check a weakness before readers of the notice can look for it. The operator of a compromised endpoint gets a day, since its weakness may still be open; the notice also withholds that endpoint's attack details ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)).
+
+**Not an embargo.** An embargo is a negotiated period whose end depends on the parties: a fix, an agreed date, an extension on request. The lead time is fixed before any report is sent, carries no condition and is never negotiated. A recipient cannot buy delay with cooperation or silence, so the clock cannot become a way to keep an incident quiet.
 
 ## FM-10.3 Relation to vulnerability disclosure standards
 
@@ -27,10 +39,10 @@ The method borrows the structure of coordinated vulnerability disclosure and dep
 
 | Source | What the method takes | Where it departs |
 |---|---|---|
-| [ISO/IEC 29147:2018](references.md#disclosure) Vulnerability disclosure | Receiving and sending reports through published contacts; advisories with what is affected and what to do. | Disclosure does not wait for a remediation; there is no vendor fix to wait for. |
+| [ISO/IEC 29147:2018](references.md#disclosure) Vulnerability disclosure | Receiving and sending reports through published contacts; advisories with what is affected and what to do. | Disclosure waits only for the fixed lead time, not for a remediation; there is no vendor fix to wait for. |
 | [ISO/IEC 30111:2019](references.md#disclosure) Vulnerability handling processes | Tracked handling: each case has a record of decisions and sends. | The finder, not a vendor, runs the process. |
-| [ISO/IEC TR 5895:2022](references.md#disclosure) Multi-party coordinated vulnerability disclosure and handling | Several parties reported in one coordinated action, each with its role. | No pre-release coordination period. |
-| [FIRST multi-party guidelines](references.md#disclosure) | Its guidance gives an embargo by default only absent evidence of prior public disclosure, including active exploitation, and recognises that active exploitation may lead a finder or coordinator to disclose before remediation. | The method treats every confirmed incident as active, so it applies that exception as the rule. |
+| [ISO/IEC TR 5895:2022](references.md#disclosure) Multi-party coordinated vulnerability disclosure and handling | Several parties reported in one coordinated action, each with its role, before public disclosure. | The pre-release period is a fixed lead time of at most a day per party, not a negotiated coordination period, and no party can extend it. |
+| [FIRST multi-party guidelines](references.md#disclosure) | Its guidance gives an embargo by default only absent evidence of prior public disclosure, including active exploitation, and recognises that active exploitation may lead a finder or coordinator to disclose before remediation. | The method treats every confirmed incident as active, so it applies that exception as the rule, keeping only a short fixed notice to the parties. |
 
 A practitioner who follows this manual says so in reports, so recipients used to embargoes know what to expect.
 
@@ -40,11 +52,11 @@ For each affected host, the contact is the first published security contact foun
 
 ## FM-10.5 Right of reply
 
-A provider's or affected operator's statement is appended to the notice verbatim, as a dated update, when they ask. Replies never delay publication and are never edited, except to withhold what any notice withholds ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)), with the withholding marked.
+A provider's or affected operator's statement is appended to the notice verbatim, as a dated update, when they ask. Each report says so. Replies never delay publication ([FM-10.2](#fm-102-lead-times)) and are never edited, except to withhold what any notice withholds ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)), with the withholding marked.
 
 ## FM-10.6 Authorised testing
 
-A cluster that declares itself an authorised red-team or research evaluation is handled as a normal incident: a declaration in a request is self-identification and is not checked by being believed. Its declared owner is contacted at the same time as the provider. If the owner confirms the test was authorised and in scope, the notice is published as "authorised test, closed". It is not withheld: other operators saw the same traffic and need to know what it was.
+A cluster that declares itself an authorised red-team or research evaluation is handled as a normal incident: a declaration in a request is self-identification and is not checked by being believed. Its declared owner is contacted with the provider. If the owner confirms the test was authorised and in scope, the notice is published as "authorised test, closed". It is not withheld: other operators saw the same traffic and need to know what it was.
 
 Toolkit: a cluster whose requests declare a test lists the declaring text and the contact it names, in case notes only ([FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing)). The admin adds the owner it names with `case contact add --party declared-owner`.
 
@@ -68,6 +80,23 @@ Tools draft reports, find contacts and prepare notices. They never send or publi
 - each endpoint and the admin's decision on it (compromised, targeted, historical, not affected);
 - every attribution claim with its evidence level;
 - every merge and split ([FM-5.8](05-linking.md#fm-58-candidate-fleets-merge-and-split));
-- every contact, every send and every reply, dated.
+- every contact, every send with its time, every party no contact was found for, and every reply, dated;
+- the self-review below.
 
 An evidence bundle sent with a report holds the records, their analysis, a stamp with the rules and toolkit versions, and a hash manifest, so a recipient can re-run the analysis and check every tier ([evidence bundles](../reference/cases.md#evidence-bundles)).
+
+## FM-10.9 Self-review
+
+Where one practitioner both decides and publishes, no second reviewer reads the notice. A written checklist stands in for one. Before publication, every item **must** pass, and each is recorded in the case:
+
+1. Every attribution claim has its layer, label and tag ([FM-7.6](07-attribution.md#fm-76-claim-tags), [FM-7.7](07-attribution.md#fm-77-attribution-labels)), and no likelihood word is stronger than its label allows ([FM-8.3](08-confidence.md#fm-83-usage-rules)).
+2. Each named organisation is described as targeted or affected, never as the actor. "Compromised" is used only for an endpoint classified compromised on a recorded basis beyond the requests it received.
+3. An endpoint every record of which comes from a service anyone can submit a URL to is named only with a logged reason, and the notice says "URLs targeting <organisation>'s hosts were submitted to public scan services", not that requests reached it ([FM-5.11](05-linking.md#fm-511-provenance-and-planted-records)).
+4. No provider appears in the title, or as more than the notified party, below shared identifiers ([FM-11.2](11-notices.md#fm-112-structure)).
+5. Each alternative explanation is recorded as rejected, with the reason: an authorised test ([FM-10.6](#fm-106-authorised-testing)), a honeypot, a research scanner, spoofed self-identification ([FM-7.9](07-attribution.md#fm-79-false-flag-reasoning)), planted records.
+6. A cluster with two or more plant signals has a recorded review ([FM-5.11](05-linking.md#fm-511-provenance-and-planted-records)).
+7. Every party was sent its report or recorded as having no contact, and the lead time has run ([FM-10.2](#fm-102-lead-times)).
+8. The withholding scan passes ([FM-11.5](11-notices.md#fm-115-lint)).
+9. **Cooling-off re-read.** The practitioner re-reads the exact final draft at least an hour after it was drafted. A change after the re-read needs another. The hour fits inside the operators' lead time.
+
+Toolkit: `notice add` prints the checklist as a pass/fail list and writes nothing while an item fails; `case reread` records the draft's SHA-256 and the time; `notice lint` checks the items a committed notice shows on its own ([cases](../reference/cases.md#self-review-checklist)).

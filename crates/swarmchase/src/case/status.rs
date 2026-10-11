@@ -178,6 +178,9 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
         c.decisions.len(),
         c.sent.len()
     )?;
+    if !matches!(c.status, CaseStatus::Published | CaseStatus::Closed) {
+        super::lead::show(&c, chrono::Utc::now().timestamp(), out)?;
+    }
 
     let has_draft = case_dir(root, id)?.join(NOTICE_DRAFT).is_file();
     let todo = todo(&c, &claims, has_draft);
@@ -243,8 +246,39 @@ fn todo(c: &Case, claims: &[Claim], has_draft: bool) -> Vec<String> {
         ));
     } else if !has_draft && matches!(c.status, CaseStatus::Open | CaseStatus::Reported) {
         t.push(format!(
-            "no notice draft; reports and the notice go out together: `swarmchase case notice {}`",
+            "no notice draft; draft it after the reports are sent, then re-read it an hour later: `swarmchase case notice {}`",
             c.id
+        ));
+    } else if matches!(c.status, CaseStatus::Open | CaseStatus::Reported) {
+        let undecided: Vec<&str> = AlternativeKind::ALL
+            .into_iter()
+            .filter(|k| !c.alternatives.iter().any(|x| x.kind == *k))
+            .map(|k| k.id())
+            .collect();
+        if !undecided.is_empty() {
+            t.push(format!(
+                "decide the alternative explanations ({}): `swarmchase case alternative {} <kind> --rejected \"…\"`",
+                undecided.join(", "),
+                c.id
+            ));
+        }
+        if c.reread.is_none() {
+            t.push(format!(
+                "re-read the notice draft an hour or more after writing it: `swarmchase case reread {}`; `swarmchase case checklist {}` shows what `notice add` checks",
+                c.id, c.id
+            ));
+        }
+    }
+    for e in c
+        .endpoints
+        .iter()
+        .filter(|e| e.state == EndpointState::Compromised && e.basis.is_none())
+    {
+        t.push(format!(
+            "{} is compromised with no recorded basis: `swarmchase case endpoint {} {} compromised --basis \"…\"`",
+            sc_core::defang_host(&e.host),
+            c.id,
+            e.host
         ));
     }
     let named = claims

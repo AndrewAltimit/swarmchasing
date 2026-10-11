@@ -87,6 +87,8 @@ A report or notice names a developer or operator only at or above the threshold 
 - the default threshold is **Suspected** (`shared_identifiers`);
 - the admin may raise it, or lower it to **Possible** with the reason logged in the case, and the notice then prints the label next to the name;
 - whatever the setting, a developer is never named on self-identification alone;
+- below shared identifiers, a public notice names the provider only as the party notified: what the requests say about themselves, that this is the weakest evidence, that the provider's operation, deployment or authorisation is not confirmed, and that it was sent the evidence ([FM-11.2](11-notices.md#fm-112-structure)); its name stays out of the title;
+- at `provider_infrastructure`, a notice says the requests came from infrastructure the provider operates; who deployed the agents is a separate claim;
 - a network operator may be named as a host, because that is what an ASN shows;
 - harness and model-family candidates are never named ([FM-7.4](#fm-74-harness-and-framework-layer), [FM-7.5](#fm-75-model-family-layer)).
 

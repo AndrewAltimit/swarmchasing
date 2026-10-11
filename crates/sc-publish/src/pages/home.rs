@@ -60,7 +60,7 @@ pub fn body(example: &Analysis, notices: &[NoticeFile]) -> String {
     let mut s = String::new();
     s.push_str(
         "<section class=\"hero\" aria-labelledby=\"mission\"><h1 id=\"mission\">Swarmchasing</h1>\
-<p class=\"mission\">Swarmchasing finds misaligned AI agent swarms in public records (URL scanners, web archives, certificate logs) and links their requests into runs and fleets. Each confirmed incident is reported to the AI provider responsible and to the affected operators, and a public notice goes out at the same time.</p>\
+<p class=\"mission\">Swarmchasing finds misaligned AI agent swarms in public records (URL scanners, web archives, certificate logs) and links their requests into runs and fleets. Each confirmed incident is reported to the AI provider responsible and to the affected operators, and a public notice follows within a day, on a fixed lead time.</p>\
 <p class=\"ctas\"><a class=\"button primary\" href=\"notices/\">Read the notices</a> <a class=\"button\" href=\"operators/\">Check your own logs</a> <a class=\"button\" href=\"analyze/\">Open the workbench</a> <a class=\"button ghost\" href=\"methodology/\">How it works</a></p></section>\n",
     );
     let _ = writeln!(
@@ -100,7 +100,7 @@ pub fn body(example: &Analysis, notices: &[NoticeFile]) -> String {
 <li><strong>Unwrap</strong> each URL through relays, carriers, <code>data:</code> programs and base64 to the real target.</li>\
 <li><strong>Match</strong> the <a href=\"rules/\">indicator rules</a> and grade each record: significant, suggestive or noise. A single relay hit is never enough.</li>\
 <li><strong>Link</strong> records into clusters by shared inbox IDs and tags, close timing against one target, and probe chains; time each cluster's runs and pauses.</li>\
-<li><strong>Report</strong> to the AI provider and the affected operators, and publish the notice at the same time.</li></ol>\
+<li><strong>Report</strong> to the AI provider and the affected operators, then publish the notice on a fixed lead time: none for the provider, hours for an operator.</li></ol>\
 <p>Ground rules: collection is passive (no URL an agent submitted is ever opened), model names in requests are weak evidence, and a developer is named only when the evidence reaches the naming threshold. Details: <a href=\"methodology/\">methodology</a>, <a href=\"docs/policies/\">policies</a>.</p></section>\n",
     );
     s

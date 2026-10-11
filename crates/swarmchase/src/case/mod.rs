@@ -31,11 +31,13 @@
 //! against. Contacts, operator evidence and the notice draft are in
 //! [`crate::contacts`], [`crate::evidence`] and [`crate::notice`].
 
+pub(crate) mod checklist;
 mod cli;
 pub(crate) mod fleet;
 mod grade;
 pub(crate) mod incident;
 mod indicators;
+pub(crate) mod lead;
 mod model;
 mod report;
 mod select;
@@ -209,6 +211,12 @@ pub(crate) fn new_case(
         evidence: Vec::new(),
         fleets: Vec::new(),
         agent_grade: None,
+        lead_hours: None,
+        no_contact: Vec::new(),
+        alternatives: Vec::new(),
+        plant_reviews: Vec::new(),
+        drafted: None,
+        reread: None,
     };
     c.add_endpoints(&a);
     c.log(
@@ -502,13 +510,16 @@ mod tests {
             "notices are published, not sent"
         );
 
-        // The notice: drafted in the case, blocked while an endpoint is
-        // unreviewed, then added to notices/ without its draft banner.
-        let (p, review) = notice_draft(&root, "t-1", false, "2026-10-15").unwrap();
+        // The notice: drafted in the case, blocked by the self-review
+        // checklist until every item passes, then added to notices/ without
+        // its draft banner.
+        const H: i64 = 3600;
+        let t0 = 1_791_500_000;
+        let (p, review) = notice_draft(&root, "t-1", false, "2026-10-15", t0).unwrap();
         assert!(review.lint.is_empty(), "{:?}", review.lint);
         assert_eq!(review.unreviewed, vec!["elsewhere.example".to_string()]);
         assert!(
-            notice_draft(&root, "t-1", false, "2026-10-15").is_err(),
+            notice_draft(&root, "t-1", false, "2026-10-15", t0).is_err(),
             "keeps edits"
         );
         let md = std::fs::read_to_string(&p).unwrap();
@@ -516,17 +527,68 @@ mod tests {
         assert!(md.contains("affected = [\"portal.example.gov\"]"), "{md}");
         let notices = root.join("notices");
         let rules = sc_core::Rules::default_rules();
-        assert!(crate::notice::add_for_test(&root, "t-1", &notices, &rules, "2026-10-16").is_err());
+        let add =
+            |now| crate::notice::add_for_test(&root, "t-1", &notices, &rules, "2026-10-16", now);
+        let e = add(t0 + 30 * H).unwrap_err().to_string();
+        assert!(e.contains("every endpoint is classified"), "{e}");
+        assert!(e.contains("alternative explanations"), "{e}");
+        assert!(e.contains("every party was sent"), "{e}");
         update(&root, "t-1", |c| {
             c.endpoints[1].state = EndpointState::NotAffected;
+            cli::sent(
+                c,
+                "security@portal.example.gov",
+                "email",
+                None,
+                Some(&rfc3339(t0 + 60)),
+                None,
+                t0 + 120,
+            )?;
+            cli::no_contact(
+                c,
+                lead::ANY_PROVIDER,
+                "no directory entry for the self-named vendor",
+                t0 + 60,
+            )?;
+            for k in AlternativeKind::ALL {
+                cli::alternative(c, k, Some("checked; see case notes"), None, "2026-10-15")?;
+            }
             Ok(())
         })
         .unwrap();
-        let added =
-            crate::notice::add_for_test(&root, "t-1", &notices, &rules, "2026-10-16").unwrap();
+        // The draft predates the sends, so it cannot say who was reported.
+        let e = add(t0 + 30 * H).unwrap_err().to_string();
+        assert!(e.contains("the draft was written after every send"), "{e}");
+        notice_draft(&root, "t-1", true, "2026-10-15", t0 + 120).unwrap();
+        // A re-read inside the cooling-off does not count.
+        checklist::reread(&root, "t-1", "2026-10-15", t0 + 120 + H / 2).unwrap();
+        let e = add(t0 + 30 * H).unwrap_err().to_string();
+        assert!(e.contains("re-read at least an hour"), "{e}");
+        checklist::reread(&root, "t-1", "2026-10-15", t0 + 120 + H).unwrap();
+        // The operator's 6-hour lead runs from the send; no override.
+        let e = add(t0 + 3 * H).unwrap_err().to_string();
+        assert!(e.contains("The lead time runs until"), "{e}");
+        assert!(e.contains(&show_time(t0 + 60 + 6 * H)), "{e}");
+        // An edit after the re-read needs another re-read.
+        let draft = std::fs::read_to_string(&p).unwrap();
+        std::fs::write(
+            &p,
+            draft.replace("## Indicators", "Edited.\n\n## Indicators"),
+        )
+        .unwrap();
+        assert!(add(t0 + 7 * H).unwrap_err().to_string().contains("re-read"));
+        checklist::reread(&root, "t-1", "2026-10-15", t0 + 7 * H).unwrap();
+        let added = add(t0 + 7 * H).unwrap();
         let text = std::fs::read_to_string(&added).unwrap();
         assert!(!text.contains("DRAFT"), "{text}");
         assert!(text.contains("kind = \"published\""), "{text}");
+        assert!(
+            text.contains("Reports went to the affected operators before publication")
+                && text.contains(
+                    "No contact could be found for the AI provider; contact was attempted."
+                ),
+            "{text}"
+        );
         // Added is not published: reported, with the push pending.
         let c = load(&root, "t-1").unwrap();
         assert_eq!(c.status, CaseStatus::Reported);
@@ -535,7 +597,7 @@ mod tests {
         status(&root, "t-1", &mut buf).unwrap();
         let s = String::from_utf8(buf).unwrap();
         assert!(s.contains("publish pending"), "{s}");
-        assert!(crate::notice::add_for_test(&root, "t-1", &notices, &rules, "2026-10-16").is_err());
+        assert!(add(t0 + 8 * H).is_err());
         // Not on any remote (no repository here): refused unless forced.
         let e = crate::notice::published_for_test(&root, &notices, "t-1", false, "2026-10-17");
         assert!(e.unwrap_err().to_string().contains("not on origin yet"));

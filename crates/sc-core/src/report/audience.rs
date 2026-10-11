@@ -114,7 +114,7 @@ pub(super) fn summary(
             },
             reported
                 .and_then(Reported::parties)
-                .map(|p| format!("Reports went to {p} when this notice was published. "))
+                .map(|p| format!("Reports went to {p} before this notice was published. "))
                 .unwrap_or_default()
         ),
     }

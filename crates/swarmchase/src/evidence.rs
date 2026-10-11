@@ -445,7 +445,7 @@ mod tests {
         let md = report(&root, "t-2", Audience::Affected, None, Some(&other), "d").unwrap();
         assert!(!md.contains(marker), "another operator's logs: {md}");
 
-        let (p, review) = notice_draft(&root, "t-2", false, "2026-10-21").unwrap();
+        let (p, review) = notice_draft(&root, "t-2", false, "2026-10-21", 1_791_000_000).unwrap();
         assert!(!std::fs::read_to_string(&p).unwrap().contains(marker));
         assert!(
             review
@@ -465,7 +465,7 @@ mod tests {
             Ok(())
         })
         .unwrap();
-        let (p, review) = notice_draft(&root, "t-2", true, "2026-10-22").unwrap();
+        let (p, review) = notice_draft(&root, "t-2", true, "2026-10-22", 1_791_000_000).unwrap();
         assert!(std::fs::read_to_string(&p).unwrap().contains(marker));
         assert!(review.lint.is_empty(), "{:?}", review.lint);
         cleanup(&root);

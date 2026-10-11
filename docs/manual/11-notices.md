@@ -25,7 +25,14 @@ A notice has machine-readable front matter and a body.
 
 Hosts are defanged (`a[.]b`) and no URL from a record is a link.
 
-Toolkit: `case notice` drafts the body from the case, and the admin edits it. The draft's attribution section gives each host claim, and each developer claim that passes the naming gate, with its layer, label, claim tag and evidence, and a Conclusion line for each named developer; developers below the gate and harness and model-family candidates are left out. Claim tags outside the attribution section are added by hand.
+**Who is named, and how.**
+
+- An affected organisation is described as targeted or affected, never as the actor. "Compromised" appears only for an endpoint classified so on a recorded basis beyond the requests it received.
+- An endpoint seen only in records anyone could have submitted is named only with the practitioner's logged reason, as "URLs targeting <organisation>'s hosts were submitted to public scan services".
+- A provider below shared identifiers is the party notified, in these words: "Requests in this cluster identify themselves as using <model> from <provider>. Self-identification is the weakest evidence we use. We have not confirmed that <provider> operated, deployed or authorised them. <provider> has been sent the full evidence." The title never names it.
+- At provider infrastructure, the notice says the requests came from infrastructure that the provider operates, and keeps who deployed them separate.
+
+Toolkit: `case notice` drafts the body from the case, and the admin edits it. The draft's attribution section gives each host claim, and each developer claim that passes the naming gate, with its layer, label, claim tag and evidence, and a Conclusion line for each named developer; a developer below shared identifiers gets the notified-party line, with its label and tag, and the sentence about the evidence only when a send to the provider is recorded; harness and model-family candidates are left out. Claim tags outside the attribution section are added by hand.
 
 ## FM-11.3 Status lifecycle
 
@@ -52,7 +59,7 @@ Content from a source whose terms forbid redistribution is never quoted; the not
 
 ## FM-11.5 Lint
 
-Every notice is checked by a program before publication and on every later change, for: callback channel identifiers, e-mail addresses other than role mailboxes, credential shapes, and well-formed front matter with updates in date order. A notice that fails is not published. The lint is a last check, not the withholding itself: the draft is built from a withholding view, and the lint catches what got through ([notices](../reference/notices.md#lint)).
+Every notice is checked by a program before publication and on every later change, for: callback channel identifiers, e-mail addresses other than role mailboxes, credential shapes, well-formed front matter with updates in date order, attribution statements without a layer, label or tag, likelihood words stronger than their labels allow, and a title naming a provider the notice does not name as a developer. A notice that fails is not published. Before publication, the self-review checklist covers what the notice alone cannot show ([FM-10.9](10-disclosure.md#fm-109-self-review)). The lint is a last check, not the withholding itself: the draft is built from a withholding view, and the lint catches what got through ([notices](../reference/notices.md#lint)).
 
 ## FM-11.6 Corrections and retractions
 
@@ -70,4 +77,4 @@ The feed carries every update, so a reader who saw the original sees the correct
 
 ## FM-11.7 Permanence
 
-A notice id, once published, keeps its address. Notices are published from a version-controlled repository, so every state of every notice is recoverable. Committing a notice publishes it; nothing else does ([notices](../reference/notices.md#from-draft-to-published)).
+A notice id, once published, keeps its address. Notices are published from a version-controlled repository, so every state of every notice is recoverable. Committing a notice publishes it; nothing else does ([notices](../reference/notices.md#from-draft-to-published)). A notice is published no earlier than the lead times allow ([FM-10.2](10-disclosure.md#fm-102-lead-times)), and its first update says who was reported before it and for whom no contact could be found.
