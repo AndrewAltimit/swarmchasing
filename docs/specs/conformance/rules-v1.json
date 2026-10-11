@@ -1,239 +1,297 @@
 {
-  "spec": "SC-Rules v1",
   "description": "Conformance vectors for SC-Rules v1 (docs/specs/rules-v1.md): each URL, analysed alone with the rules file at rules_version, yields this target host, this set of rule ids, this score and this tier. Hosts are reserved example domains or public relay and echo services; every URL is synthetic.",
   "rules_version": "2026-10-10",
+  "spec": "SC-Rules v1",
   "thresholds": {
-    "suggestive": 3,
-    "significant": 6
+    "significant": 6,
+    "suggestive": 3
   },
   "vectors": [
     {
       "id": "plain-page",
       "note": "An ordinary request: no layer, no rule.",
-      "url": "https://www.example.org/",
-      "target": "www.example.org",
       "rules": [],
       "score": 0,
-      "tier": "noise"
+      "target": "www.example.org",
+      "tier": "noise",
+      "url": "https://www.example.org/"
     },
     {
       "id": "relay-only",
       "note": "One relay: below suggestive on its own.",
-      "url": "https://r.jina.ai/https://www.example.org/news?id=1",
-      "target": "www.example.org",
       "rules": [
         "relay.jina"
       ],
       "score": 2,
-      "tier": "noise"
+      "target": "www.example.org",
+      "tier": "noise",
+      "url": "https://r.jina.ai/https://www.example.org/news?id=1"
     },
     {
       "id": "two-relays",
       "note": "Two relays: context kinds only.",
-      "url": "https://r.jina.ai/https://www-example-org.translate.goog/page",
-      "target": "www.example.org",
       "rules": [
         "relay.jina",
         "relay.translate_goog"
       ],
-      "score": 4,
-      "tier": "suggestive"
+      "score": 2,
+      "target": "www.example.org",
+      "tier": "noise",
+      "url": "https://r.jina.ai/https://www-example-org.translate.goog/page"
     },
     {
       "id": "relay-selfid",
       "note": "A relay and a vendor name: context kinds only.",
-      "url": "https://r.jina.ai/https://www.example.org/?q=claude",
-      "target": "www.example.org",
       "rules": [
         "relay.jina",
         "selfid.vendor_name"
       ],
-      "score": 3,
-      "tier": "suggestive"
+      "score": 2,
+      "target": "www.example.org",
+      "tier": "noise",
+      "url": "https://r.jina.ai/https://www.example.org/?q=claude"
     },
     {
       "id": "cachebuster",
       "note": "A cache buster alone.",
-      "url": "https://api.example.org/v1/items?id=1&cb=123",
-      "target": "api.example.org",
       "rules": [
         "cache.buster"
       ],
       "score": 1,
-      "tier": "noise"
+      "target": "api.example.org",
+      "tier": "noise",
+      "url": "https://api.example.org/v1/items?id=1&cb=123"
     },
     {
       "id": "httpbin-program",
       "note": "A fetch program carried as base64 through an echo service.",
-      "url": "https://httpbin.org/base64/PHNjcmlwdD5mZXRjaCgnaHR0cHM6Ly93d3cuZXhhbXBsZS5vcmcvYXBpL3NjaGVkdWxlJykudGhlbihyPT5yLnRleHQoKSkudGhlbih0PT5kb2N1bWVudC50aXRsZT10KTwvc2NyaXB0Pg==",
-      "target": "www.example.org",
       "rules": [
         "carrier.html_program",
         "carrier.httpbin",
         "carrier.inline_fetch_program",
         "marker.title_write"
       ],
-      "score": 9,
-      "tier": "significant"
+      "score": 5,
+      "target": "www.example.org",
+      "tier": "suggestive",
+      "url": "https://httpbin.org/base64/PHNjcmlwdD5mZXRjaCgnaHR0cHM6Ly93d3cuZXhhbXBsZS5vcmcvYXBpL3NjaGVkdWxlJykudGhlbihyPT5yLnRleHQoKSkudGhlbih0PT5kb2N1bWVudC50aXRsZT10KTwvc2NyaXB0Pg=="
     },
     {
       "id": "data-url-program",
       "note": "A fetch program in a data: URL.",
-      "url": "data:text/html;base64,PHNjcmlwdD5mZXRjaCgnaHR0cHM6Ly93d3cuZXhhbXBsZS5vcmcvYScpPC9zY3JpcHQ+",
-      "target": "www.example.org",
       "rules": [
         "carrier.data_url_script",
         "carrier.html_program",
         "carrier.inline_fetch_program"
       ],
-      "score": 8,
-      "tier": "significant"
+      "score": 3,
+      "target": "www.example.org",
+      "tier": "suggestive",
+      "url": "data:text/html;base64,PHNjcmlwdD5mZXRjaCgnaHR0cHM6Ly93d3cuZXhhbXBsZS5vcmcvYScpPC9zY3JpcHQ+"
     },
     {
       "id": "sqli-union",
       "note": "A UNION SELECT payload.",
-      "url": "https://www.example.org/item?id=1%20UNION%20SELECT%20null,null--",
-      "target": "www.example.org",
       "rules": [
         "exploit.sqli_union"
       ],
       "score": 5,
-      "tier": "significant"
+      "target": "www.example.org",
+      "tier": "significant",
+      "url": "https://www.example.org/item?id=1%20UNION%20SELECT%20null,null--"
     },
     {
       "id": "sqli-boolean",
       "note": "A boolean SQL injection payload.",
-      "url": "https://www.example.org/item?id=1'%20OR%20'1'='1",
-      "target": "www.example.org",
       "rules": [
         "exploit.sqli_boolean"
       ],
       "score": 4,
-      "tier": "significant"
+      "target": "www.example.org",
+      "tier": "significant",
+      "url": "https://www.example.org/item?id=1'%20OR%20'1'='1"
     },
     {
       "id": "traversal",
       "note": "A multi-step traversal to a sensitive file.",
-      "url": "https://www.example.org/view?file=../../../etc/passwd",
-      "target": "www.example.org",
       "rules": [
         "exploit.traversal",
         "exploit.traversal_single"
       ],
-      "score": 9,
-      "tier": "significant"
+      "score": 5,
+      "target": "www.example.org",
+      "tier": "significant",
+      "url": "https://www.example.org/view?file=../../../etc/passwd"
     },
     {
       "id": "xss",
       "note": "A script tag in a parameter value.",
-      "url": "https://www.example.org/search?q=%3Cscript%3Ealert(1)%3C/script%3E",
-      "target": "www.example.org",
       "rules": [
         "carrier.html_program",
         "exploit.xss"
       ],
       "score": 6,
-      "tier": "significant"
+      "target": "www.example.org",
+      "tier": "significant",
+      "url": "https://www.example.org/search?q=%3Cscript%3Ealert(1)%3C/script%3E"
     },
     {
       "id": "ssti",
       "note": "A template-injection probe.",
-      "url": "https://www.example.org/greet?name=%7B%7B7*7%7D%7D",
-      "target": "www.example.org",
       "rules": [
         "exploit.ssti"
       ],
       "score": 4,
-      "tier": "significant"
+      "target": "www.example.org",
+      "tier": "significant",
+      "url": "https://www.example.org/greet?name=%7B%7B7*7%7D%7D"
     },
     {
       "id": "prose-union",
       "note": "Hard negative: the words of a payload in a search.",
-      "url": "https://www.example.org/search?q=union%20select%20a%20band",
-      "target": "www.example.org",
       "rules": [],
       "score": 0,
-      "tier": "noise"
+      "target": "www.example.org",
+      "tier": "noise",
+      "url": "https://www.example.org/search?q=union%20select%20a%20band"
     },
     {
       "id": "example-relay",
       "note": "Hard negative: trying a relay out on the example domain.",
-      "url": "https://r.jina.ai/https://example.com/",
-      "target": "example.com",
       "rules": [
         "relay.jina"
       ],
       "score": 2,
-      "tier": "noise"
+      "target": "example.com",
+      "tier": "noise",
+      "url": "https://r.jina.ai/https://example.com/"
     },
     {
       "id": "run-tag",
       "note": "A run-tag parameter carrying a published test tag.",
-      "url": "https://www.example.org/?uqtag=chatgpttest1",
-      "target": "www.example.org",
       "rules": [
         "marker.test_tag",
         "marker.uq_tags"
       ],
-      "score": 6,
-      "tier": "significant"
+      "score": 3,
+      "target": "www.example.org",
+      "tier": "suggestive",
+      "url": "https://www.example.org/?uqtag=chatgpttest1"
     },
     {
       "id": "callback-inbox",
       "note": "A callback inbox with a numbered report value.",
-      "url": "https://webhook.site/00000000-0000-4000-8000-000000000000?d=headers1",
-      "target": null,
       "rules": [
         "exfil.webhook_site",
         "marker.callback_seq"
       ],
       "score": 6,
-      "tier": "significant"
+      "target": null,
+      "tier": "significant",
+      "url": "https://webhook.site/00000000-0000-4000-8000-000000000000?d=headers1"
     },
     {
       "id": "md-link",
       "note": "Markdown link residue in a parameter value.",
-      "url": "https://www.example.org/p?u=%5Bsite%5D(https://www.example.org/a)",
-      "target": "www.example.org",
       "rules": [
         "marker.md_link"
       ],
       "score": 2,
-      "tier": "noise"
+      "target": "www.example.org",
+      "tier": "noise",
+      "url": "https://www.example.org/p?u=%5Bsite%5D(https://www.example.org/a)"
     },
     {
       "id": "tool-call-json",
       "note": "Tool-call arguments left in a request.",
-      "url": "https://r.jina.ai/https://www.example.org/?q=%7B%22url%22:%22https://www.example.org/b%22%7D",
-      "target": "www.example.org",
       "rules": [
         "marker.tool_call_json",
         "relay.jina"
       ],
       "score": 5,
-      "tier": "suggestive"
+      "target": "www.example.org",
+      "tier": "suggestive",
+      "url": "https://r.jina.ai/https://www.example.org/?q=%7B%22url%22:%22https://www.example.org/b%22%7D"
     },
     {
       "id": "placeholder",
       "note": "An unfilled placeholder.",
-      "url": "https://api.example.org/v1/data?key=YOUR_API_KEY",
-      "target": "api.example.org",
       "rules": [
         "marker.placeholder"
       ],
       "score": 2,
-      "tier": "noise"
+      "target": "api.example.org",
+      "tier": "noise",
+      "url": "https://api.example.org/v1/data?key=YOUR_API_KEY"
     },
     {
       "id": "repeated-token",
       "note": "A generation loop: one word six times.",
-      "url": "https://www.example.org/search?q=schedule%20schedule%20schedule%20schedule%20schedule%20schedule",
-      "target": "www.example.org",
       "rules": [
         "marker.repeated_token"
       ],
       "score": 1,
-      "tier": "noise"
+      "target": "www.example.org",
+      "tier": "noise",
+      "url": "https://www.example.org/search?q=schedule%20schedule%20schedule%20schedule%20schedule%20schedule"
+    },
+    {
+      "id": "context-cap",
+      "note": "A relay, a run tag and a cache buster: the context cap holds relay and cache buster to one below suggestive, so the record is suggestive on the run tag, not significant.",
+      "rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "score": 5,
+      "target": "www.example.org",
+      "tier": "suggestive",
+      "url": "https://r.jina.ai/https://www.example.org/x?uqtag=run7&cb=1"
+    },
+    {
+      "id": "double-encoded-path",
+      "note": "A double-encoded route name in a path (F%2561cts arrives as F%61cts).",
+      "rules": [
+        "exploit.double_encoded_path"
+      ],
+      "score": 4,
+      "target": "api.example.org",
+      "tier": "significant",
+      "url": "https://api.example.org/datamart/F%2561cts?select=Year"
+    },
+    {
+      "id": "double-encoded-meta",
+      "note": "A double-encoded injection metacharacter in a value (%253C arrives as %3C).",
+      "rules": [
+        "exploit.double_encoded_meta"
+      ],
+      "score": 4,
+      "target": "www.example.org",
+      "tier": "significant",
+      "url": "https://www.example.org/record?IdNumber=%253Cscript%253E"
+    },
+    {
+      "id": "httpbin-data-exfil",
+      "note": "Fetched data returned inside an echo-service URL.",
+      "rules": [
+        "carrier.httpbin",
+        "exfil.httpbin_data"
+      ],
+      "score": 5,
+      "target": null,
+      "tier": "significant",
+      "url": "https://httpbin.org/get?d=%7B%22Facts%22%3A%5B%7B%22Year%22%3A2005%2C%22Value%22%3A123456%2C%22Economy%22%3A%22US%22%7D%5D%7D"
+    },
+    {
+      "id": "oai-prefix-tag",
+      "note": "An OAI_ run tag (grouped with the other run tags).",
+      "rules": [
+        "marker.oai_prefix"
+      ],
+      "score": 3,
+      "target": "api.example.org",
+      "tier": "suggestive",
+      "url": "https://api.example.org/datamart/Facts?tok=OAI_META_1312"
     }
   ]
 }

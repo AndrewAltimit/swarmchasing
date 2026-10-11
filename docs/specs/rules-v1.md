@@ -11,10 +11,10 @@ This page specifies the format of a swarmchasing rules file, such as [`rules/def
 | Part | Status |
 |---|---|
 | File structure, rule fields, matching and scoring | Normative; the toolkit implements it. |
-| The `group` field and in-group scoring | Reserved (planned); see [Independence groups](#independence-groups). |
-| The context cap | Planned; see [Context cap](#context-cap). |
+| The `group` field and in-group scoring | Normative; see [Independence groups](#independence-groups). |
+| The context cap | Normative; see [Context cap](#context-cap). |
 
-A planned part becomes normative in a later minor version of this spec. Until then a conforming file **must not** use `group`, and an engine that does not implement it **must** reject a file that does, so a file never scores differently on two engines without saying so.
+An engine that does not implement groups or the context cap **must** reject a file that sets `group`, so a file never scores differently on two engines without saying so.
 
 ## File
 
@@ -48,7 +48,7 @@ The version is an opaque string. This project uses a date. Two files with the sa
 | `tactic` | `T1`–`T7` | one of these two | The SC-T tactic a match is evidence of. |
 | `artifact` | boolean | one of these two | A match is a trace of how the agent was built. |
 | `check` | enum | no | A test a `param_value` match must also pass. |
-| `group` | string | reserved | An independence group (planned). |
+| `group` | string | no | An independence group ([Independence groups](#independence-groups)). |
 | `description` | string | no | One line for people. |
 
 A rule **must** carry a `tactic`, or `artifact = true`, or both. `T8` and `T9` are cluster-level judgments and **must not** be a rule's tactic ([FM-4.3](../manual/04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)). A `check` **must** sit on a `param_value` rule. The only check in v1 is `repeated_token`: one word of three characters or more with a letter, or a phrase of two or three words, repeated five or more times in a row.
@@ -87,27 +87,33 @@ A cluster's tier is not a summed score: it is its strongest member's tier, raise
 
 ### Independence groups
 
-(Planned.) Rules that read the same artifact on the same layer are not independent evidence: one fetch program carried through an echo service fires the echo rule, the script rule and the fetch rule at once. Under groups, step 2 becomes: the score is the sum, over groups, of the largest weight among the group's rules that fired, plus the weights of ungrouped rules that fired. `significant` is unchanged: any significant rule still sets the top tier. The method and the default groups are in [FM-4.11](../manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap).
+Rules that read the same artifact on the same layer are not independent evidence: one fetch program carried through an echo service fires the echo rule, the script rule and the fetch rule at once. Under groups, step 2 becomes: the score is the sum, over groups, of the largest weight among the group's rules that fired, plus the weights of ungrouped rules that fired. `significant` is unchanged: any significant rule still sets the top tier. The method and the default groups are in [FM-4.11](../manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap).
 
 ### Context cap
 
-(Planned.) Rules of context kinds together contribute at most `thresholds.suggestive − 1` to a record's score, so a record whose only hits are context kinds stays noise ([FM-4.11](../manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap)). A `significant` context rule still sets the top tier on its own.
+Rules of context kinds together contribute at most `thresholds.suggestive − 1` to a record's score, so a record whose only hits are context kinds stays noise ([FM-4.11](../manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap)). A `significant` context rule still sets the top tier on its own. A group counts as context when the heaviest of its rules that fired is a context kind, a non-context rule winning a tie; its weight then falls under the cap with the ungrouped context rules.
 
 ## Conformance
 
-An engine conforms to SC-Rules v1 when, with the rules file at the corpus's `rules_version`, it gives every vector in [`conformance/rules-v1.json`](conformance/rules-v1.json) the same target host, the same set of rule ids, the same score and the same tier. Layer order and numbering are the engine's own. Each vector is a single synthetic URL on a reserved example domain or a public relay or echo service, analysed alone.
+An engine conforms to SC-Rules v1 when, with the rules file at the corpus's `rules_version`, it gives every vector in [`conformance/rules-v1.json`](conformance/rules-v1.json) the same target host, the same set of rule ids, the same score and the same tier. Layer order and numbering are the engine's own. Each vector is a single synthetic URL on a reserved example domain or a public relay or echo service, analysed alone. This repository's own engine is held to the file by a test in `sc-core` (`tests/conformance.rs`), which also regenerates the vectors' scores and tiers after an intended scoring change.
 
-The corpus covers each layer type, each tier, the hard negatives the default rules are built to avoid (payload words in a search, a relay tried on the example domain), and the cases the planned semantics change:
+The corpus covers each layer type, each tier, the hard negatives the default rules are built to avoid (payload words in a search, a relay tried on the example domain), and the records whose tier the independence groups and the context cap decide:
 
-| Vector | Rules today | Today | Under FM-4.11 |
-|---|---|---|---|
-| `two-relays` | `relay.jina`, `relay.translate_goog` | suggestive | noise (context cap) |
-| `relay-selfid` | `relay.jina`, `selfid.vendor_name` | suggestive | noise (context cap) |
-| `httpbin-program` | echo, script, fetch, title write | significant | suggestive (program group) |
-| `traversal` | `exploit.traversal`, `exploit.traversal_single` | significant | significant (`significant` rule) |
-| `run-tag` | `marker.uq_tags`, `marker.test_tag` | significant | suggestive (run-tag group) |
+| Vector | Rules | Score | Tier | Why |
+|---|---|---|---|---|
+| `two-relays` | `relay.jina`, `relay.translate_goog` | 2 | noise | context cap |
+| `relay-selfid` | `relay.jina`, `selfid.vendor_name` | 2 | noise | context cap |
+| `context-cap` | `relay.jina`, `marker.uq_tags`, `cache.buster` | 5 | suggestive | run tag, context capped |
+| `httpbin-program` | echo, script, fetch, title write | 5 | suggestive | program group plus the echo |
+| `data-url-program` | echo script, script, fetch | 3 | suggestive | program group |
+| `run-tag` | `marker.uq_tags`, `marker.test_tag` | 3 | suggestive | run-tag group |
+| `oai-prefix-tag` | `marker.oai_prefix` | 3 | suggestive | run-tag group |
+| `traversal` | `exploit.traversal`, `exploit.traversal_single` | 5 | significant | traversal group, a `significant` rule |
+| `double-encoded-path` | `exploit.double_encoded_path` | 4 | significant | a `significant` rule |
+| `double-encoded-meta` | `exploit.double_encoded_meta` | 4 | significant | a `significant` rule |
+| `httpbin-data-exfil` | `carrier.httpbin`, `exfil.httpbin_data` | 5 | significant | a `significant` rule |
 
-When the planned semantics land, the corpus moves to the rules version that implements them, and the table above becomes its expected values.
+The full set, with its scores and tiers, is [`conformance/rules-v1.json`](conformance/rules-v1.json), regenerated from the rules at `rules_version`.
 
 ## Validating a rules file
 
@@ -117,7 +123,7 @@ The JSON value of the TOML is validated with any JSON Schema 2020-12 validator. 
 python -c "import tomllib, json, jsonschema; jsonschema.validate(tomllib.load(open('rules/default.toml', 'rb')), json.load(open('schemas/sc-rules-v1.json')))"
 ```
 
-No output means the file is valid. The engine's own load (`swarmchase scan --rules <file>`) then checks what the schema cannot: unique ids and patterns that compile.
+No output means the file is valid. This repository's gate, [`scripts/ci/check-rules-schema.py`](../../scripts/ci/check-rules-schema.py), does the same with the standard library alone (`tomllib`, `json`, `re`), so it needs no third-party package. The engine's own load (`swarmchase scan --rules <file>`) then checks what the schema cannot: unique ids and patterns that compile.
 
 ## Versioning
 
