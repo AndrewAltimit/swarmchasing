@@ -179,6 +179,7 @@ common = [
 # ── Relays: fetch-through / conversion services ────────────────────────────
 [[rule]]
 id = "relay.jina"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -188,6 +189,7 @@ description = "Jina Reader: fetches a page server-side and returns Markdown"
 
 [[rule]]
 id = "relay.markdown_new"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -197,6 +199,7 @@ description = "URL-to-Markdown converter"
 
 [[rule]]
 id = "relay.microlink"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -206,6 +209,7 @@ description = "Microlink headless fetch API"
 
 [[rule]]
 id = "relay.hrefli"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -215,6 +219,7 @@ description = "Referrer-stripping redirector"
 
 [[rule]]
 id = "relay.translate_goog"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -224,6 +229,7 @@ description = "Google Translate proxy host rewriting"
 
 [[rule]]
 id = "relay.allorigins"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -233,6 +239,7 @@ description = "CORS proxy"
 
 [[rule]]
 id = "relay.corsproxy"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "url"
@@ -270,6 +277,7 @@ description = "CodeSandbox"
 
 [[rule]]
 id = "carrier.data_url_script"
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"
@@ -279,6 +287,7 @@ description = "data: URL carrying an HTML program that makes requests"
 
 [[rule]]
 id = "carrier.inline_fetch_program"
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"
@@ -289,6 +298,7 @@ description = "Inline program fetching other URLs from inside a remote browser"
 
 [[rule]]
 id = "carrier.form_post_program"
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"
@@ -300,6 +310,7 @@ description = "Self-submitting POST form delivered as a program"
 
 [[rule]]
 id = "carrier.html_program"
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"
@@ -312,6 +323,7 @@ description = "HTML page with script carried inside the request"
 # ── Exploit payloads ───────────────────────────────────────────────────────
 [[rule]]
 id = "exploit.sqli_union"
+group = "sqli"
 kind = "exploit"
 tactic = "T4"
 target = "url"
@@ -326,6 +338,7 @@ description = "SQL injection: UNION SELECT"
 
 [[rule]]
 id = "exploit.sqli_boolean"
+group = "sqli"
 kind = "exploit"
 tactic = "T4"
 target = "param_value"
@@ -338,6 +351,7 @@ description = "SQL injection: boolean / time-based probe"
 
 [[rule]]
 id = "exploit.traversal"
+group = "traversal"
 kind = "exploit"
 tactic = "T4"
 target = "url"
@@ -348,6 +362,7 @@ description = "Path traversal / sensitive file probe"
 
 [[rule]]
 id = "exploit.traversal_single"
+group = "traversal"
 kind = "exploit"
 tactic = "T4"
 target = "url"
@@ -359,6 +374,7 @@ description = "Single path-traversal step (often encoded as ..%2F)"
 
 [[rule]]
 id = "exploit.sqli_quote"
+group = "sqli"
 kind = "exploit"
 tactic = "T4"
 target = "param_value"
@@ -409,6 +425,7 @@ description = "Out-of-range ID values (often precede injection probes)"
 # ── Agent markers / tags ───────────────────────────────────────────────────
 [[rule]]
 id = "marker.uq_tags"
+group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "param_name"
@@ -418,6 +435,7 @@ description = "urlquery cache-busting / tracking tags seen in agent fleets"
 
 [[rule]]
 id = "marker.test_tag"
+group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -428,6 +446,7 @@ description = "Test tags agents add to URLs"
 
 [[rule]]
 id = "marker.oai_tag"
+group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -446,6 +465,7 @@ description = "Sequenced callback labels (headers0, body0-0, done)"
 
 [[rule]]
 id = "marker.title_write"
+group = "program"
 kind = "agent_marker"
 tactic = "T7"
 target = "url"
@@ -462,6 +482,7 @@ description = "Program writes its result into the page title"
 
 [[rule]]
 id = "marker.md_link"
+group = "markdown"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -471,6 +492,7 @@ description = "Markdown link syntax `[text](https://...)` inside a request URL"
 
 [[rule]]
 id = "marker.md_url_wrapper"
+group = "markdown"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -519,6 +541,7 @@ description = "Redirect or callback parameter left pointing at example.com (temp
 
 [[rule]]
 id = "marker.tool_call_markup"
+group = "tool_call"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -528,6 +551,7 @@ description = "Function-call wrapper markup or tool-call fields from a model's o
 
 [[rule]]
 id = "marker.tool_call_json"
+group = "tool_call"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -541,6 +565,7 @@ description = "Tool-call JSON arguments inside a request ({\"url\": ..., \"argum
 
 [[rule]]
 id = "marker.json_quote_residue"
+group = "tool_call"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -689,6 +714,7 @@ description = "webhook.site inbox (callback / exfil channel)"
 
 [[rule]]
 id = "exfil.requestbin"
+group = "oast"
 kind = "exfil"
 tactic = "T7"
 target = "url"
@@ -699,6 +725,7 @@ description = "Request-catcher / OAST inbox (a per-user subdomain on the service
 
 [[rule]]
 id = "exfil.oast_service"
+group = "oast"
 kind = "exfil"
 tactic = "T7"
 target = "url"
@@ -777,6 +804,7 @@ description = "General-purpose OCR API pointed at a CAPTCHA image"
 # ── Header fingerprints ────────────────────────────────────────────────────
 [[rule]]
 id = "header.via_hysandbox"
+group = "proxy_headers"
 kind = "header"
 artifact = true
 target = "header"
@@ -787,6 +815,7 @@ description = "Via header from a hysandbox Apache Traffic Server proxy"
 
 [[rule]]
 id = "header.via_ats"
+group = "proxy_headers"
 kind = "header"
 artifact = true
 target = "header"
@@ -796,6 +825,7 @@ description = "Request passed through Apache Traffic Server"
 
 [[rule]]
 id = "header.gzip_only_requests"
+group = "proxy_headers"
 kind = "header"
 artifact = true
 target = "header"

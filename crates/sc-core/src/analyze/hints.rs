@@ -72,11 +72,7 @@ pub(super) fn base(
             *feats.entry(f).or_default() += 1;
         }
     }
-    let score: i32 = rules_seen
-        .keys()
-        .filter_map(|id| rules.rule(id))
-        .map(|r| r.weight)
-        .sum();
+    let score = rules.score(rules_seen.keys().map(String::as_str));
     Cluster {
         tier: cluster_tier(results, &members),
         score,
@@ -272,14 +268,7 @@ pub(super) fn cluster_tier(results: &[ObsResult], members: &[usize]) -> Tier {
 
 /// Kinds that describe how a request was sent rather than what it did.
 pub(crate) fn is_context_kind(k: IndicatorKind) -> bool {
-    matches!(
-        k,
-        IndicatorKind::Relay
-            | IndicatorKind::CacheBuster
-            | IndicatorKind::SelfId
-            | IndicatorKind::Header
-            | IndicatorKind::Outcome
-    )
+    k.is_context()
 }
 
 pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {

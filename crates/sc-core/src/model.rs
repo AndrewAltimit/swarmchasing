@@ -302,6 +302,20 @@ pub enum IndicatorKind {
     Infra,
 }
 
+impl IndicatorKind {
+    /// Kinds that describe how a request was sent rather than what it did,
+    /// and that ordinary clients produce too: relays, cache busters,
+    /// self-identification, headers and outcomes. Together they never reach
+    /// the suggestive tier on their own ([`crate::rules::Rules::score`]),
+    /// never join records by timing and never corroborate a cluster tier.
+    pub fn is_context(self) -> bool {
+        matches!(
+            self,
+            Self::Relay | Self::CacheBuster | Self::SelfId | Self::Header | Self::Outcome
+        )
+    }
+}
+
 /// What an indicator shows an agent doing: the swarmchasing tactic
 /// vocabulary, `T1` to `T9` in rules files and JSON. Descriptive; it never
 /// changes a score.

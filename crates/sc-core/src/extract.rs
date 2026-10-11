@@ -448,7 +448,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         }
     }
 
-    let score = hits.iter().map(|h| h.weight).sum();
+    let score = rules.score(hits.iter().map(|h| h.rule_id.as_str()));
     let target_host = layers
         .iter()
         .enumerate()

@@ -75,8 +75,9 @@ pub struct Cluster {
     /// The strongest member's tier, raised one step only by corroboration
     /// ([`hints::cluster_tier`]).
     pub tier: Tier,
-    /// Sum of weights over the distinct rules seen anywhere in the cluster.
-    /// Descriptive: it does not set the tier.
+    /// The score of the distinct rules seen anywhere in the cluster, read
+    /// as one record's ([`crate::rules::Rules::score`]: groups once, context
+    /// capped). Descriptive: it does not set the tier.
     pub score: i32,
     pub rules: BTreeMap<String, usize>,
     pub kinds: BTreeMap<IndicatorKind, usize>,
