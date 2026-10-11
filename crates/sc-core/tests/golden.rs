@@ -47,22 +47,22 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (73, 0, 6, 77),
+        (111, 0, 6, 77),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (33, 0, 46, 77), "significant");
+    assert_eq!(counts(Tier::Significant), (71, 0, 46, 77), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 193);
+    assert_eq!(a.total, 231);
     assert_eq!(
         tiers,
-        [86, 42, 65],
+        [86, 42, 103],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 24, "clusters");
+    assert_eq!(a.clusters.len(), 31, "clusters");
 
     // Agent grades by actor: no scanner run and no hand-typed pentest grades
     // above L0; a person pasting chatbot payloads reaches L3, the grade's
@@ -102,4 +102,13 @@ fn evaluation_set_numbers_hold() {
         "{c:?}"
     );
     assert!(c.run_labelled > 0 && c.bcubed_precision.is_some());
+
+    // Interaction edges: each labelled swarm has one inside it; the sharded
+    // scheduler (labelled `none`) gets only a disjoint partition, the fleet
+    // signal that one scheduler produces alone.
+    let w = &report.swarm;
+    assert_eq!(w.found, w.groups, "{w:?}");
+    assert_eq!(w.groups.len(), 3, "{w:?}");
+    assert_eq!((w.edges, w.on_groups, w.across_groups), (4, 3, 0), "{w:?}");
+    assert_eq!(w.on_non_swarm, [0, 0, 0, 0, 1], "S5 only: {w:?}");
 }

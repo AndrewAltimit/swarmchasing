@@ -204,7 +204,7 @@ pub fn shared_pauses(
 }
 
 /// P(X >= m) for X ~ Poisson(lambda).
-pub(super) fn poisson_at_least(lambda: f64, m: usize) -> f64 {
+pub(crate) fn poisson_at_least(lambda: f64, m: usize) -> f64 {
     let (mut term, mut below) = ((-lambda).exp(), 0.0);
     for k in 0..m {
         below += term;

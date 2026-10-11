@@ -110,3 +110,11 @@ Someone who wants a false incident found, or a real cluster attributed elsewhere
 - **Habit mismatch.** An identifier shared with an earlier cluster whose relay routes, URL encodings or payloads share nothing with this one's.
 
 Each is a prompt, never a finding, and stays out of reports to providers and operators and out of notices. Toolkit: `provenance`, `corroboration` and `plant_signals` on each cluster; provider and internal reports carry the provenance line, and case notes a *Plant review* section ([methodology](../methodology.md#provenance-and-plant-review)).
+
+## FM-5.12 Interaction edges
+
+An interaction edge joins two runs that may have acted on each other's output, on one of the signals in [FM-4.10](04-indicators.md#fm-410-interaction-signals). It is a hint like a soft link, with two differences: it is between runs, not clusters, and it never proposes a fleet. Edges are never scored and never merge clusters.
+
+Hard links can hide interaction. A shared inbox joins every record that writes to it into one cluster, so two agents reporting to one sink become one cluster and their exchange is invisible at cluster level. The standard therefore splits each run into **strands** by how its records were sent (relay route, user agent, network, header set) and compares strands, inside a cluster as well as across clusters. Two strands count as different clients only when they differ on at least two of those dimensions or their encoding style, and share no user agent, network or header set.
+
+Where a signal has a chance model it is stated with the edge: synchronized starts use the shared-pause model ([FM-6.7](06-timing.md#fm-67-shared-pauses)) over run starts and ends; role sequences and partitions draw hosts at random from the analysis's target hosts or target family. A reviewer who accepts an edge records it in the case with what the records show; until then the grouping is a fleet ([FM-1.3](01-scope.md#fm-13-groupings)). Toolkit: thresholds are in [methodology](../methodology.md#interaction-between-runs); internal and provider reports list edges under *Possible interaction (SC-T9)*, and affected-operator reports and notices never do.

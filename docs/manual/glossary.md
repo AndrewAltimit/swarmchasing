@@ -30,6 +30,7 @@ Each term links to the section that defines it.
 | Hard link | A link that joins records into a cluster. | [FM-5.1](05-linking.md#fm-51-hard-and-soft-links) |
 | Incident | Confirmed agent activity that harms or risks an operator. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
 | Indicator | A rule that matches a feature of a record. | [FM-1.2](01-scope.md#fm-12-units-of-observation), [FM-4.2](04-indicators.md#fm-42-rule-anatomy) |
+| Interaction edge | A hint that two runs acted on each other's output; never a merge. | [FM-4.10](04-indicators.md#fm-410-interaction-signals), [FM-5.12](05-linking.md#fm-512-interaction-edges) |
 | Lead | A cluster or candidate fleet nobody has reviewed. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
 | Likelihood word | A term from the ICD 203 table. | [FM-8.1](08-confidence.md#fm-81-likelihood-table) |
 | Link feature | A matched value one operator would hold. | [FM-1.2](01-scope.md#fm-12-units-of-observation), [FM-5.2](05-linking.md#fm-52-shared-link-features) |
@@ -53,6 +54,7 @@ Each term links to the section that defines it.
 | Soft link | A proposed link between clusters; never joins them. | [FM-5.1](05-linking.md#fm-51-hard-and-soft-links), [FM-5.7](05-linking.md#fm-57-soft-links) |
 | Stale date | A "today" tag well behind the observed date. | [FM-6.6](06-timing.md#fm-66-stale-dates) |
 | Stale knowledge | Retired endpoints or old clients a model still writes. | [FM-4.5](04-indicators.md#fm-45-artifact-families) |
+| Strand | The records of one run sent one way (route, user agent, network, header set). | [FM-5.12](05-linking.md#fm-512-interaction-edges) |
 | Swarm | A fleet with evidence its agents interact. | [FM-1.3](01-scope.md#fm-13-groupings) |
 | Tier | Significant, suggestive or noise. | [FM-1.5](01-scope.md#fm-15-evidence-tiers) |
 | Timestamp kind | Request, submit, capture or unknown. | [FM-6.1](06-timing.md#fm-61-timestamp-kinds) |

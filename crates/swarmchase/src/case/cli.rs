@@ -274,6 +274,31 @@ pub enum FleetCmd {
     },
     /// The case's fleets, and the candidate fleets the analysis proposes.
     Show { id: String },
+    /// Record interaction between a fleet's runs that you reviewed (SC-T9);
+    /// while it stands, reports and the notice call the fleet a swarm.
+    Interaction {
+        id: String,
+        /// The fleet (`fleet-1`).
+        fleet: String,
+        /// shared_sink | handoff | synchronized_start | role_sequence |
+        /// disjoint_partition (or S1..S5).
+        #[arg(long)]
+        kind: sc_core::SwarmEdgeKind,
+        /// A run, as <cluster>#<run> (`C3#2` or `k-3f9a2c1b#2`). Repeat.
+        #[arg(long = "run", required = true)]
+        runs: Vec<String>,
+        /// What the records show.
+        #[arg(long)]
+        note: String,
+    },
+    /// Withdraw interaction record <n> (from `fleet show`).
+    Withdraw {
+        id: String,
+        fleet: String,
+        n: usize,
+        #[arg(long)]
+        why: Option<String>,
+    },
 }
 
 /// Who a hand-added contact is for.
@@ -443,6 +468,25 @@ fn fleet_cmd(
             let c = load(root, &id)?;
             super::fleet::show(&c, &case_analysis(root, &c)?, out)
         }
+        FleetCmd::Interaction {
+            id,
+            fleet,
+            kind,
+            runs,
+            note,
+        } => {
+            let a = case_analysis(root, &load(root, &id)?)?;
+            update(root, &id, |c| {
+                super::fleet::interaction(c, &a, &fleet, kind, &runs, &note, today)?;
+                println!("{}", c.decisions.last().map_or("", |d| d.text.as_str()));
+                Ok(())
+            })
+        }
+        FleetCmd::Withdraw { id, fleet, n, why } => update(root, &id, |c| {
+            super::fleet::withdraw(c, &fleet, n, why.as_deref(), today)?;
+            println!("{}", c.decisions.last().map_or("", |d| d.text.as_str()));
+            Ok(())
+        }),
     }
 }
 

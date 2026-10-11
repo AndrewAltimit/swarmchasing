@@ -35,8 +35,8 @@ The manual describes the method as a standard. Where this repository's toolkit d
 | [1. Scope and definitions](01-scope.md) | Agent, record, run, cluster, fleet, swarm, incident, case, notice; evidence tiers. |
 | [2. Principles](02-principles.md) | The eight rules every step follows. |
 | [3. Sources and collection](03-sources.md) | What counts as a public record, the passivity test, source rationale, source biases. |
-| [4. Indicators](04-indicators.md) | Rule anatomy, the SC-T tactics, artifact families, ATLAS and ATT&CK cross-walk, rule-writing standard. |
-| [5. Linking](05-linking.md) | Hard links, soft links, candidate fleets, merge and split, escalation sequences, reruns. |
+| [4. Indicators](04-indicators.md) | Rule anatomy, the SC-T tactics, artifact families, ATLAS and ATT&CK cross-walk, rule-writing standard, interaction signals. |
+| [5. Linking](05-linking.md) | Hard links, soft links, candidate fleets, merge and split, escalation sequences, reruns, interaction edges. |
 | [6. Timing and concurrency](06-timing.md) | Timestamp kinds, cadence, bursts, rhythm, clock offset, stale dates, shared pauses. |
 | [7. Attribution](07-attribution.md) | Four attribution layers, the evidence ladder, claim tags, labels, the naming gate, false flags, agent likelihood. |
 | [8. Confidence language](08-confidence.md) | The words-to-probability table every report uses. |

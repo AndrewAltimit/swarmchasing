@@ -81,10 +81,20 @@ pub(super) fn fleet_objects(
             "created_by_ref": h.identity,
             "created": h.created,
             "modified": h.created,
-            "name": format!("Fleet {} ({case_id})", f.id),
+            "name": format!("{} {} ({case_id})", if f.is_swarm() { "Swarm" } else { "Fleet" }, f.id),
             "description": format!(
-                "Agent runs the reporter treats as one fleet, one operator behind several runs: {}. The grouping rests on soft links, which unrelated clients can also share; an inference, not a finding.",
-                keys.join(", ")
+                "Agent runs the reporter treats as one fleet, one operator behind several runs: {}. The grouping rests on soft links, which unrelated clients can also share; an inference, not a finding.{}",
+                keys.join(", "),
+                if f.is_swarm() {
+                    let k: std::collections::BTreeSet<&str> =
+                        f.swarm_evidence.iter().map(|e| e.kind.label()).collect();
+                    format!(
+                        " The reporter also reviewed interaction between its runs (SC-T9: {}), so treats it as a swarm; also an inference.",
+                        k.into_iter().collect::<Vec<_>>().join(", ")
+                    )
+                } else {
+                    String::new()
+                }
             ),
             "context": "suspicious-activity",
             "object_refs": refs,

@@ -1,7 +1,7 @@
 //! What `case.toml` holds.
 
 use crate::evidence::OperatorEvidence;
-use sc_core::{Analysis, Claim, EndpointOptions, Evidence, endpoints};
+use sc_core::{Analysis, Claim, EndpointOptions, Evidence, SwarmEdgeKind, endpoints};
 pub use sc_publish::NoticeStatus;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -104,6 +104,35 @@ pub struct Fleet {
     pub clusters: Vec<String>,
     /// When the grouping last changed.
     pub since: String,
+    /// Interaction between the fleet's runs that the admin reviewed and
+    /// accepts (`case fleet interaction`). Reports and notices call the
+    /// fleet a swarm only while this holds an entry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub swarm_evidence: Vec<SwarmEvidence>,
+}
+
+impl Fleet {
+    /// Whether reviewed interaction evidence makes the fleet a swarm.
+    pub fn is_swarm(&self) -> bool {
+        !self.swarm_evidence.is_empty()
+    }
+
+    /// `fleet` or `swarm`.
+    pub fn noun(&self) -> &'static str {
+        if self.is_swarm() { "swarm" } else { "fleet" }
+    }
+}
+
+/// One piece of interaction evidence the admin accepted for a fleet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SwarmEvidence {
+    /// What it rests on (`handoff`, `shared_sink`, ...).
+    pub kind: SwarmEdgeKind,
+    /// The runs involved, as `<cluster key>#<run>`.
+    pub runs: Vec<String>,
+    /// The admin's reading of the records.
+    pub note: String,
+    pub date: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

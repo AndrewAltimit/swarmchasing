@@ -80,6 +80,10 @@ swarmchase eval <data>/store/wayback.ndjson <data>/cases/<id>/raw/records.ndjson
 
 Any cluster at L2 or above is a false grade. Old records are mostly archive captures, which stop at L2, so the control measures how often the model-written rung fires on pre-agent traffic. Run it on local data only: the records and the table stay in the data directory and are never committed.
 
+## Interaction edges
+
+Records labelled with `swarm` measure the interaction edges ([SC-FM 5.12](../manual/05-linking.md#fm-512-interaction-edges)). The value names the interacting group a record's run belongs to, or `none` for runs known not to interact. `eval` prints the edges found by kind, how many labelled groups have an edge inside them, and how many edges touch a `none` run, by kind. Each side of an edge is placed by its first labelled record. The numbers are reported, never gated, and the committed groups are synthetic ([evaluation set](../../samples/eval/README.md#swarm-interactionndjson)). A disjoint partition on a `none` run is expected: a sharded scheduler draws one.
+
 ## Frozen splits
 
 `--split` writes the ids of a held-out side to `--split-out` and exits. Write it to the data directory, never to the repository.
