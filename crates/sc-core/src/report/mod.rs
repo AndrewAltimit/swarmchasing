@@ -266,7 +266,12 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     let claims = clusters
         .iter()
         .fold(Vec::new(), |acc, c| merge(acc, &attribute(a, c)));
-    attribution_section(&mut s, &merge(claims, &opts.claims), opts);
+    attribution_section(
+        &mut s,
+        &merge(claims, &opts.claims),
+        opts,
+        clusters.len() == 1,
+    );
     agentness::section(&mut s, &clusters, opts);
 
     if opts.audience != Audience::Provider {
@@ -899,6 +904,39 @@ mod tests {
         let public = render(Audience::Public, Evidence::SelfId, vec![family, confirmed]);
         assert!(!public.contains("family-q"), "{public}");
         assert!(public.contains("operated by **Anthropic**"), "{public}");
+
+        // Below shared identifiers, a notice names the provider as the party
+        // that was notified, never as the operator.
+        let opts = |reported| ReportOptions {
+            audience: Audience::Public,
+            reported,
+            ..Default::default()
+        };
+        let public = render_markdown(&a, &opts(None));
+        assert!(
+            public.contains("identify themselves as using `claude` from Anthropic. Self-identification is the weakest evidence we use. We have not confirmed that Anthropic operated, deployed or authorised them. Layer: developer. Label: Unattributed; tag: Inference."),
+            "{public}"
+        );
+        assert!(!public.contains("**Conclusion.**"), "{public}");
+        let sent = Reported {
+            provider: true,
+            ..Default::default()
+        };
+        assert!(
+            render_markdown(&a, &opts(Some(sent)))
+                .contains("Anthropic has been sent the full evidence.")
+        );
+        // Provider infrastructure says whose systems, not who deployed.
+        let infra = Claim::new(
+            "Anthropic",
+            Role::Developer,
+            Evidence::ProviderInfrastructure,
+        );
+        let md = render(Audience::Public, Evidence::default(), vec![infra]);
+        assert!(
+            md.contains("- Suspected: the requests very likely came from infrastructure that **Anthropic** operates; who deployed the agents is a separate question"),
+            "{md}"
+        );
     }
 
     #[test]
@@ -1046,8 +1084,9 @@ mod tests {
             },
         );
         assert!(
-            sent.markdown
-                .contains("Reports went to the affected operators when this notice was published."),
+            sent.markdown.contains(
+                "Reports went to the affected operators before this notice was published."
+            ),
             "{}",
             sent.markdown
         );

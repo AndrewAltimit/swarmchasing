@@ -16,7 +16,12 @@ use std::fmt::Write;
 /// audiences see a developer named only at or above `opts.min_named`. Harness
 /// and model-family candidates are listed as ranked candidates in private
 /// reports and never in public.
-pub(super) fn attribution_section(s: &mut String, claims: &[Claim], opts: &ReportOptions) {
+pub(super) fn attribution_section(
+    s: &mut String,
+    claims: &[Claim],
+    opts: &ReportOptions,
+    one: bool,
+) {
     if claims.is_empty() {
         return;
     }
@@ -53,6 +58,11 @@ pub(super) fn attribution_section(s: &mut String, claims: &[Claim], opts: &Repor
                     tags(c)
                 );
             }
+            // In public, a provider below shared identifiers is the party
+            // that was notified, never the one that did it.
+            Role::Developer if public && c.evidence < Evidence::SharedIdentifiers => {
+                instrument(s, c, opts, one)
+            }
             Role::Developer => withheld += 1,
             Role::Host => {
                 let _ = writeln!(
@@ -83,18 +93,63 @@ pub(super) fn attribution_section(s: &mut String, claims: &[Claim], opts: &Repor
     if !concluded.is_empty() {
         let _ = writeln!(s, "**Conclusion.**");
         for c in concluded {
+            let word = c.label().word().unwrap_or_default();
+            // Infrastructure shows whose systems sent the requests, not who
+            // deployed the agents on them.
+            let what = if c.evidence == Evidence::ProviderInfrastructure {
+                format!(
+                    "the requests {word} came from infrastructure that **{}** operates; who deployed the agents is a separate question",
+                    c.party
+                )
+            } else {
+                format!("{word} operated by **{}**", c.party)
+            };
             let _ = writeln!(
                 s,
-                "- {}: {} operated by **{}** ({}). Tag: {}.",
+                "- {}: {what} ({}). Tag: {}.",
                 c.label().label(),
-                c.label().word().unwrap_or_default(),
-                c.party,
                 c.evidence.describe(),
                 Tag::Conclusion.label()
             );
         }
         let _ = writeln!(s);
     }
+}
+
+/// A public notice's line for a provider the requests name below shared
+/// identifiers: what the requests say, how weak that is, and that the
+/// provider was sent the evidence.
+fn instrument(s: &mut String, c: &Claim, opts: &ReportOptions, one: bool) {
+    let models: Vec<String> = c
+        .details
+        .iter()
+        .filter_map(|d| d.split_once(" name `")?.1.split('`').next())
+        .map(|m| format!("`{m}`"))
+        .collect();
+    let p = &c.party;
+    let _ = write!(
+        s,
+        "- Requests in {} identify themselves as using {} from {p}. Self-identification is the weakest evidence we use. We have not confirmed that {p} operated, deployed or authorised them.",
+        if one {
+            "this cluster"
+        } else {
+            "these clusters"
+        },
+        if models.is_empty() {
+            "a model".into()
+        } else {
+            models.join(", ")
+        }
+    );
+    if opts.reported.is_some_and(|r| r.provider) {
+        let _ = write!(s, " {p} has been sent the full evidence.");
+    }
+    let _ = writeln!(
+        s,
+        " Layer: developer. Label: {}; tag: {}.",
+        c.label().label(),
+        c.tag().label()
+    );
 }
 
 /// Harness candidates by records, model families by likelihood: ranked,

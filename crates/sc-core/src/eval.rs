@@ -1,8 +1,8 @@
 //! Measure the rules against labelled records.
 //!
-//! With no embargo, a false positive is published the moment the admin acts on
-//! it, so precision is the number that matters most. [`evaluate`] scores an
-//! [`Analysis`] against labels and reports, at each tier threshold, how many
+//! With no embargo, a false positive is published within a day of the admin
+//! acting on it, so precision is the number that matters most. [`evaluate`]
+//! scores an [`Analysis`] against labels and reports, at each tier threshold, how many
 //! flagged records were really agent activity (precision) and how much of the
 //! labelled agent activity was flagged (recall). It also reports precision per
 //! rule, so a noisy rule can be found and down-weighted, and recall per label
