@@ -4,9 +4,9 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-20 12:02:03 UTC
-- **Records:** 137 linked public records in 36 cluster(s) (of 278 records reviewed, 211 flagged)
+- **Records:** 137 linked public records in 36 cluster(s) (of 282 records reviewed, 215 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-11
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-11.1
 
 ## Summary
 
@@ -243,6 +243,7 @@ Every flagged request to each host, including requests outside the linked cluste
   - linked by: `param:uqtag=xsvA41`
   - provenance: submit-anywhere 8 · single source: anyone can submit or publish such records, so they show that someone did, not who
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
+  - cross-service fan-out: 4 target(s) on 8 records went to several scan services (urlquery ×4, urlscan ×4), each within 11s of its first submission; 0 ordinary link(s) on other hosts were fanned out alike around it; an agent's tool loop or a script sending each URL to every service does this, and so does a mail gateway (a hint, not evidence)
   - all 8 records share one URL encoding style (`sp20.unsorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 8 records: sqli (quote_or_1eq1 ×8). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C3** (significant): 7 records, 1 run(s), 2026-05-14 03:20:00 UTC → 2026-05-14 03:20:04 UTC, median gap 1s
@@ -268,6 +269,7 @@ Every flagged request to each host, including requests outside the linked cluste
   - linked by: `param:uqtag=gwP7q2`
   - provenance: submit-anywhere 6 · single source: anyone can submit or publish such records, so they show that someone did, not who
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
+  - cross-service fan-out: 3 target(s) on 6 records went to several scan services (urlquery ×3, urlscan ×3), each within 3s of its first submission; 5 ordinary link(s) on other hosts were fanned out alike around it, which marks an auto-submitter (a mail gateway or security product submitting every link it sees): whoever sent the links made these records (a hint, not evidence)
   - all 6 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 6 records: sqli (quote_or_1eq1 ×6). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C7** (significant): 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
@@ -445,6 +447,7 @@ Signs that a cluster's records were placed to be found. Prompts to check, never 
   - provenance monoculture: all 8 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them (records `eval:xsvc-agent-q0`, `eval:xsvc-agent-s0`, `eval:xsvc-agent-q1`, `eval:xsvc-agent-s1`, `eval:xsvc-agent-q2` and 3 more)
 - **C6** (single source):
   - provenance monoculture: all 6 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them (records `eval:xsvc-gw-crafted-s0`, `eval:xsvc-gw-crafted-q0`, `eval:xsvc-gw-crafted-s1`, `eval:xsvc-gw-crafted-q1`, `eval:xsvc-gw-crafted-s2` and 1 more)
+  - auto-submitted: 3 of its targets went to urlquery, urlscan within 3s, and 5 ordinary link(s) on other hosts were fanned out alike around it: something submits every link it sees, as a mail gateway or security product does, so whoever sent the links made these records (records `eval:xsvc-gw-crafted-s0`, `eval:xsvc-gw-crafted-q0`, `eval:xsvc-gw-crafted-s1`, `eval:xsvc-gw-crafted-q1`, `eval:xsvc-gw-crafted-s2` and 1 more)
 - **C26** (single source):
   - provenance monoculture: all 2 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them (records `eval:xsvc-human-s`, `eval:xsvc-human-q`)
 - **C32** (single source):

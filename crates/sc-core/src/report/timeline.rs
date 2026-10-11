@@ -2,7 +2,9 @@
 //! per hint (probe chains, route escalations, rhythm, links, habits,
 //! knowledge, prose, declared testing).
 
-use super::hints::{cut_line, dialect_line, fanout_line, rhythm_line, stale_dates_line};
+use super::hints::{
+    cross_service_line, cut_line, dialect_line, fanout_line, rhythm_line, stale_dates_line,
+};
 use super::{Audience, Report, basis_note, dur, touches_exposed};
 use crate::analyze::Cluster;
 use crate::extract::{defang, defang_host};
@@ -33,6 +35,13 @@ impl Report<'_> {
             // Scope (FM chapter 15): internal and provider reports only.
             if matches!(self.opts.audience, Audience::Internal | Audience::Provider) {
                 scope_line(s, c);
+            }
+            // Cross-service fan-out names the scan services: internal and
+            // provider reports only.
+            if matches!(self.opts.audience, Audience::Internal | Audience::Provider)
+                && let Some(line) = cross_service_line(&c.cross_service)
+            {
+                let _ = writeln!(s, "  - {line}");
             }
             habits(s, c, view.as_deref());
             knowledge(s, c);

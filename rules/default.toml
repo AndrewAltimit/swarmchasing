@@ -45,7 +45,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-11"
+version = "2026-10-11.1"
 
 [thresholds]
 suggestive = 3
@@ -258,6 +258,9 @@ description = "Public CORS proxies"
 # ── Carriers: echo / sandbox / code-hosting services ───────────────────────
 [[rule]]
 id = "carrier.httpbin"
+# In the program group: the echo service and the page it serves are one route,
+# so a script page on httpbin's own endpoints counts once and stays noise.
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"

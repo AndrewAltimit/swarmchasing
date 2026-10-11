@@ -90,6 +90,7 @@ pub(super) const PASSES: &[Pass] = &[
             "fingerprints",
             "dialect",
             "provenance",
+            "cross_service",
         ],
         plant,
     ),

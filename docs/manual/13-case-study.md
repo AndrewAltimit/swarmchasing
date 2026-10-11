@@ -94,7 +94,7 @@ The case studies below apply the template to public incident write-ups. They sho
 |---|---|
 | Probe parameters `tok=expt0` to `tok=expt8` on the library's probes | `marker.test_tag` (links), and `tok` is a run-tag parameter |
 | The tag `CHATGPTTEST1` on three reports of one day | `marker.test_tag` |
-| Base64 programs sent through `httpbin.org/base64/` | `carrier.httpbin`, and the `program` group counted once (`carrier.inline_fetch_program`, `carrier.html_program`, `marker.title_write`): suggestive |
+| Base64 programs sent through `httpbin.org/base64/` | the `program` group counted once (`carrier.httpbin`, `carrier.inline_fetch_program`, `carrier.html_program`, `marker.title_write`): suggestive |
 | Injection, traversal and template probes | `exploit.sqli_boolean`, `exploit.traversal`, `exploit.ssti`, `exploit.cmdi` |
 | A script payload in a dashboard parameter | `exploit.xss` (significant) |
 | Relays such as Jina Reader and markdown.new | `relay.jina`, `relay.markdown_new` |

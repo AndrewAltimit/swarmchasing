@@ -105,13 +105,7 @@ pub fn negative_control(a: &Analysis) -> ControlSummary {
     let high = (0..nc)
         .filter(|&c| matches!(view::cluster_level(a, c), "L2" | "L3" | "L4" | "L5"))
         .count();
-    let kinds = [
-        PlantSignalKind::ProvenanceMonoculture,
-        PlantSignalKind::BurnedIdentifier,
-        PlantSignalKind::TooPerfect,
-        PlantSignalKind::HabitMismatch,
-    ];
-    let plant_signals = kinds
+    let plant_signals = PlantSignalKind::ALL
         .iter()
         .map(|k| ControlRow {
             name: k.label().to_string(),
@@ -206,7 +200,17 @@ mod tests {
         assert_eq!(c.by_tier[1].rate.k, 1, "{c:?}");
         let total: usize = c.by_agent_level.iter().map(|r| r.rate.k).sum();
         assert_eq!(total, 3);
-        assert_eq!(c.plant_signals.len(), 4);
+        let kinds: Vec<&str> = c.plant_signals.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(
+            kinds,
+            [
+                "provenance monoculture",
+                "burned identifier",
+                "too perfect",
+                "habit mismatch",
+                "auto-submitted"
+            ]
+        );
         // Only the payload record is flagged; each rule that fired is listed
         // with that one record, flagged.
         assert!(!c.by_rule.is_empty());

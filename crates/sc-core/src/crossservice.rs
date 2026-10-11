@@ -326,6 +326,15 @@ mod tests {
             c.agent
         );
         assert_eq!(c.agent.level, AgentLevel::Adaptive, "{:?}", c.agent);
+        // The plant review names it.
+        assert!(
+            c.origin
+                .plant_signals
+                .iter()
+                .any(|p| p.kind == crate::plant::PlantSignalKind::AutoSubmitted),
+            "{:?}",
+            c.origin.plant_signals
+        );
         // The ordinary links are not flagged and form no cluster.
         assert_eq!(a.clusters.len(), 1, "{:?}", a.clusters);
     }
