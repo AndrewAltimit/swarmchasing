@@ -49,6 +49,10 @@ The rules were tuned on this set, so it is a **regression floor, not a precision
 
 Synthetic records that give every rule at least one labelled positive, and the significant and link rules hard negatives: benign records that look alike and must not fire. Each is marked `"synthetic": true`, uses reserved `.example` hosts (or the public service the rule names), and was written by hand. Payloads are the canonical textbook test strings. Benign records name the rule they guard in `hard_negative_for`, and records from one synthetic run share a `run` id.
 
+## `carrier-negatives.ndjson`
+
+Synthetic benign records, class `dev_tool`, each marked `"synthetic": true` and written by hand: pages with an inline or linked script and no request of their own, served from the echo service's base64 endpoint (`httpbin.org/base64/`, and the `httpbun.com` mirror), as developers use it to serve a test page. Script references use reserved `.example` hosts. They guard `carrier.httpbin` and `carrier.html_program`: the echo rule and the script rule read one artifact, so these stay noise. No archive capture was copied.
+
 ## `actor-controls.ndjson`
 
 Synthetic runs sent by people and conventional tools, for the agent grade. Each carries `actor` (`human` or `tool`) and no `label`, so detection does not score it: the rules flag their payloads by design. Each is marked `"synthetic": true`, uses reserved `.example` hosts, and was written by hand from tools' documented defaults and textbook payloads.

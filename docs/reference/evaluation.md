@@ -122,7 +122,7 @@ swarmchase eval <data>/store --before 2022-11-30 --summary-json <data>/eval/cont
 
 Old records are mostly archive captures, which stop at L2, so the control measures how often the model-written rung fires on pre-agent traffic. Run it on local data only: the records and the table stay in the data directory and are never committed.
 
-A relay rule firing on a pre-era record is not by itself a false alarm: the record went through the relay. The per-rule table separates the records a rule fired on from those it helped flag, and the flagged column is the one that counts.
+A relay or carrier rule firing on a pre-era record of its own host is not by itself a false alarm: the record went through the relay or the echo service. The per-rule table separates the records a rule fired on from those it helped flag, and the flagged column is the one that counts.
 
 ### The pre-era control on archive data
 
@@ -131,12 +131,15 @@ A relay rule firing on a pre-era record is not by itself a false alarm: the reco
 ```sh
 swarmchase eval pre-era --per-source 600
 swarmchase eval pre-era --offline            # measure what is collected, fetch nothing
+swarmchase eval pre-era --offline --years even   # one half of the capture years
 ```
 
 1. It reads the `wayback` sources of [`watchlist.toml`](../../watchlist.toml), the relay and carrier hosts, with their patterns and filters (`--source <name>` picks some).
 2. For each source it reads the Wayback index one calendar year at a time, from `--from-year` (default 2012) to the day before `--before` (default 2022-11-30), up to `--per-source` captures spread evenly over the years. Index rows only, one request per year and source, at the watchlist's request interval.
 3. Each year's rows go to `<data>/controls/pre-era/<source>/<year>-n<bound>.ndjson`. A year collected once is reused, so a second run with the same arguments measures the same records without fetching, and a failed year is fetched on the next run.
 4. It analyses every collected record before the date and prints the per-source counts, the [negative control](#negative-control) tables and the grade table. The same numbers, and no record content, go to `<data>/controls/pre-era/summary.json`.
+
+`--years even` or `--years odd` measures only the captures of even or odd calendar years. The per-year bound is still set over every year, so both halves read the files a full run collected. Tune a change on one half and quote the other ([FM-9.13](../manual/09-evaluation.md#fm-913-negative-control-and-benign-baseline)).
 
 The index is sorted by URL within a year, so a year's share is the first captures by URL in it, not a random draw. Several relays did not exist before the cut, so their sources return little or nothing; the per-source table shows how much each contributed. The records stay in the data directory; only the aggregate numbers may be quoted.
 

@@ -120,7 +120,7 @@ The agent-likelihood grade ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)
 - label each record's **actor**: agent, human or tool;
 - report a confusion table of actor by grade, by record and by cluster;
 - include hard negatives for the grade: human-pentest runs (hand-typed payloads, repeater pace, retries) and scanner runs (tool defaults, tool pace, fan-out);
-- run a **negative control**: the grade over records captured before capable agents existed, none of which an agent sent. Any grade of L2 or above there is a false grade; archive captures stop at L2, so such a control measures the model-written rung.
+- run a **negative control**: the grade over records captured before capable agents existed, none of which an agent sent. Any grade of L2 or above there is a false grade; archive captures stop at L2, so such a control measures the model-written rung ([FM-9.13](#fm-913-negative-control-and-benign-baseline)).
 
 A grade is not quoted as performance until a held-out measurement exists ([FM-9.1](#fm-91-three-kinds-of-evaluation)). Toolkit: records may carry `actor`; `eval` prints the table by record, and `eval --before <date>` runs the control over local records ([evaluation](../reference/evaluation.md#agent-grades-by-actor)). Neither is gated.
 
@@ -148,3 +148,22 @@ Rules that follow:
 - **Words move down as well as up.** When a new measurement lowers a bound, later notices use the lower word, and published notices are not rewritten ([FM-2.6](02-principles.md#fm-26-correct-in-public)).
 
 Toolkit: precision with Wilson intervals per tier, per class and per tactic, and the actor-by-grade table, are reported by `eval` ([statistics](../reference/evaluation.md#statistics)). Deriving the allowed word from a saved measurement, and checking it in `notice lint`, are (planned).
+
+## FM-9.13 Negative control and benign baseline
+
+No agent of the kind the method looks for sent a request before late 2022. Records captured before then are a **negative control**: every flag, every grade above L1 and every plant signal on them is a false alarm, so the rates need no labels. Archive captures of the relay and carrier hosts the rules watch make the natural control.
+
+A relay or carrier rule firing on a pre-era capture of its own host is expected: the record went through the relay or the echo service, and the rule says so truly. Only the records a rule helped flag at suggestive or above count as false alarms. The control reports both per rule, the records it fired on and the records it helped flag, and only the second is read.
+
+A rule or scoring change made after reading the control's errors spends what it read. The control is split by capture year: the change is tuned on one half (the even years, say) and measured on the other, and the held-out half gives the figure quoted.
+
+The **reviewed benign baseline** bounds the false-positive rate on current traffic, where the control cannot reach. A record counts toward it when it is:
+
+- **sampled**: drawn by a seeded, stratified sample over source, route, month and timestamp kind, in proportion to each stratum's size, so the rules did not choose it;
+- **labelled by reviewers**: benign or agent, by two labellers whose disagreements are settled;
+- **non-synthetic**: a collected record, never one written by hand;
+- **untuned**: never looked at while changing a rule.
+
+The target is 1,000 benign records. With none flagged that bounds the false-positive rate at 0.3% by the rule of three ([FM-9.5](#fm-95-detection-metrics)); a baseline short of the target is quoted with the bound it reaches.
+
+Toolkit: `eval pre-era` collects Wayback index rows for the watchlist's relay and carrier sources, keeps them in the data directory and prints the control, with fired and flagged per rule; `--years even|odd` measures one half of the capture years ([pre-era control](../reference/evaluation.md#the-pre-era-control-on-archive-data)). `review sample` draws the baseline, `review tuned` spends a record, and `eval` prints the baseline's progress toward its target and the bound per tier ([benign baseline](../reference/evaluation.md#a-reviewed-benign-baseline)).

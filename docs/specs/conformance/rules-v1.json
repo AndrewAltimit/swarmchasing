@@ -1,6 +1,6 @@
 {
   "description": "Conformance vectors for SC-Rules v1 (docs/specs/rules-v1.md): each URL, analysed alone with the rules file at rules_version, yields this target host, this set of rule ids, this score and this tier. Hosts are reserved example domains or public relay and echo services; every URL is synthetic.",
-  "rules_version": "2026-10-11",
+  "rules_version": "2026-10-11.1",
   "spec": "SC-Rules v1",
   "thresholds": {
     "significant": 6,
@@ -71,10 +71,22 @@
         "carrier.inline_fetch_program",
         "marker.title_write"
       ],
-      "score": 5,
+      "score": 3,
       "target": "www.example.org",
       "tier": "suggestive",
       "url": "https://httpbin.org/base64/PHNjcmlwdD5mZXRjaCgnaHR0cHM6Ly93d3cuZXhhbXBsZS5vcmcvYXBpL3NjaGVkdWxlJykudGhlbihyPT5yLnRleHQoKSkudGhlbih0PT5kb2N1bWVudC50aXRsZT10KTwvc2NyaXB0Pg=="
+    },
+    {
+      "id": "echo-script-page",
+      "note": "A page with a script and no request, served by an echo service.",
+      "rules": [
+        "carrier.html_program",
+        "carrier.httpbin"
+      ],
+      "score": 2,
+      "target": null,
+      "tier": "noise",
+      "url": "https://httpbin.org/base64/PHA+b2s8L3A+PHNjcmlwdD5jb25zb2xlLmxvZygnbG9hZGVkJyk8L3NjcmlwdD4="
     },
     {
       "id": "data-url-program",
