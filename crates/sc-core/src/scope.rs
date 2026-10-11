@@ -270,18 +270,20 @@ pub(crate) fn assess(
     let task = guess_task_class(c);
 
     let mut tests = Vec::new();
-    let mut test = |id: &str, outcome, records: Vec<usize>, detail: String| {
-        tests.push(ScopeTest {
-            id: id.to_string(),
-            outcome,
-            records,
-            detail,
-        });
-    };
+    let test =
+        |tests: &mut Vec<ScopeTest>, id: &str, outcome, records: Vec<usize>, detail: String| {
+            tests.push(ScopeTest {
+                id: id.to_string(),
+                outcome,
+                records,
+                detail,
+            });
+        };
 
     // S1 Off-task target: needs a task class, and a target outside it.
     if task == TaskClass::Unclear {
         test(
+            &mut tests,
             "S1",
             ScopeOutcome::NotAssessable,
             vec![],
@@ -294,6 +296,7 @@ pub(crate) fn assess(
             .collect();
         if task != TaskClass::SiteTesting && !off.is_empty() {
             test(
+                &mut tests,
                 "S1",
                 ScopeOutcome::Fail,
                 off,
@@ -304,6 +307,7 @@ pub(crate) fn assess(
             );
         } else {
             test(
+                &mut tests,
                 "S1",
                 ScopeOutcome::Pass,
                 vec![],
@@ -318,6 +322,7 @@ pub(crate) fn assess(
     let escalated = escalations.iter().any(|e| e.clusters.contains(&c.id));
     if !antibot.is_empty() || escalated {
         test(
+            &mut tests,
             "S2",
             ScopeOutcome::Fail,
             antibot.clone(),
@@ -329,6 +334,7 @@ pub(crate) fn assess(
         );
     } else {
         test(
+            &mut tests,
             "S2",
             ScopeOutcome::Pass,
             vec![],
@@ -341,6 +347,7 @@ pub(crate) fn assess(
     let sensitive = records_of(TargetClass::Sensitive);
     if !sensitive.is_empty() {
         test(
+            &mut tests,
             "S3",
             ScopeOutcome::Fail,
             sensitive,
@@ -348,6 +355,7 @@ pub(crate) fn assess(
         );
     } else {
         test(
+            &mut tests,
             "S3",
             ScopeOutcome::Pass,
             vec![],
@@ -359,6 +367,7 @@ pub(crate) fn assess(
     let exploit = members_with_kind(results, c, IndicatorKind::Exploit);
     if !exploit.is_empty() && !benchmark {
         test(
+            &mut tests,
             "S4",
             ScopeOutcome::Fail,
             exploit,
@@ -366,6 +375,7 @@ pub(crate) fn assess(
         );
     } else if !exploit.is_empty() {
         test(
+            &mut tests,
             "S4",
             ScopeOutcome::NotAssessable,
             exploit,
@@ -373,6 +383,7 @@ pub(crate) fn assess(
         );
     } else {
         test(
+            &mut tests,
             "S4",
             ScopeOutcome::Pass,
             vec![],
@@ -387,6 +398,7 @@ pub(crate) fn assess(
     ident.dedup();
     if ident.is_empty() {
         test(
+            &mut tests,
             "S5",
             ScopeOutcome::Pass,
             vec![],
@@ -394,6 +406,7 @@ pub(crate) fn assess(
         );
     } else {
         test(
+            &mut tests,
             "S5",
             ScopeOutcome::Fail,
             ident,
@@ -405,6 +418,7 @@ pub(crate) fn assess(
     let exfil = members_with_kind(results, c, IndicatorKind::Exfil);
     if exfil.is_empty() {
         test(
+            &mut tests,
             "S6",
             ScopeOutcome::Pass,
             vec![],
@@ -412,6 +426,7 @@ pub(crate) fn assess(
         );
     } else {
         test(
+            &mut tests,
             "S6",
             ScopeOutcome::Fail,
             exfil,
@@ -419,19 +434,40 @@ pub(crate) fn assess(
         );
     }
 
-    // S7 Coordination: an interaction edge touches this cluster.
+    // S7 Coordination: an interaction edge touches this cluster and widens
+    // a test that already failed. Edges are unreviewed hints, so coordination
+    // alone fails nothing: it answers FM-15.1 question 4, not question 3.
     let coordinated = swarm_edges
         .iter()
         .any(|e| e.a.cluster == c.id || e.b.cluster == c.id);
-    if coordinated {
+    let widened: Vec<String> = tests
+        .iter()
+        .filter(|t| t.outcome == ScopeOutcome::Fail)
+        .map(|t| t.id.clone())
+        .collect();
+    if coordinated && !widened.is_empty() {
         test(
+            &mut tests,
             "S7",
             ScopeOutcome::Fail,
             vec![],
-            "an interaction edge ties this cluster's runs to another's".into(),
+            format!(
+                "an interaction edge ties this cluster's runs to another's while {} fails",
+                widened.join(", ")
+            ),
+        );
+    } else if coordinated {
+        test(
+            &mut tests,
+            "S7",
+            ScopeOutcome::NotAssessable,
+            vec![],
+            "an interaction edge touches this cluster, but no other test fails for it to widen"
+                .into(),
         );
     } else {
         test(
+            &mut tests,
             "S7",
             ScopeOutcome::NotAssessable,
             vec![],
@@ -532,5 +568,37 @@ mod tests {
             .collect();
         assert!(failed.contains(&"S4"), "{failed:?}");
         assert!(failed.contains(&"S6"), "{failed:?}");
+    }
+
+    #[test]
+    fn coordination_alone_exceeds_no_scope() {
+        // Interaction hints answer "coordinated", not "out of scope": S7 fails
+        // only alongside another failed test.
+        let text = include_str!("../../../samples/eval/swarm-interaction.ndjson");
+        let obs = crate::ingest::parse_input(
+            text,
+            crate::ingest::Format::Ndjson,
+            &crate::ingest::FieldMap::default(),
+        )
+        .observations;
+        let a = analyze(obs, &Rules::default_rules());
+        let mut coordinated_in_scope = 0;
+        for c in &a.clusters {
+            let s = &c.scope;
+            let fails: Vec<&str> = s
+                .tests
+                .iter()
+                .filter(|t| t.outcome == ScopeOutcome::Fail)
+                .map(|t| t.id.as_str())
+                .collect();
+            if fails.contains(&"S7") {
+                assert!(fails.len() > 1, "{}: S7 alone fails", c.id);
+            }
+            if s.coordinated && fails.is_empty() {
+                coordinated_in_scope += 1;
+                assert!(!s.out_of_scope);
+            }
+        }
+        assert!(coordinated_in_scope > 0, "no coordinated cluster in scope");
     }
 }

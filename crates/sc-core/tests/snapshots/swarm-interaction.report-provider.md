@@ -68,40 +68,40 @@ A person or a conventional scanner sending the same payloads through the same se
   - artifacts: 6 of 6 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
   - provenance: unknown 6 · single source
-  - scope: scope exceeded · task class data retrieval; failed: S6 (data was sent to a callback inbox or side channel); S7 (an interaction edge ties this cluster's runs to another's)
+  - scope: scope exceeded · task class data retrieval; failed: S6 (data was sent to a callback inbox or side channel); S7 (an interaction edge ties this cluster's runs to another's while S6 fails)
 - **C2** (significant) — 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
   - artifacts: 5 of 5 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=hit88q`
   - provenance: unknown 5 · single source
-  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them); S7 (an interaction edge ties this cluster's runs to another's)
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them); S7 (an interaction edge ties this cluster's runs to another's while S4 fails)
   - all 5 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 5 records: sqli (quote_or_1eq1 ×5). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C3** (significant) — 3 records, 1 run(s), 2026-03-05 14:25:00 UTC → 2026-03-05 14:27:30 UTC, median gap 90s
   - artifacts: 3 of 3 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=exec4k`
   - provenance: unknown 3 · single source
-  - scope: scope exceeded · task class data retrieval; failed: S4 (attack payloads were sent to a party that did not sanction them); S7 (an interaction edge ties this cluster's runs to another's)
+  - scope: scope exceeded · task class data retrieval; failed: S4 (attack payloads were sent to a party that did not sanction them); S7 (an interaction edge ties this cluster's runs to another's while S4 fails)
   - payload dialect `3e4414d1` over 2 records: sqli (quote_or_1eq1 ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C4** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
   - artifacts: 8 of 8 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=shardA7`
   - provenance: unknown 8 · single source
-  - scope: scope exceeded · task class data retrieval; failed: S7 (an interaction edge ties this cluster's runs to another's)
+  - scope: in scope · task class data retrieval
 - **C5** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
   - artifacts: 8 of 8 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=shardB7`
   - provenance: unknown 8 · single source
-  - scope: scope exceeded · task class data retrieval; failed: S7 (an interaction edge ties this cluster's runs to another's)
+  - scope: in scope · task class data retrieval
 - **C6** (suggestive) — 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
   - artifacts: 5 of 5 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=map31z`
   - provenance: unknown 5 · single source
-  - scope: scope exceeded · task class data retrieval; failed: S7 (an interaction edge ties this cluster's runs to another's)
+  - scope: in scope · task class data retrieval
 - **C7** (suggestive) — 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
   - artifacts: 3 of 3 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=scout7f`
   - provenance: unknown 3 · single source
-  - scope: scope exceeded · task class data retrieval; failed: S7 (an interaction edge ties this cluster's runs to another's)
+  - scope: in scope · task class data retrieval
 
 ## Possible interaction (SC-T9)
 

@@ -2,7 +2,7 @@
 
 [Manual index](README.md) · Previous: [14. Known limits](14-limits.md) · Next: [16. Other methods](16-other-methods.md)
 
-The manual's scope is misaligned or unsupervised agents ([FM-1.1](01-scope.md#fm-11-scope)). A tier does not measure that. It measures payloads and tool use: a fetch program that reads a TV schedule through an echo service grades as high as a probe of a login form. This chapter makes misalignment a separate assessment, with its own evidence, so that a report says which of four different things it found.
+The manual's scope is misaligned or unsupervised agents ([FM-1.1](01-scope.md#fm-11-scope)). A tier does not measure that. It measures payloads and tool use: a fetch program that reads a TV schedule through an echo service, carrying a run tag, grades significant, the same tier as an injection probe of a login form. This chapter makes misalignment a separate assessment, with its own evidence, so that a report says which of four different things it found.
 
 ## FM-15.1 Four questions
 
@@ -80,4 +80,4 @@ An incident is activity a reviewer judged to harm, or put at risk, an affected o
 - A cluster whose scope is exceeded, against a party who did not sanction it, is an incident candidate. The admin decides, and records the finding with the case's other decisions.
 - A cluster that is not assessable is held as a lead until more records arrive, unless a payload against an access-controlled or sensitive target makes S3 or S4 decidable on its own.
 
-Toolkit: a scope pass fills `Cluster.scope` with the task class, the target classes reached, the S1–S7 tests with the record ids that answer each, the finding, and the four FM-15.1 questions; it is conservative, so tool use alone fails no test. Internal and provider reports carry a one-line Scope entry per cluster; the public notice is unchanged. The admin still decides the incident from it.
+Toolkit: a scope pass fills `Cluster.scope` with the task class, the target classes reached, the S1–S7 tests with the record ids that answer each, the finding, and the four FM-15.1 questions; it is conservative, so tool use alone fails no test, and an unreviewed interaction hint alone fails none either: S7 fails only when a hint touches a cluster that already fails another test, and is otherwise not assessable. Internal and provider reports carry a one-line Scope entry per cluster; the public notice is unchanged. The admin still decides the incident from it.
