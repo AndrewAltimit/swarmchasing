@@ -19,7 +19,7 @@ pub(crate) fn cluster_level(a: &Analysis, c: usize) -> &'static str {
 /// The kinds of plant signal the cluster carries, each once.
 pub(crate) fn cluster_plant_kinds(a: &Analysis, c: usize) -> Vec<PlantSignalKind> {
     let mut out: Vec<PlantSignalKind> = Vec::new();
-    for p in &a.clusters[c].plant_signals {
+    for p in &a.clusters[c].origin.plant_signals {
         if !out.contains(&p.kind) {
             out.push(p.kind);
         }

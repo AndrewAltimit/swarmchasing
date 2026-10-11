@@ -114,7 +114,7 @@ Every hit carries its rule's tactic and artifact flag, and each cluster counts h
 
 ## Tiers
 
-Each record is graded by [`analyze.rs`](../crates/sc-core/src/analyze/mod.rs):
+Each record is graded by [`analyze/pipeline.rs`](../crates/sc-core/src/analyze/pipeline.rs):
 
 - **significant:** a significant rule fired, or the score reached `thresholds.significant`;
 - **suggestive:** the score reached `thresholds.suggestive`;
@@ -236,7 +236,7 @@ Each is something ordinary agent activity also produces, which is why they are p
 
 ## Interaction between runs
 
-[`swarm.rs`](../crates/sc-core/src/swarm.rs) lists possible interaction between runs (SC-T9) as edges (`swarm_edges` in the analysis). Each edge names two runs as `C3#2` (cluster and run number) with a few of the records it rests on, a kind, a strength (weak, moderate, strong), a chance where the kind has a model, and a detail line. Edges are hints: they never score, link or merge, and they never make a grouping a swarm. That takes a reviewed record in the case ([cases](reference/cases.md#swarms)). The method and its limits are in [SC-FM 4.10](manual/04-indicators.md#fm-410-interaction-signals) and [SC-FM 5.12](manual/05-linking.md#fm-512-interaction-edges).
+[`swarm.rs`](../crates/sc-core/src/swarm/mod.rs) lists possible interaction between runs (SC-T9) as edges (`swarm_edges` in the analysis). Each edge names two runs as `C3#2` (cluster and run number) with a few of the records it rests on, a kind, a strength (weak, moderate, strong), a chance where the kind has a model, and a detail line. Edges are hints: they never score, link or merge, and they never make a grouping a swarm. That takes a reviewed record in the case ([cases](reference/cases.md#swarms)). The method and its limits are in [SC-FM 4.10](manual/04-indicators.md#fm-410-interaction-signals) and [SC-FM 5.12](manual/05-linking.md#fm-512-interaction-edges).
 
 **Runs and strands.** Runs are the clusters' runs above noise. Each run is split into strands by relay route, user agent, client network and header set, so that two clients joined into one cluster by a shared inbox can still be told apart. Two sides are different clients when their known values differ on a dimension (relay route, user agent, network, header set or encoding style) and they share no user agent, network or header set.
 
