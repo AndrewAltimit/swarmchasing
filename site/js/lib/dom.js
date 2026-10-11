@@ -62,7 +62,20 @@ export const store = {
 };
 
 export function showError(target, err) {
-  target.replaceChildren(el("p", { class: "hint warn", role: "status" }, String(err?.message ?? err)));
+  target.replaceChildren(el("p", { class: "warn", role: "status" }, String(err?.message ?? err)));
+}
+
+/**
+ * An alert card: what went wrong in bold, then what to do. Each of `parts`
+ * is an element, or text (or an array of text and nodes) made a paragraph.
+ * Shown in `target`, which is unhidden.
+ */
+export function showAlert(target, title, ...parts) {
+  target.hidden = false;
+  target.replaceChildren(
+    el("p", {}, el("strong", {}, title)),
+    ...parts.filter((x) => x != null && x !== false).map((x) => (x instanceof Element ? x : el("p", {}, x))),
+  );
 }
 
 /** Save text as a file through a blob: URL the page made. */
