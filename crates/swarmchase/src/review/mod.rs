@@ -36,12 +36,13 @@
 //! `suggested`, never as the label.
 //!
 //! `review sample` ([`sample`]) writes a stratified, seeded sample of the
-//! records below suggestive as a queue file, and `review <queue> --all`
-//! queues every record in it, as `review:baseline-sample`. Two labellers
-//! label it; `review --stats` reports their agreement and what the benign
-//! records reviewed so far can bound: the rule of three gives a 95% upper
-//! bound of `3/n` on the false-positive rate when none of `n` benign
-//! records was flagged.
+//! store as a queue file, and `review <queue> --all` queues every record in
+//! it, as `review:baseline-sample`. Two labellers label it; `review --stats`
+//! reports their agreement and what the benign records reviewed so far can
+//! bound: the rule of three gives a 95% upper bound of `3/n` on the
+//! false-positive rate when none of `n` benign records was flagged. `eval`
+//! reports the same bound for the current rules. `review tuned <id>...`
+//! marks records looked at while changing a rule, which leave the baseline.
 
 pub mod sample;
 
@@ -56,13 +57,26 @@ use std::path::{Path, PathBuf};
 
 pub const CLASS_FLAGGED: &str = "review:flagged";
 pub const CLASS_SAMPLE: &str = "review:unflagged-sample";
-pub const CLASS_BASELINE: &str = "review:baseline-sample";
+pub const CLASS_BASELINE: &str = sc_core::eval::baseline::CLASS;
 
 #[derive(clap::Subcommand)]
 pub enum ReviewCmd {
-    /// Write a stratified, seeded sample of records below suggestive as a
-    /// review queue, to grow a reviewed benign baseline.
+    /// Write a stratified, seeded sample of records as a review queue, to
+    /// grow a reviewed benign baseline.
     Sample(sample::SampleArgs),
+    /// Mark reviewed records as tuned on: looked at while changing a rule.
+    /// `eval` leaves them out of the benign baseline.
+    Tuned(TunedArgs),
+}
+
+#[derive(clap::Args)]
+pub struct TunedArgs {
+    /// Record ids, or files listing one id per line (`#` comments allowed).
+    #[arg(required = true)]
+    ids: Vec<String>,
+    /// Data directory (the watch's `--out`).
+    #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+    data: PathBuf,
 }
 
 #[derive(clap::Args)]
@@ -108,8 +122,10 @@ pub struct ReviewArgs {
 }
 
 pub fn run(args: ReviewArgs) -> Result<()> {
-    if let Some(ReviewCmd::Sample(s)) = args.cmd {
-        return sample::run(s);
+    match args.cmd {
+        Some(ReviewCmd::Sample(s)) => return sample::run(s),
+        Some(ReviewCmd::Tuned(t)) => return mark_tuned(&t),
+        None => {}
     }
     let data = &args.data;
     if args.input.is_empty() || args.stats {
@@ -243,6 +259,50 @@ pub struct Review {
     /// record (`review --suggest`). Never the label.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub suggested: Option<crate::suggest::Suggestion>,
+    /// Looked at while changing a rule (`review tuned`): `eval` leaves it
+    /// out of the benign baseline.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tuned: bool,
+}
+
+/// `review tuned`: set `tuned` on the listed records in every review file.
+fn mark_tuned(args: &TunedArgs) -> Result<()> {
+    let mut ids = BTreeSet::new();
+    for a in &args.ids {
+        let p = Path::new(a);
+        if p.is_file() {
+            let text =
+                std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
+            ids.extend(sc_core::eval::split::parse_id_list(&text));
+        } else {
+            ids.insert(a.clone());
+        }
+    }
+    let mut marked = BTreeSet::new();
+    for (who, path) in labeller_files(&args.data.join("labels"))? {
+        let mut store = ReviewStore::open(path)?;
+        let mut n = 0;
+        for id in &ids {
+            if let Some(r) = store.entries.get_mut(id)
+                && !r.tuned
+            {
+                r.tuned = true;
+                marked.insert(id.clone());
+                n += 1;
+            }
+        }
+        if n > 0 {
+            store.save()?;
+            println!("{who}: marked {n} record(s) tuned");
+        }
+    }
+    let unknown = ids.iter().filter(|id| !marked.contains(*id)).count();
+    println!(
+        "{} of {} id(s) newly marked tuned; {unknown} not found or already tuned",
+        marked.len(),
+        ids.len()
+    );
+    Ok(())
 }
 
 /// The review file, keyed by record ID. Saving rewrites it, so a re-review
@@ -709,6 +769,7 @@ pub fn session(
                             rules_version: a.rules_version.clone(),
                             // Only the shown record had a suggestion.
                             suggested: suggestion.clone().filter(|_| it.idx == item.idx),
+                            tuned: false,
                         },
                     );
                     *tally.labelled.entry(label).or_default() += 1;
@@ -770,24 +831,27 @@ pub fn stats(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
 /// (tier at review time) with its Wilson interval, and with none flagged the
 /// rule of three, `3/n`. Agent labels in it are misses.
 pub fn baseline(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
-    let sampled: Vec<&Review> = store
+    let all: Vec<&Review> = store
         .entries
         .values()
         .filter(|r| r.class == CLASS_BASELINE)
         .collect();
-    let benign: Vec<&&Review> = sampled.iter().filter(|r| r.label == "benign").collect();
-    let agents = sampled.iter().filter(|r| r.label == "agent").count();
-    let n = benign.len();
-    if sampled.is_empty() {
+    if all.is_empty() {
         return Ok(());
     }
+    let sampled: Vec<&&Review> = all.iter().filter(|r| !r.tuned).collect();
+    let benign: Vec<&&&Review> = sampled.iter().filter(|r| r.label == "benign").collect();
+    let agents = sampled.iter().filter(|r| r.label == "agent").count();
+    let n = benign.len();
     let k = benign.iter().filter(|r| r.tier >= Tier::Suggestive).count();
     let p = sc_core::eval::stats::Proportion::new(k, n);
     let pct = |x: Option<f64>| x.map_or("n/a".into(), |v| format!("{:.2}%", v * 100.0));
+    let target = sc_core::eval::baseline::TARGET;
     writeln!(
         out,
-        "benign baseline: {} baseline-sample reviews · {n} benign · {agents} agent (misses) · benign flagged suggestive+ at review {k} · FP rate {} [{}–{}]",
-        sampled.len(),
+        "benign baseline: {} baseline-sample reviews ({} tuned, left out) · {n} benign of the {target} target · {agents} agent (misses) · benign flagged suggestive+ at review {k} · FP rate {} [{}–{}]",
+        all.len(),
+        all.len() - sampled.len(),
         pct(p.value),
         pct(p.lo),
         pct(p.hi)
@@ -808,6 +872,15 @@ pub fn baseline(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
         store.path.display()
     )?;
     Ok(())
+}
+
+/// The ids of every record in any review file in `dir`.
+pub fn reviewed_ids(dir: &Path) -> Result<BTreeSet<String>> {
+    let mut out = BTreeSet::new();
+    for (_, p) in labeller_files(dir)? {
+        out.extend(ReviewStore::open(p)?.entries.into_keys());
+    }
+    Ok(out)
 }
 
 /// Every review file in `dir` with its labeller: `default` for
@@ -1005,6 +1078,7 @@ mod tests {
                         rules: Vec::new(),
                         rules_version: a.rules_version.clone(),
                         suggested: None,
+                        tuned: false,
                     },
                 );
             }
@@ -1067,6 +1141,7 @@ mod tests {
                     rules: Vec::new(),
                     rules_version: a.rules_version.clone(),
                     suggested: None,
+                    tuned: false,
                 },
             );
         }
@@ -1074,8 +1149,37 @@ mod tests {
         let mut out = Vec::new();
         baseline(&store, &mut out).unwrap();
         let out = String::from_utf8(out).unwrap();
-        assert!(out.contains(&format!("{n} benign · 0 agent")), "{out}");
+        assert!(
+            out.contains(&format!("{n} benign of the 1000 target · 0 agent")),
+            "{out}"
+        );
         assert!(out.contains(&format!("below 3/{n}")), "{out}");
+
+        // A tuned record leaves the baseline, here and in eval's labels.
+        let id = store.entries.keys().next().unwrap().clone();
+        store.entries.get_mut(&id).unwrap().tuned = true;
+        let mut out = Vec::new();
+        baseline(&store, &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("(1 tuned, left out)"), "{out}");
+        assert!(out.contains(&format!("{} benign of", n - 1)), "{out}");
+        store.save().unwrap();
+        let text = std::fs::read_to_string(&store.path).unwrap();
+        let labels = sc_core::parse_labels(&text);
+        assert!(labels.labels[&id].tuned);
+        let b = sc_core::eval::baseline::baseline(&a, &labels).unwrap();
+        assert_eq!((b.benign, b.excluded), (n - 1, 1));
+
+        // `review tuned` marks by id in every review file.
+        let data = store.path.parent().unwrap().parent().unwrap().to_path_buf();
+        let other = store.entries.keys().nth(1).unwrap().clone();
+        mark_tuned(&TunedArgs {
+            ids: vec![other.clone(), "no:such".into()],
+            data: data.clone(),
+        })
+        .unwrap();
+        assert!(ReviewStore::open(store.path.clone()).unwrap().entries[&other].tuned);
+        assert_eq!(reviewed_ids(&data.join("labels")).unwrap().len(), n);
     }
 
     #[test]
