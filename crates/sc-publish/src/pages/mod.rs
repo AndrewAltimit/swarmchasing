@@ -12,10 +12,12 @@ pub mod evalpage;
 pub mod home;
 pub mod html;
 pub mod layout;
+pub mod manual;
 pub mod notices;
 pub mod rules;
 pub mod shells;
 pub mod svg;
+pub mod walk;
 
 use crate::file::NoticeFile;
 use crate::site::build_site;
@@ -24,9 +26,10 @@ use sc_core::{FieldMap, Format, Rules};
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-/// The labelled file whose records the landing page and "Try an example"
-/// use. Every record in it must be marked synthetic.
-pub const EXAMPLE_FILE: &str = "llm-residue.ndjson";
+/// The showcase set the landing page walks through and the workbench's
+/// "Try an example" loads (`samples/showcase/`). Every record in it must be
+/// marked synthetic.
+pub const EXAMPLE_FILE: &str = "showcase.ndjson";
 
 /// Fields of a labelled record that carry the answer, stripped from the
 /// example the workbench loads.
@@ -41,6 +44,9 @@ pub struct SiteInputs {
     pub rules_toml: String,
     /// (file name, NDJSON) of every `samples/eval/*.ndjson`.
     pub eval_set: Vec<(String, String)>,
+    /// `samples/showcase/showcase.ndjson`: synthetic records for the landing
+    /// page and the workbench's example.
+    pub showcase: String,
     /// `samples/eval/coverage-allow.txt`, or empty.
     pub coverage_allow: String,
     /// The site's public URL.
@@ -48,8 +54,10 @@ pub struct SiteInputs {
     /// `https://github.com/<owner>/<repo>`.
     pub repo: String,
     pub version: String,
-    /// Size of the WASM module in bytes, when it was built first.
+    /// Size of the engine module in bytes, when it was built first.
     pub engine_bytes: Option<u64>,
+    /// Size of the tools module (reports, bundle check, eval) in bytes.
+    pub tools_bytes: Option<u64>,
 }
 
 /// Values every page's shell shows.
@@ -57,8 +65,10 @@ pub struct Ctx {
     pub version: String,
     pub rules_version: String,
     pub repo: String,
-    /// "1.5 MB", for the engine's loading message.
+    /// "1.3 MB", for the engine's loading message.
     pub engine_size: String,
+    /// The same for the tools module.
+    pub tools_size: String,
 }
 
 /// The example records for the workbench: the example file without its
@@ -149,7 +159,7 @@ fn title_case(s: &str) -> String {
     }
 }
 
-fn doc_body(d: &docs::Doc, all: &[docs::Doc], repo: &str, before: &str) -> String {
+fn doc_body(d: &docs::Doc, all: &[docs::Doc], repo: &str, before: &str, after: &str) -> String {
     let mut toc = String::new();
     if d.toc.len() > 2 {
         toc.push_str("<nav class=\"toc\" aria-label=\"On this page\"><p class=\"nav-h\">On this page</p><ol>");
@@ -164,7 +174,7 @@ fn doc_body(d: &docs::Doc, all: &[docs::Doc], repo: &str, before: &str) -> Strin
         toc.push_str("</ol></nav>");
     }
     format!(
-        "<div class=\"doc-layout\">{}<article class=\"doc prose\"><header class=\"page-head\"><h1>{}</h1></header>{before}{}<p class=\"hint doc-src\">Source: <a href=\"{}/blob/main/{}\">{}</a></p></article>{toc}</div>",
+        "<div class=\"doc-layout\">{}<article class=\"doc prose\"><header class=\"page-head\"><h1>{}</h1></header>{before}{}{after}<p class=\"hint doc-src\">Source: <a href=\"{}/blob/main/{}\">{}</a></p></article>{toc}</div>",
         docs_sidebar(all, &d.src),
         html::esc(&d.title),
         d.html,
@@ -174,11 +184,60 @@ fn doc_body(d: &docs::Doc, all: &[docs::Doc], repo: &str, before: &str) -> Strin
     )
 }
 
-fn engine_size(bytes: Option<u64>) -> String {
+fn module_size(bytes: Option<u64>) -> String {
     match bytes {
         Some(b) => format!("{:.1} MB", b as f64 / 1_048_576.0),
         None => "1.5 MB".into(),
     }
+}
+
+/// The manual's pages in reading order: the index, the chapters, then the
+/// glossary and the references.
+fn manual_pages(docs: &[docs::Doc]) -> Vec<&docs::Doc> {
+    let mut m: Vec<&docs::Doc> = docs
+        .iter()
+        .filter(|d| d.src.starts_with("docs/manual/"))
+        .collect();
+    let rank = |d: &docs::Doc| {
+        let name = d.src.rsplit('/').next().unwrap_or("").to_string();
+        let r = match name.as_str() {
+            "README.md" => 0,
+            "glossary.md" => 2,
+            "references.md" => 3,
+            _ => 1,
+        };
+        (r, name)
+    };
+    m.sort_by_key(|d| rank(d));
+    m
+}
+
+/// What the docs auto-link: section ids, tactic ids, glossary terms.
+fn manual_terms(first: &[docs::Doc], sources: &[(String, String)]) -> docs::Terms {
+    let mut t = docs::Terms::default();
+    for f in docs::fm_sections(first) {
+        if f.id == "FM-4.3" {
+            for n in 1..=9 {
+                t.tactics
+                    .insert(format!("SC-T{n}"), format!("{}#sc-t{n}", f.url));
+            }
+        }
+        t.fm.insert(f.id, format!("{}#{}", f.url, f.anchor));
+    }
+    if let Some((src, text)) = sources.iter().find(|(p, _)| p == "docs/manual/glossary.md") {
+        let url = docs::doc_url(src);
+        t.gloss = docs::glossary_terms(text)
+            .into_iter()
+            .filter(|(term, _)| term.len() >= 4)
+            .map(|(term, def)| {
+                let href = format!("{url}#{}", docs::term_anchor(&term));
+                (term, def, href)
+            })
+            .collect();
+        t.gloss
+            .sort_by(|a, b| b.0.len().cmp(&a.0.len()).then(a.0.cmp(&b.0)));
+    }
+    t
 }
 
 /// Every file of the site except the static assets (`site/` is copied as
@@ -195,7 +254,8 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         version: inp.version.clone(),
         rules_version: rules.set.meta.version.clone(),
         repo: inp.repo.clone(),
-        engine_size: engine_size(inp.engine_bytes),
+        engine_size: module_size(inp.engine_bytes),
+        tools_size: module_size(inp.tools_bytes),
     };
     let mut out: Vec<(String, String)> = Vec::new();
     // Notice data (newest first) as the CLI's `notice build` writes it.
@@ -204,15 +264,15 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     }
     let mut pages: Vec<Page> = Vec::new();
 
-    // The labelled set: the example, the eval data, the precomputed eval.
+    // The showcase (the landing page's walk and the workbench's example),
+    // the eval data, the precomputed eval.
     inp.eval_set.sort_by(|a, b| a.0.cmp(&b.0));
-    let example_src = inp
-        .eval_set
-        .iter()
-        .find(|(n, _)| n == EXAMPLE_FILE)
-        .map(|(_, t)| t.as_str())
-        .ok_or_else(|| format!("samples/eval/{EXAMPLE_FILE} not found"))?;
-    let example = example_records(example_src)?;
+    if inp.showcase.trim().is_empty() {
+        return Err(format!(
+            "samples/showcase/{EXAMPLE_FILE} is empty or missing"
+        ));
+    }
+    let example = example_records(&inp.showcase)?;
     let example_analysis = sc_core::analyze(
         sc_core::parse_input(&example, Format::Ndjson, &FieldMap::default()).observations,
         &rules,
@@ -244,17 +304,6 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         serde_json::json!({ "files": files, "ndjson": set }).to_string(),
     ));
 
-    // Landing.
-    let mut home = page(
-        "index.html",
-        "home",
-        "",
-        "Passive detection of misaligned AI agent swarms in public records: notices, methodology and browser tools.",
-        home::body(&example_analysis, &inp.notices),
-    );
-    home.title = String::new();
-    pages.push(home);
-
     // Notices.
     let mut idx = page(
         "notices/index.html",
@@ -280,11 +329,24 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         ));
     }
 
-    // Docs.
+    // Docs, twice: the first pass finds the Field Manual's sections and
+    // the glossary's terms, the second links them in running text.
     let srcs: BTreeSet<String> = inp.docs.iter().map(|(p, _)| p.clone()).collect();
+    let plain = docs::Links {
+        docs: &srcs,
+        repo: &inp.repo,
+        terms: None,
+    };
+    let first: Vec<docs::Doc> = inp
+        .docs
+        .iter()
+        .map(|(p, t)| docs::render_doc(p, t, &plain))
+        .collect();
+    let terms = manual_terms(&first, &inp.docs);
     let links = docs::Links {
         docs: &srcs,
         repo: &inp.repo,
+        terms: Some(&terms),
     };
     let mut rendered: Vec<docs::Doc> = inp
         .docs
@@ -298,6 +360,8 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         };
         key(a).cmp(&key(b))
     });
+    let sections = docs::fm_sections(&rendered);
+    let manual_order = manual_pages(&rendered);
     let mut seen = BTreeSet::new();
     for d in &rendered {
         if !seen.insert(d.url.clone()) {
@@ -306,6 +370,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         let nav = match d.url.as_str() {
             "methodology/" => "methodology",
             "operators/" => "operators",
+            u if u.starts_with("docs/manual/") => "manual",
             _ => "docs",
         };
         let before = if nav == "operators" {
@@ -313,16 +378,55 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         } else {
             ""
         };
+        let after = if nav == "manual" {
+            manual::pager(d, &manual_order)
+        } else {
+            String::new()
+        };
         let mut p = page(
             &format!("{}index.html", d.url),
             nav,
             &d.title,
             &d.summary.chars().take(200).collect::<String>(),
-            doc_body(d, &rendered, &inp.repo, before),
+            doc_body(d, &rendered, &inp.repo, before, &after),
         );
         p.wide = true;
         pages.push(p);
     }
+    if !sections.is_empty() {
+        out.push((
+            "assets/fm-index.json".into(),
+            manual::search_index(&sections),
+        ));
+        let mut p = page(
+            "docs/manual/sections/index.html",
+            "manual",
+            "Field Manual sections",
+            "Every section of the Swarmchasing Field Manual by id, with search.",
+            manual::sections_page(&sections, &manual_order),
+        );
+        p.wide = true;
+        p.scripts.push("js/pages/manual.js");
+        pages.push(p);
+    }
+
+    // Landing.
+    let fm_links: home::FmLinks = terms
+        .fm
+        .iter()
+        .chain(terms.tactics.iter())
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    let mut home = page(
+        "index.html",
+        "home",
+        "",
+        "Passive detection of misaligned AI agent swarms in public records: the method walked through a synthetic incident, notices, and browser tools.",
+        home::body(&example_analysis, &rules, &inp.notices, &fm_links),
+    );
+    home.title = String::new();
+    home.scripts.push("js/pages/home.js");
+    pages.push(home);
 
     // Rules, evaluation, and the tools.
     let mut p = page(
@@ -330,7 +434,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "rules",
         "Rules",
         "The indicator rules every analysis runs, with their weights, patterns and scores on the labelled set.",
-        rules::body(&inp.rules_toml, &report.rules)?,
+        rules::body(&inp.rules_toml, &report.rules, &fm_links)?,
     );
     p.scripts.push("js/pages/rules.js");
     pages.push(p);
@@ -356,7 +460,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     pages.push(p);
     let mut p = page(
         "unwrap/index.html",
-        "tools",
+        "unwrap",
         "Unwrap a URL",
         "The layers inside one URL and the rules each triggers, without opening it.",
         shells::UNWRAP.to_string(),
@@ -471,7 +575,7 @@ mod tests {
             rules_toml: sc_core::DEFAULT_RULES.into(),
             eval_set: vec![
                 (
-                    EXAMPLE_FILE.into(),
+                    "llm-residue.ndjson".into(),
                     include_str!("../../../../samples/eval/llm-residue.ndjson").into(),
                 ),
                 (
@@ -480,10 +584,12 @@ mod tests {
                 ),
             ],
             coverage_allow: String::new(),
+            showcase: include_str!("../../../../samples/showcase/showcase.ndjson").into(),
             base_url: "https://example.github.io/swarmchasing".into(),
             repo: "https://github.com/o/r".into(),
             version: "0.1.0".into(),
-            engine_bytes: Some(1_500_000),
+            engine_bytes: Some(1_300_000),
+            tools_bytes: Some(1_500_000),
         }
     }
 
@@ -603,7 +709,7 @@ mod tests {
     #[test]
     fn the_example_is_synthetic_and_unlabelled() {
         let ex =
-            example_records(include_str!("../../../../samples/eval/llm-residue.ndjson")).unwrap();
+            example_records(include_str!("../../../../samples/showcase/showcase.ndjson")).unwrap();
         for l in ex.lines() {
             let v: serde_json::Value = serde_json::from_str(l).unwrap();
             for k in LABEL_FIELDS {

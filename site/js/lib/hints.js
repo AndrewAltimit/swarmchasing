@@ -54,3 +54,80 @@ export function fleetItems(fleets, idOf = String) {
       kinds.length ? el("span", { class: "hint" }, ` (${kinds.join(", ")}${s != null ? `; strength ${s.toFixed(2)}` : ""})`) : null);
   });
 }
+
+// ── Agent likelihood (SC-FM ladder) ─────────────────────────────────────
+// The engine's AgentLevel, SignalKind and AgentCap, in its words. A kind
+// this list does not know is shown by its id.
+export const AGENT_LEVELS = [
+  { id: "payloads_only", code: "L0", label: "payloads only", meaning: "Attack payloads were present; this alone does not show what sent them." },
+  { id: "self_described", code: "L1", label: "self-described", meaning: "The requests name a model or vendor, or carry an agent test tag. Anyone can write this." },
+  { id: "model_written", code: "L2", label: "model-written", meaning: "The requests carry content a language model writes. A person pasting model output leaves the same." },
+  { id: "adaptive", code: "L3", label: "adaptive", meaning: "Model-written requests that change in answer to responses." },
+  { id: "agent_likely", code: "L4", label: "agent likely", meaning: "Adaptive, model-written requests at a pace or scale beyond one person." },
+  { id: "documented", code: "L5", label: "documented", meaning: "Documented by case work: operator logs matching an agent harness, or the provider's confirmation. Only an admin's case decision sets it." },
+];
+export const levelOf = (id) => AGENT_LEVELS.find((l) => l.id === id) ?? null;
+
+/** Signal kind → [rung id or null for a counter-signal, label]. */
+export const AGENT_SIGNALS = {
+  self_id: ["self_described", "names a model or vendor, or carries an agent test tag (anyone can write this)"],
+  residue: ["model_written", "model-output residue in requests"],
+  prose: ["model_written", "natural-language prose in parameters"],
+  fabricated_ids: ["model_written", "identifiers no generator produces"],
+  cut_lengths: ["model_written", "URLs cut at one repeated length, like an output limit"],
+  stale_knowledge: ["model_written", "retired endpoints or old client versions"],
+  stale_dates: ["model_written", "date tags naming a consistent past date"],
+  retry_after_error: ["adaptive", "a changed request right after an error response"],
+  escalation: ["adaptive", "a route escalation to reach one page"],
+  model_pace_chain: ["adaptive", "a probe chain at model pace"],
+  machine_pace: ["agent_likely", "retries after errors at tool pace, faster than a person reads"],
+  fan_out: ["agent_likely", "parallel fan-out of one fixed width"],
+  round_the_clock: ["agent_likely", "activity round the clock"],
+  declared_testing: [null, "declares authorised testing or research"],
+  benchmark: [null, "public benchmark or practice targets"],
+  scanner_pace: [null, "a probe chain at tool pace with no change after errors, as a scanner runs a list"],
+  working_hours: [null, "activity in one time zone's working hours"],
+};
+export const signalLabel = (k) => AGENT_SIGNALS[k]?.[1] ?? (trunc(String(k ?? "?").replace(/_/g, " "), 60) || "?");
+export const signalRung = (k) => AGENT_SIGNALS[k]?.[0] ?? null;
+
+/** Cap id → [ceiling level id, label]. */
+export const AGENT_CAPS = {
+  capture_times: ["model_written", "capture times only: pace, retries and rhythm cannot be read, so the grade stops at L2"],
+  human_pace: ["model_written", "a working-hours rhythm at slow pace: possibly human-operated with model help, so the grade stops at L2"],
+  working_hours: ["adaptive", "a working-hours rhythm, which an unattended fleet need not keep, so the grade stops at L3"],
+};
+export const capLabel = (k) => AGENT_CAPS[k]?.[1] ?? trunc(String(k ?? "?").replace(/_/g, " "), 60);
+
+// ── Interaction edges (SC-T9) ───────────────────────────────────────────
+export const SWARM_KINDS = {
+  shared_sink: { id: "S1", label: "shared sink", what: "runs, or strands of one run, writing to one inbox or artifact while sending requests differently" },
+  handoff: { id: "S2", label: "hand-off", what: "an artifact one run writes and a later run fetches" },
+  synchronized_start: { id: "S3", label: "synchronized start", what: "differently fingerprinted runs that start and stop together, against a chance model" },
+  role_sequence: { id: "S4", label: "role sequence", what: "a run that only reads a set of hosts, then another attacking them in the same order" },
+  disjoint_partition: { id: "S5", label: "disjoint partition", what: "runs started together splitting one target family with almost no overlap (alone, a fleet signal)" },
+};
+export const swarmKind = (k) => SWARM_KINDS[k] ?? { id: "S?", label: trunc(String(k ?? "?").replace(/_/g, " "), 40), what: "" };
+
+// ── Provenance and corroboration ────────────────────────────────────────
+export const PROVENANCE = {
+  observed: "observed (a server recorded it)",
+  "submit-anywhere": "submit-anywhere (anyone can submit the URL)",
+  "publish-anywhere": "publish-anywhere (anyone can publish it)",
+  unknown: "unknown source",
+};
+export const provenanceLabel = (k) => PROVENANCE[k] ?? trunc(String(k ?? "?"), 40);
+export const CORROBORATION = {
+  single_source: "single source",
+  multi_source: "several kinds of source",
+  operator_confirmed: "confirmed in operator logs",
+};
+export const corroborationLabel = (k) => CORROBORATION[k] ?? trunc(String(k ?? "?").replace(/_/g, " "), 40);
+
+export const PLANT_KINDS = {
+  provenance_monoculture: "provenance monoculture: every record from a service anyone can submit to",
+  burned_identifier: "burned identifier: a value quoted in a public report, which anyone can copy",
+  too_perfect: "too perfect: significant on many kinds of evidence with nothing ordinary around it",
+  habit_mismatch: "habit mismatch: an identifier shared with an earlier cluster that worked differently",
+};
+export const plantLabel = (k) => PLANT_KINDS[k] ?? trunc(String(k ?? "?").replace(/_/g, " "), 60);

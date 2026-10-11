@@ -1,34 +1,23 @@
 // Tools: check an evidence bundle (`swarmchase case bundle`), read a
 // security.txt, defang. Files are read in this page: the manifest hashes
-// are checked with Web Crypto and the analysis is re-run by the engine.
+// are checked with Web Crypto and the analysis is re-run by the tools module.
 // Record contents, stamps and claims are untrusted: inserted as text, URLs
 // defanged.
 import { $, el, showError } from "../lib/dom.js";
 import { arr, obj, num, pct, dur, fmtTs, topEntries, trunc } from "../lib/fmt.js";
-import { engine, host, pageRules } from "../lib/wasm.js";
+import { tools, host, pageRules } from "../lib/wasm.js";
 import { figure, swimlanes, tierLegend } from "../lib/charts.js";
 import { fleetItems, route } from "../lib/hints.js";
+import { layersTable } from "../lib/layers.js";
 
 const FILES = ["records.ndjson", "analysis.json", "stamp.json"];
 const MANIFEST = "MANIFEST.sha256";
 // Optional: the claims from case work, as `report --claims` reads them.
 const CLAIMS = "claims.json";
-const LAYERS = [
-  ["developer", "Developer and operator"],
-  ["host", "Hosting and runtime"],
-  ["harness", "Harness and framework"],
-  ["model_family", "Model family"],
-];
-const EVIDENCE = {
-  self_id: "self-identification", hosting_asn: "hosting network (ASN)", shared_identifiers: "identifiers shared with a confirmed incident",
-  provider_infrastructure: "provider infrastructure", provider_confirmed: "confirmed by the provider",
-};
-const word = (s) => String(s ?? "").replace(/[^a-z_]/g, "");
-const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const MAX_ROWS = 500;
 const pill = (t) => el("span", { class: `pill ${t}` }, t);
 
-const sc = await engine();
+const sc = await tools();
 const rules = await pageRules(sc, null);
 
 async function sha256(buf) {
@@ -133,23 +122,9 @@ function evalText(ev) {
 
 /** The attribution layers the re-run supports, with claims from case work. */
 function attribution(res) {
-  const layers = arr(res.layers);
-  const rows = LAYERS.flatMap(([id, heading]) => {
-    const mine = layers.filter((l) => l.layer === id);
-    if (!mine.length) return [el("tr", {}, el("th", { scope: "row" }, heading), el("td", { colspan: 4, class: "hint" }, "no candidate"))];
-    return mine.map((l, i) => el("tr", {},
-      i === 0 ? el("th", { scope: "row", rowspan: mine.length }, heading) : null,
-      el("td", {}, trunc(String(l.party ?? ""), 80), l.nameable ? null : el("span", { class: "hint" }, " (never named on this alone)")),
-      el("td", {}, el("span", { class: `conf ${word(l.label)}` }, cap(word(l.label))), l.likelihood_word ? el("span", { class: "hint" }, ` ${trunc(String(l.likelihood_word), 30)}`) : null),
-      el("td", {}, EVIDENCE[l.evidence] ?? trunc(String(l.evidence ?? ""), 40)),
-      el("td", {}, el("span", { class: `claim-tag ${word(l.tag)}` }, cap(word(l.tag)))),
-    ));
-  });
   return [
     el("p", { class: "hint" }, `What the records support at each layer${res.claimsFile ? ", with the claims from claims.json" : " (pick the case's claims.json too to include case work)"}. The label follows the evidence; the word after it is the strongest likelihood a report may use.${res.withheld ? ` ${res.withheld} developer candidate(s) below the naming gate are not shown.` : ""}`),
-    el("div", { class: "scroll" }, el("table", { class: "layers" },
-      el("thead", {}, el("tr", {}, ["Layer", "Party or candidate", "Label", "Evidence", "Tag"].map((h) => el("th", { scope: "col" }, h)))),
-      el("tbody", {}, rows))),
+    layersTable(res.layers),
   ];
 }
 

@@ -1,7 +1,7 @@
 // Evaluation page: the numbers are pre-rendered; "Recompute" loads the
-// engine and scores the bundled and the edited rules in this page.
+// tools module and scores the bundled and the edited rules in this page.
 import { $, showError } from "../lib/dom.js";
-import { engine, editedRules, rulesJson } from "../lib/wasm.js";
+import { tools, editedRules, rulesJson } from "../lib/wasm.js";
 import { renderComparison, scoreBoth } from "../lib/evalview.js";
 
 const btn = document.querySelector('[data-act="recompute"]');
@@ -11,7 +11,7 @@ btn?.addEventListener("click", async () => {
   const out = $("eval-out");
   btn.disabled = true;
   try {
-    const sc = await engine();
+    const sc = await tools();
     const [base, edited, files] = await scoreBoth(sc, await rulesJson(editedRules()));
     out.replaceChildren(...renderComparison(base, edited, files));
   } catch (e) {

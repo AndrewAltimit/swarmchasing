@@ -25,7 +25,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 <div class="row"><button type="button" id="run" class="primary" data-needs-engine disabled>Analyze</button><button type="button" id="example" data-needs-engine disabled>Try an example</button></div>
 <p class="hint" data-engine-status aria-live="polite"></p>
 <p id="rules-note" class="hint" hidden></p>
-<p id="example-note" class="hint note" hidden>Example loaded: synthetic records written to exercise the rules. None were collected, the hosts are placeholders, and the labels are removed.</p>
+<p id="example-note" class="hint note" hidden>Example loaded: the synthetic showcase the home page walks through. None of it was collected; target hosts are placeholders and networks documentation ASNs.</p>
 <p id="preset-note" class="hint note" hidden>Access-log preset: paste your web server's log (Common or Combined Log Format) and put your own host in the field map, e.g. <code>host=www.example.org</code>. The log stays in this page.</p>
 <p id="warnings" class="hint warn" role="status" hidden></p>
 <div id="summary" hidden></div>
@@ -37,6 +37,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 <div class="viz-tabs" role="tablist" aria-label="Views">
 <button type="button" role="tab" id="tab-runs" aria-controls="viz-panel" aria-selected="true" data-view="runs">Runs</button>
 <button type="button" role="tab" id="tab-fleet" aria-controls="viz-panel" aria-selected="false" tabindex="-1" data-view="fleet">Fleet</button>
+<button type="button" role="tab" id="tab-swarm" aria-controls="viz-panel" aria-selected="false" tabindex="-1" data-view="swarm">Swarm</button>
 <button type="button" role="tab" id="tab-heat" aria-controls="viz-panel" aria-selected="false" tabindex="-1" data-view="heat">Rules × clusters</button>
 <button type="button" role="tab" id="tab-rhythm" aria-controls="viz-panel" aria-selected="false" tabindex="-1" data-view="rhythm">Rhythm</button>
 <button type="button" role="tab" id="tab-strip" aria-controls="viz-panel" aria-selected="false" tabindex="-1" data-view="strip">Endpoints × time</button>
@@ -60,7 +61,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 </div>
 <section class="card pane-report" data-pane="report" aria-labelledby="h-report">
 <h2 id="h-report">Report</h2>
-<p class="hint">A disclosure draft from this analysis, scoped to the selected cluster if there is one. It follows the CLI's naming gate: outside case notes, a developer is named only on evidence at or above the level you pick. Model names in requests never name one on their own; an ASN names the host.</p>
+<p class="hint">A disclosure draft from this analysis, scoped to the selected cluster if there is one. Drafting loads the report tools, a second module, the first time. It follows the CLI's naming gate: outside case notes, a developer is named only on evidence at or above the level you pick. Model names in requests never name one on their own; an ASN names the host.</p>
 <div class="row">
 <label>Audience <select id="audience"><option value="internal">Internal case notes</option><option value="provider">AI provider</option><option value="affected">Affected operator</option><option value="public">Public notice</option></select></label>
 <label class="grow">Reporter <input id="reporter" placeholder="Name and contact"></label>
@@ -70,7 +71,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 <p class="hint">The JSON array <code>swarmchase report --claims</code> reads, e.g. <code>[{"party":"Example AI","role":"developer","evidence":"provider_confirmed","details":["confirmed in writing"]}]</code>. Kept in this page only.</p>
 <label for="claims" class="sr-only">Claims JSON</label><textarea id="claims" rows="4" spellcheck="false"></textarea>
 <p id="claims-status" class="hint warn" role="status" hidden></p></details>
-<div class="row"><button type="button" id="copy-report" disabled>Copy</button><button type="button" id="dl-report" disabled>Download .md</button><button type="button" id="dl-json" disabled>Download analysis .json</button></div>
+<div class="row"><button type="button" id="draft-report" class="primary">Draft the report</button><button type="button" id="copy-report" disabled>Copy</button><button type="button" id="dl-report" disabled>Download .md</button><button type="button" id="dl-json" disabled>Download analysis .json</button></div>
 <pre id="report" class="report" tabindex="0" aria-label="Report draft">Analyse records to draft a report.</pre>
 </section>"#;
 
