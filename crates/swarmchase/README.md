@@ -55,12 +55,19 @@ swarmchase unwrap 'https://r.jina.ai/https://portal.example.gov/q?id=1%20UNION%2
 
 ### Collect
 
-Collectors read indexes and public records only. They never open a capture or a URL an agent submitted. Requests go one at a time per host with an identifying user agent (override with `SWARMCHASE_UA`), and retry on HTTP 429 and 5xx with jittered backoff, honouring `Retry-After`. Every `collect` source also takes `--endpoint`, `--scan` and `--cache` ([source kinds](../../docs/reference/watch.md#source-kinds)).
+Collectors read indexes and public records only. They never open a capture or a URL an agent submitted. Requests go one at a time per host with an identifying user agent (override with `SWARMCHASE_UA`), and retry on HTTP 429 and 5xx with jittered backoff, honouring `Retry-After`. Every `collect` source also takes `--endpoint`, `--scan` and `--cache` ([source kinds](../../docs/reference/watch.md#source-kinds)), and some take a source-specific option:
+
+| Option | Source | Does |
+|---|---|---|
+| `--filter <f>` | Wayback, Arquivo.pt | A CDX filter the index server applies, repeatable; `collection:SAWP.*` keeps Arquivo.pt's on-demand saves. |
+| `--slice-days <n>` | Wayback | Reads the time range in windows of `n` days; a sliced pull resumes by window. |
+| `--canary <query>` | npm | A query known to match, run once first, so an empty result is told apart from a broken search. |
+| `--max-mb <n>` | GH Archive | The most compressed megabytes streamed per run. |
 
 | Command | What it does |
 |---|---|
-| `collect wayback <pattern>` | Wayback Machine CDX index, e.g. `'r.jina.ai/*'`. `--from`/`--to` (`yyyyMMdd[hhmmss]`), `--match-type`, `--limit`, `--page-size`, `-o`, and `--resume` to continue an interrupted pull. |
-| `collect arquivo <pattern>` | Arquivo.pt CDX index, same options. |
+| `collect wayback <pattern>` | Wayback Machine CDX index, e.g. `'r.jina.ai/*'`. `--from`/`--to` (`yyyyMMdd[hhmmss]`), `--match-type`, `--limit`, `--page-size`, `-o`, `--resume` to continue an interrupted pull, and `--slice-days N` to read the range in windows of N days. |
+| `collect arquivo <pattern>` | Arquivo.pt CDX index, same options. It cannot page, so a full result is cut at `--limit`. |
 | `collect urlquery <query>` | urlquery.net report search. Needs `URLQUERY_APIKEY`. |
 | `collect commoncrawl <pattern>` | Common Crawl CDX index rows, newest crawl by default. |
 | `collect urlscan <query>` | urlscan.io public search, per case. `URLSCAN_APIKEY` optional. |
@@ -68,6 +75,8 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect gharchive <substrings>` | Public GitHub events matching repo names or payload URLs. |
 | `collect npm <text>`, `collect pypi <substrings>` | Package names, versions and publish times; never code. |
 | `collect ctlog <substrings> --endpoint <log>` | Certificates in a CT log's newest entries whose names match. |
+| `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |
+| `collect mcp <substrings>` | Official MCP Registry servers whose name or declared URLs match (`*` for all), updated since `--from`. Metadata only; no server is contacted. |
 | `asn fetch`, `asn lookup <ip>…` | The offline IP-to-ASN table in `<data>/asn/`. |
 | `collect urlquery-reports <ids> -o <out>` | Fetches urlquery reports by ID, or every ID in a labels file such as Transluce's `reports.csv`. Appends to `--out` and skips IDs already there; `--sample N` caps the agent-labelled reports. |
 | `certs <query>` | Certificate Transparency lookup via crt.sh, e.g. `'%.example.com'`. |
@@ -75,6 +84,7 @@ Collectors read indexes and public records only. They never open a capture or a 
 
 ```sh
 swarmchase collect wayback 'r.jina.ai/*' --from 20260901 -o data/jina.ndjson
+swarmchase collect arquivo 'r.jina.ai/*' --filter 'collection:SAWP.*' --from 20260901 -o data/spn.ndjson
 scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o data/uq.ndjson
 ```
 
@@ -84,7 +94,9 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 |---|---|
 | `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`. Details: [Watch runs](../../docs/reference/watch.md). |
 | `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest` shows a local model's suggestion. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
-| `eval <input>…` | Precision and recall of the rules on labelled records, and agent grades by actor. Labels come from a `label` field or `--labels` (NDJSON or CSV). With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. `--before <date>` grades a pre-agent negative control instead. |
+| `review sample` | Writes a stratified, seeded sample of low-tier records as a queue for a [reviewed benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline); `review <queue> --all` labels it. |
+| `eval <input>…` | Precision and recall of the rules on labelled records, per record and per cluster, for all and for non-synthetic records. With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. `--before <date>` runs a pre-agent negative control instead. Details: [Evaluation](../../docs/reference/evaluation.md). |
+| `eval repro`, `eval check-results`, `eval export-bench` | Measure a saved result again; check the committed results; write an SC-Bench file (`eval --bench` scores one). |
 
 ```sh
 swarmchase watch                              # uses watchlist.toml and $SWARMCHASE_DATA (or data/)
@@ -108,7 +120,7 @@ swarmchase case verify data/cases/2026-10-portal/bundles/2026-10-12
 swarmchase case status
 ```
 
-Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), `no-contact`, `alternative`, `plant-review` and `checklist` for the self-review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
+Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (`--format stix`, `misp`, `oecd` with its EU AI Act Article 73 section, or `aiid`), `no-contact`, `alternative`, `plant-review` and `checklist` for the self-review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
 ### Notices
 
@@ -150,22 +162,21 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 
 | File | Covers |
 |---|---|
-| [`main.rs`](src/main.rs) | Argument parsing and dispatch. |
+| [`lib.rs`](src/lib.rs) | Argument parsing and dispatch; [`main.rs`](src/main.rs) calls it. |
 | [`commands/`](src/commands/mod.rs) | The analysis, collect and lookup commands, one module each. |
 | [`input.rs`](src/input.rs) | Reading records and rules for the analysis commands. |
 | [`store.rs`](src/store.rs) | The watch record store, retention, JSON and NDJSON files. |
 | [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
 | [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
-| [`review.rs`](src/review.rs) | Interactive labelling. |
+| [`review/`](src/review/mod.rs) | Interactive labelling; the benign-baseline sampler ([`sample.rs`](src/review/sample.rs)). |
 | [`suggest.rs`](src/suggest.rs) | Label suggestions from a local model (`review --suggest`), local hosts only. |
-| [`eval.rs`](src/eval.rs) | The `eval` command. |
-| [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, lead times ([`lead.rs`](src/case/lead.rs)), the self-review checklist ([`checklist.rs`](src/case/checklist.rs)), and the indicators the watch matches. |
+| [`eval.rs`](src/eval.rs) | The `eval` command's tables, floors and saved results; `repro` and `check-results` ([`repro.rs`](src/eval/repro.rs)); SC-Bench export and scoring ([`bench.rs`](src/eval/bench.rs)). |
+| [`case/`](src/case/mod.rs) | Case files on disk and every analysis of a case under its pinned rules (`Pinned`); the subcommands, one module per group ([`cli/`](src/case/cli/mod.rs)); record selection, status, report and e-mail drafts, the checklist's inputs, incident drafts, and the indicators the watch matches. The case model and decisions are [`sc-case`](../sc-case/README.md). |
 | [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |
-| [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |
+| [`contacts/`](src/contacts/mod.rs) | security.txt and RDAP parsing, contact lookup for `case contacts`, provider seeding from the directory, `contacts verify`, and `swarmchase contacts`. |
 | [`csirts.rs`](src/csirts.rs) | National CSIRTs by country ([`contacts/csirts.toml`](../../contacts/csirts.toml)). |
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
 | [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
-| [`stix/`](src/stix/mod.rs) | STIX 2.1 export: records to observables and indicators, one builder per object type, deterministic ids. |
+| [`stix/`](src/stix/mod.rs) | `case export --format stix\|misp`: the case scoped to an audience, built by [`sc-stix`](../sc-stix/README.md). |
 | [`notice.rs`](src/notice.rs) | The notice draft (`case notice`); adding, updating, linting and building notices. |
-| [`wording.rs`](src/wording.rs) | Wording checks on a notice: claim form, likelihood words, provider names in titles, "compromised", accusations. |

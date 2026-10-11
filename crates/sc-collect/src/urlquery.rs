@@ -58,6 +58,7 @@ impl Source for Urlquery {
             records: p.records,
             next,
             truncated: false,
+            coverage: None,
         })
     }
 }

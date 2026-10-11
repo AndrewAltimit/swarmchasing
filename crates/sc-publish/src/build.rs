@@ -2,9 +2,9 @@
 //! and `swarmchase site build` call.
 //!
 //! Reads only `notices/*.md`, `docs/**/*.md`, `rules/default.toml`,
-//! `samples/eval/*.ndjson`, `samples/eval/coverage-allow.txt` and the static
-//! files in `site/` (with the WASM package `scripts/ci/build-site.sh` builds
-//! into `site/pkg`). It refuses any path under `data/` or
+//! `samples/eval/*.ndjson`, `samples/eval/coverage-allow.txt`,
+//! `samples/showcase/*.ndjson` and the static files in `site/` (with the
+//! WASM modules `scripts/ci/build-site.sh` builds into `site/pkg`). It refuses any path under `data/` or
 //! `$SWARMCHASE_DATA`: watch data and case files never reach the site.
 //! Unlike the rest of this crate it reads and writes files; it never touches
 //! the network.
@@ -60,6 +60,7 @@ const INPUTS: &[(&str, &str)] = &[
     ("rules/default.toml", ".toml"),
     ("samples/eval/", ".ndjson"),
     ("samples/eval/coverage-allow.txt", ".txt"),
+    ("samples/showcase/", ".ndjson"),
     ("site/", ""),
 ];
 
@@ -247,19 +248,22 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
     } else {
         String::new()
     };
-    let engine_bytes = fs::metadata(r.root.join("site/pkg/sc_wasm_bg.wasm"))
-        .ok()
-        .map(|m| m.len());
+    let showcase = r.read("samples/showcase/showcase.ndjson")?;
+    let size = |p: &str| fs::metadata(r.root.join(p)).ok().map(|m| m.len());
+    let engine_bytes = size("site/pkg/sc_wasm_bg.wasm");
+    let tools_bytes = size("site/pkg/tools/sc_tools_bg.wasm");
     let mut inputs = SiteInputs {
         notices,
         docs,
         rules_toml,
         eval_set,
         coverage_allow,
+        showcase,
         base_url: o.base_url.clone(),
         repo: env!("CARGO_PKG_REPOSITORY").to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         engine_bytes,
+        tools_bytes,
     };
     let files = build_pages(&mut inputs)?;
 

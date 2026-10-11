@@ -23,6 +23,64 @@ pub struct Page {
     /// The source had more records than it returned and cannot page to them
     /// (Arquivo.pt's index, a one-page feed). The pull is incomplete.
     pub truncated: bool,
+    /// How much of the source this page read, for sources that read a
+    /// stream or feed and keep only matches.
+    pub coverage: Option<Coverage>,
+}
+
+/// How much of a streamed or filtered source a pull read, against what was
+/// there to read, and whether it proved the pipe works. A source that keeps
+/// only matches returns nothing most runs; coverage tells "nothing matched"
+/// from "nothing was read".
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Coverage {
+    /// What `read` and `available` count: `hours`, `entries`, `items`, `servers`.
+    pub unit: &'static str,
+    /// Units read and filtered.
+    pub read: u64,
+    /// Units there were to read since the checkpoint (or in the sample
+    /// window), `read` included. Pages add to it: a source that knows the
+    /// whole span gives it on its first page only.
+    pub available: u64,
+    /// Units passed over because the backlog was too long to catch up on.
+    /// Pages add to it, as `available`.
+    pub skipped: u64,
+    /// Where the next pull starts (an hour or entry index), kept across runs
+    /// by sources that read a stream from a checkpoint.
+    pub next: Option<u64>,
+    /// Whether the pull saw what any working pull sees (events parsed,
+    /// entries with names, a known-present search hit). `None` when the
+    /// source has no canary.
+    pub canary: Option<bool>,
+}
+
+impl Coverage {
+    /// Fold a later page's coverage into this one.
+    pub fn merge(&mut self, later: &Coverage) {
+        if self.unit.is_empty() {
+            self.unit = later.unit;
+        }
+        self.read += later.read;
+        self.available += later.available;
+        self.skipped += later.skipped;
+        if later.next.is_some() {
+            self.next = later.next;
+        }
+        self.canary = match (self.canary, later.canary) {
+            (Some(true), _) | (_, Some(true)) => Some(true),
+            (Some(false), _) | (_, Some(false)) => Some(false),
+            _ => None,
+        };
+    }
+
+    /// `6 of 6 hours`, `4096 of 912338 entries, 40000 skipped`.
+    pub fn line(&self) -> String {
+        let mut s = format!("{} of {} {}", self.read, self.available, self.unit);
+        if self.skipped > 0 {
+            s.push_str(&format!(", {} skipped", self.skipped));
+        }
+        s
+    }
 }
 
 /// The result of one pull.
@@ -40,6 +98,8 @@ pub struct Pull {
     pub stopped: Option<anyhow::Error>,
     /// A page was cut short by a source that cannot page (see [`Page::truncated`]).
     pub truncated: bool,
+    /// Every page's coverage folded together (see [`Coverage`]).
+    pub coverage: Option<Coverage>,
 }
 
 impl Pull {
@@ -78,6 +138,9 @@ pub fn pull(
         };
         on_page(&page)?;
         out.truncated |= page.truncated;
+        if let Some(c) = &page.coverage {
+            out.coverage.get_or_insert_with(Coverage::default).merge(c);
+        }
         out.observations.extend(page.records);
         cursor = page.next;
         if cursor.is_none() {
@@ -104,7 +167,7 @@ mod tests {
                 })
                 .collect(),
             next: next.map(|k| Cursor::Key(k.into())),
-            truncated: false,
+            ..Default::default()
         })
     }
 
@@ -199,5 +262,47 @@ mod tests {
             Err(anyhow::anyhow!("disk full"))
         });
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn coverage_folds_over_pages() {
+        let cov = |read: u64, canary, next: Option<Cursor>| Page {
+            next,
+            coverage: Some(Coverage {
+                unit: "hours",
+                read,
+                available: if read == 1 { 6 } else { 0 },
+                next: Some(read),
+                canary,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut pages = VecDeque::from(vec![
+            cov(1, Some(false), Some(Cursor::Offset(1))),
+            cov(2, Some(true), Some(Cursor::Offset(2))),
+            cov(3, None, None),
+        ]);
+        let p = pull(
+            10,
+            1,
+            None,
+            |_, _| Ok(pages.pop_front().unwrap()),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        let c = p.coverage.unwrap();
+        assert_eq!((c.read, c.available, c.next), (6, 6, Some(3)));
+        assert_eq!(c.canary, Some(true));
+        assert_eq!(c.line(), "6 of 6 hours");
+        let mut none = Coverage::default();
+        none.merge(&Coverage {
+            canary: Some(false),
+            skipped: 3,
+            unit: "entries",
+            ..Default::default()
+        });
+        assert_eq!(none.canary, Some(false));
+        assert_eq!(none.line(), "0 of 0 entries, 3 skipped");
     }
 }

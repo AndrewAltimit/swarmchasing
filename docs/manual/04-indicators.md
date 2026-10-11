@@ -7,9 +7,10 @@
 Indicators are rules kept as data, versioned, and shared by every tool that grades records. Before rules run, each recorded URL is unwrapped: relays, translate proxies, URL-valued parameters, `data:` URLs and base64 values are peeled into layers, so rules see every hop and the real target ([methodology](../methodology.md#unwrapping)).
 
 - Each rule counts at most once per record, whichever layer it matched.
-- A record's score is the sum of the weights of the distinct rules that fired.
+- A record's score adds the weights of the distinct rules that fired. Rules that read the same artifact are one piece of evidence, not several, and count once per independence group; context kinds together count at most one below the suggestive threshold ([FM-4.11](#fm-411-independence-groups-and-the-context-cap)).
 - The score is graded against two thresholds into a tier ([FM-1.5](01-scope.md#fm-15-evidence-tiers)). A rule marked significant puts a record in the top tier on its own.
-- **One relay hit is never enough.** No rule for something ordinary users do may reach the suggestive threshold alone. A relay, a cache-buster or a self-identification needs a second, independent indicator.
+- **One relay hit is never enough.** No rule for something ordinary users do may reach the suggestive threshold alone. A relay, a cache-buster or a self-identification needs a second, independent indicator, and that indicator is not another context hit ([FM-4.11](#fm-411-independence-groups-and-the-context-cap)).
+- **A tier measures payload and tool use.** It says what a record contains, not whether an agent sent it or whether the agent went beyond its task. Those are separate questions with their own evidence ([chapter 15](15-misalignment.md)).
 
 ## FM-4.2 Rule anatomy
 
@@ -105,7 +106,7 @@ ATLAS and ATT&CK describe adversaries using systems. Swarmchasing describes agen
 | SC-T8 | none | none | none |
 | SC-T9 | AML.T0118 Autonomous AI Agent Communication (.000 shared artifacts, .001 direct); AML.T0124 Autonomous Attack Orchestration | none | close |
 
-ATLAS ids and names are taken from the published ATLAS data file; ATT&CK ids from the ATT&CK technique pages ([references](references.md#threat-frameworks)). Re-check both when either framework releases a new version, since techniques are renamed and merged.
+The OWASP Top 10 for Agentic Applications column, and the agent-specific ATLAS techniques, are in [FM-12.4](12-interoperability.md#fm-124-crosswalk-to-agent-security-frameworks). A STIX or MISP export carries both tables' entries for each tactic ([FM-12.2](12-interoperability.md#fm-122-the-x-sc-agent-run-extension)). ATLAS ids and names are taken from the published ATLAS data file; ATT&CK ids from the ATT&CK technique pages ([references](references.md#threat-frameworks)). Re-check both when either framework releases a new version, since techniques are renamed and merged.
 
 ## FM-4.7 Rule-writing standard
 
@@ -145,3 +146,30 @@ Interaction between agents rarely leaves a direct trace in public records. A rec
 | S5 | Disjoint partition | Runs started together split one target family with almost no overlap. | One scheduler sharding a list: a fleet signal unless others join it. |
 
 Identifiers are matched as strings already in the records. Reading an artifact, an inbox or a channel to see what was written is never part of the method ([FM-3.2](03-sources.md#fm-32-passivity-test)). How the signals are found and recorded is in [FM-5.12](05-linking.md#fm-512-interaction-edges).
+
+## FM-4.11 Independence groups and the context cap
+
+A score adds weights as if each rule were a separate observation. Rules that read the same artifact are not. One fetch program carried through an echo service fires the echo rule, the script rule, the fetch rule and the title-write rule together, and a benign data task done that way (a program that fetches a TV schedule) reaches the top tier on its tool use alone. Two relays in one route, or a relay and a vendor name in the same query, are two context hits that ordinary clients produce together. Summing them grades how a request was written, not how much evidence it holds.
+
+The standard therefore scores with two constraints:
+
+- **Independence groups.** Rules that read the same artifact in the same request **must** share a group. A group counts once per record, at the largest weight among its rules that fired. Ungrouped rules count as before. A `significant` rule still sets the top tier on its own.
+- **Context cap.** Context kinds (relay, cache buster, self-identification, header, outcome) together contribute at most one less than the suggestive threshold. A record whose only hits are context kinds stays noise, however many it has.
+
+A group is a statement about correlation, so it is set from evidence: two rules belong together when, on labelled records, one rarely fires without the other on the same request. The default groups:
+
+| Group | Rules | The shared artifact |
+|---|---|---|
+| `program` | `carrier.data_url_script`, `carrier.inline_fetch_program`, `carrier.form_post_program`, `carrier.html_program`, `marker.title_write` | One program's text. |
+| `relay` | every `relay.*` rule | One fetch route. |
+| `run_tag` | `marker.uq_tags`, `marker.test_tag`, `marker.oai_tag` | One tag and its parameter. |
+| `sqli` | `exploit.sqli_union`, `exploit.sqli_boolean`, `exploit.sqli_quote` | One injection payload. |
+| `traversal` | `exploit.traversal`, `exploit.traversal_single` | One traversal payload. |
+| `oast` | `exfil.requestbin`, `exfil.oast_service` | One out-of-band host. |
+| `markdown` | `marker.md_link`, `marker.md_url_wrapper` | One Markdown wrapper. |
+| `tool_call` | `marker.tool_call_markup`, `marker.tool_call_json`, `marker.json_quote_residue` | One tool-call argument. |
+| `proxy_headers` | `header.via_hysandbox`, `header.via_ats`, `header.gzip_only_requests` | One proxy's rewrite of the request. |
+
+The echo service itself (`carrier.httpbin`) stays outside `program`: the route and the payload are separate choices, and each says something. A change of groups is a rule change and passes the [FM-4.7](#fm-47-rule-writing-standard) standard, with its before and after numbers.
+
+What changes: a program through an echo service is suggestive, not significant, unless a payload or a channel comes with it; a run tag with its own parameter name is one indicator; two relays, or a relay and a vendor name, are noise. Records with an attack payload are unaffected, because payload rules are `significant`. Toolkit: `Rules::score` counts each group once at its largest fired weight and caps the context kinds together at one below suggestive; the default groups are set in [`rules/default.toml`](../../rules/default.toml), and the `group` field and the cap are normative in [SC-Rules v1](../specs/rules-v1.md#independence-groups), with conformance vectors for the records whose tier they decide.

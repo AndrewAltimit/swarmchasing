@@ -41,7 +41,7 @@ On Windows, `python3` may be the Store stub; use `python`. Shell scripts run und
 cargo run -q --profile release-test -p swarmchase -- eval samples/eval/*.ndjson --show-fp 50
 ```
 
-Give precision and recall at both tiers and the changed rule's own precision. Never lower a floor. `eval` scores records, not clusters.
+Give precision and recall at both tiers and the changed rule's own precision. Never lower a floor. Give the non-synthetic numbers too; the floors read the record unit, and the cluster unit is printed beside it.
 
 ## Browser toolkit
 

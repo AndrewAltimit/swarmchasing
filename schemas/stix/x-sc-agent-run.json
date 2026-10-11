@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/stix/x-sc-agent-run.json",
   "title": "x-sc-agent-run",
-  "description": "A STIX 2.1 Domain Object, defined by an extension-definition of type new-sdo: one run of an autonomous agent, a linked cluster of requests (Swarmchasing Field Manual 12.2). Version 1.0.0.",
+  "description": "A STIX 2.1 Domain Object, defined by an extension-definition of type new-sdo: one run of an autonomous agent, a linked cluster of requests (Swarmchasing Field Manual 12.2). Version 1.1.0.",
   "type": "object",
   "required": [
     "type",
@@ -107,6 +107,21 @@
     "object_marking_refs": {
       "type": "array",
       "items": { "type": "string", "pattern": "^marking-definition--" }
+    },
+    "external_references": {
+      "description": "The run's tactics and their cross-walk (SC-FM 4.6): an SC-T reference per tactic, then MITRE ATLAS, MITRE ATT&CK and OWASP Top 10 for Agentic Applications entries.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["source_name", "external_id"],
+        "additionalProperties": false,
+        "properties": {
+          "source_name": { "enum": ["swarmchasing-sc-t", "mitre-atlas", "mitre-attack", "owasp-agentic-top-10"] },
+          "external_id": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
     },
     "extensions": {
       "type": "object",

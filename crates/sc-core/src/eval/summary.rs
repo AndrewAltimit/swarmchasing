@@ -9,6 +9,7 @@
 use super::clusters::ClusterEval;
 use super::coverage::{AllowList, Coverage, RuleMeta, UNTAGGED, coverage, rule_meta};
 use super::stats::Proportion;
+use super::units::{self, Calibration, Slice};
 use super::{EvalReport, Label, LabelSet, Threshold, evaluate};
 use crate::analyze::Analysis;
 use crate::model::Tier;
@@ -36,6 +37,26 @@ pub struct Summary {
     pub benign_classes: Vec<BenignRow>,
     pub tactics: Vec<RecallRow>,
     pub clusters: ClusterEval,
+    /// `tiers` counted per cluster instead of per record ([`units`]).
+    #[serde(default)]
+    pub cluster_tiers: Vec<TierSummary>,
+    /// Every number above the line again, over the records not marked
+    /// `synthetic` (reconstructed and collected records).
+    #[serde(default)]
+    pub non_synthetic: Slice,
+    /// One slice per provenance: `synthetic`, `reconstructed`, `collected`.
+    #[serde(default)]
+    pub by_provenance: Vec<Slice>,
+    /// One slice per record source (`manual`, `urlquery`, ...).
+    #[serde(default)]
+    pub by_source: Vec<Slice>,
+    /// One slice per label file, when the caller says which file each label
+    /// came from; empty otherwise.
+    #[serde(default)]
+    pub by_file: Vec<Slice>,
+    /// Observed precision per tier and per agent grade.
+    #[serde(default)]
+    pub calibration: Calibration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,17 +72,23 @@ pub struct TierSummary {
     pub recall: Proportion,
 }
 
+impl TierSummary {
+    pub fn from_counts(tier: Tier, tp: usize, fp: usize, fn_: usize, tn: usize) -> Self {
+        Self {
+            tier,
+            tp,
+            fp,
+            fn_,
+            tn,
+            precision: Proportion::new(tp, tp + fp),
+            recall: Proportion::new(tp, tp + fn_),
+        }
+    }
+}
+
 impl From<&Threshold> for TierSummary {
     fn from(t: &Threshold) -> Self {
-        Self {
-            tier: t.tier,
-            tp: t.tp,
-            fp: t.fp,
-            fn_: t.fn_,
-            tn: t.tn,
-            precision: Proportion::new(t.tp, t.tp + t.fp),
-            recall: Proportion::new(t.tp, t.tp + t.fn_),
-        }
+        Self::from_counts(t.tier, t.tp, t.fp, t.fn_, t.tn)
     }
 }
 
@@ -187,6 +214,12 @@ fn build(
             allowed: c.allowed.clone(),
         })
         .collect();
+    let items = units::labelled(a, labels);
+    let non_synthetic: Vec<_> = items
+        .iter()
+        .copied()
+        .filter(|(_, l)| !l.synthetic)
+        .collect();
     Summary {
         schema: SCHEMA,
         rules_version: report.rules_version.clone(),
@@ -235,6 +268,19 @@ fn build(
             })
             .collect(),
         clusters: report.clusters.clone(),
+        cluster_tiers: units::slice(a, &items, "all").cluster_tiers,
+        non_synthetic: units::slice(a, &non_synthetic, "non_synthetic"),
+        by_provenance: units::breakdown(a, &items, |_, l| Some(l.provenance().to_string())),
+        by_source: units::breakdown(a, &items, |i, _| {
+            let s = &a.results[i].obs.source;
+            Some(if s.is_empty() {
+                "unknown".into()
+            } else {
+                s.clone()
+            })
+        }),
+        by_file: units::breakdown(a, &items, |_, l| l.origin.clone()),
+        calibration: units::calibration(a, &items),
     }
 }
 

@@ -61,6 +61,8 @@ A report to one operator never carries another operator's logs. Records used wit
 - likelihood words stronger than their label allows: in the attribution section, each line's own label; in the summary, the strongest label the notice states; anywhere, off-table words of certainty ([SC-FM 8](../manual/08-confidence.md));
 - a title naming a model provider from the [provider directory](cases.md#the-provider-directory) that `providers` does not list.
 
+Every notice goes through this one linter, wherever it is checked: `notice lint`, `notice update` before it writes, `notice build`, the site build, and `notice add`, whose checklist reports the front matter and leak checks as its withholding scan and the wording checks as their own items ([cases](cases.md#self-review-checklist)). It lives in [`sc-case`](../../crates/sc-case/README.md) (`notice::lint`); `notice lint` also checks that each file is named after its id.
+
 CI runs it on every pull request and push, and so does the pre-commit hook when `notices/` is staged ([scripts](../../scripts/README.md)).
 
 ## Burned tags

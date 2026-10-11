@@ -18,6 +18,8 @@ A claimed number names its kind. Only held-out and prospective numbers may be qu
 
 The regression set holds reconstructed records from published incident reports, synthetic records for each artifact family, and benign records, including hard negatives built to trip the rules ([FM-4.7](04-indicators.md#fm-47-rule-writing-standard)). A gate runs on every change and fails when precision or recall at either tier falls below its floor. Floors only go up.
 
+Synthetic records are written to exercise a rule, so the rules catch them by construction and they lift every number they are counted in. Every headline number is therefore given twice: over all labelled records, and over the records not marked synthetic (reconstructions and collected records). The gate holds floors on both, so hand-written fixtures cannot hold a number up on their own. Read the non-synthetic numbers first.
+
 In this repository the set is [`samples/eval/`](../../samples/eval/README.md) and the gate is described in [evaluation](../reference/evaluation.md#the-eval-gate).
 
 ## FM-9.3 Frozen held-out split
@@ -31,7 +33,7 @@ A frozen split is used for measurement only. Looking at its errors to change a r
 
 Labels from an external release are used with documented overrides, each with its reason. The [Transluce release](references.md#incident-reports) is such a source: it labels scan reports and ships report ids, not contents, so a practitioner fetches the reports under their own access and measures record by record ([held-out steps](../../samples/eval/README.md#held-out-evaluation-on-the-transluce-release)). Its labels draw on context a single record cannot show, so the per-class table matters more than the total.
 
-Toolkit: the Transluce measurement runs record by record, and `eval --split time|cluster` freezes a split of any labelled set ([frozen splits](../reference/evaluation.md#frozen-splits)). Results are saved as numbers and hashes ([saved results](../reference/evaluation.md#saved-results)).
+Toolkit: the Transluce measurement runs record by record, and `eval --split time|cluster` freezes a split of any labelled set ([frozen splits](../reference/evaluation.md#frozen-splits)). Results are saved as numbers and hashes ([saved results](../reference/evaluation.md#saved-results)). `eval repro <result>` finds the inputs by hash, measures again and diffs every number ([reproducing a result](../reference/evaluation.md#reproducing-a-result)); `eval check-results`, run by the gate, checks that every saved result names committed rules and code, has a benign record when held out or prospective, and holds no URL ([checking saved results](../reference/evaluation.md#checking-saved-results)).
 
 ## FM-9.4 Prospective evaluation
 
@@ -45,7 +47,8 @@ Detection is measured as precision and recall:
 
 - **per tier**: significant, and suggestive or above;
 - **per tactic** ([FM-4.3](04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)), so a strong tactic does not hide a weak one;
-- **per unit**: by record and by cluster. A cluster of ten records counts ten times by record and once by cluster; give both.
+- **per unit**: by record and by cluster. A cluster of ten records counts ten times by record and once by cluster; give both. By cluster, a predicted group whose labelled members mix agent and benign is wrong whether flagged or not: flagged, reporting it would misattribute the benign members;
+- **per provenance**: over all records and over the non-synthetic ones ([FM-9.2](#fm-92-regression-set)).
 
 Every proportion carries a 95% Wilson score interval ([Wilson 1927](references.md#statistics)), which behaves at small counts and near 0 or 1 where the plain normal interval does not. For `k` successes in `n` trials, `p = k/n` and `z = 1.96`:
 
@@ -54,7 +57,9 @@ centre    = (p + z²/(2n)) / (1 + z²/n)
 halfwidth = (z / (1 + z²/n)) · sqrt( p(1−p)/n + z²/(4n²) )
 ```
 
-Toolkit: precision and recall per tier, recall per class and per tactic, and false positives per benign class, each with its Wilson interval ([statistics](../reference/evaluation.md#statistics)). Detection scored with the cluster as the unit is (planned).
+**Zero errors.** With none of `n` benign records flagged, the observed false-positive rate is 0 but the 95% upper bound is not: it is close to `3/n`, the rule of three ([Hanley and Lippman-Hand 1983](references.md#statistics)). Bounding a false-positive rate at 0.5% takes more than 600 benign records with none flagged. A clean result on fewer says less than that, and is quoted with its bound.
+
+Toolkit: precision and recall per tier, by record and by cluster, over all and non-synthetic records, recall per class and per tactic, and false positives per benign class, each with its Wilson interval; the `3/n` bound where nothing was flagged ([statistics](../reference/evaluation.md#statistics), [units](../reference/evaluation.md#record-and-cluster-units)).
 
 ## FM-9.6 Cluster metrics
 
@@ -106,6 +111,8 @@ A published benchmark contains:
 
 It never contains a source's content where the source's terms forbid redistribution ([FM-3.4](03-sources.md#fm-34-terms-of-use)), captured secrets, or operator-supplied logs. Users fetch records themselves, under the source's terms.
 
+SC-Bench is this form as a file: the JSON Schema [`schemas/sc-bench-v1.json`](../../schemas/sc-bench-v1.json) holds a header (freeze date, rules version and hash, toolkit version) and one entry per record (id, defanged host, label, labellers, split, timestamp kind, provenance, and the reference rules' fired rules, tier and cluster), never a URL. Toolkit: `eval export-bench` writes one, and `eval --bench` scores another detector's predictions against it, by record and by cluster, over all and non-synthetic records ([SC-Bench](../reference/evaluation.md#sc-bench)).
+
 ## FM-9.11 Agent-grade evaluation
 
 The agent-likelihood grade ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)) is measured against who really sent the records, not against detection labels:
@@ -116,3 +123,28 @@ The agent-likelihood grade ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)
 - run a **negative control**: the grade over records captured before capable agents existed, none of which an agent sent. Any grade of L2 or above there is a false grade; archive captures stop at L2, so such a control measures the model-written rung.
 
 A grade is not quoted as performance until a held-out measurement exists ([FM-9.1](#fm-91-three-kinds-of-evaluation)). Toolkit: records may carry `actor`; `eval` prints the table by record, and `eval --before <date>` runs the control over local records ([evaluation](../reference/evaluation.md#agent-grades-by-actor)). Neither is gated.
+
+## FM-9.12 Calibrated public language
+
+Three kinds of word reach a reader: a tier ("significant"), an agent grade ("adaptive") and an attribution label with a likelihood word ("Suspected: very likely"). Each implies a rate of being right, and each may be said in public only as strongly as a measurement supports.
+
+**The calibration rule.** A public statement that a class of finding *is* something (agent activity, an agent, a given operator) uses a likelihood word no stronger than the lower bound of the 95% Wilson interval ([FM-9.5](#fm-95-detection-metrics)) of that class's measured precision, read against the table in [FM-8.1](08-confidence.md#fm-81-likelihood-table).
+
+For example, a significant tier whose held-out precision has a lower bound of 83% supports "very likely agent activity" for records of that tier and kind; one at 70% supports "likely". The measurement is held-out or prospective ([FM-9.1](#fm-91-three-kinds-of-evaluation)), on the same unit as the claim (record or cluster), and on data like the case's: the same source kinds and a comparable class mix ([FM-9.9](#fm-99-what-to-publish-with-a-number)).
+
+| Statement | Measured by | Before a measurement exists | After |
+|---|---|---|---|
+| Tier: "the records contain attack payloads" | Nothing: it is Observed. | Allowed, with the rule ids. | Allowed. |
+| Tier as agent activity: "this is agent activity" | Held-out precision of the tier, by cluster. | Not said. The notice says what the records contain ([FM-14.7](14-limits.md#fm-147-humans-look-the-same)). | The word the lower bound allows. |
+| Agent grade: "an agent sent these" | The actor-by-grade table on a held-out set ([FM-9.11](#fm-911-agent-grade-evaluation)). | Not in a notice ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)). Private reports give the grade as evidence reached, with its competing hypotheses ([FM-7.12](07-attribution.md#fm-712-competing-hypotheses)). | The word the grade's lower bound allows. |
+| Scope: "the agents went beyond their task" | Reviewer agreement on scope findings ([FM-9.8](#fm-98-inter-rater-agreement)). | Allowed as the reviewer's Inference, with the evidence listed ([FM-15.4](15-misalignment.md#fm-154-stating-a-scope-finding)). | As before, with the agreement figure. |
+| Attribution: label and likelihood word | The reliability table of settled attributions ([FM-9.7](#fm-97-attribution-calibration)). | The label is about evidence, not probability, and may be used. The likelihood word is the analyst's judgment, capped by the label, and the report says it is not yet calibrated. | The word may not exceed what the reliability table shows for its band. |
+
+Rules that follow:
+
+- **The regression set calibrates nothing.** It was tuned on, and is mostly synthetic, so its precision is a floor for regressions and never a basis for a word ([FM-9.2](#fm-92-regression-set)).
+- **Agreement is not calibration.** Several groups reaching the same tier with the same rules shows the rules are shared, not that they are right.
+- **Per class, not overall.** A precision measured mostly on one artifact family does not support a word for another. Where per-class counts are too small for an interval, the class has no measurement.
+- **Words move down as well as up.** When a new measurement lowers a bound, later notices use the lower word, and published notices are not rewritten ([FM-2.6](02-principles.md#fm-26-correct-in-public)).
+
+Toolkit: precision with Wilson intervals per tier, per class and per tactic, and the actor-by-grade table, are reported by `eval` ([statistics](../reference/evaluation.md#statistics)). Deriving the allowed word from a saved measurement, and checking it in `notice lint`, are (planned).

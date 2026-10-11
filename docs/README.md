@@ -20,7 +20,7 @@ What each part does and how it is configured.
 | Doc | Covers |
 |---|---|
 | [`reference/watch.md`](reference/watch.md) | The data directory, incremental collection, the digest, retention, reviewing leads. |
-| [`reference/cases.md`](reference/cases.md) | Case files: `case.toml`, every `case` subcommand, contacts, drafts, bundles, pinned rules, STIX, operator evidence. |
+| [`reference/cases.md`](reference/cases.md) | Case files: `case.toml`, every `case` subcommand, contacts, drafts, bundles, pinned rules, STIX and MISP exports, incident drafts, operator evidence. |
 | [`reference/notices.md`](reference/notices.md) | Drafting, adding and updating notices; what they withhold; lint and build. |
 | [`reference/evaluation.md`](reference/evaluation.md) | `swarmchase eval`, the CI eval gate and its floors, the held-out measurement. |
 | [`reference/browser-toolkit.md`](reference/browser-toolkit.md) | The Pages site: how it is built, each page, the workbench, and how it keeps payloads inert. |
@@ -35,6 +35,18 @@ What each part does and how it is configured.
 | [`policies.md`](policies.md) | Collection, attribution, reporting and publication. |
 | [`manual/README.md`](manual/README.md) | The Swarmchasing Field Manual (SC-FM): the method as a citable standard, with stable section ids. |
 
+## Specs
+
+Formats other groups can implement, each with a JSON Schema under `schemas/`.
+
+| Doc | Covers |
+|---|---|
+| [`specs/README.md`](specs/README.md) | Index of the specs and their versions. |
+| [`specs/rules-v1.md`](specs/rules-v1.md) | SC-Rules v1: the indicator rules file, scoring semantics and conformance vectors. |
+| [`specs/incident-v1.md`](specs/incident-v1.md) | SC-Incident v1: one JSON document per published incident. |
+| [`specs/adopting.md`](specs/adopting.md) | How another group adopts the method and states conformance. |
+| [`schemas/sc-bench-v1.json`](../schemas/sc-bench-v1.json) | SC-Bench v1: a labelled set, by record id, that other detectors are scored against ([evaluation](reference/evaluation.md#sc-bench)). |
+
 ## Elsewhere
 
 | Doc | Covers |
@@ -42,3 +54,4 @@ What each part does and how it is configured.
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | The hard rule, the gates, conventions, contributing a rule. |
 | [`scripts/README.md`](../scripts/README.md) | Every script and gate, and where each runs. |
 | [`samples/eval/README.md`](../samples/eval/README.md) | The labelled evaluation set and the held-out Transluce steps. |
+| [`samples/showcase/README.md`](../samples/showcase/README.md) | The synthetic set the landing page walks through. |

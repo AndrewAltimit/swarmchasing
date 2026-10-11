@@ -104,8 +104,12 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
     // Flagged requests in one probe chain (variants of one request to the
     // same host and path, minutes apart) are one client working an endpoint,
     // even when different rules fired on each.
+    // A chain hard-links its flagged records only when its gaps are request
+    // or submit times; two archive captures minutes apart say when a crawler
+    // saved two URLs, not that one client sent them in sequence (FM-5.4). A
+    // capture-timed chain is still reported, as a hint.
     let chains = crate::chains::chains(results, &rules.set.chains);
-    for ch in &chains {
+    for ch in chains.iter().filter(|ch| ch.time_basis.is_request_like()) {
         let f: Vec<usize> = ch
             .members
             .iter()

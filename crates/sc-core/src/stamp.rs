@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The method version stamps cite: the Swarmchasing Field Manual.
-pub const METHOD: &str = "SC-FM 1.0";
+pub const METHOD: &str = "SC-FM 1.1";
 
 /// Precision and recall of the stamp's rules on the committed evaluation set,
 /// computed when the stamp was made. A regression floor, not a field estimate.

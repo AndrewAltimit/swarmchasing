@@ -129,9 +129,7 @@ fn target_of(r: &ObsResult) -> Option<(String, String, Params, String)> {
         .iter()
         .rev()
         .find(|l| l.host.as_deref() == Some(host))?;
-    let path = url::Url::parse(&layer.text)
-        .map(|u| u.path().to_string())
-        .unwrap_or_else(|_| "/".into());
+    let path = crate::weburl::WebUrl::parse(&layer.text).map_or_else(|| "/".into(), |u| u.path);
     Some((
         host.to_string(),
         path,

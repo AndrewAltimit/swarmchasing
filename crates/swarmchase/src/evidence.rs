@@ -10,58 +10,13 @@
 
 use crate::case::{Case, CaseStatus, NOTICE_DRAFT, case_dir, load, save, update};
 use crate::pinning::case_rules;
-use crate::store::to_ndjson;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 use sc_core::{FieldMap, Format, OPERATOR_SOURCE, Observation, Rules, Tier, analyze, parse_input};
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperatorEvidence {
-    /// `e1`, `e2`, … within the case.
-    pub id: String,
-    /// The operator that sent the logs.
-    pub org: String,
-    /// The host the logs belong to.
-    pub host: String,
-    pub received: String,
-    /// SHA-256 of the file as received.
-    pub sha256: String,
-    /// Lines in the file, and records kept from it.
-    pub lines: usize,
-    pub kept: usize,
-    /// When and how the operator agreed to the public notice using these
-    /// records. Unset: private reports only.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub public: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-}
-
-/// Which operator evidence a rendering may use.
-pub enum Scope<'a> {
-    /// Case notes, provider reports, bundles kept with the case.
-    All,
-    /// A report to one affected operator: its own logs only.
-    Operator { org: &'a str, host: Option<&'a str> },
-    /// The public notice: only logs the operator agreed to publish.
-    Public,
-}
-
-impl OperatorEvidence {
-    pub fn in_scope(&self, scope: &Scope) -> bool {
-        match scope {
-            Scope::All => true,
-            Scope::Operator { org, host } => {
-                self.org.eq_ignore_ascii_case(org)
-                    || host.is_some_and(|h| self.host.eq_ignore_ascii_case(h))
-            }
-            Scope::Public => self.public.is_some(),
-        }
-    }
-}
+pub use sc_case::evidence::{OperatorEvidence, Scope};
 
 #[derive(Subcommand)]
 pub enum EvidenceCmd {
@@ -314,7 +269,7 @@ fn add_evidence(root: &Path, id: &str, r: Received, today: &str) -> Result<Opera
     let dir = case_dir(root, id)?;
     let p = file(&dir, &eid);
     std::fs::create_dir_all(p.parent().unwrap_or(&dir))?;
-    std::fs::write(&p, to_ndjson(&records)?)?;
+    std::fs::write(&p, crate::store::to_ndjson(&records)?)?;
     let received = date.unwrap_or_else(|| today.to_string());
     let e = OperatorEvidence {
         id: eid.clone(),
@@ -433,7 +388,7 @@ mod tests {
         assert!(provider.contains(marker), "{provider}");
         let other = Contact {
             org: "Elsewhere".into(),
-            role: "affected".into(),
+            role: crate::case::ContactRole::Affected,
             endpoint: Some("elsewhere.example".into()),
             channel: "email".into(),
             address: "security@elsewhere.example".into(),

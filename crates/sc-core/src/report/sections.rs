@@ -181,7 +181,7 @@ fn candidate_lists(s: &mut String, claims: &[Claim]) {
             };
             let _ = writeln!(
                 s,
-                "{}. {} — Label: {}; tag: {}.{measure} Traces: {}.",
+                "{}. {}. Label: {}; tag: {}.{measure} Traces: {}.",
                 i + 1,
                 c.party,
                 c.label().label(),

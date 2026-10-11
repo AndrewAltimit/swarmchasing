@@ -5,4 +5,6 @@
 //! one per file. Run a single file's tests with
 //! `cargo test -p sc-core --test integration <name>::`.
 
+mod conformance;
 mod golden;
+mod snapshot;

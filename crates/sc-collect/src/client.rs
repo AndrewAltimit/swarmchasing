@@ -1,11 +1,13 @@
 //! The blocking HTTP client every collector shares: one request at a time
 //! with a minimum gap per host, an identifying user agent, retries with
-//! jittered backoff on transient failures, a cap on response size, an
+//! jittered backoff on transient failures (and longer patience for a host
+//! that answers "temporarily unavailable", which is then skipped for the
+//! rest of the run if it stays down), a cap on response size, an
 //! optional on-disk cache with conditional requests, and a request count for
 //! sources with a quota.
 
 use crate::cache::{Cached, HttpCache};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::io::Read;
@@ -38,6 +40,13 @@ pub struct Retry {
     /// between 75% and 125% of it), so clients that failed together do not
     /// retry together. A server's `Retry-After` is honoured as given.
     pub jitter: f64,
+    /// How long to keep retrying a host that answers HTTP 503 (the Internet
+    /// Archive's "Temporarily Offline" page), counted from the first attempt.
+    /// Such outages outlast `max_retries` short waits, so they get time
+    /// rather than a count. Once it runs out the host counts as down for
+    /// the rest of the client's life (one watch run): later requests to it
+    /// fail at once instead of waiting out the same outage again.
+    pub unavailable_patience: Duration,
 }
 
 impl Default for Retry {
@@ -48,6 +57,7 @@ impl Default for Retry {
             base: Duration::from_secs(5),
             max_wait: Duration::from_secs(300),
             jitter: 0.25,
+            unavailable_patience: Duration::from_secs(600),
         }
     }
 }
@@ -125,6 +135,8 @@ pub struct Client {
     requests: Cell<usize>,
     cache_hits: Cell<usize>,
     rng: Cell<u64>,
+    /// Hosts that stayed unavailable past `unavailable_patience`, with why.
+    down: RefCell<HashMap<String, String>>,
 }
 
 /// Why a request failed, and whether trying again could help.
@@ -132,7 +144,18 @@ enum Failure {
     Transient(anyhow::Error, Option<Duration>),
     /// A gateway or client timeout: retried at most `max_timeout_retries` times.
     TimedOut(anyhow::Error),
+    /// HTTP 503: the service is down for a while. Retried for
+    /// `unavailable_patience`, then the host is marked down.
+    Unavailable(anyhow::Error, Option<Duration>),
     Fatal(anyhow::Error),
+}
+
+/// The host of `url`, or an empty string.
+fn host_of(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .unwrap_or_default()
 }
 
 struct Resp {
@@ -177,7 +200,20 @@ impl Client {
             requests: Cell::new(0),
             cache_hits: Cell::new(0),
             rng: Cell::new(seed),
+            down: RefCell::new(HashMap::new()),
         })
+    }
+
+    /// Hosts given up on as unavailable, with the reason.
+    pub fn down_hosts(&self) -> Vec<(String, String)> {
+        let mut v: Vec<_> = self
+            .down
+            .borrow()
+            .iter()
+            .map(|(h, w)| (h.clone(), w.clone()))
+            .collect();
+        v.sort();
+        v
     }
 
     pub fn with_retry(mut self, retry: Retry) -> Self {
@@ -240,7 +276,7 @@ impl Client {
                 hs.push(("If-Modified-Since", m));
             }
         }
-        let r = self.with_retries(|| self.try_get(url, &hs, opts))?;
+        let r = self.with_retries(url, || self.try_get(url, &hs, opts))?;
         if let (Some(c), Some(hit)) = (cache, &cached)
             && r.fetched.status == 304
         {
@@ -260,22 +296,51 @@ impl Client {
         Ok(r.fetched)
     }
 
-    fn with_retries<T>(&self, mut f: impl FnMut() -> std::result::Result<T, Failure>) -> Result<T> {
+    /// Run `f` with retries for `url`'s host. A host already marked down this
+    /// run fails at once.
+    fn with_retries<T>(
+        &self,
+        url: &str,
+        mut f: impl FnMut() -> std::result::Result<T, Failure>,
+    ) -> Result<T> {
+        let host = host_of(url);
+        if let Some(why) = self.down.borrow().get(&host) {
+            anyhow::bail!(
+                "{host} was unavailable earlier this run ({why}); not retried until the next run"
+            );
+        }
+        let started = Instant::now();
         let (mut attempt, mut timeouts) = (0, 0);
         loop {
-            let (e, retry_after) = match f() {
+            let (e, retry_after, unavailable) = match f() {
                 Ok(v) => return Ok(v),
                 Err(Failure::Fatal(e)) => return Err(e),
-                Err(Failure::Transient(e, retry_after)) => (e, retry_after),
+                Err(Failure::Transient(e, retry_after)) => (e, retry_after, false),
+                Err(Failure::Unavailable(e, retry_after)) => (e, retry_after, true),
                 Err(Failure::TimedOut(e)) => {
                     timeouts += 1;
-                    (e, None)
+                    (e, None, false)
                 }
             };
-            if attempt >= self.retry.max_retries || timeouts > self.retry.max_timeout_retries {
+            let wait = self.retry.wait_jittered(attempt, retry_after, self.unit());
+            let give_up = if unavailable {
+                started.elapsed() + wait > self.retry.unavailable_patience
+            } else {
+                attempt >= self.retry.max_retries || timeouts > self.retry.max_timeout_retries
+            };
+            if give_up {
+                let why = format!(
+                    "gave up after {} attempts over {}s",
+                    attempt + 1,
+                    started.elapsed().as_secs()
+                );
+                if unavailable && !host.is_empty() {
+                    self.down
+                        .borrow_mut()
+                        .insert(host.clone(), format!("HTTP 503, {why}"));
+                }
                 return Err(e.context(format!("gave up after {} attempts", attempt + 1)));
             }
-            let wait = self.retry.wait_jittered(attempt, retry_after, self.unit());
             eprintln!("  {e:#}; retrying in {}s", wait.as_secs());
             std::thread::sleep(wait);
             attempt += 1;
@@ -294,10 +359,7 @@ impl Client {
 
     /// Wait out the minimum interval for `url`'s host, then count a request.
     fn pace(&self, url: &str) {
-        let host = url::Url::parse(url)
-            .ok()
-            .and_then(|u| u.host_str().map(str::to_string))
-            .unwrap_or_default();
+        let host = host_of(url);
         let mut last = self.last.borrow_mut();
         if let Some(t) = last.get(&host) {
             let el = t.elapsed();
@@ -403,6 +465,8 @@ impl Client {
         let e = anyhow::anyhow!("GET {url}: HTTP {status}: {}", error_excerpt(&body));
         if code == 504 {
             Err(Failure::TimedOut(e))
+        } else if code == 503 {
+            Err(Failure::Unavailable(e, retry_after))
         } else if code == 429 || status.is_server_error() {
             Err(Failure::Transient(e, retry_after))
         } else {
@@ -413,24 +477,43 @@ impl Client {
     /// GET a large file as a stream (never cached, never held in memory).
     /// Reading more than `max_bytes` fails.
     pub(crate) fn get_stream(&self, url: &str, max_bytes: u64) -> Result<Box<dyn Read>> {
-        let resp = self.with_retries(|| {
+        self.get_stream_opt(url, max_bytes, false)?
+            .with_context(|| format!("GET {url}: HTTP 404"))
+    }
+
+    /// [`Client::get_stream`], with a 404 (a file the source never
+    /// published) as `None` when `not_found_ok`.
+    pub(crate) fn get_stream_opt(
+        &self,
+        url: &str,
+        max_bytes: u64,
+        not_found_ok: bool,
+    ) -> Result<Option<Box<dyn Read>>> {
+        let resp = self.with_retries(url, || {
             let r = self.send(url, &[], Opts::default())?;
             let status = r.status();
             if status.is_success() {
-                return Ok(r);
+                return Ok(Some(r));
+            }
+            if not_found_ok && status.as_u16() == 404 {
+                return Ok(None);
             }
             let e = anyhow::anyhow!("GET {url}: HTTP {status}");
             if status.as_u16() == 504 {
                 Err(Failure::TimedOut(e))
+            } else if status.as_u16() == 503 {
+                Err(Failure::Unavailable(e, None))
             } else if status.as_u16() == 429 || status.is_server_error() {
                 Err(Failure::Transient(e, None))
             } else {
                 Err(Failure::Fatal(e))
             }
         })?;
-        Ok(Box::new(Capped {
-            inner: resp,
-            left: max_bytes,
+        Ok(resp.map(|r| {
+            Box::new(Capped {
+                inner: r,
+                left: max_bytes,
+            }) as Box<dyn Read>
         }))
     }
 
@@ -553,19 +636,56 @@ mod tests {
             ..Retry::default()
         });
         let calls = Cell::new(0);
-        let r: Result<()> = c.with_retries(|| {
+        let u = "https://index.example/cdx";
+        let r: Result<()> = c.with_retries(u, || {
             calls.set(calls.get() + 1);
             Err(Failure::TimedOut(anyhow::anyhow!("HTTP 504")))
         });
         assert!(r.is_err());
         assert_eq!(calls.get(), 3);
         calls.set(0);
-        let r: Result<()> = c.with_retries(|| {
+        let r: Result<()> = c.with_retries(u, || {
             calls.set(calls.get() + 1);
-            Err(Failure::Transient(anyhow::anyhow!("HTTP 503"), None))
+            Err(Failure::Transient(anyhow::anyhow!("HTTP 500"), None))
         });
         assert!(r.is_err());
         assert_eq!(calls.get(), 6);
+        // Neither marks the host down.
+        assert!(c.down_hosts().is_empty());
+    }
+
+    #[test]
+    fn an_unavailable_host_gets_time_then_is_skipped_for_the_run() {
+        let c = Client::new(Duration::ZERO).unwrap().with_retry(Retry {
+            base: Duration::from_millis(1),
+            max_wait: Duration::from_millis(2),
+            unavailable_patience: Duration::from_millis(40),
+            ..Retry::default()
+        });
+        let calls = Cell::new(0);
+        let u = "https://archive.example/cdx?url=a";
+        let r: Result<()> = c.with_retries(u, || {
+            calls.set(calls.get() + 1);
+            Err(Failure::Unavailable(
+                anyhow::anyhow!("HTTP 503: Temporarily Offline"),
+                None,
+            ))
+        });
+        assert!(r.is_err());
+        // More attempts than `max_retries` allows other failures.
+        assert!(calls.get() > 6, "{}", calls.get());
+        assert_eq!(c.down_hosts()[0].0, "archive.example");
+        // The next request to that host fails without being sent.
+        calls.set(0);
+        let r: Result<()> = c.with_retries("https://archive.example/other", || {
+            calls.set(calls.get() + 1);
+            Ok(())
+        });
+        let e = format!("{:#}", r.unwrap_err());
+        assert!(e.contains("unavailable earlier this run"), "{e}");
+        assert_eq!(calls.get(), 0);
+        // Other hosts are unaffected.
+        assert!(c.with_retries("https://other.example/", || Ok(())).is_ok());
     }
 
     #[test]

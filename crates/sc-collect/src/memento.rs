@@ -71,6 +71,7 @@ impl Source for Memento {
             records,
             next: None,
             truncated,
+            coverage: None,
         })
     }
 }

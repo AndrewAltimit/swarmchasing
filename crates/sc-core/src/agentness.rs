@@ -319,10 +319,15 @@ pub fn assess(
     if let Some(g) = c.cut_lengths.url.or(c.cut_lengths.value) {
         push(SignalKind::CutLengths, g.records, String::new());
     }
-    let stale: Vec<&str> = c.stale_knowledge.iter().map(|u| u.id.as_str()).collect();
+    let stale: Vec<&str> = c
+        .knowledge
+        .stale_knowledge
+        .iter()
+        .map(|u| u.id.as_str())
+        .collect();
     push(
         SignalKind::StaleKnowledge,
-        c.stale_knowledge.iter().map(|u| u.records).sum(),
+        c.knowledge.stale_knowledge.iter().map(|u| u.records).sum(),
         stale.join(", "),
     );
     let sd = &c.timing.stale_dates;
@@ -375,10 +380,10 @@ pub fn assess(
         c.declared.iter().map(|d| d.records).sum(),
         String::new(),
     );
-    let bench: Vec<&str> = c.benchmarks.keys().map(String::as_str).collect();
+    let bench: Vec<&str> = c.knowledge.benchmarks.keys().map(String::as_str).collect();
     push(
         SignalKind::Benchmark,
-        c.benchmarks.values().sum(),
+        c.knowledge.benchmarks.values().sum(),
         bench.join(", "),
     );
     push(SignalKind::ScannerPace, scanner, String::new());
@@ -508,7 +513,7 @@ mod tests {
             .map(|i| {
                 (
                     t0 + i * gap,
-                    format!("{base}{i}%27%20OR%201=1--%20YOUR_API_KEY&page={i}"),
+                    format!("{base}{i}%27%20OR%201=1--%20YOUR_API_KEY&page={i}&uqtag=resz"),
                     Some(if i < 3 { 500 } else { 200 }),
                 )
             })

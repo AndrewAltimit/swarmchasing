@@ -1,78 +1,10 @@
 //! Report drafts from a case, and the unsent drafts for one contact.
 
 use super::*;
-use crate::pinning::case_rules;
-use crate::util::audience_id;
 use anyhow::{Result, bail};
-use sc_core::{Audience, ReportOptions, Reported, analyze, render_markdown};
+use sc_case::text::audience_id;
+use sc_core::{Audience, render_markdown};
 use std::path::{Path, PathBuf};
-
-pub(crate) fn report_options(
-    c: &Case,
-    audience: Audience,
-    reporter: Option<String>,
-    today: &str,
-) -> ReportOptions {
-    ReportOptions {
-        audience,
-        reporter,
-        generated: Some(today.to_string()),
-        min_named: c.min_named,
-        claims: c.claims.clone(),
-        agent_grade: c.agent_grade.clone(),
-        exposed_hosts: c
-            .endpoints
-            .iter()
-            .filter(|e| e.state == EndpointState::Compromised)
-            .map(|e| e.host.clone())
-            .collect(),
-        affected_hosts: Some(affected_hosts(c)),
-        reported: Some(reported(c)),
-        ..Default::default()
-    }
-}
-
-/// The endpoints the admin classified as affected: compromised, targeted or
-/// historical. A public notice names these hosts and no others.
-pub(crate) fn affected_hosts(c: &Case) -> Vec<String> {
-    c.endpoints
-        .iter()
-        .filter(|e| {
-            matches!(
-                e.state,
-                EndpointState::Compromised | EndpointState::Targeted | EndpointState::Historical
-            )
-        })
-        .map(|e| e.host.clone())
-        .collect()
-}
-
-/// Which parties the case's recorded sends reached. A send's recipient is
-/// matched to a contact by address or organisation; failing that, the draft
-/// it names says its audience. Anything else counts as another responder.
-pub(crate) fn reported(c: &Case) -> Reported {
-    let mut r = Reported::default();
-    for s in &c.sent {
-        let role = c
-            .contacts
-            .iter()
-            .find(|x| {
-                x.address.eq_ignore_ascii_case(&s.recipient)
-                    || x.org.eq_ignore_ascii_case(&s.recipient)
-            })
-            .map(|x| x.role.as_str());
-        let draft = s.report.as_deref().unwrap_or_default();
-        match role {
-            Some("provider") => r.provider = true,
-            Some("affected") => r.operators = true,
-            Some(_) => r.others = true,
-            None if draft.contains("-provider-") => r.provider = true,
-            None if draft.contains("-affected-") => r.operators = true,
-            None => r.others = true,
-        }
-    }
-    r
-}
 
 pub(crate) fn report(
     root: &Path,
@@ -83,19 +15,16 @@ pub(crate) fn report(
     today: &str,
 ) -> Result<String> {
     let c = load(root, id)?;
-    let a = analyze(
-        case_records(root, &c, &scope(audience, to))?,
-        &case_rules(root, &c)?,
-    );
+    let a = analysis(root, &c, &scope(audience, to))?;
     let md = render_markdown(&a, &report_options(&c, audience, reporter, today));
-    let md = super::fleet::with_fleets(md, &super::fleet::report_section(&c, &a, audience));
+    let md = sc_case::fleet::with_fleets(md, &sc_case::fleet::report_section(&c, &a, audience));
     // A recipient learns when the notice goes public, and that the time is
     // fixed.
     Ok(match audience {
         Audience::Provider | Audience::Affected => format!(
             "{}\n\n{}",
             md.trim_end(),
-            super::lead::publication_section(&c, chrono::Utc::now().timestamp())
+            sc_case::lead::publication_section(&c, chrono::Utc::now().timestamp())
         ),
         _ => md,
     })
@@ -161,11 +90,12 @@ pub(crate) fn draft(
         )?;
         return Ok(p);
     }
+    let pinned = Pinned::new(root, &c)?;
     let bundle = crate::bundle::write(
         &dir.join("bundles"),
         id,
         &case_records(root, &c, &scope(audience, Some(contact)))?,
-        &case_rules(root, &c)?,
+        &pinned.rules,
         today,
         crate::bundle::git_commit(),
     )?;

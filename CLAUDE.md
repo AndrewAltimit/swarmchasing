@@ -22,13 +22,17 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 |---|---|
 | [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, reports. No I/O (compiles to WASM). |
 | [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (archive CDX, scan services, GH Archive, registries, CT logs, security.txt), HTTP cache, PSL, ASN table. |
-| [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README); [`watch/`](crates/swarmchase/src/watch/mod.rs) is the incremental watch pipeline and digest; [`case/`](crates/swarmchase/src/case/mod.rs) is case files and send drafts; [`pinning.rs`](crates/swarmchase/src/pinning.rs) is the rules a case is pinned to; [`evidence.rs`](crates/swarmchase/src/evidence.rs) is logs operators send back; [`stix/`](crates/swarmchase/src/stix/mod.rs) is the STIX 2.1 export; [`notice.rs`](crates/swarmchase/src/notice.rs) adds, updates, lints and builds public notices. |
+| [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README): [`watch/`](crates/swarmchase/src/watch/mod.rs) watch and digest, [`review/`](crates/swarmchase/src/review/mod.rs) lead labelling, [`case/`](crates/swarmchase/src/case/mod.rs) case files (subcommands in `case/cli/`), [`contacts/`](crates/swarmchase/src/contacts/mod.rs) contact discovery, [`notice.rs`](crates/swarmchase/src/notice.rs) notices. |
+| [`crates/sc-case`](crates/sc-case/README.md) | What a case is and may do, without I/O: case model, admin actions, pinning, lead clock, bundles, notice format and linter. |
+| [`crates/sc-stix`](crates/sc-stix/README.md) | A case as a STIX 2.1 bundle or MISP event, with the SC-T cross-walk. No I/O. |
 | [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site page generation. Text in, text out. |
 | [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit; [`sc-rules-wasm`](crates/sc-rules-wasm/README.md) converts edited rules. |
 | [`site/`](site/js/site.js) | The site's styles and page scripts; `sc-site` (sc-publish) generates the pages into `_site/`. |
 | `notices/` | Published notices (`<id>.md`, front matter + dated updates). Committing one publishes it ([notices](docs/reference/notices.md)). |
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. Every change passes the eval gate. |
 | [`samples/eval/`](samples/eval/README.md) | Labelled evaluation set behind the CI eval gate; the held-out Transluce steps. |
+| [`samples/showcase/`](samples/showcase/README.md) | Synthetic records the landing page walks through and the workbench loads. |
+| [`schemas/`](schemas/sc-rules-v1.json) | JSON Schemas for the specs (rules, incident, SC-Bench) and the STIX extension. |
 | [`watchlist.toml`](watchlist.toml) | Sources the scheduled watch pulls, each with its rationale. |
 | [`contacts/providers.toml`](contacts/providers.toml) | Providers' security and abuse channels, each with its source and verified date; `swarmchase contacts verify` re-checks them. |
 | [`scripts/`](scripts/README.md) | CI gates, helpers and the pre-commit hook; the README says what runs where. |
@@ -54,6 +58,7 @@ Find misaligned AI agent swarms in public records, link their activity into runs
 | [`methodology.md`](docs/methodology.md) | Tiers, clusters, hints, attribution levels, known limits. |
 | [`policies.md`](docs/policies.md) | Collection, attribution, reporting and publication. |
 | [`manual/README.md`](docs/manual/README.md) | Field Manual (SC-FM): the method as a citable standard, section ids `FM-n.m`. |
+| [`specs/README.md`](docs/specs/README.md) | Formats other groups implement (SC-Rules, SC-Incident), conformance vectors, adopting the method. |
 
 ## Scripts and gates
 
@@ -90,7 +95,7 @@ python3 scripts/ci/check-md-links.py && python3 scripts/ci/check-doc-density.py
 ## Cross-cutting facts that catch people out
 
 - **The data directory is relative by default.** `--out`/`--data`, else `SWARMCHASE_DATA`, else `data/` under the working directory. Run from the checkout root or set the variable, or a watch starts a fresh store. Details: [watch](docs/reference/watch.md#the-data-directory).
-- **`eval` scores records, not clusters.** A cluster of ten flagged records counts ten times, and the committed set is a regression floor, not a precision estimate. Details: [evaluation](docs/reference/evaluation.md).
+- **`eval` scores records and clusters,** over all labelled records and over the non-synthetic ones. The gate's floors read the record unit, with a second set for non-synthetic records. The committed set is a regression floor, not a precision estimate. Details: [evaluation](docs/reference/evaluation.md).
 - **Cases pin rules.** A case's reports, notice, exports and bundles use the rules version it was opened with; a rules change does not reach them until `case rules <id> --update`. Details: [cases](docs/reference/cases.md#pinned-rules).
 - **urlquery content is never committed or quoted.** Not in samples, fixtures, notices or eval overrides; link the report, quote only derived indicators. Details: [configuration](docs/reference/configuration.md#urlquerynet).
 - **Fork PRs run nothing** on the self-hosted runner. To test a fork's change, push it to a branch of this repository. Details: [runner](docs/reference/runner.md).

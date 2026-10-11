@@ -3,8 +3,9 @@
 Passive collectors for public records. They return [`sc-core`](../sc-core/README.md) `Observation`s, with secrets already redacted:
 
 - web archive indexes: the Wayback Machine, Arquivo.pt and Common Crawl CDX, and Memento timemaps;
+- agent protocol footprints: Wayback captures of agent cards and signature key directories;
 - scan services: urlquery.net and urlscan.io search;
-- event streams and registries: GH Archive, npm search and PyPI feeds;
+- event streams and registries: GH Archive, npm search, PyPI feeds and the MCP Registry;
 - certificates: crt.sh, and CT logs read directly;
 - contacts: security.txt and RDAP.
 
@@ -43,7 +44,7 @@ let q = CdxQuery {
 let records = client.wayback_cdx(&q)?;
 ```
 
-`CdxQuery` also deserialises from a `watchlist.toml` source entry, with `limit` and `page_size` defaulting to 5000 and 1000. `endpoint` picks the instance of a source that has several (a CT log, a crawl, a feed). `scan` bounds how much of a streamed source one pull reads.
+`CdxQuery` also deserialises from a `watchlist.toml` source entry, with `limit` and `page_size` defaulting to 5000 and 1000. `endpoint` picks the instance of a source that has several (a CT log, a crawl, a feed). `scan` and `max_mb` bound how much of a streamed source one pull reads. `filter` passes CDX filters to the index server, `slice_days` reads a Wayback time range in windows, and `canary` names a search known to match.
 
 | Method | Source |
 |---|---|
@@ -72,6 +73,8 @@ Every source has a `parse_*` function that reads a saved response without the ne
 | `npm` | npm registry search | search text | request |
 | `pypi` | PyPI RSS feeds | substrings | request |
 | `ctlog` | One CT log's newest entries | substrings | request |
+| `wellknown` | Wayback captures of agent footprint files | hosts or `*.domain`s | capture |
+| `mcp` | Official MCP Registry list | substrings | request |
 
 "Substrings" are `|`-separated and case-insensitive; `*` keeps everything. Each module's docs give the source's terms of use and what they allow.
 
@@ -81,13 +84,18 @@ The record sources (or `source(kind, query, key)`) implement the `Source` trait.
 
 A pull that fails after its first page keeps what it has and says so in `Pull::stopped`; `Pull::strict` turns that back into an error. A source that cannot page (Arquivo.pt, a feed) sets `Pull::truncated` when a page came back full.
 
-Wayback's resume key and Common Crawl's crawl-and-page cursor stay valid across runs (`Source::resumable`), so the watch continues a cut-short pull on its next run. A urlquery or npm offset is valid only within one pull.
+Wayback's resume key (with its time window, when sliced), Common Crawl's crawl-and-page cursor, the footprint source's scope-and-key cursor and the MCP Registry's cursor stay valid across runs (`Source::resumable`), so the watch continues a cut-short pull on its next run. A urlquery or npm offset is valid only within one pull.
 
-Streamed sources read a bounded sample each pull: the newest `scan` hours of GH Archive, decoded a line at a time, and the newest `scan` entries of a CT log.
+Streamed sources read a bounded amount each pull from a checkpoint (`Source::checkpointed`): GH Archive reads on from the last hour read, up to `scan` hours and `max_mb`, decoded a line at a time; a CT log reads from its checkpoint when that is within the newest `scan` entries, else the newest `scan`. A backlog too long to catch up on is skipped and counted.
+
+### Coverage and canaries
+
+Sources that read a stream or feed and keep only matches report a `Coverage` on each page, folded into `Pull::coverage`: what was read against what there was to read since the checkpoint, what was skipped, the next checkpoint, and a canary. The canary is something every working pull sees: GH Archive events that parse, CT entries with DNS names, PyPI feed items, or hits for npm's `canary` search. A failed canary means the source answered in a shape the parser no longer understands, so an empty pull proves nothing.
 
 ## Retries, limits and the cache
 
 - **Retries.** Dropped connections, HTTP 429 and 5xx are retried with exponential backoff: 5 retries from 5 seconds, spread ±25%, each wait capped at 5 minutes. A gateway timeout (HTTP 504) or a request that timed out is retried only twice, because an index query too heavy for the server times out the same way every time. Other errors fail at once. Change the policy with `Client::with_retry`.
+- **Unavailable hosts.** HTTP 503 (the Internet Archive's "Temporarily Offline") is retried for a span of time, `unavailable_patience` (10 minutes), rather than a count. A host still unavailable after that is marked down for the client's life: later requests to it fail at once, so one outage costs a watch run ten minutes, not ten minutes per source. `Client::down_hosts` lists them.
 - **Retry-After.** A server's `Retry-After`, in seconds or as an HTTP date, is honoured as given.
 - **Pacing.** The minimum interval applies per host, so sources on different hosts do not slow each other.
 - **Size cap.** A response read into memory is capped at 64 MiB (`Client::with_max_body`). Large files are streamed with their own cap.
@@ -126,7 +134,8 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`pager.rs`](src/pager.rs) | Paging, cursors and `Pull`. |
 | [`wayback.rs`](src/wayback.rs), [`arquivo.rs`](src/arquivo.rs), [`commoncrawl.rs`](src/commoncrawl.rs), [`memento.rs`](src/memento.rs) | Archive index sources. |
 | [`urlquery.rs`](src/urlquery.rs), [`urlscan.rs`](src/urlscan.rs) | Scan-service sources. |
-| [`gharchive.rs`](src/gharchive.rs), [`npm.rs`](src/npm.rs), [`pypi.rs`](src/pypi.rs) | Event-stream and registry sources. |
+| [`gharchive.rs`](src/gharchive.rs), [`npm.rs`](src/npm.rs), [`pypi.rs`](src/pypi.rs), [`mcp.rs`](src/mcp.rs) | Event-stream and registry sources. |
+| [`wellknown.rs`](src/wellknown.rs) | Agent protocol footprints in the Wayback index. |
 | [`ctlog.rs`](src/ctlog.rs) | The CT log source and its SAN parser. |
 | [`crtsh.rs`](src/crtsh.rs), [`securitytxt.rs`](src/securitytxt.rs), [`rdap.rs`](src/rdap.rs) | Lookups: certificates, security.txt, RDAP. |
 | [`psl.rs`](src/psl.rs), [`asn.rs`](src/asn.rs) | Registrable domains; the IP-to-ASN table download. |

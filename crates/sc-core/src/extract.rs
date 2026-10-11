@@ -7,6 +7,7 @@
 
 use crate::model::{Hit, LinkFeature, Observation, truncate};
 use crate::rules::{Matcher, Rules, Target, host_matches, is_intermediary_kind};
+use crate::weburl::WebUrl;
 use base64::Engine;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,9 @@ use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 const MAX_LAYERS: usize = 16;
+
+/// [`Layer::via`] of the outermost layer: the URL as submitted.
+pub const VIA_SUBMITTED: &str = "submitted";
 const MAX_DEPTH: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -28,6 +32,13 @@ pub struct Layer {
     pub text: String,
     #[serde(skip)]
     pub params: Vec<(String, String)>,
+}
+
+impl Layer {
+    /// The outermost layer: the URL as submitted, not one found inside it.
+    pub fn is_submitted(&self) -> bool {
+        self.via == VIA_SUBMITTED
+    }
 }
 
 fn embedded_url_re() -> &'static Regex {
@@ -123,7 +134,7 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
     let mut layers: Vec<Layer> = Vec::new();
     let mut queue: std::collections::VecDeque<(String, String, usize)> = Default::default();
     let mut seen = BTreeSet::new();
-    queue.push_back((url.trim().to_string(), "submitted".into(), 0));
+    queue.push_back((url.trim().to_string(), VIA_SUBMITTED.into(), 0));
 
     while let Some((raw, via, depth)) = queue.pop_front() {
         let raw = if raw.starts_with("data:") {
@@ -160,33 +171,30 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
                 text: format!("data:{meta},{content}"),
                 params: vec![],
             });
-        } else if let Ok(parsed) = url::Url::parse(&raw) {
+        } else if let Some(parsed) = WebUrl::parse(&raw) {
             // `https://https://a.example/` parses with the host `https`: a
             // scheme written twice. The URL after it is the real one.
-            // Quotes and backticks a model wrote around the URL are not part
-            // of the host (`https://a.example%60` parses as `a.example``).
+            // Quotes, backticks and punctuation a model wrote around the URL
+            // are not part of the host ([`crate::weburl::normalise_host`]).
             let host = parsed
-                .host_str()
-                .map(|h| {
-                    h.trim_matches(|c| matches!(c, '`' | '"' | '\''))
-                        .to_ascii_lowercase()
-                })
-                .filter(|h| !h.is_empty())
+                .host
+                .clone()
                 .filter(|h| !doubled || !is_scheme_name(h.trim_end_matches("%3a")));
-            let sas = parsed.query_pairs().any(|(k, _)| k == "sv");
-            let params: Vec<(String, String)> = parsed
-                .query_pairs()
+            let pairs = parsed.query_pairs();
+            let sas = pairs.iter().any(|(k, _)| k == "sv");
+            let params: Vec<(String, String)> = pairs
+                .into_iter()
                 .map(|(k, v)| {
-                    let v = redact_param(&k, v.into_owned(), sas);
-                    (k.into_owned(), v)
+                    let v = redact_param(&k, v, sas);
+                    (k, v)
                 })
                 .collect();
 
             // Embedded URL in the path: r.jina.ai/https://target/...
-            let path = pct_decode(parsed.path());
+            let path = pct_decode(&parsed.path);
             if let Some(i) = path.find("http://").or_else(|| path.find("https://")) {
                 let mut inner = path[i..].to_string();
-                if let Some(q) = parsed.query() {
+                if let Some(q) = parsed.query {
                     inner.push('?');
                     inner.push_str(q);
                 }
@@ -199,12 +207,7 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
             // Standard base64 contains `/`, so the payload can span several
             // segments: try the rest of the path from each segment on, and stop
             // at the first decoding that looks like a URL or a program.
-            let segs: Vec<String> = parsed
-                .path_segments()
-                .into_iter()
-                .flatten()
-                .map(pct_decode)
-                .collect();
+            let segs: Vec<String> = parsed.path_segments().into_iter().map(pct_decode).collect();
             for i in 0..segs.len() {
                 let Some(decoded) = try_b64(&segs[i..].join("/")).map(|d| redact_decoded(&d))
                 else {
@@ -232,14 +235,14 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
                 }
             }
             // A whole query that is a URL: `corsproxy.io/?https://target/...`.
-            if let Some(q) = parsed.query().map(pct_decode)
+            if let Some(q) = parsed.query.map(pct_decode)
                 && (q.starts_with("http://") || q.starts_with("https://"))
             {
                 children.push((q, "query".into()));
             }
             if let Some(h) = host.as_deref().and_then(untranslate_host) {
-                let mut inner = format!("https://{h}{}", parsed.path());
-                if let Some(q) = parsed.query() {
+                let mut inner = format!("https://{h}{}", parsed.path);
+                if let Some(q) = parsed.query {
                     inner.push('?');
                     inner.push_str(q);
                 }
@@ -445,7 +448,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         }
     }
 
-    let score = hits.iter().map(|h| h.weight).sum();
+    let score = rules.score(hits.iter().map(|h| h.rule_id.as_str()));
     let target_host = layers
         .iter()
         .enumerate()

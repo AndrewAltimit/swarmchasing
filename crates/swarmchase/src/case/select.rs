@@ -1,13 +1,35 @@
 //! Picking the records a case is opened from or extended with.
 
-use super::cli::Selection;
 use crate::input::{InputArgs, read_inputs};
 use crate::pinning::RulesText;
 use crate::store::load_store;
 use anyhow::{Context, Result, bail};
+use clap::Args;
 use sc_core::{Analysis, Observation, Tier, analyze};
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Which records to take into a case.
+#[derive(Args)]
+pub struct Selection {
+    /// Record files. Default: the watch store's last `--days` days.
+    pub(super) input: Vec<PathBuf>,
+    #[arg(long, default_value_t = 30)]
+    pub(super) days: i64,
+    /// Clusters to take, by number in this analysis (C1) or stable key
+    /// (k-3f9a2c1b); `swarmchase clusters` lists both.
+    #[arg(long = "cluster")]
+    pub(super) clusters: Vec<String>,
+    /// Individual records to take, by ID.
+    #[arg(long = "record")]
+    pub(super) records: Vec<String>,
+    /// Also take every flagged record on the hosts those records target,
+    /// including other clusters, so the endpoint view is complete.
+    #[arg(long)]
+    pub(super) host_hits: bool,
+    #[arg(long)]
+    pub(super) rules: Option<PathBuf>,
+}
 
 /// Load records, analyse them, and pick the selected clusters and records.
 pub(super) fn select(

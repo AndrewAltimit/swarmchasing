@@ -65,6 +65,16 @@ impl TimeBasis {
         *self == TimeBasis::Unknown
     }
 
+    /// Whether times on this basis can stand for the order one client sent
+    /// requests in: request or submit times, or unknown read as requests.
+    /// Capture times (and a mix including them) cannot ([FM-5.4](../../docs/manual/05-linking.md)).
+    pub fn is_request_like(self) -> bool {
+        matches!(
+            self,
+            TimeBasis::Request | TimeBasis::Submit | TimeBasis::Unknown
+        )
+    }
+
     /// Words a hint adds about its times, or nothing for request times.
     pub fn note(self) -> Option<&'static str> {
         match self {

@@ -74,6 +74,12 @@ jobs:
       - name: Committed data (no dumps, no live secrets)
         run: python3 scripts/ci/check-committed-data.py
 
+      # The bundled rules file against the published SC-Rules v1 schema, so a
+      # field the schema does not know (or a missing one) fails here, not in
+      # someone else's tooling. Stdlib only.
+      - name: Rules schema (SC-Rules v1)
+        run: python3 scripts/ci/check-rules-schema.py
+
       - name: Doc links + heading anchors
         run: python3 scripts/ci/check-md-links.py
 
@@ -192,9 +198,12 @@ jobs:
           owner="$(tr '[:upper:]' '[:lower:]' <<<"$GITHUB_REPOSITORY_OWNER")"
           SITE_BASE_URL="https://${owner}.github.io/${GITHUB_REPOSITORY#*/}/" scripts/ci/build-site.sh
 
+      # Every release module the site loads: the analysis engine, the
+      # on-demand tools module (report drafts, bundle checks) and the rules
+      # converter. build-site.sh enforces each budget; this only reports.
       - name: WASM module sizes
         run: |
-          for f in site/pkg/sc_wasm_bg.wasm site/pkg-rules/sc_rules_wasm_bg.wasm; do
+          for f in site/pkg/sc_wasm_bg.wasm site/pkg/tools/sc_tools_bg.wasm site/pkg-rules/sc_rules_wasm_bg.wasm; do
             size=$(stat -c %s "$f")
             echo "$f: $size bytes"
             echo "$(basename "$f"): $(( size / 1024 )) KiB" >> "$GITHUB_STEP_SUMMARY"

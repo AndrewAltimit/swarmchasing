@@ -59,6 +59,11 @@ pub struct RuleDef {
     /// candidates, the check decides what regular expressions cannot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check: Option<Check>,
+    /// The independence group: rules that read the same artifact of one
+    /// request count once per record, at the largest weight among those
+    /// that fired ([`Rules::score`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
     #[serde(default)]
     pub description: String,
 }
@@ -313,6 +318,40 @@ impl Rules {
             benchmarks,
             stale,
         })
+    }
+
+    /// The score of a record on which the rules `fired` (distinct ids):
+    /// each independence group counts once, at the largest weight among
+    /// its rules that fired, ungrouped rules count their weight, and the
+    /// context kinds ([`IndicatorKind::is_context`]) together contribute at
+    /// most one less than the suggestive threshold, so context alone is
+    /// noise. A group counts as context when its heaviest rule that fired
+    /// is (a non-context rule wins a tie). Unknown ids count nothing.
+    pub fn score<'a>(&self, fired: impl IntoIterator<Item = &'a str>) -> i32 {
+        let mut groups: BTreeMap<&str, (i32, bool)> = BTreeMap::new();
+        let (mut evidence, mut context) = (0, 0);
+        for id in fired {
+            let Some(d) = self.rule(id) else { continue };
+            let ctx = d.kind.is_context();
+            match d.group.as_deref() {
+                Some(g) => {
+                    let e = groups.entry(g).or_insert((d.weight, ctx));
+                    if d.weight > e.0 || (d.weight == e.0 && !ctx) {
+                        *e = (d.weight, ctx);
+                    }
+                }
+                None if ctx => context += d.weight,
+                None => evidence += d.weight,
+            }
+        }
+        for &(w, ctx) in groups.values() {
+            if ctx {
+                context += w;
+            } else {
+                evidence += w;
+            }
+        }
+        evidence + context.min(self.set.thresholds.suggestive - 1).max(0)
     }
 
     /// The rule with this id.

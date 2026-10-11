@@ -15,6 +15,9 @@ Each record is an ordinary record plus label fields:
 | `hard_negative_for` | benign, optional | Rule ids the record was written to resemble and must not be flagged for. |
 | `actor` | optional | Who sent it: `agent`, `human` or `tool`, for the [agent grade table](../../docs/reference/evaluation.md#agent-grades-by-actor). A record with an `actor` and no `label` is graded, not scored. |
 | `swarm` | optional | The interacting group (swarm) the record's run belongs to, or `none` for a run known not to interact. Scored by the [interaction-edge summary](../../docs/reference/evaluation.md#interaction-edges). |
+| `synthetic` | written records | `true`: written by hand to exercise the rules. `eval` reports every number again without these ([synthetic and non-synthetic](../../docs/reference/evaluation.md#synthetic-and-non-synthetic-records)). |
+| `reconstructed` | rebuilt records | `true`: rebuilt from a published incident. |
+| `labeller` | optional | Who labelled the record, for [SC-Bench](../../docs/reference/evaluation.md#sc-bench) exports. |
 
 Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), and `scanner` (security scanners). False positives are reported per benign class.
 
@@ -74,9 +77,17 @@ Every record is flagged significant on its own, so the file raises recall at bot
 
 [`coverage-allow.txt`](coverage-allow.txt) lists rules that may go without a positive: one rule id per line, then the reason. The gate fails on a rule with no agent-labelled record it fires on unless it is listed, and on an entry whose rule now has a positive. Remove the entry in the commit that adds the record.
 
+## Synthetic and reconstructed records
+
+Every record here is marked `synthetic` or `reconstructed`. The synthetic files exist to give each rule a positive and a hard negative, and the rules catch their agent records almost by construction; the reconstructions in `published-patterns.ndjson` are the closest the set comes to real traffic. `eval` prints the non-synthetic numbers beside the all-records ones, and the gate holds floors on both ([the eval gate](../../docs/reference/evaluation.md#the-eval-gate)).
+
+## SC-Bench example
+
+[`bench/sc-bench-v1-example.json`](bench/sc-bench-v1-example.json) is this set as an [SC-Bench](../../docs/reference/evaluation.md#sc-bench) file: ids, labels, provenance, defanged hosts, and what the rules said when it was frozen. It is built from the files here only, with `swarmchase eval export-bench`, and every record is in the `regression` split because the rules were tuned on it. The records themselves are the lines in this directory with the same `id`.
+
 ## Saved results
 
-[`results/`](results/README.md) holds measured results as JSON: numbers, input hashes, the rules version and the toolkit commit. Never record content.
+[`results/`](results/README.md) holds measured results as JSON: numbers, input paths and hashes, the rules version and hash, and the toolkit version and commit. Never record content.
 
 ## Held-out evaluation on the Transluce release
 

@@ -10,12 +10,19 @@ A public record is a trace of a request that a third party publishes to anyone, 
 |---|---|---|
 | Public scan services | A submitted URL, where the scan ended, the target's address and network | urlquery.net and urlscan.io search |
 | Web archives | Index rows: when a URL was captured, its status and digest | Wayback Machine, Arquivo.pt and Common Crawl CDX; Memento timemaps |
+| Submit-anywhere archives | On-demand saves of any URL anyone submits | Arquivo.pt SavePageNow, its `SAWP` collections |
 | Certificate Transparency logs | Certificates issued for a name | crt.sh lookups; CT logs read directly |
 | Package registries | Package metadata: names, versions, publish times, maintainers | npm search, PyPI feeds |
 | Public code-host event streams | Public events: repository creation, pushes, issues | GH Archive |
+| Agent protocol footprints | Archive index rows for the well-known files agents and agent platforms serve | Wayback CDX for agent cards, agent registration files and signature key directories |
+| Tool-server registries | Published tool servers: name, version, publish time, declared hosts | The official MCP Registry |
 | Published security contacts | An organisation's security.txt, or its registrar's abuse address | security.txt, RDAP |
 
 The last row is not evidence: it is how a practitioner finds whom to report to ([FM-10.4](10-disclosure.md#fm-104-contacts-and-channels)).
+
+**Submit-anywhere archives.** An archive's save-now feature fetches any URL anyone submits, from the archive's own origin, so agents use it as they use a scan service: a neutral origin that fetches the target for them. Arquivo.pt merges these saves into collections named `SAWP<n>` within days, long before its crawls are indexed, so a collector reads only those collections. The rows are still capture times, not submission times ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)).
+
+**Reference data.** Agent protocol footprints and tool-server registries are not records of a request to a target. They are reference data for linking: a footprint on a throwaway tunnel names a platform a run may have used, and a registry entry lets a host seen in a run be matched to a declared tool server. Both are read from indexes only. A footprint file is never fetched, and no registered server is contacted ([FM-3.2](#fm-32-passivity-test)).
 
 An operator's own access logs are not a public record. They enter a case only when the operator sends them ([FM-10.7](10-disclosure.md#fm-107-operator-supplied-logs)), and are never a collection source.
 

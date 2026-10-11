@@ -1,10 +1,8 @@
 //! `case status`: the list of cases, or one case and what it still needs.
 
 use super::*;
-use crate::evidence::Scope;
-use crate::pinning::case_rules;
 use anyhow::Result;
-use sc_core::{Claim, EndpointOptions, Evidence, Role, analyze, endpoints, fmt_ts};
+use sc_core::{Claim, EndpointOptions, Evidence, Role, endpoints, fmt_ts};
 use std::io::Write;
 use std::path::Path;
 
@@ -25,8 +23,8 @@ pub(crate) fn list(root: &Path, out: &mut impl Write) -> Result<()> {
             out,
             "{:<32} {:<10} {:<11} {:<10} {}",
             c.id,
-            format!("{:?}", c.status).to_lowercase(),
-            format!("{:?}", c.notice).to_lowercase(),
+            c.status.label(),
+            c.notice.label(),
             c.opened,
             c.title
         )?;
@@ -36,8 +34,8 @@ pub(crate) fn list(root: &Path, out: &mut impl Write) -> Result<()> {
 
 pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> {
     let c = load(root, id)?;
-    let a = analyze(case_records(root, &c, &Scope::All)?, &case_rules(root, &c)?);
-    writeln!(out, "# {} — {}", c.id, c.title)?;
+    let a = analysis(root, &c, &Scope::All)?;
+    writeln!(out, "# {}: {}", c.id, c.title)?;
     writeln!(
         out,
         "status {:?} · notice {:?} · opened {} · developers named at: {}",
@@ -79,14 +77,18 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
             cl.members.len(),
             fmt_ts(cl.start),
             fmt_ts(cl.end),
-            cl.corroboration.label(),
+            cl.origin.corroboration.label(),
             c.fleet_of(&cl.key)
                 .map(|f| format!(" · {}", f.id))
                 .unwrap_or_default()
         )?;
-        if !cl.plant_signals.is_empty() {
-            let kinds: std::collections::BTreeSet<&str> =
-                cl.plant_signals.iter().map(|p| p.kind.label()).collect();
+        if !cl.origin.plant_signals.is_empty() {
+            let kinds: std::collections::BTreeSet<&str> = cl
+                .origin
+                .plant_signals
+                .iter()
+                .map(|p| p.kind.label())
+                .collect();
             writeln!(
                 out,
                 "      plant review: {} (see the case-notes report)",
@@ -124,22 +126,20 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
             .unwrap_or_default(),
             e.note
                 .as_deref()
-                .map(|n| format!(" — {n}"))
+                .map(|n| format!(": {n}"))
                 .unwrap_or_default()
         )?;
     }
 
     writeln!(out, "\nAttribution")?;
-    let claims = a.clusters.iter().fold(c.claims.clone(), |acc, cl| {
-        sc_core::attribution::merge(acc, &sc_core::attribute(&a, cl))
-    });
+    let claims = sc_case::report::all_claims(&c, &a);
     if claims.is_empty() {
         writeln!(out, "  none")?;
     }
     for cl in &claims {
         writeln!(
             out,
-            "  {:<3} {} ({:?}) — {} · {} · {}",
+            "  {:<3} {} ({:?}): {} · {} · {}",
             if cl.nameable(c.min_named) {
                 "✓"
             } else {
@@ -157,7 +157,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
         for e in &c.evidence {
             writeln!(
                 out,
-                "  {:<4} {} ({}), received {}, {} of {} records kept — {}",
+                "  {:<4} {} ({}), received {}, {} of {} records kept: {}",
                 e.id,
                 e.org,
                 sc_core::defang_host(&e.host),
@@ -179,7 +179,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
         c.sent.len()
     )?;
     if !matches!(c.status, CaseStatus::Published | CaseStatus::Closed) {
-        super::lead::show(&c, chrono::Utc::now().timestamp(), out)?;
+        sc_case::lead::show(&c, chrono::Utc::now().timestamp(), out)?;
     }
 
     let has_draft = case_dir(root, id)?.join(NOTICE_DRAFT).is_file();
@@ -207,20 +207,15 @@ fn todo(c: &Case, claims: &[Claim], has_draft: bool) -> Vec<String> {
             c.id
         ));
     }
-    let affected = c.endpoints.iter().any(|e| {
-        matches!(
-            e.state,
-            EndpointState::Compromised | EndpointState::Targeted | EndpointState::Historical
-        )
-    });
-    if affected && !c.contacts.iter().any(|x| x.role == "affected") {
+    let affected = c.endpoints.iter().any(|e| e.state.affected());
+    if affected && c.contacts_in(ContactRole::Affected).next().is_none() {
         t.push(format!(
             "find contacts for the affected operators: `swarmchase case contacts {}`",
             c.id
         ));
     }
-    if !c.contacts.iter().any(|x| x.role == "provider") {
-        let dir = crate::contacts::Directory::builtin();
+    if c.contacts_in(ContactRole::Provider).next().is_none() {
+        let dir = sc_case::providers::Directory::builtin();
         let known: Vec<&str> = claims
             .iter()
             .filter(|x| matches!(x.role, Role::Developer | Role::Host))

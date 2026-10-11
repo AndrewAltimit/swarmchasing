@@ -43,7 +43,7 @@ impl Corroboration {
 }
 
 /// What a plant signal points at.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlantSignalKind {
     /// Every record comes from a service anyone can submit a URL to.
@@ -78,6 +78,22 @@ pub struct PlantSignal {
     /// The records it rests on (indexes into `Analysis::results`).
     pub records: Vec<usize>,
     pub detail: String,
+    /// The share of the analysis's clusters that carry this signal kind,
+    /// set only when it is high enough to make the signal context: more
+    /// than half of the clusters, and at least four clusters in all
+    /// ([FM-5.11](../../docs/manual/05-linking.md)). A signal with a base
+    /// rate is reported with it and does not count toward the plant-review
+    /// threshold; one without (`None`) counts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_rate: Option<f64>,
+}
+
+impl PlantSignal {
+    /// Whether this signal counts toward the plant-review threshold: one
+    /// whose base rate marks it as context does not.
+    pub fn counts(&self) -> bool {
+        self.base_rate.is_none()
+    }
 }
 
 /// Plant signals kept per cluster.
@@ -91,15 +107,14 @@ pub(crate) fn burned(cfg: &Linking, value: &str) -> bool {
         .any(|t| t.eq_ignore_ascii_case(value))
 }
 
-/// Members by provenance, keyed by [`Provenance::label`].
+/// Members by provenance.
 pub(crate) fn provenance_counts(
     results: &[ObsResult],
     members: &[usize],
-) -> BTreeMap<String, usize> {
+) -> BTreeMap<Provenance, usize> {
     let mut m = BTreeMap::new();
     for &i in members {
-        let p = results[i].obs.provenance().label();
-        *m.entry(p.to_string()).or_default() += 1;
+        *m.entry(results[i].obs.provenance()).or_default() += 1;
     }
     m
 }
@@ -145,15 +160,46 @@ pub(crate) fn plant_signals(
         })
         .collect();
     habit_mismatches(results, clusters, common, cfg, &mut out);
+    base_rates(&mut out, clusters.len());
     for v in &mut out {
         v.truncate(MAX_SIGNALS);
     }
     out
 }
 
+/// At least this many clusters before a signal's base rate is read: below
+/// it, "most clusters carry it" says too little.
+const BASE_RATE_MIN_CLUSTERS: usize = 4;
+
+/// Set each signal kind's base rate when it is context: the kind is on more
+/// than half of the analysis's `clusters`, and there are at least
+/// [`BASE_RATE_MIN_CLUSTERS`] of them. A signal carried by most clusters of
+/// a collection tells the reviewer nothing about one cluster, so it is
+/// reported with its base rate and does not count toward the review
+/// threshold ([FM-5.11]).
+fn base_rates(out: &mut [Vec<PlantSignal>], clusters: usize) {
+    if clusters < BASE_RATE_MIN_CLUSTERS {
+        return;
+    }
+    let mut carrying: BTreeMap<PlantSignalKind, usize> = BTreeMap::new();
+    for v in out.iter() {
+        for kind in v.iter().map(|p| p.kind).collect::<BTreeSet<_>>() {
+            *carrying.entry(kind).or_default() += 1;
+        }
+    }
+    for v in out.iter_mut() {
+        for p in v.iter_mut() {
+            let n = carrying.get(&p.kind).copied().unwrap_or(0);
+            if n * 2 > clusters {
+                p.base_rate = Some(n as f64 / clusters as f64);
+            }
+        }
+    }
+}
+
 fn monoculture(results: &[ObsResult], c: &Cluster) -> Option<PlantSignal> {
     let all = c.members.len();
-    if c.tier == Tier::Noise || c.provenance.get(Provenance::SubmitAnywhere.label()) != Some(&all) {
+    if c.tier == Tier::Noise || c.origin.provenance.get(&Provenance::SubmitAnywhere) != Some(&all) {
         return None;
     }
     let mut sources: Vec<&str> = c
@@ -170,6 +216,7 @@ fn monoculture(results: &[ObsResult], c: &Cluster) -> Option<PlantSignal> {
             "all {all} records come from services anyone can submit a URL to ({}); no server log or owner-published record stands behind them",
             sources.join(", ")
         ),
+        base_rate: None,
     })
 }
 
@@ -192,6 +239,7 @@ fn burned_in(results: &[ObsResult], c: &Cluster, cfg: &Linking, out: &mut Vec<Pl
                 defang(&truncate(&g[0].0.to_string(), 90)),
                 g.len()
             ),
+            base_rate: None,
         });
     }
 }
@@ -242,6 +290,7 @@ fn too_perfect(
             "every one of its {} records is significant on three or more kinds of evidence, with no unflagged request on its hosts, no route escalation and no task retrieval: a textbook cluster, as a planted one would be",
             c.members.len()
         ),
+        base_rate: None,
     })
 }
 
@@ -297,6 +346,7 @@ fn habit_mismatches(
                     first.id,
                     differs.join(", ")
                 ),
+                base_rate: None,
             });
         }
     }
@@ -323,18 +373,19 @@ fn habits_differ(a: &Cluster, b: &Cluster) -> Vec<&'static str> {
 /// One line on a cluster's provenance and corroboration, for internal and
 /// provider reports.
 pub(crate) fn provenance_line(c: &Cluster) -> Option<String> {
-    if c.provenance.is_empty() {
+    if c.origin.provenance.is_empty() {
         return None;
     }
     let shown: Vec<String> = c
+        .origin
         .provenance
         .iter()
         .map(|(p, n)| format!("{p} {n}"))
         .collect();
     let open = [Provenance::SubmitAnywhere, Provenance::PublishAnywhere]
         .iter()
-        .any(|p| c.provenance.contains_key(p.label()));
-    let caveat = if c.corroboration == Corroboration::SingleSource && open {
+        .any(|p| c.origin.provenance.contains_key(p));
+    let caveat = if c.origin.corroboration == Corroboration::SingleSource && open {
         ": anyone can submit or publish such records, so they show that someone did, not who"
     } else {
         ""
@@ -342,23 +393,26 @@ pub(crate) fn provenance_line(c: &Cluster) -> Option<String> {
     Some(format!(
         "provenance: {} · {}{caveat}",
         shown.join(", "),
-        c.corroboration.label()
+        c.origin.corroboration.label()
     ))
 }
 
 /// The internal report's plant review: each shown cluster's plant signals.
 pub(crate) fn plant_review(s: &mut String, a: &Analysis, clusters: &[&Cluster]) {
     use std::fmt::Write;
-    if clusters.iter().all(|c| c.plant_signals.is_empty()) {
+    if clusters.iter().all(|c| c.origin.plant_signals.is_empty()) {
         return;
     }
     let _ = writeln!(
         s,
         "\n## Plant review\n\nSigns that a cluster's records were placed to be found. Prompts to check, never findings: none changes a score, a tier or a link.\n"
     );
-    for c in clusters.iter().filter(|c| !c.plant_signals.is_empty()) {
-        let _ = writeln!(s, "- **{}** ({}):", c.id, c.corroboration.label());
-        for p in &c.plant_signals {
+    for c in clusters
+        .iter()
+        .filter(|c| !c.origin.plant_signals.is_empty())
+    {
+        let _ = writeln!(s, "- **{}** ({}):", c.id, c.origin.corroboration.label());
+        for p in &c.origin.plant_signals {
             let ids: Vec<&str> = p
                 .records
                 .iter()
@@ -368,6 +422,13 @@ pub(crate) fn plant_review(s: &mut String, a: &Analysis, clusters: &[&Cluster]) 
                 .collect();
             let more = p.records.len().saturating_sub(5);
             let _ = write!(s, "  - {}: {}", p.kind.label(), p.detail);
+            if let Some(rate) = p.base_rate {
+                let _ = write!(
+                    s,
+                    " (base rate {:.0}% of clusters carry this signal: context, not counted toward the review threshold)",
+                    rate * 100.0
+                );
+            }
             if !ids.is_empty() {
                 let _ = write!(s, " (records `{}`", ids.join("`, `"));
                 if more > 0 {
@@ -430,11 +491,23 @@ mod tests {
         let op = crate::analyze(obs("operator:e1"), &rules);
         let unknown = crate::analyze(obs("manual"), &rules);
         let c = |a: &Analysis| a.clusters[0].clone();
-        assert_eq!(c(&single).corroboration, Corroboration::SingleSource);
-        assert_eq!(c(&single).provenance.get("submit-anywhere"), Some(&2));
-        assert_eq!(c(&multi).corroboration, Corroboration::MultiSource);
-        assert_eq!(c(&op).corroboration, Corroboration::OperatorConfirmed);
-        assert_eq!(c(&unknown).corroboration, Corroboration::SingleSource);
+        assert_eq!(c(&single).origin.corroboration, Corroboration::SingleSource);
+        assert_eq!(
+            c(&single)
+                .origin
+                .provenance
+                .get(&Provenance::SubmitAnywhere),
+            Some(&2)
+        );
+        assert_eq!(c(&multi).origin.corroboration, Corroboration::MultiSource);
+        assert_eq!(
+            c(&op).origin.corroboration,
+            Corroboration::OperatorConfirmed
+        );
+        assert_eq!(
+            c(&unknown).origin.corroboration,
+            Corroboration::SingleSource
+        );
         for a in [&multi, &op, &unknown] {
             assert_eq!(
                 (&c(a).members, c(a).tier, c(a).score),
@@ -442,7 +515,12 @@ mod tests {
             );
         }
         let kinds = |a: &Analysis| -> Vec<PlantSignalKind> {
-            a.clusters[0].plant_signals.iter().map(|p| p.kind).collect()
+            a.clusters[0]
+                .origin
+                .plant_signals
+                .iter()
+                .map(|p| p.kind)
+                .collect()
         };
         assert!(kinds(&single).contains(&PlantSignalKind::ProvenanceMonoculture));
         assert!(!kinds(&multi).contains(&PlantSignalKind::ProvenanceMonoculture));
@@ -483,15 +561,17 @@ mod tests {
         assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters);
         for c in &a.clusters {
             let burned: Vec<&PlantSignal> = c
+                .origin
                 .plant_signals
                 .iter()
                 .filter(|p| p.kind == PlantSignalKind::BurnedIdentifier)
                 .collect();
-            assert_eq!(burned.len(), 1, "{:?}", c.plant_signals);
+            assert_eq!(burned.len(), 1, "{:?}", c.origin.plant_signals);
             assert!(burned[0].detail.contains("chatgpttest1"));
             assert_eq!(burned[0].records.len(), 1);
             assert!(
-                c.plant_signals
+                c.origin
+                    .plant_signals
                     .iter()
                     .all(|p| p.kind != PlantSignalKind::HabitMismatch)
             );
@@ -554,15 +634,17 @@ mod tests {
         let later = a.clusters.iter().max_by_key(|c| c.start).unwrap();
         let earlier = a.clusters.iter().min_by_key(|c| c.start).unwrap();
         let hm: Vec<&PlantSignal> = later
+            .origin
             .plant_signals
             .iter()
             .filter(|p| p.kind == PlantSignalKind::HabitMismatch)
             .collect();
-        assert_eq!(hm.len(), 1, "{:?}", later.plant_signals);
+        assert_eq!(hm.len(), 1, "{:?}", later.origin.plant_signals);
         assert!(hm[0].detail.contains(&earlier.id) && hm[0].detail.contains("relay stacks"));
         assert_eq!(hm[0].records.len(), 2);
         assert!(
             earlier
+                .origin
                 .plant_signals
                 .iter()
                 .all(|p| p.kind != PlantSignalKind::HabitMismatch)
@@ -591,6 +673,7 @@ mod tests {
         assert_eq!(a.clusters.len(), 1, "{:?}", kinds_of(&a));
         let perfect = |a: &Analysis| {
             a.clusters[0]
+                .origin
                 .plant_signals
                 .iter()
                 .any(|p| p.kind == PlantSignalKind::TooPerfect)
@@ -599,7 +682,7 @@ mod tests {
             perfect(&a),
             "{:?} {:?}",
             kinds_of(&a),
-            a.clusters[0].plant_signals
+            a.clusters[0].origin.plant_signals
         );
         // An ordinary request on the host in its span: not too perfect.
         obs.push(rec("n", "urlquery", 1010, "https://t.example/"));

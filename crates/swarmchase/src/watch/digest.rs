@@ -3,9 +3,10 @@
 
 use super::cases::CaseReport;
 use crate::util::{one_line, top_keys};
+use sc_collect::{Coverage, Kind};
 use sc_core::bursts::ArchiveBurst;
 use sc_core::recurrence::{ClusterRun, cluster_reruns};
-use sc_core::{Analysis, Tier, defang_host};
+use sc_core::{Analysis, Hit, IndicatorKind, ObsResult, Tier, defang_host};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -46,8 +47,11 @@ pub struct Endpoint {
 }
 
 /// One source's line in the digest.
+#[derive(Default)]
 pub struct SourceReport {
     pub name: String,
+    /// Its `kind` in the watchlist.
+    pub kind: String,
     pub pulled: usize,
     pub new: usize,
     pub pending: bool,
@@ -56,20 +60,114 @@ pub struct SourceReport {
     pub error: Option<String>,
     /// Why the source did not run (e.g. no API key). Not an error.
     pub skipped: Option<String>,
+    /// A page failed after earlier ones succeeded: what it kept counts, and
+    /// it continues next run.
+    pub stopped: Option<String>,
+    /// How much of a stream or feed it read.
+    pub coverage: Option<Coverage>,
+    /// Successful runs in a row that pulled nothing, once that reaches
+    /// [`crate::health::QUIET_RUNS`], and whether it ever pulled a record.
+    pub quiet: Option<(u32, bool)>,
 }
 
 impl SourceReport {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, kind: &str) -> Self {
         Self {
             name: name.to_string(),
-            pulled: 0,
-            new: 0,
-            pending: false,
-            requests: 0,
-            error: None,
-            skipped: None,
+            kind: kind.to_string(),
+            ..Default::default()
         }
     }
+
+    fn ran(&self) -> bool {
+        self.skipped.is_none() && self.error.is_none()
+    }
+}
+
+/// What the digest loses when a source of `kind` does not run.
+pub fn capability(kind: &str) -> &'static str {
+    match kind {
+        "urlquery" | "urlscan" => {
+            "submit-time records, the only request-like times: timing links, pace, agent grades above L2 and interaction edges (S1–S5)"
+        }
+        "wayback" | "commoncrawl" | "memento" => {
+            "archive captures through this relay or carrier: the targets, payloads and run tags it wraps"
+        }
+        "arquivo" => {
+            "Arquivo.pt captures, including on-demand saves (a second submit-anywhere channel)"
+        }
+        "gharchive" => "GitHub event leads: run-named repositories and pasted relay URLs",
+        "npm" | "pypi" => "registry leads: packages carrying run tags",
+        "ctlog" => "certificate leads: new relay look-alikes and mirrors",
+        "wellknown" => "agent protocol footprints: agent cards and signature key directories",
+        "mcp" => "MCP Registry metadata for linking hosts to tool servers",
+        _ => "this source's records",
+    }
+}
+
+/// The health block's lines on lost capability: sources that were skipped,
+/// failed, stopped early or read only part of their stream, and the run-wide
+/// loss when no submit-time source ran.
+fn lost_lines(sources: &[SourceReport]) -> Vec<String> {
+    let mut out = Vec::new();
+    let submit = |r: &&SourceReport| r.kind.parse::<Kind>().is_ok_and(Kind::submit_time);
+    if !sources.iter().filter(submit).any(|r| r.ran()) {
+        out.push(
+            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S5) are unavailable this run: archive capture times cannot stand in for submission times."
+                .to_string(),
+        );
+    }
+    for r in sources {
+        let what = capability(&r.kind);
+        if let Some(why) = &r.skipped {
+            let why = why.strip_prefix("skipped: ").unwrap_or(why);
+            out.push(format!("`{}` skipped ({why}). Lost: {what}.", r.name));
+        } else if let Some(e) = &r.error {
+            out.push(format!(
+                "`{}` failed ({}). Lost this run: {what}.",
+                r.name,
+                one_line(e, 120)
+            ));
+        } else if let Some(e) = &r.stopped {
+            out.push(format!(
+                "`{}` stopped early ({}) after {} records; it continues from its checkpoint next run.",
+                r.name,
+                one_line(e, 120),
+                r.pulled
+            ));
+        }
+        if let Some(c) = &r.coverage
+            && c.skipped > 0
+        {
+            out.push(format!(
+                "`{}` read {}: the skipped part of the stream is not read.",
+                r.name,
+                c.line()
+            ));
+        }
+    }
+    out
+}
+
+/// Notes on sources that keep pulling nothing.
+fn quiet_lines(sources: &[SourceReport]) -> Vec<String> {
+    sources
+        .iter()
+        .filter_map(|r| {
+            let (runs, ever) = r.quiet?;
+            let canary = match r.coverage.as_ref().and_then(|c| c.canary) {
+                Some(true) => {
+                    "; its canary passed, so the pipe works and the pattern finds nothing"
+                }
+                _ => "",
+            };
+            Some(format!(
+                "`{}` has pulled nothing in {runs} runs{}{canary}.",
+                r.name,
+                if ever { "" } else { " and never has" }
+            ))
+        })
+        .collect()
 }
 
 /// A failed source's reason in a few words, for its status cell: the HTTP
@@ -167,8 +265,19 @@ pub fn summarise(a: &Analysis, prev: &Summary, generated: String) -> Summary {
     let mut s = Summary {
         generated,
         clusters: BTreeMap::new(),
-        endpoints: prev.endpoints.clone(),
+        endpoints: BTreeMap::new(),
     };
+    // Keys written before hosts were cleaned are merged into their clean form.
+    for (h, e) in &prev.endpoints {
+        let h = clean_host(h);
+        if h.is_empty() {
+            continue;
+        }
+        let m = s.endpoints.entry(h).or_insert_with(|| e.clone());
+        m.first_seen = m.first_seen.min(e.first_seen);
+        m.last_seen = m.last_seen.max(e.last_seen);
+        m.max_tier = m.max_tier.max(e.max_tier);
+    }
     for c in &a.clusters {
         let Some(first) = c
             .members
@@ -197,8 +306,13 @@ pub fn summarise(a: &Analysis, prev: &Summary, generated: String) -> Summary {
         if r.tier < Tier::Suggestive {
             continue;
         }
-        let Some(h) = &r.target_host else { continue };
-        let e = s.endpoints.entry(h.clone()).or_insert(Endpoint {
+        let Some(h) = r.target_host.as_deref().map(clean_host) else {
+            continue;
+        };
+        if h.is_empty() {
+            continue;
+        }
+        let e = s.endpoints.entry(h).or_insert(Endpoint {
             first_seen: r.obs.ts,
             last_seen: r.obs.ts,
             max_tier: r.tier,
@@ -219,46 +333,87 @@ pub fn digest(d: &DigestInput) -> Digest {
         "Unverified leads from passive collection. Review before acting on anything here.\n"
     );
 
-    let _ = writeln!(t, "## Sources\n");
-    let _ = writeln!(
-        t,
-        "| Source | Pulled | New | Requests | Status |\n|---|---:|---:|---:|---|"
-    );
-    for s in &health.sources {
-        let status = match (&s.error, s.pending) {
-            _ if s.skipped.is_some() => s.skipped.clone().unwrap_or_default(),
-            (Some(e), _) => format!("error: {}", one_line(e, 160)),
-            (None, true) => "partial, continues next run".into(),
-            (None, false) => "complete".into(),
-        };
+    // Health first: a source that did not run hides whatever it would have
+    // found, so what was lost is the first thing to read.
+    let _ = writeln!(t, "## Health ({})\n", health.alerts.len());
+    let lost = lost_lines(&health.sources);
+    if health.alerts.is_empty() && lost.is_empty() {
         let _ = writeln!(
             t,
-            "| {} | {} | {} | {} | {status} |",
-            s.name, s.pulled, s.new, s.requests
+            "Every source ran. No failures, source collapses or rule drift."
         );
-    }
-
-    let _ = writeln!(t, "\n## Health ({})\n", health.alerts.len());
-    if health.alerts.is_empty() {
-        let _ = writeln!(t, "No source collapses or rule drift.");
     }
     for x in &health.alerts {
         let _ = writeln!(t, "- {x}");
+    }
+    // A blank line between blocks, not before the first.
+    let gap = |t: &String| if t.ends_with("\n\n") { "" } else { "\n" };
+    if !lost.is_empty() {
+        let _ = writeln!(t, "{}Capability lost this run:\n", gap(&t));
+        for x in &lost {
+            let _ = writeln!(t, "- {x}");
+        }
+    }
+    let quiet = quiet_lines(&health.sources);
+    if !quiet.is_empty() {
+        let _ = writeln!(t, "{}Quiet sources:\n", gap(&t));
+        for x in &quiet {
+            let _ = writeln!(t, "- {x}");
+        }
     }
     for x in &health.notes {
         let _ = writeln!(t, "\n{x}");
     }
 
-    let tier = |x| a.tier_counts.get(&x).copied().unwrap_or(0);
+    let _ = writeln!(t, "\n## Sources\n");
     let _ = writeln!(
         t,
-        "\n## Last {} days\n\n{} records, {} flagged ({} significant, {} suggestive), {} clusters.\n",
+        "| Source | Pulled | New | Requests | Coverage | Status |\n|---|---:|---:|---:|---|---|"
+    );
+    for s in &health.sources {
+        let status = match (&s.error, &s.stopped, s.pending) {
+            _ if s.skipped.is_some() => s.skipped.clone().unwrap_or_default(),
+            (Some(e), _, _) => format!("error: {}", one_line(e, 160)),
+            (None, Some(e), _) => format!("stopped early: {}", one_line(e, 120)),
+            (None, None, true) => "partial, continues next run".into(),
+            (None, None, false) => "complete".into(),
+        };
+        let coverage = s.coverage.as_ref().map_or(String::new(), |c| {
+            let canary = match c.canary {
+                Some(true) => ", canary ok",
+                Some(false) => ", canary FAILED",
+                None => "",
+            };
+            format!("{}{canary}", c.line())
+        });
+        let _ = writeln!(
+            t,
+            "| {} | {} | {} | {} | {coverage} | {status} |",
+            s.name, s.pulled, s.new, s.requests
+        );
+    }
+
+    let tier = |x| a.tier_counts.get(&x).copied().unwrap_or(0);
+    let with_indicator = a.results.iter().filter(|r| indicative(r)).count();
+    let (above_noise, noise): (Vec<_>, Vec<_>) =
+        a.clusters.iter().partition(|c| c.tier >= Tier::Suggestive);
+    let _ = writeln!(
+        t,
+        "\n## Last {} days\n\n{} records, {} with an indicator beyond the relay or carrier they came through ({} significant, {} suggestive), {} clusters above noise{}.\n",
         d.window_days,
         a.total,
-        a.flagged,
+        with_indicator,
         tier(Tier::Significant),
         tier(Tier::Suggestive),
-        a.clusters.len()
+        above_noise.len(),
+        if noise.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " ({} noise-tier clusters listed under Noise-tier clusters)",
+                noise.len()
+            )
+        }
     );
 
     let mut new_clusters = Vec::new();
@@ -306,20 +461,20 @@ pub fn digest(d: &DigestInput) -> Digest {
         let _ = writeln!(
             t,
             "- `{}` [{}] first seen {}, last {}",
-            defang_host(h),
+            defang_host(&clean_host(h)),
             e.max_tier.label(),
             sc_core::fmt_ts(e.first_seen),
             sc_core::fmt_ts(e.last_seen)
         );
     }
 
-    let mut targets: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut targets: BTreeMap<String, usize> = BTreeMap::new();
     for r in &a.results {
         if r.tier >= Tier::Suggestive
             && d.new_ids.contains(&r.obs.id)
             && let Some(h) = &r.target_host
         {
-            *targets.entry(h.as_str()).or_default() += 1;
+            *targets.entry(clean_host(h)).or_default() += 1;
         }
     }
     let mut targets: Vec<_> = targets.into_iter().collect();
@@ -327,8 +482,14 @@ pub fn digest(d: &DigestInput) -> Digest {
     let _ = writeln!(t, "\n## Top targets in new records\n");
     none(&mut t, targets.is_empty());
     for (h, n) in targets.iter().take(10) {
-        let _ = writeln!(t, "- `{}`: {n} flagged", defang_host(h));
+        let _ = writeln!(
+            t,
+            "- `{}`: {n} suggestive or significant",
+            defang_host(&clean_host(h))
+        );
     }
+
+    lone_significant(&mut t, a, d.new_ids);
 
     // Descriptive only: a rerun is a lead for the admin, never a merge.
     let (runs, matches) = cluster_reruns(a, d.new_ids);
@@ -355,19 +516,27 @@ pub fn digest(d: &DigestInput) -> Digest {
     }
 
     leads(&mut t, a);
+    noise_clusters(&mut t, a);
 
     let _ = writeln!(t, "\n## Archive bursts ({})\n", d.bursts.len());
     none(&mut t, d.bursts.is_empty());
     for b in d.bursts {
+        // Counted here rather than taken from the burst: every capture of a
+        // relay's host carries the relay's own rule.
+        let with = a
+            .results
+            .iter()
+            .filter(|r| r.obs.ts >= b.start && r.obs.ts <= b.end)
+            .filter(|r| outer_host(&r.obs.url) == b.host && indicative(r))
+            .count();
         let _ = writeln!(
             t,
-            "- `{}`: {} captures {} → {} ({} distinct URLs, {} flagged); usually {:.1}/day",
-            defang_host(&b.host),
+            "- `{}`: {} captures {} → {} ({} distinct URLs, {with} with an indicator beyond the relay); usually {:.1}/day",
+            defang_host(&clean_host(&b.host)),
             b.count,
             sc_core::fmt_ts(b.start),
             sc_core::fmt_ts(b.end),
             b.distinct_urls,
-            b.flagged,
             b.baseline_per_day
         );
     }
@@ -394,6 +563,137 @@ pub fn digest(d: &DigestInput) -> Digest {
         || errors
         || !health.alerts.is_empty();
     Digest { text: t, changed }
+}
+
+/// The host of a record's own URL, lowercased.
+fn outer_host(url: &str) -> String {
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_ascii_lowercase))
+        .unwrap_or_default()
+}
+
+/// Whether a hit shows what a request did rather than how it was sent: not
+/// one of the kinds that describe the route (relay, cache buster, self-id,
+/// header, outcome, as `sc_core`'s context kinds), and not a carrier rule
+/// that only names the record's own host. Every watch source is a relay's
+/// or carrier's own host with its own rule, so only these hits say more
+/// than "this record came from the source it was pulled from".
+fn indicative_hit(h: &Hit, host: &str) -> bool {
+    match h.kind {
+        k if sc_core::is_context_kind(k) => false,
+        IndicatorKind::Carrier => {
+            let m = h.matched.to_ascii_lowercase();
+            m.is_empty() || !host.contains(&m)
+        }
+        _ => true,
+    }
+}
+
+/// Whether a record has at least one [`indicative_hit`].
+pub fn indicative(r: &ObsResult) -> bool {
+    let host = outer_host(&r.obs.url);
+    r.hits.iter().any(|h| indicative_hit(h, &host))
+}
+
+/// A host as printed: characters a host name cannot hold (quotes,
+/// backticks, brackets, trailing punctuation from the text it was cut
+/// from) trimmed from both ends, lowercased, so a printed host never
+/// breaks out of its code span.
+pub fn clean_host(h: &str) -> String {
+    let ok = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':');
+    h.trim_matches(|c: char| !ok(c))
+        .trim_end_matches('.')
+        .to_ascii_lowercase()
+}
+
+/// How many significant records outside any cluster the digest lists.
+const LONE_LINES: usize = 15;
+
+/// Significant records that joined no cluster: without a cluster line they
+/// would show only as a host elsewhere in the digest, with no rule context.
+/// New records first.
+fn lone_significant(t: &mut String, a: &Analysis, new_ids: &BTreeSet<String>) {
+    let mut lone: Vec<&ObsResult> = a
+        .results
+        .iter()
+        .filter(|r| r.tier == Tier::Significant && r.cluster.is_none())
+        .collect();
+    let fresh = lone.iter().filter(|r| new_ids.contains(&r.obs.id)).count();
+    lone.sort_by(|x, y| {
+        let new = |r: &ObsResult| !new_ids.contains(&r.obs.id);
+        new(x)
+            .cmp(&new(y))
+            .then(y.score.cmp(&x.score))
+            .then(y.obs.ts.cmp(&x.obs.ts))
+    });
+    let _ = writeln!(
+        t,
+        "\n## Significant records outside any cluster ({}, {fresh} new)\n",
+        lone.len()
+    );
+    if lone.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for r in lone.iter().take(LONE_LINES) {
+        let host = r
+            .target_host
+            .clone()
+            .unwrap_or_else(|| outer_host(&r.obs.url));
+        let rules: BTreeSet<&str> = r.hits.iter().map(|h| h.rule_id.as_str()).collect();
+        let _ = writeln!(
+            t,
+            "- `{}` [{}] score {}{}: {}; {} {}",
+            defang_host(&clean_host(&host)),
+            r.tier.label(),
+            r.score,
+            if new_ids.contains(&r.obs.id) {
+                ", new"
+            } else {
+                ""
+            },
+            rules.into_iter().collect::<Vec<_>>().join(", "),
+            r.obs.source,
+            sc_core::fmt_ts(r.obs.ts)
+        );
+    }
+    if lone.len() > LONE_LINES {
+        let _ = writeln!(t, "- … {} more", lone.len() - LONE_LINES);
+    }
+}
+
+/// Noise-tier clusters: listed for completeness, never counted in the
+/// headline. Most are capture chains, one relay's captures of one page
+/// joined by time with no indicator beyond the relay.
+fn noise_clusters(t: &mut String, a: &Analysis) {
+    let noise: Vec<_> = a
+        .clusters
+        .iter()
+        .filter(|c| c.tier < Tier::Suggestive)
+        .collect();
+    let _ = writeln!(t, "\n## Noise-tier clusters ({})\n", noise.len());
+    if noise.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for c in noise.iter().take(LEAD_LINES) {
+        let _ = writeln!(
+            t,
+            "- {}: {} records, {} → {}; targets {}; rules {}",
+            cluster_ref(a, &c.id),
+            c.members.len(),
+            sc_core::fmt_ts(c.start),
+            sc_core::fmt_ts(c.end),
+            top_keys(&c.target_hosts, 3)
+                .iter()
+                .map(|h| format!("`{}`", defang_host(&clean_host(h))))
+                .collect::<Vec<_>>()
+                .join(", "),
+            top_keys(&c.rules, 4).join(", ")
+        );
+    }
+    if noise.len() > LEAD_LINES {
+        let _ = writeln!(t, "- … {} more", noise.len() - LEAD_LINES);
+    }
 }
 
 /// `C3 k-3f9a2c1b`: a cluster's number in this analysis and its stable key.
@@ -623,7 +923,7 @@ mod tests {
 
         // In the digest's status cell, with no part of the URL.
         let a = analyze(Vec::new(), &Rules::default_rules());
-        let mut rep = SourceReport::new("wayback-jina");
+        let mut rep = SourceReport::new("wayback-jina", "wayback");
         rep.requests = 3;
         rep.error = Some(short_reason(&gave_up));
         let health = Health {
@@ -634,11 +934,173 @@ mod tests {
         let d = write("t1", &a, &s, &s, &BTreeSet::new(), &health, &[]);
         assert!(
             d.text
-                .contains("| wayback-jina | 0 | 0 | 3 | error: HTTP 504 after 3 attempts |"),
+                .contains("| wayback-jina | 0 | 0 | 3 |  | error: HTTP 504 after 3 attempts |"),
             "{}",
             d.text
         );
         assert!(!d.text.contains("web.archive.org"), "{}", d.text);
+        // The health block, first in the digest, says what the failure lost.
+        let health_at = d.text.find("## Health").unwrap();
+        assert!(health_at < d.text.find("## Sources").unwrap());
+        assert!(
+            d.text.contains(
+                "`wayback-jina` failed (HTTP 504 after 3 attempts). Lost this run: archive captures"
+            ),
+            "{}",
+            d.text
+        );
+    }
+
+    #[test]
+    fn health_block_names_lost_capability_coverage_and_quiet_sources() {
+        let a = analyze(Vec::new(), &Rules::default_rules());
+        let s = summarise(&a, &Summary::default(), "t1".into());
+        let skipped = SourceReport {
+            skipped: Some("skipped: URLQUERY_APIKEY not set".into()),
+            ..SourceReport::new("urlquery-jina", "urlquery")
+        };
+        let gh = SourceReport {
+            coverage: Some(Coverage {
+                unit: "hours",
+                read: 6,
+                available: 60,
+                skipped: 54,
+                canary: Some(true),
+                ..Default::default()
+            }),
+            quiet: Some((5, false)),
+            ..SourceReport::new("gharchive-relays", "gharchive")
+        };
+        let stopped = SourceReport {
+            pulled: 1000,
+            stopped: Some("HTTP 503 after 7 attempts".into()),
+            ..SourceReport::new("jina-reader", "wayback")
+        };
+        let health = Health {
+            sources: vec![skipped, gh, stopped],
+            ..Default::default()
+        };
+        let d = write("t1", &a, &s, &s, &BTreeSet::new(), &health, &[]);
+        for want in [
+            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S5) are unavailable",
+            "`urlquery-jina` skipped (URLQUERY_APIKEY not set). Lost: submit-time records",
+            "`gharchive-relays` read 6 of 60 hours, 54 skipped",
+            "`gharchive-relays` has pulled nothing in 5 runs and never has; its canary passed",
+            "`jina-reader` stopped early (HTTP 503 after 7 attempts) after 1000 records",
+            "| gharchive-relays | 0 | 0 | 0 | 6 of 60 hours, 54 skipped, canary ok | complete |",
+            "| jina-reader | 1000 | 0 | 0 |  | stopped early: HTTP 503 after 7 attempts |",
+        ] {
+            assert!(d.text.contains(want), "missing {want:?} in\n{}", d.text);
+        }
+        // Lost capability alone does not mail the digest; alerts do.
+        assert!(!d.changed, "{}", d.text);
+
+        // A submit-time source that ran clears the run-wide line.
+        let ran = SourceReport::new("urlquery-jina", "urlquery");
+        let health = Health {
+            sources: vec![ran],
+            ..Default::default()
+        };
+        let d = write("t2", &a, &s, &s, &BTreeSet::new(), &health, &[]);
+        assert!(!d.text.contains("No submit-time source"), "{}", d.text);
+        assert!(d.text.contains("Every source ran."), "{}", d.text);
+    }
+
+    #[test]
+    fn headline_counts_indicators_beyond_the_relay_and_lists_lone_records() {
+        let rules = Rules::default_rules();
+        let rec = |id: &str, ts: i64, url: &str| Observation {
+            id: id.into(),
+            source: "wayback".into(),
+            ts,
+            url: url.into(),
+            ..Default::default()
+        };
+        let t0 = 1_791_000_000;
+        let obs = vec![
+            // The relay's own rule only.
+            rec("plain", t0, "https://r.jina.ai/https://news.example/story"),
+            // The carrier's own rule only.
+            rec("echo", t0 + 5000, "https://httpbin.org/get?x=1"),
+            // An exploit payload through the relay.
+            rec(
+                "sqli",
+                t0 + 90_000,
+                "https://r.jina.ai/https://portal.example.gov/q?id=1'%20OR%201=1--",
+            ),
+        ];
+        let a = analyze(obs, &rules);
+        let with: Vec<&str> = a
+            .results
+            .iter()
+            .filter(|r| indicative(r))
+            .map(|r| r.obs.id.as_str())
+            .collect();
+        assert_eq!(with, ["sqli"]);
+        let s = summarise(&a, &Summary::default(), "t1".into());
+        let ids = BTreeSet::from(["sqli".to_string()]);
+        let d = write("t1", &a, &s, &s, &ids, &Health::default(), &[]);
+        assert!(
+            d.text
+                .contains("3 records, 1 with an indicator beyond the relay or carrier"),
+            "{}",
+            d.text
+        );
+        assert!(!d.text.contains("flagged"), "{}", d.text);
+        let lone: Vec<&ObsResult> = a
+            .results
+            .iter()
+            .filter(|r| r.tier == Tier::Significant && r.cluster.is_none())
+            .collect();
+        assert_eq!(lone.len(), 1, "one significant record with nothing to join");
+        assert!(
+            d.text.contains(&format!(
+                "## Significant records outside any cluster ({}, ",
+                lone.len()
+            )),
+            "{}",
+            d.text
+        );
+        for r in lone {
+            let line = d
+                .text
+                .lines()
+                .find(|l| {
+                    l.contains(&defang_host(r.target_host.as_deref().unwrap()))
+                        && l.contains("[significant] score")
+                })
+                .unwrap();
+            assert!(
+                line.contains("exploit.") && line.contains(", new:"),
+                "{line}"
+            );
+        }
+        assert!(d.text.contains("## Noise-tier clusters ("), "{}", d.text);
+    }
+
+    #[test]
+    fn hosts_are_cleaned_before_printing_and_summarising() {
+        assert_eq!(clean_host("example.com`"), "example.com");
+        assert_eq!(clean_host("\"Example.COM\"),"), "example.com");
+        assert_eq!(clean_host("a.example."), "a.example");
+        assert_eq!(clean_host("`"), "");
+        let e = |t| Endpoint {
+            first_seen: t,
+            last_seen: t,
+            max_tier: Tier::Suggestive,
+        };
+        let prev = Summary {
+            endpoints: BTreeMap::from([
+                ("example.com`".to_string(), e(10)),
+                ("example.com".to_string(), e(20)),
+            ]),
+            ..Default::default()
+        };
+        let a = analyze(Vec::new(), &Rules::default_rules());
+        let s = summarise(&a, &prev, "t".into());
+        assert_eq!(s.endpoints.len(), 1);
+        let m = &s.endpoints["example.com"];
+        assert_eq!((m.first_seen, m.last_seen), (10, 20));
     }
 
     #[test]

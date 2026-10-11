@@ -40,6 +40,13 @@ pub enum CollectSource {
     /// Certificates in a CT log whose DNS names match PATTERN. --endpoint is the
     /// log's base URL; --scan the newest entries read (default 256).
     Ctlog(CollectArgs),
+    /// Wayback captures of agent protocol footprints (agent cards, agent
+    /// registration files, signature key directories) under PATTERN: hosts or
+    /// `*.domain`s, `|`-separated. Index rows only; the files are never fetched.
+    Wellknown(CollectArgs),
+    /// Official MCP Registry servers whose name or declared URLs match
+    /// PATTERN (`*` for all), updated since --from. Metadata only.
+    Mcp(CollectArgs),
     /// Fetch urlquery.net reports by ID (needs URLQUERY_APIKEY), e.g. to turn a
     /// labelled report list such as Transluce's reports.csv into records for
     /// `swarmchase eval`. Appends to --out and skips IDs already in it, so an
@@ -82,6 +89,19 @@ pub struct CollectArgs {
     /// How much of a streamed source to read: CT log entries, GH Archive hours.
     #[arg(long)]
     scan: Option<usize>,
+    /// CDX filter applied by the index server, e.g. `collection:SAWP.*` for
+    /// Arquivo.pt's on-demand saves (repeatable; Wayback and Arquivo.pt).
+    #[arg(long)]
+    filter: Vec<String>,
+    /// Read the time range in windows of this many days (Wayback).
+    #[arg(long)]
+    slice_days: Option<u32>,
+    /// A query known to match, run once as a canary (npm).
+    #[arg(long)]
+    canary: Option<String>,
+    /// Most compressed megabytes to stream (GH Archive).
+    #[arg(long)]
+    max_mb: Option<u64>,
     /// Cache responses in <data>/cache/http (data: SWARMCHASE_DATA, else ./data)
     /// and revalidate them with ETags.
     #[arg(long)]
@@ -112,6 +132,8 @@ pub fn run(source: CollectSource) -> Result<()> {
         CollectSource::Npm(a) => (a, Kind::Npm),
         CollectSource::Pypi(a) => (a, Kind::Pypi),
         CollectSource::Ctlog(a) => (a, Kind::CtLog),
+        CollectSource::Wellknown(a) => (a, Kind::WellKnown),
+        CollectSource::Mcp(a) => (a, Kind::Mcp),
     };
     let mut client = Client::new(Duration::from_secs(2))?;
     if args.cache {
@@ -131,6 +153,10 @@ pub fn run(source: CollectSource) -> Result<()> {
         page_size: args.page_size,
         endpoint: args.endpoint,
         scan: args.scan,
+        filter: args.filter,
+        slice_days: args.slice_days,
+        canary: args.canary,
+        max_mb: args.max_mb,
     };
     if let (Some(out), Kind::Wayback) = (&args.out, kind) {
         return collect_wayback_to_file(&client, q, out, args.resume);

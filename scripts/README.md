@@ -19,9 +19,10 @@ A gate fails the commit or the run. CI is the authority; the hook is a fast loca
 | `cargo fmt --check` | Formatting. The hook auto-fixes and re-stages. | `ci` | staged Rust, `Cargo.*`, `rules/`, `samples/eval/` |
 | `cargo clippy -D warnings` | Lints, warnings as errors. | `ci` | as above |
 | `cargo test --profile release-test` | The test suite. | `ci` | not run; run it before pushing |
-| [`ci/eval-gate.sh`](ci/eval-gate.sh) | Precision and recall floors on `samples/eval/` ([evaluation](../docs/reference/evaluation.md#the-eval-gate)). | `ci` | staged `rules/`, `crates/sc-core/`, `samples/eval/` |
+| [`ci/eval-gate.sh`](ci/eval-gate.sh) | Precision and recall floors on `samples/eval/`, all and non-synthetic, then `eval check-results` on the saved results ([evaluation](../docs/reference/evaluation.md#the-eval-gate)). | `ci` | staged `rules/`, `crates/sc-core/`, `samples/eval/` |
+| [`ci/check-rules-schema.py`](ci/check-rules-schema.py) | `rules/default.toml` validates against [`schemas/sc-rules-v1.json`](../schemas/sc-rules-v1.json) ([SC-Rules v1](../docs/specs/rules-v1.md)). Stdlib only. | `gates` | staged `rules/` or `schemas/` |
 | `swarmchase notice lint` | Committed notices carry nothing a notice withholds ([notices](../docs/reference/notices.md#lint)). | `ci` | staged `notices/` |
-| [`ci/check-wasm-target.sh`](ci/check-wasm-target.sh) | Type-checks `sc-wasm` and `sc-rules-wasm` for `wasm32-unknown-unknown`. | `ci` | staged `crates/sc-core/`, `crates/sc-wasm/` |
+| [`ci/check-wasm-target.sh`](ci/check-wasm-target.sh) | Type-checks `sc-wasm` (engine and `tools` feature), `sc-rules-wasm` and `sc-case` for `wasm32-unknown-unknown`. | `ci` | staged `crates/sc-core/`, `crates/sc-wasm/`, `crates/sc-case/` |
 | [`site-xss-check.mjs`](site-xss-check.mjs) | Builds the site with a hostile notice and drives every page in headless Chrome with XSS probes; fails if any runs. | `deploy-pages` | not run |
 
 Pull requests run `gates` then `ci`; pushes to `main` run both and then `deploy-pages`. Pull requests from forks run nothing. The jobs are in [`main-ci.yml`](../.github/workflows/main-ci.yml); the runner setup is in [runner](../docs/reference/runner.md).

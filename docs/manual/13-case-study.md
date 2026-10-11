@@ -6,7 +6,7 @@
 
 A case study, whether a published write-up or the reasoning behind a notice, uses these parts in this order. Each claim carries its tag ([FM-7.6](07-attribution.md#fm-76-claim-tags)).
 
-1. **Header.** Case id; method version (SC-FM 1.0) and any departures; rules version; toolkit version; the period covered; each source with its timestamp kind ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)).
+1. **Header.** Case id; method version (SC-FM 1.1) and any departures; rules version; toolkit version; the period covered; each source with its timestamp kind ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)).
 2. **Conclusions first.** Each Conclusion with its label ([FM-7.7](07-attribution.md#fm-77-attribution-labels)) and likelihood words or confidence level ([chapter 8](08-confidence.md)).
 3. **Observed.** A table: claim, record link, rule id.
 4. **Documented.** A table: claim, cited source.
@@ -19,9 +19,9 @@ A case study, whether a published write-up or the reasoning behind a notice, use
 
 ## FM-13.2 Worked example (synthetic)
 
-**Every record in this example is synthetic.** The records were written by hand to exercise the rules, use reserved `.example` hosts, and were never collected. They are the toolkit's example records ([`llm-residue.ndjson`](../../samples/eval/llm-residue.ndjson)), which the browser toolkit loads under *Try an example*. Their times and groupings are artefacts of how they were written. Results below are as the toolkit grades them at rules version 2026-10-15; a later rules version may grade them differently.
+**Every record in this example is synthetic.** The records were written by hand to exercise the rules, use reserved `.example` hosts, and were never collected. They are the toolkit's example records ([`llm-residue.ndjson`](../../samples/eval/llm-residue.ndjson)), which the browser toolkit loads under *Try an example*. Their times and groupings are artefacts of how they were written. Results below are as the toolkit grades them at rules version 2026-10-11; a later rules version may grade them differently.
 
-**Header.** Case: synthetic example. Method: SC-FM 1.0. Source: hand-written records with no timestamp kind (unknown).
+**Header.** Case: synthetic example. Method: SC-FM 1.1. Source: hand-written records with no timestamp kind (unknown).
 
 **Conclusions.**
 
@@ -74,12 +74,12 @@ The case studies below apply the template to public incident write-ups. They sho
 
 - **The write-up's observations are Documented.** What the authors say a record shows is Documented ([FM-7.6](07-attribution.md#fm-76-claim-tags)), cited to the write-up, until the practitioner pulls the record and sees it. Nothing in these studies is Observed at first hand.
 - **Quote shapes, not records.** Only short indicator shapes the write-up itself publishes are quoted here. Record URLs and scan-service content are not reproduced ([FM-3.4](03-sources.md#fm-34-terms-of-use)); the write-up links its records.
-- **Rule matches are checked on stand-ins.** Each rule id given for a published shape was checked with `swarmchase unwrap` or `swarmchase scan` at rules version 2026-10-15, on a reconstructed record from the [regression set](../../samples/eval/README.md#published-patternsndjson) or a synthetic `.example` record of the same shape, with headers or a final URL where the rule reads them.
+- **Rule matches are checked on stand-ins.** Each rule id given for a published shape was checked with `swarmchase unwrap` or `swarmchase scan` at rules version 2026-10-11, on a reconstructed record from the [regression set](../../samples/eval/README.md#published-patternsndjson) or a synthetic `.example` record of the same shape, with headers or a final URL where the rule reads them.
 - **Two parts are added** after the template's attribution part: what a notice following [chapter 11](11-notices.md) would withhold, and where the write-up's claims go beyond the evidence it shows. The second part compares claims with this manual's rules; it is not a judgment of the authors, who in each case state many of the same limits themselves.
 
 ## FM-13.4 Case study: urlquery.net agent activity
 
-**Header.** Source: [Transluce, *Early rogue AI agent activity and attempts to hack found on urlquery.net*](references.md#incident-reports), published 23 September 2026. Records: urlquery.net reports, timestamped at submission (submit, [FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Period: November 2025 to September 2026, with the strongest evidence from March to June 2026. Method: SC-FM 1.0; departure: the records were not re-pulled, so the write-up's observations enter as Documented. Rules version 2026-10-15.
+**Header.** Source: [Transluce, *Early rogue AI agent activity and attempts to hack found on urlquery.net*](references.md#incident-reports), published 23 September 2026. Records: urlquery.net reports, timestamped at submission (submit, [FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Period: November 2025 to September 2026, with the strongest evidence from March to June 2026. Method: SC-FM 1.1; departure: the records were not re-pulled, so the write-up's observations enter as Documented. Rules version 2026-10-11.
 
 **Conclusions.**
 
@@ -94,7 +94,7 @@ The case studies below apply the template to public incident write-ups. They sho
 |---|---|
 | Probe parameters `tok=expt0` to `tok=expt8` on the library's probes | `marker.test_tag` (links), and `tok` is a run-tag parameter |
 | The tag `CHATGPTTEST1` on three reports of one day | `marker.test_tag` |
-| Base64 programs sent through `httpbin.org/base64/` | `carrier.httpbin`, `carrier.inline_fetch_program`, `carrier.html_program` |
+| Base64 programs sent through `httpbin.org/base64/` | `carrier.httpbin`, and the `program` group counted once (`carrier.inline_fetch_program`, `carrier.html_program`, `marker.title_write`): suggestive |
 | Injection, traversal and template probes | `exploit.sqli_boolean`, `exploit.traversal`, `exploit.ssti`, `exploit.cmdi` |
 | A script payload in a dashboard parameter | `exploit.xss` (significant) |
 | Relays such as Jina Reader and markdown.new | `relay.jina`, `relay.markdown_new` |
@@ -148,7 +148,7 @@ The provider's acknowledgement covers the swarm. It would raise these clusters t
 
 ## FM-13.5 Case study: US and Canadian government targets
 
-**Header.** Source: [Transluce, *AI Agents Targeted U.S. and Canadian Government Websites*](references.md#incident-reports), published 30 September 2026, a follow-up to the write-up in [FM-13.4](#fm-134-case-study-urlquerynet-agent-activity). Records: urlquery.net reports (submit times) and Arquivo.pt captures (capture times), including captures the agents requested through the archive's save-now feature. Period: April to July 2026. Method: SC-FM 1.0, departure as in FM-13.4. Rules version 2026-10-15.
+**Header.** Source: [Transluce, *AI Agents Targeted U.S. and Canadian Government Websites*](references.md#incident-reports), published 30 September 2026, a follow-up to the write-up in [FM-13.4](#fm-134-case-study-urlquerynet-agent-activity). Records: urlquery.net reports (submit times) and Arquivo.pt captures (capture times), including captures the agents requested through the archive's save-now feature. Period: April to July 2026. Method: SC-FM 1.1, departure as in FM-13.4. Rules version 2026-10-11.
 
 **Conclusions.**
 
@@ -167,7 +167,7 @@ The provider's acknowledgement covers the swarm. It would raise these clusters t
 | `?uniqN` on relay submissions | `cache.buster`, with the relay rule |
 | A general OCR service pointed at a CAPTCHA | `antibot.ocr_captcha` |
 | The organisation name "OpenAI Research" in a sign-up | `selfid.vendor_name` (weight 1) |
-| `/_Incapsula_Resource` | `outcome.challenge`, where it is the scan's final URL |
+| `/_Incapsula_Resource` | `antibot.incapsula` when requested; `outcome.challenge` when it is the scan's final URL |
 | `debug=1`, `?output=`, `?raw=`, `?url=` | None. Each is also ordinary, so a rule would need hard negatives first ([FM-4.7](04-indicators.md#fm-47-rule-writing-standard)). |
 | Double-slash paths | None, and the write-up shows no bypass. |
 
@@ -214,9 +214,9 @@ The provider's acknowledgement covers the swarm. It would raise these clusters t
 
 ## FM-13.6 Case study: an agent fleet reading a map service
 
-**Header.** Source: [swarmcha.se, *We found a Chinese agent fleet*](references.md#incident-reports), a preliminary report dated 4 October 2026, first published 5 October 2026, with a dated changelog. Records: urlquery.net reports (submit times); webhook.site inbox logs and creation records, read through the service's public API (request times); Wayback Machine and archive.today listings (capture times); certificate logs; the authors' own tests of models and services. Method: SC-FM 1.0, departure as in FM-13.4.
+**Header.** Source: [swarmcha.se, *We found a Chinese agent fleet*](references.md#incident-reports), a preliminary report dated 4 October 2026, first published 5 October 2026, with a dated changelog. Records: urlquery.net reports (submit times); webhook.site inbox logs and creation records, read through the service's public API (request times); Wayback Machine and archive.today listings (capture times); certificate logs; the authors' own tests of models and services. Method: SC-FM 1.1, departure as in FM-13.4.
 
-Two of the sources fall outside this manual: reading an agent's inbox fails the passivity test ([FM-3.2](03-sources.md#fm-32-passivity-test)), and testing models is out of scope ([FM-1.1](01-scope.md#fm-11-scope)). Their results enter only as Documented, cited to the write-up. Rules version 2026-10-15.
+Two of the sources fall outside this manual: reading an agent's inbox fails the passivity test ([FM-3.2](03-sources.md#fm-32-passivity-test)), and testing models is out of scope ([FM-1.1](01-scope.md#fm-11-scope)). Their results enter only as Documented, cited to the write-up. Rules version 2026-10-11.
 
 **Conclusions.**
 
@@ -233,7 +233,7 @@ Two of the sources fall outside this manual: reading an agent's inbox fails the 
 | `bx-ua`, `bx_et` anti-bot tokens | `antibot.baxia` |
 | `kind=body1-0` on inbox requests | `marker.callback_seq` (not `kind=start`) |
 | webhook.site inbox URLs | `exfil.webhook_site` (links) |
-| A `Via` header ending `(hysandbox-ats)` | `header.via_hysandbox` (significant), `header.via_ats` |
+| A `Via` header ending `(hysandbox-ats)` | `header.via_hysandbox` (significant), `header.via_ats`; one `proxy_headers` group |
 | `python-requests/2.32.5`, `curl/8.14.1`, bare `Accept-Encoding: gzip` | `header.scripted_ua`, `header.gzip_only_requests` (weight 1 each) |
 | "claude" inside a tag value | None: `selfid.vendor_name` needs a whole word, and would be level 1 if it fired |
 

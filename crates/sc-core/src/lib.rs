@@ -10,6 +10,7 @@ pub mod attribution;
 pub mod bursts;
 pub mod capture;
 pub mod chains;
+pub mod crosswalk;
 pub mod declared;
 pub mod dialect;
 pub mod endpoints;
@@ -30,15 +31,17 @@ pub mod recurrence;
 pub mod redact;
 pub mod report;
 pub mod rules;
+pub mod scope;
 pub mod securitytxt;
 pub mod sort;
 pub mod stamp;
 pub mod swarm;
 pub mod timing;
 pub mod urlquery;
+mod weburl;
 
 pub use agentness::{AgentAssessment, AgentLevel, AgentSignal, GradeDecision};
-pub use analyze::{Analysis, Cluster, ObsResult, analyze};
+pub use analyze::{Analysis, Cluster, KnowledgeHints, ObsResult, Origin, analyze, is_context_kind};
 pub use attribution::{AttributionLabel, Claim, Evidence, Role, Tag, attribute};
 pub use bursts::{ArchiveBurst, archive_bursts};
 pub use chains::{Chain, Pace};
@@ -53,8 +56,8 @@ pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, Tactic, Tier,
-    TsKind, fmt_ts, parse_ts, top_counts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SourceKind, Tactic,
+    Tier, TsKind, fmt_ts, parse_ts, top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use plant::{Corroboration, PlantSignal, PlantSignalKind};

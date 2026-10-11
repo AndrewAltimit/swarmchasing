@@ -1,15 +1,14 @@
-//! What a cluster looks like: its tier, timing and the descriptive hints
-//! (encoding, paths, payload dialect, fan-out, cut lengths) assembled over
-//! its members. Hints are shown in reports; none changes a score or a link.
+//! What a cluster looks like: its tier and counts ([`base`]), then one
+//! function per enrichment the pipeline runs over it (timing, fingerprints,
+//! paths, payload dialect, fan-out, prose, declarations, provenance).
+//! Hints are shown in reports; none changes a score or a link.
 
 use super::{Cluster, ObsResult};
 use crate::fanout::FanRequest;
 use crate::model::{IndicatorKind, LinkFeature, Tactic, Tier};
 use crate::paths::PathStats;
-use crate::rules::Rules;
-use crate::timing::{
-    Span, TimeBasis, parse_date_tag, request_like, rhythm_of, stale_dates, timing,
-};
+use crate::rules::{Linking, Rules};
+use crate::timing::{Span, TimeBasis, request_like, rhythm_of, stale_dates, timing};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// Unflagged requests by target host: the context path hints read around a
@@ -30,15 +29,15 @@ pub(super) fn unflagged_by_host(results: &[ObsResult]) -> HashMap<&str, Vec<usiz
 /// Distinct declarations kept per cluster.
 const MAX_DECLARED: usize = 8;
 
-/// One cluster of `members` (indexes into `results`), not yet numbered.
-pub(super) fn cluster(
+/// One cluster of `members` (indexes into `results`), not yet numbered or
+/// described: members in time order, tier, score, rule and kind counts,
+/// hosts, networks, user agents and the features that joined it.
+pub(super) fn base(
     results: &[ObsResult],
     mut members: Vec<usize>,
     joined: &HashSet<(usize, &LinkFeature)>,
-    unflagged_by_host: &HashMap<&str, Vec<usize>>,
     rules: &Rules,
 ) -> Cluster {
-    let cfg = &rules.set.linking;
     crate::sort::by_key(&mut members, |&i| results[i].obs.ts);
     let mut rules_seen: BTreeMap<String, usize> = BTreeMap::new();
     let mut kinds: BTreeMap<IndicatorKind, usize> = BTreeMap::new();
@@ -47,20 +46,9 @@ pub(super) fn cluster(
     let mut hosts: BTreeMap<String, usize> = BTreeMap::new();
     let mut asns: BTreeMap<u32, usize> = BTreeMap::new();
     let mut uas: BTreeMap<String, usize> = BTreeMap::new();
-    let mut encodings: BTreeMap<String, usize> = BTreeMap::new();
-    let mut header_sets: BTreeMap<String, usize> = BTreeMap::new();
     let mut feats: BTreeMap<&LinkFeature, usize> = BTreeMap::new();
-    let mut relay_stacks: BTreeMap<String, usize> = BTreeMap::new();
-    let mut declared: BTreeMap<(String, Option<String>), usize> = BTreeMap::new();
     for &i in &members {
         let r = &results[i];
-        let params = r.layers.iter().flat_map(|l| l.params.iter());
-        if let Some(d) = crate::declared::declared(&r.obs, params) {
-            *declared.entry(d).or_default() += 1;
-        }
-        if let Some(s) = relay_stack(r) {
-            *relay_stacks.entry(s).or_default() += 1;
-        }
         for h in &r.hits {
             *rules_seen.entry(h.rule_id.clone()).or_default() += 1;
             *kinds.entry(h.kind).or_default() += 1;
@@ -80,23 +68,34 @@ pub(super) fn cluster(
         if let Some(u) = &r.obs.user_agent {
             *uas.entry(u.clone()).or_default() += 1;
         }
-        let enc = crate::fingerprint::encoding(&r.obs.url);
-        if enc.informative() {
-            *encodings.entry(enc.style).or_default() += 1;
-        }
-        if let Some(h) = crate::fingerprint::header_set(&r.obs.headers) {
-            *header_sets.entry(h.hash).or_default() += 1;
-        }
         for f in r.features.iter().filter(|f| joined.contains(&(i, *f))) {
             *feats.entry(f).or_default() += 1;
         }
     }
-    let score: i32 = rules_seen
-        .keys()
-        .filter_map(|id| rules.rule(id))
-        .map(|r| r.weight)
-        .sum();
-    let tier = cluster_tier(results, &members);
+    let score = rules.score(rules_seen.keys().map(String::as_str));
+    Cluster {
+        tier: cluster_tier(results, &members),
+        score,
+        rules: rules_seen,
+        kinds,
+        tactics,
+        artifacts,
+        target_hosts: hosts,
+        asns,
+        user_agents: uas,
+        link_features: feats
+            .into_iter()
+            .filter(|&(_, n)| n > 1)
+            .map(|(f, _)| f.clone())
+            .collect(),
+        members,
+        ..Default::default()
+    }
+}
+
+/// Span, time basis, cadence, rhythm, stale date tags and runs.
+pub(super) fn cluster_timing(c: &mut Cluster, results: &[ObsResult], cfg: &Linking) {
+    let members = &c.members;
     let ts: Vec<i64> = members.iter().map(|&i| results[i].obs.ts).collect();
     let timed = || {
         members
@@ -120,34 +119,61 @@ pub(super) fn cluster(
     t.stale_dates = stale_dates(
         &members
             .iter()
-            .filter_map(|&i| {
-                let r = &results[i];
-                r.layers
-                    .iter()
-                    .flat_map(|l| l.params.iter())
-                    .find_map(|(_, v)| parse_date_tag(v))
-                    .map(|d| (r.obs.ts, d))
-            })
-            .filter(|&(ts, _)| ts > 0)
+            .filter_map(|&i| results[i].date_tag())
             .collect::<Vec<_>>(),
     );
-    let runs = split_runs(&ts, cfg.run_gap_secs);
-    let paths = path_stats(
-        results,
-        &members,
-        unflagged_by_host,
-        (t.start, t.end),
-        cfg.window_secs,
-        &rules.set.paths,
-    );
-    let dialect = crate::dialect::dialect(
-        &members
+    c.runs = split_runs(&ts, cfg.run_gap_secs);
+    c.time_basis = time_basis;
+    c.start = t.start;
+    c.end = t.end;
+    c.timing = t;
+}
+
+/// URL encoding styles, header sets and relay stacks of the members.
+pub(super) fn fingerprints(c: &mut Cluster, results: &[ObsResult]) {
+    for &i in &c.members {
+        let r = &results[i];
+        if let Some(s) = relay_stack(r) {
+            *c.relay_stacks.entry(s).or_default() += 1;
+        }
+        let enc = crate::fingerprint::encoding(&r.obs.url);
+        if enc.informative() {
+            *c.encodings.entry(enc.style).or_default() += 1;
+        }
+        if let Some(h) = crate::fingerprint::header_set(&r.obs.headers) {
+            *c.header_sets.entry(h.hash).or_default() += 1;
+        }
+    }
+}
+
+/// Canonical test payloads and the lengths truncated URLs were cut at.
+pub(super) fn dialect(c: &mut Cluster, results: &[ObsResult], rules: &Rules) {
+    c.dialect = crate::dialect::dialect(
+        &c.members
             .iter()
             .map(|&i| payload_variants(&results[i]))
             .collect::<Vec<_>>(),
     );
-    let fanout = crate::fanout::fanout(
-        &members
+    c.cut_lengths = crate::dialect::cut_lengths(
+        &c.members
+            .iter()
+            .map(|&i| {
+                let r = &results[i];
+                let fired = r
+                    .hits
+                    .iter()
+                    .any(|h| h.rule_id == rules.set.cut_lengths.rule);
+                (r.obs.url.as_str(), fired)
+            })
+            .collect::<Vec<_>>(),
+        &rules.set.cut_lengths,
+    );
+}
+
+/// Widths of one-second batches, from request-like times only.
+pub(super) fn fanout(c: &mut Cluster, results: &[ObsResult], rules: &Rules) {
+    c.fanout = crate::fanout::fanout(
+        &c.members
             .iter()
             .map(|&i| {
                 let r = &results[i];
@@ -164,21 +190,11 @@ pub(super) fn cluster(
             .collect::<Vec<_>>(),
         &rules.set.fanout,
     );
-    let cut_lengths = crate::dialect::cut_lengths(
-        &members
-            .iter()
-            .map(|&i| {
-                let r = &results[i];
-                let fired = r
-                    .hits
-                    .iter()
-                    .any(|h| h.rule_id == rules.set.cut_lengths.rule);
-                (r.obs.url.as_str(), fired)
-            })
-            .collect::<Vec<_>>(),
-        &rules.set.cut_lengths,
-    );
-    let prose = crate::prose::prose_stats(members.iter().map(|&i| {
+}
+
+/// Prose in parameter values and its guessed languages.
+pub(super) fn prose(c: &mut Cluster, results: &[ObsResult]) {
+    c.prose = crate::prose::prose_stats(c.members.iter().map(|&i| {
         let r = &results[i];
         let values = r
             .layers
@@ -187,55 +203,34 @@ pub(super) fn cluster(
             .collect();
         (r.target_host.as_deref(), values)
     }));
-    let provenance = crate::plant::provenance_counts(results, &members);
-    let corroboration = crate::plant::corroboration(results, &members);
-    Cluster {
-        id: String::new(),
-        key: String::new(),
-        start: t.start,
-        end: t.end,
-        time_basis,
-        members,
-        tier,
-        score,
-        rules: rules_seen,
-        kinds,
-        tactics,
-        artifacts,
-        target_hosts: hosts,
-        asns,
-        user_agents: uas,
-        encodings,
-        header_sets,
-        paths,
-        dialect,
-        fanout,
-        cut_lengths,
-        relay_stacks,
-        prose,
-        benchmarks: BTreeMap::new(),
-        stale_knowledge: Vec::new(),
-        declared: declared
-            .into_iter()
-            .take(MAX_DECLARED)
-            .map(|((text, contact), records)| crate::declared::Declared {
-                text,
-                contact,
-                records,
-            })
-            .collect(),
-        link_features: feats
-            .into_iter()
-            .filter(|&(_, n)| n > 1)
-            .map(|(f, _)| f.clone())
-            .collect(),
-        runs,
-        timing: t,
-        provenance,
-        corroboration,
-        plant_signals: Vec::new(),
-        agent: Default::default(),
+}
+
+/// Members announcing testing or research, with the contact they name.
+pub(super) fn declared(c: &mut Cluster, results: &[ObsResult]) {
+    let mut declared: BTreeMap<(String, Option<String>), usize> = BTreeMap::new();
+    for &i in &c.members {
+        let r = &results[i];
+        let params = r.layers.iter().flat_map(|l| l.params.iter());
+        if let Some(d) = crate::declared::declared(&r.obs, params) {
+            *declared.entry(d).or_default() += 1;
+        }
     }
+    c.declared = declared
+        .into_iter()
+        .take(MAX_DECLARED)
+        .map(|((text, contact), records)| crate::declared::Declared {
+            text,
+            contact,
+            records,
+        })
+        .collect();
+}
+
+/// Members by provenance, and whether more than one kind of source stands
+/// behind them.
+pub(super) fn provenance(c: &mut Cluster, results: &[ObsResult]) {
+    c.origin.provenance = crate::plant::provenance_counts(results, &c.members);
+    c.origin.corroboration = crate::plant::corroboration(results, &c.members);
 }
 
 /// A cluster's tier: its strongest member's, raised one step (suggestive to
@@ -271,16 +266,10 @@ pub(super) fn cluster_tier(results: &[ObsResult], members: &[usize]) -> Tier {
     if corroborated { Tier::Significant } else { top }
 }
 
-/// Kinds that describe how a request was sent rather than what it did.
-pub(crate) fn is_context_kind(k: IndicatorKind) -> bool {
-    matches!(
-        k,
-        IndicatorKind::Relay
-            | IndicatorKind::CacheBuster
-            | IndicatorKind::SelfId
-            | IndicatorKind::Header
-            | IndicatorKind::Outcome
-    )
+/// Kinds that describe how a request was sent rather than what it did
+/// ([`IndicatorKind::is_context`]).
+pub fn is_context_kind(k: IndicatorKind) -> bool {
+    k.is_context()
 }
 
 pub(super) fn split_runs(ts: &[i64], gap: i64) -> Vec<Span> {
@@ -356,7 +345,24 @@ fn payload_variants(r: &ObsResult) -> BTreeSet<String> {
 }
 
 /// Path hints for one cluster: its members plus the unflagged requests on its
-/// hosts from `window` seconds before its start to its end.
+/// hosts from `window` seconds before its start to its end. Reads the
+/// cluster's span, so it runs after [`cluster_timing`].
+pub(super) fn paths(
+    c: &mut Cluster,
+    results: &[ObsResult],
+    unflagged_by_host: &HashMap<&str, Vec<usize>>,
+    rules: &Rules,
+) {
+    c.paths = path_stats(
+        results,
+        &c.members,
+        unflagged_by_host,
+        (c.start, c.end),
+        rules.set.linking.window_secs,
+        &rules.set.paths,
+    );
+}
+
 fn path_stats(
     results: &[ObsResult],
     members: &[usize],

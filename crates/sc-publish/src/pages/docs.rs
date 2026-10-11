@@ -6,9 +6,16 @@
 //! Links to other docs go to their site pages; links to other repository
 //! files go to GitHub; `http(s)` links stay as they are; any other scheme
 //! is shown as text, never as a link.
+//!
+//! With [`Terms`], the Field Manual becomes hypertext: `FM-n.m` section ids
+//! and `SC-Tn` tactic ids in running text link to their sections, and in
+//! the manual's chapters the first use of each glossary term links to its
+//! definition (with the short definition for a tooltip). The glossary's
+//! terms are `<dfn>`s with anchors.
 
 use super::html::esc;
 use super::layout::rel_root;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
@@ -29,6 +36,110 @@ pub struct Doc {
     /// The body after its first heading.
     pub html: String,
     pub toc: Vec<TocEntry>,
+    /// The plain text under each heading, by anchor: for the section
+    /// search index.
+    pub sections: Vec<(String, String)>,
+}
+
+/// Longest text kept per section for the search index, in characters.
+const SECTION_TEXT: usize = 700;
+
+/// What auto-links: hrefs relative to the site root.
+#[derive(Debug, Clone, Default)]
+pub struct Terms {
+    /// `FM-4.1` → `docs/manual/04-indicators/#fm-41-grading-records`.
+    pub fm: BTreeMap<String, String>,
+    /// `SC-T4` → the tactic's row in the taxonomy.
+    pub tactics: BTreeMap<String, String>,
+    /// (term, short definition, href), longest term first.
+    pub gloss: Vec<(String, String, String)>,
+}
+
+/// One Field Manual section, for the index and the search.
+#[derive(Debug, Clone)]
+pub struct FmSection {
+    /// `FM-4.1`.
+    pub id: String,
+    pub title: String,
+    /// The chapter's page title.
+    pub chapter: String,
+    /// The page directory (`docs/manual/04-indicators/`) and the anchor.
+    pub url: String,
+    pub anchor: String,
+    /// The section's plain text, cut short.
+    pub text: String,
+}
+
+/// Every `FM-n.m` section of the rendered manual, in chapter order.
+pub fn fm_sections(docs: &[Doc]) -> Vec<FmSection> {
+    let mut out = Vec::new();
+    let mut manual: Vec<&Doc> = docs
+        .iter()
+        .filter(|d| d.src.starts_with("docs/manual/"))
+        .collect();
+    manual.sort_by(|a, b| a.src.cmp(&b.src));
+    for d in manual {
+        for (level, anchor, text) in &d.toc {
+            let Some((id, title)) = text.split_once(' ') else {
+                continue;
+            };
+            if *level != 2 || !is_fm_id(id) {
+                continue;
+            }
+            let body = d
+                .sections
+                .iter()
+                .find(|(a, _)| a == anchor)
+                .map(|(_, t)| t.clone())
+                .unwrap_or_default();
+            out.push(FmSection {
+                id: id.to_string(),
+                title: title.trim().to_string(),
+                chapter: d.title.clone(),
+                url: d.url.clone(),
+                anchor: anchor.clone(),
+                text: body,
+            });
+        }
+    }
+    out
+}
+
+/// `FM-4.10`: digits, a dot, digits.
+fn is_fm_id(s: &str) -> bool {
+    s.strip_prefix("FM-")
+        .and_then(|r| r.split_once('.'))
+        .is_some_and(|(a, b)| {
+            !a.is_empty()
+                && !b.is_empty()
+                && a.bytes().all(|c| c.is_ascii_digit())
+                && b.bytes().all(|c| c.is_ascii_digit())
+        })
+}
+
+/// The glossary's terms and short definitions, from its table.
+pub fn glossary_terms(text: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let lines: Vec<&str> = text.lines().collect();
+    for (i, l) in lines.iter().enumerate() {
+        let t = l.trim();
+        if !t.starts_with('|')
+            || is_table_sep(t)
+            || lines.get(i + 1).is_some_and(|n| is_table_sep(n))
+        {
+            continue;
+        }
+        let c = cells(t);
+        if c.len() >= 2 && !c[0].is_empty() {
+            out.push((strip_inline(&c[0]), strip_inline(&c[1])));
+        }
+    }
+    out
+}
+
+/// The anchor a glossary term gets.
+pub fn term_anchor(term: &str) -> String {
+    format!("term-{}", slug(term))
 }
 
 /// Where a doc is published: `docs/README.md` is the docs index, the
@@ -98,6 +209,8 @@ pub struct Links<'a> {
     pub docs: &'a BTreeSet<String>,
     /// `https://github.com/<owner>/<repo>`.
     pub repo: &'a str,
+    /// Section, tactic and glossary links, or none.
+    pub terms: Option<&'a Terms>,
 }
 
 struct Ctx<'a> {
@@ -106,17 +219,29 @@ struct Ctx<'a> {
     links: &'a Links<'a>,
     ids: BTreeMap<String, usize>,
     toc: Vec<TocEntry>,
+    sections: Vec<(String, String)>,
+    /// Inside a link or a heading: no auto-links.
+    quiet: Cell<bool>,
+    /// Glossary terms already linked on this page.
+    glossed: RefCell<BTreeSet<String>>,
+    /// Link glossary terms (the manual's chapters, not the glossary).
+    gloss_on: bool,
 }
 
 /// Render one doc.
 pub fn render_doc(src: &str, text: &str, links: &Links) -> Doc {
     let url = doc_url(src);
+    let in_manual = src.starts_with("docs/manual/");
     let mut ctx = Ctx {
         src,
         page: format!("{url}index.html"),
         links,
         ids: BTreeMap::new(),
         toc: Vec::new(),
+        sections: Vec::new(),
+        quiet: Cell::new(false),
+        glossed: RefCell::new(BTreeSet::new()),
+        gloss_on: in_manual && !src.ends_with("/glossary.md") && !src.ends_with("/references.md"),
     };
     let lines: Vec<&str> = text.lines().collect();
     // The first level-1 heading is the page title, not part of the body.
@@ -131,6 +256,15 @@ pub fn render_doc(src: &str, text: &str, links: &Links) -> Doc {
             continue;
         }
         body_lines.push(*l);
+    }
+    // A manual chapter opens with a hand-written "Manual index · Previous ·
+    // Next" line for reading on the code host. The site renders its own
+    // pager, so the line is dropped here, and it is not the summary.
+    if in_manual
+        && let Some(i) = body_lines.iter().position(|l| !l.trim().is_empty())
+        && body_lines[i].starts_with("[Manual index](")
+    {
+        body_lines.remove(i);
     }
     let summary = body_lines
         .iter()
@@ -151,6 +285,7 @@ pub fn render_doc(src: &str, text: &str, links: &Links) -> Doc {
         summary: strip_inline(&summary),
         html,
         toc: ctx.toc,
+        sections: ctx.sections,
     }
 }
 
@@ -262,11 +397,16 @@ fn blocks(lines: &[&str], ctx: &mut Ctx) -> String {
             if level <= 3 {
                 ctx.toc.push((level, id.clone(), strip_inline(text)));
             }
+            if level == 2 {
+                ctx.sections.push((id.clone(), String::new()));
+            }
+            ctx.quiet.set(true);
+            let h = inline(text, ctx);
+            ctx.quiet.set(false);
             let _ = writeln!(
                 out,
-                "<h{level} id=\"{}\">{}<a class=\"anchor\" href=\"#{}\" aria-label=\"Link to this section\">#</a></h{level}>",
+                "<h{level} id=\"{}\">{h}<a class=\"anchor\" href=\"#{}\" aria-label=\"Link to this section\">#</a></h{level}>",
                 esc(&id),
-                inline(text, ctx),
                 esc(&id)
             );
             i += 1;
@@ -295,10 +435,28 @@ fn blocks(lines: &[&str], ctx: &mut Ctx) -> String {
                 let _ = write!(out, "<th scope=\"col\">{}</th>", inline(h, ctx));
             }
             out.push_str("</tr></thead><tbody>");
+            let glossary = ctx.src.ends_with("manual/glossary.md");
             for r in &rows {
                 out.push_str("<tr>");
-                for c in r {
-                    let _ = write!(out, "<td>{}</td>", inline(c, ctx));
+                for (k, c) in r.iter().enumerate() {
+                    let plain = strip_inline(c);
+                    if k == 0 && glossary && !plain.is_empty() {
+                        let _ = write!(
+                            out,
+                            "<td><dfn id=\"{}\">{}</dfn></td>",
+                            esc(&term_anchor(&plain)),
+                            inline(c, ctx)
+                        );
+                    } else if k == 0 && is_tactic_id(&plain) {
+                        let _ = write!(
+                            out,
+                            "<td id=\"{}\">{}</td>",
+                            esc(&plain.to_ascii_lowercase()),
+                            inline(c, ctx)
+                        );
+                    } else {
+                        let _ = write!(out, "<td>{}</td>", inline(c, ctx));
+                    }
                 }
                 out.push_str("</tr>");
             }
@@ -316,9 +474,27 @@ fn blocks(lines: &[&str], ctx: &mut Ctx) -> String {
 
 fn flush_para(para: &mut Vec<&str>, out: &mut String, ctx: &mut Ctx) {
     if !para.is_empty() {
-        let _ = writeln!(out, "<p>{}</p>", inline(&para.join(" "), ctx));
+        let text = para.join(" ");
+        if let Some((_, body)) = ctx.sections.last_mut()
+            && body.chars().count() < SECTION_TEXT
+        {
+            if !body.is_empty() {
+                body.push(' ');
+            }
+            body.push_str(&strip_inline(&text));
+            if body.chars().count() > SECTION_TEXT {
+                *body = body.chars().take(SECTION_TEXT).collect();
+            }
+        }
+        let _ = writeln!(out, "<p>{}</p>", inline(&text, ctx));
         para.clear();
     }
+}
+
+/// `SC-T4`: a tactic id.
+fn is_tactic_id(s: &str) -> bool {
+    s.strip_prefix("SC-T")
+        .is_some_and(|d| !d.is_empty() && d.len() <= 2 && d.bytes().all(|c| c.is_ascii_digit()))
 }
 
 /// One list starting at `lines[i]`; returns the index after it.
@@ -585,7 +761,9 @@ fn inline(s: &str, ctx: &Ctx) -> String {
             }
             b'[' => {
                 if let Some((text, href, end)) = parse_link(s, i) {
+                    let was = ctx.quiet.replace(true);
                     let label = inline(text, ctx);
+                    ctx.quiet.set(was);
                     match resolve(href, ctx) {
                         Some(url) => {
                             let ext = url.starts_with("http");
@@ -626,11 +804,86 @@ fn inline(s: &str, ctx: &Ctx) -> String {
             }
             _ => {}
         }
+        if let Some((html, len)) = autolink(s, i, ctx) {
+            out.push_str(&html);
+            i += len;
+            continue;
+        }
         let ch = s[i..].chars().next().unwrap_or(' ');
         out.push_str(&esc(ch.encode_utf8(&mut [0; 4])));
         i += ch.len_utf8();
     }
     out
+}
+
+/// A section id, tactic id or glossary term starting at byte `i`, as a
+/// link, with its length in bytes. Only at a word start, never inside a
+/// link or a heading.
+fn autolink(s: &str, i: usize, ctx: &Ctx) -> Option<(String, usize)> {
+    let terms = ctx.links.terms?;
+    if ctx.quiet.get() {
+        return None;
+    }
+    let b = s.as_bytes();
+    let word_char = |c: u8| c.is_ascii_alphanumeric() || c == b'-' || c == b'_';
+    if i > 0 && word_char(b[i - 1]) {
+        return None;
+    }
+    let root = rel_root(&ctx.page);
+    let link = |class: &str, href: &str, text: &str, title: Option<&str>| {
+        format!(
+            "<a class=\"{class}\" href=\"{}{}\"{}>{}</a>",
+            esc(&root),
+            esc(href),
+            title.map_or_else(String::new, |t| format!(" data-def=\"{}\"", esc(t))),
+            esc(text)
+        )
+    };
+    let rest = &s[i..];
+    if let Some(tail) = rest.strip_prefix("FM-") {
+        // FM-<digits>.<digits>, not followed by more of an id.
+        let n = tail
+            .bytes()
+            .take_while(|c| c.is_ascii_digit() || *c == b'.')
+            .count();
+        let id = rest[..3 + n].trim_end_matches('.');
+        if is_fm_id(id)
+            && !rest[id.len()..]
+                .bytes()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphanumeric())
+            && let Some(href) = terms.fm.get(id)
+        {
+            return Some((link("fm-link", href, id, None), id.len()));
+        }
+    }
+    if let Some(tail) = rest.strip_prefix("SC-T") {
+        let n = tail.bytes().take_while(u8::is_ascii_digit).count();
+        let id = &rest[..4 + n];
+        if is_tactic_id(id)
+            && !rest[id.len()..].bytes().next().is_some_and(word_char)
+            && let Some(href) = terms.tactics.get(id)
+        {
+            return Some((link("fm-link", href, id, None), id.len()));
+        }
+    }
+    if ctx.gloss_on {
+        for (term, def, href) in &terms.gloss {
+            let len = term.len();
+            let Some(cand) = rest.get(..len) else {
+                continue;
+            };
+            if !cand.eq_ignore_ascii_case(term)
+                || rest[len..].bytes().next().is_some_and(word_char)
+                || ctx.glossed.borrow().contains(term)
+            {
+                continue;
+            }
+            ctx.glossed.borrow_mut().insert(term.clone());
+            return Some((link("gloss", href, cand, Some(def)), len));
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -652,8 +905,20 @@ mod tests {
             &Links {
                 docs: &docs,
                 repo: "https://github.com/o/r",
+                terms: None,
             },
         )
+    }
+
+    #[test]
+    fn drops_the_hand_written_manual_nav() {
+        let text = "# 2. Principles\n\n[Manual index](README.md) · Previous: [1. Scope](01-scope.md)\n\nThe body.\n";
+        let d = render("docs/manual/02-principles.md", text);
+        assert_eq!(d.summary, "The body.");
+        assert!(!d.html.contains("Manual index"), "{}", d.html);
+        // Elsewhere the same line is ordinary text.
+        let d = render("docs/reference/cases.md", text);
+        assert!(d.html.contains("Manual index"));
     }
 
     #[test]

@@ -45,7 +45,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-10"
+version = "2026-10-11"
 
 [thresholds]
 suggestive = 3
@@ -179,6 +179,7 @@ common = [
 # ── Relays: fetch-through / conversion services ────────────────────────────
 [[rule]]
 id = "relay.jina"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -188,6 +189,7 @@ description = "Jina Reader: fetches a page server-side and returns Markdown"
 
 [[rule]]
 id = "relay.markdown_new"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -197,6 +199,7 @@ description = "URL-to-Markdown converter"
 
 [[rule]]
 id = "relay.microlink"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -206,6 +209,7 @@ description = "Microlink headless fetch API"
 
 [[rule]]
 id = "relay.hrefli"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -215,6 +219,7 @@ description = "Referrer-stripping redirector"
 
 [[rule]]
 id = "relay.translate_goog"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -224,6 +229,7 @@ description = "Google Translate proxy host rewriting"
 
 [[rule]]
 id = "relay.allorigins"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "host"
@@ -233,6 +239,7 @@ description = "CORS proxy"
 
 [[rule]]
 id = "relay.corsproxy"
+group = "relay"
 kind = "relay"
 tactic = "T1"
 target = "url"
@@ -270,6 +277,7 @@ description = "CodeSandbox"
 
 [[rule]]
 id = "carrier.data_url_script"
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"
@@ -279,6 +287,7 @@ description = "data: URL carrying an HTML program that makes requests"
 
 [[rule]]
 id = "carrier.inline_fetch_program"
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"
@@ -289,6 +298,7 @@ description = "Inline program fetching other URLs from inside a remote browser"
 
 [[rule]]
 id = "carrier.form_post_program"
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"
@@ -300,6 +310,7 @@ description = "Self-submitting POST form delivered as a program"
 
 [[rule]]
 id = "carrier.html_program"
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"
@@ -312,6 +323,7 @@ description = "HTML page with script carried inside the request"
 # ── Exploit payloads ───────────────────────────────────────────────────────
 [[rule]]
 id = "exploit.sqli_union"
+group = "sqli"
 kind = "exploit"
 tactic = "T4"
 target = "url"
@@ -326,6 +338,7 @@ description = "SQL injection: UNION SELECT"
 
 [[rule]]
 id = "exploit.sqli_boolean"
+group = "sqli"
 kind = "exploit"
 tactic = "T4"
 target = "param_value"
@@ -338,6 +351,7 @@ description = "SQL injection: boolean / time-based probe"
 
 [[rule]]
 id = "exploit.traversal"
+group = "traversal"
 kind = "exploit"
 tactic = "T4"
 target = "url"
@@ -348,6 +362,7 @@ description = "Path traversal / sensitive file probe"
 
 [[rule]]
 id = "exploit.traversal_single"
+group = "traversal"
 kind = "exploit"
 tactic = "T4"
 target = "url"
@@ -359,6 +374,7 @@ description = "Single path-traversal step (often encoded as ..%2F)"
 
 [[rule]]
 id = "exploit.sqli_quote"
+group = "sqli"
 kind = "exploit"
 tactic = "T4"
 target = "param_value"
@@ -409,6 +425,7 @@ description = "Out-of-range ID values (often precede injection probes)"
 # ── Agent markers / tags ───────────────────────────────────────────────────
 [[rule]]
 id = "marker.uq_tags"
+group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "param_name"
@@ -418,6 +435,7 @@ description = "urlquery cache-busting / tracking tags seen in agent fleets"
 
 [[rule]]
 id = "marker.test_tag"
+group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -428,6 +446,7 @@ description = "Test tags agents add to URLs"
 
 [[rule]]
 id = "marker.oai_tag"
+group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -446,6 +465,7 @@ description = "Sequenced callback labels (headers0, body0-0, done)"
 
 [[rule]]
 id = "marker.title_write"
+group = "program"
 kind = "agent_marker"
 tactic = "T7"
 target = "url"
@@ -462,6 +482,7 @@ description = "Program writes its result into the page title"
 
 [[rule]]
 id = "marker.md_link"
+group = "markdown"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -471,6 +492,7 @@ description = "Markdown link syntax `[text](https://...)` inside a request URL"
 
 [[rule]]
 id = "marker.md_url_wrapper"
+group = "markdown"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -519,6 +541,7 @@ description = "Redirect or callback parameter left pointing at example.com (temp
 
 [[rule]]
 id = "marker.tool_call_markup"
+group = "tool_call"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -528,6 +551,7 @@ description = "Function-call wrapper markup or tool-call fields from a model's o
 
 [[rule]]
 id = "marker.tool_call_json"
+group = "tool_call"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -541,6 +565,7 @@ description = "Tool-call JSON arguments inside a request ({\"url\": ..., \"argum
 
 [[rule]]
 id = "marker.json_quote_residue"
+group = "tool_call"
 kind = "agent_marker"
 artifact = true
 target = "url"
@@ -689,6 +714,7 @@ description = "webhook.site inbox (callback / exfil channel)"
 
 [[rule]]
 id = "exfil.requestbin"
+group = "oast"
 kind = "exfil"
 tactic = "T7"
 target = "url"
@@ -699,6 +725,7 @@ description = "Request-catcher / OAST inbox (a per-user subdomain on the service
 
 [[rule]]
 id = "exfil.oast_service"
+group = "oast"
 kind = "exfil"
 tactic = "T7"
 target = "url"
@@ -777,6 +804,7 @@ description = "General-purpose OCR API pointed at a CAPTCHA image"
 # ── Header fingerprints ────────────────────────────────────────────────────
 [[rule]]
 id = "header.via_hysandbox"
+group = "proxy_headers"
 kind = "header"
 artifact = true
 target = "header"
@@ -787,6 +815,7 @@ description = "Via header from a hysandbox Apache Traffic Server proxy"
 
 [[rule]]
 id = "header.via_ats"
+group = "proxy_headers"
 kind = "header"
 artifact = true
 target = "header"
@@ -796,6 +825,7 @@ description = "Request passed through Apache Traffic Server"
 
 [[rule]]
 id = "header.gzip_only_requests"
+group = "proxy_headers"
 kind = "header"
 artifact = true
 target = "header"
@@ -849,6 +879,98 @@ target = "url"
 pattern = "hysandbox\\.tencent-cloud\\.com"
 weight = 3
 description = "Tencent hysandbox hostnames"
+
+# ── Evasion and exfiltration seen in published incidents ───────────────────
+# Reconstructed from the write-ups the file header cites. Never fetched.
+[[rule]]
+id = "exploit.double_encoded_path"
+kind = "exploit"
+tactic = "T4"
+target = "url"
+# A percent escape surviving inside a path segment after the engine decoded
+# the URL once: `F%2561cts` decodes to `F%61cts`, so `%61` (`a`) is still
+# there, where a normally once-encoded path would be plain text. Only escapes
+# of a printable graphic character (`%25`-`%7a`, so not `%20` space) count, so
+# `annual%2520report` (a double-encoded space) is left alone.
+pattern = "/[a-z0-9_.~-]*%(2[5-9a-f]|[3-6][0-9a-f]|7[0-9a])"
+weight = 4
+significant = true
+description = "Double-encoded path segment (F%2561cts -> F%61cts), an input-filter evasion"
+
+[[rule]]
+id = "exploit.double_encoded_meta"
+kind = "exploit"
+tactic = "T4"
+target = "param_value"
+# An injection metacharacter (`< > ' " ( )`) left percent-encoded in a value
+# that the engine already decoded once: it was double-encoded to survive one
+# layer of decoding (`%253Cscript%253E` arrives as `%3Cscript%3E`). An
+# ordinary once-encoded value decodes to the character itself, so this fires
+# only on the surviving escape of a deliberate double-encoding.
+pattern = "%(3[ce]|27|22|28|29)"
+weight = 4
+significant = true
+description = "Double-encoded injection metacharacter in a parameter value (%253C -> %3C)"
+
+[[rule]]
+id = "antibot.incapsula"
+kind = "anti_bot"
+tactic = "T3"
+target = "url"
+pattern = "_Incapsula_Resource"
+weight = 3
+description = "Imperva Incapsula anti-bot resource requested directly"
+
+[[rule]]
+id = "exfil.httpbin_data"
+kind = "exfil"
+tactic = "T7"
+target = "url"
+# A long value on a `d`, `e`, `data`, `out`, `resp` or `result` parameter of an
+# echo service: a program sending a fetched response or error text back out by
+# putting it in the URL it navigates to. Ordinary echo calls carry short
+# values; this wants 40 characters or more.
+pattern = "(httpbin\\.org|httpbun\\.(com|org))/(get|anything)[^#]*[?&](d|e|data|out|resp|result)=[^&#]{40,}"
+weight = 3
+significant = true
+description = "Fetched data sent back inside an echo-service URL (httpbin get?d=...)"
+
+[[rule]]
+id = "marker.oai_prefix"
+kind = "agent_marker"
+artifact = true
+group = "run_tag"
+target = "url"
+# `OAI_` or `CHATGPT_` followed by an upper-case/numeric identifier, in a tag
+# or `tok` value (`tok=OAI_META_1312`, `CHATGPT_1610_2000_125192`). Matched
+# case-sensitively: ordinary words are not upper case.
+pattern = "(?-i:\\bOAI_[A-Z][A-Z0-9_]+|\\bCHATGPT_[0-9][0-9A-Z_]+)"
+weight = 3
+description = "OAI_/CHATGPT_ run tag (OpenAI-UNCTAD, US/Canada government reports)"
+
+# ── Declared agent identity (FM-7.11): evidence, never fetched ─────────────
+[[rule]]
+id = "selfid.signature_agent"
+kind = "self_id"
+artifact = true
+target = "header"
+# Web Bot Auth message-signature headers. Their presence shows the client
+# signs its requests; the key is never fetched (the URI is agent-supplied).
+pattern = "^signature-agent:|^signature-input:.*\\bkeyid="
+weight = 1
+description = "Web Bot Auth signature headers (Signature-Agent / Signature-Input)"
+
+[[rule]]
+id = "header.agent_ua"
+kind = "header"
+artifact = true
+target = "user_agent"
+# User agents that name a published agent product. A product that signs its
+# requests but appears here with no signature is a counter-signal the case
+# records; on its own this only says an agent may have sent the request.
+pattern = "ChatGPT-User|OAI-SearchBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-CloudVertexBot|Bytespider|Amazonbot|Meta-ExternalAgent"
+weight = 1
+description = "Known agent product in the user agent (FM-7.11 declared identity)"
 
 # ── ASN → organisation hints (attribution context, never proof) ────────────
 [[asn]]

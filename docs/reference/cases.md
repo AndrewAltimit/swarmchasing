@@ -2,6 +2,8 @@
 
 A case is one incident's working directory under `<data>/cases/<id>/`: its records, `case.toml`, reports, drafts, evidence bundles and exports. Cases never go into git, because an open case names organisations on unconfirmed evidence and private reports carry details that public notices withhold. The day-to-day flow is in the [admin workflow](../guides/admin-workflow.md).
 
+The CLI reads and writes the files; what a case holds and every decision on it are in [`sc-case`](../../crates/sc-case/README.md), and the STIX and MISP builders in [`sc-stix`](../../crates/sc-stix/README.md), so the browser toolkit can share them.
+
 ## Opening a case
 
 ```sh
@@ -53,8 +55,8 @@ Each change is logged with its date.
 | `case reread <id>` | Records a re-read of the notice draft as it is now, by its SHA-256. |
 | `case checklist <id>` | Prints the self-review checklist `notice add` runs. |
 | `case rules <id> [--update]` | Shows the pinned rules version against the current one and the records whose tier would change. |
-| `case export <id> --format stix --audience … [--to <contact>]` | Writes the case as a STIX 2.1 bundle ([STIX export](#stix-export)). |
-| `case export <id> --format oecd\|aiid [--site-url …]` | Writes a draft for an AI incident database ([incident database drafts](#incident-database-drafts)). |
+| `case export <id> --format stix\|misp --audience … [--to <contact>]` | Writes the case as a STIX 2.1 bundle or a MISP event ([STIX export](#stix-export), [MISP export](#misp-export)). |
+| `case export <id> --format oecd\|aiid [--site-url …]` | Writes a draft for an AI incident database or reporting framework ([incident database drafts](#incident-database-drafts)). |
 | `case evidence add <id> <log> --org … --host …` | Adds logs an affected operator sent back ([operator evidence](#operator-evidence)). |
 | `case evidence consent <id> <eid> --how …` | Records the operator's agreement to the notice using its logs; `withdraw` reverses it. |
 
@@ -106,6 +108,8 @@ While a fleet has an entry, reports call it a swarm and list each entry as an In
 ## Contacts
 
 `case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each domain is read once a run, whether the read succeeds or not, so endpoints under one registered domain (by the Public Suffix List) share its security.txt and RDAP reads. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
+
+Each contact has a role: `provider`, `affected` (an operator), `registrar`, `host`, `csirt` or `declared_owner`. A role this toolkit version does not know reads as `other`.
 
 `case contact add <id> --party provider|operator|csirt|declared-owner --org … --channel email|form|portal --address … --source <link>` adds a contact found by hand, such as a sector CSIRT or an authorised test's declared owner; `case contact rm <id> <address>` removes one. `case status` lists a missing provider contact and a missing notice draft under *Needs*.
 
@@ -189,11 +193,28 @@ Ids are deterministic.
 
 Each exported cluster is also an `x-sc-agent-run` object: its cluster key, span and timestamp kind, the SC-T tactics of the rules its records hit (each rule's `tactic`), the artifact families seen, how wide its parallel batches were, its tier, attribution per layer and its `observed-data`. The bundle carries the `extension-definition` (type `new-sdo`) that defines it; the schema is [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json). A public export's runs carry developers through the naming gate and hosts only.
 
+Indicators and runs carry their SC-T tactics as `external_references`, each followed by the MITRE ATLAS and ATT&CK techniques the Field Manual's cross-walk maps it to ([SC-FM 4.6](../manual/04-indicators.md#fm-46-cross-walk-to-mitre-atlas-and-attck)) and the agent-specific ATLAS techniques and OWASP Top 10 for Agentic Applications entries (`ASI01` to `ASI10`) of its crosswalk to agent-security frameworks ([SC-FM 12.4](../manual/12-interoperability.md#fm-124-crosswalk-to-agent-security-frameworks)). Indicators also carry them as `kill_chain_phases` of the `swarmchasing-sc-t` kill chain. The rules carry only the SC-T tactic; the cross-walk is a table in `sc-stix`.
+
 Each case fleet with at least two exported runs is a `grouping` (context `suspicious-activity`) whose `object_refs` are its runs and their `observed-data`, plus a `related-to` relationship between two of its runs for each soft link, named by kind ([SC-FM 12.2](../manual/12-interoperability.md)). Candidate fleets the admin has not merged are not exported.
+
+## MISP export
+
+`case export --format misp` writes the STIX export for the same audience as a MISP event (MISP core format), so it withholds exactly what that export withholds:
+
+- run tags and agent markers as `text` attributes, callback channel domains as `domain` and flagged user agents as `user-agent` (both marked for IDS);
+- the observed URLs, domains, client addresses (`ip-src`) and networks (`AS`), not for IDS;
+- each agent run as a `swarmchasing-agent-run` object with its cluster key, tier, record count and tactics;
+- tags for the export's TLP, `swarmchasing:draft`, and each tactic as a `swarmchasing:tactic` machine tag with galaxy-style tags for its ATLAS and ATT&CK techniques and OWASP entries.
+
+The event is unpublished, with distribution "your organisation only". Sharing it is the admin's decision in their own MISP instance; the tool never connects to one.
 
 ## Incident database drafts
 
-`case export --format aiid` drafts an AI Incident Database submission (title, description, date, alleged developer, deployer and harmed parties, the notice as the report, public record links). `--format oecd` drafts the OECD common reporting framework's criteria the case can fill and lists the mandatory ones it cannot (`missing_mandatory`: harm type and severity are the admin's judgment). Both are JSON files in `exports/` for the admin to complete and submit by hand after the notice is public ([SC-FM 12.3](../manual/12-interoperability.md#fm-123-ai-incident-databases)); the tool never submits anything.
+`case export --format aiid` drafts an AI Incident Database submission (title, description, date, alleged developer, deployer and harmed parties, the notice as the report, public record links). `--format oecd` drafts the OECD common reporting framework's criteria the case can fill and lists the mandatory ones it cannot (`missing_mandatory`: harm type and severity are the admin's judgment).
+
+The OECD draft also carries an `eu_ai_act_article_73` section: a serious-incident report laid out as Article 73 of the EU AI Act asks of the provider of a high-risk AI system, with the fields the case cannot fill (the system and its classification, the incident category, corrective measures) listed under `missing`. The duty to report under Article 73 rests on that provider, and the case does not establish that the agent is a high-risk system; the section is labelled a draft, not a filing, for the admin to pass to the provider or an authority.
+
+All of these are JSON files in `exports/` for the admin to complete and submit by hand after the notice is public ([SC-FM 12.3](../manual/12-interoperability.md#fm-123-ai-incident-databases)); the tool never submits anything.
 
 Both take the public scope: the notice's withholding, developers only through the naming gate with their label and likelihood word, no harness or model-family candidates. They are refused while an endpoint is unreviewed or when the lint finds anything a notice must not carry. The notice link needs `--site-url` (or `SWARMCHASE_SITE_URL`); the text is the committed notice, else the case's draft.
 

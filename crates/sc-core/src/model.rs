@@ -67,35 +67,101 @@ impl TsKind {
     }
 
     /// The kind a record from `source` carries, for records stored before
-    /// they said.
+    /// they said. Only a bare source name counts (`wayback`, not
+    /// `wayback:x`), except operator logs, which always carry an evidence id.
     pub fn of_source(source: &str) -> Self {
-        match source {
-            "wayback" | "arquivo" => Self::Capture,
-            "urlquery" => Self::Submit,
-            "access_log" => Self::Request,
-            s if s.starts_with("operator:") => Self::Request,
+        let bare = !source.contains(':');
+        match SourceKind::of(source) {
+            SourceKind::Wayback | SourceKind::Arquivo if bare => Self::Capture,
+            SourceKind::Urlquery if bare => Self::Submit,
+            SourceKind::AccessLog | SourceKind::Mcp if bare => Self::Request,
+            SourceKind::Operator if !bare => Self::Request,
             _ => Self::Unknown,
         }
     }
 }
 
+/// The sources the analysis knows, read from [`Observation::source`]: the
+/// part before any `:` (`operator:e1` is [`SourceKind::Operator`]). The
+/// field itself stays the string the record carries, since imports and
+/// field maps can name any source; this is where its known values are
+/// matched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SourceKind {
+    /// A server's access log (`access_log`).
+    AccessLog,
+    /// Logs an affected operator sent ([`OPERATOR_SOURCE`]).
+    Operator,
+    Urlquery,
+    Urlscan,
+    Wayback,
+    Arquivo,
+    Memento,
+    Gharchive,
+    Npm,
+    Pypi,
+    Ctlog,
+    Commoncrawl,
+    /// The MCP server registry (`mcp`).
+    Mcp,
+    /// Any other source (`manual`, `lines`, an import, a fixture, none).
+    Other,
+}
+
+impl SourceKind {
+    const NAMED: [(SourceKind, &'static str); 13] = [
+        (Self::AccessLog, "access_log"),
+        (Self::Operator, OPERATOR_SOURCE),
+        (Self::Urlquery, "urlquery"),
+        (Self::Urlscan, "urlscan"),
+        (Self::Wayback, "wayback"),
+        (Self::Arquivo, "arquivo"),
+        (Self::Memento, "memento"),
+        (Self::Gharchive, "gharchive"),
+        (Self::Npm, "npm"),
+        (Self::Pypi, "pypi"),
+        (Self::Ctlog, "ctlog"),
+        (Self::Commoncrawl, "commoncrawl"),
+        (Self::Mcp, "mcp"),
+    ];
+
+    /// The kind of `source`, by the part before any `:`.
+    pub fn of(source: &str) -> Self {
+        let name = source.split(':').next().unwrap_or_default();
+        Self::NAMED
+            .iter()
+            .find(|(_, n)| *n == name)
+            .map_or(Self::Other, |(k, _)| *k)
+    }
+
+    /// The source name records carry (`wayback`); empty for `Other`.
+    pub fn name(self) -> &'static str {
+        Self::NAMED
+            .iter()
+            .find(|(k, _)| *k == self)
+            .map_or("", |(_, n)| n)
+    }
+}
+
 /// Who can put a record into its source, which says how hard it is to plant.
 /// Derived from [`Observation::source`] (never stored), beside
-/// [`TsKind::of_source`]. Written as its [`Provenance::label`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// [`TsKind::of_source`]. Written as its [`Provenance::label`]. Ordered by
+/// label, so maps keyed by it keep the order they had keyed by the label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Provenance {
     /// A server recorded the request itself: an access log, logs an affected
     /// operator sent.
     Observed,
+    /// Anyone can publish the record under a name of their choosing: GH
+    /// Archive events, npm and PyPI packages, Certificate Transparency
+    /// entries, and Common Crawl, which crawls what any page links to.
+    PublishAnywhere,
     /// Anyone can submit any URL: scan services (urlquery, urlscan) and web
     /// archives, whose index cannot tell an on-demand save (Save Page Now)
     /// from a crawl without opening the capture, so every archive row counts
     /// as submitted.
     SubmitAnywhere,
-    /// Anyone can publish the record under a name of their choosing: GH
-    /// Archive events, npm and PyPI packages, Certificate Transparency
-    /// entries, and Common Crawl, which crawls what any page links to.
-    PublishAnywhere,
     /// A source this list does not know (`manual`, an import, a fixture).
     Unknown,
 }
@@ -103,11 +169,12 @@ pub enum Provenance {
 impl Provenance {
     /// The provenance of a record from `source`.
     pub fn of_source(source: &str) -> Self {
-        match source.split(':').next().unwrap_or_default() {
-            "access_log" | OPERATOR_SOURCE => Self::Observed,
-            "urlquery" | "urlscan" | "wayback" | "arquivo" | "memento" => Self::SubmitAnywhere,
-            "gharchive" | "npm" | "pypi" | "ctlog" | "commoncrawl" => Self::PublishAnywhere,
-            _ => Self::Unknown,
+        use SourceKind::*;
+        match SourceKind::of(source) {
+            AccessLog | Operator => Self::Observed,
+            Urlquery | Urlscan | Wayback | Arquivo | Memento => Self::SubmitAnywhere,
+            Gharchive | Npm | Pypi | Ctlog | Commoncrawl | Mcp => Self::PublishAnywhere,
+            Other => Self::Unknown,
         }
     }
 
@@ -118,6 +185,12 @@ impl Provenance {
             Self::PublishAnywhere => "publish-anywhere",
             Self::Unknown => "unknown",
         }
+    }
+}
+
+impl std::fmt::Display for Provenance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
     }
 }
 
@@ -185,7 +258,7 @@ impl Observation {
         if self.ts_kind.is_unknown() {
             self.ts_kind = TsKind::of_source(&self.source);
         }
-        if self.source == crate::urlquery::SOURCE && self.target_asn.is_none() {
+        if self.source == SourceKind::Urlquery.name() && self.target_asn.is_none() {
             self.target_asn = self.asn.take();
         }
     }
@@ -195,11 +268,13 @@ impl Observation {
         Provenance::of_source(&self.source)
     }
 
+    /// What kind of source the record came from ([`SourceKind::of`]).
+    pub fn source_kind(&self) -> SourceKind {
+        SourceKind::of(&self.source)
+    }
+
     pub fn operator_supplied(&self) -> bool {
-        self.source
-            .split(':')
-            .next()
-            .is_some_and(|s| s == OPERATOR_SOURCE)
+        self.source_kind() == SourceKind::Operator
     }
 }
 
@@ -228,6 +303,20 @@ pub enum IndicatorKind {
     AntiBot,
     /// Hosting infrastructure (ASN, sandbox hostnames).
     Infra,
+}
+
+impl IndicatorKind {
+    /// Kinds that describe how a request was sent rather than what it did,
+    /// and that ordinary clients produce too: relays, cache busters,
+    /// self-identification, headers and outcomes. Together they never reach
+    /// the suggestive tier on their own ([`crate::rules::Rules::score`]),
+    /// never join records by timing and never corroborate a cluster tier.
+    pub fn is_context(self) -> bool {
+        matches!(
+            self,
+            Self::Relay | Self::CacheBuster | Self::SelfId | Self::Header | Self::Outcome
+        )
+    }
 }
 
 /// What an indicator shows an agent doing: the swarmchasing tactic
@@ -592,5 +681,44 @@ mod tests {
         v.sort();
         let order: Vec<String> = v.iter().map(ToString::to_string).collect();
         assert_eq!(order, ["exfil.y:c", "param:b=1", "relay.x:a"]);
+    }
+
+    #[test]
+    fn source_kinds_read_the_name_before_the_colon() {
+        for k in SourceKind::NAMED.iter().map(|x| x.0) {
+            assert_eq!(SourceKind::of(k.name()), k);
+        }
+        assert_eq!(SourceKind::of("operator:e1"), SourceKind::Operator);
+        assert_eq!(SourceKind::of("manual"), SourceKind::Other);
+        assert_eq!(SourceKind::of(""), SourceKind::Other);
+        assert_eq!(SourceKind::Other.name(), "");
+        // Timestamp kinds read bare names; operator logs always carry an id.
+        assert_eq!(TsKind::of_source("wayback"), TsKind::Capture);
+        assert_eq!(TsKind::of_source("wayback:x"), TsKind::Unknown);
+        assert_eq!(TsKind::of_source("urlquery"), TsKind::Submit);
+        assert_eq!(TsKind::of_source("operator:e1"), TsKind::Request);
+        assert_eq!(TsKind::of_source("operator"), TsKind::Unknown);
+        assert_eq!(Provenance::of_source("operator"), Provenance::Observed);
+    }
+
+    #[test]
+    fn provenance_orders_and_writes_as_its_label() {
+        let all = [
+            Provenance::Observed,
+            Provenance::SubmitAnywhere,
+            Provenance::PublishAnywhere,
+            Provenance::Unknown,
+        ];
+        for p in all {
+            let json = serde_json::to_string(&p).unwrap();
+            assert_eq!(json, format!("\"{}\"", p.label()));
+            assert_eq!(serde_json::from_str::<Provenance>(&json).unwrap(), p);
+        }
+        // Maps keyed by it keep the order they had keyed by its label.
+        let mut by_value = all;
+        by_value.sort();
+        let mut by_label = all;
+        by_label.sort_by_key(|p| p.label());
+        assert_eq!(by_value, by_label);
     }
 }
