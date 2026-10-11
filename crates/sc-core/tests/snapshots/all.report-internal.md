@@ -445,6 +445,7 @@ Signs that a cluster's records were placed to be found. Prompts to check, never 
   - provenance monoculture: all 8 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them (records `eval:xsvc-agent-q0`, `eval:xsvc-agent-s0`, `eval:xsvc-agent-q1`, `eval:xsvc-agent-s1`, `eval:xsvc-agent-q2` and 3 more)
 - **C6** (single source):
   - provenance monoculture: all 6 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them (records `eval:xsvc-gw-crafted-s0`, `eval:xsvc-gw-crafted-q0`, `eval:xsvc-gw-crafted-s1`, `eval:xsvc-gw-crafted-q1`, `eval:xsvc-gw-crafted-s2` and 1 more)
+  - auto-submitted: 3 of its targets went to urlquery, urlscan within 3s, and 5 ordinary link(s) on other hosts were fanned out alike around it: something submits every link it sees, as a mail gateway or security product does, so whoever sent the links made these records (records `eval:xsvc-gw-crafted-s0`, `eval:xsvc-gw-crafted-q0`, `eval:xsvc-gw-crafted-s1`, `eval:xsvc-gw-crafted-q1`, `eval:xsvc-gw-crafted-s2` and 1 more)
 - **C26** (single source):
   - provenance monoculture: all 2 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them (records `eval:xsvc-human-s`, `eval:xsvc-human-q`)
 - **C32** (single source):

@@ -110,6 +110,7 @@ Someone who wants a false incident found, or a real cluster attributed elsewhere
 - **Burned identifier.** An identifier quoted in a published report ([FM-14.5](14-limits.md#fm-145-tags-get-copied-after-publication)).
 - **Too perfect.** Every record significant on several kinds of evidence, with no ordinary requests around it, no escalation and no task retrieval.
 - **Habit mismatch.** An identifier shared with an earlier cluster whose relay routes, URL encodings or payloads share nothing with this one's.
+- **Auto-submitted.** Its targets went to several scan services within seconds, and ordinary links on other hosts were fanned out the same way around it: a mail gateway or security product submitted them, and whoever sent the links made the records.
 
 A plant signal is informative only against its base rate. Provenance monoculture fires on every cluster built from one scan service, which is most clusters in such a collection; a signal that fires on nearly every cluster of a source tells the reviewer nothing about this one. Each signal **should** be reported with its base rate: the share of the analysis's clusters from the same source kinds that carry it. A signal carried by more than half of them is context, listed but not counted towards the plant review threshold ([FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review)).
 

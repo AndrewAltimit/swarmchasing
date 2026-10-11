@@ -233,6 +233,7 @@ Archive rows count as submitted. A CDX row does not say whether a capture came f
 - **Burned identifier**: a member's linking feature is one of `linking.published_tags`. Such a value never links, and is not a soft link either.
 - **Too perfect**: every member significant on three or more kinds of evidence other than context kinds, with no unflagged request on its hosts within `linking.window_secs` of its span, no route escalation and no task retrieval. Real agents read pages no rule flags on their way to a probe; a cluster built from textbook payloads need not.
 - **Habit mismatch**: a linking feature the cluster shares with an earlier cluster (outside the link window, not common and not burned), where the two clusters' relay stacks, URL encodings or payload dialects both exist and share nothing. The identifier may have been copied.
+- **Auto-submitted**: the cluster's [cross-service fan-out](#descriptive-hints) marks it as an auto-submitter: at least `fanout.cross_service_ambient` ordinary targets on other hosts went to several services alike around it. A mail gateway or security product submits every link it sees, so the records say who mailed the links, not who sent requests.
 
 Each is something ordinary agent activity also produces, which is why they are prompts and never evidence.
 

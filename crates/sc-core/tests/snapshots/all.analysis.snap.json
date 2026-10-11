@@ -11722,6 +11722,18 @@
             66
           ],
           "detail": "all 6 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them"
+        },
+        {
+          "kind": "auto_submitted",
+          "records": [
+            57,
+            58,
+            61,
+            62,
+            65,
+            66
+          ],
+          "detail": "3 of its targets went to urlquery, urlscan within 3s, and 5 ordinary link(s) on other hosts were fanned out alike around it: something submits every link it sees, as a mail gateway or security product does, so whoever sent the links made these records"
         }
       ],
       "agent": {
