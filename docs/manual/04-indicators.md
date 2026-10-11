@@ -106,7 +106,7 @@ ATLAS and ATT&CK describe adversaries using systems. Swarmchasing describes agen
 | SC-T8 | none | none | none |
 | SC-T9 | AML.T0118 Autonomous AI Agent Communication (.000 shared artifacts, .001 direct); AML.T0124 Autonomous Attack Orchestration | none | close |
 
-ATLAS ids and names are taken from the published ATLAS data file; ATT&CK ids from the ATT&CK technique pages ([references](references.md#threat-frameworks)). Re-check both when either framework releases a new version, since techniques are renamed and merged.
+The OWASP Top 10 for Agentic Applications column, and the agent-specific ATLAS techniques, are in [FM-12.4](12-interoperability.md#fm-124-crosswalk-to-agent-security-frameworks). A STIX or MISP export carries both tables' entries for each tactic ([FM-12.2](12-interoperability.md#fm-122-the-x-sc-agent-run-extension)). ATLAS ids and names are taken from the published ATLAS data file; ATT&CK ids from the ATT&CK technique pages ([references](references.md#threat-frameworks)). Re-check both when either framework releases a new version, since techniques are renamed and merged.
 
 ## FM-4.7 Rule-writing standard
 

@@ -28,7 +28,7 @@ The toolkit implements this profile ([STIX export](../reference/cases.md#stix-ex
 
 ## FM-12.2 The `x-sc-agent-run` extension
 
-STIX has no object for "a run of an autonomous agent". The extension defines one as a new STIX Domain Object, through an `extension-definition` with extension type `new-sdo` (STIX 2.1 §7.3). The type name keeps the `x-` prefix, which the specification recommends for objects outside the standard so a future version cannot collide with them.
+STIX has no object for "a run of an autonomous agent". The extension defines one as a new STIX Domain Object, through an `extension-definition` with extension type `new-sdo` (STIX 2.1, section 7.3). The type name keeps the `x-` prefix, which the specification recommends for objects outside the standard so a future version cannot collide with them.
 
 Properties:
 
@@ -45,13 +45,17 @@ Properties:
 | `attribution` | Per layer: party or candidate, label, likelihood word, evidence level. |
 | `observed_data_refs` | The `observed-data` objects holding its records. |
 
-The toolkit writes one run object per exported cluster, so `concurrency.runs` counts the runs inside it. The JSON schema is committed at [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json), and every export carries the `extension-definition` that points to it. A public export's `attribution` carries developers through the naming gate and hosts only.
+The extension is version 1.1.0. The toolkit writes one run object per exported cluster, so `concurrency.runs` counts the runs inside it. The JSON schema is committed at [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json), and every export carries the `extension-definition` that points to it.
+
+Runs and indicators carry their tactics twice more, for tools that do not read the extension: as `external_references`, each SC-T id followed by the ATLAS, ATT&CK and OWASP entries the crosswalk maps it to ([FM-12.4](#fm-124-crosswalk-to-agent-security-frameworks)), and, on indicators, as `kill_chain_phases` of the `swarmchasing-sc-t` kill chain.
+
+The same bundle also exports as a MISP event (`case export <id> --format misp`), with the tactics and crosswalk entries as tags; it withholds exactly what the STIX export for that audience withholds ([MISP export](../reference/cases.md#misp-export)). A public export's `attribution` carries developers through the naming gate and hosts only.
 
 A merged fleet as a STIX `grouping` whose `object_refs` list its runs, and soft links between runs as `related-to` relationships whose description names the link type ([FM-5.7](05-linking.md#fm-57-soft-links)), are built.
 
 ## FM-12.3 AI incident databases
 
-Confirmed incidents may also be submitted to AI incident databases, so they enter the public record on AI harms. The toolkit drafts (`case export --format aiid` and `--format oecd`); the admin submits. A submission links to the published notice, carries only what the notice carries, and is made after the notice is public.
+Confirmed incidents may also be submitted to AI incident databases, so they enter the public record on AI harms. The toolkit drafts (`case export --format aiid` and `--format oecd`); the admin submits. The OECD draft also carries a serious-incident section laid out as Article 73 of the EU AI Act asks ([FM-12.5](#fm-125-regulatory-incident-reports)), with what the case cannot fill listed. A submission links to the published notice, carries only what the notice carries, and is made after the notice is public.
 
 | Database | Its format | What a draft maps |
 |---|---|---|
@@ -95,16 +99,18 @@ OWASP and ATLAS describe the agent's builder or an adversary using it. From publ
 | `affected` (hosts) | `domain-name` objects | `domain` attributes | Harm details; People and planet | Harmed parties |
 | `sector` | `identity.sectors` | Event tag | Economic context | Harmed parties |
 | `providers`, `attribution` | `x-sc-agent-run.attribution` | Event tag with label | AI model | Developer and deployer |
-| `tactics` | `x-sc-agent-run.tactics` | Event tags (`sc-t:T4`) | Task and output | Description |
+| `tactics` | `x-sc-agent-run.tactics` | Event tags (`swarmchasing:tactic="SC-T4"`) | Task and output | Description |
 | `tier`, `agent_grade` | `indicator.confidence`; run `tier` | Event `threat_level_id` | Harm details | Description |
 | `scope` | none | Event tag | Task and output | Description |
 | `fleets` | `grouping` | Event per fleet, related | Other information | Linked incidents |
 | `method`, `rules_version` | `report` external reference | Event tag | Other information | Report text |
 
-STIX patterns carry real values and MISP attributes do too; a public export or event withholds what a notice withholds ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)). Toolkit: STIX and the AIID and OECD drafts are built ([FM-12.3](#fm-123-ai-incident-databases)); MISP events and the SC-Incident document are (planned).
+STIX patterns carry real values and MISP attributes do too; a public export or event withholds what a notice withholds ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)). Toolkit: STIX, MISP events and the AIID and OECD drafts are built ([FM-12.2](#fm-122-the-x-sc-agent-run-extension), [FM-12.3](#fm-123-ai-incident-databases)); the SC-Incident document is (planned). The export's crosswalk is the two tables, SC-FM 4.6 and this one, and a test fails when it differs from them.
 
 ## FM-12.5 Regulatory incident reports
 
 Some recipients of a report have their own reporting duties. Under the EU AI Act, a provider of a high-risk AI system reports a serious incident to the market surveillance authority within fifteen days of becoming aware of it, within two days for a widespread infringement or a serious disruption of critical infrastructure, and within ten days of a death (Article 73, [EU AI Act](references.md#standards-and-guidance)). A swarmchasing report to a provider is not such a report and does not stand in for one, but it can be how the provider becomes aware of an incident. Reports therefore state their date and evidence plainly, so the recipient can judge its own duties.
+
+The OECD draft's Article 73 section ([FM-12.3](#fm-123-ai-incident-databases)) lays the case out in that report's shape for the provider or the authority to use; it does not establish that the agent is a high-risk system.
 
 The method's lead times ([FM-10.2](10-disclosure.md#fm-102-lead-times)) are not set by any regulatory clock and do not wait for one.
