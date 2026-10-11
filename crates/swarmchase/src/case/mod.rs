@@ -24,7 +24,8 @@
 //!
 //! [`model`] is what `case.toml` holds, [`cli`] the subcommands, [`select`]
 //! picks records, [`status`] shows a case, [`fleet`] records the admin's
-//! fleet merges and splits, [`report`] drafts reports and
+//! fleet merges and splits and the interaction evidence that makes a fleet a
+//! swarm, [`report`] drafts reports and
 //! e-mail drafts, and [`indicators`] is what the watch matches new records
 //! against. Contacts, operator evidence and the notice draft are in
 //! [`crate::contacts`], [`crate::evidence`] and [`crate::notice`].

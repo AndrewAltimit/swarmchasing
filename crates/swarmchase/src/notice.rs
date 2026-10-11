@@ -478,7 +478,12 @@ pub(crate) fn notice_draft(
             toolkit: env!("CARGO_PKG_VERSION").to_string(),
             updates: Vec::new(),
         },
-        body: notice.markdown.clone(),
+        // A swarm the case recorded reviewed interaction for; fleets alone
+        // stay out of the notice.
+        body: crate::case::fleet::with_fleets(
+            notice.markdown.clone(),
+            &crate::case::fleet::report_section(&c, &a, Audience::Public),
+        ),
     };
     std::fs::write(&path, write_notice(&n))?;
     let mut withheld = notice.withheld;

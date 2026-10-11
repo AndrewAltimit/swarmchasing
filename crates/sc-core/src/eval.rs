@@ -66,6 +66,10 @@ pub struct Labelled {
     /// For a benign record: the rules it was written to resemble.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hard_negative_for: Vec<String>,
+    /// The interacting group (a swarm) the record's run belongs to, or
+    /// `none` for a run known not to interact; for the swarm-edge summary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swarm: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -163,6 +167,9 @@ pub struct EvalReport {
     /// Linking against labelled runs (report only).
     #[serde(default)]
     pub clusters: clusters::ClusterEval,
+    /// Swarm edges against `swarm` group labels (report only).
+    #[serde(default)]
+    pub swarm: crate::swarm::SwarmEval,
     /// Labeller's tier → our tier → count, for labels that carry a tier.
     pub agreement: BTreeMap<String, BTreeMap<String, usize>>,
     /// Benign records we flagged, strongest first.
@@ -324,6 +331,7 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
         benign_classes: benign_classes.into_values().collect(),
         hard_negatives,
         clusters: clusters::cluster_eval(a, labels),
+        swarm: crate::swarm::swarm_eval(a, labels),
         agreement,
         false_positives: fps,
     }
@@ -397,6 +405,7 @@ fn parse_ndjson_labels(text: &str) -> LabelSet {
                 class: s("class"),
                 cite: s("cite"),
                 run: s("run"),
+                swarm: s("swarm"),
                 hard_negative_for: v
                     .get("hard_negative_for")
                     .and_then(|x| x.as_array())
@@ -465,6 +474,7 @@ fn parse_csv_labels(text: &str) -> LabelSet {
                 cite: get(cite_col).filter(|s| !s.is_empty()).map(str::to_string),
                 run: get(run_col).filter(|s| !s.is_empty()).map(str::to_string),
                 hard_negative_for: Vec::new(),
+                swarm: None,
             },
         );
     }

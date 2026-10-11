@@ -194,6 +194,7 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
         );
     }
     print_clusters(s);
+    print_swarm(&r.swarm);
     println!(
         "\ncoverage: {}/{} rules have a positive · {} allow-listed · {} uncovered · {} with hard negatives",
         s.coverage.covered,
@@ -215,6 +216,48 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
                 crate::util::truncate(&m.url, 140)
             );
         }
+    }
+}
+
+/// Interaction edges against `swarm` group labels. Report only.
+fn print_swarm(w: &sc_core::swarm::SwarmEval) {
+    if w.edges == 0 && w.groups.is_empty() {
+        return;
+    }
+    let kinds = |m: &[usize; 5]| {
+        sc_core::SwarmEdgeKind::ALL
+            .iter()
+            .zip(m)
+            .filter(|(_, n)| **n > 0)
+            .map(|(k, n)| format!("{} {n}", k.id()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    println!(
+        "\ninteraction edges (report only): {} ({}) · swarm groups with an edge inside {}/{} · edges inside a group {} · across groups {} · on runs labelled none {}{}",
+        w.edges,
+        kinds(&w.by_kind),
+        w.found.len(),
+        w.groups.len(),
+        w.on_groups,
+        w.across_groups,
+        w.on_non_swarm.iter().sum::<usize>(),
+        if w.on_non_swarm.iter().all(|n| *n == 0) {
+            String::new()
+        } else {
+            format!(" ({})", kinds(&w.on_non_swarm))
+        }
+    );
+    let missed: Vec<&String> = w.groups.iter().filter(|g| !w.found.contains(g)).collect();
+    if !missed.is_empty() {
+        println!(
+            "  groups with no edge: {}",
+            missed
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 }
 

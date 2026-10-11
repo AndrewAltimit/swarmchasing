@@ -6,7 +6,7 @@
 mod hints;
 mod link;
 
-pub(crate) use hints::target_text;
+pub(crate) use hints::{relay_stack, target_text};
 
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::{Layer, extract};
@@ -176,6 +176,10 @@ pub struct Analysis {
     /// admin, never findings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub candidate_fleets: Vec<crate::fleets::CandidateFleet>,
+    /// Pairs of runs whose records suggest agents interacting (SC-T9):
+    /// hints for the admin, never scored, never a link or a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub swarm_edges: Vec<crate::swarm::SwarmEdge>,
 }
 
 /// A linking feature whose carriers were not joined because it is common:
@@ -335,6 +339,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
     );
     let candidate_fleets =
         crate::fleets::candidate_fleets(&soft_links, &cluster_ids, &rules.set.soft_links);
+    let swarm_edges = crate::swarm::swarm_edges(&clusters, &results, rules);
 
     Analysis {
         rules_version: rules.set.meta.version.clone(),
@@ -358,6 +363,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         escalations,
         soft_links,
         candidate_fleets,
+        swarm_edges,
         results,
         clusters,
     }

@@ -16,7 +16,7 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 - each endpoint and the admin's decision on it: `compromised`, `targeted`, `historical`, `not-affected`, or still `unreviewed`;
 - attribution claims established by case work, each with its layer, evidence and tag;
 - contacts;
-- fleets: clusters the admin treats as one operator's, by stable key;
+- fleets: clusters the admin treats as one operator's, by stable key, each with any interaction evidence the admin accepted ([swarms](#swarms));
 - a dated decision log;
 - the reports sent.
 
@@ -33,6 +33,7 @@ Each change is logged with its date.
 | `case set <id> --status … --notice … --min-named …` | Changes the status or the naming threshold. |
 | `case note <id> "…"` | Adds a dated entry to the decision log. |
 | `case fleet merge\|split\|show <id> …` | Groups soft-linked clusters into one fleet, splits one off, or lists fleets and candidates ([fleets](#fleets)). |
+| `case fleet interaction\|withdraw <id> <fleet> …` | Records reviewed interaction between a fleet's runs, or withdraws it ([swarms](#swarms)). |
 | `case add <id> …` | Adds new records. |
 | `case contacts <id> [--providers-only] [--country CC]` | Adds provider contacts from the directory, proposes national CSIRTs, then finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
@@ -67,6 +68,19 @@ swarmchase case fleet split <id> k-77d0e2aa [--why "…"]
 Clusters are named by stable key (or C-number in the case's analysis) and stored as keys under `[[fleet]]` in `case.toml`. A merge takes in any fleet already holding one of the clusters. The decision log records the clusters, the soft links between them with their strength and detail, the candidate fleet that proposed it, the reason, and the command that reverses it. A merge with no soft link between the clusters needs `--why`. A split takes one cluster out; a fleet left with one cluster is dissolved.
 
 Reports then carry a *Fleets* section, with soft-link details in case notes only, and STIX exports a `grouping` per fleet ([STIX export](#stix-export)). `case status` shows each cluster's key and fleet.
+
+## Swarms
+
+A fleet is a swarm only when the case records evidence that its runs interact ([SC-FM 1.3](../manual/01-scope.md#fm-13-groupings)). The analysis lists possible interaction between runs as edges ([SC-FM 5.11](../manual/05-linking.md#fm-511-interaction-edges)); `case fleet show` prints those between a fleet's clusters. None of them makes a swarm. The admin reads the records and records what they show:
+
+```sh
+swarmchase case fleet interaction <id> fleet-1 --kind handoff --run C1#1 --run k-77d0e2aa#2 --note "…"
+swarmchase case fleet withdraw <id> fleet-1 1 [--why "…"]
+```
+
+`--kind` is one of `shared_sink`, `handoff`, `synchronized_start`, `role_sequence` and `disjoint_partition` (or `S1` to `S5`). Each `--run` is `<cluster>#<run>`, a C-number or stable key and the run's number in its cluster, and must belong to the fleet; it is stored by key. `--note` is required. The entry goes under `[[fleet.swarm_evidence]]` with its date, and the decision log records it with the matching analysis edges and the command that withdraws it. Splitting a cluster out of the fleet sets aside the entries that name it.
+
+While a fleet has an entry, reports call it a swarm and list each entry as an Inference (the note in case notes and provider reports only), the notice draft gains a short *Swarm* section naming the clusters and kinds without keys or notes, and the STIX `grouping` is named a swarm. Without one, the grouping is a fleet everywhere and the notice says nothing about it.
 
 ## Contacts
 

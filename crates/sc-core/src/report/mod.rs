@@ -525,6 +525,9 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             }
         }
     }
+    if matches!(opts.audience, Audience::Internal | Audience::Provider) {
+        crate::swarm::report_block(&mut s, &a.swarm_edges, &pair_shown);
+    }
     if opts.audience == Audience::Internal && !a.common_features.is_empty() {
         let _ = writeln!(
             s,

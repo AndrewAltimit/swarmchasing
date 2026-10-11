@@ -202,6 +202,24 @@ For each pair of clusters the strengths combine as `1 - Π(1 - strength)`, so se
 
 **Why they never score or link.** Each of these is shared by many unrelated clients. Encoding styles are mostly library defaults. Polite crawlers and security scanners share recon openings. Popular targets attract the same paths. Cron jobs share pause times. Letting any of them raise a score would flag ordinary clients. Letting any of them link records would merge unrelated clusters, and every later step would inherit that error. They are also not measured by the evaluation set. So they appear in reports as hints, labelled as hints, for the admin to weigh.
 
+## Interaction between runs
+
+[`swarm.rs`](../crates/sc-core/src/swarm.rs) lists possible interaction between runs (SC-T9) as edges (`swarm_edges` in the analysis). Each edge names two runs as `C3#2` (cluster and run number) with a few of the records it rests on, a kind, a strength (weak, moderate, strong), a chance where the kind has a model, and a detail line. Edges are hints: they never score, link or merge, and they never make a grouping a swarm. That takes a reviewed record in the case ([cases](reference/cases.md#swarms)). The method and its limits are in [SC-FM 4.10](manual/04-indicators.md#fm-410-interaction-signals) and [SC-FM 5.11](manual/05-linking.md#fm-511-interaction-edges).
+
+**Runs and strands.** Runs are the clusters' runs above noise. Each run is split into strands by relay route, user agent, client network and header set, so that two clients joined into one cluster by a shared inbox can still be told apart. Two sides are different clients when their known values differ on a dimension (relay route, user agent, network, header set or encoding style) and they share no user agent, network or header set.
+
+**Artifacts.** A record names an artifact by string only: an inbox a linking `exfil.*` rule matched, a gist id, a pastebin or rentry id, a Hugging Face Space, or a subdomain of a static-site host (`pages.dev`, `vercel.app`, `netlify.app`, `workers.dev`, `github.io` and similar). An inbox is written to, unless the record reads it back (a webhook.site `token/` URL, an ntfy subscription path). Any other artifact is fetched when it is the first host the record reaches past relays and carriers, and written to when the record names it as a destination. An artifact named by more than 10 runs is common and draws no edge.
+
+The kinds and their thresholds:
+
+- **S1 shared sink.** Two strands writing one artifact that differ on at least two dimensions; moderate at three. A one-record strand beside others is left out.
+- **S2 hand-off.** A run writes an artifact and another run fetches it later. Strong when the fetch comes within an hour and the two are different clients, moderate otherwise; never within one cluster by one client.
+- **S3 synchronized start.** Runs of at least 3 records in two different-client clusters whose starts and ends each fall within 120 seconds. The chance model is the shared-pause one over the span of all such runs; a match on a clock hour counts a quarter. Kept at a chance of at most 1%; moderate with two matches at 0.01% or less.
+- **S4 role sequence.** A run with no attack hits on at least 3 hosts, then a different-client run with attack (`exploit`) hits starting within 6 hours of its end, on at least 3 of the same hosts, Jaccard at least 0.5, and at least 80% of them attacked after they were read. Chance: Poisson with mean `|read| × |attacked| / all target hosts`; kept at 1% or less. Moderate at Jaccard 0.7 with every host in order.
+- **S5 disjoint partition.** Runs starting within 10 minutes, each with at least 3 hosts in one family (the last two labels), sharing at most a tenth of the smaller set. Chance of so little overlap if hosts were drawn from the family's hosts in the analysis; kept at 5% or less. Always weak, because one scheduler sharding a list does the same.
+
+At most 200 edges are kept. Internal and provider reports list those touching the report's clusters (a provider report only those between two of them) under *Possible interaction (SC-T9)*, details defanged. Affected-operator reports and notices do not.
+
 ## Endpoints
 
 Flagged requests are also grouped per target host: hits, first and last seen, attack payloads, the clusters involved, and whether the hits are ongoing or historical. `swarmchase endpoints` prints this table, and a report to an affected operator carries it for that operator's hosts. In a case, the admin classifies each endpoint ([case files](reference/cases.md#what-casetoml-holds)).

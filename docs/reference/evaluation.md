@@ -62,6 +62,10 @@ Records labelled with `run` measure linking. The numbers are reported, never gat
 - **False merges**: clusters whose labelled members span two or more runs, or mix agent and benign records. Each is listed by cluster key with the runs it joins.
 - **Split runs**: runs whose records sit in more than one predicted group. An agent record no rule fired on is never clustered, so a run with a missed record always shows as split.
 
+## Interaction edges
+
+Records labelled with `swarm` measure the interaction edges ([SC-FM 5.11](../manual/05-linking.md#fm-511-interaction-edges)). The value names the interacting group a record's run belongs to, or `none` for runs known not to interact. `eval` prints the edges found by kind, how many labelled groups have an edge inside them, and how many edges touch a `none` run, by kind. Each side of an edge is placed by its first labelled record. The numbers are reported, never gated, and the committed groups are synthetic ([evaluation set](../../samples/eval/README.md#swarm-interactionndjson)). A disjoint partition on a `none` run is expected: a sharded scheduler draws one.
+
 ## Frozen splits
 
 `--split` writes the ids of a held-out side to `--split-out` and exits. Write it to the data directory, never to the repository.

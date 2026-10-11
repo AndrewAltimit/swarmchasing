@@ -13,6 +13,7 @@ Each record is an ordinary record plus label fields:
 | `cite` | every record | Where the pattern comes from, or `synthetic: ...`. |
 | `run` | optional | The true run the record belongs to. Scored by the [cluster-level evaluation](../../docs/reference/evaluation.md#cluster-level-evaluation). |
 | `hard_negative_for` | benign, optional | Rule ids the record was written to resemble and must not be flagged for. |
+| `swarm` | optional | The interacting group (swarm) the record's run belongs to, or `none` for a run known not to interact. Scored by the [interaction-edge summary](../../docs/reference/evaluation.md#interaction-edges). |
 
 Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), and `scanner` (security scanners). False positives are reported per benign class.
 
@@ -46,6 +47,17 @@ Synthetic records that give every rule at least one labelled positive, and the s
 ## `linking-negatives.ndjson`
 
 Benign records for the cluster-level evaluation. Two readers, months apart, fetch different pages through the same relay with the same popular campaign tag (`tag=blackfriday`). They are different runs, so they must not merge. A shared feature links only within the link window, so the pair stays apart; if it merged, the cluster-level evaluation would list it as a false merge. The cluster-level numbers are reported, not gated.
+
+## `swarm-interaction.ndjson`
+
+Synthetic agent records for the interaction edges ([SC-FM 5.11](../../docs/manual/05-linking.md#fm-511-interaction-edges)), each marked `"synthetic": true`, on reserved `.example` hosts and made-up inbox and gist identifiers, and carrying a `swarm` group:
+
+- **`none`**: one scheduler with one client splitting a host list into two shards started together. It is a fleet, and the only edge it should draw is a disjoint partition.
+- **`handoff-1`**: one run names a gist as where its notes go; a different client fetches that gist 25 minutes later and probes other hosts.
+- **`sink-1`**: two clients, one direct with a headless browser and one through a relay from another network, writing to one webhook.site inbox. The inbox joins them into one cluster; the shared-sink edge is between its strands.
+- **`roles-1`**: one client reads five hosts; a different client attacks the same five in the same order half an hour later.
+
+Every record is flagged significant on its own, so the file raises recall at both tiers and leaves precision unchanged.
 
 ## Coverage allow-list
 
