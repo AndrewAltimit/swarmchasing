@@ -28,7 +28,7 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
   Reports and notices name a developer only at or above the level the admin sets for the case (`swarmchase report --min-named`, default: shared identifiers), and never on self-identification alone. Case notes list every claim.
 - **Four layers.** Developer, hosting network, harness and model family are attributed separately ([SC-FM 7](manual/07-attribution.md)). A host is named as a host. Harness and model-family candidates are ranked in private reports and never named in public; a model-family claim needs a held-out measurement of its method.
 - **Tags and labels.** Every attribution claim is tagged Observed, Documented, Inference or Conclusion, and labelled Confirmed, Suspected, Possible or Unattributed by its evidence. No statement uses a likelihood word stronger than its label allows.
-- **Four findings, kept apart.** Whether the records carry payloads (the tier), whether an agent sent them (the agent grade), whether the activity went beyond its task (the scope finding) and whether agents coordinated are separate findings ([SC-FM 15](manual/15-misalignment.md)). A tier alone does not make an incident: before a case is reported, the admin records the scope finding with the tests that failed. Activity that stayed within its task is not reported, whatever its tier. We call agents misaligned only when an agent is present and the activity went out of scope.
+- **Four findings, kept apart.** Whether the records carry payloads (the tier), whether an agent sent them (the agent grade), whether the activity went beyond its task (the scope finding) and whether agents coordinated are separate findings ([SC-FM 15](manual/15-misalignment.md)). A tier alone does not make an incident: before a case is reported, the admin records the scope finding with the tests that failed. Activity that stayed within its task is not reported, whatever its tier. We call agents misaligned only when an agent is present and the activity went out of scope, and the tooling enforces it ([Wording](#wording)).
 - **Words follow measurement.** A public notice says what the records contain. It says that the activity is an agent's, or rates how likely, only as strongly as a held-out measurement of that kind of finding supports ([SC-FM 9.12](manual/09-evaluation.md#fm-912-calibrated-public-language)).
 - **Neutral fleet names.** A fleet's identifier never contains a provider, model, country or organisation name, and is never reused ([SC-FM 5.13](manual/05-linking.md#fm-513-cluster-lifecycle-and-identifiers)).
 
@@ -38,57 +38,90 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
 
 | Topic | Policy |
 |---|---|
-| **Publication** | Every confirmed incident gets a public notice on the site, one page per incident. Updates are appended as dated entries, and the page shows its status: active, contained or historical. |
-| **Timing** | Reports go first; the notice follows on a fixed lead time: 0 hours for the AI provider, 4 to 12 hours for the operator of a targeted endpoint, 24 hours for the operator of a compromised one. Nothing a recipient says extends it. It is not an embargo. See [Lead times](#lead-times). |
+| **Publication** | Every confirmed incident gets a public notice on the site, in two stages: indicators first, names later. Updates are appended as dated entries, and the page shows its status. See [Two stages](#two-stages). |
+| **Timing** | Reports go first. Indicators follow on a short fixed clock; an operator is named 3 working days after its report, 10 if compromised, unless it consents earlier. Not an embargo. See [Lead times](#lead-times). |
 | **Admin gate** | Tools and agents draft reports, find contacts and prepare notices. Only the admin decides when evidence is sufficient, which endpoints are compromised or targeted, and sends reports and publishes notices. |
-| **Self-review** | One admin decides and publishes, so every notice passes a written checklist and a re-read at least an hour after drafting. See [Self-review](#self-review). |
+| **Review** | Every indicator notice and naming update passes the admin's written checklist and an approved review of the exact draft by a second person. See [Self-review and second review](#self-review-and-second-review). |
 | **Channels** | Email is preferred. When an organisation has no email contact, the admin uses its web form or CERT portal. |
-| **Naming** | Public notices name the affected organisations as targets. A provider below shared identifiers is named only as the party that was notified. See [Naming](#naming). |
+| **Naming** | Affected organisations are named as targets, in a naming update after their clock. A provider below shared identifiers is named only as the party that was notified. See [Naming](#naming). |
+| **Wording** | Notices and reports describe suspected AI agent activity. "Misaligned" appears only on a recorded scope-exceeded finding and an admin agent grade of L3 or higher. See [Wording](#wording). |
 | **What notices withhold** | Anything that lets a reader take over or reuse the swarm's channels, or exploit an unfixed weakness. See [What notices withhold](#what-notices-withhold). |
 | **Corrections** | Notices are versioned. Corrections and retractions are appended as dated updates on the notice and in the feed. Earlier entries are never rewritten. |
 | **Right of reply** | A provider's or affected operator's statement is appended verbatim to the notice as a dated update when they ask. It never delays publication. See [for-operators.md](guides/for-operators.md#right-of-reply-and-corrections). |
 | **Authorised testing** | A cluster that declares itself an authorised red-team or research evaluation is handled as a normal incident, and its declared owner is contacted with the provider. If the owner confirms it was authorised and in scope, the notice is published as "authorised test, closed". It is not withheld. |
 | **Independence** | We work independently and do not depend on other groups or services for permission to publish. |
 
+### Two stages
+
+A notice is published in two stages.
+
+1. **Indicator notice.** What the activity was and how to recognise it: relays, carriers, payload families and shapes, run tags already published elsewhere, the kinds of callback service used (never a channel identifier), the time window, cluster tiers, attribution and the scope finding. It names and locates no affected party: no organisation, host, registrable domain, IP address or network of a target, and no target URL or path that contains an affected host. Targets are described by class only, such as "a national government data portal" or "two university research sites".
+2. **Naming updates.** Dated updates appended to the published notice, each adding the names and defanged hosts of the affected organisations whose naming clock has run or who consented. One update may name some operators while others are still pending; a later update names the rest.
+
+Naming is the default once allowed. The admin may decide never to name an operator, with the reason logged in the case.
+
 ### Lead times
 
-The public notice follows the reports on a fixed clock. Each party's clock starts at the latest report sent to it:
+Each party's clocks start at the latest report sent to it, or at the recorded no-contact for a party with none.
 
-| Party | Lead time |
-|---|---|
-| The AI provider | 0 hours |
-| The operator of a targeted or historical endpoint | 4 to 12 hours; 6 unless the admin sets the case otherwise |
-| The operator of a compromised endpoint | 24 hours |
+| Party | Indicator notice | Naming |
+|---|---|---|
+| The AI provider | 0 hours | Named per the attribution rules below |
+| The operator of a targeted or historical endpoint | 0 hours | 3 working days |
+| The operator of a compromised endpoint | 24 hours | 10 working days |
 
-The notice may be published once every party's clock has run. The lead time gives an operator hours to check its logs and patch before the notice is public. It is short because a swarm is an active incident: others it targets can protect themselves only once the notice is out.
+The indicator notice may be published once every party was sent its report or recorded as having no contact, so operators hear privately before anything is public, and every party's indicator clock has run. Others the swarm targets can protect themselves only once the indicators are out, so that clock is short.
 
-- **No extension.** Nothing a recipient says, asks or offers lengthens the clock, and the admin cannot set it beyond these bounds. The tooling has no override.
-- **Not an embargo.** The clock is fixed in advance, attached to no condition and never negotiated. Recipients are told the publication time in their report.
-- **No contact.** When no contact can be found for a party, the admin records what was tried. That party does not hold the notice back, and the notice says contact was attempted.
-- **Replies.** A statement sent for publication is appended verbatim to the notice as a dated update. It never moves the time.
+Working days are Monday to Friday in UTC; Saturdays and Sundays never count. A report sent on a weekend counts from the following Monday 00:00 UTC. The naming clock ends at the same UTC time of day once the working days have passed. The naming lead gives an operator time to check its logs, patch and prepare before its name is public.
 
-### Self-review
+- **Not an embargo.** Indicators are published on a fixed, short clock regardless of what anyone says; only names wait. Every clock is fixed in advance, attached to no condition and never negotiated. Recipients are told the times in their report.
+- **Lengthening.** The admin may lengthen the naming lead for a case, from 3 to 20 working days; a compromised endpoint's operator then waits the longer of 10 and that lead. Nothing shortens it below these bounds.
+- **Consent.** An operator that says in writing it may be named earlier is recorded, and may then be named in the next naming update with no wait. Consent is the only thing that shortens the naming clock.
+- **Requests.** Nothing a recipient says, asks or offers changes the indicator clock. A request to delay naming is recorded; the admin may lengthen the naming lead within the bounds above, and is not bound by the request.
+- **No contact.** When no contact can be found for a party, the admin records what was tried. That party does not hold the indicator notice back, its naming clock runs from the record, and the notice says contact was attempted.
+- **Replies.** A statement sent for publication is appended verbatim to the notice as a dated update. It never moves a clock.
 
-No second person reviews a notice. Before the tooling writes one, every item of a checklist passes, recorded in the case:
+### Self-review and second review
+
+Before the tooling writes an indicator notice or a naming update, two reviews pass, both recorded in the case.
+
+The admin's self-review checklist:
 
 - every attribution claim states its layer, label and tag, and no likelihood word is stronger than its label allows;
 - each named organisation is described as targeted or affected; "compromised" is used only for an endpoint classified compromised on a recorded basis beyond the requests it received;
 - each alternative explanation (authorised test, honeypot, research scanner, spoofed self-identification, planted records) is recorded as rejected, with the reason;
 - a cluster with two or more plant signals has a recorded review;
-- every party was sent its report or recorded as having no contact, and the lead time has run;
-- the withholding scan passes;
-- the admin re-read the exact final draft at least an hour after it was drafted.
+- every party was sent its report or recorded as having no contact, and the stage's clock has run;
+- the withholding scan passes, and the indicator notice names and locates no affected party;
+- the admin re-read the exact final draft at least an hour after it was drafted;
+- a second person approved the exact draft, as below.
+
+The second review:
+
+- **A second person.** A reviewer other than the admin reads the exact draft and approves or objects. The review records the reviewer, the time, the verdict, the stage and the SHA-256 of the draft.
+- **Exact draft.** Any edit to the draft after the review invalidates it. An objection blocks publication until a later approval of the current draft; the objection and the response stay in the case log.
+- **No bypass.** The tooling has no override. With no reviewer available, nothing is published.
+- **Not a gate on corrections.** Corrections, retractions, right-of-reply statements and status changes need no second review, so a correction is never blocked.
+- **Anonymous in public.** The notice says it was reviewed by a second reviewer before publication, without the reviewer's name.
 
 ### Naming
 
-- **Affected organisations** are named as targets. When every record on an endpoint comes from a service anyone can submit a URL to, its operator is named only with the admin's reason logged in the case. The notice then says "URLs targeting <organisation>'s hosts were submitted to public scan services", not that requests reached them.
+- **Affected organisations** are named as targets, in a naming update once their clock has run or they consented. When every record on an endpoint comes from a service anyone can submit a URL to, its operator is named only with the admin's reason logged in the case. The update then says "URLs targeting <organisation>'s hosts were submitted to public scan services", not that requests reached them.
+- **Withholding a name.** The admin may decide never to name an operator; the decision and its reason are logged in the case.
 - **Providers below shared identifiers** are named as the party notified, never as the operator: "Requests in this cluster identify themselves as using <model> from <provider>. Self-identification is the weakest evidence we use. We have not confirmed that <provider> operated, deployed or authorised them. <provider> has been sent the full evidence." No such provider appears in a notice title.
 - **Provider infrastructure** shows whose systems the requests came from: the notice says they came from infrastructure the provider operates, and treats who deployed the agents as a separate question.
+
+### Wording
+
+Reports and notices describe what is detected: suspected AI agent activity in public records, linked into runs and fleets, reported when it harms or endangers others. Their titles are "Report of suspected AI agent activity" and "Public notice: suspected AI agent activity".
+
+"Misaligned" in any form appears in a report or notice only when the case records both an admin scope finding of scope exceeded for the clusters it covers and an admin agent grade of L3 or higher ([SC-FM 15](manual/15-misalignment.md)). The notice front matter records both, and the notice linter rejects the word without them.
 
 ### What notices withhold
 
 - **Channels.** Live inbox or topic identifiers, and anything else that lets a reader take over or reuse the swarm's channels.
 - **Secrets.** Captured credentials and cookies.
+- **Affected parties, until named.** The indicator notice names and locates no affected party ([Two stages](#two-stages)).
 - **Unfixed weaknesses.** Details of a weakness at an affected endpoint that is not yet fixed. Endpoints marked compromised have their attack details withheld.
 - **Anything unclassified.** The notice draft withholds whatever it cannot classify and flags it for the admin.
 

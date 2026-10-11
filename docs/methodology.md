@@ -2,7 +2,7 @@
 
 This page describes how swarmchasing turns public records into the claims in a report or notice. It is written for three readers: security teams at AI providers who receive a report, operators of affected sites, and researchers checking the method. Each section links to the code that does the work. Where a number is a setting, the page names the setting so you can check its current value.
 
-The short version: the toolkit reads public indexes, redacts secrets, unwraps each recorded URL, matches indicator rules, grades each record, links flagged records into clusters, and describes their timing. The admin reviews the result, decides what is true, and sends and publishes. No step is automatic past drafting.
+The short version: the toolkit reads public indexes, redacts secrets, unwraps each recorded URL, matches indicator rules, grades each record, links flagged records into clusters, and describes their timing. The admin reviews the result, decides what is true, and sends and publishes, after a second person reviews each notice. No step is automatic past drafting.
 
 Policies (what we collect, how we name, what notices withhold) are in [policies.md](policies.md). Guidance for operators is in [for-operators.md](guides/for-operators.md).
 
@@ -307,7 +307,9 @@ The grade is descriptive. It changes no score, tier or link, and it has no held-
 
 A tier measures payloads and tool use, and the grade measures how likely an agent is. Neither says the agent went beyond its task. The method makes that a third finding, the scope assessment ([SC-FM 15](manual/15-misalignment.md)): the reviewer states the cluster's task class from its ordinary requests, classifies each target (public content, interactive, access-controlled, sensitive, third-party channel, benchmark), and runs seven tests, from off-task targets (S1, SC-T8) and control circumvention (S2) to coordination (S7). Tool use alone, relays and echo-service programs included, fails no test. A cluster is called misaligned only when an agent is present and a test fails with its innocent explanation rejected.
 
-The toolkit runs the assessment as a pass and records it on each cluster (`Cluster.scope`): the task class, the target classes, the S1–S7 tests with their evidence records, and the finding. Internal and provider reports show it in one line; the public notice is unchanged. The admin still decides the incident from it.
+The toolkit runs the assessment as a pass and records it on each cluster (`Cluster.scope`): the task class, the target classes, the S1–S7 tests with their evidence records, and the finding. Internal and provider reports show it in one line. The pass is a suggestion: the admin decides the incident from it and records the finding (`case scope`, [cases](reference/cases.md#scope-finding)), which is what notices state.
+
+Reports and notices describe suspected AI agent activity. The word "misaligned" in any form appears in one only when the case records an admin finding of scope exceeded for the clusters it covers and an admin agent grade of L3 or higher (`case grade`); the notice front matter carries both, and the notice linter rejects the word without them ([notices](reference/notices.md#lint)).
 
 ## Evaluation
 

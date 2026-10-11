@@ -11,7 +11,7 @@ use sc_case::{Case, actions, lead, notice};
 
 let mut c = Case::parse(&case_toml)?;
 actions::classify(&mut c, &["portal.example.gov".into()], "targeted".parse()?, None, None, None, today)?;
-let clock = lead::clock(&c); // when the notice may be added
+let clock = lead::clock(&c); // when the indicator notice may be added, and each operator named
 let problems = notice::lint_notice(&notice::parse_notice(&text)?, &rules); // empty: may be published
 let text = c.to_toml()?; // the caller writes it back
 ```
@@ -20,14 +20,14 @@ let text = c.to_toml()?; // the caller writes it back
 
 | Module | Covers |
 |---|---|
-| [`model`](src/model.rs) | What `case.toml` holds: status, endpoints, typed contact roles, claims, sends, fleets, the self-review records. |
+| [`model`](src/model.rs) | What `case.toml` holds: status, admin, endpoints, typed contact roles, claims, sends, fleets, scope findings, naming consent, the self-review and second-review records. |
 | [`actions`](src/actions.rs) | The admin's decisions: classify, send, no contact, alternative, claim, grade, plant review, contacts, settings. Each is checked and logged. |
 | [`evidence`](src/evidence.rs) | Logs operators send back, and which rendering may use them (`Scope`). |
 | [`report`](src/report.rs) | Report options from a case, the hosts a notice may name, who the sends reached, the claims a report sees. |
 | [`fleet`](src/fleet.rs) | Fleet merges and splits, and the interaction evidence that makes a fleet a swarm. |
-| [`lead`](src/lead.rs) | The lead-time clock each party's report starts. |
+| [`lead`](src/lead.rs) | The indicator and naming clocks each party's report starts, in UTC working days for naming. |
 | [`pinning`](src/pinning.rs) | Names for pinned rule sets, and the records whose tier differs between two rule sets. |
-| [`checklist`](src/checklist.rs) | The self-review checklist `notice add` runs, from inputs the caller gathers. |
+| [`checklist`](src/checklist.rs) | The self-review checklist `notice add` and `notice update --naming` run, from inputs the caller gathers. |
 | [`bundle`](src/bundle.rs) | Evidence bundle contents, the manifest, and the stamp check (with a lean reader of `analysis.json`). |
 | [`incident`](src/incident.rs) | Drafts for the AI Incident Database and the OECD framework, with an EU AI Act Article 73 section. |
 | [`notice`](src/notice/mod.rs) | The notice file format and the one notice linter (front matter, leaks, wording). |

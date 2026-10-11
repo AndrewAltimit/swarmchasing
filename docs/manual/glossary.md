@@ -35,13 +35,16 @@ Each term links to the section that defines it.
 | Incident | Confirmed agent activity that harms or risks an operator. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
 | Independence group | Rules reading the same artifact, counted once per record. | [FM-4.11](04-indicators.md#fm-411-independence-groups-and-the-context-cap) |
 | Indicator | A rule that matches a feature of a record. | [FM-1.2](01-scope.md#fm-12-units-of-observation), [FM-4.2](04-indicators.md#fm-42-rule-anatomy) |
+| Indicator notice | The first stage of a notice: indicators, no affected party named. | [FM-10.2](10-disclosure.md#fm-102-lead-times) |
 | Interaction edge | A hint that two runs acted on each other's output; never a merge. | [FM-4.10](04-indicators.md#fm-410-interaction-signals), [FM-5.12](05-linking.md#fm-512-interaction-edges) |
 | Lead | A cluster or candidate fleet nobody has reviewed. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
 | Likelihood word | A term from the ICD 203 table. | [FM-8.1](08-confidence.md#fm-81-likelihood-table) |
 | Link feature | A matched value one operator would hold. | [FM-1.2](01-scope.md#fm-12-units-of-observation), [FM-5.2](05-linking.md#fm-52-shared-link-features) |
-| Misaligned | An agent present and out of scope, with no accepted alternative. | [FM-15.1](15-misalignment.md#fm-151-four-questions) |
+| Misaligned | An agent present and out of scope, with no accepted alternative; in reports only with both recorded. | [FM-15.1](15-misalignment.md#fm-151-four-questions), [FM-15.4](15-misalignment.md#fm-154-stating-a-scope-finding) |
 | Named fleet | A fleet with an identifier unique across cases, `SCF-<n>`. | [FM-5.13](05-linking.md#fm-513-cluster-lifecycle-and-identifiers) |
 | Naming gate | The evidence threshold for naming a developer. | [FM-7.8](07-attribution.md#fm-78-the-naming-gate) |
+| Naming lead | Working days before an affected operator is named: 3, or 10 if compromised. | [FM-10.2](10-disclosure.md#fm-102-lead-times) |
+| Naming update | A dated update that names affected operators. | [FM-10.2](10-disclosure.md#fm-102-lead-times), [FM-11.2](11-notices.md#fm-112-structure) |
 | Notice | The public page for one incident. | [FM-1.4](01-scope.md#fm-14-casework-terms), [chapter 11](11-notices.md) |
 | Passivity test | The conditions every source must pass. | [FM-3.2](03-sources.md#fm-32-passivity-test) |
 | Pause | A gap long in absolute terms and against the median gap. | [FM-6.2](06-timing.md#fm-62-cadence-bursts-and-pauses) |
@@ -59,6 +62,7 @@ Each term links to the section that defines it.
 | SC-T | The swarmchasing tactic ids, SC-T1 to SC-T9. | [FM-4.3](04-indicators.md#fm-43-the-sc-t-tactic-taxonomy) |
 | Scope finding | In scope, scope exceeded or not assessable. | [FM-15.4](15-misalignment.md#fm-154-stating-a-scope-finding) |
 | Scope test | One of S1 to S7, each a way activity can exceed its task. | [FM-15.3](15-misalignment.md#fm-153-scope-tests) |
+| Second review | Approval of the exact draft by a person other than the admin. | [FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review) |
 | Shared pause | Two clusters going quiet together beyond chance. | [FM-6.7](06-timing.md#fm-67-shared-pauses) |
 | Signed request | A request carrying a Web Bot Auth signature and `Signature-Agent`. | [FM-7.11](07-attribution.md#fm-711-declared-agent-identity) |
 | Soft link | A proposed link between clusters; never joins them. | [FM-5.1](05-linking.md#fm-51-hard-and-soft-links), [FM-5.7](05-linking.md#fm-57-soft-links) |

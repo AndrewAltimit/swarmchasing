@@ -15,15 +15,18 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 ## What `case.toml` holds
 
 - the case status (`open`, `reported`, `published`, `closed`), the notice status (`active`, `contained`, `historical`), and the date a notice was added while its publication is pending;
-- each endpoint and the admin's decision on it: `compromised` (with its basis), `targeted`, `historical`, `not-affected`, or still `unreviewed`, and any reason for naming an endpoint seen only in submit-anywhere records;
+- the admin's name (`admin`), set by `case new` from `SWARMCHASE_ADMIN`, else `git config user.name`, and changed with `case set --admin`;
+- each endpoint and the admin's decision on it: `compromised` (with its basis), `targeted`, `historical`, `not-affected`, or still `unreviewed`, any sector description for the notice, and any reason for naming an endpoint seen only in submit-anywhere records;
 - attribution claims established by case work, each with its layer, evidence and tag;
 - contacts;
 - fleets: clusters the admin treats as one operator's, by stable key, each with any interaction evidence the admin accepted ([swarms](#swarms));
 - the admin's agent grade, with its date and basis ([agent grade](#agent-grade));
+- the admin's scope finding per cluster, with the failed tests and a note ([scope finding](#scope-finding));
 - a dated decision log;
 - the reports sent, each with its time, and the parties no contact was found for;
-- the operators' lead time, if the admin changed it ([lead time](#lead-time));
-- the self-review: the decisions on alternative explanations, plant reviews, and the notice draft's hash and time when written and when re-read ([self-review checklist](#self-review-checklist)).
+- the naming lead, if the admin lengthened it, and each operator's consent to earlier naming or the decision never to name it ([lead times](#lead-times));
+- the self-review: the decisions on alternative explanations, plant reviews, and each draft's hash and time when written and when re-read ([self-review checklist](#self-review-checklist));
+- the second reviews, each with its reviewer, time, verdict, note, stage and draft hash ([second review](#second-review)).
 
 Each change is logged with its date.
 
@@ -32,11 +35,12 @@ Each change is logged with its date.
 | Command | What it does |
 |---|---|
 | `case status [<id>]` | Lists cases, or shows one case and what it still needs. |
-| `case endpoint <id> <host>... <state> [--note …] [--basis …] [--single-source-reason …]` | Classifies one or more endpoints; `compromised` needs `--basis`. A host not in the case changes nothing. |
+| `case endpoint <id> <host>... <state> [--note …] [--basis …] [--single-source-reason …] [--sector "…"]` | Classifies one or more endpoints; `compromised` needs `--basis`. A host not in the case changes nothing. |
 | `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits. Refused once its notice is published. |
 | `case claim <id> --party … [--layer …] --evidence … [--tag …] --detail …` | Records an attribution claim ([attribution claims](#attribution-claims)). |
-| `case set <id> --status … --notice … --min-named … --lead-hours …` | Changes the status, the naming threshold or the operators' lead time (4 to 12 hours). |
+| `case set <id> --status … --notice … --min-named … --naming-days N --admin "…"` | Changes the status, the developer naming threshold, the naming lead (3 to 20 working days) or the admin's name. |
 | `case grade <id> [<L0..L5> --note … \| --clear]` | Shows each cluster's agent grade, or records the admin's ([agent grade](#agent-grade)). |
+| `case scope <id> --cluster <key> --finding in-scope\|exceeded\|not-assessable --tests S2,S4 --note "…"` | Records the admin's scope finding for a cluster ([scope finding](#scope-finding)). |
 | `case note <id> "…"` | Adds a dated entry to the decision log. |
 | `case fleet merge\|split\|show <id> …` | Groups soft-linked clusters into one fleet, splits one off, or lists fleets and candidates ([fleets](#fleets)). |
 | `case fleet interaction\|withdraw <id> <fleet> …` | Records reviewed interaction between a fleet's runs, or withdraws it ([swarms](#swarms)). |
@@ -47,13 +51,17 @@ Each change is logged with its date.
 | `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
 | `case bundle <id>` | Writes an evidence bundle without drafting a report. |
 | `case verify <bundle>` | Checks the manifest, re-runs the analysis and fails if any tier or cluster differs. |
-| `case sent <id> --to … --channel … [--at <time>]` | Records a send the admin made, with its time, and moves an open case to reported ([lead time](#lead-time)). |
-| `case no-contact <id> <host\|org\|provider> --searched …` | Records that no contact was found for a party ([lead time](#lead-time)). |
-| `case notice <id>` | Drafts the public notice into `notice.md` ([notices](notices.md)). |
+| `case sent <id> --to … --channel … [--at <time>]` | Records a send the admin made, with its time, and moves an open case to reported ([lead times](#lead-times)). |
+| `case no-contact <id> <host\|org\|provider> --searched …` | Records that no contact was found for a party ([lead times](#lead-times)). |
+| `case consent <id> --party <p> --note "…"` | Records an operator's written consent to be named before its naming lead runs ([lead times](#lead-times)). |
+| `case naming <id> --party <p> --withhold --reason "…"` | Records the decision never to name an operator ([lead times](#lead-times)). |
+| `case notice <id> [--naming]` | Drafts the indicator notice into `notice.md`, or the next naming update into `naming.md` ([notices](notices.md)). |
 | `case alternative <id> [<kind> --rejected …]` | Records why an alternative explanation does not hold, or lists the decisions ([self-review](#self-review-checklist)). |
 | `case plant-review <id> <cluster> --note …` | Records the review of a cluster's plant signals. |
 | `case reread <id>` | Records a re-read of the notice draft as it is now, by its SHA-256. |
 | `case checklist <id>` | Prints the self-review checklist `notice add` runs. |
+| `case review-packet <id> [--naming]` | Writes the draft, checklist output and internal report into `outbox/review/` for the second reviewer ([second review](#second-review)). |
+| `case review <id> --reviewer "…" --verdict approve\|object [--note "…"]` | Records a second review of the current draft ([second review](#second-review)). |
 | `case rules <id> [--update]` | Shows the pinned rules version against the current one and the records whose tier would change. |
 | `case export <id> --format stix\|misp --audience … [--to <contact>]` | Writes the case as a STIX 2.1 bundle or a MISP event ([STIX export](#stix-export), [MISP export](#misp-export)). |
 | `case export <id> --format oecd\|aiid [--site-url …]` | Writes a draft for an AI incident database or reporting framework ([incident database drafts](#incident-database-drafts)). |
@@ -76,7 +84,20 @@ swarmchase case grade <id> L5 --note "provider confirmed: <link>"
 swarmchase case grade <id> --clear
 ```
 
-The decision is the admin's, stored as `agent_grade` (level, date, note) in `case.toml` and logged. It needs `--note`, what it rests on with links. It is the only way to L5 (documented: operator logs matching an agent harness, or the provider's confirmation), and it may also set a lower grade than the records reach, such as L0 for a confirmed human tester. Case notes and provider reports show it beside the computed grades; the note appears in case notes only. A public notice prints no grade either way.
+The decision is the admin's, stored as `agent_grade` (level, date, note) in `case.toml` and logged. It needs `--note`, what it rests on with links. It is the only way to L5 (documented: operator logs matching an agent harness, or the provider's confirmation), and it may also set a lower grade than the records reach, such as L0 for a confirmed human tester. Case notes and provider reports show it beside the computed grades; the note appears in case notes only. A notice's front matter records the admin's grade, which the linter reads for the word "misaligned" ([scope finding](#scope-finding)); its body prints no grade.
+
+## Scope finding
+
+Each cluster carries a computed scope assessment ([SC-FM 15](../manual/15-misalignment.md)): its task class, the target classes reached and the S1 to S7 tests. That pass is a suggestion. The admin records the finding:
+
+```sh
+swarmchase case scope <id> --cluster k-3f9a2c1b --finding exceeded --tests S2,S4 --note "relays after a challenge, then SQL injection on the login form: <links>"
+swarmchase case scope <id> --cluster C2 --finding in-scope --note "schedule retrieval only"
+```
+
+`--finding` is `in-scope`, `exceeded` or `not-assessable`; `--tests` lists the failed tests. The finding is stored by cluster key in `case.toml` and logged. Notices state the admin's finding, and the notice front matter records it for the clusters the notice covers.
+
+"Misaligned" in any form may appear in a report or notice only when every cluster it covers has an admin finding of `exceeded` and the admin's agent grade is L3 or higher ([SC-FM 15.4](../manual/15-misalignment.md#fm-154-stating-a-scope-finding)). Without both, `notice add`, `notice update` and `notice lint` reject it ([lint](notices.md#lint)).
 
 ## Fleets
 
@@ -129,22 +150,32 @@ Each contact has a role: `provider`, `affected` (an operator), `registrar`, `hos
 
 `case draft` writes the report for one listed contact into `outbox/`. For an email contact it is an unsent `.eml` with a fresh evidence bundle attached; otherwise it is paste-ready text for a web form or CERT portal. Nothing is ever sent by the tool. After the admin sends a draft, `case sent` records it.
 
-Provider and affected reports end with a *Publication* section: the time the notice is scheduled for, that the time is fixed and not an embargo, and that a statement sent for the notice is appended verbatim. The time assumes every party not yet sent its report is sent it now; send the drafts as soon as they are read.
+Provider and affected reports end with a *Publication* section: the time the indicator notice is scheduled for, that it will not name or locate the recipient, the time from which the recipient may be named, that both are fixed and not an embargo, how to consent to earlier naming, and that a statement sent for the notice is appended verbatim. The times assume every party not yet sent its report is sent it now; send the drafts as soon as they are read.
 
-## Lead time
+## Lead times
 
-The notice follows the reports on the fixed clocks in [policies](../policies.md#lead-times): 0 hours for the provider, 4 to 12 for the operator of a targeted or historical endpoint (6 unless `case set --lead-hours` says otherwise), 24 for the operator of a compromised endpoint. Each clock runs from the latest send to that party.
+The notice follows the reports in two stages, on the fixed clocks in [policies](../policies.md#lead-times). Each clock runs from the latest send to that party, or from its recorded no-contact.
+
+| Party | Indicator notice | Naming |
+|---|---|---|
+| Provider | 0 hours | Through the developer naming gate |
+| Operator of a targeted or historical endpoint | 0 hours | 3 working days, or `--naming-days` |
+| Operator of a compromised endpoint | 24 hours | The longer of 10 working days and `--naming-days` |
 
 - **Parties.** Each provider organisation among the case's contacts (or one unnamed provider when there is none), and the operator of each endpoint classified compromised, targeted or historical. A send counts for an operator when its recipient is a contact listed for that endpoint.
 - **Send times.** `case sent` records the time of the send: now, or `--at` (RFC 3339, such as `2026-10-12T14:05:00Z`) for a send recorded afterwards. A time in the future is refused. A send recorded with `--date` only counts from the end of that day.
-- **No contact.** `case no-contact <id> <party> --searched "…"` records what was tried for a party with no contact (an endpoint's host, a provider organisation, or `provider`). It is refused while the case lists a contact for that party. The party then does not hold the notice back, and the notice's first update says contact was attempted.
-- **No override.** Nothing lengthens a clock beyond its bound, and nothing shortens one.
+- **Working days.** The naming clock counts Monday to Friday in UTC. A send on a Saturday or Sunday counts from the following Monday 00:00 UTC; the clock ends at the same UTC time of day once the working days have passed.
+- **Lengthening.** `case set <id> --naming-days N`, N from 3 to 20, lengthens the naming lead for the case. Nothing shortens it below the bounds, and nothing changes the indicator clock.
+- **Consent.** `case consent <id> --party <p> --note "…"` records an operator's written consent to earlier naming, with how it was given. Its name may then go in the next naming update with no wait.
+- **Never naming.** `case naming <id> --party <p> --withhold --reason "…"` records the decision never to name an operator. Naming updates leave it out, and the reason stays in the case log.
+- **No contact.** `case no-contact <id> <party> --searched "…"` records what was tried for a party with no contact (an endpoint's host, a provider organisation, or `provider`). It is refused while the case lists a contact for that party. The party then does not hold the indicator notice back, its naming clock runs from the record, and the notice's first update says contact was attempted.
+- **Requests.** A recipient's request to delay naming is recorded with `case note`; it changes no clock unless the admin lengthens the lead.
 
-`case status` lists each party's clock and the time the notice may be added from.
+`case status` lists each party's clocks, the time the indicator notice may be added from, and the time each operator may be named from.
 
 ## Self-review checklist
 
-`notice add` runs a checklist against the case and the draft, prints it as a pass/fail list, and writes nothing while any item fails. `case checklist <id>` prints it without adding. The items, and what clears each:
+`notice add` and `notice update --naming` run a checklist against the case and the stage's draft, print it as a pass/fail list, and write nothing while any item fails. `case checklist <id>` prints it without adding. The items, and what clears each:
 
 | Item | Cleared by |
 |---|---|
@@ -158,14 +189,36 @@ The notice follows the reports on the fixed clocks in [policies](../policies.md#
 | Alternative explanations decided | `case alternative <id> <kind> --rejected "…"` for each kind |
 | Clusters with two or more plant signals reviewed | `case plant-review <id> <cluster> --note "…"` |
 | Every party sent or recorded without a contact | `case sent`, `case no-contact` |
-| The lead time has run | Waiting |
+| The stage's clock has run for each party it covers | Waiting, or `case consent` for naming |
 | The draft written after every send | `case notice --force` after the sends |
 | A re-read of the exact draft an hour or more after it was written | `case reread` |
 | The withholding scan passes | Editing the draft |
+| The indicator notice names and locates no affected party | Editing the draft; describe targets by class or `--sector` |
+| "Misaligned" only with a scope-exceeded finding and an admin grade of L3 or higher | `case scope`, `case grade`, or editing the draft |
+| An approved second review of the current draft | `case review` ([second review](#second-review)) |
 
 The kinds of alternative explanation are `authorised-test`, `honeypot`, `research-scanner`, `spoofed-self-id` and `planted-records`. Only `authorised-test` can be `--accepted` (its owner confirmed it, with the link); the notice must then say it was an authorised test ([SC-FM 10.6](../manual/10-disclosure.md#fm-106-authorised-testing)).
 
-`case notice` records the draft's SHA-256 and the time it was written; `case reread` records the SHA-256 of the draft as it is and the time. Any edit after a re-read changes the hash and needs another re-read. The re-read counts only an hour or more after the draft was written, so drafting after the sends puts the cooling-off inside the operators' lead time.
+`case notice` records the draft's SHA-256 and the time it was written; `case reread` records the SHA-256 of the draft as it is and the time. Any edit after a re-read changes the hash and needs another re-read. The re-read counts only an hour or more after the draft was written, so a notice is never added within an hour of its draft.
+
+## Second review
+
+Every indicator notice and naming update needs an approved review of the exact draft by a second person before `notice add` or `notice update --naming` writes it. There is no override: with no reviewer available, nothing is published.
+
+```sh
+swarmchase case review-packet <id>                 # outbox/review/: notice.md, the checklist output, the internal report
+swarmchase case review-packet <id> --naming        # the same for naming.md
+swarmchase case review <id> --reviewer "R. Reviewer" --verdict approve --note "read the draft and the internal report"
+swarmchase case review <id> --reviewer "R. Reviewer" --verdict object --note "the summary names a university by its city"
+```
+
+- **Packet.** `case review-packet` writes the stage's draft, the checklist output and the internal report into `<case>/outbox/review/`, for the admin to hand to the reviewer. Nothing is sent.
+- **Record.** `case review` records the reviewer, the time, the verdict, the note, the stage (`indicators` or `naming`) and the SHA-256 of the current draft for that stage (`notice.md` or `naming.md`).
+- **Refusals.** A review is refused when the reviewer is the case's admin (compared trimmed and without case) or when the stage's checklist has failing items.
+- **Exact draft.** An edit to the draft changes its hash and invalidates the review. An `object` blocks until a later `approve` of the current draft; both stay in the log.
+- **Exempt.** Corrections, retractions, replies and status changes need no review.
+
+The published notice says it was reviewed by a second reviewer before publication, without the reviewer's name.
 
 ## Evidence bundles
 

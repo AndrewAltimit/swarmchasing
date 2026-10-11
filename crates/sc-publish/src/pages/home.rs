@@ -747,20 +747,20 @@ fn attribute_step(a: &Analysis, links: &FmLinks) -> String {
 
 fn report_step(links: &FmLinks) -> String {
     let steps = [
-        ("Report drafted", "admin reviews"),
-        ("AI provider", "first, 0 h"),
-        ("Operators", "4–12 h, 24 h if compromised"),
-        ("Public notice", "after every clock runs"),
+        ("Reports", "provider and operators"),
+        ("Second review", "of the exact draft"),
+        ("Indicator notice", "0 h, 24 h if compromised"),
+        ("Naming update", "3 working days, 10 if compromised"),
     ];
     step(&Step {
         id: "report",
         n: 8,
         title: "Report, then publish",
-        prose: "<p>The tools draft; a person sends. Reports go to the AI provider responsible and to the affected operators, and the public notice follows on a fixed lead time that nothing a recipient says extends. A notice informs without enabling: it withholds working payloads, inbox and tag values, and anything that would help repeat the attack. The example notice below is drafted from these synthetic records.</p>".into(),
+        prose: "<p>The tools draft; a person sends, and a second person reviews every notice before it is published. Reports go to the AI provider responsible and to the affected operators first. An indicator notice follows on a short fixed clock that nothing a recipient says extends: it describes the activity and names no affected party. Operators are named in a later update, 3 working days after their report (10 if compromised), or earlier with their consent. A notice informs without enabling: it withholds working payloads, inbox and tag values, and anything that would help repeat the attack. The example notice below is drafted from these synthetic records.</p>".into(),
         figure: disclosure_flow(&steps, "Who hears first, and when the notice may follow"),
         caption: "Lead times from the publication policy.".into(),
         table: rows_table(
-            &["Party", "Lead time"],
+            &["Stage", "When"],
             &steps
                 .iter()
                 .map(|(a, b)| vec![esc(a), esc(b)])
@@ -841,7 +841,7 @@ pub fn body(a: &Analysis, rules: &Rules, notices: &[NoticeFile], links: &FmLinks
     let mut s = String::new();
     s.push_str(
         "<section class=\"hero\" aria-labelledby=\"mission\"><p class=\"eyebrow\">Passive detection · coordinated disclosure · an open method</p><h1 id=\"mission\">Swarmchasing</h1>\
-<p class=\"mission\">Swarmchasing finds misaligned AI agent swarms in public records (URL scanners, web archives, certificate logs), links their requests into runs and fleets, and reports each confirmed incident to the AI provider responsible and to the affected operators. A public notice follows on a fixed lead time.</p>\
+<p class=\"mission\">Swarmchasing finds AI agent activity in public records (URL scanners, web archives, certificate logs), links its requests into runs and fleets, and reports each confirmed incident that harms or endangers others to the AI provider responsible and to the affected operators. A public notice follows: indicators on a short fixed clock, the names of affected organisations after a few working days.</p>\
 <p class=\"ctas\"><a class=\"button primary\" href=\"#walk\">See the method</a> <a class=\"button\" href=\"operators/\">Check your own logs</a> <a class=\"button\" href=\"analyze/\">Open the workbench</a> <a class=\"button ghost\" href=\"docs/manual/\">Read the Field Manual</a></p>",
     );
     s.push_str("<nav aria-label=\"The method\"><ol class=\"method-strip\">");
