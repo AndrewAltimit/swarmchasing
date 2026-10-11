@@ -48,12 +48,36 @@ pub struct PreEraArgs {
     /// Measure what is already collected; fetch nothing.
     #[arg(long)]
     offline: bool,
+    /// Capture years measured: `all`, or `even` or `odd` to tune on one
+    /// half of the years and hold the other out. Collection still spreads
+    /// `--per-source` over every year, so the halves share their files.
+    #[arg(long, value_enum, default_value_t = Years::All)]
+    years: Years,
     /// Rules file (defaults to the bundled rules).
     #[arg(long)]
     rules: Option<PathBuf>,
     /// Where the summary JSON goes. Default: `<data>/controls/pre-era/summary.json`.
     #[arg(long)]
     summary_json: Option<PathBuf>,
+}
+
+/// Which capture years a run measures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Years {
+    All,
+    Even,
+    Odd,
+}
+
+impl Years {
+    fn keeps(self, year: i32) -> bool {
+        match self {
+            Self::All => true,
+            Self::Even => year % 2 == 0,
+            Self::Odd => year % 2 != 0,
+        }
+    }
 }
 
 /// One calendar-year window of one source.
@@ -106,6 +130,7 @@ struct Output<'a> {
     from_year: i32,
     per_source: usize,
     per_year: usize,
+    years: Years,
     rules_version: &'a str,
     sources: &'a [SourceTally],
     control: &'a sc_core::eval::control::ControlSummary,
@@ -140,14 +165,24 @@ pub fn run(args: &PreEraArgs) -> Result<()> {
     if wins.is_empty() {
         bail!("--from-year {} is after --before", args.from_year);
     }
+    // The bound is set over every year, so a half reads the same files.
     let per_year = args.per_source.div_ceil(wins.len()).max(1);
+    let wins: Vec<Window> = wins
+        .into_iter()
+        .filter(|w| args.years.keeps(w.year))
+        .collect();
     let dir = args.data.join("controls").join("pre-era");
     let client = Client::new(Duration::from_secs(wl.min_interval_secs.max(1)))?;
     eprintln!(
-        "pre-era control: {} sources · {} years from {} · up to {per_year} captures a year · {}",
+        "pre-era control: {} sources · {} years from {} ({}) · up to {per_year} captures a year · {}",
         sources.len(),
         wins.len(),
         args.from_year,
+        match args.years {
+            Years::All => "all years",
+            Years::Even => "even years",
+            Years::Odd => "odd years",
+        },
         if args.offline {
             "offline"
         } else {
@@ -239,6 +274,7 @@ pub fn run(args: &PreEraArgs) -> Result<()> {
         from_year: args.from_year,
         per_source: args.per_source,
         per_year,
+        years: args.years,
         rules_version: &a.rules_version,
         sources: &tallies,
         control: &c,
@@ -277,6 +313,13 @@ mod tests {
         let jan1 = NaiveDate::from_ymd_opt(2022, 1, 1).unwrap();
         assert_eq!(windows(2021, jan1).len(), 1);
         assert!(windows(2023, before).is_empty());
+    }
+
+    #[test]
+    fn year_halves_split_the_years() {
+        assert!(Years::Even.keeps(2014) && !Years::Even.keeps(2015));
+        assert!(Years::Odd.keeps(2015) && !Years::Odd.keeps(2014));
+        assert!(Years::All.keeps(2014) && Years::All.keeps(2015));
     }
 
     #[test]
