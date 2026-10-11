@@ -1,6 +1,6 @@
 # 14. Known limits and traps
 
-[Manual index](README.md) · Previous: [13. Case study](13-case-study.md) · Next: [Glossary](glossary.md)
+[Manual index](README.md) · Previous: [13. Case study](13-case-study.md) · Next: [15. Misalignment and scope](15-misalignment.md)
 
 Each entry is a conclusion that looks sound and is not, with what to do instead. Cite them by id in a case study's limits ([FM-13.1](13-case-study.md#fm-131-template)). Do not walk these paths again.
 
@@ -83,3 +83,11 @@ A new rules version can move a record between tiers. A case pins its version, an
 ## FM-14.20 Public records can be planted
 
 Scan services and archives take any URL from anyone, and registries, code events and certificate logs publish whatever their users name. A cluster made only of such records shows that someone submitted them. It may be an agent's activity, a researcher's test, or records placed to start a false incident or to point attribution at someone else. State the cluster's provenance and corroboration, check its plant signals, and look for a record no outsider could have made, such as an affected operator's own logs, before resting a claim on it ([FM-5.11](05-linking.md#fm-511-provenance-and-planted-records)).
+
+## FM-14.21 A tier is not misalignment
+
+A significant tier says a record carried a payload or escalated tool use. Agents doing an ordinary data task with fetch programs and echo services reach it too. Whether the activity went beyond its task is a separate finding ([FM-15.1](15-misalignment.md#fm-151-four-questions)); a report that calls a cluster misaligned because it is significant has skipped it.
+
+## FM-14.22 Correlated rules stack
+
+Several rules can read the same artifact: a fetch program fires the script, fetch and title rules together, and a run tag fires its parameter rule and its value rule. Summed, one observation counts several times and lifts a record a tier. Read a record's rules by what they matched, and count rules that read the same thing once ([FM-4.11](04-indicators.md#fm-411-independence-groups-and-the-context-cap)).

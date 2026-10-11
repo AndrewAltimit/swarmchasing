@@ -6,7 +6,7 @@
 
 A case study, whether a published write-up or the reasoning behind a notice, uses these parts in this order. Each claim carries its tag ([FM-7.6](07-attribution.md#fm-76-claim-tags)).
 
-1. **Header.** Case id; method version (SC-FM 1.0) and any departures; rules version; toolkit version; the period covered; each source with its timestamp kind ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)).
+1. **Header.** Case id; method version (SC-FM 1.1) and any departures; rules version; toolkit version; the period covered; each source with its timestamp kind ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)).
 2. **Conclusions first.** Each Conclusion with its label ([FM-7.7](07-attribution.md#fm-77-attribution-labels)) and likelihood words or confidence level ([chapter 8](08-confidence.md)).
 3. **Observed.** A table: claim, record link, rule id.
 4. **Documented.** A table: claim, cited source.
@@ -21,7 +21,7 @@ A case study, whether a published write-up or the reasoning behind a notice, use
 
 **Every record in this example is synthetic.** The records were written by hand to exercise the rules, use reserved `.example` hosts, and were never collected. They are the toolkit's example records ([`llm-residue.ndjson`](../../samples/eval/llm-residue.ndjson)), which the browser toolkit loads under *Try an example*. Their times and groupings are artefacts of how they were written. Results below are as the toolkit grades them at rules version 2026-10-15; a later rules version may grade them differently.
 
-**Header.** Case: synthetic example. Method: SC-FM 1.0. Source: hand-written records with no timestamp kind (unknown).
+**Header.** Case: synthetic example. Method: SC-FM 1.1. Source: hand-written records with no timestamp kind (unknown).
 
 **Conclusions.**
 
@@ -79,7 +79,7 @@ The case studies below apply the template to public incident write-ups. They sho
 
 ## FM-13.4 Case study: urlquery.net agent activity
 
-**Header.** Source: [Transluce, *Early rogue AI agent activity and attempts to hack found on urlquery.net*](references.md#incident-reports), published 23 September 2026. Records: urlquery.net reports, timestamped at submission (submit, [FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Period: November 2025 to September 2026, with the strongest evidence from March to June 2026. Method: SC-FM 1.0; departure: the records were not re-pulled, so the write-up's observations enter as Documented. Rules version 2026-10-15.
+**Header.** Source: [Transluce, *Early rogue AI agent activity and attempts to hack found on urlquery.net*](references.md#incident-reports), published 23 September 2026. Records: urlquery.net reports, timestamped at submission (submit, [FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Period: November 2025 to September 2026, with the strongest evidence from March to June 2026. Method: SC-FM 1.1; departure: the records were not re-pulled, so the write-up's observations enter as Documented. Rules version 2026-10-15.
 
 **Conclusions.**
 
@@ -148,7 +148,7 @@ The provider's acknowledgement covers the swarm. It would raise these clusters t
 
 ## FM-13.5 Case study: US and Canadian government targets
 
-**Header.** Source: [Transluce, *AI Agents Targeted U.S. and Canadian Government Websites*](references.md#incident-reports), published 30 September 2026, a follow-up to the write-up in [FM-13.4](#fm-134-case-study-urlquerynet-agent-activity). Records: urlquery.net reports (submit times) and Arquivo.pt captures (capture times), including captures the agents requested through the archive's save-now feature. Period: April to July 2026. Method: SC-FM 1.0, departure as in FM-13.4. Rules version 2026-10-15.
+**Header.** Source: [Transluce, *AI Agents Targeted U.S. and Canadian Government Websites*](references.md#incident-reports), published 30 September 2026, a follow-up to the write-up in [FM-13.4](#fm-134-case-study-urlquerynet-agent-activity). Records: urlquery.net reports (submit times) and Arquivo.pt captures (capture times), including captures the agents requested through the archive's save-now feature. Period: April to July 2026. Method: SC-FM 1.1, departure as in FM-13.4. Rules version 2026-10-15.
 
 **Conclusions.**
 
@@ -214,7 +214,7 @@ The provider's acknowledgement covers the swarm. It would raise these clusters t
 
 ## FM-13.6 Case study: an agent fleet reading a map service
 
-**Header.** Source: [swarmcha.se, *We found a Chinese agent fleet*](references.md#incident-reports), a preliminary report dated 4 October 2026, first published 5 October 2026, with a dated changelog. Records: urlquery.net reports (submit times); webhook.site inbox logs and creation records, read through the service's public API (request times); Wayback Machine and archive.today listings (capture times); certificate logs; the authors' own tests of models and services. Method: SC-FM 1.0, departure as in FM-13.4.
+**Header.** Source: [swarmcha.se, *We found a Chinese agent fleet*](references.md#incident-reports), a preliminary report dated 4 October 2026, first published 5 October 2026, with a dated changelog. Records: urlquery.net reports (submit times); webhook.site inbox logs and creation records, read through the service's public API (request times); Wayback Machine and archive.today listings (capture times); certificate logs; the authors' own tests of models and services. Method: SC-FM 1.1, departure as in FM-13.4.
 
 Two of the sources fall outside this manual: reading an agent's inbox fails the passivity test ([FM-3.2](03-sources.md#fm-32-passivity-test)), and testing models is out of scope ([FM-1.1](01-scope.md#fm-11-scope)). Their results enter only as Documented, cited to the write-up. Rules version 2026-10-15.
 
