@@ -6,7 +6,7 @@
 // higher) comes from the server as flags on each record and group: a
 // suggestion of agent below L2 is never accepted, and labelling agent below
 // L2 opens a confirmation that shows the grade, its signals and caps and
-// the rule, and asks for a reason. The server saves such a label with the
+// the rule, and requires a reason. The server saves such a label with the
 // grade it was judged against (`label_grade`, marked below L2), and the
 // page shows that context wherever the label appears. A session panel (`p`)
 // counts labels, agreement with the suggestions and how far the labels are
@@ -191,8 +191,9 @@ async function apply(ids, label, note, { record = true, restore = false, grades 
 
 // The labelling rule: agent needs L2 or higher. Below it the page asks
 // once more in a dialog that shows the grade, its signals and caps and the
-// rule, and asks for a reason (saved as the note, never required). The
-// server saves the label with its grade, marked below L2.
+// rule, and requires a reason (saved as the note) before it labels agent;
+// the server refuses one without. It saves the label with its grade, marked
+// below L2.
 function gradeLines(gr) {
   if (!gr) return el("p.muted.small", "No agent grade: no signal beyond the payloads.");
   const sig = (x) => typeof x === "string" ? x : `${x.label} (${plural(x.records, "record")})`;
@@ -216,8 +217,16 @@ function confirmAgent(records, run) {
     value: prior, placeholder: "What the grade misses, e.g. the same run as cluster c4", autocomplete: "off",
     "aria-describedby": "below-reason-help",
   });
-  const go = (label) => { const r = reason.value.trim(); UI.closeDialog(); run(label, r); };
+  const go = (label) => {
+    const r = reason.value.trim();
+    if (label === "agent" && !r) { reason.focus(); return; }
+    UI.closeDialog(); run(label, r);
+  };
+  const agentBtn = el("button.btn.below-agent", { type: "button", "data-focus": "below-agent", onclick: () => go("agent") }, "Label agent below L2");
+  const sync = () => { agentBtn.disabled = !reason.value.trim(); };
+  reason.addEventListener("input", sync);
   reason.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go("agent"); } });
+  sync();
   const body = el("div.below-confirm",
     el("p", el("b", `${plural(below.length, "record")} of ${records.length} ${below.length === 1 ? "is" : "are"} graded ${grade}.`),
       " The labelling rule: agent needs an agent grade of L2 or higher; below it, unsure is the most the evidence allows."),
@@ -225,11 +234,11 @@ function confirmAgent(records, run) {
       el("h3.section-title", g && g.grade_basis === "records" ? "Agent grade (records graded alone)" : "Agent grade"),
       gradeLines(g && g.grade)),
     el("p.small", "Labelled agent anyway, the label is saved as an exception: marked below L2 with this grade, its signals and caps, and shown that way on this page, in review stats, review agreement, eval and the dashboard."),
-    el("label.below-field", { for: "below-reason" }, el("span.tri-name", "Reason (saved as the note; optional)"), reason),
-    el("p.muted.small#below-reason-help", "Say what the grade does not capture, so a later reader can weigh the exception."),
+    el("label.below-field", { for: "below-reason" }, el("span.tri-name", "Reason (saved as the note; required)"), reason),
+    el("p.muted.small#below-reason-help", "Say what the grade does not capture and where that evidence is, so a later reader can weigh the exception. Without one, the label is unsure."),
     el("div.below-actions",
       el("button.btn.primary", { type: "button", "data-focus": "below-unsure", onclick: () => go("unsure") }, "Label unsure instead"),
-      el("button.btn.below-agent", { type: "button", "data-focus": "below-agent", onclick: () => go("agent") }, "Label agent below L2"),
+      agentBtn,
       el("button.btn.ghost", { type: "button", onclick: () => UI.closeDialog() }, "Cancel")));
   UI.dialog({ id: "below", title: "Agent below L2?", body });
   reason.focus();

@@ -1104,8 +1104,8 @@ pub fn session(
 
 /// `agent` on records graded below L2: say what the grade is and what the
 /// rule says, and ask for a reason, saved as the note, unless the answer
-/// carried one. `u` labels them unsure instead. The label is the admin's
-/// either way; it is saved with its grade and marked below the rule.
+/// carried one. The reason is required: Enter asks again, `u` labels them
+/// unsure instead. The label is saved with its grade, marked below the rule.
 fn confirm_below_rule(
     a: &Analysis,
     targets: &[Item],
@@ -1139,18 +1139,23 @@ fn confirm_below_rule(
     if note.is_some() {
         return Ok((label, note));
     }
-    write!(
-        out,
-        "  reason, saved as the note (Enter for none, `u` for unsure instead)> "
-    )?;
-    out.flush()?;
-    let mut line = String::new();
-    input.read_line(&mut line)?;
-    Ok(match line.trim() {
-        "u" => ("unsure", None),
-        "" => (label, None),
-        r => (label, Some(r.to_string())),
-    })
+    loop {
+        write!(
+            out,
+            "  reason, saved as the note (required; `u` for unsure instead)> "
+        )?;
+        out.flush()?;
+        let mut line = String::new();
+        if input.read_line(&mut line)? == 0 {
+            // Input ended without a reason: unsure, the most the rule allows.
+            return Ok(("unsure", None));
+        }
+        match line.trim() {
+            "" => continue,
+            "u" => return Ok(("unsure", None)),
+            r => return Ok((label, Some(r.to_string()))),
+        }
+    }
 }
 
 /// Counts in the review file, and where the rules disagree with the admin.
@@ -1786,10 +1791,17 @@ mod tests {
         let r = r.unwrap();
         assert_eq!(r.label, "unsure");
         assert!(r.grade.unwrap().rule.is_none());
-        // Enter: agent, no reason.
-        let (r, _) = run("a\n\n");
+        // Enter asks again: the reason is required.
+        let (r, out) = run("a\n\nthe run's write-up\n");
+        assert_eq!(out.matches("reason, saved as the note").count(), 2, "{out}");
         let r = r.unwrap();
-        assert_eq!((r.label.as_str(), r.note.as_deref()), ("agent", None));
+        assert_eq!(
+            (r.label.as_str(), r.note.as_deref()),
+            ("agent", Some("the run's write-up"))
+        );
+        // Input ending without one labels unsure.
+        let (r, _) = run("a\n\n");
+        assert_eq!(r.unwrap().label, "unsure");
     }
 
     #[test]

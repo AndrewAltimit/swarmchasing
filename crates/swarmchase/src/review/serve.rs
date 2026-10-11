@@ -13,9 +13,9 @@
 //! agent grade of L2 or higher, so each record and group says whether the
 //! label is open to it, and flags a suggestion or a saved label that says
 //! `agent` below it. The server still saves an `agent` label below L2 when
-//! the admin confirms it, with the grade it was judged against
-//! ([`LabelGrade`], marked `below_l2`), so the label is never read without
-//! its context.
+//! the admin confirms it with a reason, saved as the note, and with the
+//! grade it was judged against ([`LabelGrade`], marked `below_l2`), so the
+//! label is never read without its context. Without a reason it refuses.
 
 use super::{CLASS_FLAGGED, GradeFrom, Item, LabelGrade, Review, ReviewStore};
 use crate::localui::{App, Response};
@@ -374,6 +374,21 @@ impl ReviewApp {
             .map(|n| n.split_whitespace().collect::<Vec<_>>().join(" "))
             .filter(|n| !n.is_empty())
             .map(|n| truncate(&n, 500));
+        // An agent label below L2 needs a reason: the one sent, else the
+        // record's saved note. An undo puts back what was there.
+        if label == "agent" && !req.restore && note.is_none() {
+            let missing = targets.iter().any(|it| {
+                LabelGrade::of(&self.a, it.idx, label).below_rule()
+                    && self
+                        .store
+                        .entries
+                        .get(&self.a.results[it.idx].obs.id)
+                        .is_none_or(|b| b.note.is_none())
+            });
+            if missing {
+                bail!("agent below L2 needs a reason, saved as the note");
+            }
+        }
         let mut out = serde_json::Map::new();
         for it in targets {
             let r = &self.a.results[it.idx];
@@ -601,8 +616,18 @@ mod tests {
             }
         }
 
-        // The admin may still label agent; the label is saved and flagged.
+        // The admin may still label agent, with a reason; the label is saved
+        // and flagged. Without a reason it is refused and nothing is saved.
         let r = post(&mut app, r#"{"ids":["s1"],"label":"agent"}"#);
+        assert_ne!(r.status, 200);
+        assert!(String::from_utf8_lossy(&r.body).contains("needs a reason"));
+        assert_eq!(app.queue_json()["stored"]["total"], 0);
+        let r = post(&mut app, r#"{"ids":["s1"],"label":"agent","note":"  "}"#);
+        assert_ne!(r.status, 200, "a blank note is no reason");
+        let r = post(
+            &mut app,
+            r#"{"ids":["s1"],"label":"agent","note":"same tag as cluster c2"}"#,
+        );
         assert_eq!(r.status, 200);
         let body: Value = serde_json::from_slice(&r.body).unwrap();
         assert_eq!(body["items"]["s1"]["breaks_rule"], true);

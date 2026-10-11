@@ -39,7 +39,7 @@ An exception is never an ordinary agent label. Every label is saved with the gra
 To record one:
 
 1. Label agent as usual. On the page a dialog shows the grade, its signals and caps and the rule, and offers unsure instead. In the terminal the session prints the same and asks for a reason.
-2. Give the reason. It is saved as the label's note: say what the grade does not capture and where that evidence is (a cluster id, a case, a report), without quoting urlquery content.
+2. Give the reason; it is required. The page and the server refuse an agent label below L2 without one, and the terminal asks until it gets one or `u`. It is saved as the label's note: say what the grade does not capture and where that evidence is (a cluster id, a case, a report), without quoting urlquery content.
 3. Expect it to be counted apart. `eval` prints precision with and without the exceptions, so they never carry a precision estimate alone.
 
 Without a reason worth writing down, the label is unsure.

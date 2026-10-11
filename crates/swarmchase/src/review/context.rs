@@ -751,7 +751,7 @@ mod tests {
             },
         );
         // The group's own label is not an earlier decision.
-        let body = r#"{"ids":["s1"],"label":"agent"}"#;
+        let body = r#"{"ids":["s1"],"label":"agent","note":"seen in a case"}"#;
         assert_eq!(
             crate::localui::App::post(&mut app, "label", body.as_bytes(), "now").status,
             200
