@@ -59,7 +59,10 @@
         "batch_secs": { "$ref": "#/$defs/secs" },
         "min_batches": { "$ref": "#/$defs/count" },
         "min_width": { "$ref": "#/$defs/count" },
-        "min_share": { "$ref": "#/$defs/share" }
+        "min_share": { "$ref": "#/$defs/share" },
+        "cross_service_secs": { "$ref": "#/$defs/secs" },
+        "cross_service_min": { "$ref": "#/$defs/count" },
+        "cross_service_ambient": { "$ref": "#/$defs/count" }
       }
     },
     "escalation": {

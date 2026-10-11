@@ -19,7 +19,7 @@ Each record is an ordinary record plus label fields:
 | `reconstructed` | rebuilt records | `true`: rebuilt from a published incident. |
 | `labeller` | optional | Who labelled the record, for [SC-Bench](../../docs/reference/evaluation.md#sc-bench) exports. |
 
-Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), and `scanner` (security scanners). False positives are reported per benign class.
+Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), `mail_gateway` (links a mail gateway or security product submits on its own), and `scanner` (security scanners). False positives are reported per benign class.
 
 Records get a `run` only where the grouping is clear: the published reconstructions of one incident share one, and each other incident has its own. The `llm-residue.ndjson` records are independent synthetic examples and carry none.
 
@@ -72,6 +72,14 @@ Synthetic agent records for the interaction edges ([SC-FM 5.12](../../docs/manua
 - **`roles-1`**: one client reads five hosts; a different client attacks the same five in the same order half an hour later.
 
 Every record is flagged significant on its own, so the file raises recall at both tiers and leaves precision unchanged.
+
+## `cross-service.ndjson`
+
+Synthetic records for cross-service fan-out ([methodology](../../docs/methodology.md#descriptive-hints)): one target submitted to several scan services within seconds. Each is marked `"synthetic": true`, uses reserved `.example` hosts, carries `"ts_kind": "submit"`, and was written by hand.
+
+- **Agent run** (`xsvc-agent-1`): a tool loop probing one search with an unfilled placeholder, sending each variant to urlquery and then to urlscan 6 to 11 seconds later. It grades L4.
+- **Human** (`actor`, no `label`): an analyst checking one suspicious link on two services four minutes apart, outside the window.
+- **Mail gateway**: a gateway submitting every link in scanned mail to urlscan and then urlquery 3 seconds later. The ordinary links (newsletter, invoice, calendar, shared document, a click tracker with a timestamp parameter) are benign hard negatives, class `mail_gateway`, actor `tool`. Three links a person crafted in an agent's style and mailed through it are graded as `human`, with no `label`: the ordinary fan-outs around them mark an auto-submitter, so they stop at L3, the grade's known limit for a person pasting model output, instead of reaching L4.
 
 ## Coverage allow-list
 
