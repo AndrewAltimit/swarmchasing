@@ -6,7 +6,7 @@
 
 This manual covers the observation of AI agent activity that crosses the public internet and leaves traces in public records. It covers finding that activity, linking it, attributing it, and disclosing it.
 
-It applies to agents whose activity is **misaligned** (the agent pursues a goal by means its operator or the affected party would not sanction, such as probing for vulnerabilities while on a research task) or **unsupervised** (the activity continues with no sign of a person checking it). Both are findings with their own evidence, made by the scope assessment ([chapter 15](15-misalignment.md)), not read off a tier. It does not cover:
+It applies to agent activity that harms or endangers others: activity that goes beyond its evident task against a party who did not sanction it, such as probing for vulnerabilities while on a research task, or that continues with no sign of a person checking it. Both are findings with their own evidence, made by the scope assessment ([chapter 15](15-misalignment.md)), not read off a tier. Reports describe such activity as suspected AI agent activity; chapter 15 defines when the word "misaligned" applies. It does not cover:
 
 - red-teaming, jailbreaking or otherwise interacting with an agent or model;
 - private telemetry, such as a provider's own logs, except where a provider or operator supplies it for a case ([FM-10.7](10-disclosure.md#fm-107-operator-supplied-logs));

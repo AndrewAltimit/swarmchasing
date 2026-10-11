@@ -178,7 +178,7 @@ Reading the worksheet:
 
 - The surviving hypothesis sets the claim; the label and likelihood word still come from the evidence level, and the worksheet never raises them ([FM-8.3](08-confidence.md#fm-83-usage-rules)).
 - Where two hypotheses survive with no evidence against either, the Conclusion names both and uses no likelihood word stronger than "roughly even chance" between them.
-- Each rejected hypothesis is recorded with the evidence against it. These are the alternatives the self-review checks ([FM-10.9](10-disclosure.md#fm-109-self-review)).
+- Each rejected hypothesis is recorded with the evidence against it. These are the alternatives the self-review checks ([FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review)).
 - The report says which evidence would change the result ([FM-8.3](08-confidence.md#fm-83-usage-rules)).
 
 Toolkit: the case records each rejected alternative (authorised test, honeypot, research scanner, spoofed self-identification, planted records) with its reason, and the self-review refuses a notice until each is recorded ([cases](../reference/cases.md#self-review-checklist)). The worksheet itself is kept in case notes by hand; recording it in the case is (planned).

@@ -114,20 +114,22 @@ swarmchase case new 2026-10-portal --title "Portal SQLi" --cluster C1 --host-hit
 swarmchase case endpoint 2026-10-portal portal.example.gov targeted
 swarmchase case contacts 2026-10-portal
 swarmchase case draft 2026-10-portal --audience affected --to security@example.gov   # unsent .eml + bundle
-swarmchase case sent 2026-10-portal --to security@example.gov                         # after the admin sends it; starts its lead time
+swarmchase case sent 2026-10-portal --to security@example.gov                         # after the admin sends it; starts its clocks
 swarmchase case reread 2026-10-portal                                                # an hour after `case notice`
+swarmchase case review 2026-10-portal --reviewer "R. Reviewer" --verdict approve      # a second person's review of the draft
 swarmchase case verify data/cases/2026-10-portal/bundles/2026-10-12
 swarmchase case status
 ```
 
-Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (`--format stix`, `misp`, `oecd` with its EU AI Act Article 73 section, or `aiid`), `no-contact`, `alternative`, `plant-review` and `checklist` for the self-review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
+Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (`--format stix`, `misp`, `oecd` with its EU AI Act Article 73 section, or `aiid`), `no-contact`, `scope`, `consent`, `naming`, `alternative`, `plant-review` and `checklist` for the self-review, `review-packet` and `review` for the second review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
 ### Notices
 
 | Command | What it does |
 |---|---|
-| `notice add <case>` | Runs the self-review checklist, including the lead time, and copies a case's reviewed `notice.md` to `notices/<id>.md`. Committing the file publishes it. |
+| `notice add <case>` | Runs the self-review checklist and the second-review check, and copies a case's indicator notice `notice.md` to `notices/<id>.md`. Committing the file publishes it. |
 | `notice update <id> --kind …` | Appends a dated update, status change, correction, reply or retraction. |
+| `notice update <id> --naming` | Appends the case's reviewed `naming.md`, naming the operators whose lead has run or who consented. |
 | `notice lint [files]` | Checks front matter, update order, attribution wording and that nothing withheld got through. CI and the pre-commit hook run it. |
 | `notice build --out <dir> --base-url <url>` | Writes the site's notice index, pages and Atom feed. |
 | `site build [--out _site] [--base-url <url>]` | Builds the whole public site from the checkout, as `sc-site` does ([how the site is built](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). |
@@ -139,6 +141,7 @@ Details: [Notices](../../docs/reference/notices.md).
 | Variable | Used for |
 |---|---|
 | `SWARMCHASE_DATA` | The data directory (`--out` / `--data`, default `data/`): watch state and store, labels, cases. Gitignored. |
+| `SWARMCHASE_ADMIN` | The admin name `case new` records; else `git config user.name`. |
 | `URLQUERY_APIKEY` | urlquery.net collectors. Without it, `watch` skips urlquery sources and says so. |
 | `URLSCAN_APIKEY` | Optional key for `collect urlscan`. |
 | `SWARMCHASE_SITE_URL` | `notice build --base-url`. |

@@ -2,7 +2,7 @@
 
 [Manual index](README.md) · Previous: [14. Known limits](14-limits.md) · Next: [16. Other methods](16-other-methods.md)
 
-The manual's scope is misaligned or unsupervised agents ([FM-1.1](01-scope.md#fm-11-scope)). A tier does not measure that. It measures payloads and tool use: a fetch program that reads a TV schedule through an echo service, carrying a run tag, grades significant, the same tier as an injection probe of a login form. This chapter makes misalignment a separate assessment, with its own evidence, so that a report says which of four different things it found.
+The manual's scope is agent activity that goes beyond its task against others, or runs unsupervised ([FM-1.1](01-scope.md#fm-11-scope)). A tier does not measure that. It measures payloads and tool use: a fetch program that reads a TV schedule through an echo service, carrying a run tag, grades significant, the same tier as an injection probe of a login form. This chapter makes misalignment a separate assessment, with its own evidence, so that a report says which of four different things it found.
 
 ## FM-15.1 Four questions
 
@@ -15,7 +15,7 @@ The manual's scope is misaligned or unsupervised agents ([FM-1.1](01-scope.md#fm
 
 The answers are independent. A significant cluster can be in scope (a data task done with programs); a noise cluster can be out of scope (a polite crawl of a government login page, off task). A report answers each question it can, separately, and never lets one stand in for another.
 
-**Misaligned**, for this manual, means: an agent is present, and its activity is out of scope on at least one test in [FM-15.3](#fm-153-scope-tests), with no accepted alternative explanation ([FM-10.9](10-disclosure.md#fm-109-self-review)). **Unsupervised** means the activity continues with no sign of a person checking it: round-the-clock rhythm, reruns, retries after a block, or persistence across days. Neither word appears in a public Conclusion without the evidence for each part.
+**Misaligned**, for this manual, means: an agent is present, and its activity is out of scope on at least one test in [FM-15.3](#fm-153-scope-tests), with no accepted alternative explanation ([FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review)). **Unsupervised** means the activity continues with no sign of a person checking it: round-the-clock rhythm, reruns, retries after a block, or persistence across days. Neither word appears in a public Conclusion without the evidence for each part.
 
 ## FM-15.2 Task class and target class
 
@@ -57,7 +57,7 @@ Procedure:
 1. State the task class, with the requests it rests on, or "unclear".
 2. Classify each target host by target class, and record its sector.
 3. Run each test. Record pass, fail or not assessable, with the records and rule ids for each.
-4. Record the innocent explanation considered for each failed test and why it was rejected, as for the self-review alternatives ([FM-10.9](10-disclosure.md#fm-109-self-review)).
+4. Record the innocent explanation considered for each failed test and why it was rejected, as for the self-review alternatives ([FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review)).
 5. Set the finding ([FM-15.4](#fm-154-stating-a-scope-finding)).
 
 ## FM-15.4 Stating a scope finding
@@ -70,7 +70,9 @@ Procedure:
 
 S2 to S6 can fail without a task class, because they rest on what the target is, not on what the task was. S1 needs one.
 
-A finding is an Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)). It is stated with the tests that failed, their records, and the agent grade, for example: "Scope exceeded (S2, S4): after a challenge page, requests in this cluster reached the login endpoint through two relays and then carried SQL injection payloads. The records show an adaptive client (L3); a person using a proxy tool cannot be excluded." The word "misaligned" is used only when the agent question and the scope question both hold ([FM-15.1](#fm-151-four-questions)).
+A finding is an Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)). It is stated with the tests that failed, their records, and the agent grade, for example: "Scope exceeded (S2, S4): after a challenge page, requests in this cluster reached the login endpoint through two relays and then carried SQL injection payloads. The records show an adaptive client (L3); a person using a proxy tool cannot be excluded." The word "misaligned" is used only when the agent question and the scope question both hold ([FM-15.1](#fm-151-four-questions)). This chapter is the one place that defines when it applies; elsewhere, reports and notices describe suspected AI agent activity.
+
+Toolkit: the rule is enforced. "Misaligned" in any form may appear in a report or notice only when the case records both an admin scope finding of scope exceeded for the clusters it covers (`case scope`, [cases](../reference/cases.md#scope-finding)) and an admin agent grade of L3 or higher (`case grade`). The notice's front matter carries both, and the notice linter rejects the word without them, before a notice is written and in CI.
 
 ## FM-15.5 From finding to incident
 
@@ -80,4 +82,4 @@ An incident is activity a reviewer judged to harm, or put at risk, an affected o
 - A cluster whose scope is exceeded, against a party who did not sanction it, is an incident candidate. The admin decides, and records the finding with the case's other decisions.
 - A cluster that is not assessable is held as a lead until more records arrive, unless a payload against an access-controlled or sensitive target makes S3 or S4 decidable on its own.
 
-Toolkit: a scope pass fills `Cluster.scope` with the task class, the target classes reached, the S1–S7 tests with the record ids that answer each, the finding, and the four FM-15.1 questions; it is conservative, so tool use alone fails no test, and an unreviewed interaction hint alone fails none either: S7 fails only when a hint touches a cluster that already fails another test, and is otherwise not assessable. Internal and provider reports carry a one-line Scope entry per cluster; the public notice is unchanged. The admin still decides the incident from it.
+Toolkit: a scope pass fills `Cluster.scope` with the task class, the target classes reached, the S1–S7 tests with the record ids that answer each, the finding, and the four FM-15.1 questions; it is conservative, so tool use alone fails no test, and an unreviewed interaction hint alone fails none either: S7 fails only when a hint touches a cluster that already fails another test, and is otherwise not assessable. Internal and provider reports carry a one-line Scope entry per cluster. The pass is a suggestion: the admin decides the incident from it and records the finding with `case scope`, which is what notices state.
