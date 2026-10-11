@@ -15,7 +15,8 @@ How the rules are measured, and how CI stops a rules change that costs precision
 - precision per rule, with its hard negatives;
 - linking against labelled runs ([cluster-level evaluation](#cluster-level-evaluation));
 - agent grades against each record's actor ([agent grades by actor](#agent-grades-by-actor));
-- rule coverage, in one line, or per rule with `--coverage`.
+- rule coverage, in one line, or per rule with `--coverage`;
+- for admin review labels, the agent labels below the labelling rule, with precision and recall without them ([agent labels below L2](#agent-labels-below-l2)).
 
 Labels come from a `label` field on each record (`agent` or `benign`), or from `--labels` files (NDJSON or CSV, including Transluce's `reports.csv`). Later `--labels` files override earlier ones. The other label fields (`class`, `run`, `hard_negative_for`, `actor`, `synthetic`, `reconstructed`, `labeller`) are described in [samples/eval/README.md](../../samples/eval/README.md#record-fields).
 
@@ -260,6 +261,18 @@ urlquery content is never committed or quoted: the fetched reports stay in the d
 ## Reviewed records
 
 Records labelled with `swarmchase review` are saved with their labels in `<data>/labels/reviewed.ndjson` ([review](watch.md#reviewing-leads)). Measuring them shows how the rules do on what the watch actually finds, including the unflagged sample. The file is never committed.
+
+### Agent labels below L2
+
+The labelling rule gives `agent` only at an agent grade of L2 or higher ([evaluating leads](../guides/evaluating-leads.md#exceptions-to-the-labelling-rule)). The admin may still label agent below it, and `review` saves such a label with the grade it was judged against, marked `below_l2` ([label lines](watch.md#label-lines)).
+
+When the label files hold admin review lines (lines with `reviewed_at`), `eval` prints one more block after the tables:
+
+- how many of the admin's agent labels are below L2, split by the grade stored with the label and the grade now for an older line that stores none;
+- how many older lines name a record not in the analysis, which are not judged;
+- precision and recall at each tier, record unit over all records, with those labels and without them (left unlabelled).
+
+The evaluation set's labels are not admin review labels, so for `samples/eval/` nothing is printed and the gate is unaffected.
 
 ### Two labellers
 

@@ -25,6 +25,14 @@ Read it top down:
 
 Details: [watch runs](../reference/watch.md#the-digest).
 
+The same picture across runs is on a local page: what is new since you last looked, each source's health, the review queue, open cases and their clocks, and the command for each next step. Press `s` there once you have read a run, and later runs show as new.
+
+```sh
+swarmchase dashboard                  # http://127.0.0.1:8767/
+```
+
+Details: [the dashboard](../reference/watch.md#the-dashboard).
+
 ## 2. Review the leads
 
 ```sh

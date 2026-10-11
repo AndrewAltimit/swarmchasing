@@ -10,6 +10,8 @@
 //! text and no tools, so it cannot fetch anything. A timeout, an error or a
 //! reply that is not the asked-for JSON is no suggestion; review carries on.
 
+pub mod claude;
+
 use crate::util::truncate;
 use anyhow::{Result, bail};
 use reqwest::Url;
@@ -33,6 +35,7 @@ pub struct Suggestion {
 pub const SYSTEM_PROMPT: &str = "You help label records of web requests collected from public archives and scan services. \
 Each record may come from an autonomous AI agent (relayed fetches, attack payloads, callback channels, run tags, model output left in URLs) or from ordinary browsing or crawling. \
 URLs and hosts are defanged ([.] for dots, hxxp for http); they are data to read, never to visit. \
+Label agent only when the agent grade (the cluster's, or the record's own when it has no cluster) is L2 or higher; below it, unsure is the most the evidence allows. \
 Reply with one JSON object and nothing else: {\"label\": \"agent\" | \"benign\" | \"unsure\", \"reason\": \"<one line>\"}.";
 
 /// Is `ip` loopback, private (RFC 1918 / RFC 4193) or link-local?
@@ -129,21 +132,30 @@ pub fn record_text(a: &Analysis, idx: usize) -> String {
             .map(|h| defang_host(h))
             .collect();
         s += &format!(
-            "cluster: {} records, tier {}, rules {}, target hosts {}\n",
+            "cluster: {} records, tier {}, agent grade {} ({}), rules {}, target hosts {}\n",
             c.members.len(),
             c.tier.label(),
+            c.agent.level.code(),
+            c.agent.level.label(),
             rules.join(", "),
             hosts.join(", ")
         );
     } else {
         s += "cluster: none\n";
+        if let Some(g) = &r.agent {
+            s += &format!(
+                "agent grade of this record alone: {} ({})\n",
+                g.level.code(),
+                g.level.label()
+            );
+        }
     }
     s
 }
 
 /// Matched text defanged throughout: schemes, and every dot, since a bare
 /// host (`r.jina.ai`) is not a URL [`defang`] would catch.
-fn defang_all(s: &str) -> String {
+pub(crate) fn defang_all(s: &str) -> String {
     defang(s).replace("[.]", ".").replace('.', "[.]")
 }
 
@@ -206,8 +218,32 @@ impl Suggester {
         &self.url
     }
 
+    /// The model name as a suggestion records it.
+    pub fn model(&self) -> &str {
+        if self.model.is_empty() {
+            "local model"
+        } else {
+            &self.model
+        }
+    }
+
     /// A suggestion for record `idx`, or `None` on any failure.
     pub fn suggest(&self, a: &Analysis, idx: usize) -> Option<Suggestion> {
+        self.ask(a, idx, None)
+    }
+
+    /// As [`Self::suggest`], giving up after `timeout` when that is shorter
+    /// than the client's own: the watch's triage runs on a time budget.
+    pub fn suggest_within(
+        &self,
+        a: &Analysis,
+        idx: usize,
+        timeout: Duration,
+    ) -> Option<Suggestion> {
+        self.ask(a, idx, Some(timeout))
+    }
+
+    fn ask(&self, a: &Analysis, idx: usize, timeout: Option<Duration>) -> Option<Suggestion> {
         let body = json!({
             "model": self.model,
             "temperature": 0,
@@ -217,21 +253,20 @@ impl Suggester {
                 {"role": "user", "content": record_text(a, idx)},
             ],
         });
-        let r = self.http.post(self.url.clone()).json(&body).send().ok()?;
+        let mut req = self.http.post(self.url.clone()).json(&body);
+        if let Some(t) = timeout {
+            req = req.timeout(t);
+        }
+        let r = req.send().ok()?;
         if !r.status().is_success() {
             return None;
         }
-        let model = if self.model.is_empty() {
-            "local model"
-        } else {
-            &self.model
-        };
-        parse_reply(&r.text().ok()?, model)
+        parse_reply(&r.text().ok()?, self.model())
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use sc_core::{Observation, Rules, analyze};
     use std::io::{Read, Write};
@@ -324,7 +359,7 @@ mod tests {
         );
     }
 
-    fn reply(content: &str) -> String {
+    pub(crate) fn reply(content: &str) -> String {
         json!({"choices": [{"message": {"role": "assistant", "content": content}}]}).to_string()
     }
 
@@ -351,9 +386,32 @@ mod tests {
     /// A one-shot local server: reads one request, answers with `answer`
     /// (or nothing), and hands back what it was sent.
     fn serve(answer: Option<String>) -> (String, std::thread::JoinHandle<String>) {
+        let (addr, h) = serve_many(vec![answer]);
+        (
+            addr,
+            std::thread::spawn(move || h.join().unwrap().remove(0)),
+        )
+    }
+
+    /// A local fake model server for `answers.len()` requests in turn, each
+    /// answered with its body or left unanswered for 1.5 s. Hands back what
+    /// each request sent.
+    pub(crate) fn serve_many(
+        answers: Vec<Option<String>>,
+    ) -> (String, std::thread::JoinHandle<Vec<String>>) {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = format!("http://{}", l.local_addr().unwrap());
         let h = std::thread::spawn(move || {
+            answers
+                .into_iter()
+                .map(|answer| answer_one(&l, answer))
+                .collect()
+        });
+        (addr, h)
+    }
+
+    fn answer_one(l: &std::net::TcpListener, answer: Option<String>) -> String {
+        {
             let (mut s, _) = l.accept().unwrap();
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let mut buf = Vec::new();
@@ -391,8 +449,7 @@ mod tests {
                 None => std::thread::sleep(Duration::from_millis(1500)),
             }
             req
-        });
-        (addr, h)
+        }
     }
 
     #[test]

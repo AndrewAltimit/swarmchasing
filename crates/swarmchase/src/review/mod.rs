@@ -8,8 +8,11 @@
 //! unflagged record labelled `agent` is a false negative.
 //!
 //! Reviews go to `<data>/labels/reviewed.ndjson`, one line per record: the
-//! stored (already redacted) record plus `label`, `note`, `class` and what the
-//! rules said at review time. The file is both a label file and an eval input:
+//! stored (already redacted) record plus `label`, `note`, `class`, what the
+//! rules said at review time and the agent grade the label was judged against
+//! ([`LabelGrade`]). An `agent` label below L2 is allowed but marked
+//! `below_l2`, its reason in the note, so every reader shows it as the
+//! exception it is. The file is both a label file and an eval input:
 //!
 //! ```sh
 //! swarmchase eval data/labels/reviewed.ndjson
@@ -35,6 +38,15 @@
 //! label before each prompt; it is saved beside the admin's label as
 //! `suggested`, never as the label.
 //!
+//! `review --serve` ([`serve`]) shows the same queue as a page on this
+//! machine, grouped by cluster or shape, and saves to the same file.
+//! `review --export-hosted` ([`hosted`]) writes the queue's public records
+//! for a hosted model, whose suggestions the page shows; `review
+//! check-suggestions` validates a suggestions file against its export.
+//! `review agreement` ([`agreement`]) compares the admin's labels with the
+//! suggestions, and `review misfires` ([`misfires`]) lists rules whose
+//! reviewed hits are mostly benign, with candidate hard negatives.
+//!
 //! `review sample` ([`sample`]) writes a stratified, seeded sample of the
 //! store as a queue file, and `review <queue> --all` queues every record in
 //! it, as `review:baseline-sample`. Two labellers label it; `review --stats`
@@ -44,7 +56,12 @@
 //! reports the same bound for the current rules. `review tuned <id>...`
 //! marks records looked at while changing a rule, which leave the baseline.
 
+pub mod agreement;
+pub mod context;
+pub mod hosted;
+pub mod misfires;
 pub mod sample;
+pub mod serve;
 
 use crate::suggest::Suggestion;
 use crate::util::truncate;
@@ -67,6 +84,20 @@ pub enum ReviewCmd {
     /// Mark reviewed records as tuned on: looked at while changing a rule.
     /// `eval` leaves them out of the benign baseline.
     Tuned(TunedArgs),
+    /// Check a suggestions file against the export it answers: format,
+    /// ids, the labelling rule (agent needs L2 or higher), recorded grades
+    /// and misfire rule ids.
+    CheckSuggestions(hosted::CheckArgs),
+    /// Compare the admin's labels with model suggestions: confusion matrix
+    /// per model and per agent grade, and suggestions that break the
+    /// labelling rule.
+    Agreement(agreement::AgreementArgs),
+    /// Rules whose reviewed hits are mostly benign, with candidate hard
+    /// negatives written to the data directory.
+    Misfires(misfires::MisfiresArgs),
+    /// Ask Claude through Claude Code (headless, no tools) for suggestions
+    /// on `--export-hosted` files, appended to a suggestions file.
+    SuggestClaude(crate::suggest::claude::SuggestArgs),
 }
 
 #[derive(clap::Args)]
@@ -119,12 +150,40 @@ pub struct ReviewArgs {
     /// each prompt. Saved beside the label as `suggested`, never as it.
     #[arg(long)]
     suggest: bool,
+    /// Serve the queue as a page on 127.0.0.1 instead of prompting: records
+    /// grouped by cluster or shape, with saved suggestions. Reviewed records
+    /// stay on the page so a label can be changed or cleared.
+    #[arg(long, conflicts_with_all = ["list", "stats", "suggest"])]
+    serve: bool,
+    /// Port for `--serve`.
+    #[arg(long, default_value_t = 8765, requires = "serve")]
+    port: u16,
+    /// Pre-era control summary for `--serve`, whose per-rule false-alarm
+    /// counts the page shows beside each rule. Default:
+    /// `<data>/controls/pre-era/summary.json`, then
+    /// `data/controls/pre-era/summary.json`, when present.
+    #[arg(long, value_name = "FILE", requires = "serve")]
+    control: Option<PathBuf>,
+    /// Write the queue's public records (web archives and urlquery) as text
+    /// for a hosted model to suggest labels on, and exit. Operator logs and
+    /// sources not on the list are withheld. The file must be inside the
+    /// data directory.
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["list", "stats", "serve", "suggest"])]
+    export_hosted: Option<PathBuf>,
+    /// With `--export-hosted`: split the export into numbered files of
+    /// about this many records, each review group whole, one per subagent.
+    #[arg(long, value_name = "N", requires = "export_hosted")]
+    batch_size: Option<usize>,
 }
 
 pub fn run(args: ReviewArgs) -> Result<()> {
     match args.cmd {
         Some(ReviewCmd::Sample(s)) => return sample::run(s),
         Some(ReviewCmd::Tuned(t)) => return mark_tuned(&t),
+        Some(ReviewCmd::CheckSuggestions(c)) => return hosted::check(&c),
+        Some(ReviewCmd::Agreement(g)) => return agreement::run(&g),
+        Some(ReviewCmd::Misfires(m)) => return misfires::run(&m),
+        Some(ReviewCmd::SuggestClaude(s)) => return crate::suggest::claude::run(&s),
         None => {}
     }
     let data = &args.data;
@@ -134,7 +193,8 @@ pub fn run(args: ReviewArgs) -> Result<()> {
     let path = ReviewStore::path_for(data, args.labeller.as_deref())?;
     let mut store = ReviewStore::open(path)?;
     if args.stats {
-        stats(&store, &mut std::io::stdout())?;
+        let rules = crate::pinning::RulesText::load(args.rules.as_deref())?;
+        stats(&store, &rules.rules, &mut std::io::stdout())?;
         return agreement_report(&data.join("labels"), &mut std::io::stdout());
     }
     let min = check_min_tier(crate::input::parse_tier(&args.min_tier)?)?;
@@ -158,12 +218,20 @@ pub fn run(args: ReviewArgs) -> Result<()> {
         crate::input::read_inputs(&crate::input::InputArgs::files(args.input))?
     };
     let a = sc_core::analyze(obs, &rules.rules);
-    let done = store.entries.keys().cloned().collect();
+    // The page keeps reviewed records on it, so a label can be changed.
+    let done = if args.serve {
+        BTreeSet::new()
+    } else {
+        store.entries.keys().cloned().collect()
+    };
     let items = if args.all {
         queue_all(&a, &done)
     } else {
         queue(&a, &done, min, args.unflagged)
     };
+    if let Some(out) = &args.export_hosted {
+        return hosted::export(&a, &items, data, out, args.batch_size);
+    }
     println!(
         "{} records · {} reviewed before · {} in the queue ({} flagged, {} unflagged sample, {} baseline sample)",
         a.total,
@@ -188,6 +256,38 @@ pub fn run(args: ReviewArgs) -> Result<()> {
     }
     if items.is_empty() {
         return Ok(());
+    }
+    if args.serve {
+        let labels = data.join("labels");
+        let loaded = hosted::load_suggestions(&labels, &a)?;
+        println!(
+            "{} suggestion(s) from {}{}",
+            loaded.by_id.len(),
+            labels.join("suggestions-*.ndjson").display(),
+            if loaded.invalid + loaded.dropped > 0 {
+                format!(
+                    " ({} line(s) invalid, {} dropped: not in the queue's analysis or from a source a hosted model may not see)",
+                    loaded.invalid, loaded.dropped
+                )
+            } else {
+                String::new()
+            }
+        );
+        if loaded.demoted > 0 {
+            println!(
+                "{} agent suggestion(s) on records graded below L2 are against the labelling rule; the page flags them (`review agreement` lists them)",
+                loaded.demoted
+            );
+        }
+        println!("labels go to {}", store.path.display());
+        let control = context::Control::find(args.control.as_deref(), data)?;
+        match &control {
+            Some(c) => println!("pre-era control from {} ({} records)", c.path, c.records),
+            None => println!("no pre-era control summary (swarmchase eval pre-era writes one)"),
+        }
+        let app = serve::ReviewApp::new(a, items, store, loaded.by_id, from)
+            .with_context(&rules.rules, control);
+        return crate::localui::Server::new(app, args.port).run("review page");
     }
     let suggester = if args.suggest {
         let s = crate::suggest::Suggester::from_env()?;
@@ -263,6 +363,209 @@ pub struct Review {
     /// out of the benign baseline.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tuned: bool,
+    /// The agent grade the label was judged against, as it stood when the
+    /// record was labelled. `None` on a line written before grades were
+    /// stored: unknown, so readers grade it from the analysis they have and
+    /// say that they did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grade: Option<LabelGrade>,
+}
+
+/// The marker on an `agent` label below the labelling rule.
+pub const BELOW_L2: &str = "below_l2";
+
+/// What a label was judged against: the agent grade that decides the
+/// record's labels (its cluster's, else its own), in short form, and
+/// whether the labelling rule allowed `agent` at it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelGrade {
+    /// `L0` .. `L5`; `None` for an ungraded record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// The rung's name, e.g. `payloads only`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// `cluster`, `record` or `none`.
+    pub basis: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster: Option<String>,
+    /// Signals for, `<signal> (<n> records)`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signals: Vec<String>,
+    /// Signals against, in the same form.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub counter: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub caps: Vec<String>,
+    /// The grade is L2 or higher, so the rule allows `agent`.
+    pub agent_allowed: bool,
+    /// [`BELOW_L2`] on an `agent` label the rule does not allow: an
+    /// exception the admin chose, its reason in the review's `note`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
+}
+
+impl LabelGrade {
+    /// The grade record `idx` is labelled against in `a`, for `label`.
+    pub fn of(a: &Analysis, idx: usize, label: &str) -> Self {
+        let (g, basis) = hosted::grade_of(a, idx);
+        let signal =
+            |s: &sc_core::AgentSignal| format!("{} ({} records)", s.kind.label(), s.records);
+        let allowed = hosted::agent_allowed(g.map(|g| g.level));
+        Self {
+            code: g.map(|g| g.level.code().to_string()),
+            label: g.map(|g| g.level.label().to_string()),
+            basis: basis.to_string(),
+            cluster: a.results[idx].cluster.map(|c| a.clusters[c].id.clone()),
+            signals: g.map_or_else(Vec::new, |g| g.signals.iter().map(signal).collect()),
+            counter: g.map_or_else(Vec::new, |g| g.counter.iter().map(signal).collect()),
+            caps: g.map_or_else(Vec::new, |g| {
+                g.caps.iter().map(|k| k.label().to_string()).collect()
+            }),
+            agent_allowed: allowed,
+            rule: (label == "agent" && !allowed).then(|| BELOW_L2.to_string()),
+        }
+    }
+
+    /// An `agent` label below the labelling rule.
+    pub fn below_rule(&self) -> bool {
+        self.rule.as_deref() == Some(BELOW_L2)
+    }
+
+    /// The code, or `no grade`.
+    pub fn code(&self) -> &str {
+        self.code.as_deref().unwrap_or("no grade")
+    }
+
+    /// One line: code and name, basis, signals and caps.
+    pub fn short(&self) -> String {
+        let mut s = match &self.label {
+            Some(l) => format!("{} {l}", self.code()),
+            None => self.code().to_string(),
+        };
+        match (&self.cluster, self.basis.as_str()) {
+            (Some(c), "cluster") => s.push_str(&format!(" · cluster {c}")),
+            (_, "record") => s.push_str(" · record alone"),
+            _ => {}
+        }
+        if !self.signals.is_empty() {
+            s.push_str(&format!(" · signals: {}", self.signals.join(", ")));
+        }
+        if !self.counter.is_empty() {
+            s.push_str(&format!(" · against: {}", self.counter.join(", ")));
+        }
+        if !self.caps.is_empty() {
+            s.push_str(&format!(" · caps: {}", self.caps.join("; ")));
+        }
+        s
+    }
+}
+
+/// Where a label's grade came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GradeFrom {
+    /// Stored with the label when it was written.
+    Stored,
+    /// Computed now from the analysis at hand: the line stores none.
+    Now,
+}
+
+impl GradeFrom {
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Stored => "stored",
+            Self::Now => "now",
+        }
+    }
+}
+
+impl Review {
+    /// The grade the label was judged against: the stored one, else the one
+    /// `now` gives (a line from before grades were stored). `None` when the
+    /// line stores none and `now` has no analysis of the record.
+    pub fn judged_grade(
+        &self,
+        now: impl FnOnce() -> Option<LabelGrade>,
+    ) -> Option<(LabelGrade, GradeFrom)> {
+        match &self.grade {
+            Some(g) => Some((g.clone(), GradeFrom::Stored)),
+            None => now().map(|g| (g, GradeFrom::Now)),
+        }
+    }
+}
+
+/// Agent labels in a review file below the labelling rule.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct BelowRuleCount {
+    /// Agent labels in the file.
+    pub agents: usize,
+    /// Of those, below L2: by the stored grade, else the grade now.
+    pub total: usize,
+    /// Below L2 and queued as flagged (what a precision estimate reads).
+    pub flagged: usize,
+    /// Below L2 by the grade now: the line stores none.
+    pub graded_now: usize,
+    /// Below L2 with a reason in the note.
+    pub with_reason: usize,
+    /// Lines storing no grade whose record is not in the analysis.
+    pub unknown: usize,
+}
+
+/// Count `store`'s agent labels below L2, grading a line that stores no
+/// grade by `a`.
+pub fn count_below_rule(store: &ReviewStore, a: &Analysis) -> BelowRuleCount {
+    let mut c = BelowRuleCount::default();
+    let old = store
+        .entries
+        .values()
+        .any(|v| v.label == "agent" && v.grade.is_none());
+    let index: BTreeMap<&str, usize> = if old {
+        a.results
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(i, r)| (r.obs.id.as_str(), i))
+            .collect()
+    } else {
+        BTreeMap::new()
+    };
+    for v in store.entries.values().filter(|v| v.label == "agent") {
+        c.agents += 1;
+        let now = || {
+            let &i = index.get(v.record.id.as_str())?;
+            Some(LabelGrade::of(a, i, &v.label))
+        };
+        match v.judged_grade(now) {
+            Some((g, from)) if g.below_rule() => {
+                c.total += 1;
+                c.graded_now += usize::from(from == GradeFrom::Now);
+                c.flagged += usize::from(v.class == CLASS_FLAGGED);
+                c.with_reason += usize::from(v.note.is_some());
+            }
+            Some(_) => {}
+            None => c.unknown += 1,
+        }
+    }
+    c
+}
+
+/// The grade of every record in the review file, from an analysis of the
+/// file's own records: what a reader without the watch store grades an
+/// older line by. A cluster with members outside the file may grade
+/// differently on the review page.
+pub fn grades_now(store: &ReviewStore, rules: &sc_core::Rules) -> BTreeMap<String, LabelGrade> {
+    let a = sc_core::analyze(
+        store.entries.values().map(|r| r.record.clone()).collect(),
+        rules,
+    );
+    let mut out = BTreeMap::new();
+    for (i, r) in a.results.iter().enumerate() {
+        if let Some(v) = store.entries.get(&r.obs.id) {
+            out.entry(r.obs.id.clone())
+                .or_insert_with(|| LabelGrade::of(&a, i, &v.label));
+        }
+    }
+    out
 }
 
 /// `review tuned`: set `tuned` on the listed records in every review file.
@@ -519,6 +822,17 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
         fmt_ts(r.obs.ts),
         r.obs.source
     )?;
+    let g = LabelGrade::of(a, item.idx, "unsure");
+    writeln!(
+        out,
+        "  grade:   {}{}",
+        g.short(),
+        if g.agent_allowed {
+            ""
+        } else {
+            " (below L2: unsure is the most the rule allows)"
+        }
+    )?;
     writeln!(out, "  url:     {}", defang(&truncate(&r.obs.url, 300)))?;
     for l in r.layers.iter().filter(|l| l.via != "submitted").take(5) {
         writeln!(
@@ -753,6 +1067,7 @@ pub fn session(
                         .collect(),
                     _ => vec![item],
                 };
+                let (label, note) = confirm_below_rule(a, &targets, label, note, &mut input, out)?;
                 for it in &targets {
                     let r = &a.results[it.idx];
                     store.entries.insert(
@@ -770,6 +1085,7 @@ pub fn session(
                             // Only the shown record had a suggestion.
                             suggested: suggestion.clone().filter(|_| it.idx == item.idx),
                             tuned: false,
+                            grade: Some(LabelGrade::of(a, it.idx, label)),
                         },
                     );
                     *tally.labelled.entry(label).or_default() += 1;
@@ -786,8 +1102,64 @@ pub fn session(
     Ok(tally)
 }
 
+/// `agent` on records graded below L2: say what the grade is and what the
+/// rule says, and ask for a reason, saved as the note, unless the answer
+/// carried one. The reason is required: Enter asks again, `u` labels them
+/// unsure instead. The label is saved with its grade, marked below the rule.
+fn confirm_below_rule(
+    a: &Analysis,
+    targets: &[Item],
+    label: &'static str,
+    note: Option<String>,
+    input: &mut impl BufRead,
+    out: &mut impl Write,
+) -> Result<(&'static str, Option<String>)> {
+    if label != "agent" {
+        return Ok((label, note));
+    }
+    let below: Vec<LabelGrade> = targets
+        .iter()
+        .map(|it| LabelGrade::of(a, it.idx, label))
+        .filter(LabelGrade::below_rule)
+        .collect();
+    let Some(g) = below.first() else {
+        return Ok((label, note));
+    };
+    writeln!(
+        out,
+        "  below the labelling rule: {} of {} record(s) at {}",
+        below.len(),
+        targets.len(),
+        g.short()
+    )?;
+    writeln!(
+        out,
+        "  agent needs an agent grade of L2 or higher; below it, unsure is the most the evidence allows. An agent label here is saved as an exception, marked `{BELOW_L2}` with this grade."
+    )?;
+    if note.is_some() {
+        return Ok((label, note));
+    }
+    loop {
+        write!(
+            out,
+            "  reason, saved as the note (required; `u` for unsure instead)> "
+        )?;
+        out.flush()?;
+        let mut line = String::new();
+        if input.read_line(&mut line)? == 0 {
+            // Input ended without a reason: unsure, the most the rule allows.
+            return Ok(("unsure", None));
+        }
+        match line.trim() {
+            "" => continue,
+            "u" => return Ok(("unsure", None)),
+            r => return Ok((label, Some(r.to_string()))),
+        }
+    }
+}
+
 /// Counts in the review file, and where the rules disagree with the admin.
-pub fn stats(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
+pub fn stats(store: &ReviewStore, rules: &sc_core::Rules, out: &mut impl Write) -> Result<()> {
     let mut by: BTreeMap<(&str, &str), usize> = BTreeMap::new();
     for r in store.entries.values() {
         *by.entry((r.class.as_str(), r.label.as_str())).or_default() += 1;
@@ -815,6 +1187,7 @@ pub fn stats(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
         out,
         "flagged at review but labelled benign: {fp} · labelled agent but not flagged: {missed}"
     )?;
+    below_rule(store, rules, 10, out)?;
     baseline(store, out)?;
     if fp + missed > 0 {
         writeln!(
@@ -822,6 +1195,70 @@ pub fn stats(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
             "Run `swarmchase eval {}` for the full table. Fix the rules and add a reconstructed record to samples/eval/ as a regression case.",
             store.path.display()
         )?;
+    }
+    Ok(())
+}
+
+/// Agent labels below the labelling rule, each with the grade it was judged
+/// against: the one stored with the label, else (an older line) the grade
+/// now from the review file's own records, said as such.
+pub fn below_rule(
+    store: &ReviewStore,
+    rules: &sc_core::Rules,
+    show: usize,
+    out: &mut impl Write,
+) -> Result<()> {
+    let agents: Vec<&Review> = store
+        .entries
+        .values()
+        .filter(|r| r.label == "agent")
+        .collect();
+    if agents.is_empty() {
+        return Ok(());
+    }
+    let now = if agents.iter().any(|r| r.grade.is_none()) {
+        grades_now(store, rules)
+    } else {
+        BTreeMap::new()
+    };
+    let below: Vec<(&Review, LabelGrade, GradeFrom)> = agents
+        .iter()
+        .filter_map(|r| {
+            let (g, from) = r.judged_grade(|| now.get(&r.record.id).cloned())?;
+            g.below_rule().then_some((*r, g, from))
+        })
+        .collect();
+    let from_now = below.iter().filter(|b| b.2 == GradeFrom::Now).count();
+    writeln!(
+        out,
+        "agent labels below the labelling rule (agent needs L2 or higher): {} of {} agent label(s){}",
+        below.len(),
+        agents.len(),
+        if from_now > 0 {
+            format!(
+                "; {from_now} graded now from the review file's records, since their lines store no grade"
+            )
+        } else {
+            String::new()
+        }
+    )?;
+    for (r, g, from) in below.iter().take(show) {
+        writeln!(
+            out,
+            "  {} · {} (grade {}) · {}",
+            r.record.id,
+            g.short(),
+            from.word(),
+            r.note
+                .as_deref()
+                .map_or("no reason noted".into(), |n| format!(
+                    "reason: {}",
+                    crate::suggest::defang_all(n)
+                ))
+        )?;
+    }
+    if below.len() > show {
+        writeln!(out, "  and {} more", below.len() - show)?;
     }
     Ok(())
 }
@@ -1079,6 +1516,7 @@ mod tests {
                         rules_version: a.rules_version.clone(),
                         suggested: None,
                         tuned: false,
+                        grade: None,
                     },
                 );
             }
@@ -1142,6 +1580,7 @@ mod tests {
                     rules_version: a.rules_version.clone(),
                     suggested: None,
                     tuned: false,
+                    grade: None,
                 },
             );
         }
@@ -1293,6 +1732,140 @@ mod tests {
             "eval reads the admin's label"
         );
         std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn agent_below_the_rule_shows_the_grade_and_asks_for_a_reason() {
+        let a = analysis();
+        let solo = a.results.iter().position(|r| r.obs.id == "solo").unwrap();
+        assert!(!LabelGrade::of(&a, solo, "agent").agent_allowed);
+        let q = vec![Item {
+            idx: solo,
+            class: CLASS_FLAGGED,
+        }];
+        let run = |input: &str| {
+            let mut store = tmp_store("below");
+            let cases = sink(&store);
+            let mut out = Vec::new();
+            session(
+                &a,
+                &q,
+                &mut store,
+                input.as_bytes(),
+                &mut out,
+                &Session {
+                    now: "2026-10-12",
+                    cases: &cases,
+                    suggest: &|_, _| None,
+                },
+            )
+            .unwrap();
+            let r = store.entries.get("solo").cloned();
+            let _ = std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap());
+            (r, String::from_utf8(out).unwrap())
+        };
+        // A reason at the prompt is saved as the note, with the grade.
+        let (r, out) = run("a\nseen with cluster c4\n");
+        assert!(out.contains("  grade:   L"), "{out}");
+        assert!(
+            out.contains("(below L2: unsure is the most the rule allows)"),
+            "{out}"
+        );
+        assert!(
+            out.contains("below the labelling rule: 1 of 1 record(s) at L"),
+            "{out}"
+        );
+        assert!(out.contains("marked `below_l2`"), "{out}");
+        let r = r.unwrap();
+        assert_eq!(r.label, "agent");
+        assert_eq!(r.note.as_deref(), Some("seen with cluster c4"));
+        let g = r.grade.unwrap();
+        assert!(g.below_rule() && !g.agent_allowed);
+        assert_eq!(g.basis, "record");
+        // A note given with the key is the reason: no prompt.
+        let (r, out) = run("a pasted with residue\n");
+        assert!(!out.contains("reason, saved as the note"), "{out}");
+        assert_eq!(r.unwrap().note.as_deref(), Some("pasted with residue"));
+        // `u` at the prompt labels unsure instead, with no marker.
+        let (r, _) = run("a\nu\n");
+        let r = r.unwrap();
+        assert_eq!(r.label, "unsure");
+        assert!(r.grade.unwrap().rule.is_none());
+        // Enter asks again: the reason is required.
+        let (r, out) = run("a\n\nthe run's write-up\n");
+        assert_eq!(out.matches("reason, saved as the note").count(), 2, "{out}");
+        let r = r.unwrap();
+        assert_eq!(
+            (r.label.as_str(), r.note.as_deref()),
+            ("agent", Some("the run's write-up"))
+        );
+        // Input ending without one labels unsure.
+        let (r, _) = run("a\n\n");
+        assert_eq!(r.unwrap().label, "unsure");
+    }
+
+    #[test]
+    fn old_lines_without_a_grade_read_and_are_graded_now_in_stats() {
+        let a = analysis();
+        let mut store = tmp_store("old");
+        let solo = a.results.iter().find(|r| r.obs.id == "solo").unwrap();
+        let mut line = serde_json::to_value(Review {
+            record: solo.obs.clone(),
+            label: "agent".into(),
+            note: None,
+            class: CLASS_FLAGGED.into(),
+            reviewed_at: "x".into(),
+            tier: solo.tier,
+            score: solo.score,
+            rules: Vec::new(),
+            rules_version: a.rules_version.clone(),
+            suggested: None,
+            tuned: false,
+            grade: None,
+        })
+        .unwrap();
+        assert!(line.get("grade").is_none(), "no grade, no field: {line}");
+        // An older line has no `grade` field at all.
+        line.as_object_mut().unwrap().remove("grade");
+        std::fs::create_dir_all(store.path.parent().unwrap()).unwrap();
+        std::fs::write(&store.path, format!("{line}\n")).unwrap();
+        store = ReviewStore::open(store.path.clone()).unwrap();
+        let old = &store.entries["solo"];
+        assert!(old.grade.is_none());
+        let (g, from) = old
+            .judged_grade(|| Some(LabelGrade::of(&a, 0, "agent")))
+            .unwrap();
+        assert_eq!(from, GradeFrom::Now);
+        assert!(g.rule.is_some() || g.agent_allowed);
+        assert!(
+            old.judged_grade(|| None).is_none(),
+            "unknown without an analysis"
+        );
+
+        let mut out = Vec::new();
+        stats(&store, &Rules::default_rules(), &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(
+            out.contains("agent labels below the labelling rule (agent needs L2 or higher): 1 of 1 agent label(s); 1 graded now from the review file's records"),
+            "{out}"
+        );
+        assert!(out.contains("  solo · L"), "{out}");
+        assert!(out.contains("(grade now) · no reason noted"), "{out}");
+        let c = count_below_rule(&store, &a);
+        assert_eq!((c.agents, c.total, c.graded_now, c.flagged), (1, 1, 1, 1));
+
+        // Once stored, the stored grade is read and said so.
+        let idx = a.results.iter().position(|r| r.obs.id == "solo").unwrap();
+        store.entries.get_mut("solo").unwrap().grade = Some(LabelGrade::of(&a, idx, "agent"));
+        store.entries.get_mut("solo").unwrap().note = Some("why".into());
+        let mut out = Vec::new();
+        stats(&store, &Rules::default_rules(), &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("1 of 1 agent label(s)\n"), "{out}");
+        assert!(out.contains("(grade stored) · reason: why"), "{out}");
+        let c = count_below_rule(&store, &a);
+        assert_eq!((c.graded_now, c.with_reason), (0, 1));
+        let _ = std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap());
     }
 
     #[test]

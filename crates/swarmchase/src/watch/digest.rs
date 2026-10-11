@@ -2,6 +2,8 @@
 //! fared, and the leads (reruns, archive bursts, case status) for the admin.
 
 use super::cases::CaseReport;
+use super::priority::{Level, Priority};
+use super::triage::{Lead, LeadKind, TriageReport};
 use crate::util::{one_line, top_keys};
 use sc_collect::{Coverage, Kind};
 use sc_core::bursts::ArchiveBurst;
@@ -82,6 +84,18 @@ impl SourceReport {
     fn ran(&self) -> bool {
         self.skipped.is_none() && self.error.is_none()
     }
+
+    /// One word for the run summary: `skipped`, `error`, `stopped`,
+    /// `partial` (continues next run) or `complete`.
+    pub fn status(&self) -> &'static str {
+        match (&self.skipped, &self.error, &self.stopped, self.pending) {
+            (Some(_), ..) => "skipped",
+            (None, Some(_), ..) => "error",
+            (None, None, Some(_), _) => "stopped",
+            (None, None, None, true) => "partial",
+            (None, None, None, false) => "complete",
+        }
+    }
 }
 
 /// What the digest loses when a source of `kind` does not run.
@@ -108,7 +122,7 @@ pub fn capability(kind: &str) -> &'static str {
 /// The health block's lines on lost capability: sources that were skipped,
 /// failed, stopped early or read only part of their stream, and the run-wide
 /// loss when no submit-time source ran.
-fn lost_lines(sources: &[SourceReport]) -> Vec<String> {
+pub(super) fn lost_lines(sources: &[SourceReport]) -> Vec<String> {
     let mut out = Vec::new();
     let submit = |r: &&SourceReport| r.kind.parse::<Kind>().is_ok_and(Kind::submit_time);
     if !sources.iter().filter(submit).any(|r| r.ran()) {
@@ -236,8 +250,70 @@ fn without_urls(m: &str) -> String {
 #[derive(Default)]
 pub struct Health {
     pub sources: Vec<SourceReport>,
-    pub alerts: Vec<String>,
+    pub alerts: Vec<Alert>,
     pub notes: Vec<String>,
+}
+
+/// What a health alert is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AlertKind {
+    /// The source's pull failed.
+    SourceFailed,
+    /// The source was skipped for the first time (no API key).
+    SourceSkipped,
+    /// The source pulled far less than its recent median.
+    SourceCollapsed,
+    /// The source answered, but not in the shape the parser expects.
+    CanaryFailed,
+    /// A host stayed unavailable through its retries.
+    HostDown,
+    /// A rule's hit rate jumped on one source's new records.
+    RuleDrift,
+    Other,
+}
+
+impl AlertKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            AlertKind::SourceFailed => "source_failed",
+            AlertKind::SourceSkipped => "source_skipped",
+            AlertKind::SourceCollapsed => "source_collapsed",
+            AlertKind::CanaryFailed => "canary_failed",
+            AlertKind::HostDown => "host_down",
+            AlertKind::RuleDrift => "rule_drift",
+            AlertKind::Other => "other",
+        }
+    }
+}
+
+/// One health alert: its kind, the source or host it concerns, and the line.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Alert {
+    pub kind: AlertKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    pub text: String,
+}
+
+impl Alert {
+    pub fn new(kind: AlertKind, source: &str, text: String) -> Self {
+        Self {
+            kind,
+            source: Some(source.to_string()),
+            text,
+        }
+    }
+}
+
+impl From<&str> for Alert {
+    fn from(text: &str) -> Self {
+        Self {
+            kind: AlertKind::Other,
+            source: None,
+            text: text.to_string(),
+        }
+    }
 }
 
 /// Everything one digest is written from.
@@ -254,6 +330,10 @@ pub struct DigestInput<'a> {
     pub bursts: &'a [ArchiveBurst],
     pub cases: &'a CaseReport,
     pub window_days: i64,
+    /// The run's new leads ([`super::triage::leads`]), with any suggestions.
+    pub leads: &'a [Lead],
+    pub triage: &'a TriageReport,
+    pub priority: &'a Priority,
 }
 
 pub struct Digest {
@@ -332,6 +412,7 @@ pub fn digest(d: &DigestInput) -> Digest {
         t,
         "Unverified leads from passive collection. Review before acting on anything here.\n"
     );
+    needs_attention(&mut t, d.priority);
 
     // Health first: a source that did not run hides whatever it would have
     // found, so what was lost is the first thing to read.
@@ -344,7 +425,7 @@ pub fn digest(d: &DigestInput) -> Digest {
         );
     }
     for x in &health.alerts {
-        let _ = writeln!(t, "- {x}");
+        let _ = writeln!(t, "- {}", x.text);
     }
     // A blank line between blocks, not before the first.
     let gap = |t: &String| if t.ends_with("\n\n") { "" } else { "\n" };
@@ -490,6 +571,7 @@ pub fn digest(d: &DigestInput) -> Digest {
     }
 
     lone_significant(&mut t, a, d.new_ids);
+    model_suggestions(&mut t, d.leads, d.triage);
 
     // Descriptive only: a rerun is a lead for the admin, never a merge.
     let (runs, matches) = cluster_reruns(a, d.new_ids);
@@ -554,7 +636,15 @@ pub fn digest(d: &DigestInput) -> Digest {
     }
 
     let errors = health.sources.iter().any(|s| s.error.is_some());
+    // A new lone record at L2 or higher is a lead the admin should see
+    // now, like a new cluster.
+    let lone_graded = d.leads.iter().any(|l| {
+        l.kind == LeadKind::Record
+            && l.tier == Tier::Significant
+            && l.grade >= sc_core::agentness::AgentLevel::ModelWritten
+    });
     let changed = d.cases.changed
+        || lone_graded
         || !new_clusters.is_empty()
         || !escalated.is_empty()
         || !new_endpoints.is_empty()
@@ -563,6 +653,103 @@ pub fn digest(d: &DigestInput) -> Digest {
         || errors
         || !health.alerts.is_empty();
     Digest { text: t, changed }
+}
+
+/// The priority and the facts behind it, first in the digest.
+fn needs_attention(t: &mut String, p: &Priority) {
+    let _ = writeln!(t, "## Needs attention: {}\n", p.level.label());
+    if p.reasons.is_empty() {
+        let _ = writeln!(
+            t,
+            "No new significant lead, no lead at L2 or higher, no health alert and no case clock due.\n"
+        );
+        return;
+    }
+    for r in p.reasons.iter().take(LEAD_LINES) {
+        let tag = match r.level {
+            Level::High => "**high**",
+            Level::Medium => "medium",
+            Level::Low => "low",
+        };
+        let _ = writeln!(t, "- {tag}: {}", r.text);
+    }
+    if p.reasons.len() > LEAD_LINES {
+        let _ = writeln!(t, "- … {} more below", p.reasons.len() - LEAD_LINES);
+    }
+    let _ = writeln!(
+        t,
+        "\nSet from the leads' tiers and agent grades, health alerts and case clocks; a model suggestion never sets it.\n"
+    );
+}
+
+/// The model's suggestions on this run's leads, when triage is on:
+/// suggestions, never labels.
+fn model_suggestions(t: &mut String, leads: &[Lead], tr: &TriageReport) {
+    if !tr.enabled {
+        return;
+    }
+    let with: Vec<&Lead> = leads.iter().filter(|l| l.suggestion.is_some()).collect();
+    let _ = writeln!(t, "\n## Model suggestions ({})\n", with.len());
+    let model = if tr.model.is_empty() {
+        String::new()
+    } else {
+        format!(" (`{}`)", one_line(&tr.model, 60))
+    };
+    let from = if tr.backend == super::triage::Backend::Claude.label() {
+        format!(
+            "From Claude through the admin's Claude Code login on the runner{model}, shown only leads from web archive indexes and urlquery, defanged and without IP addresses"
+        )
+    } else {
+        format!("From a model on the admin's own machine or network{model}")
+    };
+    let _ = writeln!(
+        t,
+        "{from}: suggestions only, never labels. Review decides; they are saved in `labels/{}`.\n",
+        tr.file()
+    );
+    if with.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for l in with.iter().take(LEAD_LINES * 2) {
+        let Some(s) = &l.suggestion else { continue };
+        let _ = writeln!(
+            t,
+            "- {} [{}, {}]: suggests {}: {}{}",
+            l.name(),
+            l.tier.label(),
+            l.grade.code(),
+            s.label,
+            one_line(&crate::suggest::defang_all(&s.reason), 160),
+            if l.against_rule() {
+                format!(
+                    ". Against the labelling rule: agent needs L2 or higher, and this lead is {}, so unsure is the most it allows",
+                    l.grade.code()
+                )
+            } else {
+                String::new()
+            }
+        );
+    }
+    if with.len() > LEAD_LINES * 2 {
+        let _ = writeln!(t, "- … {} more", with.len() - LEAD_LINES * 2);
+    }
+    let _ = writeln!(
+        t,
+        "\nAsked {}, answered {}, reused {}, not asked {}{}.{}",
+        tr.asked,
+        tr.answered,
+        tr.reused,
+        tr.left,
+        if tr.withheld > 0 {
+            format!(", withheld {} (not a hosted source)", tr.withheld)
+        } else {
+            String::new()
+        },
+        tr.note
+            .as_ref()
+            .map(|n| format!(" {}.", one_line(n, 200)))
+            .unwrap_or_default()
+    );
 }
 
 /// The host of a record's own URL, lowercased.
@@ -855,6 +1042,9 @@ mod tests {
             bursts,
             cases: &CaseReport::default(),
             window_days: 30,
+            leads: &[],
+            triage: &TriageReport::default(),
+            priority: &super::super::priority::assess(&[], &health.alerts, &[]),
         })
     }
 
@@ -894,6 +1084,120 @@ mod tests {
             d3.changed && d3.text.contains("## Health (1)"),
             "{}",
             d3.text
+        );
+    }
+
+    #[test]
+    fn digest_opens_with_priority_and_shows_suggestions_as_suggestions() {
+        use crate::suggest::Suggestion;
+        use sc_core::agentness::AgentLevel;
+        let (a, ids) = super::super::triage::tests::analysis();
+        let next = summarise(&a, &Summary::default(), "t1".into());
+        let mut leads = super::super::triage::leads(&a, &Summary::default(), &next, &ids);
+        assert!(!leads.is_empty());
+        leads[0].grade = AgentLevel::SelfDescribed;
+        leads[0].suggestion = Some(Suggestion {
+            label: "agent".into(),
+            reason: "relay via r.jina.ai plus SQLi".into(),
+            model: "fake-local".into(),
+        });
+        let health = Health::default();
+        let priority = super::super::priority::assess(&leads, &health.alerts, &[]);
+        let triage = TriageReport {
+            enabled: true,
+            model: "fake-local".into(),
+            asked: 2,
+            answered: 1,
+            ..Default::default()
+        };
+        let d = digest(&DigestInput {
+            stamp: "t1",
+            analysis: &a,
+            prev: &Summary::default(),
+            next: &next,
+            new_ids: &ids,
+            health: &health,
+            bursts: &[],
+            cases: &CaseReport::default(),
+            window_days: 30,
+            leads: &leads,
+            triage: &triage,
+            priority: &priority,
+        });
+        let first = d.text.find("## ").unwrap();
+        assert!(
+            d.text[first..].starts_with(&format!("## Needs attention: {}", priority.level.label())),
+            "{}",
+            d.text
+        );
+        assert!(d.text.find("## Needs attention").unwrap() < d.text.find("## Health").unwrap());
+        assert!(d.text.contains("## Model suggestions (1)"), "{}", d.text);
+        assert!(
+            d.text.contains("suggestions only, never labels"),
+            "{}",
+            d.text
+        );
+        let line = d
+            .text
+            .lines()
+            .find(|l| l.contains("suggests agent"))
+            .unwrap();
+        assert!(line.contains("r[.]jina[.]ai"), "{line}");
+        assert!(
+            line.contains("Against the labelling rule: agent needs L2 or higher"),
+            "{line}"
+        );
+        assert!(d.text.contains("Asked 2, answered 1"), "{}", d.text);
+        assert!(d.text.contains("labels/suggestions-local.ndjson"));
+
+        // Claude through Claude Code: says so, its file, and what was withheld.
+        let claude = TriageReport {
+            backend: "claude".into(),
+            model: "claude-opus-5-5".into(),
+            withheld: 1,
+            ..triage.clone()
+        };
+        let d = digest(&DigestInput {
+            stamp: "t1",
+            analysis: &a,
+            prev: &Summary::default(),
+            next: &next,
+            new_ids: &ids,
+            health: &health,
+            bursts: &[],
+            cases: &CaseReport::default(),
+            window_days: 30,
+            leads: &leads,
+            triage: &claude,
+            priority: &priority,
+        });
+        assert!(d.text.contains("Claude Code login"), "{}", d.text);
+        assert!(d.text.contains("labels/suggestions-claude-watch.ndjson"));
+        assert!(
+            d.text.contains("withheld 1 (not a hosted source)"),
+            "{}",
+            d.text
+        );
+
+        // Triage off: no suggestions block; a quiet run is low priority.
+        let quiet = write(
+            "t2",
+            &a,
+            &next,
+            &next,
+            &BTreeSet::new(),
+            &Health::default(),
+            &[],
+        );
+        assert!(
+            !quiet.text.contains("## Model suggestions"),
+            "{}",
+            quiet.text
+        );
+        assert!(
+            quiet.text.contains("## Needs attention: low"),
+            "{}",
+            quiet.text
         );
     }
 

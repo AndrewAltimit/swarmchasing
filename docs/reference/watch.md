@@ -11,7 +11,10 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `state.json` | Each source's time cursor, resume key or stream checkpoint, and health history. |
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
 | `runs/<stamp>/digest.md` | One directory per run, with its digest. |
+| `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
+| `labels/suggestions-local.ndjson` | The local model's suggestions on new leads ([model triage](#model-triage)). |
+| `labels/suggestions-claude-watch.ndjson` | Claude's suggestions on new leads from hosted sources ([model triage](#model-triage)). |
 | `cases/<id>/` | Case files ([cases](cases.md)). |
 | `rules/<version>.toml` | Rules versions that cases pin. |
 | `cache/http/` | Cached collector responses; safe to delete. |
@@ -56,7 +59,21 @@ Streamed and feed kinds read a bounded amount each run and report their coverage
 
 ## The digest
 
-Each run writes `runs/<stamp>/digest.md`. It opens with source health, then covers new clusters, tier changes and endpoints hit for the first time. When something changed, the scheduled workflow emails it to the admin; nothing else leaves the runner.
+Each run writes `runs/<stamp>/digest.md`. It opens with the run's priority and source health, then covers new clusters, tier changes and endpoints hit for the first time. When something changed, the scheduled workflow emails it to the admin, with the priority in the subject (`[swarmchase] [HIGH] watch digest <stamp>`); nothing else leaves the runner.
+
+### Needs attention
+
+The first block gives the run a priority, `high`, `medium` or `low`, and lists the facts that set it, highest first. Only deterministic facts count:
+
+| Priority | Set by |
+|---|---|
+| `high` | A new or escalated significant cluster at agent grade L2 or higher; a new significant record outside any cluster at L2; a case clock that has run. |
+| `medium` | Any health alert (a source failed, skipped, collapsed or failed its canary, a host down, rule drift); a significant lead below L2; a suggestive lead at L2 or higher. |
+| `low` | None of these. |
+
+A lead is a cluster above noise that is new since the last run or rose a tier, or a new significant record that joined no cluster. A case clock has run when reports were sent and the indicator notice's lead time has passed with the notice not yet added, or when the notice is added and an operator may now be named. Each due clock is also a *Case status* line with the command that starts the step; the watch takes no step itself.
+
+A model's suggestion never sets the priority: the same facts give the same priority whatever a model said. A new significant record outside any cluster at L2 or higher makes the run count as changed, like a new cluster.
 
 ### Health
 
@@ -101,6 +118,22 @@ Over the whole window, up to ten lines each:
 
 Clusters are named by number and stable key throughout (`C3 k-3f9a2c1b`), and hosts and values are defanged. These sections alone never make a run count as changed.
 
+### Model triage
+
+Off by default. The watch asks a model for a label on each new lead's strongest record, through one of two backends:
+
+- **Local.** `watch --triage` (or `--triage=local`, or `SWARMCHASE_WATCH_TRIAGE` set to `local`, `1` or `true`) with `SWARMCHASE_LLM_URL` set asks the model at that URL, one record per ask. It uses the client of [label suggestions](#label-suggestions), with the same rules: a loopback, private or link-local endpoint only, defanged text, no IP addresses, no tools, no proxy, no redirect. It may see any lead.
+- **Claude.** `watch --triage=claude` (or `SWARMCHASE_WATCH_TRIAGE=claude`) asks Claude through Claude Code, logged in as the user running the watch ([runner](runner.md#model-triage-with-claude)). Claude is a hosted model, so it is sent only leads from the [hosted sources](#hosted-suggestions), as the lines `review --export-hosted` writes, with their grade, `agent_allowed`, signals and rules; the rest are counted as withheld. All of a run's leads go in one call, or one per 25 records.
+
+The rest is common to both:
+
+- **Limits.** Leads are asked strongest first, up to `--triage-max` per run (default 20, `SWARMCHASE_TRIAGE_MAX`) and within `--triage-secs` (default 600, `SWARMCHASE_TRIAGE_SECS`). A local ask takes at most 60 s, and after three failed asks in a row the rest are left for the next run. A Claude call takes at most the time left; after two failed calls in a row, or a usage or rate limit, it asks no more that run.
+- **Failures.** A missing or refused endpoint, a missing `claude`, a timeout, a failed call or a reply that is not the asked-for JSON is no suggestion. The run carries on and the digest says how many were asked, answered, left and withheld, and why it stopped.
+- **Saved.** Answers are appended to `labels/suggestions-local.ndjson` or `labels/suggestions-claude-watch.ndjson`, one `{"id", "label", "reason", "model", "run"}` per line, the format review reads; Claude's lines also carry `grade` and `misfires`. A record already in the file is not asked again; its earlier suggestion is shown. Review reads Claude's file as a hosted model's, so a line for a record from any other source is dropped.
+- **Shown.** *Model suggestions* names the backend and lists each lead's suggestion with its tier and agent grade. An `agent` suggestion on a lead below L2 is marked as against the labelling rule, under which `unsure` is the most that grade allows.
+
+A suggestion is never a label: review saves it beside the admin's label as `suggested`, and eval reads only the admin's.
+
 ### Case status
 
 The watch matches new records against every case's indicators: its clusters' linking features and its endpoints, under the case's pinned rules. The *Case status* section then proposes:
@@ -111,9 +144,79 @@ The watch matches new records against every case's indicators: its clusters' lin
 
 The watch changes nothing itself. Apply an approved proposal with `swarmchase notice update <id> --kind status --status <s>`, which also updates the case.
 
+## The run summary
+
+Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for scripts, local dashboards and agents. `LATEST` names the newest run's stamp. The file stays in the data directory with the digest. Hosts in it are defanged, and it carries no record URL, IP address or model prompt. `schema` is `swarmchase-watch-run/1`; fields are only added within a version.
+
+| Field | Holds |
+|---|---|
+| `schema` | `swarmchase-watch-run/1`. |
+| `stamp`, `generated` | The run's stamp (its directory name) and its time, RFC 3339 UTC. |
+| `rules_version` | The rules the analysis ran with. |
+| `changed` | Whether the digest counts as changed, and so is emailed. |
+| `priority`, `reasons` | `high`, `medium` or `low`, and the facts behind it ([needs attention](#needs-attention)). |
+| `counts` | `records`, `new_records`, `significant`, `suggestive` and `clusters_above_noise` over the window. |
+| `leads` | The run's new leads, strongest first ([leads](#lead-fields)). |
+| `triage` | `enabled`, `backend`, `model`, `asked`, `answered`, `reused`, `left`, `withheld` and an optional `note` ([model triage](#model-triage)). |
+| `health` | `alerts`, the `lost` capability lines, and `sources` with `name`, `kind`, `pulled`, `new` and `status`. |
+| `cases` | `due` clocks (`case`, `clock`, `since`, `hosts`) and the number of case status `lines`. |
+| `digest` | The digest's file name in the same directory. |
+
+A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
+
+### Lead fields
+
+| Field | Holds |
+|---|---|
+| `kind`, `change` | `cluster` or `record`; `new`, or `escalated` for a cluster that rose a tier. |
+| `id`, `key` | The cluster's number in this run (`C3`) and stable key, or the record id. |
+| `record`, `source` | The record a model is asked about (the cluster's strongest) and its source. |
+| `tier`, `score`, `records` | As the analysis gives them. |
+| `grade` | The agent grade, `L0` to `L4`. |
+| `targets` | Target hosts, defanged. |
+| `suggestion` | `label`, `reason` and `model` from the local model, when there is one. Never a label. |
+
 ## Retention
 
 At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
+
+## The dashboard
+
+`swarmchase dashboard` shows the state of monitoring on `http://127.0.0.1:8767/` (`--port`), one of the [local pages](#local-pages). It reads the data directory (`-d`, as for `review`) and the watchlist (`--watchlist`, default `watchlist.toml`, for each source's kind) and writes nothing. It reloads when a new run lands, and `r` reloads by hand.
+
+```sh
+swarmchase dashboard -d "$SWARMCHASE_DATA"
+swarmchase dashboard -d "$SWARMCHASE_DATA" --json --since 20261011T060000Z
+```
+
+When the latest run wrote a [run summary](#the-run-summary), the page opens with the digest's priority and its reasons, reads the health alerts from it, and lists the local model's suggestions on the run's leads, flagging an `agent` suggestion below L2 as against the labelling rule.
+
+It answers four questions, in this order:
+
+- **What is new.** Clusters above noise that are new or rose a tier, with their agent grade, and significant records outside any cluster, collected since a baseline run. The baseline is the run before the latest, as in the digest, or the run the admin marked seen (`s` on the page, remembered in that browser only; `--since` for `--json`). When that run was deleted by retention, the nearest kept run before it is used.
+- **Whether monitoring is healthy.** Each source's status from `state.json` (failing, skipped, quiet, catching up, ok), its recent pulls, what its absence loses, the latest digest's health alerts, and rule drift recomputed on the latest run.
+- **What waits on the admin.** The review queue as `review --serve` builds it from the latest run's analysis, with label progress and the agent labels below L2 counted apart, and each open case's clocks and what `case status` says it still needs.
+- **What to run next.** Each item comes with its command, with the data directory filled in: `review --serve`, `case … new --cluster <key>`, a case's next step, or `scan` on a drifting source's records.
+
+`d` shows the latest digest; `1` to `4` jump to the sections; `?` lists the keys.
+
+### The overview document
+
+The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<stamp>` for another baseline). `--json` prints the same document, for a script or an agent. Hosts in it are defanged and no record URL is included. `schema` names the version; a field changes meaning or goes only with a new one.
+
+| Field | Holds |
+|---|---|
+| `run` | The latest run's stamp, age in hours, `stale` past 12 hours, kept runs, rules version, the digest's path. |
+| `since` | The baseline run's `stamp` and its `basis`: `previous-run`, `requested`, `nearest-kept-run`, `before-kept-runs` or `first-run`. |
+| `new.clusters` | New or escalated clusters: `id`, `cluster_key`, `change`, `tier`, `grade`, `records`, `new_records`, `targets`, `rules`, `open_case`. |
+| `new.lone` | Significant records outside any cluster collected since the baseline: `id`, `host`, `grade`, `score`, `rules`, `source`, `time`. |
+| `new.endpoints` | Target hosts flagged for the first time since the baseline. |
+| `health.sources` | Per source: `status`, `reason`, `pulled` history, `new_latest`, streak counts, and `lost` when failing or skipped. |
+| `health.alerts` | The latest digest's health lines. |
+| `health.drift` | Rules that fired well above their baseline on the latest run, per source, with both rates. |
+| `waiting.review` | `unreviewed`, `groups`, counts by tier and label, `with_suggestion`, `agent_below_rule` (agent labels below L2: `total`, `flagged`, `graded_now`, `with_reason`, `unknown`), and the `command`. |
+| `waiting.cases` | Each open case: status, `clock` lines, `notice_not_before`, `naming_ready`, `watch_hits`, and `needs` with commands. |
+| `actions` | The next steps, most urgent first: `kind`, `title`, `detail`, `command`. |
 
 ## Reviewing leads
 
@@ -129,13 +232,39 @@ At the end of each run, run directories and stored records older than `retain_da
 
 Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing.
 
+Each record shows its agent grade. Labelling agent below L2 prints the grade, its signals and caps and the labelling rule, then asks for a reason, saved as the note: Enter saves the label with none, and `u` labels unsure instead. A note typed after the key is taken as the reason.
+
 - `--unflagged N` adds a stable sample of unflagged records, which grows the benign baseline and catches misses.
 - `review sample` writes a stratified, seeded sample as a queue file, and `review <queue> --all` labels every record in it ([a reviewed benign baseline](evaluation.md#a-reviewed-benign-baseline)).
 - `--stats` counts reviews and disagreements, and Cohen's κ between labellers; `--list` prints the queue.
 - `--labeller <name>` saves to `labels/reviewed-<name>.ndjson` instead, for a second, independent reviewer ([two labellers](evaluation.md#two-labellers)).
 - `--suggest` shows a local model's label suggestion before each prompt ([label suggestions](#label-suggestions)).
+- `--serve` labels the same queue in a browser on this machine ([the review page](#the-review-page)); `--export-hosted <file>` writes it for a hosted model's suggestions ([hosted suggestions](#hosted-suggestions)).
 
 Each answer goes to `labels/reviewed.ndjson` with the record, so `swarmchase eval <data>/labels/reviewed.ndjson` measures the rules against everything reviewed ([evaluation](evaluation.md)). The file stays in the data directory and is never committed.
+
+### Label lines
+
+Each line is the stored record with these fields beside it:
+
+| Field | Holds |
+|---|---|
+| `label` | `agent`, `benign` or `unsure`. |
+| `note` | The admin's note; for an agent label below L2, the reason. |
+| `class` | Why the record was queued: flagged, the unflagged sample, or the baseline sample. |
+| `reviewed_at` | When it was labelled. |
+| `tier`, `score`, `rules`, `rules_version` | What the rules said then. |
+| `grade` | The agent grade the label was judged against ([below](#the-grade-on-a-label)). |
+| `suggested` | A model's suggestion shown before the label, never the label. |
+| `tuned` | Looked at while changing a rule ([evaluation](evaluation.md#a-reviewed-benign-baseline)). |
+
+### The grade on a label
+
+`grade` is the grade that decides the record's labels when it is labelled: its cluster's, else its own. It holds `code` and `label` (absent for an ungraded record), `basis` (`cluster`, `record` or `none`), `cluster`, `signals` and `counter` as `<signal> (<n> records)`, `caps`, and `agent_allowed`. An agent label below L2 also carries `"rule": "below_l2"`: an exception the admin chose, with the reason in `note` ([evaluating leads](../guides/evaluating-leads.md#exceptions-to-the-labelling-rule)).
+
+A line without `grade` comes from before grades were stored. Its grade is unknown, so each reader grades it from the analysis it has and says so. The review page and the dashboard use their own analysis. `review --stats` and `review agreement` analyse the review file's own records, so a cluster with members outside the file may grade differently. `eval` uses the analysis of its inputs and does not judge a line whose record is not among them.
+
+`review --stats` lists the agent labels below L2 with their grades and reasons. `review agreement` lists them too, and reads the stored grade before the grade now when a suggestion line records none.
 
 ### Label suggestions
 
@@ -147,3 +276,50 @@ It is allowed only with a model running locally:
 - **What it sees.** The defanged URL, target host and rule hits, the tier and score, and the cluster's size, tier, top rules and target hosts, with a fixed prompt asking for `{"label": "agent" | "benign" | "unsure", "reason": "…"}`. No IP addresses.
 - **No fetching.** The model gets text and no tools; the prompt says the URLs are data, never to be visited.
 - **Failures.** A timeout (60 s), an error or a reply that is not that JSON means no suggestion for the record; the review carries on.
+
+### Hosted suggestions
+
+A hosted model may suggest labels for public records only ([policies](../policies.md#evidence-and-attribution)):
+
+```sh
+swarmchase review --export-hosted data/labels/hosted.ndjson          # the flagged queue
+swarmchase review <queue> --all --export-hosted data/labels/hosted-baseline.ndjson
+```
+
+- **What it writes.** One `{"id", "group", "text", "grade", "grade_basis", "agent_allowed", "signals", "counter", "caps", "rules"}` per record: the text the local model reads, the record's review group, the agent grade it is labelled against and the rules that fired. `--batch-size N` splits the export into numbered files and keeps each group in one. Records from `wayback`, `arquivo`, `memento`, `commoncrawl` and `urlquery` only; operator logs and the rest are counted as withheld. The list is in code, so a new source is withheld until it is added on purpose.
+- **Where.** The file must be inside the data directory, and stays there.
+- **Answers.** The model's suggestions go in `labels/suggestions-<name>.ndjson`, one `{"id", "label", "reason", "model", "grade", "misfires"}` per line (`grade` and `misfires` are optional). `review suggest-claude <export>...` asks Claude through Claude Code, as [model triage](#model-triage) does, and appends its answers to `labels/suggestions-claude-<export name>.ndjson`; records already in that file are skipped, so a run cut short by a usage limit resumes. `review check-suggestions` validates a file against its export. `review --serve` reads every such file; a line for a record from any other source is dropped, except in `suggestions-local.ndjson`, which a local model writes ([model triage](#model-triage)).
+- **The loop.** `review agreement` compares the admin's labels with each model's, and `review misfires` lists rules that keep firing on records labelled benign. How to run it all: [AI assistance](../guides/ai-assistance.md).
+- **No fetching.** Whoever runs the model gives it the file and no web access.
+
+### The review page
+
+`review --serve` serves the queue on `http://127.0.0.1:8765/` (`--port`) instead of prompting, with the same inputs and options as the terminal session. It is built on the shared [local pages](#local-pages).
+
+- **Layout.** The queue of groups is on the left, with tabs for what is left to do, labels that differ from a suggestion, what is done, and everything, and a search by rule, host or id. The selected group is on the right: its agent grade and signals, its suggestion, the rules that fired, and each record with its decoded layers.
+- **Groups.** Records are grouped by cluster, or by shape (the rules that fired and the start of the URL) when unclustered, so a run of near-identical records is labelled at once. Each record can still be labelled alone.
+- **Flow.** Labelling a group moves to the next one. `z` undoes the last action, label and note included.
+- **Triage.** The queue sorts in queue order, needs attention first (rule conflicts, then split suggestions, then mixed or differing labels), largest groups first, or by grade. Filters narrow it by grade (`L2 or higher`, `below L2`, or one rung), tier, source, suggestion and check. The browser remembers both.
+- **Labelling rule.** `agent` needs an agent grade of L2 or higher. The server marks each record and group with whether the rule allows it, a suggestion of agent below L2, and a saved agent label below L2. The page shows these in the queue and on the group, and a group labelled so can be relabelled unsure in one step.
+- **Exceptions.** Labelling agent below L2 opens a dialog with the grade, its signals and caps and the rule, and a reason field saved as the note; it offers unsure instead. The server saves every label with its grade ([the grade on a label](#the-grade-on-a-label)). An agent label below L2 shows as `agent < L2` in the queue and the done tab, with an exception field on each record giving the grade, signals, caps and reason, and in earlier decisions. The top bar counts them, and the session panel lists them with the review file's count and the precision estimate without them. An older line without a stored grade shows the grade now and says so.
+- **Suggestions.** `accept suggestion` labels the selected group's unlabelled records as suggested, never across groups, and leaves any suggestion of agent below L2 for the admin. The suggestion is saved beside the label as `suggested`.
+- **Bulk.** `A` / `B` / `U` (with Shift) label only the group's unlabelled records. Every bulk label is one undoable step, and an undo puts back each label with the grade it was saved with.
+- **Session.** `p` opens the session panel: labels this session and in the review file, agreement between the labels and the suggestions as a table, labels that break the rule, and the agent share of decided flagged records with its 95% Wilson interval, the labels still needed for ±10 points, and the `swarmchase eval` command to run next.
+- **Changing labels.** Reviewed records stay on the page, so a label can be changed or cleared. Labels go to the same file as the terminal session (`--labeller` included).
+- **Rule context.** Each rule in the group shows its description, kind, weight and tactic from the rules the analysis ran with, how many records it fired on in the analysis and how many of those were flagged. With a pre-era control summary, it also shows how often the rule fired and flagged before agents existed ([negative control](evaluation.md#negative-control)). `--control <file>` names the summary; the default is `<data>/controls/pre-era/summary.json`, then `data/controls/pre-era/summary.json`.
+- **Timeline.** When the group's records happened, binned, with the median step and the largest gaps, and whether the times are requests, submissions or archive captures ([FM-6.1](../manual/06-timing.md#fm-61-timestamp-kinds)).
+- **Earlier decisions.** Reviewed records outside the group sharing its rule set, cluster or target host, with their labels and notes.
+- **Related records.** Records anywhere in the analysis sharing a target host or a linking feature with the group, with tier and label, and a jump to their group when it is in the queue.
+- **Programs and copying.** A decoded layer that reads as a program can be laid out as text with its outbound and page-reading calls marked. It is never run or rendered. Buttons copy a record's id, and the group's ids or defanged references, one per line.
+- **Loading.** Context loads when a group is selected, from the analysis, the review file and the control summary only. Nothing is fetched.
+- **Keys.** `j` / `k` move, `a` / `b` / `u` label the group, `s` accepts its suggestion, `x` clears, `z` undoes, `n` writes a note, `e` shows every record, `/` searches, `f` filters, `o` changes the sort, `p` opens the session panel, `1` to `4` switch tabs, `?` lists them.
+- **Access.** Focus returns to the same control after each label, a dialog keeps focus inside it and gives it back on close, moving between groups is announced to screen readers, and rule flags carry words and an icon as well as colour.
+- **Guide.** `g` opens the evaluator guide, with worked examples and a practice round that saves nothing, and `h` turns on blind review, which hides suggestions until a group is labelled. The same method in prose is [evaluating leads](../guides/evaluating-leads.md).
+
+### Local pages
+
+The admin's pages run on this machine from the CLI, never on the public site. They share one server and one look ([`localui`](../../crates/swarmchase/src/localui/mod.rs)):
+
+- **Network.** The server listens on 127.0.0.1 only, refuses any other `Host` (no DNS rebinding), and accepts a change only with the token in the page it served and a same-origin `Origin`.
+- **Content.** Records are shown defanged, as text nodes, never as links, under a content security policy that loads nothing but the page's own files.
+- **Look.** Shared tokens and components (verdict buttons, chips, cards, keyboard help, toasts) follow the system's light or dark setting.

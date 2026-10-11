@@ -9,6 +9,8 @@ Task-oriented: how to do one job end to end.
 | Doc | Covers |
 |---|---|
 | [`guides/admin-workflow.md`](guides/admin-workflow.md) | The admin's day: watch digest, review, case, contacts, drafts, send, notice, updates. |
+| [`guides/ai-assistance.md`](guides/ai-assistance.md) | Where a model helps (suggestions, triage, rule upkeep, drafting, monitoring), what it may see, what stays human. |
+| [`guides/evaluating-leads.md`](guides/evaluating-leads.md) | Labelling leads well: what each label means, deciding a group, the traps, worked examples. |
 | [`guides/for-operators.md`](guides/for-operators.md) | For a site that received a report: what it means, telling it is genuine, checking logs, sending logs back, replies, verifying a bundle, private contact. |
 | [`guides/for-providers.md`](guides/for-providers.md) | For an AI provider that received a report: what it holds, checking the bundle, STIX and MISP exports, the publication clock, how it is named, replies. |
 | [`guides/for-researchers.md`](guides/for-researchers.md) | For outside researchers: the workbench on your own exports, rules and tactics, citing the manual, reproducing the evaluation, what is never shared. |

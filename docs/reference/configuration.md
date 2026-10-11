@@ -24,8 +24,12 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | `URLQUERY_APIKEY` | `swarmchase` | urlquery.net collectors and watch sources. |
 | `URLSCAN_APIKEY` | `swarmchase` | Optional: raises urlscan.io's search quota ([urlscan.io](#urlscanio)). |
 | `SWARMCHASE_SITE_URL` | `swarmchase notice build`, `site build` | `--base-url`. |
-| `SWARMCHASE_LLM_URL` | `swarmchase review --suggest` | A local OpenAI-compatible model server; loopback, private or link-local hosts only ([label suggestions](watch.md#label-suggestions)). |
-| `SWARMCHASE_LLM_MODEL` | `swarmchase review --suggest` | The model name sent to that server. |
+| `SWARMCHASE_LLM_URL` | `swarmchase review --suggest`, `watch --triage` | A local OpenAI-compatible model server; loopback, private or link-local hosts only ([label suggestions](watch.md#label-suggestions)). |
+| `SWARMCHASE_LLM_MODEL` | `swarmchase review --suggest`, `watch --triage` | The model name sent to that server. |
+| `SWARMCHASE_WATCH_TRIAGE` | `swarmchase watch` | The [model triage](watch.md#model-triage) backend, as `--triage=` sets it: `local` (also `1`, `true`, `yes`) or `claude`. |
+| `SWARMCHASE_CLAUDE_MODEL` | `watch --triage=claude`, `review suggest-claude` | The model Claude Code is asked for. Default `claude-opus-5-5`. |
+| `CLAUDE_PATH` | `watch --triage=claude`, `review suggest-claude` | The `claude` binary. Unset, it is found on `PATH` or in the usual install locations. |
+| `SWARMCHASE_TRIAGE_MAX`, `SWARMCHASE_TRIAGE_SECS` | `swarmchase watch` | Leads triage asks about per run (default 20) and seconds it may spend (default 600). |
 | `SWARMCHASE_UA` | collectors | Overrides the collectors' user agent. |
 | `SWARMCHASE_BACKUP_DIR` | `swarmchase backup` | Where encrypted backups go, one subdirectory per host ([backups](#backups)). |
 | `SWARMCHASE_BACKUP_RECIPIENT` | `swarmchase backup create` | The age public key backups are encrypted to. |
@@ -39,7 +43,7 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 
 urlquery's search API needs a key from a urlquery account, read from `URLQUERY_APIKEY` (the same variable `urlquery-cli` uses). Without one, `watch` skips urlquery sources and says so at the top of the digest: urlquery is the only scheduled source with submission times, so timing links, pace, agent grades above L2 and interaction edges are lost ([health](watch.md#health)). A urlquery export (search response or report JSON) can still be loaded with any command or in the browser.
 
-urlquery's terms allow personal, non-commercial research use and forbid redistributing their content without permission. So reports and notices link to urlquery reports and quote only the indicators derived from them, and urlquery content is never committed: not in `samples/`, not in test fixtures, not in a notice.
+urlquery's terms allow personal, non-commercial research use and forbid redistributing their content without permission. So reports and notices link to urlquery reports and quote only the indicators derived from them, and urlquery content is never committed: not in `samples/`, not in test fixtures, not in a notice. It may go to a hosted model for private label suggestions ([hosted suggestions](watch.md#hosted-suggestions)).
 
 ## urlscan.io
 

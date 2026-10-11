@@ -134,7 +134,9 @@ The rungs are ordered by the kind of evidence, not by measured likelihood. Nothi
 
 A grade without a held-out measurement **must not** appear in a public notice. Until one exists, a notice says at most that attack payloads were present and that this alone does not show what sent them. Measuring the grade needs records whose actor is known: synthetic human and tool runs as hard negatives, and a negative control of records from before capable agents existed, which no agent sent ([FM-9.11](09-evaluation.md#fm-911-agent-grade-evaluation)).
 
-Toolkit: every cluster carries its grade, signals, counter-signals and caps; case notes and provider reports list them, and `case grade` records the admin's decision, the only way to L5 ([methodology](../methodology.md#agent-likelihood)).
+A record in no cluster is graded from its own hits: self-description is L1 and model-output residue L2, and with no pace, retries or rhythm to read it stops there.
+
+Toolkit: every cluster, and every flagged record in none, carries its grade, signals, counter-signals and caps; case notes and provider reports list them, and `case grade` records the admin's decision, the only way to L5 ([methodology](../methodology.md#agent-likelihood)).
 
 ## FM-7.11 Declared agent identity
 

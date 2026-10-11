@@ -300,6 +300,28 @@ pub fn run(args: EvalArgs) -> Result<()> {
     let (r, cov, summary) =
         sc_core::summarize(&a, &l, &rules_text, &allow_text).map_err(anyhow::Error::msg)?;
     eval::print(&r, &summary, &l, args.show_fp);
+    // Admin review labels only: the evaluation set's labels are not judged
+    // by the labelling rule, so for it nothing is printed.
+    let label_files = if args.labels.is_empty() {
+        &args.input
+    } else {
+        &args.labels
+    };
+    let lines = eval::admin_agent_lines(label_files)?;
+    if !lines.is_empty() {
+        let b = eval::below_rule(&a, &l, &lines);
+        let without = if b.ids().next().is_some() {
+            let l2 = eval::without_below_rule(&l, &b);
+            Some(
+                sc_core::summarize(&a, &l2, &rules_text, &allow_text)
+                    .map_err(anyhow::Error::msg)?
+                    .2,
+            )
+        } else {
+            None
+        };
+        eval::print_below_rule(&b, &summary, without.as_ref());
+    }
     if args.coverage {
         eval::print_coverage(&cov);
     }

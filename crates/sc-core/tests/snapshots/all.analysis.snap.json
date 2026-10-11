@@ -1365,7 +1365,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -1415,7 +1418,10 @@
       ],
       "target_host": "cdn.widgets.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -1459,7 +1465,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -1503,7 +1512,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -2325,7 +2337,10 @@
       ],
       "target_host": "shop.xsvc-store.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -2363,7 +2378,10 @@
       ],
       "target_host": "shop.xsvc-store.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -2502,7 +2520,10 @@
       "features": [
         "param:tag=blackfriday"
       ],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -2541,7 +2562,10 @@
       "features": [
         "param:tag=blackfriday"
       ],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -2688,7 +2712,10 @@
       ],
       "target_host": "records.plant-a.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -2817,7 +2844,10 @@
       ],
       "target_host": "api.plant-b.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -2862,7 +2892,17 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.md_link"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -2907,7 +2947,17 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.md_url_wrapper"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -2946,7 +2996,17 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.tool_call_json"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3071,7 +3131,17 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.placeholder"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3118,7 +3188,17 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.template_unrendered"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3202,7 +3282,17 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.json_quote_residue, marker.escaped_newline"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3247,7 +3337,17 @@
       ],
       "target_host": "example.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.placeholder, marker.example_host_value"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3331,7 +3431,17 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.json_quote_residue"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3370,7 +3480,17 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.tool_call_json"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3454,7 +3574,17 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.chat_opener"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3501,7 +3631,17 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.chat_opener"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3652,7 +3792,17 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.doubled_scheme"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3707,7 +3857,17 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.garbled_scheme"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3746,7 +3906,17 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.garbled_scheme"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -3830,7 +4000,17 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.impossible_date"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -4098,7 +4278,17 @@
       ],
       "target_host": "example.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.example_host_value"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -4171,7 +4361,17 @@
       ],
       "target_host": "www.shop.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.template_unrendered"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -4250,7 +4450,10 @@
       ],
       "target_host": "docs.anthropic.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -4343,7 +4546,10 @@
       ],
       "target_host": "blog.shop.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -4479,7 +4685,17 @@
       ],
       "target_host": "docs.mail.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.placeholder_identity"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -4511,7 +4727,17 @@
       ],
       "target_host": "qa.shop.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.placeholder_identity"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -4543,7 +4769,17 @@
       ],
       "target_host": "maps.shop.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.placeholder_identity"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -4588,7 +4824,17 @@
       ],
       "target_host": "www.permits.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.repeated_token"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -4633,7 +4879,17 @@
       ],
       "target_host": "news.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.repeated_token"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -4889,7 +5145,10 @@
       ],
       "target_host": "cal-access.sos.ca.gov",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -4934,7 +5193,10 @@
       ],
       "target_host": "ojjdp.ojp.gov",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -4979,7 +5241,10 @@
       ],
       "target_host": "portal.max.gov",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5016,7 +5281,10 @@
       ],
       "target_host": "apps.bea.gov",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5131,7 +5399,17 @@
       "features": [
         "marker.test_tag:chatgpttest1"
       ],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "marker.test_tag"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -5287,7 +5565,10 @@
       ],
       "target_host": "www.oncb.go.th",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5417,7 +5698,10 @@
       ],
       "target_host": "api.datausa.io",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5454,7 +5738,10 @@
       ],
       "target_host": "en.wikipedia.org",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5491,7 +5778,10 @@
       ],
       "target_host": "blog.example.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5528,7 +5818,10 @@
       ],
       "target_host": "claude.ai",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5565,7 +5858,10 @@
       ],
       "target_host": "chatgpt.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5602,7 +5898,10 @@
       ],
       "target_host": "docs.python.org",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5639,7 +5938,10 @@
       ],
       "target_host": "api.github.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5676,7 +5978,10 @@
       ],
       "target_host": "www.example.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5707,7 +6012,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5738,7 +6046,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5769,7 +6080,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5800,7 +6114,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5831,7 +6148,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5868,7 +6188,10 @@
       ],
       "target_host": "www.example.org",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -5905,7 +6228,10 @@
       ],
       "target_host": "www.example.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6095,7 +6421,10 @@
       ],
       "target_host": "unctadstat-api.unctad.org",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6153,7 +6482,10 @@
       ],
       "target_host": "www.thrill-data.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6200,7 +6532,10 @@
       ],
       "target_host": "xss-game.appspot.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6239,7 +6574,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6270,7 +6608,10 @@
       ],
       "target_host": "unctadstat-api.unctad.org",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6320,7 +6661,10 @@
       ],
       "target_host": "unctadstat-api.unctad.org",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6351,7 +6695,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6412,7 +6759,10 @@
       ],
       "target_host": "public-firing-range.appspot.com",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6451,7 +6801,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6513,7 +6866,10 @@
       ],
       "target_host": "unctadstat-api.unctad.org",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -6595,7 +6951,10 @@
       ],
       "target_host": "www.news.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7134,7 +7493,10 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7277,7 +7639,10 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7424,7 +7789,17 @@
       "features": [
         "param:uqtag=covrun8"
       ],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -7475,7 +7850,10 @@
       ],
       "target_host": "portal.agency.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7517,7 +7895,10 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7628,7 +8009,10 @@
       ],
       "target_host": "www.news.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7787,7 +8171,10 @@
       ],
       "target_host": "api.weather.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7838,7 +8225,10 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7921,7 +8311,17 @@
       "features": [
         "param:uqtag=covrun10"
       ],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -7960,7 +8360,10 @@
       ],
       "target_host": null,
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
     },
     {
       "obs": {
@@ -7993,7 +8396,17 @@
       "features": [
         "param:tok=OAI_META_1312"
       ],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.oai_prefix"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -8029,7 +8442,17 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": null
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "selfid.signature_agent"
+          }
+        ]
+      }
     },
     {
       "obs": {

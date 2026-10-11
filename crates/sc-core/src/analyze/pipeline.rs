@@ -215,6 +215,7 @@ fn score(cx: &mut AnalysisCtx) {
                 target_host: x.target_host,
                 features: x.features,
                 cluster: None,
+                agent: None,
                 obs,
             }
         })
@@ -302,7 +303,7 @@ fn scope(cx: &mut AnalysisCtx) {
     }
 }
 
-/// Each cluster's agent grade.
+/// Each cluster's agent grade, and each flagged unclustered record's.
 fn agent(cx: &mut AnalysisCtx) {
     let a = &mut cx.a;
     for c in a.clusters.iter_mut() {
@@ -313,6 +314,13 @@ fn agent(cx: &mut AnalysisCtx) {
             &a.escalations,
             &cx.rules.set.chains,
         );
+    }
+    for r in a
+        .results
+        .iter_mut()
+        .filter(|r| r.cluster.is_none() && r.score > 0)
+    {
+        r.agent = Some(crate::agentness::assess_record(r));
     }
 }
 

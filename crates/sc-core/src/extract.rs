@@ -62,7 +62,7 @@ fn pct_decode(s: &str) -> String {
 /// services truncate long URLs. The longest decodable prefix is used. Text
 /// only counts if it is mostly printable and has letters, so random IDs (which
 /// decode to binary) are rejected.
-fn try_b64(s: &str) -> Option<String> {
+pub(crate) fn try_b64(s: &str) -> Option<String> {
     if !b64_re().is_match(s) {
         return None;
     }

@@ -7,7 +7,9 @@
 //! secret still link to each other.
 //!
 //! Only secret-shaped values are touched. Attack payloads, agent tags and run
-//! identifiers stay as they are, because the rules need them.
+//! identifiers stay as they are, because the rules need them. Base64 carried
+//! in a URL (a program echoed by httpbin, an encoded parameter) is decoded,
+//! and re-encoded from the redacted text only when it held a secret.
 
 use regex::Regex;
 use sha2::{Digest, Sha256};
@@ -163,7 +165,107 @@ pub fn redact_url(url: &str, n: &mut usize) -> String {
             out.push_str(f);
         }
     }
-    redact_text(&out, n)
+    redact_text(&redact_b64(&out, n), n)
+}
+
+/// A run of base64, plain or with `+`, `/` and `=` percent-encoded, long
+/// enough to carry a program.
+fn b64_run() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?:[A-Za-z0-9+/_-]|%2[BbFf]){16,}(?:=|%3[Dd]){0,2}").unwrap())
+}
+
+/// Redact secrets inside base64 carried in a URL. Each run is decoded the
+/// way the unwrapper decodes it; when the text holds a secret, the run is
+/// re-encoded from the redacted text in the same alphabet, padding and
+/// percent-encoding, so the stored URL and its decoded layer agree. A run
+/// whose text holds no secret is left byte-for-byte as is.
+fn redact_b64(url: &str, n: &mut usize) -> String {
+    b64_run()
+        .replace_all(url, |c: &regex::Captures| {
+            redact_run(&c[0], n).unwrap_or_else(|| c[0].to_string())
+        })
+        .into_owned()
+}
+
+/// Base64 decoded strictly, for rewriting: the bytes must be UTF-8 (a
+/// sequence cut at the very end is dropped, as scan services cut long URLs)
+/// and mostly printable. A misaligned start, such as a path segment before
+/// the payload, decodes to invalid UTF-8 and is skipped, so re-encoding never
+/// changes anything but the payload.
+fn strict_b64(s: &str) -> Option<String> {
+    use base64::Engine;
+    let mut norm: String = s
+        .trim_end_matches('=')
+        .chars()
+        .map(|c| match c {
+            '-' => '+',
+            '_' => '/',
+            c => c,
+        })
+        .collect();
+    norm.truncate(norm.len() - norm.len() % 4);
+    let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
+        .decode(&norm)
+        .ok()?;
+    let text = match std::str::from_utf8(&bytes) {
+        Ok(t) => t,
+        Err(e) if e.error_len().is_none() => std::str::from_utf8(&bytes[..e.valid_up_to()]).ok()?,
+        Err(_) => return None,
+    };
+    let total = text.chars().count();
+    let printable = text
+        .chars()
+        .filter(|&c| !c.is_control() || c.is_whitespace())
+        .count();
+    (total >= 12 && printable * 10 >= total * 9 && text.chars().any(|c| c.is_ascii_alphabetic()))
+        .then(|| text.to_string())
+}
+
+/// Standard base64 can span `/`, so a run is tried from its start and from
+/// each segment start after it, as the unwrapper does for paths.
+fn redact_run(run: &str, n: &mut usize) -> Option<String> {
+    use base64::Engine;
+    use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
+    let starts = std::iter::once(0).chain(run.match_indices('/').map(|(i, _)| i + 1));
+    for start in starts {
+        let raw = &run[start..];
+        let pct = raw.contains('%');
+        let plain = if pct {
+            raw.replace("%2B", "+")
+                .replace("%2b", "+")
+                .replace("%2F", "/")
+                .replace("%2f", "/")
+                .replace("%3D", "=")
+                .replace("%3d", "=")
+        } else {
+            raw.to_string()
+        };
+        let Some(text) = strict_b64(&plain) else {
+            continue;
+        };
+        let red = redact_decoded(&text);
+        if red == text {
+            continue;
+        }
+        *n += 1;
+        let url_safe = plain.contains('-') || plain.contains('_');
+        let enc = match (url_safe, plain.ends_with('=')) {
+            (false, true) => STANDARD.encode(red.as_bytes()),
+            (false, false) => STANDARD_NO_PAD.encode(red.as_bytes()),
+            (true, true) => URL_SAFE.encode(red.as_bytes()),
+            (true, false) => URL_SAFE_NO_PAD.encode(red.as_bytes()),
+        };
+        let enc = if pct {
+            enc.replace('+', "%2B")
+                .replace('/', "%2F")
+                .replace('=', "%3D")
+        } else {
+            enc
+        };
+        return Some(format!("{}{enc}", &run[..start]));
+    }
+    None
 }
 
 /// Whether the decoded `value` of parameter `name` is a secret. `sas` is set
@@ -199,12 +301,50 @@ fn redact_pairs(q: &str, n: &mut usize) -> String {
             if secret_pair(&name, &decoded, sas) {
                 *n += 1;
                 format!("{k}={}", hash_token(&decoded))
+            } else if let Some(v) = redact_nested(v, &decoded) {
+                *n += 1;
+                format!("{k}={v}")
             } else {
                 pair.to_string()
             }
         })
         .collect::<Vec<_>>()
         .join("&")
+}
+
+/// A parameter value that decodes to a URL or a query of its own (a proxy's
+/// `?url=https%3A%2F%2F...%3Fkey%3D...`): each secret pair inside is hashed
+/// where it stands in the raw value, as `name=value` or `name%3Dvalue`, so
+/// nothing else in the value changes. The hash is the one the decoded layer
+/// gets, so the stored URL and the layer agree.
+fn redact_nested(raw: &str, decoded: &str) -> Option<String> {
+    use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+    if !decoded.contains('=') {
+        return None;
+    }
+    let sas = decoded.contains("sv=");
+    let mut out = raw.to_string();
+    for c in text_pair().captures_iter(decoded) {
+        let (name, val) = (&c[1], decode(&c[2]));
+        if !secret_pair(name, &val, sas) {
+            continue;
+        }
+        let hash = hash_token(&val);
+        let forms = [
+            c[2].to_string(),
+            val.clone(),
+            utf8_percent_encode(&c[2], NON_ALPHANUMERIC).to_string(),
+        ];
+        for sep in ["=", "%3D", "%3d", "%253D", "%253d"] {
+            for form in &forms {
+                let from = format!("{name}{sep}{form}");
+                if out.contains(&from) {
+                    out = out.replace(&from, &format!("{name}{sep}{hash}"));
+                }
+            }
+        }
+    }
+    (out != raw).then_some(out)
 }
 
 /// The value to keep for a decoded query parameter of an unwrapped layer:
@@ -249,6 +389,85 @@ fn redact_text(s: &str, n: &mut usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine;
+    use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+
+    fn decoded_tail(url: &str, after: &str) -> String {
+        let b = url.split_once(after).unwrap().1;
+        let b = b.split('&').next().unwrap();
+        let b = b
+            .replace("%2B", "+")
+            .replace("%2F", "/")
+            .replace("%3D", "=");
+        crate::extract::try_b64(&b).unwrap()
+    }
+
+    #[test]
+    fn secrets_inside_base64_are_redacted_and_re_encoded() {
+        let program = "<script>fetch('https://api.data.example/v1/facts?subscription-key=433468f8d0c4401e9cd359beec6d2bd4&year=2020').then(r=>r.text()).then(t=>document.title=t)</script>";
+        // A path payload in the standard alphabet, as httpbin echoes it.
+        let url = format!("https://httpbin.org/base64/{}", STANDARD.encode(program));
+        let (out, n) = r(&url);
+        assert_eq!(n, 1, "{out}");
+        assert!(out.starts_with("https://httpbin.org/base64/"), "{out}");
+        let text = decoded_tail(&out, "/base64/");
+        assert!(!text.contains("433468f8"), "{text}");
+        assert!(text.contains("subscription-key=REDACTED-"), "{text}");
+        assert!(
+            text.contains("&year=2020"),
+            "the rest of the program stays: {text}"
+        );
+        assert_eq!(r(&out), (out.clone(), 0), "idempotent");
+
+        // A percent-encoded parameter value, URL-safe alphabet unpadded.
+        let js = "fetch('https://x.example/?q=1&token=ghp_abcdefghijklmnopqrstuvwxyz0123456789')"; // secret-scan: fixture (fake token)
+        let v = STANDARD
+            .encode(js)
+            .replace('+', "%2B")
+            .replace('/', "%2F")
+            .replace('=', "%3D");
+        let (out, n) = r(&format!("https://r.example/run?p={v}&cb=1"));
+        assert_eq!(n, 1, "{out}");
+        assert!(out.ends_with("&cb=1"), "{out}");
+        assert!(!decoded_tail(&out, "p=").contains("ghp_"), "{out}");
+        let safe = URL_SAFE_NO_PAD.encode(js);
+        let (out, _) = r(&format!("https://e.example/{safe}"));
+        let seg = out.rsplit('/').next().unwrap();
+        assert!(
+            !seg.contains('+') && !seg.contains('/') && !seg.ends_with('='),
+            "{seg}"
+        );
+        assert!(!crate::extract::try_b64(seg).unwrap().contains("ghp_"));
+    }
+
+    #[test]
+    fn secrets_in_a_percent_encoded_nested_url_are_redacted_in_place() {
+        let u = "https://api.codetabs.example/v1/proxy/?quest=https%3A%2F%2Fdata.example%2Fapi%2FFacts%3Fsubscription-key%3D433468f8d0c4401e9cd359beec6d2bd4%26%24select%3DYear";
+        let (out, n) = r(u);
+        assert_eq!(n, 1, "{out}");
+        assert!(!out.contains("433468f8"), "{out}");
+        let want = format!(
+            "https://api.codetabs.example/v1/proxy/?quest=https%3A%2F%2Fdata.example%2Fapi%2FFacts%3Fsubscription-key%3D{}%26%24select%3DYear",
+            hash_token("433468f8d0c4401e9cd359beec6d2bd4")
+        );
+        assert_eq!(
+            out, want,
+            "only the value changes, with the decoded layer's hash"
+        );
+        assert_eq!(r(&out), (out.clone(), 0), "idempotent");
+        // A nested URL with nothing secret stays byte-for-byte.
+        let plain = "https://api.codetabs.example/v1/proxy/?quest=https%3A%2F%2Fdata.example%2Fp%3Fpage%3D2";
+        assert_eq!(r(plain), (plain.to_string(), 0));
+    }
+
+    #[test]
+    fn base64_without_secrets_is_untouched() {
+        let program = "<script>fetch('https://tv.example/api/schedule?day=2026-08-03&key=YOUR_API_KEY').then(r=>r.json())</script>";
+        let url = format!("https://httpbin.org/base64/{}", STANDARD.encode(program));
+        assert_eq!(r(&url), (url.clone(), 0));
+        let ids = "https://cdn.example/assets/a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6/app.js";
+        assert_eq!(r(ids), (ids.to_string(), 0));
+    }
 
     fn r(u: &str) -> (String, usize) {
         let mut n = 0;

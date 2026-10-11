@@ -292,6 +292,8 @@ A tier says attack payloads were present. It does not say an AI agent sent them:
 | L4 | agent likely | L3, and retries at tool pace (faster than a person reads), a fixed fan-out width, cross-service fan-out with no auto-submitter around it, or a round-the-clock rhythm. |
 | L5 | documented | Never computed. Only the admin's case decision sets it (`case grade`). |
 
+A flagged record in no cluster is graded the same way from its own hits alone: self-description gives L1 and model-output residue L2. One record shows no pace, retries or rhythm, so it never reaches L3.
+
 Prose counts when a cluster has at least two prose values, or one in a language other than its target's country domain: one search in plain words is ordinary. Adaptive and pace signals are read only from probe chains and escalations timed by request or submit times; a chain or escalation timed by captures is skipped, as for pace ([timing](#timing)).
 
 **Caps.** Some evidence holds a grade down:
