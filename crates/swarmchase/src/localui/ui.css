@@ -376,3 +376,27 @@ kbd, .kbd {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+/* ---- lane A: selects, wide dialogs, flags, focus on filled controls ---- */
+select.input {
+  appearance: none; cursor: pointer; padding-right: 26px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 13px) 50%, calc(100% - 9px) 50%;
+  background-size: 4px 4px, 4px 4px; background-repeat: no-repeat;
+}
+.input.small { padding: 3px 8px; font-size: var(--fs-sm); }
+select.input.small { padding-right: 24px; }
+.overlay .card.dialog-wide { max-width: 760px; }
+/* A rule flag: an icon and a few words, readable without colour. */
+.flag {
+  display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); font-weight: 650; line-height: 1.2;
+  padding: 2px 7px 2px 5px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap;
+}
+.flag .icon { width: 12px; height: 12px; }
+.flag.break { color: var(--agent); background: var(--agent-soft); }
+.flag.conflict { color: var(--unsure); background: var(--unsure-soft); }
+/* Filled and selected controls set their own shadow; keep the ring visible on them. */
+.btn:focus-visible, .tabs button:focus-visible, .chip:focus-visible { box-shadow: var(--focus-ring); }
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
+}

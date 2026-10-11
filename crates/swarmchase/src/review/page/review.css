@@ -176,3 +176,75 @@ body { overflow: hidden; }
   .rhead .seg { width: 100%; }
   .rhead .seg button { flex: 1; justify-content: center; }
 }
+
+/* Queue triage: sort and filters. */
+.triage { display: grid; gap: var(--sp-2); }
+.tri-row { display: flex; align-items: end; gap: var(--sp-2); }
+.tri-field { display: grid; gap: 2px; min-width: 0; }
+.tri-sort { flex: 1; }
+.tri-name { font-size: var(--fs-xs); font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.tri-toggle { white-space: nowrap; }
+.tri-toggle.on { color: var(--accent); }
+.tri-n { font-size: var(--fs-xs); font-weight: 700; min-width: 18px; padding: 1px 5px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); }
+.tri-panel { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); padding: var(--sp-2); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.tri-actions { display: flex; align-items: end; justify-content: flex-end; }
+.tri-status { margin: 0; font-size: var(--fs-sm); color: var(--muted); }
+
+/* Rule flags in the queue and on records. */
+.qflags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.chip.rulebreak { cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 650; color: var(--agent); background: var(--agent-soft); border-color: var(--agent); }
+.chip.rulebreak .icon { width: 13px; height: 13px; }
+
+/* A label the rule does not allow here asks twice; the button says so. */
+.btn.verdict.gated { border-style: dashed; }
+.gate { white-space: nowrap; font: 650 var(--fs-xs)/1 var(--mono); padding: 2px 4px; border-radius: 4px; color: var(--ink-2); background: var(--sunken); }
+.btn.verdict.on .gate { color: inherit; background: transparent; }
+.seg button.gated { text-decoration: underline dotted; text-underline-offset: 3px; }
+.vrest { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-2); }
+.vrest-n { font-weight: 600; }
+.btn.rest.agent { color: var(--agent); } .btn.rest.benign { color: var(--benign); } .btn.rest.unsure { color: var(--unsure); }
+
+.rule-notes { display: grid; gap: var(--sp-2); margin-bottom: var(--gap-stack); }
+.rule-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.rule-note > .icon { flex: none; }
+.rule-note.danger > .icon { color: var(--agent); }
+.rule-note.warn > .icon { color: var(--unsure); }
+.rule-note p { margin: 0; flex: 1 1 260px; min-width: 0; }
+
+/* Focus stays visible on selected and filled controls. */
+.qrow:focus-visible, .qrow.on:focus-visible { box-shadow: var(--focus-ring); border-color: var(--accent); }
+.btn.verdict.on:focus-visible { box-shadow: var(--focus-ring); }
+
+/* Session panel. */
+.ss-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--sp-4) var(--sp-5); }
+.ss-sec { min-width: 0; display: grid; gap: 6px; align-content: start; }
+.ss-sec p { margin: 0; overflow-wrap: anywhere; }
+.ss-sec .section-title { margin: 0; }
+.ss-big { font-size: var(--fs-md); }
+.ss-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ss-bad { color: var(--agent); font-weight: 650; }
+.ss-table { border-collapse: collapse; font-size: var(--fs-sm); width: 100%; }
+.ss-table th, .ss-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: center; }
+.ss-table th[scope="row"] { text-align: left; }
+.ss-table thead th { font-weight: 600; color: var(--ink-2); }
+.ss-table thead th:first-child { text-align: left; font-weight: 500; }
+.ss-table td.diag { background: var(--benign-soft); color: var(--benign); font-weight: 700; }
+.ss-table td.off { background: var(--unsure-soft); color: var(--unsure); font-weight: 650; }
+.ss-meter { height: 8px; border-radius: 99px; background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.ss-fill { display: block; height: 100%; background: var(--accent); }
+.ss-cmd { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ss-cmd .mono { flex: 1; min-width: 0; }
+
+@media (max-width: 480px) {
+  .tri-panel { grid-template-columns: 1fr; }
+  .vrest kbd { display: none; }
+  .ss-grid { grid-template-columns: 1fr; }
+}
+.tri-field.wide { grid-column: 1 / -1; }
+.tri-panel .tri-actions { grid-column: 1 / -1; }
+@media (max-width: 860px) {
+  /* The rail scrolls as one, so open filters never squeeze the list away. */
+  .rail { overflow-y: auto; }
+  .rail-head { position: static; }
+  .rail .queue { overflow: visible; }
+}

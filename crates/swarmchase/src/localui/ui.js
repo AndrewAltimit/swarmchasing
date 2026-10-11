@@ -282,3 +282,64 @@ const UI = (() => {
     prefs, theme, setTheme, density, setDensity, settings, icon, highlight, emptyState, skeleton,
   };
 })();
+
+// ---- lane A: dialogs and announcements -------------------------------------
+// UI.dialog({id, title, body, wide}) opens a modal card that keeps Tab inside
+// it, closes on Escape or a click outside, and gives focus back to what had
+// it. UI.announce(text) says a short status to screen readers through one
+// polite live region that outlives page renders.
+(() => {
+  const { el, icon } = UI;
+  let ret = null;
+  const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
+
+  function closeDialog() {
+    const o = document.querySelector(".overlay.ui-dialog");
+    if (!o) return false;
+    o.remove();
+    if (ret && ret.isConnected) ret.focus();
+    ret = null;
+    return true;
+  }
+
+  function dialog({ id = "dialog", title, body, wide = false }) {
+    closeDialog();
+    if (document.querySelector(".overlay")) return null;
+    ret = document.activeElement;
+    const closeBtn = el("button.btn.ghost.small.icon-only", { type: "button", "aria-label": "Close", title: "Close (Esc)", onclick: closeDialog }, icon("close"));
+    const card = el("div.card" + (wide ? ".dialog-wide" : ""), { role: "dialog", "aria-modal": "true", "aria-labelledby": id + "-title", tabindex: "-1" },
+      el("div.dialog-head", el("h2#" + id + "-title", title), closeBtn), body);
+    const o = el("div.overlay.ui-dialog", { onclick: (e) => { if (e.target === o) closeDialog(); } }, card);
+    card.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const list = [...card.querySelectorAll(FOCUSABLE)];
+      if (!list.length) { e.preventDefault(); return; }
+      const first = list[0], last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+    document.body.append(o);
+    closeBtn.focus();
+    return card;
+  }
+
+  // Before the shared handler, so Escape closes the dialog and returns focus.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && closeDialog()) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+
+  let timer = 0;
+  function announce(text) {
+    let r = document.getElementById("ui-announce");
+    if (!r) {
+      r = el("div#ui-announce.sr-only", { role: "status", "aria-live": "polite", "aria-atomic": "true" });
+      document.body.append(r);
+    }
+    // Clear first, so the same words said twice are still announced.
+    r.textContent = "";
+    clearTimeout(timer);
+    timer = setTimeout(() => { r.textContent = text; }, 60);
+  }
+
+  Object.assign(UI, { dialog, closeDialog, announce });
+})();

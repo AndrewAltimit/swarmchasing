@@ -8,13 +8,18 @@
 //! never as a link. Labels go to the same review file as the terminal
 //! session. Reviewed records stay on the page, so a label can be changed,
 //! cleared or undone.
+//!
+//! The labelling rule is checked here, not left to the page: `agent` needs an
+//! agent grade of L2 or higher, so each record and group says whether the
+//! label is open to it, and flags a suggestion or a saved label that says
+//! `agent` below it.
 
-use super::{Item, Review, ReviewStore};
+use super::{CLASS_FLAGGED, Item, Review, ReviewStore};
 use crate::localui::{App, Response};
 use crate::suggest::{Suggestion, defang_all};
 use crate::util::truncate;
 use anyhow::{Result, bail};
-use sc_core::{Analysis, defang_host, fmt_ts};
+use sc_core::{AgentLevel, Analysis, defang_host, fmt_ts};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -133,6 +138,37 @@ impl ReviewApp {
         }
     }
 
+    /// The grade that decides record `idx`'s labels: its cluster's, else its
+    /// own. `None` when it has neither.
+    fn level_of(&self, idx: usize) -> Option<AgentLevel> {
+        let r = &self.a.results[idx];
+        match r.cluster {
+            Some(c) => Some(self.a.clusters[c].agent.level),
+            None => r.agent.as_ref().map(|g| g.level),
+        }
+    }
+
+    /// Whether the labelling rule lets record `idx` be labelled `agent`.
+    fn agent_allowed(&self, idx: usize) -> bool {
+        self.level_of(idx)
+            .is_some_and(|l| l >= AgentLevel::ModelWritten)
+    }
+
+    /// Every review in the file, this queue's or not, counted by label, and
+    /// by label over the flagged records alone (what a precision estimate
+    /// reads).
+    fn stored_json(&self) -> Value {
+        let mut all: BTreeMap<&str, usize> = BTreeMap::new();
+        let mut flagged: BTreeMap<&str, usize> = BTreeMap::new();
+        for v in self.store.entries.values() {
+            *all.entry(v.label.as_str()).or_default() += 1;
+            if v.class == CLASS_FLAGGED {
+                *flagged.entry(v.label.as_str()).or_default() += 1;
+            }
+        }
+        json!({ "total": self.store.entries.len(), "by_label": all, "flagged": flagged })
+    }
+
     fn item_json(&self, it: Item) -> Value {
         let r = &self.a.results[it.idx];
         let review = self.store.entries.get(&r.obs.id);
@@ -165,6 +201,8 @@ impl ReviewApp {
             .suggestions
             .get(&r.obs.id)
             .or_else(|| review.and_then(|v| v.suggested.as_ref()));
+        let allowed = self.agent_allowed(it.idx);
+        let says_agent = |l: Option<&str>| l == Some("agent") && !allowed;
         json!({
             "id": r.obs.id,
             "class": it.class,
@@ -183,6 +221,11 @@ impl ReviewApp {
             "reviewed_at": review.map(|v| v.reviewed_at.as_str()),
             "suggested": suggested,
             "grade": r.agent.as_ref().map(|g| g.level.code()),
+            "agent_allowed": allowed,
+            // A suggestion of `agent` the rule does not allow: not to accept.
+            "conflict": says_agent(suggested.map(|s| s.label.as_str())),
+            // A saved `agent` label the rule does not allow.
+            "breaks_rule": says_agent(review.map(|v| v.label.as_str())),
         })
     }
 
@@ -236,10 +279,20 @@ impl ReviewApp {
             .filter_map(|k| {
                 let (title, cluster, items) = groups.remove(&k)?;
                 let (grade, basis) = self.group_grade(&items);
+                // The group's grade is the lowest any record is held to, so
+                // a group label of `agent` is allowed only if every record's is.
+                let level = items.iter().map(|it| self.level_of(it.idx)).min().flatten();
+                let allowed = items.iter().all(|it| self.agent_allowed(it.idx));
                 let items: Vec<Value> = items.into_iter().map(|it| self.item_json(it)).collect();
+                let flagged = |f: &str| items.iter().filter(|i| i[f] == true).count();
                 Some(json!({
                     "key": k, "title": title, "cluster": cluster,
-                    "grade": grade, "grade_basis": basis, "items": items,
+                    "grade": grade, "grade_basis": basis,
+                    "level": level.map(|l| l as u8),
+                    "agent_allowed": allowed,
+                    "conflicts": flagged("conflict"),
+                    "rule_breaks": flagged("breaks_rule"),
+                    "items": items,
                 }))
             })
             .collect();
@@ -256,6 +309,7 @@ impl ReviewApp {
             "from": self.from,
             "rules_version": self.a.rules_version,
             "records": self.items.len(),
+            "stored": self.stored_json(),
             "groups": groups,
         })
     }
@@ -318,7 +372,7 @@ impl ReviewApp {
             out.insert(id, self.item_json(it));
         }
         self.store.save()?;
-        Ok(json!({ "items": out }))
+        Ok(json!({ "items": out, "stored": self.stored_json() }))
     }
 }
 
@@ -454,6 +508,64 @@ mod tests {
         );
         assert_eq!(x["grade"]["code"], x["items"][0]["grade"]);
         assert_eq!(q["labeller"], "default");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn flags_agent_below_l2_in_suggestions_and_labels() {
+        let (mut app, dir) = app("rule");
+        let q = app.queue_json();
+        let g = q["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| {
+                g["items"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|i| i["id"] == "s1")
+            })
+            .unwrap()
+            .clone();
+        assert!(g["level"].as_u64().unwrap() < 2, "{g}");
+        assert_eq!(g["agent_allowed"], false);
+        assert_eq!(g["conflicts"], 1, "the agent suggestion on s1");
+        assert_eq!(g["rule_breaks"], 0);
+        let s1 = g["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["id"] == "s1")
+            .unwrap();
+        assert_eq!(s1["conflict"], true);
+        assert_eq!(s1["agent_allowed"], false);
+        // Every flag agrees with its parts, in every group.
+        for g in q["groups"].as_array().unwrap() {
+            for i in g["items"].as_array().unwrap() {
+                let sug = i["suggested"]["label"] == "agent";
+                assert_eq!(i["conflict"], sug && i["agent_allowed"] == false, "{i}");
+                if g["agent_allowed"] == true {
+                    assert_eq!(i["agent_allowed"], true, "{g}");
+                }
+            }
+        }
+
+        // The admin may still label agent; the label is saved and flagged.
+        let r = post(&mut app, r#"{"ids":["s1"],"label":"agent"}"#);
+        assert_eq!(r.status, 200);
+        let body: Value = serde_json::from_slice(&r.body).unwrap();
+        assert_eq!(body["items"]["s1"]["breaks_rule"], true);
+        assert_eq!(body["stored"]["total"], 1);
+        assert_eq!(body["stored"]["by_label"]["agent"], 1);
+        assert_eq!(body["stored"]["flagged"]["agent"], 1);
+        let q = app.queue_json();
+        assert_eq!(q["stored"]["total"], 1);
+        assert!(q.to_string().contains("\"rule_breaks\":1"));
+        post(&mut app, r#"{"ids":["s1"],"label":"unsure"}"#);
+        let q = app.queue_json();
+        assert!(!q.to_string().contains("\"breaks_rule\":true"));
+        assert_eq!(q["stored"]["by_label"]["unsure"], 1);
         let _ = std::fs::remove_dir_all(dir);
     }
 
