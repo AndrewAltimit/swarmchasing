@@ -1,6 +1,6 @@
 [package]
 name = "swarmchase"
-description = "CLI for finding, linking and reporting misaligned agent activity in public records"
+description = "CLI for finding, linking and reporting AI agent activity in public records"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

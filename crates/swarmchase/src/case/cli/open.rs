@@ -41,21 +41,52 @@ pub struct SetArgs {
     notice: Option<NoticeStatus>,
     #[arg(long)]
     min_named: Option<Evidence>,
-    /// The lead time for targeted and historical endpoints' operators,
-    /// 4 to 12 hours (default 6).
+    /// The naming lead for targeted and historical endpoints' operators, in
+    /// UTC working days: 3 (the default and the least) to 20. Compromised
+    /// endpoints' operators wait the longer of this and 10.
     #[arg(long)]
-    lead_hours: Option<u32>,
+    naming_days: Option<u32>,
+    /// Who decides and publishes for the case; a second review must come
+    /// from someone else.
+    #[arg(long)]
+    admin: Option<String>,
 }
 
 pub(super) fn new(ctx: &Ctx, a: NewArgs, out: &mut impl Write) -> Result<()> {
     let (rules, records) = select(&ctx.data, &a.sel, ctx.now)?;
     let an = new_case(&ctx.root, &a.id, &a.title, records, &rules, &ctx.today)?;
+    match admin_name() {
+        Some(name) => update(&ctx.root, &a.id, |c| {
+            Ok(sc_case::review::set_admin(c, &name, &ctx.today)?)
+        })?,
+        None => eprintln!(
+            "warning: no admin recorded (set SWARMCHASE_ADMIN or `git config user.name`); `swarmchase case set {} --admin \"<name>\"` before the second review",
+            a.id
+        ),
+    }
     println!(
         "opened {} ({} records)",
         ctx.root.join(&a.id).display(),
         an.total
     );
     show_case(&ctx.root, &a.id, out)
+}
+
+/// The admin's name for a new case: `SWARMCHASE_ADMIN`, else `git config
+/// user.name`.
+fn admin_name() -> Option<String> {
+    let given = |s: String| Some(s.trim().to_string()).filter(|s| !s.is_empty());
+    std::env::var("SWARMCHASE_ADMIN")
+        .ok()
+        .and_then(given)
+        .or_else(|| {
+            let o = std::process::Command::new("git")
+                .args(["config", "user.name"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())?;
+            given(String::from_utf8_lossy(&o.stdout).into_owned())
+        })
 }
 
 pub(super) fn add(ctx: &Ctx, a: AddArgs) -> Result<()> {
@@ -87,7 +118,8 @@ pub(super) fn set(ctx: &Ctx, a: SetArgs) -> Result<()> {
             status: a.status,
             notice: a.notice,
             min_named: a.min_named,
-            lead_hours: a.lead_hours,
+            naming_days: a.naming_days,
+            admin: a.admin,
         };
         Ok(actions::set(c, s, &ctx.today)?)
     })

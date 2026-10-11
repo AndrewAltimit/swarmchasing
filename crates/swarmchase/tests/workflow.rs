@@ -2,10 +2,11 @@
 //! review from scripted answers, a case opened from a cluster key, endpoint
 //! decisions, a hand-added contact, a draft with its bundle, verification,
 //! timed sends and missing contacts, the alternative explanations, the
-//! notice draft and its re-read, `notice add` refused by the self-review
-//! checklist until the cooling-off and the lead time have passed, then
-//! added into a scratch notices directory, and the notice lint. No step
-//! touches the network.
+//! indicator notice draft and its re-read, `notice add` refused by the
+//! self-review checklist until the cooling-off, the lead time and a second
+//! review have passed, then added into a scratch notices directory, a
+//! naming update after the operator's consent, and the notice lint. No
+//! step touches the network.
 
 use crate::common::{Run, Scratch, ok, run};
 use std::io::Write;
@@ -179,6 +180,36 @@ fn from_a_watch_digest_to_a_linted_notice() {
     args.extend(hs.iter().map(String::as_str));
     args.push("targeted");
     ok(dir, &args);
+    // The first is compromised, with what shows it, and the notice
+    // describes it without naming it. The admin is recorded.
+    ok(
+        dir,
+        &[
+            "case",
+            "--data",
+            data,
+            "endpoint",
+            "wf-1",
+            &hs[0],
+            "compromised",
+            "--basis",
+            "operator statement: a web shell was found",
+            "--sector",
+            "a national government data portal",
+        ],
+    );
+    ok(
+        dir,
+        &[
+            "case",
+            "--data",
+            data,
+            "set",
+            "wf-1",
+            "--admin",
+            "Ada Admin",
+        ],
+    );
 
     // 5. Contacts: the directory (offline), then the operator by hand.
     ok(
@@ -273,7 +304,9 @@ fn from_a_watch_digest_to_a_linted_notice() {
     );
     let aff = std::fs::read_to_string(dir.join("aff.md")).unwrap();
     assert!(
-        aff.contains("## Publication") && aff.contains("is scheduled for **"),
+        aff.contains("## Publication")
+            && aff.contains("**Indicators**, not before **")
+            && aff.contains("will not name or locate you"),
         "{aff}"
     );
     assert!(aff.contains("appended verbatim"), "{aff}");
@@ -421,7 +454,8 @@ fn from_a_watch_digest_to_a_linted_notice() {
     // was written two hours ago (after the sends), the re-read is now.
     shift_times(&toml_path, 2 * 3600);
     ok(dir, &["case", "--data", data, "reread", "wf-1"]);
-    // The operator's six-hour lead has one hour left; there is no override.
+    // The compromised endpoint's operator has 24 hours, 19 of them left;
+    // there is no override, and no second review yet.
     let r = add(dir);
     assert!(!r.ok, "{}", r.stdout);
     assert!(
@@ -430,13 +464,69 @@ fn from_a_watch_digest_to_a_linted_notice() {
         r.stderr
     );
     assert!(
-        r.stdout.contains("[FAIL] the lead time has passed"),
+        r.stdout
+            .contains("[FAIL] the indicator clock has run for each party"),
+        "{}",
+        r.stdout
+    );
+    assert!(
+        r.stdout
+            .contains("[FAIL] an approved second review of the current draft"),
+        "{}",
+        r.stdout
+    );
+    assert!(
+        r.stdout
+            .contains("[pass] the indicator notice names and locates no affected party"),
         "{}",
         r.stdout
     );
     assert!(!dir.join("notices/wf-1.md").exists());
-    // Two hours on, it has passed.
-    shift_times(&toml_path, 2 * 3600);
+
+    // 9. The second review: a packet for the reviewer, never the admin.
+    let r = ok(dir, &["case", "--data", data, "review-packet", "wf-1"]);
+    assert!(r.stdout.contains("not sent"), "{}", r.stdout);
+    let packet = dir.join("data/cases/wf-1/outbox/review");
+    for f in [
+        "notice.md",
+        "checklist.txt",
+        "report-internal.md",
+        "README.txt",
+    ] {
+        assert!(packet.join(f).is_file(), "{f}");
+    }
+    let review = |who: &str, verdict: &str| {
+        run(
+            dir,
+            &[
+                "case",
+                "--data",
+                data,
+                "review",
+                "wf-1",
+                "--reviewer",
+                who,
+                "--verdict",
+                verdict,
+                "--note",
+                "read against the case notes",
+            ],
+        )
+    };
+    let r = review(" ada admin ", "approve");
+    assert!(!r.ok && r.stderr.contains("admin"), "{}", r.stderr);
+    let r = review("Rae Reviewer", "approve");
+    assert!(r.ok, "{}\n{}", r.stdout, r.stderr);
+    let r = ok(dir, &["case", "--data", data, "checklist", "wf-1"]);
+    assert!(
+        r.stdout
+            .contains("[pass] an approved second review of the current draft"),
+        "{}",
+        r.stdout
+    );
+    assert!(r.stdout.contains("Stage 2, naming"), "{}", r.stdout);
+    // Twenty hours on, the lead has passed.
+    shift_times(&toml_path, 20 * 3600);
     let r = add(dir);
     assert!(r.ok, "{}\n{}", r.stdout, r.stderr);
     assert!(!r.stdout.contains("[FAIL]"), "{}", r.stdout);
@@ -452,6 +542,15 @@ fn from_a_watch_digest_to_a_linted_notice() {
         ),
         "{notice}"
     );
+    assert!(
+        notice.contains("A second reviewer reviewed it before publication."),
+        "{notice}"
+    );
+    assert!(!notice.contains("Rae"), "{notice}");
+    for h in &hs {
+        assert!(!notice.contains(h.as_str()), "{h}: {notice}");
+        assert!(!notice.contains(&h.replace('.', "[.]")), "{h}: {notice}");
+    }
     if hs.len() > 1 {
         assert!(notice.contains("contact was attempted"), "{notice}");
     }
@@ -477,4 +576,58 @@ fn from_a_watch_digest_to_a_linted_notice() {
     let r = ok(dir, &["case", "--data", data, "status", "wf-1"]);
     assert!(r.stdout.contains("status Reported"), "{}", r.stdout);
     assert!(r.stdout.contains("publish pending"), "{}", r.stdout);
+    assert!(r.stdout.contains("may be named from"), "{}", r.stdout);
+
+    // 10. Names: the compromised endpoint's operator waits 10 working days,
+    // unless it consents in writing.
+    let r = run(dir, &["case", "--data", data, "notice", "wf-1", "--naming"]);
+    assert!(
+        !r.ok && r.stderr.contains("may be named from"),
+        "{}",
+        r.stderr
+    );
+    ok(
+        dir,
+        &[
+            "case",
+            "--data",
+            data,
+            "consent",
+            "wf-1",
+            "--party",
+            &hs[0],
+            "--note",
+            "operator e-mail agreeing to be named",
+        ],
+    );
+    let r = ok(dir, &["case", "--data", data, "notice", "wf-1", "--naming"]);
+    assert!(r.stdout.contains("names:"), "{}", r.stdout);
+    let naming = || {
+        run(
+            dir,
+            &[
+                "notice", "--dir", "notices", "update", "wf-1", "--naming", "--data", data,
+            ],
+        )
+    };
+    let r = naming();
+    assert!(!r.ok, "{}", r.stdout);
+    assert!(
+        r.stdout
+            .contains("[FAIL] an approved second review of the current draft"),
+        "{}",
+        r.stdout
+    );
+    let r = review("Rae Reviewer", "approve");
+    assert!(r.ok, "{}\n{}", r.stdout, r.stderr);
+    let r = naming();
+    assert!(r.ok, "{}\n{}", r.stdout, r.stderr);
+    let notice = std::fs::read_to_string(dir.join("notices/wf-1.md")).unwrap();
+    assert!(notice.contains("kind = \"naming\""), "{notice}");
+    assert!(
+        notice.contains(&format!("affected = [\"{}\"]", hs[0])),
+        "{notice}"
+    );
+    let r = ok(dir, &["notice", "--dir", "notices", "lint"]);
+    assert!(r.stdout.contains("notices OK (1 checked)"), "{}", r.stdout);
 }

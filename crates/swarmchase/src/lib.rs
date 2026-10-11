@@ -1,4 +1,4 @@
-//! `swarmchase`: find, link and report misaligned agent activity in public records.
+//! `swarmchase`: find, link and report AI agent activity in public records.
 //!
 //! The library behind the `swarmchase` binary. [`run`] parses the arguments
 //! and dispatches; each command lives in its own module ([`commands`],
@@ -88,7 +88,8 @@ pub enum Cmd {
     /// with `--labeller`), which `swarmchase eval`
     /// reads directly. Progress is saved after every answer.
     Review(review::ReviewArgs),
-    /// Case files: open, classify endpoints, record attribution, draft reports.
+    /// Case files: open, classify endpoints, record attribution, draft reports
+    /// and notices, record the second review and the naming decisions.
     Case(case::CaseArgs),
     /// Public notices: add a reviewed draft, append updates, lint, build the site files.
     Notice(notice::NoticeArgs),

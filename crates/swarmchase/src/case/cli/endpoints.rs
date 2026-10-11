@@ -24,6 +24,10 @@ pub struct EndpointArgs {
     /// the endpoint is submit-anywhere.
     #[arg(long)]
     single_source_reason: Option<String>,
+    /// How the indicator notice describes the target without identifying
+    /// it, e.g. "a national government data portal".
+    #[arg(long)]
+    sector: Option<String>,
 }
 
 #[derive(Args)]
@@ -61,7 +65,7 @@ pub struct PlantReviewArgs {
 
 pub(super) fn endpoint(ctx: &Ctx, a: EndpointArgs) -> Result<()> {
     update(&ctx.root, &a.id, |c| {
-        Ok(actions::classify(
+        actions::classify(
             c,
             &a.hosts,
             a.state,
@@ -69,7 +73,11 @@ pub(super) fn endpoint(ctx: &Ctx, a: EndpointArgs) -> Result<()> {
             a.basis.as_deref(),
             a.single_source_reason.as_deref(),
             &ctx.today,
-        )?)
+        )?;
+        if let Some(s) = &a.sector {
+            actions::describe(c, &a.hosts, s, &ctx.today)?;
+        }
+        Ok(())
     })
 }
 
