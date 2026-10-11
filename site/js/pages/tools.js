@@ -128,12 +128,7 @@ function render(res, synthetic) {
     el("h3", {}, "Runs per cluster (UTC)"),
     figure({ chart, legend: tierLegend(), caption: "Each bar is one run: a stretch of a cluster's activity without a long pause.", head: ["Cluster", "Tier", "Start", "End", "Records"], rows: runRows }),
     el("h3", {}, "Clusters"),
-    el("div", { class: "scroll" }, el("table", {},
-      el("thead", {}, el("tr", {}, ["Cluster", "Tier", "Records", "Runs", "First seen", "Last seen", "Targets"].map((h) => el("th", { scope: "col" }, h)))),
-      el("tbody", {}, a.clusters.length ? a.clusters.map((c) => el("tr", {},
-        el("td", {}, c.id), el("td", {}, pill(c.tier)), el("td", { class: "num" }, c.members.length), el("td", { class: "num" }, c.runs.length),
-        el("td", {}, fmtTs(c.start)), el("td", {}, fmtTs(c.end)),
-        el("td", {}, topEntries(c.target_hosts, 3).map(([h, n]) => el("span", { class: "chip" }, `${host(sc, h)} ×${n}`))))) : el("tr", {}, el("td", { colspan: 7, class: "hint" }, "No clusters."))))),
+    clusterTable(a),
     ...hints(a),
     el("h3", {}, "Records"),
     recordTable(a),
@@ -144,9 +139,10 @@ function render(res, synthetic) {
 function evalText(ev) {
   ev = obj(ev);
   if (!num(ev.labelled)) return el("span", { class: "hint" }, "not recorded (the maker had no labelled set, or an older toolkit)");
-  const at = (t) => `${t}: precision ${pct(ev[`${t}_precision`])}, recall ${pct(ev[`${t}_recall`])}`;
-  return [`rules ${trunc(String(ev.rules_version ?? "?"), 40)} on ${ev.labelled} labelled records; ${at("suggestive")}; ${at("significant")}`,
-    el("div", { class: "hint" }, "a regression floor on the committed set, not an estimate for this case")];
+  const at = (t) => el("li", {}, `${t[0].toUpperCase()}${t.slice(1)}: precision ${pct(ev[`${t}_precision`])}, recall ${pct(ev[`${t}_recall`])}`);
+  return [`Rules ${trunc(String(ev.rules_version ?? "?"), 40)} on ${ev.labelled} labelled records:`,
+    el("ul", {}, at("suggestive"), at("significant")),
+    el("div", { class: "hint" }, "A regression floor on the committed set, not an estimate for this case. The stamp keeps the rates only, without the counts an interval needs.")];
 }
 
 /** The attribution layers the re-run supports, with claims from case work. */
@@ -178,26 +174,62 @@ function hints(a) {
   return out;
 }
 
+const CLUSTER_HEAD = ["Cluster", "Tier", "Records", "Runs", "First seen", "Last seen", "Targets"];
+
+/** The clusters; each cell carries its column name, so on phones the rows stack as cards. */
+function clusterTable(a) {
+  const td = (col, attrs, ...kids) => el("td", { ...attrs, "data-label": CLUSTER_HEAD[col] }, ...kids);
+  return el("div", { class: "scroll" }, el("table", { class: "cards" },
+    el("thead", {}, el("tr", {}, CLUSTER_HEAD.map((h) => el("th", { scope: "col" }, h)))),
+    el("tbody", {}, a.clusters.length ? a.clusters.map((c) => el("tr", {},
+      td(0, { class: "rc-head" }, el("strong", {}, c.id)), td(1, { class: "rc-head" }, pill(c.tier)),
+      td(2, { class: "num rc-head rc-lab" }, c.members.length), td(3, { class: "num rc-head rc-lab" }, c.runs.length),
+      td(4, {}, fmtTs(c.start)), td(5, {}, fmtTs(c.end)),
+      td(6, {}, topEntries(c.target_hosts, 3).map(([h, n]) => el("span", { class: "chip" }, `${host(sc, h)} ×${n}`))))) : el("tr", {}, el("td", { colspan: 7, class: "hint" }, "No clusters.")))));
+}
+
 const RECORD_HEAD = ["Tier", "Time", "Cluster", "ID", "URL (defanged)", "Rules"];
+// Phones show the first few records, with a button for the rest.
+const PHONE_ROWS = 10;
 
 function recordTable(a) {
   const idx = a.results.map((_, i) => i).sort((x, y) => a.results[x].obs.ts - a.results[y].obs.ts);
-  const shown = idx.slice(0, MAX_ROWS);
-  // Each cell carries its column name: on phones the rows stack as cards.
+  const all = idx.slice(0, MAX_ROWS);
+  const few = matchMedia("(max-width: 700px)").matches && all.length > PHONE_ROWS + 2;
+  // Each cell carries its column name: on phones the rows stack as cards,
+  // opening on one line with the tier, time and cluster.
   const td = (col, attrs, ...kids) => el("td", { ...attrs, "data-label": RECORD_HEAD[col] }, ...kids);
-  return el("div", { class: "scroll" }, el("table", { class: "records" },
-    el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))),
-    el("tbody", {}, shown.map((i) => {
-      const r = a.results[i];
-      return el("tr", {},
-        td(0, {}, pill(r.tier)), td(1, { class: "nowrap" }, fmtTs(r.obs.ts)),
-        td(2, {}, r.cluster != null ? a.clusters[r.cluster].id : "–"),
-        td(3, {}, trunc(String(r.obs.id), 40)),
-        td(4, { class: "url" }, sc.defang(trunc(String(r.obs.url), 300))),
-        td(5, {}, r.hits.map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched)) }, h.rule_id))));
-    }), idx.length > shown.length ? el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - shown.length} more not shown.`)) : null)));
+  const row = (i) => {
+    const r = a.results[i];
+    return el("tr", {},
+      td(0, { class: "rc-head" }, pill(r.tier)), td(1, { class: "nowrap rc-head" }, fmtTs(r.obs.ts)),
+      td(2, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster].id : "–"),
+      td(3, {}, trunc(String(r.obs.id), 40)),
+      td(4, { class: "url" }, sc.defang(trunc(String(r.obs.url), 300))),
+      td(5, {}, r.hits.map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched)) }, h.rule_id))));
+  };
+  const body = el("tbody", {}, (few ? all.slice(0, PHONE_ROWS) : all).map(row),
+    idx.length > all.length ? el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - all.length} more not shown.`)) : null);
+  const box = el("div", {}, el("div", { class: "scroll" }, el("table", { class: "records" },
+    el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)));
+  if (few) {
+    const more = el("button", { type: "button", class: "more-rows" }, `Show all ${all.length} records`);
+    more.addEventListener("click", () => {
+      const rows = all.slice(PHONE_ROWS).map(row);
+      body.replaceChildren(...[...body.children].slice(0, PHONE_ROWS), ...rows, ...[...body.children].slice(PHONE_ROWS));
+      more.remove();
+      rows[0]?.querySelector("td")?.setAttribute("tabindex", "-1");
+      rows[0]?.querySelector("td")?.focus();
+    });
+    box.append(more);
+  }
+  return box;
 }
 
+// Most visitors arrive with a report's attachments: picking them is the
+// card's main action, and the card says so first.
+$("case-files").closest("label")?.classList.add("primary");
+$("bundle-h")?.after(el("p", { class: "lede-card" }, "Got a report? Pick the files attached to the email."));
 for (const id of ["case-files", "case-dir"]) $(id).addEventListener("change", (e) => e.target.files.length && load(e.target.files));
 $("case-example").addEventListener("click", loadShowcase);
 

@@ -150,16 +150,25 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
 .site-nav a { display: block; padding: 16px 10px 14px; color: var(--text-secondary); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; font-size: 14px; }
 .site-nav a:hover { color: var(--text-primary); }
 .site-nav a[aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--accent); font-weight: 600; }
-.theme-toggle { flex: none; width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; }
-.theme-toggle span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--text-secondary); background: linear-gradient(90deg, var(--text-secondary) 50%, transparent 50%); }
-/* The toggle cycles system, light, dark; site.js sets data-mode. Half
-   filled follows the system, an empty ring is light, a full disc is dark. */
-.theme-toggle[data-mode="light"] span { background: transparent; }
-.theme-toggle[data-mode="dark"] span { background: var(--text-secondary); }
+.theme-toggle { flex: none; position: relative; width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; color: var(--text-secondary); }
+/* The icon shows the look now: a sun for light, a moon for dark (site.js
+   sets data-look). Before site.js runs it is a half-filled disc. A small
+   "A" in the corner marks a look that follows the system (data-auto). */
+.theme-toggle span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
+.theme-toggle[data-look="light"] span {
+  width: 8px; height: 8px; border: 0; background: currentColor;
+  box-shadow: 0 -7px 0 -2.5px currentColor, 0 7px 0 -2.5px currentColor, 7px 0 0 -2.5px currentColor, -7px 0 0 -2.5px currentColor,
+    5px 5px 0 -2.5px currentColor, -5px -5px 0 -2.5px currentColor, 5px -5px 0 -2.5px currentColor, -5px 5px 0 -2.5px currentColor;
+}
+.theme-toggle[data-look="dark"] span { width: 15px; height: 15px; border: 0; background: transparent; box-shadow: inset -5px -3px 0 0 currentColor; transform: translateX(-2px) rotate(-20deg); }
+.theme-toggle[data-auto="true"]::after {
+  content: "A"; content: "A" / ""; position: absolute; right: 2px; bottom: 1px; font: 700 9px/1 system-ui, sans-serif; color: var(--text-secondary);
+}
 .site-foot { border-top: 1px solid var(--border); background: var(--surface-1); color: var(--text-muted); font-size: 13px; padding: 20px 0; }
 .site-foot p { margin: 4px 0; }
-/* Wide pages (workbench, docs): the header and footer share their edge. */
-body:has(> main.wide) .site-head > .wrap, body:has(> main.wide) .site-foot > .wrap { max-width: 1640px; }
+/* The header and footer keep one edge on every page, the wide pages'
+   (workbench, docs), so the brand and nav never move between pages. */
+.site-head > .wrap, .site-foot > .wrap { max-width: 1640px; }
 @media (max-width: 760px) {
   /* Not sticky on phones: it would cover the workbench's step bar and
      take a quarter of the screen. */
@@ -285,7 +294,7 @@ h2:hover .anchor, h3:hover .anchor, h4:hover .anchor, .anchor:focus { opacity: 1
 .hero h1 { font-size: 40px; }
 .mission { font-size: 19px; line-height: 1.5; max-width: 62ch; color: var(--text-primary); }
 .ctas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-.notice-cards { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.notice-cards { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
 .notice-cards .card { margin: 0; }
 .steps-list { padding-left: 22px; max-width: 76ch; }
 .steps-list li { margin-bottom: 6px; }
@@ -603,7 +612,11 @@ table.layers th[scope="row"] { white-space: nowrap; color: var(--text-primary); 
 .method-strip a:hover { border-color: var(--accent); }
 .method-strip .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-strong); color: var(--on-accent); font-size: 12px; }
 .walk { margin-top: 36px; scroll-margin-top: 72px; }
-.walk-head { max-width: 84ch; }
+/* The step strip takes the walk's full width, so all eight fit one row on
+   a wide screen; the prose under it keeps a reading measure. */
+.walk-head { max-width: none; }
+.walk-head > p { max-width: 84ch; }
+.walk-head nav { margin-bottom: 12px; }
 .walk-head h2 { font-size: 24px; margin-top: 0; }
 .synthetic-banner { border: 1px dashed var(--axis); border-radius: 8px; padding: 8px 12px; background: var(--surface-1); color: var(--text-secondary); font-size: 14px; }
 .synthetic-banner strong { color: var(--text-primary); }
@@ -848,7 +861,11 @@ a.audience strong, a.audience h2, a.audience h3 { color: var(--accent-ink); }
 /* Notice filters: the date pair sits together in one fieldset. */
 .filters fieldset { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end; flex: 2 1 300px; min-width: 0; border: 0; margin: 0; padding: 0; }
 .filters fieldset legend { float: left; width: 100%; padding: 0; margin: 0 0 3px; font-weight: 600; font-size: 13px; color: var(--text-secondary); }
-.filters fieldset label { flex: 1 1 130px; min-width: 0; }
+/* From and To sit beside their inputs, so the legend lines up with the
+   other filters' labels and every input shares one baseline. */
+.filters fieldset label { flex: 1 1 130px; min-width: 0; flex-direction: row; align-items: center; gap: 6px; }
+.filters fieldset label input { flex: 1 1 auto; min-width: 0; }
+.filters > label { white-space: nowrap; }
 
 /* Docs on narrow screens: the page's sections, collapsed, above the text. */
 details.on-this-page { display: none; }
@@ -902,19 +919,87 @@ details.on-this-page { display: none; }
 
 /* Records and endpoints on phones: one card per row, each cell labelled. */
 @media (max-width: 700px) {
-  :is(table.records, table.endpoints) { min-width: 0 !important; }
-  :is(table.records, table.endpoints) thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  :is(table.records, table.endpoints), :is(table.records, table.endpoints) :is(tbody, tr, td, th[scope="row"]) { display: block; width: 100%; }
-  :is(table.records, table.endpoints) tr { border-bottom: 1px solid var(--border); padding: 8px 4px; }
-  :is(table.records, table.endpoints) tr[hidden] { display: none; }
-  :is(table.records, table.endpoints) :is(td, th[scope="row"]) { border: 0; padding: 2px 0; min-width: 0 !important; }
-  :is(table.records, table.endpoints) td.num { text-align: left; }
-  :is(table.records, table.endpoints) td[data-label] { position: relative; padding-left: 92px; }
-  :is(table.records, table.endpoints) td[data-label]::before {
+  :is(table.records, table.endpoints, table.layers, table.cards) { min-width: 0 !important; }
+  :is(table.records, table.endpoints, table.layers, table.cards) thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  :is(table.records, table.endpoints, table.layers, table.cards), :is(table.records, table.endpoints, table.layers, table.cards) :is(tbody, tr, td, th[scope="row"]) { display: block; width: 100%; }
+  :is(table.records, table.endpoints, table.layers, table.cards) tr { border-bottom: 1px solid var(--border); padding: 8px 4px; }
+  :is(table.records, table.endpoints, table.layers, table.cards) tr[hidden] { display: none; }
+  :is(table.records, table.endpoints, table.layers, table.cards) :is(td, th[scope="row"]) { border: 0; padding: 2px 0; min-width: 0 !important; }
+  :is(table.records, table.endpoints, table.layers, table.cards) td.num { text-align: left; }
+  :is(table.records, table.endpoints, table.layers, table.cards) td[data-label] { position: relative; padding-left: 92px; }
+  :is(table.records, table.endpoints, table.layers, table.cards) td[data-label]::before {
     content: attr(data-label); position: absolute; left: 0; top: 3px; width: 84px;
     color: var(--text-muted); font-size: 12px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-weight: 400;
   }
-  :is(table.records, table.endpoints) td.url { word-break: break-all; }
+  :is(table.records, table.endpoints, table.layers, table.cards) td.url { word-break: break-all; }
   table.records .chip { white-space: normal; overflow-wrap: anywhere; }
-  :is(table.records, table.endpoints) tr.sel { background: var(--code-bg); }
+  :is(table.records, table.endpoints, table.layers, table.cards) tr.sel { background: var(--code-bg); }
+  /* A record card opens on one line: tier, score, time and cluster. */
+  :is(table.records, table.cards) td.rc-head[data-label] { display: inline-flex; align-items: center; gap: 4px; width: auto; padding: 0; margin: 0 12px 4px 0; vertical-align: middle; }
+  :is(table.records, table.cards) td.rc-head[data-label]::before { content: none; }
+  :is(table.records, table.cards) td.rc-head.rc-lab[data-label]::before { content: attr(data-label); position: static; width: auto; }
+  /* Attribution: the layer heads its group of candidates. */
+  table.layers tr { border-bottom: 0; padding: 2px 4px; }
+  table.layers tr:has(> th[scope="row"]) { border-top: 1px solid var(--border); padding-top: 8px; }
+  table.layers th[scope="row"] { font-size: 13.5px; padding-bottom: 4px; }
+  /* A candidate is two lines: who, then its label, evidence and tag. */
+  table.layers td[data-label] { padding-left: 0; }
+  table.layers td[data-label]::before { content: none; }
+  table.layers td:is([data-label="Label"], [data-label="Evidence"], [data-label="Tag"]) { display: inline-block; width: auto; margin-right: 10px; color: var(--text-secondary); }
+  table.layers td[data-label="Party"] { font-weight: 600; }
+}
+.conf-pair { white-space: nowrap; }
+
+/* Workbench records: the URL column keeps a readable share of a wide table. */
+@media (min-width: 701px) {
+  table.records td.url { width: 40%; }
+  table.records :is(th, td) { padding: 6px 7px; }
+}
+@media (min-width: 1261px) {
+  .workbench { grid-template-columns: minmax(280px, 300px) minmax(0, 1fr) minmax(260px, 300px); }
+}
+.more-rows { margin: 8px 0 0; }
+.lede-card { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; }
+/* Workbench steps on phones: a pane scrolled to sits below the sticky step bar. */
+@media (max-width: 899px) {
+  [data-pane] { scroll-margin-top: 58px; }
+}
+
+/* Text-heavy walk figures keep their drawn width on phones and scroll in
+   their box, so their labels stay at the size they were drawn. */
+@media (max-width: 600px) {
+  :is(.walk-fig, .walk-fig.wide-min) svg.chart:is(.layers-fig, .score-fig, .ladder-fig, .bands-fig, .flow-fig) { min-width: 720px; }
+}
+
+/* Folded figures on the landing: a compact "Show the figure" control on
+   phones (home.js closes them there); open above 600 px, where the
+   control is not shown. The notice filters fold the same way. */
+details.fig-fold { margin: 0; min-width: 0; }
+:is(details.fig-fold, details.filters-fold) > summary {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 12px; cursor: pointer; list-style: none;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface-1); color: var(--accent-ink); font-size: 14px; font-weight: 600;
+}
+:is(details.fig-fold, details.filters-fold) > summary::-webkit-details-marker { display: none; }
+:is(details.fig-fold, details.filters-fold) > summary::before {
+  content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg);
+}
+:is(details.fig-fold, details.filters-fold)[open] > summary::before { transform: translateY(-2px) rotate(45deg); }
+:is(details.fig-fold, details.filters-fold) > summary:hover { border-color: var(--accent); }
+details.fig-fold[open] > summary { margin-bottom: 8px; }
+details.filters-fold { margin: 0 0 12px; }
+details.filters-fold[open] > summary { margin-bottom: 10px; }
+@media (min-width: 601px) {
+  :is(details.fig-fold, details.filters-fold)[open] > summary { display: none; }
+}
+
+/* A notice's stage: indicators only, or named. */
+.notice-stage { display: inline-block; font-size: 13px; color: var(--text-secondary); margin: 2px 0 0; }
+.notice-stage::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--accent); vertical-align: 1px; }
+:is(p, div).notice-stage { display: block; }
+
+/* Touch screens: small disclosure controls and checkboxes get a target
+   large enough for a finger. */
+@media (hover: none) {
+  :is(.as-table, .rule-test, .claims, .more, .internal-review, .editor details) > summary { min-height: 32px; padding: 6px 0; box-sizing: border-box; }
+  input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
 }

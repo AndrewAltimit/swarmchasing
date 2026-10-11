@@ -1,35 +1,38 @@
 // Every page: the theme toggle, the nav menus, and glossary tooltips.
-// The toggle cycles system, light, dark. The theme follows the system until
-// the toggle picks light or dark, which is kept in this browser; picking
-// system again forgets it. The menus are <details> and work without this
-// script; it only closes the others when one opens, and on Escape or a
-// click outside.
+// Each press of the toggle flips the look between light and dark. A look
+// other than the system's is kept in this browser; flipping back to the
+// system's look forgets it, so the page follows the system again. The menus
+// are <details> and work without this script; it only closes the others
+// when one opens, and on Escape or a click outside.
 import { store } from "./lib/dom.js";
 import { tip } from "./lib/tip.js";
 
 const KEY = "swarmchase.theme";
 const root = document.documentElement;
 const system = matchMedia("(prefers-color-scheme: dark)");
-const MODES = ["system", "light", "dark"];
-const mode = () => (root.dataset.theme === "light" || root.dataset.theme === "dark" ? root.dataset.theme : "system");
+const systemLook = () => (system.matches ? "dark" : "light");
+const chosen = () => (root.dataset.theme === "light" || root.dataset.theme === "dark" ? root.dataset.theme : null);
+const look = () => chosen() ?? systemLook();
 const changed = () => document.dispatchEvent(new CustomEvent("themechange"));
 
 const toggles = [...document.querySelectorAll("[data-theme-toggle]")];
 const label = () => {
-  const now = mode();
-  const next = MODES[(MODES.indexOf(now) + 1) % MODES.length];
-  const shown = now === "system" ? ` (${system.matches ? "dark" : "light"} now)` : "";
+  const now = look();
+  const next = now === "dark" ? "light" : "dark";
+  const auto = chosen() == null;
+  const said = `Theme: ${now}${auto ? " (following the system)" : ""}. Switch to ${next}`;
   for (const b of toggles) {
-    b.dataset.mode = now;
-    b.setAttribute("aria-label", `Theme: ${now}${shown}. Switch to ${next}`);
-    b.title = `Theme: ${now}${shown}`;
+    b.dataset.look = now;
+    b.dataset.auto = String(auto);
+    b.setAttribute("aria-label", said);
+    b.title = said;
   }
 };
 label();
 for (const b of toggles) {
   b.addEventListener("click", () => {
-    const next = MODES[(MODES.indexOf(mode()) + 1) % MODES.length];
-    if (next === "system") {
+    const next = look() === "dark" ? "light" : "dark";
+    if (next === systemLook()) {
       delete root.dataset.theme;
       store.del(KEY);
     } else {
@@ -43,7 +46,7 @@ for (const b of toggles) {
 // Following the system: redraw when it changes.
 system.addEventListener?.("change", () => {
   label();
-  if (mode() === "system") changed();
+  if (chosen() == null) changed();
 });
 
 // Nav menus: one open at a time.
