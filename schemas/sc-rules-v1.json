@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/sc-rules-v1.json",
+  "title": "SC-Rules v1",
+  "description": "A swarmchasing indicator rules file (docs/specs/rules-v1.md), as the JSON value of its TOML. Validates the rules file's structure and value domains; regular expressions are checked by compiling them, which a schema cannot do.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "description": "The rules version. Cases pin it; reports and bundles quote it." }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suggestive", "significant"],
+      "properties": {
+        "suggestive": { "type": "integer", "minimum": 1 },
+        "significant": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "linking": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strong_params": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "feature_link_window_secs": { "$ref": "#/$defs/secs" },
+        "feature_max_hosts": { "$ref": "#/$defs/count" },
+        "feature_max_share": { "$ref": "#/$defs/share" },
+        "feature_share_min_records": { "$ref": "#/$defs/count" },
+        "published_tags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "window_secs": { "$ref": "#/$defs/secs" },
+        "run_gap_secs": { "$ref": "#/$defs/secs" },
+        "burst_gap_secs": { "$ref": "#/$defs/secs" },
+        "burst_min": { "$ref": "#/$defs/count" },
+        "pause_min_secs": { "$ref": "#/$defs/secs" },
+        "archive_burst_gap_secs": { "$ref": "#/$defs/secs" },
+        "archive_burst_min": { "$ref": "#/$defs/count" },
+        "archive_burst_ratio": { "type": "number", "minimum": 0 }
+      }
+    },
+    "chains": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_gap_secs": { "$ref": "#/$defs/secs" },
+        "min_variants": { "$ref": "#/$defs/count" },
+        "tool_pace_below_secs": { "$ref": "#/$defs/secs" },
+        "model_pace_max_secs": { "$ref": "#/$defs/secs" }
+      }
+    },
+    "fanout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "batch_secs": { "$ref": "#/$defs/secs" },
+        "min_batches": { "$ref": "#/$defs/count" },
+        "min_width": { "$ref": "#/$defs/count" },
+        "min_share": { "$ref": "#/$defs/share" }
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "window_secs": { "$ref": "#/$defs/secs" },
+        "relay": { "$ref": "#/$defs/rule_refs" },
+        "program": { "$ref": "#/$defs/rule_refs" },
+        "remote_browser": { "$ref": "#/$defs/rule_refs" }
+      }
+    },
+    "soft_links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fleet_min_strength": { "$ref": "#/$defs/share" },
+        "max_shared": { "$ref": "#/$defs/count" },
+        "shared_pause": { "$ref": "#/$defs/share" },
+        "dialect": { "$ref": "#/$defs/share" },
+        "rerun": { "$ref": "#/$defs/share" },
+        "preamble": { "$ref": "#/$defs/share" },
+        "path_set": { "$ref": "#/$defs/share" },
+        "encoding": { "$ref": "#/$defs/share" },
+        "fanout": { "$ref": "#/$defs/share" },
+        "cut_length": { "$ref": "#/$defs/share" },
+        "header_set": { "$ref": "#/$defs/share" },
+        "escalation": { "$ref": "#/$defs/share" },
+        "common_feature": { "$ref": "#/$defs/share" },
+        "shared_secret": { "$ref": "#/$defs/share" },
+        "relay_stack": { "$ref": "#/$defs/share" },
+        "callback_service": { "$ref": "#/$defs/share" }
+      }
+    },
+    "cut_lengths": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_records": { "$ref": "#/$defs/count" },
+        "tolerance": { "$ref": "#/$defs/count" },
+        "rule": { "$ref": "#/$defs/rule_id" }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preamble_len": { "$ref": "#/$defs/count" },
+        "min_hosts": { "$ref": "#/$defs/count" },
+        "min_paths": { "$ref": "#/$defs/count" },
+        "min_jaccard": { "$ref": "#/$defs/share" },
+        "crawler": { "$ref": "#/$defs/paths" },
+        "recon": { "$ref": "#/$defs/paths" },
+        "common": { "$ref": "#/$defs/paths" }
+      }
+    },
+    "rule": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule" }
+    },
+    "asn": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["asn", "org"],
+        "properties": {
+          "asn": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+          "org": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "benchmark": { "type": "array", "items": { "$ref": "#/$defs/known" } },
+    "stale": { "type": "array", "items": { "$ref": "#/$defs/known" } }
+  },
+  "$defs": {
+    "secs": { "type": "integer", "minimum": 0 },
+    "count": { "type": "integer", "minimum": 0 },
+    "share": { "type": "number", "minimum": 0, "maximum": 1 },
+    "paths": { "type": "array", "items": { "type": "string", "pattern": "^/" } },
+    "rule_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z0-9_.]+$",
+      "description": "A dotted rule id, <family>.<name>."
+    },
+    "rule_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*\\.([a-z0-9_.]+|\\*)$",
+        "description": "A rule id, or `prefix.*` for every rule whose id starts with `prefix.`."
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "target", "pattern"],
+      "properties": {
+        "id": { "$ref": "#/$defs/rule_id" },
+        "kind": {
+          "enum": ["relay", "carrier", "exploit", "agent_marker", "cache_buster", "self_id", "exfil", "header", "outcome", "anti_bot", "infra"]
+        },
+        "target": {
+          "enum": ["host", "url", "param_name", "param_value", "header", "user_agent", "final_url"]
+        },
+        "pattern": { "type": "string", "minLength": 1 },
+        "weight": { "type": "integer", "minimum": 0, "default": 1 },
+        "significant": { "type": "boolean", "default": false },
+        "link": { "type": "boolean", "default": false },
+        "tactic": {
+          "enum": ["T1", "T2", "T3", "T4", "T5", "T6", "T7"],
+          "description": "T8 and T9 are cluster-level judgments and never a rule's tactic."
+        },
+        "artifact": { "type": "boolean", "default": false },
+        "check": { "enum": ["repeated_token"] },
+        "group": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Independence group (SC-FM 4.11): rules of one group count once per record, at the largest weight among those that fired. Reserved; an engine that does not implement groups rejects a file that sets it."
+        },
+        "description": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["check"] },
+          "then": { "properties": { "target": { "const": "param_value" } } }
+        },
+        {
+          "anyOf": [
+            { "required": ["tactic"] },
+            { "properties": { "artifact": { "const": true } }, "required": ["artifact"] }
+          ]
+        }
+      ]
+    },
+    "known": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pattern"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "target": { "enum": ["url", "user_agent"], "default": "url" },
+        "pattern": { "type": "string", "minLength": 1 },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}
