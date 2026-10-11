@@ -305,14 +305,14 @@ pub fn checklist(
     let p: Vec<String> = public
         .clusters
         .iter()
-        .filter(|cl| cl.tier > Tier::Noise && cl.plant_signals.len() >= PLANT_SIGNALS)
+        .filter(|cl| cl.tier > Tier::Noise && cl.origin.plant_signals.len() >= PLANT_SIGNALS)
         .filter(|cl| !c.plant_reviews.iter().any(|r| r.cluster == cl.key))
         .map(|cl| {
             format!(
                 "{} {} has {} plant signals: `swarmchase case plant-review {} {} --note \"…\"`",
                 cl.id,
                 cl.key,
-                cl.plant_signals.len(),
+                cl.origin.plant_signals.len(),
                 c.id,
                 cl.key
             )
