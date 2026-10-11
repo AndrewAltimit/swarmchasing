@@ -1,6 +1,6 @@
 # For researchers
 
-This page is for researchers outside the project: people studying agent behaviour on the public internet, checking this project's claims, or applying the method to their own data. It covers what the toolkit and site do, running the analysis on your own exports, the rule format and tactic taxonomy, contributing a rule, citing the method, reproducing the evaluation numbers, and what data is never shared.
+This page is for researchers outside the project: people studying agent behaviour on the public internet, checking this project's claims, or applying the method to their own data. It covers what the toolkit and site do, running the analysis on your own exports, the rule format and tactic taxonomy, contributing a rule, citing the method, reproducing the evaluation numbers, scoring your own detector against SC-Bench, and what data is never shared.
 
 ## What the toolkit does
 
@@ -56,11 +56,25 @@ Cite a rule by its id and the rules version (`[meta] version` in the rules file)
 
 There are three kinds of number, and only two may be quoted as performance ([FM-9.1](../manual/09-evaluation.md#fm-91-three-kinds-of-evaluation)).
 
-- **The regression set.** [`samples/eval/`](../../samples/eval/README.md) holds reconstructed, synthetic and benign records. `swarmchase eval samples/eval/*.ndjson` reproduces the numbers the site shows; [`eval-gate.sh`](../../scripts/ci/eval-gate.sh) adds the floors. The rules were tuned on this set, so it is a floor, not an estimate.
+- **The regression set.** [`samples/eval/`](../../samples/eval/README.md) holds reconstructed, synthetic and benign records. `swarmchase eval samples/eval/*.ndjson` reproduces the numbers the site shows; [`eval-gate.sh`](../../scripts/ci/eval-gate.sh) adds the floors. The rules were tuned on this set, so it is a floor, not an estimate. Most of it is synthetic; read the non-synthetic numbers, which `eval` prints beside the rest ([synthetic and non-synthetic](../reference/evaluation.md#synthetic-and-non-synthetic-records)).
 - **Held-out.** Transluce's labelled urlquery.net release ships report ids and labels. With your own urlquery.net key, `swarmchase collect urlquery-reports` fetches the reports into a gitignored directory and `eval --labels` scores them, with this project's label overrides and their reasons ([held-out steps](../../samples/eval/README.md#held-out-evaluation-on-the-transluce-release)).
-- **Saved results.** [`samples/eval/results/`](../../samples/eval/results/README.md) holds measured results as numbers, with the SHA-256 of every input and label file, the rules version and the toolkit commit. Holding the same inputs, you can check you measured the same thing.
+- **Saved results.** [`samples/eval/results/`](../../samples/eval/results/README.md) holds measured results as numbers, with the path, SHA-256 and size of every input and label file, the rules version and hash, and the toolkit version and commit. Holding the same inputs, `swarmchase eval repro <result.json>` measures again and diffs every number ([reproducing a result](../reference/evaluation.md#reproducing-a-result)).
 
-Every proportion carries a 95% Wilson interval, and run-labelled records also give B-cubed precision and recall for linking ([evaluation](../reference/evaluation.md)). To build your own held-out measurement, freeze a split by time or cluster before tuning anything ([frozen splits](../reference/evaluation.md#frozen-splits)).
+Every proportion carries a 95% Wilson interval. Precision and recall are counted per record and per cluster, since a run of ten flagged records is one report, not ten ([units](../reference/evaluation.md#record-and-cluster-units)). Run-labelled records also give B-cubed precision and recall for linking ([evaluation](../reference/evaluation.md)). To build your own held-out measurement, freeze a split by time or cluster before tuning anything ([frozen splits](../reference/evaluation.md#frozen-splits)).
+
+## Scoring your own detector (SC-Bench)
+
+SC-Bench is the evaluation set as a file another group can score its own detector against, with this project's scorer ([SC-Bench](../reference/evaluation.md#sc-bench)). A bench file follows [`schemas/sc-bench-v1.json`](../../schemas/sc-bench-v1.json). It names each record by id and carries its label, labellers, split, timestamp kind, source and provenance, defanged target host, and what this project's rules said at the freeze. It holds no URL or other record content.
+
+1. Get the records. The committed example, [`sc-bench-v1-example.json`](../../samples/eval/bench/sc-bench-v1-example.json), names records in [`samples/eval/`](../../samples/eval/README.md); a bench over a third-party source names records you fetch yourself, by id, under the source's terms.
+2. Run your detector and write one NDJSON line per record: `id`, then `tier` (`noise`, `suggestive`, `significant`) or `flagged` (true or false), and optionally your `cluster` for the record.
+3. Score: `swarmchase eval --bench <bench.json> --predictions <yours.ndjson> --json score.json`. The score has record-unit and cluster-unit precision and recall with intervals, for all records and for the non-synthetic ones, overall and per split. `swarmchase eval --bench <bench.json>` alone scores this project's rules as frozen in the file, for comparison.
+
+When you report a score, give the bench name and freeze date, the split, the unit, and the non-synthetic numbers beside the all-records ones.
+
+## Negative control
+
+No agent of the kind looked for existed before late 2022, so every flag on older records is a false alarm. `swarmchase eval <records or store> --before 2022-11-30` gives label-free false-alarm rates per tier, agent grade and plant signal, with intervals ([negative control](../reference/evaluation.md#negative-control)). Archive captures from before that date are the natural input.
 
 ## What is never shared, and why
 

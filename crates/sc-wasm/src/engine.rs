@@ -5,7 +5,7 @@
 //! and the module carries no deserialiser for one.
 
 use super::{json, parse_claims, rules_from};
-use sc_core::timing::{DateTagOffset, infer_offset, parse_date_tag};
+use sc_core::timing::DateTagOffset;
 use sc_core::{Analysis, Evidence, FieldMap, Format};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -33,7 +33,7 @@ pub fn analyze(input: &str, format: &str, map: &str, rules_json: &str) -> Result
     let parsed = sc_core::parse_input(input, format, &map);
     let a = sc_core::analyze(parsed.observations, &rules);
     let out = json(&Analyzed {
-        cluster_date_tags: cluster_date_tags(&a),
+        cluster_date_tags: a.cluster_date_tags(),
         analysis: &a,
         warnings: &parsed.warnings,
         redacted: parsed.redacted,
@@ -57,31 +57,6 @@ fn with_last<T>(f: impl FnOnce(&Analysis) -> Result<T, JsError>) -> Result<T, Js
         Some(a) => f(a),
         None => Err(JsError::new("nothing analysed yet")),
     })
-}
-
-/// The operator clock offset implied by each cluster's date tags, read the
-/// way `analyze` reads them for the whole input. The parameters the tags sit
-/// in are not serialised, so this runs on the analysis before it is.
-fn cluster_date_tags(a: &Analysis) -> BTreeMap<String, DateTagOffset> {
-    a.clusters
-        .iter()
-        .map(|c| {
-            let samples: Vec<_> = c
-                .members
-                .iter()
-                .map(|&m| &a.results[m])
-                .filter(|r| r.obs.ts > 0)
-                .filter_map(|r| {
-                    r.layers
-                        .iter()
-                        .flat_map(|l| l.params.iter())
-                        .find_map(|(_, v)| parse_date_tag(v))
-                        .map(|d| (r.obs.ts, d))
-                })
-                .collect();
-            (c.id.clone(), infer_offset(&samples))
-        })
-        .collect()
 }
 
 /// Unwrap a single URL; returns `{"layers": [...], "extracted": {...}}`.

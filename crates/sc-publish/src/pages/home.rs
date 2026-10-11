@@ -492,7 +492,7 @@ fn focus(a: &Analysis) -> Option<&Cluster> {
         .collect();
     a.clusters
         .iter()
-        .find(|c| fleet.contains(&c.id.as_str()) && c.provenance.contains_key("observed"))
+        .find(|c| fleet.contains(&c.id.as_str()) && c.origin.provenance.contains_key(&sc_core::model::Provenance::Observed))
         .or_else(|| a.clusters.first())
 }
 
@@ -711,7 +711,7 @@ mod tests {
         assert!(!html.contains(" style="), "a style attribute");
         // Plant signals and declared-testing contacts stay off public pages.
         for c in &a.clusters {
-            for p in &c.plant_signals {
+            for p in &c.origin.plant_signals {
                 assert!(
                     !html.contains(&p.detail),
                     "plant signal on the landing page"

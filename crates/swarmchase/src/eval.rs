@@ -5,16 +5,22 @@
 //! Besides the tables it can check rule coverage against an allow-list,
 //! write a frozen held-out split, write the summary JSON the site renders,
 //! and save a result file of numbers only (no record content) for
-//! `samples/eval/results/`.
+//! `samples/eval/results/`. [`repro`] measures a saved result again and
+//! checks the committed ones; [`bench`] writes and scores SC-Bench files.
+
+pub mod bench;
+pub mod repro;
 
 use anyhow::{Context, Result, bail};
+use sc_core::eval::control::{ControlRow, ControlSummary};
 use sc_core::eval::coverage::{AllowList, Coverage, coverage_failures};
 use sc_core::eval::grades::{COLUMNS, GradeTable};
 use sc_core::eval::stats::Proportion;
-use sc_core::eval::summary::Summary;
-use sc_core::eval::{EvalReport, LabelSet, Threshold};
+use sc_core::eval::summary::{Summary, TierSummary};
+use sc_core::eval::units::{Calibration, Slice};
+use sc_core::eval::{EvalReport, LabelSet};
 use sc_core::{Tier, parse_labels};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
@@ -42,6 +48,19 @@ pub struct Floors {
     /// below this.
     #[arg(long)]
     pub min_suggestive_precision_lower: Option<f64>,
+    /// The same six floors over the records not marked `synthetic`.
+    #[arg(long)]
+    pub min_nonsynthetic_significant_precision: Option<f64>,
+    #[arg(long)]
+    pub min_nonsynthetic_suggestive_precision: Option<f64>,
+    #[arg(long)]
+    pub min_nonsynthetic_significant_recall: Option<f64>,
+    #[arg(long)]
+    pub min_nonsynthetic_suggestive_recall: Option<f64>,
+    #[arg(long)]
+    pub min_nonsynthetic_significant_precision_lower: Option<f64>,
+    #[arg(long)]
+    pub min_nonsynthetic_suggestive_precision_lower: Option<f64>,
 }
 
 /// Labels from `--labels` files, or, when none are given, from the inputs
@@ -52,13 +71,23 @@ pub fn load_labels(labels: &[PathBuf], inputs: &[PathBuf]) -> Result<LabelSet> {
     for p in files {
         let text =
             std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
-        let l = parse_labels(&text);
+        let mut l = parse_labels(&text);
         for w in l.warnings.iter().take(5) {
             eprintln!("warning: {}: {w}", p.display());
+        }
+        // The file name only: a full path would say where the reader keeps
+        // their data.
+        let origin = p
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .filter(|n| n != "-");
+        for v in l.labels.values_mut() {
+            v.origin = origin.clone();
         }
         all.skipped += l.skipped;
         all.labels.extend(l.labels);
         all.actors.extend(l.actors);
+        all.provenance.extend(l.provenance);
     }
     if all.labels.is_empty() {
         bail!(
@@ -114,24 +143,22 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
         labels.skipped
     );
     println!("intervals are 95% Wilson score intervals; n is the denominator");
-    println!(
-        "\n{:<22} {:>5} {:>5} {:>5} {:>5}  {:>24} {:>5}  {:>24} {:>5}",
-        "threshold", "tp", "fp", "fn", "tn", "precision", "n", "recall", "n"
+    print_tiers("all records · record unit", &s.tiers);
+    print_tiers(
+        "all records · cluster unit (a cluster, or an unclustered record, counts once)",
+        &s.cluster_tiers,
     );
-    for t in &s.tiers {
-        println!(
-            "{:<22} {:>5} {:>5} {:>5} {:>5}  {:>24} {:>5}  {:>24} {:>5}",
-            format!("{} or above", t.tier.label()),
-            t.tp,
-            t.fp,
-            t.fn_,
-            t.tn,
-            ci(&t.precision),
-            t.precision.n,
-            ci(&t.recall),
-            t.recall.n
-        );
-    }
+    let ns = &s.non_synthetic;
+    println!(
+        "\nnon-synthetic: {} labelled records ({} agent, {} benign) not marked synthetic",
+        ns.labelled, ns.agents, ns.benign
+    );
+    print_tiers("non-synthetic · record unit", &ns.tiers);
+    print_tiers("non-synthetic · cluster unit", &ns.cluster_tiers);
+    print_slices("provenance", &s.by_provenance);
+    print_slices("source", &s.by_source);
+    print_slices("file", &s.by_file);
+    print_calibration(&s.calibration);
     let recall_table = |title: &str, rows: &[sc_core::eval::summary::RecallRow]| {
         if rows.is_empty() {
             return;
@@ -220,6 +247,119 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
                 m.rules.join(", "),
                 crate::util::truncate(&m.url, 140)
             );
+        }
+    }
+}
+
+/// The negative control's false-alarm rates.
+pub fn print_control(c: &ControlSummary, all: usize, date: &str, rules: &str) {
+    println!(
+        "negative control: {} of {all} records before {date} · {} clusters · rules {rules}",
+        c.records, c.clusters
+    );
+    println!(
+        "every flag, grade above L1 and plant signal here is a false alarm; rates are 95% Wilson intervals"
+    );
+    let rows = |title: &str, rows: &[ControlRow]| {
+        println!("\n{title:<26} {:>7} {:>7}  {:>24}", "k", "n", "rate");
+        for r in rows {
+            println!(
+                "{:<26} {:>7} {:>7}  {:>24}",
+                r.name,
+                r.rate.k,
+                r.rate.n,
+                ci(&r.rate)
+            );
+        }
+    };
+    rows("records flagged", &c.by_tier);
+    rows("records by agent grade", &c.by_agent_level);
+    println!(
+        "\nclusters graded L2 or above: {} of {} · {}",
+        c.clusters_l2_or_above.k,
+        c.clusters_l2_or_above.n,
+        ci(&c.clusters_l2_or_above)
+    );
+    rows("clusters by plant signal", &c.plant_signals);
+    if c.records > 0 {
+        println!(
+            "\nwith nothing flagged, the 95% upper bound on the false-alarm rate is about 3/n = {:.2}% (rule of three)",
+            300.0 / c.records as f64
+        );
+    }
+}
+
+/// A tp/fp/fn/tn table with precision and recall at each threshold.
+pub fn print_tiers(title: &str, tiers: &[TierSummary]) {
+    println!("\n{title}");
+    println!(
+        "{:<22} {:>5} {:>5} {:>5} {:>5}  {:>24} {:>5}  {:>24} {:>5}",
+        "threshold", "tp", "fp", "fn", "tn", "precision", "n", "recall", "n"
+    );
+    for t in tiers {
+        println!(
+            "{:<22} {:>5} {:>5} {:>5} {:>5}  {:>24} {:>5}  {:>24} {:>5}",
+            format!("{} or above", t.tier.label()),
+            t.tp,
+            t.fp,
+            t.fn_,
+            t.tn,
+            ci(&t.precision),
+            t.precision.n,
+            ci(&t.recall),
+            t.recall.n
+        );
+    }
+}
+
+/// One line per slice: counts, then precision and recall at both
+/// thresholds, record unit.
+pub fn print_slices(by: &str, slices: &[Slice]) {
+    if slices.is_empty() {
+        return;
+    }
+    println!(
+        "\n{:<26} {:>5} {:>5} {:>5}  {:>22} {:>22}  {:>22} {:>22}",
+        format!("by {by}"),
+        "n",
+        "agent",
+        "benign",
+        "precision (sugg+)",
+        "recall (sugg+)",
+        "precision (sig)",
+        "recall (sig)"
+    );
+    for s in slices {
+        let t = |i: usize| s.tiers.get(i);
+        let p = |i: usize| t(i).map_or("n/a".into(), |t| ci(&t.precision));
+        let r = |i: usize| t(i).map_or("n/a".into(), |t| ci(&t.recall));
+        println!(
+            "{:<26} {:>5} {:>5} {:>5}  {:>22} {:>22}  {:>22} {:>22}",
+            crate::util::truncate(&s.name, 26),
+            s.labelled,
+            s.agents,
+            s.benign,
+            p(0),
+            r(0),
+            p(1),
+            r(1)
+        );
+    }
+}
+
+/// Observed precision per tier and per agent grade.
+pub fn print_calibration(c: &Calibration) {
+    if c.by_tier.is_empty() && c.by_agent_level.is_empty() {
+        return;
+    }
+    println!("\ncalibration: share of labelled records that are agents (report only)");
+    for (title, rows) in [("tier", &c.by_tier), ("agent grade", &c.by_agent_level)] {
+        let row: Vec<String> = rows
+            .iter()
+            .map(|r| format!("{} {} of {}", r.name, ci(&r.precision), r.precision.n))
+            .collect();
+        if !row.is_empty() {
+            println!("  {title:<12} {}", row.join(" · "));
         }
     }
 }
@@ -360,79 +500,140 @@ pub fn print_coverage(c: &Coverage) {
 }
 
 /// Check the floors. Returns the failures, empty when the gate passes.
-pub fn check(r: &EvalReport, f: &Floors) -> Vec<String> {
+pub fn check(s: &Summary, f: &Floors) -> Vec<String> {
     let mut out = Vec::new();
-    let mut need = |t: Option<&Threshold>,
+    let mut need = |set: &str,
+                    tiers: &[TierSummary],
+                    tier: Tier,
                     what: &str,
                     floor: Option<f64>,
-                    get: fn(&Threshold) -> Option<f64>| {
+                    get: fn(&TierSummary) -> Option<f64>| {
         let Some(floor) = floor else { return };
-        let Some(t) = t else { return };
+        let Some(t) = tiers.iter().find(|t| t.tier == tier) else {
+            out.push(format!(
+                "{set}{} {what}: no such threshold - floor {:.1}% not met",
+                tier.label(),
+                floor * 100.0
+            ));
+            return;
+        };
         match get(t) {
             Some(v) if v + 1e-9 >= floor => {}
             Some(v) => out.push(format!(
-                "{} {what} {:.1}% < floor {:.1}%",
-                t.tier.label(),
+                "{set}{} {what} {:.1}% < floor {:.1}%",
+                tier.label(),
                 v * 100.0,
                 floor * 100.0
             )),
             None => out.push(format!(
-                "{} {what} undefined (nothing to measure) - floor {:.1}% not met",
-                t.tier.label(),
+                "{set}{} {what} undefined (nothing to measure) - floor {:.1}% not met",
+                tier.label(),
                 floor * 100.0
             )),
         }
     };
-    let sig = r.threshold(Tier::Significant);
-    let sug = r.threshold(Tier::Suggestive);
-    need(sig, "precision", f.min_significant_precision, |t| {
-        t.precision
-    });
-    need(sug, "precision", f.min_suggestive_precision, |t| {
-        t.precision
-    });
-    need(sig, "recall", f.min_significant_recall, |t| t.recall);
-    need(sug, "recall", f.min_suggestive_recall, |t| t.recall);
-    need(
-        sig,
-        "precision lower bound (95% Wilson)",
-        f.min_significant_precision_lower,
-        |t| t.precision_ci.map(|c| c.0),
-    );
-    need(
-        sug,
-        "precision lower bound (95% Wilson)",
-        f.min_suggestive_precision_lower,
-        |t| t.precision_ci.map(|c| c.0),
-    );
+    let lower = "precision lower bound (95% Wilson)";
+    let prec: fn(&TierSummary) -> Option<f64> = |t| t.precision.value;
+    let rec: fn(&TierSummary) -> Option<f64> = |t| t.recall.value;
+    let lo: fn(&TierSummary) -> Option<f64> = |t| t.precision.lo;
+    let (sig, sug) = (Tier::Significant, Tier::Suggestive);
+    for (set, tiers, floors) in [
+        (
+            "",
+            &s.tiers,
+            [
+                f.min_significant_precision,
+                f.min_suggestive_precision,
+                f.min_significant_recall,
+                f.min_suggestive_recall,
+                f.min_significant_precision_lower,
+                f.min_suggestive_precision_lower,
+            ],
+        ),
+        (
+            "non-synthetic ",
+            &s.non_synthetic.tiers,
+            [
+                f.min_nonsynthetic_significant_precision,
+                f.min_nonsynthetic_suggestive_precision,
+                f.min_nonsynthetic_significant_recall,
+                f.min_nonsynthetic_suggestive_recall,
+                f.min_nonsynthetic_significant_precision_lower,
+                f.min_nonsynthetic_suggestive_precision_lower,
+            ],
+        ),
+    ] {
+        need(set, tiers, sig, "precision", floors[0], prec);
+        need(set, tiers, sug, "precision", floors[1], prec);
+        need(set, tiers, sig, "recall", floors[2], rec);
+        need(set, tiers, sug, "recall", floors[3], rec);
+        need(set, tiers, sig, lower, floors[4], lo);
+        need(set, tiers, sug, lower, floors[5], lo);
+    }
     out
 }
 
-/// A file named by hash and size, never by content.
-#[derive(Debug, Serialize)]
+/// A file named by path, hash and size, never by content.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileHash {
+    /// The path as given when relative (with `/`), the file name when
+    /// absolute: enough to find it again, without saying where a reader
+    /// keeps their data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
     pub sha256: String,
     pub bytes: u64,
+}
+
+pub fn sha256_hex(b: &[u8]) -> String {
+    Sha256::digest(b)
+        .iter()
+        .map(|x| format!("{x:02x}"))
+        .collect()
+}
+
+/// The path as a [`FileHash`] records it.
+pub fn recorded_path(p: &Path) -> String {
+    if p.is_absolute() {
+        p.file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    } else {
+        p.to_string_lossy().replace('\\', "/")
+    }
 }
 
 pub fn hash_file(p: &Path) -> Result<FileHash> {
     let b = std::fs::read(p).with_context(|| format!("reading {}", p.display()))?;
     Ok(FileHash {
-        sha256: Sha256::digest(&b)
-            .iter()
-            .map(|x| format!("{x:02x}"))
-            .collect(),
+        path: Some(recorded_path(p)),
+        sha256: sha256_hex(&b),
         bytes: b.len() as u64,
     })
 }
 
+/// SHA-256 of rules text with line endings made `\n`, so a checkout with
+/// CRLF line endings hashes the same rules the same.
+pub fn rules_sha256(text: &str) -> String {
+    sha256_hex(text.replace("\r\n", "\n").as_bytes())
+}
+
+/// The version of the saved-result format [`SavedResult`] writes.
+pub const RESULT_SCHEMA: u32 = 2;
+
 /// A saved result: numbers, hashes and the summary. No record content.
 #[derive(Debug, Serialize)]
 pub struct SavedResult<'a> {
+    pub result_schema: u32,
     /// `regression`, `held_out` or `prospective` (manual FM-9.1).
     pub kind: &'a str,
     pub description: &'a str,
     pub rules_version: &'a str,
+    /// [`rules_sha256`] of the rules the analysis ran with.
+    pub rules_sha256: String,
+    /// The rules file given with `--rules`; absent for the bundled rules.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rules_file: Option<String>,
     pub toolkit: Toolkit,
     pub records: Vec<FileHash>,
     pub labels: Vec<FileHash>,
@@ -441,7 +642,34 @@ pub struct SavedResult<'a> {
     pub only_ids: Option<FileHash>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude_ids: Option<FileHash>,
+    pub counts: Counts,
+    /// Saved with `--allow-no-benign`: a result with no benign record, whose
+    /// precision cannot be wrong and so says nothing.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub allow_no_benign: bool,
     pub summary: &'a Summary,
+}
+
+/// The counts a reader checks first.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Counts {
+    pub labelled: usize,
+    pub agents: usize,
+    pub benign: usize,
+    pub non_synthetic_labelled: usize,
+    pub non_synthetic_benign: usize,
+}
+
+impl Counts {
+    pub fn of(s: &Summary) -> Self {
+        Self {
+            labelled: s.labelled,
+            agents: s.agents,
+            benign: s.benign,
+            non_synthetic_labelled: s.non_synthetic.labelled,
+            non_synthetic_benign: s.non_synthetic.benign,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -503,15 +731,51 @@ mod tests {
             ],
             &sc_core::Rules::default_rules(),
         );
-        let r = sc_core::evaluate(&a, &labels);
+        let (_, _, s) = sc_core::summarize(&a, &labels, sc_core::DEFAULT_RULES, "").unwrap();
         // 1/1 precision: the point estimate is 100%, the lower bound ~20.7%.
         let f = Floors {
             min_significant_precision: Some(0.9),
             min_significant_precision_lower: Some(0.5),
             ..Default::default()
         };
-        let fails = check(&r, &f);
+        let fails = check(&s, &f);
         assert_eq!(fails.len(), 1, "{fails:?}");
         assert!(fails[0].contains("lower bound"), "{fails:?}");
+    }
+
+    #[test]
+    fn non_synthetic_floors_read_the_non_synthetic_slice() {
+        let labels = parse_labels(
+            "{\"id\":\"x:1\",\"label\":\"agent\",\"synthetic\":true}\n\
+             {\"id\":\"x:2\",\"label\":\"agent\"}\n",
+        );
+        let a = sc_core::analyze(
+            vec![
+                sc_core::Observation {
+                    id: "x:1".into(),
+                    url: "https://t.example/?id=1%20OR%201=1".into(),
+                    ..Default::default()
+                },
+                sc_core::Observation {
+                    id: "x:2".into(),
+                    url: "https://t.example/".into(),
+                    ..Default::default()
+                },
+            ],
+            &sc_core::Rules::default_rules(),
+        );
+        let (_, _, s) = sc_core::summarize(&a, &labels, sc_core::DEFAULT_RULES, "").unwrap();
+        let f = Floors {
+            min_significant_recall: Some(0.5),
+            min_nonsynthetic_significant_recall: Some(0.5),
+            ..Default::default()
+        };
+        let fails = check(&s, &f);
+        assert_eq!(fails.len(), 1, "{fails:?}");
+        assert!(
+            fails[0].starts_with("non-synthetic significant recall 0.0%"),
+            "{fails:?}"
+        );
+        assert_eq!(Counts::of(&s).non_synthetic_labelled, 1);
     }
 }

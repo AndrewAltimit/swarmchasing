@@ -44,18 +44,22 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 
 [docs/methodology.md](../../docs/methodology.md) explains how records become tiers, clusters and claims, and the known limits.
 
+## The pipeline
+
+`analyze` runs the passes listed in [`analyze/pipeline.rs`](src/analyze/pipeline.rs) in order over one context that holds the `Analysis` being built. Each pass names the passes whose output it reads, and a test fails when one is listed before them. A new per-cluster output is a field on `Cluster` (or in one of its groups, such as `knowledge` or `origin`, which serialise flat), a function that fills it, and one pass. The snapshot tests then show its JSON.
+
 ## Modules
 
 | Module | Covers |
 |---|---|
-| [`model`](src/model.rs) | `Observation` (with what its timestamp is, `TsKind`, and the client's `asn` apart from the `target_asn`), `Tier`, `Hit`, `LinkFeature` and timestamp helpers. |
+| [`model`](src/model.rs) | `Observation` (with what its timestamp is, `TsKind`, and the client's `asn` apart from the `target_asn`), `Tier`, `Hit`, `LinkFeature`, the known sources (`SourceKind`), `Provenance` and timestamp helpers. |
 | [`ingest`](src/ingest.rs) | NDJSON, JSON, CDX, urlquery, URL lists and access logs into `Observation`s; `--map` field mappings. |
 | [`urlquery`](src/urlquery.rs) | urlquery.net report records into `Observation`s. |
 | [`capture`](src/capture.rs) | Wayback and Arquivo.pt captures into `Observation`s, with one id however they arrive. |
 | [`redact`](src/redact.rs) | Replaces secrets with `REDACTED-<hash>` at ingest, and in every layer unwrapping decodes. |
 | [`extract`](src/extract.rs) | URL unwrapping, indicator matching for one record, and `defang`. |
 | [`rules`](src/rules.rs) | Loading and compiling rule sets. |
-| [`analyze`](src/analyze/mod.rs) | The pipeline: extract, score, link into clusters (`link`), describe each cluster (`hints`), time. Clusters have a number (`C1`) and a stable `key`. |
+| [`analyze`](src/analyze/mod.rs) | The pipeline as ordered passes (`pipeline`): score, link into clusters (`link`), describe each cluster (`hints`), number, then cross-cluster hints. Clusters have a number (`C1`) and a stable `key`. |
 | [`chains`](src/chains.rs) | Probe chains: one client trying variant after variant of a request. |
 | [`timing`](src/timing/mod.rs) | Cadence, bursts and pauses (`cadence`), hour-of-day profiles (`rhythm`), date tags (`dates`) and shared pauses (`pauses`). |
 | [`fingerprint`](src/fingerprint.rs) | How a request was encoded, and header sets. |
@@ -69,10 +73,11 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`escalation`](src/escalation.rs) | Route escalation: one target requested directly, then through a relay, a program carrier, a remote browser. |
 | [`attribution`](src/attribution.rs) | The evidence ladder and who a report may name. |
 | [`agentness`](src/agentness.rs) | Each cluster's agent grade (L0 payloads only to L4 agent likely) with its signals, counter-signals and caps; L5 only from a case decision. |
-| [`report`](src/report/mod.rs) | Markdown drafts and the public notice: per-audience wording (`audience`), cluster hint lines (`hints`), attribution and endpoints (`sections`), the agent grade block (`agentness`). |
+| [`swarm`](src/swarm/mod.rs) | Interaction edges between runs (SC-T9): runs and strands (`runs`), named artifacts (`artifacts`), one detector per kind (`edges`), edges against labels (`eval`). |
+| [`report`](src/report/mod.rs) | Markdown drafts and the public notice, one module per section; per-audience wording (`audience`) and cluster hint lines (`hints`). |
 | [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |
-| [`eval`](src/eval.rs) | Precision and recall against labelled records; agent grades by actor (`grades`). |
+| [`eval`](src/eval.rs) | Precision and recall against labelled records, per record and per cluster (`units`); agent grades by actor (`grades`); the negative control (`control`); SC-Bench (`bench`). |
 | [`securitytxt`](src/securitytxt.rs) | RFC 9116 `security.txt` parsing. |
 | [`sort`](src/sort.rs) | Stable sorts that share one compiled routine, so each call site does not add a copy of the standard sort to the browser module. Same order as `slice::sort_by`. |
 
@@ -86,6 +91,6 @@ Rule changes go in `rules/default.toml`, not in code, and must pass the eval gat
 cargo test -p sc-core
 ```
 
-Unit tests sit beside the code. [`tests/integration.rs`](tests/integration.rs) gathers the integration tests into one binary; [`tests/golden.rs`](tests/golden.rs) analyses the labelled set in `samples/eval/` end to end and holds the eval gate's numbers, so a change that moves them fails `cargo test` as well as the gate.
+Unit tests sit beside the code. [`tests/integration.rs`](tests/integration.rs) gathers the integration tests into one binary; [`tests/golden.rs`](tests/golden.rs) analyses the labelled set in `samples/eval/` end to end and holds the eval gate's numbers, so a change that moves them fails `cargo test` as well as the gate. [`tests/snapshot.rs`](tests/snapshot.rs) pins the full `Analysis` JSON (what the browser toolkit reads) and every audience's report over the same set to the files in `tests/snapshots/`; after an intended change, regenerate them with `UPDATE_SNAPSHOTS=1 cargo test -p sc-core --test integration snapshot::` and review the diff.
 
 `scripts/ci/check-wasm-target.sh` checks that the crate still builds for `wasm32-unknown-unknown`, so anything that needs the OS (files, network, the clock) stays out of it.

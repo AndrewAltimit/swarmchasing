@@ -6,7 +6,7 @@
 
 This manual covers the observation of AI agent activity that crosses the public internet and leaves traces in public records. It covers finding that activity, linking it, attributing it, and disclosing it.
 
-It applies to agents whose activity is **misaligned** (the agent pursues a goal by means its operator or the affected party would not sanction, such as probing for vulnerabilities while on a research task) or **unsupervised** (the activity continues with no sign of a person checking it). It does not cover:
+It applies to agents whose activity is **misaligned** (the agent pursues a goal by means its operator or the affected party would not sanction, such as probing for vulnerabilities while on a research task) or **unsupervised** (the activity continues with no sign of a person checking it). Both are findings with their own evidence, made by the scope assessment ([chapter 15](15-misalignment.md)), not read off a tier. It does not cover:
 
 - red-teaming, jailbreaking or otherwise interacting with an agent or model;
 - private telemetry, such as a provider's own logs, except where a provider or operator supplies it for a case ([FM-10.7](10-disclosure.md#fm-107-operator-supplied-logs));
@@ -62,7 +62,7 @@ Each record, and each cluster, is graded into one tier:
 | **Suggestive** | The summed weight reached the suggestive threshold. |
 | **Noise** | Anything below; including records with some weight. |
 
-A tier says how strongly a record looks like agent activity under the rules. It does not say who sent it, and it does not say the request succeeded. A cluster's tier is the highest tier among its members, raised one step only when independent members corroborate each other ([FM-14.9](14-limits.md#fm-149-stacking-across-a-cluster)).
+A tier says how strongly a record's contents look like agent activity under the rules: payloads, programs, channels, residue. It does not say who sent it, whether an agent was present ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)), whether the activity went beyond its task ([FM-15.1](15-misalignment.md#fm-151-four-questions)), or that the request succeeded. A cluster's tier is the highest tier among its members, raised one step only when independent members corroborate each other ([FM-14.9](14-limits.md#fm-149-stacking-across-a-cluster)).
 
 The tier names match those in the [Transluce release](references.md#incident-reports), so results can be compared against its labels.
 

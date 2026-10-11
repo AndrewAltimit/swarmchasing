@@ -110,6 +110,7 @@ At the end of each run, run directories and stored records older than `retain_da
 Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing.
 
 - `--unflagged N` adds a stable sample of unflagged records, which grows the benign baseline and catches misses.
+- `review sample` writes a stratified, seeded sample as a queue file, and `review <queue> --all` labels every record in it ([a reviewed benign baseline](evaluation.md#a-reviewed-benign-baseline)).
 - `--stats` counts reviews and disagreements, and Cohen's κ between labellers; `--list` prints the queue.
 - `--labeller <name>` saves to `labels/reviewed-<name>.ndjson` instead, for a second, independent reviewer ([two labellers](evaluation.md#two-labellers)).
 - `--suggest` shows a local model's label suggestion before each prompt ([label suggestions](#label-suggestions)).

@@ -36,6 +36,8 @@ Close timing is only as good as the timestamps. It **should** use request or sub
 
 A probe chain is one client trying variants of one request: requests to the same host and path, each within a few minutes of the last, with at least three distinct parameter sets and at least one parameter whose value changes. The flagged requests in a chain are hard-linked even when different rules fired on each, because the chain itself is the evidence of one client.
 
+A chain's gaps are timing, so they rest on what the timestamps measure ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). A chain **must** be timed by request or submit times to hard-link: two archive captures minutes apart say when a crawler saved two URLs, not that one client sent them in sequence. A chain timed by capture times is listed as a hint, and its records join only through a shared identifier or another hard link. Toolkit: (planned). Today the toolkit forms chains on any timestamp and hard-links their flagged records whatever the kind; it states each chain's time basis and reads no pace from captures.
+
 A chain also carries description that never changes a link: its pace (median gap) and its retries after an error. A sub-second pace reads as a script or scanner; seconds to minutes is consistent with a model choosing each request; a changed request sent right after an error response suggests a reader of the error. Both are hints ([methodology](../methodology.md#linking-into-clusters)).
 
 ## FM-5.5 Runs
@@ -109,6 +111,8 @@ Someone who wants a false incident found, or a real cluster attributed elsewhere
 - **Too perfect.** Every record significant on several kinds of evidence, with no ordinary requests around it, no escalation and no task retrieval.
 - **Habit mismatch.** An identifier shared with an earlier cluster whose relay routes, URL encodings or payloads share nothing with this one's.
 
+A plant signal is informative only against its base rate. Provenance monoculture fires on every cluster built from one scan service, which is most clusters in such a collection; a signal that fires on nearly every cluster of a source tells the reviewer nothing about this one. Each signal **should** be reported with its base rate: the share of the analysis's clusters from the same source kinds that carry it. A signal carried by more than half of them is context, listed but not counted towards the plant review threshold ([FM-10.9](10-disclosure.md#fm-109-self-review)). Toolkit: (planned); today `provenance_monoculture` fires on every flagged cluster whose records are all submit-anywhere, and counts towards the threshold.
+
 Each is a prompt, never a finding, and stays out of reports to providers and operators and out of notices. Toolkit: `provenance`, `corroboration` and `plant_signals` on each cluster; provider and internal reports carry the provenance line, and case notes a *Plant review* section ([methodology](../methodology.md#provenance-and-plant-review)).
 
 ## FM-5.12 Interaction edges
@@ -118,3 +122,25 @@ An interaction edge joins two runs that may have acted on each other's output, o
 Hard links can hide interaction. A shared inbox joins every record that writes to it into one cluster, so two agents reporting to one sink become one cluster and their exchange is invisible at cluster level. The standard therefore splits each run into **strands** by how its records were sent (relay route, user agent, network, header set) and compares strands, inside a cluster as well as across clusters. Two strands count as different clients only when they differ on at least two of those dimensions or their encoding style, and share no user agent, network or header set.
 
 Where a signal has a chance model it is stated with the edge: synchronized starts use the shared-pause model ([FM-6.7](06-timing.md#fm-67-shared-pauses)) over run starts and ends; role sequences and partitions draw hosts at random from the analysis's target hosts or target family. A reviewer who accepts an edge records it in the case with what the records show; until then the grouping is a fleet ([FM-1.3](01-scope.md#fm-13-groupings)). Toolkit: thresholds are in [methodology](../methodology.md#interaction-between-runs); internal and provider reports list edges under *Possible interaction (SC-T9)*, and affected-operator reports and notices never do.
+
+## FM-5.13 Cluster lifecycle and identifiers
+
+Activity moves through stages, each with its own identifier and its own bar. The stages follow how threat-intelligence teams handle uncategorised activity: a cluster is created from an anchoring characteristic, can grow, merge or break off, and "graduates" into a named group only on substantial evidence ([Mandiant](references.md#attribution-practice)).
+
+| Stage | Identifier | Who sets it | Bar to enter |
+|---|---|---|---|
+| **Cluster** (provisional) | Stable key `k-` plus 8 hex digits; a display number (`C1`) that changes between analyses. | The analysis. | Two flagged records joined by hard links ([FM-5.1](#fm-51-hard-and-soft-links)). |
+| **Candidate fleet** | None of its own; listed by its clusters' keys. | The analysis. | Soft links between clusters above a set strength ([FM-5.8](#fm-58-candidate-fleets-merge-and-split)). |
+| **Case fleet** | `fleet-<n>`, unique within one case. | The admin. | A recorded merge decision with its evidence and what would reverse it. |
+| **Named fleet** | `SCF-<n>`, unique across all cases and never reused. | The admin. | Published in a notice, or seen in two cases, with the merge evidence reviewed again. |
+| **Swarm** | The fleet's identifier, unchanged. | The admin. | Reviewed interaction evidence ([FM-1.3](01-scope.md#fm-13-groupings)). |
+
+Rules for identifiers:
+
+- **Stable from the earliest record.** A cluster key is derived from the cluster's earliest record, so later records, retries or plants cannot rename it ([FM-5.11](#fm-511-provenance-and-planted-records)).
+- **Merge.** When two named fleets merge, the older identifier survives and the other becomes its alias. Notices that used the alias get a dated update naming the survivor.
+- **Split.** When a fleet splits, the part holding the earliest record keeps the identifier and the other part takes a new one. Both decisions are logged with the links that changed.
+- **Never reused.** A withdrawn or merged identifier is retired, never given to new activity.
+- **Neutral names.** A fleet identifier carries no provider, model, country or organisation name. A name is not an attribution, and a neutral one cannot become a false one when the attribution changes.
+
+Moving back is allowed at every stage: a swarm whose interaction record is withdrawn is a fleet again, and a named fleet whose merge evidence fails review is split, with the reason logged. Toolkit: cluster keys, candidate fleets, case fleets (`case fleet merge`, `case fleet split`) and swarm records are built ([cases](../reference/cases.md#swarms)). Named fleets, aliases and cross-case identifiers are (planned); until then a notice refers to a fleet by its case and `fleet-<n>`.
