@@ -388,7 +388,13 @@ fn chain_pace_is_not_read_from_capture_times() {
         .iter()
         .map(|&(dt, q)| Observation {
             ts_kind: kind,
-            ..o(t + dt, &format!("https://portal.example.gov/item{q}"))
+            // A shared run tag keeps the records in one cluster even on
+            // capture times, which no longer hard-link a chain (FM-5.4), so
+            // the chain still shows as a hint with its pace unread.
+            ..o(
+                t + dt,
+                &format!("https://portal.example.gov/item{q}&uqtag=pacez"),
+            )
         })
         .collect();
         analyze(obs, &Rules::default_rules())
@@ -408,9 +414,10 @@ fn chain_pace_is_not_read_from_capture_times() {
 
 #[test]
 fn weak_rules_across_members_do_not_raise_a_cluster() {
-    // One inbox; each record adds a different context rule. Summed over
-    // distinct rules this reaches the significant threshold; no member
-    // does, and context kinds corroborate nothing.
+    // One inbox; each record adds a different context rule. A naive sum over
+    // the distinct rules would reach the significant threshold, but the
+    // context cap holds the context kinds together to one below suggestive,
+    // so the cluster score stays below significant and no member reaches it.
     let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
     let obs = vec![
         o(1000, &format!("https://a.example/x?hook={inbox}&_=1")),
@@ -426,7 +433,11 @@ fn weak_rules_across_members_do_not_raise_a_cluster() {
     let a = analyze(obs, &Rules::default_rules());
     assert_eq!(a.clusters.len(), 1);
     let c = &a.clusters[0];
-    assert!(c.score >= 6, "{}", c.score);
+    assert!(
+        c.score < 6,
+        "context cap should hold this below significant: {}",
+        c.score
+    );
     assert!(
         a.results.iter().all(|r| r.tier == Tier::Suggestive),
         "{:?}",

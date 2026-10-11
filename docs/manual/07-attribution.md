@@ -151,7 +151,7 @@ A verified signature shows that the request was signed with a key the signer pub
 
 Passivity limits verification. The `Signature-Agent` URI comes from a request, and a practitioner **must not** fetch it ([FM-2.1](02-principles.md#fm-21-passive-only)): it is an address the agent supplied. Keys are checked only against directories the practitioner already holds from the signer's own documentation, fetched from the address that documentation gives. Public records rarely carry request headers ([FM-3.6](03-sources.md#fm-36-known-source-biases)), so in practice this evidence comes from operator-supplied logs ([FM-10.7](10-disclosure.md#fm-107-operator-supplied-logs)).
 
-Toolkit: (planned). No rule reads signature headers today, and no directory of signing keys is kept.
+Toolkit: `selfid.signature_agent` reads the `Signature-Agent` and `Signature-Input` headers as attribution evidence (never fetching the key directory), and `header.agent_ua` flags a known agent product in the user agent, a counter-signal where that product signs its requests. No directory of signing keys is kept, so a signature is not verified.
 
 ## FM-7.12 Competing hypotheses
 

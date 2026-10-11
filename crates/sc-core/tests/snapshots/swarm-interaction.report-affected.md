@@ -30,7 +30,7 @@ Public scan and archive records show automated agents sending requests to system
 
 Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed), tag (Observed, Documented, Inference, Conclusion) and the strongest evidence it rests on. A developer is named only on evidence at least as strong as: identifiers shared with a confirmed incident. Harness and model-family candidates are never named in public.
 
-- **Amazon AWS** (hosting network). 8 record(s) sent from AS16509; 3 record(s) sent from AS16509; 5 record(s) sent from AS16509. Label: Suspected; tag: Observed. A host is not necessarily the developer.
+- **Amazon AWS** (hosting network). 3 record(s) sent from AS16509; 8 record(s) sent from AS16509; 5 record(s) sent from AS16509. Label: Suspected; tag: Observed. A host is not necessarily the developer.
 - **DigitalOcean** (hosting network). 3 record(s) sent from AS14061; 5 record(s) sent from AS14061. Label: Suspected; tag: Observed. A host is not necessarily the developer.
 
 **Harness and framework candidates** (ranked; never named as the source in public):
@@ -56,6 +56,12 @@ Every flagged request to each host, including requests outside the linked cluste
 | `support[.]utility-portal[.]example` | 2 | 2026-03-12 16:04:00 UTC | 2026-03-12 16:34:00 UTC | ongoing | `exploit.sqli_boolean` |
 | `b0[.]permits-office[.]example` | 1 | 2026-03-05 14:26:30 UTC | 2026-03-05 14:26:30 UTC | historical | `exploit.sqli_boolean` |
 | `b1[.]permits-office[.]example` | 1 | 2026-03-05 14:27:30 UTC | 2026-03-05 14:27:30 UTC | historical | `exploit.sqli_boolean` |
+| `p0[.]transit-authority[.]example` | 1 | 2026-03-09 09:00:00 UTC | 2026-03-09 09:00:00 UTC | ongoing | none seen |
+| `p1[.]transit-authority[.]example` | 1 | 2026-03-09 09:02:00 UTC | 2026-03-09 09:02:00 UTC | ongoing | none seen |
+| `p2[.]transit-authority[.]example` | 1 | 2026-03-09 09:04:00 UTC | 2026-03-09 09:04:00 UTC | ongoing | none seen |
+| `q0[.]transit-authority[.]example` | 1 | 2026-03-09 09:01:00 UTC | 2026-03-09 09:01:00 UTC | ongoing | none seen |
+| `q1[.]transit-authority[.]example` | 1 | 2026-03-09 09:03:00 UTC | 2026-03-09 09:03:00 UTC | ongoing | none seen |
+| `q2[.]transit-authority[.]example` | 1 | 2026-03-09 09:05:00 UTC | 2026-03-09 09:05:00 UTC | ongoing | none seen |
 | `gist[.]github[.]com` | 3 | 2026-03-05 14:00:00 UTC | 2026-03-05 14:02:00 UTC | historical | none seen |
 | `gist[.]githubusercontent[.]com` | 1 | 2026-03-05 14:25:00 UTC | 2026-03-05 14:25:00 UTC | historical | none seen |
 | `h0[.]county-records[.]example` | 1 | 2026-03-02 10:00:00 UTC | 2026-03-02 10:00:00 UTC | historical | none seen |
@@ -74,53 +80,47 @@ Every flagged request to each host, including requests outside the linked cluste
 | `h7[.]county-records[.]example` | 1 | 2026-03-02 10:05:50 UTC | 2026-03-02 10:05:50 UTC | historical | none seen |
 | `h8[.]county-records[.]example` | 1 | 2026-03-02 10:00:40 UTC | 2026-03-02 10:00:40 UTC | historical | none seen |
 | `h9[.]county-records[.]example` | 1 | 2026-03-02 10:01:30 UTC | 2026-03-02 10:01:30 UTC | historical | none seen |
-| `p0[.]transit-authority[.]example` | 1 | 2026-03-09 09:00:00 UTC | 2026-03-09 09:00:00 UTC | ongoing | none seen |
-| `p1[.]transit-authority[.]example` | 1 | 2026-03-09 09:02:00 UTC | 2026-03-09 09:02:00 UTC | ongoing | none seen |
-| `p2[.]transit-authority[.]example` | 1 | 2026-03-09 09:04:00 UTC | 2026-03-09 09:04:00 UTC | ongoing | none seen |
-| `q0[.]transit-authority[.]example` | 1 | 2026-03-09 09:01:00 UTC | 2026-03-09 09:01:00 UTC | ongoing | none seen |
-| `q1[.]transit-authority[.]example` | 1 | 2026-03-09 09:03:00 UTC | 2026-03-09 09:03:00 UTC | ongoing | none seen |
-| `q2[.]transit-authority[.]example` | 1 | 2026-03-09 09:05:00 UTC | 2026-03-09 09:05:00 UTC | ongoing | none seen |
 
 ## Timeline
 
-- **C1** (significant) — 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
-  - linked by: `param:uqtag=shardA7`
-- **C2** (significant) — 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
-  - linked by: `param:uqtag=shardB7`
-- **C3** (significant) — 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
+- **C1** (significant) — 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
   - linked by: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
-- **C4** (significant) — 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
-  - linked by: `param:uqtag=map31z`
-- **C5** (significant) — 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
+- **C2** (significant) — 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
   - linked by: `param:uqtag=hit88q`
   - all 5 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 5 records: sqli (quote_or_1eq1 ×5). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C6** (significant) — 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
-  - linked by: `param:uqtag=scout7f`
-- **C7** (significant) — 3 records, 1 run(s), 2026-03-05 14:25:00 UTC → 2026-03-05 14:27:30 UTC, median gap 90s
+- **C3** (significant) — 3 records, 1 run(s), 2026-03-05 14:25:00 UTC → 2026-03-05 14:27:30 UTC, median gap 90s
   - linked by: `param:uqtag=exec4k`
   - payload dialect `3e4414d1` over 2 records: sqli (quote_or_1eq1 ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C4** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
+  - linked by: `param:uqtag=shardA7`
+- **C5** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
+  - linked by: `param:uqtag=shardB7`
+- **C6** (suggestive) — 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
+  - linked by: `param:uqtag=map31z`
+- **C7** (suggestive) — 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
+  - linked by: `param:uqtag=scout7f`
 
 ## Representative records
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-03-09 09:01:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q0[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
-   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
-1. 2026-03-09 09:03:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q1[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
-   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
-1. 2026-03-09 09:05:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q2[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
-   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
 1. 2026-03-05 14:26:30 UTC — `hxxps://b0[.]permits-office[.]example/item?id=1'%20OR%201=1--&uqtag=exec4k`
    - rules: exploit.sqli_boolean, marker.uq_tags, header.scripted_ua
 1. 2026-03-05 14:27:30 UTC — `hxxps://b1[.]permits-office[.]example/item?id=1'%20OR%201=1--&uqtag=exec4k`
    - rules: exploit.sqli_boolean, marker.uq_tags, header.scripted_ua
 1. 2026-03-09 09:00:00 UTC — `hxxps://p0[.]transit-authority[.]example/api/routes?uqtag=ag1x&cb=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
    - rules: exfil.webhook_site, marker.uq_tags, cache.buster, header.headless_ua
+1. 2026-03-09 09:01:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q0[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
+   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
 1. 2026-03-09 09:02:00 UTC — `hxxps://p1[.]transit-authority[.]example/api/routes?uqtag=ag1x&cb=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
    - rules: exfil.webhook_site, marker.uq_tags, cache.buster, header.headless_ua
+1. 2026-03-09 09:03:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q1[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
+   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
 1. 2026-03-09 09:04:00 UTC — `hxxps://p2[.]transit-authority[.]example/api/routes?uqtag=ag1x&cb=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
    - rules: exfil.webhook_site, marker.uq_tags, cache.buster, header.headless_ua
+1. 2026-03-09 09:05:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q2[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
+   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
 1. 2026-03-12 16:30:00 UTC — `hxxps://billing[.]utility-portal[.]example/account?id=1'%20OR%201=1--&uqtag=hit88q`
    - rules: exploit.sqli_boolean, marker.uq_tags, header.scripted_ua
 1. 2026-03-12 16:31:00 UTC — `hxxps://outage[.]utility-portal[.]example/account?id=1'%20OR%201=1--&uqtag=hit88q`

@@ -149,6 +149,11 @@ pub(super) const PASSES: &[Pass] = &[
     pass("swarm", &["number", "trim_layers"], |cx| {
         cx.a.swarm_edges = crate::swarm::swarm_edges(&cx.a.clusters, &cx.a.results, cx.rules);
     }),
+    pass(
+        "scope",
+        &["number", "escalations", "knowledge", "agent", "swarm"],
+        scope,
+    ),
     pass("summary", &["link", "timing"], summary),
 ];
 
@@ -267,6 +272,19 @@ fn plant(cx: &mut AnalysisCtx) {
     );
     for (c, p) in cx.a.clusters.iter_mut().zip(plants) {
         c.origin.plant_signals = p;
+    }
+}
+
+/// Each cluster's scope assessment (FM chapter 15).
+fn scope(cx: &mut AnalysisCtx) {
+    let a = &cx.a;
+    let scopes: Vec<crate::scope::Scope> = a
+        .clusters
+        .iter()
+        .map(|c| crate::scope::assess(c, &a.results, &a.escalations, &a.swarm_edges))
+        .collect();
+    for (c, sc) in cx.a.clusters.iter_mut().zip(scopes) {
+        c.scope = sc;
     }
 }
 

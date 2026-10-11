@@ -105,7 +105,7 @@ OWASP and ATLAS describe the agent's builder or an adversary using it. From publ
 | `fleets` | `grouping` | Event per fleet, related | Other information | Linked incidents |
 | `method`, `rules_version` | `report` external reference | Event tag | Other information | Report text |
 
-STIX patterns carry real values and MISP attributes do too; a public export or event withholds what a notice withholds ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)). Toolkit: STIX, MISP events and the AIID and OECD drafts are built ([FM-12.2](#fm-122-the-x-sc-agent-run-extension), [FM-12.3](#fm-123-ai-incident-databases)); the SC-Incident document is (planned). The export's crosswalk is the two tables, SC-FM 4.6 and this one, and a test fails when it differs from them.
+STIX patterns carry real values and MISP attributes do too; a public export or event withholds what a notice withholds ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)). Toolkit: STIX, MISP events and the AIID and OECD drafts are built ([FM-12.2](#fm-122-the-x-sc-agent-run-extension), [FM-12.3](#fm-123-ai-incident-databases)); the SC-Incident document is (planned). The crosswalk is the two tables, SC-FM 4.6 and this one, held in code as one table keyed by tactic (`sc_core::crosswalk`), so a rule's framework ids follow from its tactic; a test fails when the code differs from the tables.
 
 ## FM-12.5 Regulatory incident reports
 

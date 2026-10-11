@@ -9,7 +9,8 @@ mod hints;
 mod link;
 mod pipeline;
 
-pub(crate) use hints::{is_context_kind, relay_stack, target_text};
+pub use hints::is_context_kind;
+pub(crate) use hints::{relay_stack, target_text};
 
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::Layer;
@@ -75,8 +76,9 @@ pub struct Cluster {
     /// The strongest member's tier, raised one step only by corroboration
     /// ([`hints::cluster_tier`]).
     pub tier: Tier,
-    /// Sum of weights over the distinct rules seen anywhere in the cluster.
-    /// Descriptive: it does not set the tier.
+    /// The score of the distinct rules seen anywhere in the cluster, read
+    /// as one record's ([`crate::rules::Rules::score`]: groups once, context
+    /// capped). Descriptive: it does not set the tier.
     pub score: i32,
     pub rules: BTreeMap<String, usize>,
     pub kinds: BTreeMap<IndicatorKind, usize>,
@@ -145,6 +147,11 @@ pub struct Cluster {
     /// ([`crate::agentness`]). Descriptive: never scored, never linked on.
     #[serde(default)]
     pub agent: crate::agentness::AgentAssessment,
+    /// Whether the activity went beyond its evident task, and the FM-15.3
+    /// tests that decide it ([`crate::scope`]). Inference for review: never
+    /// scored, never linked on.
+    #[serde(default, skip_serializing_if = "crate::scope::Scope::is_default")]
+    pub scope: crate::scope::Scope,
 }
 
 /// What the members' targets say about the agent's knowledge

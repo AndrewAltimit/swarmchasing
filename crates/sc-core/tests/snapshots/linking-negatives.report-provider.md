@@ -39,11 +39,13 @@ A person or a conventional scanner sending the same payloads through the same se
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=pl4nt1`
   - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class data retrieval; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C2** (significant) — 2 records, 1 run(s), 2026-09-03 09:00:00 UTC → 2026-09-03 09:02:00 UTC, median gap 2m
   - linked by: `param:run=pb7781`
   - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class data retrieval; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`hexU.unsorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `804cd67a` over 2 records: traversal (depth4 ×2, etc_passwd ×1); first seen traversal.depth4 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 

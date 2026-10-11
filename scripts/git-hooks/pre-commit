@@ -85,6 +85,14 @@ if grep -qE '^(notices|rules)/' <<<"$STAGED"; then
     fi
 fi
 
+if grep -qE '^(rules|schemas)/' <<<"$STAGED"; then
+    printf '[pre-commit] rules schema check\n'
+    if ! "$PY" scripts/ci/check-rules-schema.py; then
+        printf '[pre-commit] rules/default.toml does not validate against schemas/sc-rules-v1.json (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+fi
+
 if grep -q '^notices/' <<<"$STAGED"; then
     printf '[pre-commit] notice lint\n'
     if ! cargo run -q --profile release-test -p swarmchase -- notice lint; then

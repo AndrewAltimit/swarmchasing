@@ -80,10 +80,6 @@ Every flagged request to each host, including requests outside the linked cluste
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-05-15 22:05:07 UTC — `hxxps://files[.]depot[.]example/index.php?page=..%2F..%2F..%2F..%2Fetc%2Fpasswd`
-   - rules: exploit.traversal, exploit.traversal_single
-1. 2026-05-15 22:05:07 UTC — `hxxps://files[.]depot[.]example/index.php?page=..%2F..%2F..%2F..%2Fwindows%2Fwin.ini`
-   - rules: exploit.traversal, exploit.traversal_single
 1. 2026-05-12 10:15:00 UTC — `hxxps://shop[.]bakery[.]example/search?q=%3Cscript%3Ealert(1)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-13 16:40:00 UTC — `hxxps://login[.]coop[.]example/account/login?user=admin%27--&pass=YOUR_PASSWORD`
@@ -99,6 +95,10 @@ URLs are defanged. Records are listed by evidence strength.
 1. 2026-05-16 09:30:03 UTC — `hxxps://intranet[.]lab[.]example/profile?name=alice%3Cscript%3Ealert(1)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-11 14:05:03 UTC — `hxxps://portal[.]clinic[.]example/patients/search?name=smith%27%20UNION%20SELECT%20NULL--`
+   - rules: exploit.sqli_union
+1. 2026-05-11 14:06:05 UTC — `hxxps://portal[.]clinic[.]example/patients/search?name=smith%27%20UNION%20SELECT%20NULL,NULL--`
+   - rules: exploit.sqli_union
+1. 2026-05-11 14:07:35 UTC — `hxxps://portal[.]clinic[.]example/patients/search?name=smith%27%20UNION%20SELECT%20name,dob%20FROM%20patients--`
    - rules: exploit.sqli_union
 
 ## Method and limitations

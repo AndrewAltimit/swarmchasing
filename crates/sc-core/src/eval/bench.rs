@@ -108,11 +108,7 @@ pub fn build(a: &Analysis, labels: &LabelSet, meta: &BenchMeta) -> Bench {
         let host = r
             .target_host
             .clone()
-            .or_else(|| {
-                url::Url::parse(&r.obs.url)
-                    .ok()
-                    .and_then(|u| u.host_str().map(str::to_string))
-            })
+            .or_else(|| crate::weburl::WebUrl::parse(&r.obs.url).and_then(|u| u.host))
             .map(|h| crate::extract::defang_host(&h));
         let mut fired: Vec<String> = r.hits.iter().map(|h| h.rule_id.clone()).collect();
         crate::sort::sort(&mut fired);
