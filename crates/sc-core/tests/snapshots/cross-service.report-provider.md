@@ -47,6 +47,7 @@ A person or a conventional scanner sending the same payloads through the same se
   - linked by: `param:uqtag=xsvA41`
   - provenance: submit-anywhere 8 · single source: anyone can submit or publish such records, so they show that someone did, not who
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
+  - cross-service fan-out: 4 target(s) on 8 records went to several scan services (urlquery ×4, urlscan ×4), each within 11s of its first submission; 0 ordinary link(s) on other hosts were fanned out alike around it; an agent's tool loop or a script sending each URL to every service does this, and so does a mail gateway (a hint, not evidence)
   - all 8 records share one URL encoding style (`sp20.unsorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 8 records: sqli (quote_or_1eq1 ×8). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C2** (significant): 6 records, 1 run(s), 2026-09-20 12:00:00 UTC → 2026-09-20 12:02:03 UTC, median gap 3s
@@ -55,6 +56,7 @@ A person or a conventional scanner sending the same payloads through the same se
   - linked by: `param:uqtag=gwP7q2`
   - provenance: submit-anywhere 6 · single source: anyone can submit or publish such records, so they show that someone did, not who
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
+  - cross-service fan-out: 3 target(s) on 6 records went to several scan services (urlquery ×3, urlscan ×3), each within 3s of its first submission; 5 ordinary link(s) on other hosts were fanned out alike around it, which marks an auto-submitter (a mail gateway or security product submitting every link it sees): whoever sent the links made these records (a hint, not evidence)
   - all 6 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 6 records: sqli (quote_or_1eq1 ×6). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C3** (significant): 2 records, 1 run(s), 2026-09-20 11:00:00 UTC → 2026-09-20 11:04:00 UTC, median gap 4m
