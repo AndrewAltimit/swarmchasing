@@ -13,6 +13,7 @@ Each record is an ordinary record plus label fields:
 | `cite` | every record | Where the pattern comes from, or `synthetic: ...`. |
 | `run` | optional | The true run the record belongs to. Scored by the [cluster-level evaluation](../../docs/reference/evaluation.md#cluster-level-evaluation). |
 | `hard_negative_for` | benign, optional | Rule ids the record was written to resemble and must not be flagged for. |
+| `actor` | optional | Who sent it: `agent`, `human` or `tool`, for the [agent grade table](../../docs/reference/evaluation.md#agent-grades-by-actor). A record with an `actor` and no `label` is graded, not scored. |
 
 Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), and `scanner` (security scanners). False positives are reported per benign class.
 
@@ -42,6 +43,13 @@ The rules were tuned on this set, so it is a **regression floor, not a precision
 ## `rule-coverage.ndjson`
 
 Synthetic records that give every rule at least one labelled positive, and the significant and link rules hard negatives: benign records that look alike and must not fire. Each is marked `"synthetic": true`, uses reserved `.example` hosts (or the public service the rule names), and was written by hand. Payloads are the canonical textbook test strings. Benign records name the rule they guard in `hard_negative_for`, and records from one synthetic run share a `run` id.
+
+## `actor-controls.ndjson`
+
+Synthetic runs sent by people and conventional tools, for the agent grade. Each carries `actor` (`human` or `tool`) and no `label`, so detection does not score it: the rules flag their payloads by design. Each is marked `"synthetic": true`, uses reserved `.example` hosts, and was written by hand from tools' documented defaults and textbook payloads.
+
+- **Human**: SQL injection stepped through by hand in an intercepting proxy's repeater, a minute apart with retries after errors; textbook XSS typed into a search box minutes apart; and a person pasting a chatbot's login-bypass payloads, placeholder unfilled, retrying after errors. The last reaches L3, the grade's known limit.
+- **Tool**: an SQL injection tool with its default user agent at tool pace; a template scanner sending two templates per second against one parameter (fixed fan-out); a proxy's active scanner working through its insertion points whatever each response.
 
 ## `linking-negatives.ndjson`
 

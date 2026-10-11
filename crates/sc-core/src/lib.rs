@@ -3,6 +3,7 @@
 //! No I/O, no clock, no threads, so the same code runs in the CLI, on CI, and
 //! in the browser via `sc-wasm`.
 
+pub mod agentness;
 pub mod analyze;
 pub mod asn;
 pub mod attribution;
@@ -35,6 +36,7 @@ pub mod stamp;
 pub mod timing;
 pub mod urlquery;
 
+pub use agentness::{AgentAssessment, AgentLevel, AgentSignal, GradeDecision};
 pub use analyze::{Analysis, Cluster, ObsResult, analyze};
 pub use attribution::{AttributionLabel, Claim, Evidence, Role, Tag, attribute};
 pub use bursts::{ArchiveBurst, archive_bursts};

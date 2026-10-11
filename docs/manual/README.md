@@ -38,9 +38,9 @@ The manual describes the method as a standard. Where this repository's toolkit d
 | [4. Indicators](04-indicators.md) | Rule anatomy, the SC-T tactics, artifact families, ATLAS and ATT&CK cross-walk, rule-writing standard. |
 | [5. Linking](05-linking.md) | Hard links, soft links, candidate fleets, merge and split, escalation sequences, reruns. |
 | [6. Timing and concurrency](06-timing.md) | Timestamp kinds, cadence, bursts, rhythm, clock offset, stale dates, shared pauses. |
-| [7. Attribution](07-attribution.md) | Four attribution layers, the evidence ladder, claim tags, labels, the naming gate, false flags. |
+| [7. Attribution](07-attribution.md) | Four attribution layers, the evidence ladder, claim tags, labels, the naming gate, false flags, agent likelihood. |
 | [8. Confidence language](08-confidence.md) | The words-to-probability table every report uses. |
-| [9. Evaluation](09-evaluation.md) | Evaluation sets, metrics, agreement, what to publish with a number, benchmarks. |
+| [9. Evaluation](09-evaluation.md) | Evaluation sets, metrics, agreement, what to publish with a number, benchmarks, agent-grade evaluation. |
 | [10. Disclosure](10-disclosure.md) | Parties, simultaneous release, relation to ISO/IEC and FIRST guidance, reply, consent. |
 | [11. Notice standard](11-notices.md) | Notice structure, status lifecycle, withholding, lint, corrections. |
 | [12. Interoperability](12-interoperability.md) | STIX 2.1 profile, the `x-sc-agent-run` extension, AI incident databases. |

@@ -138,6 +138,10 @@ pub struct Cluster {
     /// never scored, never linked on, never in a public notice.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plant_signals: Vec<crate::plant::PlantSignal>,
+    /// How likely an agent, not a person or a tool, sent the requests
+    /// ([`crate::agentness`]). Descriptive: never scored, never linked on.
+    #[serde(default)]
+    pub agent: crate::agentness::AgentAssessment,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -289,6 +293,9 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         crate::plant::plant_signals(&results, &clusters, &escalations, &common_features, cfg);
     for (c, p) in clusters.iter_mut().zip(plants) {
         c.plant_signals = p;
+    }
+    for c in clusters.iter_mut() {
+        c.agent = crate::agentness::assess(c, &results, &chains, &escalations, &rules.set.chains);
     }
 
     let mut tier_counts = BTreeMap::new();

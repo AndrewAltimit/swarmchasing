@@ -24,13 +24,15 @@
 //!
 //! [`model`] is what `case.toml` holds, [`cli`] the subcommands, [`select`]
 //! picks records, [`status`] shows a case, [`fleet`] records the admin's
-//! fleet merges and splits, [`report`] drafts reports and
+//! fleet merges and splits, [`grade`] shows agent grades and records the
+//! admin's, [`report`] drafts reports and
 //! e-mail drafts, and [`indicators`] is what the watch matches new records
 //! against. Contacts, operator evidence and the notice draft are in
 //! [`crate::contacts`], [`crate::evidence`] and [`crate::notice`].
 
 mod cli;
 pub(crate) mod fleet;
+mod grade;
 pub(crate) mod incident;
 mod indicators;
 mod model;
@@ -205,6 +207,7 @@ pub(crate) fn new_case(
         sent: Vec::new(),
         evidence: Vec::new(),
         fleets: Vec::new(),
+        agent_grade: None,
     };
     c.add_endpoints(&a);
     c.log(

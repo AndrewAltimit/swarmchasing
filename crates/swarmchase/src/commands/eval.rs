@@ -65,6 +65,33 @@ pub struct EvalArgs {
     /// Do not score the listed ids (score the tuning side of a split).
     #[arg(long)]
     exclude_ids: Option<PathBuf>,
+    /// Negative control: grade only records timestamped before this date
+    /// (YYYY-MM-DD), all as one row, and exit. Labels are not needed and
+    /// no floor is checked.
+    #[arg(long)]
+    before: Option<chrono::NaiveDate>,
+}
+
+/// `--before`: the agent grades of records from before `date`, which no
+/// agent of the kind looked for can have sent.
+fn control(args: &EvalArgs, date: chrono::NaiveDate) -> Result<()> {
+    let cutoff = date
+        .and_hms_opt(0, 0, 0)
+        .map_or(0, |t| t.and_utc().timestamp());
+    let mut records = read_records(&args.input)?;
+    let all = records.len();
+    records.retain(|o| o.ts > 0 && o.ts < cutoff);
+    let a = sc_core::analyze(records, &load_rules(args.input.rules.as_deref())?);
+    println!(
+        "negative control: {} of {all} records before {date} · {} flagged · {} clusters",
+        a.total,
+        a.flagged,
+        a.clusters.len()
+    );
+    let row = format!("before {date}");
+    let t = sc_core::eval::grades::grade_table(&a, &Default::default(), Some(&row));
+    eval::print_grades(&t, "control");
+    Ok(())
 }
 
 fn read_ids(p: &Path) -> Result<Vec<String>> {
@@ -74,6 +101,9 @@ fn read_ids(p: &Path) -> Result<Vec<String>> {
 }
 
 pub fn run(args: EvalArgs) -> Result<()> {
+    if let Some(d) = args.before {
+        return control(&args, d);
+    }
     let mut l = eval::load_labels(&args.labels, &args.input.input)?;
     let only = args.only_ids.as_deref().map(read_ids).transpose()?;
     let exclude = args.exclude_ids.as_deref().map(read_ids).transpose()?;

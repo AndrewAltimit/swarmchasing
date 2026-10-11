@@ -9,6 +9,7 @@ Each term links to the section that defines it.
 | Admin | The person who decides, sends and publishes. | [FM-1.4](01-scope.md#fm-14-casework-terms), [FM-2.4](02-principles.md#fm-24-admin-gate) |
 | Affected operator | The organisation running a targeted host. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
 | Agent | A system in which a model chooses actions toward a goal. | [FM-1.2](01-scope.md#fm-12-units-of-observation) |
+| Agent grade | How likely an agent, not a person or a tool, sent a cluster's requests: L0 to L5. | [FM-7.10](07-attribution.md#fm-710-agent-likelihood) |
 | Artifact family | A class of build traces, such as model-output residue. | [FM-4.5](04-indicators.md#fm-45-artifact-families) |
 | Attribution label | Confirmed, Suspected, Possible or Unattributed. | [FM-7.7](07-attribution.md#fm-77-attribution-labels) |
 | Attribution layer | Developer and operator, hosting, harness, model family. | [FM-7.1](07-attribution.md#fm-71-four-layers) |

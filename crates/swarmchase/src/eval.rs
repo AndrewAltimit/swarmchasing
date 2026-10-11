@@ -9,6 +9,7 @@
 
 use anyhow::{Context, Result, bail};
 use sc_core::eval::coverage::{AllowList, Coverage, coverage_failures};
+use sc_core::eval::grades::{COLUMNS, GradeTable};
 use sc_core::eval::stats::Proportion;
 use sc_core::eval::summary::Summary;
 use sc_core::eval::{EvalReport, LabelSet, Threshold};
@@ -57,6 +58,7 @@ pub fn load_labels(labels: &[PathBuf], inputs: &[PathBuf]) -> Result<LabelSet> {
         }
         all.skipped += l.skipped;
         all.labels.extend(l.labels);
+        all.actors.extend(l.actors);
     }
     if all.labels.is_empty() {
         bail!(
@@ -76,10 +78,12 @@ pub fn restrict(labels: &mut LabelSet, only: Option<&[String]>, exclude: Option<
     if let Some(only) = only {
         let keep: std::collections::HashSet<&str> = only.iter().map(String::as_str).collect();
         labels.labels.retain(|k, _| keep.contains(k.as_str()));
+        labels.actors.retain(|k, _| keep.contains(k.as_str()));
     }
     if let Some(ex) = exclude {
         for id in ex {
             labels.labels.remove(id);
+            labels.actors.remove(id);
         }
     }
 }
@@ -194,6 +198,7 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
         );
     }
     print_clusters(s);
+    print_grades(&r.grades, "actor");
     println!(
         "\ncoverage: {}/{} rules have a positive · {} allow-listed · {} uncovered · {} with hard negatives",
         s.coverage.covered,
@@ -254,6 +259,27 @@ fn print_clusters(s: &Summary) {
     }
     if !c.false_splits.is_empty() {
         println!("  split runs: {}", c.false_splits.join(", "));
+    }
+}
+
+/// The agent-grade confusion table: rows by actor (or the control), columns
+/// by grade. Report only.
+pub fn print_grades(t: &GradeTable, rows: &str) {
+    if t.is_empty() {
+        return;
+    }
+    println!("\nagent grade by {rows} (report only, not gated; records, graded by their cluster)");
+    print!("  {:<22}", rows);
+    for c in COLUMNS {
+        print!(" {c:>11}");
+    }
+    println!();
+    for (name, cols) in &t.rows {
+        print!("  {name:<22}");
+        for c in COLUMNS {
+            print!(" {:>11}", cols.get(c).copied().unwrap_or(0));
+        }
+        println!();
     }
 }
 

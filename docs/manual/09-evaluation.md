@@ -105,3 +105,14 @@ A published benchmark contains:
 - the split assignment (tuning or held-out) and the freeze date.
 
 It never contains a source's content where the source's terms forbid redistribution ([FM-3.4](03-sources.md#fm-34-terms-of-use)), captured secrets, or operator-supplied logs. Users fetch records themselves, under the source's terms.
+
+## FM-9.11 Agent-grade evaluation
+
+The agent-likelihood grade ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)) is measured against who really sent the records, not against detection labels:
+
+- label each record's **actor**: agent, human or tool;
+- report a confusion table of actor by grade, by record and by cluster;
+- include hard negatives for the grade: human-pentest runs (hand-typed payloads, repeater pace, retries) and scanner runs (tool defaults, tool pace, fan-out);
+- run a **negative control**: the grade over records captured before capable agents existed, none of which an agent sent. Any grade of L2 or above there is a false grade; archive captures stop at L2, so such a control measures the model-written rung.
+
+A grade is not quoted as performance until a held-out measurement exists ([FM-9.1](#fm-91-three-kinds-of-evaluation)). Toolkit: records may carry `actor`; `eval` prints the table by record, and `eval --before <date>` runs the control over local records ([evaluation](../reference/evaluation.md#agent-grades-by-actor)). Neither is gated.

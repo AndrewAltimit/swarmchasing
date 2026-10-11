@@ -254,6 +254,33 @@ Levels 1 and 2 come from the records. Levels 3 to 5 come from case work and are 
 
 Reports list each claim with its layer, label and tag, and add a Conclusion line for each developer named through the gate, with the strongest likelihood word its label allows. Harness and model-family candidates appear ranked in private reports and never in public. A model-family claim needs the method's held-out accuracy and corpus size, or it is refused.
 
+## Agent likelihood
+
+A tier says attack payloads were present. It does not say an AI agent sent them: a penetration tester or a conventional scanner sending the same payloads through the same relays leaves the same records. [`agentness.rs`](../crates/sc-core/src/agentness.rs) grades each cluster on a separate ladder ([FM-7.10](manual/07-attribution.md#fm-710-agent-likelihood)). The grade is set by the strongest **combination** of signals the cluster shows, never by a sum: many weak signals of one rung do not reach the next.
+
+| Grade | Name | Needs |
+|---|---|---|
+| L0 | payloads only | Nothing beyond the rules' hits. |
+| L1 | self-described | A vendor or model name (`self_id` rules), or an agent test tag (`marker.uq_tags`, `marker.test_tag`, `marker.oai_tag`). Anyone can write either, so reports word it like L0. |
+| L2 | model-written | One of: residue (any other artifact rule of kind `agent_marker`), prose, fabricated identifiers, repeated cut lengths, stale knowledge, a stale-date pattern. |
+| L3 | adaptive | L2, and a retry after an error, a route escalation, or a probe chain at model pace. |
+| L4 | agent likely | L3, and retries at tool pace (faster than a person reads), a fixed fan-out width, or a round-the-clock rhythm. |
+| L5 | documented | Never computed. Only the admin's case decision sets it (`case grade`). |
+
+Prose counts when a cluster has at least two prose values, or one in a language other than its target's country domain: one search in plain words is ordinary. Adaptive and pace signals are read only from probe chains and escalations timed by request or submit times; a chain or escalation timed by captures is skipped, as for pace ([timing](#timing)).
+
+**Caps.** Some evidence holds a grade down:
+
+- a cluster whose timestamps are all archive captures stops at L2, because pace, retries and rhythm cannot be read from captures;
+- a working-hours rhythm with slow pace (no probe chain faster than slow pace, and a median gap above `chains.model_pace_max_secs`) stops at L2: possibly a person working with a model's help;
+- any other working-hours rhythm stops at L3, since an unattended fleet need not keep office hours.
+
+**Counter-signals** are listed beside the signals and never move the grade: declared testing, benchmark or practice targets, and a probe chain at tool pace with no change after errors, which is how a scanner runs its list. A working-hours rhythm is listed as a counter-signal too, besides capping.
+
+The grade is descriptive. It changes no score, tier or link, and it has no held-out measurement. Internal and provider reports carry a section, *Why we think this is an agent*, listing each cluster's grade, signals, counter-signals and caps, and the case decision when there is one. A provider report leaves out the decision's basis and the declared-testing counter-signal, which stay in case notes like the declaration itself. Reports to affected operators carry none of it. A public notice never prints a grade: when the strongest grade (or the case decision) is L1 or below, its summary adds that the payloads alone do not show what sent them.
+
+`swarmchase eval` prints the grade against each record's actor ([evaluation](reference/evaluation.md#agent-grades-by-actor)). The committed set's synthetic controls show the ladder's known limit: a person pasting a chatbot's payloads into an intercepting proxy, and retrying after errors, reaches L3.
+
 ## Evaluation
 
 `swarmchase eval` scores the rules against labelled records ([`eval.rs`](../crates/sc-core/src/eval.rs)). It reports precision and recall at the significant tier and at suggestive-or-above, precision per rule with its hard negatives, recall per class of activity and per tactic, and false positives per benign class. Every proportion carries a 95% Wilson interval. Records labelled with their true run also measure linking: B-cubed precision and recall, false merges and split runs, reported but not gated. Two reviewers' labels give Cohen's κ (`review --stats`). Details are in [evaluation](reference/evaluation.md). With no embargo, a false positive is published the moment the admin acts on it, so precision matters most.
@@ -274,7 +301,7 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **Archive timestamps.** A Wayback or Arquivo timestamp is when the archive captured the URL. That may be the agent's own request or a later crawl of a link to it. Cadence on archive records describes captures, not necessarily the agent, and pace, fan-out and rhythm skip them.
 
-**Humans look the same.** The rules detect agent-like activity. A security researcher, a penetration tester or a conventional scanner sending the same payloads through the same services produces the same records. A significant tier means attack payloads were present, not that an AI agent sent them. Context, rhythm, residue and case work separate the two.
+**Humans look the same.** The rules detect agent-like activity. A security researcher, a penetration tester or a conventional scanner sending the same payloads through the same services produces the same records. A significant tier means attack payloads were present, not that an AI agent sent them. Context, rhythm, residue and case work separate the two; the [agent grade](#agent-likelihood) states which of them a cluster shows.
 
 **Model-output residue from people.** A person who pastes a chatbot answer into a scan form leaves the same Markdown, placeholders and JSON. This is why residue rules carry low weights and never link.
 

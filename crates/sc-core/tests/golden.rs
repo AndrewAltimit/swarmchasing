@@ -33,7 +33,9 @@ fn evaluation_set_numbers_hold() {
     let text = eval_set();
     let rules = Rules::default_rules();
     let mut labels = LabelSet::default();
-    labels.labels.extend(parse_labels(&text).labels);
+    let parsed_labels = parse_labels(&text);
+    labels.labels.extend(parsed_labels.labels);
+    labels.actors.extend(parsed_labels.actors);
     let parsed = parse_input(&text, Format::Ndjson, &FieldMap::default());
     let a = analyze(parsed.observations, &rules);
     let report = evaluate(&a, &labels);
@@ -54,13 +56,27 @@ fn evaluation_set_numbers_hold() {
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 156);
+    assert_eq!(a.total, 193);
     assert_eq!(
         tiers,
-        [83, 40, 33],
+        [86, 42, 65],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 18, "clusters");
+    assert_eq!(a.clusters.len(), 24, "clusters");
+
+    // Agent grades by actor: no scanner run and no hand-typed pentest grades
+    // above L0; a person pasting chatbot payloads reaches L3, the grade's
+    // documented limit.
+    let g = &report.grades.rows;
+    let above = |actor: &str, from: usize| -> usize {
+        sc_core::eval::grades::COLUMNS[from..]
+            .iter()
+            .map(|c| g[actor].get(*c).copied().unwrap_or(0))
+            .sum()
+    };
+    assert_eq!(above("tool", 3), 0, "tool runs above L0: {g:?}");
+    assert_eq!(g["human"].get("L3"), Some(&4), "{g:?}");
+    assert_eq!(above("human", 6), 0, "human runs at L4: {g:?}");
 
     // Every benign record says what kind of traffic it is.
     assert!(

@@ -11,9 +11,10 @@ How the rules are measured, and how CI stops a rules change that costs precision
 - the false-positive rate per benign class;
 - precision per rule, with its hard negatives;
 - linking against labelled runs ([cluster-level evaluation](#cluster-level-evaluation));
+- agent grades against each record's actor ([agent grades by actor](#agent-grades-by-actor));
 - rule coverage, in one line, or per rule with `--coverage`.
 
-Labels come from a `label` field on each record (`agent` or `benign`), or from `--labels` files (NDJSON or CSV, including Transluce's `reports.csv`). Later `--labels` files override earlier ones. The other label fields (`class`, `run`, `hard_negative_for`) are described in [samples/eval/README.md](../../samples/eval/README.md#record-fields).
+Labels come from a `label` field on each record (`agent` or `benign`), or from `--labels` files (NDJSON or CSV, including Transluce's `reports.csv`). Later `--labels` files override earlier ones. The other label fields (`class`, `run`, `hard_negative_for`, `actor`) are described in [samples/eval/README.md](../../samples/eval/README.md#record-fields).
 
 The unit is the record, not the cluster: a cluster of ten flagged records counts ten times.
 
@@ -32,6 +33,7 @@ swarmchase eval <data>/labels/reviewed.ndjson       # everything reviewed so far
 | `--save-result <file>` | Write a [saved result](#saved-results). |
 | `--split time\|cluster`, `--seed`, `--fraction`, `--split-out` | Write a frozen held-out id list and exit ([splits](#frozen-splits)). |
 | `--only-ids <file>`, `--exclude-ids <file>` | Score only the listed ids, or all but them. |
+| `--before <date>` | Grade only records timestamped before the date, as a [negative control](#negative-control), and exit. |
 
 ## Statistics
 
@@ -61,6 +63,22 @@ Records labelled with `run` measure linking. The numbers are reported, never gat
 - **B-cubed precision, recall and F1**, over run-labelled records only. A record's predicted group is its cluster, or the record alone when it is in none.
 - **False merges**: clusters whose labelled members span two or more runs, or mix agent and benign records. Each is listed by cluster key with the runs it joins.
 - **Split runs**: runs whose records sit in more than one predicted group. An agent record no rule fired on is never clustered, so a run with a missed record always shows as split.
+
+## Agent grades by actor
+
+The agent grade ([methodology](../methodology.md#agent-likelihood)) is measured against who really sent each record. A record's `actor` field says: `agent`, `human` or `tool`. An agent-labelled record without one counts as `agent`; a benign record without one is left out of the table. `eval` prints actor by grade, one count per record: `unflagged` (no rule fired), `unclustered` (flagged, in no cluster) and the grade of the record's cluster, `L0` to `L4`. L5 is never computed, so it has no column. The table is reported, never gated; its JSON is `grades.rows` in `--json`.
+
+A record with an `actor` and no `label` is graded but not scored for detection. A person's attack payloads are flagged by design ([known limits](../methodology.md#known-limits-and-false-positive-traps)): scoring them as benign would measure that limit, not the rules. The committed set's controls are of this kind ([samples/eval/README.md](../../samples/eval/README.md#actor-controlsndjson)).
+
+### Negative control
+
+No agent of the kind this toolkit looks for sent a request before late 2022. `--before <date>` grades only records timestamped before the date, all as one row, with no labels and no floors:
+
+```sh
+swarmchase eval <data>/store/wayback.ndjson <data>/cases/<id>/raw/records.ndjson --before 2022-11-30
+```
+
+Any cluster at L2 or above is a false grade. Old records are mostly archive captures, which stop at L2, so the control measures how often the model-written rung fires on pre-agent traffic. Run it on local data only: the records and the table stay in the data directory and are never committed.
 
 ## Frozen splits
 

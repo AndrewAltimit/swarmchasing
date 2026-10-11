@@ -234,6 +234,7 @@ pub(super) fn cluster(
         provenance,
         corroboration,
         plant_signals: Vec::new(),
+        agent: Default::default(),
     }
 }
 

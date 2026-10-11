@@ -109,6 +109,22 @@ pub enum CaseCmd {
         #[arg(long = "detail", required = true)]
         details: Vec<String>,
     },
+    /// Show each cluster's agent grade (L0..L4) with its signals,
+    /// counter-signals and caps, or record the admin's grade for the case
+    /// with what it rests on. L5 (documented: operator logs matching a
+    /// harness, a provider's confirmation) is set only here.
+    Grade {
+        id: String,
+        /// L0..L5, or a name such as `model_written` or `documented`. Omit to
+        /// show the grades.
+        level: Option<sc_core::AgentLevel>,
+        /// What the decision rests on, with links. Required with a level.
+        #[arg(long)]
+        note: Option<String>,
+        /// Remove the decision.
+        #[arg(long, conflicts_with = "level")]
+        clear: bool,
+    },
     /// Change the case or notice status, or the naming threshold.
     Set {
         id: String,
@@ -542,6 +558,12 @@ pub fn run(args: CaseArgs) -> Result<()> {
             c.claims.push(claim);
             Ok(())
         }),
+        CaseCmd::Grade {
+            id,
+            level,
+            note,
+            clear,
+        } => super::grade::grade(&root, &id, level, note.as_deref(), clear, &today, &mut out),
         CaseCmd::Set {
             id,
             status,

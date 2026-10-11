@@ -30,7 +30,7 @@ A feature many unrelated clients share (a popular relay, a common tag value, a l
 
 ## FM-14.7 Humans look the same
 
-A security researcher, a penetration tester or a conventional scanner sending the same payloads through the same services produces the same records. A significant tier means an attack payload was present, not that an agent sent it. Residue, rhythm, escalation and casework separate the two.
+A security researcher, a penetration tester or a conventional scanner sending the same payloads through the same services produces the same records. A significant tier means an attack payload was present, not that an agent sent it. Residue, rhythm, escalation and casework separate the two, and the agent-likelihood grade states which of them a cluster shows ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)).
 
 ## FM-14.8 Model residue comes from people too
 
