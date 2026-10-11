@@ -174,7 +174,7 @@ def self_test() -> list[str]:
     expect("listed param feature", "linked by: `param:uqtag=zz9`", 0)
     expect("listed ignoring case", "linked by: `param:uqtag=ZZ9`", 0)
     expect("unlisted param feature", "linked by: `param:uqtag=yy8`", 1)
-    expect("unlisted tag in a defanged URL", "1. x — `hxxps://a[.]example/p?id=1&tag=run%2D7`", 1)
+    expect("unlisted tag in a defanged URL", "1. x: `hxxps://a[.]example/p?id=1&tag=run%2D7`", 1)
     expect("percent-encoded listed tag", "`hxxps://a[.]example/?uqtag=z%7A9`", 0)
     expect("withheld value", "`param:uqtag=[withheld]` and `hxxps://a[.]example/?uqtag=[withheld]`", 0)
     expect("non-linking param", "`param:tok=abc` and `hxxps://a[.]example/?q=abc&sid=s1`", 0)

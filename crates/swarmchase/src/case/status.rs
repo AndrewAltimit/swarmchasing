@@ -35,7 +35,7 @@ pub(crate) fn list(root: &Path, out: &mut impl Write) -> Result<()> {
 pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> {
     let c = load(root, id)?;
     let a = analysis(root, &c, &Scope::All)?;
-    writeln!(out, "# {} — {}", c.id, c.title)?;
+    writeln!(out, "# {}: {}", c.id, c.title)?;
     writeln!(
         out,
         "status {:?} · notice {:?} · opened {} · developers named at: {}",
@@ -126,7 +126,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
             .unwrap_or_default(),
             e.note
                 .as_deref()
-                .map(|n| format!(" — {n}"))
+                .map(|n| format!(": {n}"))
                 .unwrap_or_default()
         )?;
     }
@@ -139,7 +139,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
     for cl in &claims {
         writeln!(
             out,
-            "  {:<3} {} ({:?}) — {} · {} · {}",
+            "  {:<3} {} ({:?}): {} · {} · {}",
             if cl.nameable(c.min_named) {
                 "✓"
             } else {
@@ -157,7 +157,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
         for e in &c.evidence {
             writeln!(
                 out,
-                "  {:<4} {} ({}), received {}, {} of {} records kept — {}",
+                "  {:<4} {} ({}), received {}, {} of {} records kept: {}",
                 e.id,
                 e.org,
                 sc_core::defang_host(&e.host),

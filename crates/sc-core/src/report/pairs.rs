@@ -98,7 +98,7 @@ impl Report<'_> {
             let kinds: Vec<&str> = f.kinds.iter().map(|k| k.label()).collect();
             let _ = writeln!(
                 s,
-                "- **{}**: {} — {} soft link(s): {} (weakest pair {:.2})",
+                "- **{}**: {}, {} soft link(s): {} (weakest pair {:.2})",
                 f.id,
                 f.clusters.join(", "),
                 f.links,

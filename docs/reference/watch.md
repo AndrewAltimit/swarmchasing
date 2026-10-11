@@ -139,7 +139,7 @@ Each answer goes to `labels/reviewed.ndjson` with the record, so `swarmchase eva
 
 ### Label suggestions
 
-`review --suggest` asks a language model for a label before each prompt and shows it as `suggestion: agent — <reason>`. The admin still answers; the suggestion is saved beside the label as `suggested` and is never the label, so eval reads only the admin's.
+`review --suggest` asks a language model for a label before each prompt and shows it as `suggestion: agent, <reason>`. The admin still answers; the suggestion is saved beside the label as `suggested` and is never the label, so eval reads only the admin's.
 
 It is allowed only with a model running locally:
 

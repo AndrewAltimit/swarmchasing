@@ -65,7 +65,7 @@ mod tests {
                     },
                 ],
             },
-            body: "# Notice\n\n- **Window:** a → b\n\n## Endpoints\n\n| Host | Hits |\n|---|---|\n| `a[.]b` | 3 \\| 4 |\n\n1. one — `x`\n   - rules: r1\n2. two\n\n> quoted **line**\n\nplain\ncontinued\n".into(),
+            body: "# Notice\n\n- **Window:** a → b\n\n## Endpoints\n\n| Host | Hits |\n|---|---|\n| `a[.]b` | 3 \\| 4 |\n\n1. one: `x`\n   - rules: r1\n2. two\n\n> quoted **line**\n\nplain\ncontinued\n".into(),
         }
     }
 
@@ -82,7 +82,7 @@ mod tests {
         assert!(check_notice(&n, &Rules::default_rules()).is_empty());
 
         let mut bad = n.clone();
-        bad.body.push_str("\n> **DRAFT** — x\n");
+        bad.body.push_str("\n> **DRAFT**: x\n");
         bad.meta.updated = "2026-10-21".into();
         bad.meta.updates[1].text = "inbox is ntfy.sh/agent-run-77".into();
         assert_eq!(check_notice(&bad, &Rules::default_rules()).len(), 3);

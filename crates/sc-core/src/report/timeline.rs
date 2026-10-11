@@ -53,7 +53,7 @@ impl Report<'_> {
             .unwrap_or_default();
         let _ = writeln!(
             s,
-            "- **{}** ({}) — {} records, {} run(s), {} → {}{med}",
+            "- **{}** ({}): {} records, {} run(s), {} → {}{med}",
             c.id,
             c.tier.label(),
             c.members.len(),

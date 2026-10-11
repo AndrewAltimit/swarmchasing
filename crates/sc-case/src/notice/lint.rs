@@ -148,7 +148,7 @@ mod tests {
         let n = notice();
         assert!(lint_notice(&n, &rules).is_empty());
         let mut bad = n.clone();
-        bad.body.push_str("\n> **DRAFT** — x\n");
+        bad.body.push_str("\n> **DRAFT**: x\n");
         bad.meta.updated = "2026-10-21".into();
         bad.meta.updates[1].text = "inbox is ntfy.sh/agent-run-77".into();
         assert_eq!(lint_notice(&bad, &rules).len(), 3);

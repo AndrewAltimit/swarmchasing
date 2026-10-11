@@ -45,7 +45,7 @@ fn case_from_a_cluster_key_to_a_verified_bundle() {
     );
     assert!(r.stdout.contains("opened "), "{}", r.stdout);
     let r = ok(s.path(), &["case", "--data", data, "status", "it-1"]);
-    assert!(r.stdout.starts_with("# it-1 — Sample"), "{}", r.stdout);
+    assert!(r.stdout.starts_with("# it-1: Sample"), "{}", r.stdout);
     assert!(r.stdout.contains("(pinned)"), "{}", r.stdout);
 
     // Every endpoint at once, with the state last as in the one-host form.

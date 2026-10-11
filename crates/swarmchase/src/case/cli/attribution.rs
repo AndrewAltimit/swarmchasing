@@ -113,7 +113,7 @@ fn show(c: &sc_case::Case, a: &sc_core::Analysis, out: &mut impl Write) -> Resul
     match &c.agent_grade {
         Some(d) => writeln!(
             out,
-            "decision {}: {} {} — {}",
+            "decision {}: {} {}, {}",
             d.date,
             d.level.code(),
             d.level.label(),

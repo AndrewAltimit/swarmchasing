@@ -434,7 +434,7 @@ pub fn show(c: &Case, a: &Analysis, out: &mut impl std::io::Write) -> Result<()>
         let kinds: Vec<&str> = f.kinds.iter().map(|k| k.label()).collect();
         writeln!(
             out,
-            "  {}: {} — {} (weakest pair {:.2})",
+            "  {}: {}, {} (weakest pair {:.2})",
             f.id,
             keys.iter()
                 .map(|k| label(a, k))

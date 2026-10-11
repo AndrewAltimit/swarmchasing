@@ -153,7 +153,7 @@ fn attribution_is_gated_by_evidence() {
     );
     assert!(md.contains("**Model family candidates**"), "{md}");
     assert!(
-        md.contains("1. family-q — Label: Possible; tag: Inference."),
+        md.contains("1. family-q. Label: Possible; tag: Inference."),
         "{md}"
     );
     assert!(

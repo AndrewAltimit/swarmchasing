@@ -649,7 +649,7 @@ pub fn session(
         if let Some(s) = &suggestion {
             writeln!(
                 out,
-                "  suggestion: {} — {} ({}; a suggestion only)",
+                "  suggestion: {}, {} ({}; a suggestion only)",
                 s.label,
                 defang(&s.reason),
                 s.model
@@ -1154,7 +1154,7 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert!(out.contains("a = agent"));
         assert!(
-            out.contains("suggestion: benign — looks like a reader (m; a suggestion only)"),
+            out.contains("suggestion: benign, looks like a reader (m; a suggestion only)"),
             "{out}"
         );
         assert!(t.labelled.values().sum::<usize>() >= 2);

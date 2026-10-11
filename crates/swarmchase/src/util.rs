@@ -57,7 +57,7 @@ pub fn print_summary(a: &Analysis) {
     }
     for s in a.asns.iter().take(5) {
         println!(
-            "AS{} {} — {} flagged",
+            "AS{} {}: {} flagged",
             s.asn,
             s.org.as_deref().unwrap_or("(unknown)"),
             s.count

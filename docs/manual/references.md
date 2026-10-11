@@ -17,9 +17,9 @@ Every source the manual cites, grouped by use. Where a standard is paywalled, th
 
 | Source | Cited for |
 |---|---|
-| ISO/IEC 29147:2018, *Information technology — Security techniques — Vulnerability disclosure*. <https://www.iso.org/standard/72311.html> | [FM-10.3](10-disclosure.md#fm-103-relation-to-vulnerability-disclosure-standards). |
-| ISO/IEC 30111:2019, *Information technology — Security techniques — Vulnerability handling processes*. <https://www.iso.org/standard/69725.html> | [FM-10.3](10-disclosure.md#fm-103-relation-to-vulnerability-disclosure-standards). |
-| ISO/IEC TR 5895:2022, *Cybersecurity — Multi-party coordinated vulnerability disclosure and handling*. <https://www.iso.org/standard/81807.html> | [FM-10.3](10-disclosure.md#fm-103-relation-to-vulnerability-disclosure-standards). |
+| ISO/IEC 29147:2018, *Information technology - Security techniques - Vulnerability disclosure*. <https://www.iso.org/standard/72311.html> | [FM-10.3](10-disclosure.md#fm-103-relation-to-vulnerability-disclosure-standards). |
+| ISO/IEC 30111:2019, *Information technology - Security techniques - Vulnerability handling processes*. <https://www.iso.org/standard/69725.html> | [FM-10.3](10-disclosure.md#fm-103-relation-to-vulnerability-disclosure-standards). |
+| ISO/IEC TR 5895:2022, *Cybersecurity - Multi-party coordinated vulnerability disclosure and handling*. <https://www.iso.org/standard/81807.html> | [FM-10.3](10-disclosure.md#fm-103-relation-to-vulnerability-disclosure-standards). |
 | FIRST, *Guidelines and Practices for Multi-Party Vulnerability Coordination and Disclosure*, version 1.1, 2020. <https://www.first.org/global/sigs/vulnerability-coordination/multiparty/guidelines-v1.1> | Embargo defaults and the active-exploitation exception ([FM-10.3](10-disclosure.md#fm-103-relation-to-vulnerability-disclosure-standards)). |
 | Coalition for Secure AI (CoSAI), *AI Incident Response Framework*, version 1.0, October 2025. <https://www.coalitionforsecureai.org/defending-ai-systems-a-new-framework-for-incident-response-in-the-age-of-intelligent-technology/> | Incident response for defenders of AI systems ([FM-16.5](16-other-methods.md#fm-165-standards-work-on-agents)). |
 | FIRST, member team directory. <https://www.first.org/members/teams/> | Finding a national CSIRT ([FM-10.1](10-disclosure.md#fm-101-parties)). |

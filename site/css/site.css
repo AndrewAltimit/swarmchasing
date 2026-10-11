@@ -195,7 +195,7 @@ label { font-weight: 600; font-size: 13px; color: var(--text-secondary); }
 .badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); white-space: nowrap; }
 .flag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 5px; margin-right: 4px; border: 1px solid var(--border); }
 .flag.sig::before { content: "◆ "; color: var(--critical); }
-.flag.link::before { content: "⛓ "; color: var(--accent); }
+.flag.link::before { content: "+ "; color: var(--accent); }
 .flag.correction { border-color: var(--serious); }
 .flag.correction::before { content: "✎ "; }
 .flag.retraction { border-color: var(--critical); color: var(--critical); }
@@ -306,7 +306,7 @@ html:not(.js) [data-notice-filters] { display: none; }
 .t-head { margin: 0 0 4px; font-size: 13px; color: var(--text-secondary); }
 .t-kind { font-weight: 700; color: var(--text-primary); }
 .timeline li.flagged .t-kind { color: var(--critical); }
-.timeline li.flagged .t-kind::before { content: "⚠ "; }
+.timeline li.flagged .t-kind::before { content: "! "; }
 .verbatim { white-space: pre-wrap; margin: 0; }
 .statement { margin: 4px 0 0; }
 .statement blockquote { margin: 0; font-size: 15px; color: var(--text-primary); border-left-color: var(--series-3); }

@@ -47,7 +47,7 @@ impl Report<'_> {
                 Some(u) => {
                     let _ = writeln!(
                         s,
-                        "1. {} — `{}`",
+                        "1. {}: `{}`",
                         fmt_ts(r.obs.ts),
                         defang(&truncate(u, 240))
                     );
@@ -55,7 +55,7 @@ impl Report<'_> {
                 None => {
                     let _ = writeln!(
                         s,
-                        "1. {} — `{}` — request withheld from the public notice (sent to the affected parties)",
+                        "1. {}: `{}` (request withheld from the public notice; sent to the affected parties)",
                         fmt_ts(r.obs.ts),
                         defang_host(r.target_host.as_deref().unwrap_or("unknown host"))
                     );
