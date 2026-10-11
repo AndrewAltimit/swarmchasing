@@ -92,8 +92,9 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 
 | Command | What it does |
 |---|---|
-| `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`. Details: [Watch runs](../../docs/reference/watch.md). |
+| `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`, with a machine-readable `run.json` beside it; `--triage` asks a local model about new leads. Details: [Watch runs](../../docs/reference/watch.md). |
 | `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest`, `--serve` and `--export-hosted` add suggestions and a local page. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
+| `review agreement`, `misfires`, `check-suggestions` | Compare model suggestions with the admin's labels, list rules that fire on benign records, and validate a suggestions file. Details: [AI assistance](../../docs/guides/ai-assistance.md). |
 | `review sample` | Writes a stratified, seeded sample of low-tier records as a queue for a [reviewed benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline); `review <queue> --all` labels it. |
 | `eval <input>…` | Precision and recall of the rules on labelled records, per record and per cluster, for all and for non-synthetic records. With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. `--before <date>` runs a pre-agent negative control instead. Details: [Evaluation](../../docs/reference/evaluation.md). |
 | `eval repro`, `eval check-results`, `eval export-bench` | Measure a saved result again; check the committed results; write an SC-Bench file (`eval --bench` scores one). |
@@ -170,9 +171,9 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`input.rs`](src/input.rs) | Reading records and rules for the analysis commands. |
 | [`store.rs`](src/store.rs) | The watch record store, retention, JSON and NDJSON files. |
 | [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
-| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)). |
+| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)), the digest priority ([`priority.rs`](src/watch/priority.rs)), local model triage ([`triage.rs`](src/watch/triage.rs)) and the run summary ([`run_summary.rs`](src/watch/run_summary.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
-| [`review/`](src/review/mod.rs) | Interactive labelling; the local review page ([`serve.rs`](src/review/serve.rs)); hosted suggestions ([`hosted.rs`](src/review/hosted.rs)); the benign-baseline sampler ([`sample.rs`](src/review/sample.rs)). |
+| [`review/`](src/review/mod.rs) | Interactive labelling; the local review page ([`serve.rs`](src/review/serve.rs)); hosted suggestions ([`hosted.rs`](src/review/hosted.rs)); suggestion agreement and rule misfires ([`agreement.rs`](src/review/agreement.rs), [`misfires.rs`](src/review/misfires.rs)); the benign-baseline sampler ([`sample.rs`](src/review/sample.rs)). |
 | [`localui/`](src/localui/mod.rs) | The admin's local pages: server, security checks, shared style and helpers. |
 | [`suggest.rs`](src/suggest.rs) | Label suggestions from a local model (`review --suggest`), local hosts only. |
 | [`eval.rs`](src/eval.rs) | The `eval` command's tables, floors and saved results; `repro` and `check-results` ([`repro.rs`](src/eval/repro.rs)); SC-Bench export and scoring ([`bench.rs`](src/eval/bench.rs)). |

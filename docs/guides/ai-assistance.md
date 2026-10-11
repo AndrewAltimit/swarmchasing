@@ -23,7 +23,7 @@ For both, the same rules hold:
 
 A model reads each record of the review queue and proposes `agent`, `benign` or `unsure` with a one-line reason. The admin sees it beside the record and labels; it is saved beside the label as `suggested`, never as it, and `eval` reads only the admin's label.
 
-The labelling rule binds suggestions as it binds labels: `agent` needs an agent grade of L2 or higher. The export carries the grade, whether it is the cluster's or the record's own, an `agent_allowed` flag, the signals, counter-signals and caps, and the rules that fired. `review check-suggestions` fails a line that breaks the rule, and the review page shows an `agent` suggestion on a record now graded below L2 as `unsure`.
+The labelling rule binds suggestions as it binds labels: `agent` needs an agent grade of L2 or higher. The export carries the grade, whether it is the cluster's or the record's own, an `agent_allowed` flag, the signals, counter-signals and caps, and the rules that fired. `review check-suggestions` fails a line that breaks the rule, and the review page flags an `agent` suggestion on a record now graded below L2 as against the rule.
 
 - **Local**, one record at a time while labelling in the terminal: `review --suggest` ([label suggestions](../reference/watch.md#label-suggestions)).
 - **Hosted**, in batches: the [label-suggestions skill](../../.claude/skills/label-suggestions/SKILL.md) gives a Claude Code session the full procedure, from export to validated files.

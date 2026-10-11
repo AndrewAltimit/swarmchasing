@@ -46,7 +46,7 @@ mod digest;
 mod priority;
 mod pull;
 mod run_summary;
-mod triage;
+pub(crate) mod triage;
 
 use crate::health::{RuleHistory, RuleRun};
 use crate::store::{append, load_store, prune, read_json, to_ndjson, write_json};

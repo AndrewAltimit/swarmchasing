@@ -93,7 +93,7 @@ Pass every export file the suggestions answer (`--export` repeats). It fails on 
 
 ## 6. After the admin labels
 
-`review --serve` shows the suggestions; blind review (`h`) hides them until a group is labelled. A suggestion of `agent` on a record now graded below L2 shows as `unsure`.
+`review --serve` shows the suggestions; blind review (`h`) hides them until a group is labelled. A suggestion of `agent` on a record now graded below L2 is flagged as against the labelling rule.
 
 Once the admin has labelled, close the loop:
 

@@ -217,9 +217,10 @@ swarmchase review --export-hosted data/labels/hosted.ndjson          # the flagg
 swarmchase review <queue> --all --export-hosted data/labels/hosted-baseline.ndjson
 ```
 
-- **What it writes.** One `{"id", "group", "text"}` per record: the text the local model reads, and the record's review group. Records from `wayback`, `arquivo`, `memento`, `commoncrawl` and `urlquery` only; operator logs and the rest are counted as withheld. The list is in code, so a new source is withheld until it is added on purpose.
+- **What it writes.** One `{"id", "group", "text", "grade", "grade_basis", "agent_allowed", "signals", "counter", "caps", "rules"}` per record: the text the local model reads, the record's review group, the agent grade it is labelled against and the rules that fired. `--batch-size N` splits the export into numbered files and keeps each group in one. Records from `wayback`, `arquivo`, `memento`, `commoncrawl` and `urlquery` only; operator logs and the rest are counted as withheld. The list is in code, so a new source is withheld until it is added on purpose.
 - **Where.** The file must be inside the data directory, and stays there.
-- **Answers.** The model's suggestions go in `labels/suggestions-<name>.ndjson`, one `{"id", "label", "reason", "model"}` per line. `review --serve` reads every such file; a line for a record from any other source is dropped.
+- **Answers.** The model's suggestions go in `labels/suggestions-<name>.ndjson`, one `{"id", "label", "reason", "model", "grade", "misfires"}` per line (`grade` and `misfires` are optional). `review check-suggestions` validates a file against its export. `review --serve` reads every such file; a line for a record from any other source is dropped, except in `suggestions-local.ndjson`, which a local model writes ([model triage](#model-triage)).
+- **The loop.** `review agreement` compares the admin's labels with each model's, and `review misfires` lists rules that keep firing on records labelled benign. How to run it all: [AI assistance](../guides/ai-assistance.md).
 - **No fetching.** Whoever runs the model gives it the file and no web access.
 
 ### The review page

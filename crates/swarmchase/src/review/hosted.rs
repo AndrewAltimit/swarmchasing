@@ -300,11 +300,13 @@ pub struct Loaded {
     pub all: Vec<Stored>,
     /// Lines that did not parse or gave another label.
     pub invalid: usize,
-    /// Suggestions for a record outside [`HOSTED_SOURCES`] or not in the analysis.
+    /// Suggestions for a record not in the analysis, or, from a hosted
+    /// model, for a record outside [`HOSTED_SOURCES`].
     pub dropped: usize,
     /// Of `dropped`, those for a record from a source a hosted model may not see.
     pub withheld: usize,
-    /// `agent` suggestions on a record now graded below L2, shown as `unsure`.
+    /// `agent` suggestions on a record now graded below L2: against the
+    /// labelling rule. The page shows them as the model gave them, flagged.
     pub demoted: usize,
 }
 
@@ -328,6 +330,10 @@ pub fn suggestion_files(dir: &Path) -> Vec<PathBuf> {
 fn is_suggestion_name(n: &str) -> bool {
     n.starts_with("suggestions-") && n.ends_with(".ndjson")
 }
+
+/// The file `watch --triage` writes: suggestions from a model on a local or
+/// private-network endpoint, which policy lets see any record.
+pub const LOCAL_SUGGESTIONS: &str = crate::watch::triage::FILE;
 
 /// Every suggestions file in `dir`, in name order (a later file wins).
 pub fn load_suggestions(dir: &Path, a: &Analysis) -> Result<Loaded> {
@@ -360,7 +366,7 @@ pub fn load_suggestions(dir: &Path, a: &Analysis) -> Result<Loaded> {
                 out.dropped += 1;
                 continue;
             };
-            if !hosted_ok(&a.results[idx].obs.source) {
+            if file != LOCAL_SUGGESTIONS && !hosted_ok(&a.results[idx].obs.source) {
                 out.dropped += 1;
                 out.withheld += 1;
                 continue;
@@ -389,26 +395,13 @@ pub fn load_suggestions(dir: &Path, a: &Analysis) -> Result<Loaded> {
                 grade_seen: s.grade.map(|g| truncate(g.trim(), 8)),
                 misfires,
             });
-            let now = grade_code(a, idx);
-            let shown = if label == "agent" && !now.is_some_and(code_allows_agent) {
+            if label == "agent" && !grade_code(a, idx).is_some_and(code_allows_agent) {
                 out.demoted += 1;
-                Suggestion {
-                    label: "unsure".into(),
-                    reason: truncate(
-                        &format!(
-                            "agent suggested, but the grade is {} (below L2), so unsure: {reason}",
-                            now.unwrap_or("none")
-                        ),
-                        240,
-                    ),
-                    model,
-                }
-            } else {
-                Suggestion {
-                    label,
-                    reason,
-                    model,
-                }
+            }
+            let shown = Suggestion {
+                label,
+                reason,
+                model,
             };
             out.by_id.insert(s.id, shown);
         }
@@ -805,15 +798,15 @@ mod tests {
         let l = load_suggestions(&d.join("labels"), &a).unwrap();
         assert_eq!(l.by_id.len(), 2);
         let s = &l.by_id["wayback:1"];
-        // wayback:1 is graded below L2, so its agent suggestion shows as unsure.
+        // wayback:1 is graded below L2: its agent suggestion is kept as the
+        // model gave it and counted against the rule; the page flags it.
         let idx = a
             .results
             .iter()
             .position(|r| r.obs.id == "wayback:1")
             .unwrap();
         assert!(!grade_code(&a, idx).is_some_and(code_allows_agent));
-        assert_eq!(s.label, "unsure");
-        assert!(s.reason.contains("below L2"), "{}", s.reason);
+        assert_eq!(s.label, "agent");
         assert!(s.reason.ends_with("sqli via r[.]jina[.]ai"), "{}", s.reason);
         assert_eq!(s.model, "m");
         assert_eq!(l.by_id["wayback:4"].label, "agent");
@@ -824,6 +817,15 @@ mod tests {
         assert_eq!(l.all[1].grade_seen.as_deref(), Some("L2"));
         assert_eq!(l.all[1].misfires, ["exploit.sqli_quote"]);
         assert_eq!(l.all[1].file, "suggestions-claude.ndjson");
+        // The local model's file may cover any source.
+        std::fs::write(
+            d.join("labels").join(LOCAL_SUGGESTIONS),
+            r#"{"id":"lines:3","label":"benign","reason":"x","model":"local"}"#,
+        )
+        .unwrap();
+        let l = load_suggestions(&d.join("labels"), &a).unwrap();
+        assert_eq!(l.by_id["lines:3"].label, "benign");
+        assert_eq!(l.withheld, 1, "the hosted file's line is still withheld");
         std::fs::remove_dir_all(&d).unwrap();
     }
 

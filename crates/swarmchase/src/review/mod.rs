@@ -267,7 +267,7 @@ pub fn run(args: ReviewArgs) -> Result<()> {
         );
         if loaded.demoted > 0 {
             println!(
-                "{} agent suggestion(s) on records graded below L2 are shown as unsure, the most the labelling rule allows (`review agreement` lists them)",
+                "{} agent suggestion(s) on records graded below L2 are against the labelling rule; the page flags them (`review agreement` lists them)",
                 loaded.demoted
             );
         }
