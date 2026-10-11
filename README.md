@@ -35,18 +35,22 @@ The [CLI README](crates/swarmchase/README.md) covers input formats and every com
 | Path | What |
 |---|---|
 | [`crates/sc-core`](crates/sc-core/README.md) | Platform-independent analysis. No I/O, so it compiles to WASM. |
-| [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors: Wayback and Arquivo.pt CDX, urlquery.net, crt.sh, security.txt. |
+| [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors: archive CDX indexes, scan services, CT logs, registries, security.txt, well-known footprints, the MCP registry. |
 | [`crates/swarmchase`](crates/swarmchase/README.md) | The CLI: analysis, collection, watch, review, cases and notices. |
+| [`crates/sc-case`](crates/sc-case/README.md) | What a case is and may do, without I/O; shared by the CLI, the site build and the browser. |
+| [`crates/sc-stix`](crates/sc-stix/README.md) | A case as a STIX 2.1 bundle or a MISP event. |
 | [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, their Markdown blocks, the Atom feed and the generated site pages. |
 | [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit. |
 | [`crates/sc-rules-wasm`](crates/sc-rules-wasm/README.md) | Edited rules (TOML) to JSON in the browser, loaded only when needed. |
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. |
 | [`samples/eval/`](samples/eval/README.md) | Labelled evaluation set behind the CI eval gate. |
+| [`samples/showcase/`](samples/showcase/README.md) | Synthetic records the site's landing page walks through. |
+| [`schemas/`](docs/specs/README.md) | JSON Schemas for the specs, SC-Bench and the STIX extension. |
 | [`site/`](site/js/site.js) | The site's styles and page scripts; the pages are generated into `_site/` at deploy. |
 | `notices/` | Published notices, one `<id>.md` per incident. |
 | [`watchlist.toml`](watchlist.toml) | Sources the scheduled watch pulls, each with its rationale. |
 | [`scripts/`](scripts/README.md) | CI gates, the pre-commit hook and helpers. |
-| [`docs/`](docs/README.md) | Guides, reference, methodology and policies. |
+| [`docs/`](docs/README.md) | Guides, reference, methodology, policies, the Field Manual and the specs. |
 
 ## Docs
 
