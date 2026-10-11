@@ -53,6 +53,8 @@ The version is an opaque string. This project uses a date. Two files with the sa
 
 A rule **must** carry a `tactic`, or `artifact = true`, or both. `T8` and `T9` are cluster-level judgments and **must not** be a rule's tactic ([FM-4.3](../manual/04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)). A `check` **must** sit on a `param_value` rule. The only check in v1 is `repeated_token`: one word of three characters or more with a letter, or a phrase of two or three words, repeated five or more times in a row.
 
+A rule carries no framework ids of its own: its MITRE ATLAS techniques and OWASP Top 10 for Agentic Applications risks are derived from its `tactic` through the FM-12.4 crosswalk, so the verified ids live in one table rather than on every rule.
+
 **Kinds.** `relay`, `carrier`, `exploit`, `agent_marker`, `cache_buster`, `self_id`, `exfil`, `header`, `outcome`, `anti_bot`, `infra`. Five of them are **context kinds**, which ordinary clients produce too: `relay`, `cache_buster`, `self_id`, `header`, `outcome`. Context kinds never join records by timing ([FM-5.3](../manual/05-linking.md#fm-53-close-timing-on-the-same-target)) and never corroborate a cluster tier ([FM-14.9](../manual/14-limits.md#fm-149-stacking-across-a-cluster)). The default tactic of each kind is [FM-4.4](../manual/04-indicators.md#fm-44-default-tactics-by-rule-kind).
 
 ## Layers

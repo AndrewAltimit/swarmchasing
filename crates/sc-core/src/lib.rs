@@ -10,6 +10,7 @@ pub mod attribution;
 pub mod bursts;
 pub mod capture;
 pub mod chains;
+pub mod crosswalk;
 pub mod declared;
 pub mod dialect;
 pub mod endpoints;

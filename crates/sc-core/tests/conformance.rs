@@ -68,9 +68,7 @@ fn conformance_vectors_hold() {
         let tier = tier_label(r.tier).to_string();
 
         if update {
-            v["target"] = target
-                .clone()
-                .map_or(Value::Null, Value::String);
+            v["target"] = target.clone().map_or(Value::Null, Value::String);
             v["rules"] = Value::from(ids.clone());
             v["score"] = Value::from(score);
             v["tier"] = Value::from(tier.clone());
@@ -86,11 +84,7 @@ fn conformance_vectors_hold() {
             .collect();
         let want_score = v["score"].as_i64().unwrap() as i32;
         let want_tier = v["tier"].as_str().unwrap();
-        if target != want_target
-            || ids != want_rules
-            || score != want_score
-            || tier != want_tier
-        {
+        if target != want_target || ids != want_rules || score != want_score || tier != want_tier {
             failures.push(format!(
                 "{id}: target {target:?} (want {want_target:?}), rules {ids:?} (want {want_rules:?}), score {score} (want {want_score}), tier {tier} (want {want_tier})"
             ));

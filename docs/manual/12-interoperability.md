@@ -101,7 +101,7 @@ OWASP and ATLAS describe the agent's builder or an adversary using it. From publ
 | `fleets` | `grouping` | Event per fleet, related | Other information | Linked incidents |
 | `method`, `rules_version` | `report` external reference | Event tag | Other information | Report text |
 
-STIX patterns carry real values and MISP attributes do too; a public export or event withholds what a notice withholds ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)). Toolkit: STIX and the AIID and OECD drafts are built ([FM-12.3](#fm-123-ai-incident-databases)); MISP events and the SC-Incident document are (planned).
+STIX patterns carry real values and MISP attributes do too; a public export or event withholds what a notice withholds ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)). Toolkit: STIX and the AIID and OECD drafts are built ([FM-12.3](#fm-123-ai-incident-databases)), and the SC-T to ATLAS and OWASP tactic crosswalk above is a table keyed by tactic (`sc_core::crosswalk`), so a rule's framework ids follow from its tactic; MISP events and the SC-Incident document are (planned).
 
 ## FM-12.5 Regulatory incident reports
 
