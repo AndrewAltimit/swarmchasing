@@ -1713,6 +1713,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-case"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "sc-core",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "toml 0.8.23",
+]
+
+[[package]]
 name = "sc-collect"
 version = "0.1.0"
 dependencies = [
@@ -1749,6 +1761,7 @@ name = "sc-publish"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "sc-case",
  "sc-core",
  "serde",
  "serde_json",
@@ -1764,6 +1777,17 @@ dependencies = [
  "serde_json",
  "toml 0.8.23",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "sc-stix"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "regex",
+ "sc-case",
+ "sc-core",
+ "serde_json",
 ]
 
 [[package]]
@@ -1974,9 +1998,11 @@ dependencies = [
  "clap",
  "regex",
  "reqwest",
+ "sc-case",
  "sc-collect",
  "sc-core",
  "sc-publish",
+ "sc-stix",
  "serde",
  "serde_json",
  "sha2 0.10.9",

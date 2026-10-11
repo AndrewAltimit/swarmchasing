@@ -10,6 +10,7 @@ mod analysis;
 mod cases;
 mod common;
 mod eval;
+mod exports;
 mod notices;
 mod watch;
 mod workflow;

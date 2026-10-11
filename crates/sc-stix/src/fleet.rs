@@ -5,22 +5,22 @@
 //! fleets the admin merged (`case fleet merge`) are exported, never the
 //! analysis's candidate fleets.
 
-use super::ids::sdo_id;
-use super::objects::Head;
-use crate::case::Fleet;
+use crate::ids::sdo_id;
+use crate::objects::Head;
+use sc_case::Fleet;
 use sc_core::Analysis;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 /// One exported cluster: its run and observed-data ids, by cluster index.
-pub(super) struct Exported {
+pub(crate) struct Exported {
     pub run: String,
     pub observed: String,
 }
 
 /// The fleet's grouping and its runs' `related-to` relationships, or
 /// nothing when fewer than two of its clusters were exported.
-pub(super) fn fleet_objects(
+pub(crate) fn fleet_objects(
     h: &Head,
     a: &Analysis,
     case_id: &str,

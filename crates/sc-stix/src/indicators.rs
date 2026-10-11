@@ -6,17 +6,19 @@ use sc_core::{IndicatorKind, LinkFeature, ObsResult, Tier};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// One indicator, gathered over every record and cluster it came from.
-pub(super) struct Draft {
+pub(crate) struct Draft {
     pub name: String,
     pub label: String,
     pub tier: Tier,
     pub valid_from: i64,
     pub clusters: BTreeSet<usize>,
+    /// The SC-T tactics of the rules it came from.
+    pub tactics: BTreeSet<String>,
 }
 
 /// The indicators one record yields, keyed by STIX pattern. Only patterns
 /// that match the record they came from are kept.
-pub(super) fn indicators(
+pub(crate) fn indicators(
     r: &ObsResult,
     kinds: &BTreeMap<&str, IndicatorKind>,
     ua_rules: &BTreeSet<&str>,
@@ -108,12 +110,25 @@ pub(super) fn indicators(
             draft(format!("User agent {ua}"), "user-agent".into()),
         ));
     }
+    // Each indicator's tactics: those of the rule it came from (its label),
+    // or of the user-agent rules that fired.
+    for (_, d) in &mut out {
+        d.tactics = r
+            .hits
+            .iter()
+            .filter(|h| {
+                h.rule_id == d.label
+                    || (d.label == "user-agent" && ua_rules.contains(h.rule_id.as_str()))
+            })
+            .filter_map(|h| h.tactic.map(|t| format!("SC-{}", t.id())))
+            .collect();
+    }
     out
 }
 
 /// What a linking feature names, as indicators label it: a run tag or other
 /// linking parameter, a callback channel, or an agent marker.
-pub(crate) fn feature_kind(f: &LinkFeature, kinds: &BTreeMap<&str, IndicatorKind>) -> &'static str {
+pub fn feature_kind(f: &LinkFeature, kinds: &BTreeMap<&str, IndicatorKind>) -> &'static str {
     match f {
         LinkFeature::Param { name, .. } if TAG_PARAMS.contains(&name.as_str()) => "Run tag",
         LinkFeature::Param { .. } => "Linking parameter",
@@ -131,11 +146,12 @@ fn draft(name: String, label: String) -> Draft {
         tier: Tier::Noise,
         valid_from: i64::MAX,
         clusters: BTreeSet::new(),
+        tactics: BTreeSet::new(),
     }
 }
 
 /// The STIX confidence of an indicator from a cluster at tier `t`.
-pub(super) fn confidence(t: Tier) -> u8 {
+pub(crate) fn confidence(t: Tier) -> u8 {
     match t {
         Tier::Significant => 85,
         Tier::Suggestive => 50,

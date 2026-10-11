@@ -1,144 +1,48 @@
-//! `swarmchase case export`: a case as a STIX 2.1 bundle for the tooling of
-//! the providers and operators it is reported to.
-//!
-//! The bundle holds an `identity` for the reporter, an `indicator` per run
-//! tag, callback channel, agent marker and flagged user agent, an
-//! `observed-data` per cluster with its URLs, domains, addresses and
-//! networks, `based-on` relationships between them, and a `report` wrapping
-//! it all. Values are real (not defanged): STIX patterns are for machines.
-//! Each exported cluster is also an `x-sc-agent-run` object ([`agent_run`]),
-//! defined by the `extension-definition` the bundle carries, whose schema is
-//! committed at `schemas/stix/x-sc-agent-run.json`. Each fleet the admin
-//! merged is a `grouping` of its runs ([`fleet`]).
+//! `swarmchase case export --format stix|misp`: a case as a STIX 2.1 bundle
+//! (or a MISP event made from it) for the tooling of the providers and
+//! operators it is reported to. The bundle is built by [`sc_stix`]; this
+//! module reads the case, scopes its records to the audience, and checks
+//! what it may export.
 //!
 //! The export takes the same operator evidence as the report for that
-//! audience ([`crate::evidence::Scope`]); a public export also withholds what
-//! the public notice withholds ([`sc_core::notice::PublicView`]), carries no
-//! IP addresses or user agents, and is checked with [`lint_public`]. Every id
-//! is a UUIDv5 of the content (cyber-observable ids follow the STIX recipe),
-//! so the same case exports byte for byte the same. The export is a draft
-//! written to a file; nothing is sent.
-//!
-//! [`observed`] walks the clusters' records, [`indicators`] turns a record
-//! into patterns, [`objects`] builds each object type, and [`ids`] makes the
-//! ids, markings and timestamps.
+//! audience ([`crate::case::Scope`]); a public export also withholds what
+//! the public notice withholds. The export is a draft written to a file;
+//! nothing is sent.
 
-pub(crate) mod agent_run;
-mod fleet;
-mod ids;
-mod indicators;
-mod objects;
-mod observed;
+pub use sc_stix::feature_kind;
 
-pub(crate) use indicators::feature_kind;
-
-use crate::case::{self, EndpointState};
-use crate::util::audience_id;
+use crate::case::{self, Scope};
 use anyhow::{Context, Result, bail};
-use clap::Args;
-use ids::{TLP_AMBER, TLP_WHITE, sdo_id, stix_ts};
-use objects::Head;
-use sc_core::notice::lint_public;
-use sc_core::{Analysis, Audience, Claim, Evidence, Rules, analyze};
+use sc_core::Audience;
 use serde_json::Value;
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum ExportFormat {
-    /// A STIX 2.1 bundle (JSON).
-    Stix,
-    /// A draft for the OECD AI incident common reporting framework (JSON,
-    /// public scope), with the mandatory criteria it cannot fill listed.
-    Oecd,
-    /// A draft AI Incident Database submission (JSON, public scope).
-    Aiid,
-}
-
-#[derive(Args)]
-pub struct ExportArgs {
-    id: String,
-    #[arg(long, default_value = "stix")]
-    format: ExportFormat,
-    /// provider | affected | public
-    #[arg(long, default_value = "provider")]
-    audience: Audience,
-    /// For an affected export: the operator's contact address, as listed in
-    /// case.toml. Only that operator's own logs are included.
-    #[arg(long)]
-    to: Option<String>,
-    /// Name for the reporter identity.
-    #[arg(long)]
-    reporter: Option<String>,
-    /// The site's URL, for the notice link in incident database drafts.
-    #[arg(long, env = "SWARMCHASE_SITE_URL")]
-    site_url: Option<String>,
-    /// The committed notices directory, for incident database drafts.
-    #[arg(long, default_value = "notices")]
-    notices: PathBuf,
-    /// Default: <case>/exports/<audience>-<date>.stix.json, or
-    /// <case>/exports/<format>-<date>.json for incident database drafts.
-    #[arg(short, long)]
-    out: Option<PathBuf>,
-}
-
-pub fn run(root: &Path, args: ExportArgs, today: &str) -> Result<()> {
-    let db = match args.format {
-        ExportFormat::Stix => None,
-        ExportFormat::Oecd => Some((case::incident::Database::Oecd, "oecd")),
-        ExportFormat::Aiid => Some((case::incident::Database::Aiid, "aiid")),
-    };
-    if let Some((db, name)) = db {
-        if args.audience != Audience::Public && args.audience != Audience::Provider {
-            bail!("incident database drafts are public; they take no --audience");
-        }
-        let text = case::incident::draft(
-            root,
-            &args.notices,
-            &args.id,
-            db,
-            args.reporter.as_deref().unwrap_or("swarmchasing"),
-            args.site_url.as_deref(),
-            today,
-        )?;
-        let path = args.out.unwrap_or_else(|| {
-            root.join(&args.id)
-                .join("exports")
-                .join(format!("{name}-{today}.json"))
-        });
-        crate::util::write_out(Some(&path), &text)?;
-        println!(
-            "draft only; nothing was submitted. Submit it by hand after the notice is public."
-        );
-        return Ok(());
-    }
-    let text = export(
-        root,
-        &args.id,
-        args.audience,
-        args.to.as_deref(),
-        args.reporter.as_deref(),
-        today,
-    )?;
-    let path = args.out.unwrap_or_else(|| {
-        root.join(&args.id)
-            .join("exports")
-            .join(format!("{}-{today}.stix.json", audience_id(args.audience)))
-    });
-    crate::util::write_out(Some(&path), &text)?;
-    println!("draft only; nothing was sent");
-    Ok(())
-}
 
 /// The case as a STIX bundle for `audience`, pretty-printed.
 pub fn export(
-    root: &Path,
+    root: &std::path::Path,
     id: &str,
     audience: Audience,
     to: Option<&str>,
     reporter: Option<&str>,
     today: &str,
 ) -> Result<String> {
+    let v = export_value(root, id, audience, to, reporter, today)?;
+    Ok(format!(
+        "{}
+",
+        serde_json::to_string_pretty(&v)?
+    ))
+}
+
+/// The case as a STIX bundle for `audience`. An affected export is for the
+/// one operator `to` names; case notes are not exported.
+pub fn export_value(
+    root: &std::path::Path,
+    id: &str,
+    audience: Audience,
+    to: Option<&str>,
+    reporter: Option<&str>,
+    today: &str,
+) -> Result<Value> {
     let c = case::load(root, id)?;
     let contact = match (audience, to) {
         (Audience::Internal, _) => {
@@ -155,11 +59,7 @@ pub fn export(
         ),
         _ => None,
     };
-    let unreviewed = c
-        .endpoints
-        .iter()
-        .filter(|e| e.state == EndpointState::Unreviewed)
-        .count();
+    let unreviewed = c.unreviewed().len();
     if unreviewed > 0 {
         if audience == Audience::Public {
             bail!(
@@ -170,17 +70,11 @@ pub fn export(
             "warning: {unreviewed} endpoint(s) are still unreviewed; classify them before sharing"
         );
     }
-    let rules = crate::pinning::case_rules(root, &c)?;
-    let records = case::case_records(root, &c, &case::scope(audience, contact))?;
-    let a = analyze(records, &rules);
-    let exposed: Vec<String> = c
-        .endpoints
-        .iter()
-        .filter(|e| e.state == EndpointState::Compromised)
-        .map(|e| e.host.clone())
-        .collect();
+    let pinned = case::Pinned::new(root, &c)?;
+    let a = pinned.analysis(&Scope::for_audience(audience, contact))?;
+    let exposed = sc_case::report::compromised_hosts(&c);
     let affected = case::affected_hosts(&c);
-    let opts = Options {
+    let opts = sc_stix::Options {
         case_id: &c.id,
         title: &c.title,
         audience,
@@ -192,137 +86,16 @@ pub fn export(
         min_named: c.min_named,
         fleets: &c.fleets,
     };
-    let bundle = build(&a, &rules, &opts)?;
-    Ok(format!("{}\n", serde_json::to_string_pretty(&bundle)?))
-}
-
-struct Options<'a> {
-    case_id: &'a str,
-    title: &'a str,
-    audience: Audience,
-    reporter: &'a str,
-    today: &'a str,
-    exposed: &'a [String],
-    /// The hosts the case classified affected; a public export names no
-    /// other ([`case::affected_hosts`], as the notice).
-    affected: &'a [String],
-    /// The case's own attribution claims.
-    claims: &'a [Claim],
-    min_named: Evidence,
-    /// The admin's fleets (`case fleet merge`).
-    fleets: &'a [case::Fleet],
-}
-
-impl Options<'_> {
-    fn public(&self) -> bool {
-        self.audience == Audience::Public
-    }
-}
-
-/// The bundle: the reporter and the marking, the indicators, each
-/// cluster's observed data, the `based-on` relationships between them, a
-/// report wrapping it all, and the cyber-observables.
-fn build(a: &Analysis, rules: &Rules, o: &Options) -> Result<Value> {
-    let public = o.audience == Audience::Public;
-    let h = Head {
-        identity: sdo_id("identity", &format!("reporter:{}", o.reporter)),
-        created: stix_ts(sc_core::parse_ts(o.today).unwrap_or(0)),
-        marking: if public { TLP_WHITE } else { TLP_AMBER },
-    };
-    let observed::Observed {
-        scos,
-        drafts,
-        observed,
-    } = observed::observe(a, rules, &h, o);
-
-    let mut objects = vec![
-        objects::identity(&h, o.reporter),
-        objects::marking(h.marking),
-        agent_run::extension_definition(&h),
-    ];
-    let mut report_refs = vec![agent_run::extension_id()];
-    let od_ids: BTreeMap<usize, String> = observed
-        .iter()
-        .map(|(ci, v)| (*ci, v["id"].as_str().unwrap_or_default().to_string()))
-        .collect();
-    let mut relationships = Vec::new();
-    for (pattern, d) in &drafts {
-        let id = objects::indicator_id(&h, pattern);
-        objects.push(objects::indicator(&h, &id, pattern, d));
-        report_refs.push(id.clone());
-        for od in d.clusters.iter().filter_map(|ci| od_ids.get(ci)) {
-            let rel = objects::based_on(&h, &id, od);
-            report_refs.push(rel["id"].as_str().unwrap_or_default().to_string());
-            relationships.push(rel);
-        }
-    }
-    if drafts.is_empty() && observed.is_empty() {
-        bail!(
-            "nothing to export for this audience (no non-noise clusters, or everything withheld)"
-        );
-    }
-    let mut runs = Vec::new();
-    let mut exported = BTreeMap::new();
-    for (ci, v) in observed {
-        let od = v["id"].as_str().unwrap_or_default().to_string();
-        let run = agent_run::agent_run(&h, a, &a.clusters[ci], o, &od);
-        let run_id = run["id"].as_str().unwrap_or_default().to_string();
-        report_refs.push(od.clone());
-        report_refs.push(run_id.clone());
-        exported.insert(
-            ci,
-            fleet::Exported {
-                run: run_id,
-                observed: od,
-            },
-        );
-        objects.push(v);
-        runs.push(run);
-    }
-    objects.extend(runs);
-    for f in o.fleets {
-        for v in fleet::fleet_objects(&h, a, o.case_id, f, &exported) {
-            report_refs.push(v["id"].as_str().unwrap_or_default().to_string());
-            objects.push(v);
-        }
-    }
-    objects.extend(relationships);
-    report_refs.extend(scos.keys().cloned());
-
-    if public {
-        let values: Vec<String> = drafts
-            .keys()
-            .cloned()
-            .chain(
-                scos.values()
-                    .filter_map(|v| v["value"].as_str().map(str::to_string)),
-            )
-            .chain(
-                objects
-                    .iter()
-                    .filter(|v| v["type"] == agent_run::TYPE)
-                    .map(|v| v["attribution"].to_string()),
-            )
-            .collect();
-        let leaks = lint_public(&values.join("\n"), rules);
-        if !leaks.is_empty() {
-            bail!(
-                "the public export would carry what a notice must not:\n  {}",
-                leaks.join("\n  ")
-            );
-        }
-    }
-
-    objects.push(objects::report(&h, o, report_refs));
-    objects.extend(scos.into_values());
-    objects::bundle(objects)
+    sc_stix::build(&a, &pinned.rules, &opts).map_err(anyhow::Error::msg)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::case::analysis;
     use sc_core::Observation;
     use std::collections::BTreeSet;
+    use std::path::{Path, PathBuf};
 
     fn scratch(name: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("swarmchase-stix-{name}-{}", std::process::id()));
@@ -597,8 +370,8 @@ kept = 1
                 .collect();
             assert_eq!(defs.len(), 1);
             let def = defs[0];
-            assert_eq!(def["id"], agent_run::extension_id());
-            assert_eq!(def["name"], agent_run::TYPE);
+            assert_eq!(def["id"], sc_stix::agent_run::extension_id());
+            assert_eq!(def["name"], sc_stix::agent_run::TYPE);
             assert_eq!(def["extension_types"], serde_json::json!(["new-sdo"]));
             assert_eq!(def["schema"], schema["$id"]);
             assert!(
@@ -609,7 +382,7 @@ kept = 1
             );
             let runs: Vec<&Value> = objs
                 .iter()
-                .filter(|o| o["type"] == agent_run::TYPE)
+                .filter(|o| o["type"] == sc_stix::agent_run::TYPE)
                 .collect();
             assert!(!runs.is_empty());
             let ids: BTreeSet<&str> = objs.iter().map(|o| o["id"].as_str().unwrap()).collect();
@@ -619,7 +392,7 @@ kept = 1
                 check(r, &schema, "run", &mut errs);
                 assert!(errs.is_empty(), "{errs:?}\n{r:#}");
                 assert_eq!(
-                    r["extensions"][agent_run::extension_id()]["extension_type"],
+                    r["extensions"][sc_stix::agent_run::extension_id()]["extension_type"],
                     "new-sdo"
                 );
                 for od in r["observed_data_refs"].as_array().unwrap() {
@@ -656,15 +429,11 @@ kept = 1
         let root = scratch("tactics");
         fixture(&root);
         let c = case::load(&root, "t-1").unwrap();
-        let rules = crate::pinning::case_rules(&root, &c).unwrap();
-        let a = analyze(
-            case::case_records(&root, &c, &crate::evidence::Scope::All).unwrap(),
-            &rules,
-        );
+        let a = analysis(&root, &c, &Scope::All).unwrap();
         let text = export(&root, "t-1", Audience::Provider, None, None, "2026-10-14").unwrap();
         for r in objects(&text)
             .iter()
-            .filter(|o| o["type"] == agent_run::TYPE)
+            .filter(|o| o["type"] == sc_stix::agent_run::TYPE)
         {
             let cl = a
                 .clusters
@@ -700,13 +469,11 @@ kept = 1
         assert!(!objects(&run()).iter().any(|o| o["type"] == "grouping"));
 
         let c = case::load(&root, "f-1").unwrap();
-        let a = analyze(
-            case::case_records(&root, &c, &crate::evidence::Scope::All).unwrap(),
-            &rules.rules,
-        );
+        let a = analysis(&root, &c, &Scope::All).unwrap();
         let keys: Vec<String> = a.clusters.iter().map(|c| c.key.clone()).collect();
         case::update(&root, "f-1", |c| {
-            crate::case::fleet::merge(c, &a, &keys, None, "2026-10-13").map(|_| ())
+            crate::case::fleet::merge(c, &a, &keys, None, "2026-10-13")?;
+            Ok(())
         })
         .unwrap();
         let text = run();
@@ -725,7 +492,7 @@ kept = 1
             .collect();
         let runs: Vec<&Value> = objs
             .iter()
-            .filter(|o| o["type"] == agent_run::TYPE)
+            .filter(|o| o["type"] == sc_stix::agent_run::TYPE)
             .collect();
         assert_eq!(runs.len(), 2);
         for r in &runs {

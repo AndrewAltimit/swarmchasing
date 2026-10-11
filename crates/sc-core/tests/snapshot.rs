@@ -92,7 +92,7 @@ fn snapshot(stem: &str, text: &str, failures: &mut Vec<String>) {
     let mut json = serde_json::to_string_pretty(&a).unwrap();
     json.push('\n');
     if stem == ALL {
-        failures.extend(check(&format!("{stem}.analysis.json"), &json));
+        failures.extend(check(&format!("{stem}.analysis.snap.json"), &json));
     } else {
         // One file's analysis is pinned by its digest, to keep the snapshots
         // small; the combined analysis above shows the diff.

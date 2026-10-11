@@ -1,23 +1,22 @@
 //! The STIX objects of an export, one function per object type.
 
-use super::Options;
-use super::ids::{STIX_NS, Tlp, sdo_id, stix_ts, uuid5};
-use super::indicators::{Draft, confidence};
-use crate::util::audience_id;
-use anyhow::Result;
+use crate::Options;
+use crate::ids::{STIX_NS, Tlp, sdo_id, stix_ts, uuid5};
+use crate::indicators::{Draft, confidence};
+use sc_case::text::audience_id;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 /// What every object an export creates shares: its creator, creation time
 /// and marking.
-pub(super) struct Head {
+pub(crate) struct Head {
     pub identity: String,
     pub created: String,
     pub marking: Tlp,
 }
 
 /// The reporter.
-pub(super) fn identity(h: &Head, name: &str) -> Value {
+pub(crate) fn identity(h: &Head, name: &str) -> Value {
     json!({
         "type": "identity",
         "spec_version": "2.1",
@@ -29,7 +28,7 @@ pub(super) fn identity(h: &Head, name: &str) -> Value {
 }
 
 /// The predefined TLP marking definition.
-pub(super) fn marking(m: Tlp) -> Value {
+pub(crate) fn marking(m: Tlp) -> Value {
     json!({
         "type": "marking-definition",
         "spec_version": "2.1",
@@ -42,13 +41,14 @@ pub(super) fn marking(m: Tlp) -> Value {
 }
 
 /// An indicator's id. Exports under different markings are different objects.
-pub(super) fn indicator_id(h: &Head, pattern: &str) -> String {
+pub(crate) fn indicator_id(h: &Head, pattern: &str) -> String {
     sdo_id("indicator", &format!("{}:{pattern}", h.marking.1))
 }
 
-pub(super) fn indicator(h: &Head, id: &str, pattern: &str, d: &Draft) -> Value {
+pub(crate) fn indicator(h: &Head, id: &str, pattern: &str, d: &Draft) -> Value {
     let malicious = d.tier == sc_core::Tier::Significant;
-    json!({
+    let tactics: Vec<String> = d.tactics.iter().cloned().collect();
+    let mut v = json!({
         "type": "indicator",
         "spec_version": "2.1",
         "id": id,
@@ -64,11 +64,16 @@ pub(super) fn indicator(h: &Head, id: &str, pattern: &str, d: &Draft) -> Value {
         "confidence": confidence(d.tier),
         "labels": [d.label],
         "object_marking_refs": [h.marking.0],
-    })
+    });
+    if !tactics.is_empty() {
+        v["kill_chain_phases"] = json!(crate::mapping::kill_chain_phases(&tactics));
+        v["external_references"] = json!(crate::mapping::external_references(&tactics));
+    }
+    v
 }
 
 /// An indicator `based-on` the observed data it came from.
-pub(super) fn based_on(h: &Head, indicator: &str, observed: &str) -> Value {
+pub(crate) fn based_on(h: &Head, indicator: &str, observed: &str) -> Value {
     json!({
         "type": "relationship",
         "spec_version": "2.1",
@@ -84,7 +89,7 @@ pub(super) fn based_on(h: &Head, indicator: &str, observed: &str) -> Value {
 }
 
 /// One cluster's observations.
-pub(super) fn observed_data(
+pub(crate) fn observed_data(
     h: &Head,
     case_id: &str,
     members: &[&str],
@@ -107,7 +112,7 @@ pub(super) fn observed_data(
 }
 
 /// The report wrapping everything else.
-pub(super) fn report(h: &Head, o: &Options, refs: Vec<String>) -> Value {
+pub(crate) fn report(h: &Head, o: &Options, refs: Vec<String>) -> Value {
     json!({
         "type": "report",
         "spec_version": "2.1",
@@ -129,18 +134,18 @@ pub(super) fn report(h: &Head, o: &Options, refs: Vec<String>) -> Value {
 }
 
 /// The bundle, its id a hash of its objects.
-pub(super) fn bundle(objects: Vec<Value>) -> Result<Value> {
-    let content = serde_json::to_string(&objects)?;
+pub(crate) fn bundle(objects: Vec<Value>) -> Result<Value, String> {
+    let content = serde_json::to_string(&objects).map_err(|e| e.to_string())?;
     Ok(json!({
         "type": "bundle",
-        "id": format!("bundle--{}", uuid5(STIX_NS, &crate::bundle::sha256_hex(content.as_bytes()))),
+        "id": format!("bundle--{}", uuid5(STIX_NS, &sc_case::bundle::sha256_hex(content.as_bytes()))),
         "objects": objects,
     }))
 }
 
 /// Add a cyber-observable once, with its STIX deterministic id (a UUIDv5 of
 /// its id-contributing property in the STIX namespace).
-pub(super) fn add_sco(scos: &mut BTreeMap<String, Value>, kind: &str, props: Value) -> String {
+pub(crate) fn add_sco(scos: &mut BTreeMap<String, Value>, kind: &str, props: Value) -> String {
     let key = if kind == "autonomous-system" {
         json!({ "number": props["number"] })
     } else {
