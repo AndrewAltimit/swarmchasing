@@ -1,0 +1,4549 @@
+{
+  "$schema": "https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/sc-bench-v1.json",
+  "description": "The committed evaluation set (samples/eval/*.ndjson): synthetic fixtures and reconstructions of published incidents with hand-written benign look-alikes. The reference rules were tuned on it, so every record is in the regression split.",
+  "format": "sc-bench-v1",
+  "freeze_date": "2026-10-10",
+  "name": "sc-bench-example",
+  "records": [
+    {
+      "actor": "tool",
+      "cluster": "k-2bd95846",
+      "fired_rules": [
+        "exploit.sqli_quote"
+      ],
+      "host": "intranet[.]lab[.]example",
+      "id": "eval:act-active-scan-1",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-05-16T09:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "fired_rules": [],
+      "host": "intranet[.]lab[.]example",
+      "id": "eval:act-active-scan-2",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-05-16T09:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-2bd95846",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "intranet[.]lab[.]example",
+      "id": "eval:act-active-scan-3",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-16T09:30:01Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-2bd95846",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "intranet[.]lab[.]example",
+      "id": "eval:act-active-scan-4",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-16T09:30:02Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-2bd95846",
+      "fired_rules": [
+        "carrier.html_program",
+        "exploit.xss"
+      ],
+      "host": "intranet[.]lab[.]example",
+      "id": "eval:act-active-scan-5",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-16T09:30:03Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-2bd95846",
+      "fired_rules": [
+        "exploit.ssti"
+      ],
+      "host": "intranet[.]lab[.]example",
+      "id": "eval:act-active-scan-6",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-16T09:30:04Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "fired_rules": [],
+      "host": "intranet[.]lab[.]example",
+      "id": "eval:act-active-scan-7",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-05-16T09:30:05Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-b8b91ba5",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder"
+      ],
+      "host": "login[.]coop[.]example",
+      "id": "eval:act-chatbot-help-1",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-13T16:40:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-b8b91ba5",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder"
+      ],
+      "host": "login[.]coop[.]example",
+      "id": "eval:act-chatbot-help-2",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-13T16:41:05Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-b8b91ba5",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder"
+      ],
+      "host": "login[.]coop[.]example",
+      "id": "eval:act-chatbot-help-3",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-13T16:42:45Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-b8b91ba5",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder"
+      ],
+      "host": "login[.]coop[.]example",
+      "id": "eval:act-chatbot-help-4",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-13T16:44:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-34333b1b",
+      "fired_rules": [
+        "exploit.sqli_quote"
+      ],
+      "host": "portal[.]clinic[.]example",
+      "id": "eval:act-repeater-1",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-05-11T14:02:10Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-34333b1b",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "portal[.]clinic[.]example",
+      "id": "eval:act-repeater-2",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-11T14:03:05Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-34333b1b",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "portal[.]clinic[.]example",
+      "id": "eval:act-repeater-3",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-11T14:04:15Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-34333b1b",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "portal[.]clinic[.]example",
+      "id": "eval:act-repeater-4",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-11T14:05:03Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-34333b1b",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "portal[.]clinic[.]example",
+      "id": "eval:act-repeater-5",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-11T14:06:05Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-34333b1b",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "portal[.]clinic[.]example",
+      "id": "eval:act-repeater-6",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-11T14:07:35Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-4da1c4fa",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "api[.]parts[.]example",
+      "id": "eval:act-sqlmap-1",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-14T03:20:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-4da1c4fa",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "api[.]parts[.]example",
+      "id": "eval:act-sqlmap-2",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-14T03:20:01Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-4da1c4fa",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "api[.]parts[.]example",
+      "id": "eval:act-sqlmap-3",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-14T03:20:01Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-4da1c4fa",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "api[.]parts[.]example",
+      "id": "eval:act-sqlmap-4",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-14T03:20:02Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-4da1c4fa",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "api[.]parts[.]example",
+      "id": "eval:act-sqlmap-5",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-14T03:20:03Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-4da1c4fa",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "api[.]parts[.]example",
+      "id": "eval:act-sqlmap-6",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-14T03:20:03Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-4da1c4fa",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "api[.]parts[.]example",
+      "id": "eval:act-sqlmap-7",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-14T03:20:04Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "fired_rules": [],
+      "host": "api[.]parts[.]example",
+      "id": "eval:act-sqlmap-8",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-05-14T03:20:05Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-5de32788",
+      "fired_rules": [
+        "exploit.traversal",
+        "exploit.traversal_single"
+      ],
+      "host": "files[.]depot[.]example",
+      "id": "eval:act-template-1",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-15T22:05:07Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-5de32788",
+      "fired_rules": [
+        "exploit.traversal",
+        "exploit.traversal_single"
+      ],
+      "host": "files[.]depot[.]example",
+      "id": "eval:act-template-2",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-15T22:05:07Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-5de32788",
+      "fired_rules": [
+        "exploit.ssti"
+      ],
+      "host": "files[.]depot[.]example",
+      "id": "eval:act-template-3",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-15T22:05:10Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-5de32788",
+      "fired_rules": [
+        "exploit.ssti"
+      ],
+      "host": "files[.]depot[.]example",
+      "id": "eval:act-template-4",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-15T22:05:10Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-5de32788",
+      "fired_rules": [
+        "carrier.html_program",
+        "exploit.xss"
+      ],
+      "host": "files[.]depot[.]example",
+      "id": "eval:act-template-5",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-15T22:05:13Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-5de32788",
+      "fired_rules": [
+        "exploit.xss"
+      ],
+      "host": "files[.]depot[.]example",
+      "id": "eval:act-template-6",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-15T22:05:13Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-5de32788",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "files[.]depot[.]example",
+      "id": "eval:act-template-7",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-15T22:05:16Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "tool",
+      "cluster": "k-5de32788",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "files[.]depot[.]example",
+      "id": "eval:act-template-8",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-15T22:05:16Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-b0261a3c",
+      "fired_rules": [
+        "carrier.html_program",
+        "exploit.xss"
+      ],
+      "host": "shop[.]bakery[.]example",
+      "id": "eval:act-xss-hand-1",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-12T10:15:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-b0261a3c",
+      "fired_rules": [
+        "exploit.xss"
+      ],
+      "host": "shop[.]bakery[.]example",
+      "id": "eval:act-xss-hand-2",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-12T10:22:40Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-b0261a3c",
+      "fired_rules": [
+        "exploit.xss"
+      ],
+      "host": "shop[.]bakery[.]example",
+      "id": "eval:act-xss-hand-3",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-12T10:31:10Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-b0261a3c",
+      "fired_rules": [
+        "exploit.xss"
+      ],
+      "host": "shop[.]bakery[.]example",
+      "id": "eval:act-xss-hand-4",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-12T10:39:30Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "custom_program",
+      "cluster": "k-93ae0ac9",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.httpbin",
+        "carrier.inline_fetch_program",
+        "marker.title_write"
+      ],
+      "host": "vizprod[.]aihw[.]gov[.]au",
+      "id": "eval:aihw-httpbin-b64",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-aihw",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-12T02:14:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-93ae0ac9",
+      "fired_rules": [
+        "carrier.html_program",
+        "exploit.xss"
+      ],
+      "host": "vizprod[.]aihw[.]gov[.]au",
+      "id": "eval:aihw-xss",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-aihw",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-12T02:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "relay.allorigins"
+      ],
+      "host": "api[.]github[.]com",
+      "id": "eval:b-allorigins-gh",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-06T14:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "cdn[.]example[.]com",
+      "id": "eval:b-cache-version",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-16T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.codesandbox"
+      ],
+      "host": "codesandbox[.]io",
+      "id": "eval:b-codesandbox",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-09T16:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "api[.]datausa[.]io",
+      "id": "eval:b-datausa-normal",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-15T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "civilrightsdata[.]ed[.]gov",
+      "id": "eval:b-ed-normal",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-12T15:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "github[.]com",
+      "id": "eval:b-github-pr",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-19T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.hrefli"
+      ],
+      "host": "www[.]example[.]org",
+      "id": "eval:b-hrefli",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-10T11:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.httpbin"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:b-httpbin-anything",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-08T10:02:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.httpbin"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:b-httpbin-get",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-08T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.httpbin"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:b-httpbin-status",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-08T10:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "blog[.]example[.]com",
+      "id": "eval:b-jina-blog",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-03T18:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "chatgpt[.]com",
+      "id": "eval:b-jina-chatgpt",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-04T12:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "claude[.]ai",
+      "id": "eval:b-jina-claude",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-04T12:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "en[.]wikipedia[.]org",
+      "id": "eval:b-jina-wiki",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-01T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "recherche-collection-search[.]bac-lac[.]canada[.]ca",
+      "id": "eval:b-lac-normal",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-12T15:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "www[.]shop[.]example",
+      "id": "eval:b-link-tag-autumn",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "linking-negatives.ndjson",
+      "provenance": "synthetic",
+      "run": "benign-tag-reader-1",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2025-11-28T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "news[.]example",
+      "id": "eval:b-link-tag-spring",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "linking-negatives.ndjson",
+      "provenance": "synthetic",
+      "run": "benign-tag-reader-2",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-04-14T17:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.livecodes"
+      ],
+      "host": "livecodes[.]io",
+      "id": "eval:b-livecodes-template",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-09T16:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [
+        "marker.template_unrendered"
+      ],
+      "host": "www[.]shop[.]example",
+      "id": "eval:b-llm-angular-capture",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:11:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "www[.]shop[.]example",
+      "id": "eval:b-llm-broken-href",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:14:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "github[.]com",
+      "id": "eval:b-llm-code-search-backticks",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:08:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "www[.]shop[.]example",
+      "id": "eval:b-llm-crawler-broken-href",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:24:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "intel[.]sec[.]example",
+      "id": "eval:b-llm-defanged-search",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:23:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [
+        "marker.placeholder_identity"
+      ],
+      "host": "docs[.]mail[.]example",
+      "id": "eval:b-llm-docs-example-email",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:27:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "docs[.]weather[.]example",
+      "id": "eval:b-llm-docs-slug",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "search[.]shop[.]example",
+      "id": "eval:b-llm-elasticsearch",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "api[.]shop[.]example",
+      "id": "eval:b-llm-filter-json",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:02:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "api[.]shop[.]example",
+      "id": "eval:b-llm-graphql",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "https-portal[.]shop[.]example",
+      "id": "eval:b-llm-https-host",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:22:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "music[.]example",
+      "id": "eval:b-llm-loop-batman",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-21T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "lyrics[.]example",
+      "id": "eval:b-llm-loop-chant",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-21T09:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "shop[.]example",
+      "id": "eval:b-llm-loop-ids",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-21T09:15:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]search[.]example",
+      "id": "eval:b-llm-loop-key-mash",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-21T09:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [
+        "marker.placeholder_identity"
+      ],
+      "host": "maps[.]shop[.]example",
+      "id": "eval:b-llm-maps-main-st",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:29:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "learn[.]microsoft[.]com",
+      "id": "eval:b-llm-msdn-parens",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:04:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [
+        "marker.example_host_value"
+      ],
+      "host": "example[.]com",
+      "id": "eval:b-llm-oauth-docs",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:07:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "www[.]shop[.]example",
+      "id": "eval:b-llm-percent-value",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:13:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [
+        "marker.placeholder_identity"
+      ],
+      "host": "qa[.]shop[.]example",
+      "id": "eval:b-llm-qa-login",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:28:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "cdn[.]shop[.]example",
+      "id": "eval:b-llm-redirect-encoded",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:21:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "blog[.]shop[.]example",
+      "id": "eval:b-llm-relay-blog-slug",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:20:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]bing[.]com",
+      "id": "eval:b-llm-search-as-an-ai",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:19:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]google[.]com",
+      "id": "eval:b-llm-search-dots",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "duckduckgo[.]com",
+      "id": "eval:b-llm-search-example-com",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:06:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]google[.]com",
+      "id": "eval:b-llm-search-here-is-the",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:17:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "duckduckgo[.]com",
+      "id": "eval:b-llm-search-ill",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:18:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "stackoverflow[.]com",
+      "id": "eval:b-llm-search-markdown",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:09:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "docs[.]anthropic[.]com",
+      "id": "eval:b-llm-tool-use-docs",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:15:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "fr[.]wikipedia[.]org",
+      "id": "eval:b-llm-utf8-title",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:16:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "calendar[.]shop[.]example",
+      "id": "eval:b-llm-valid-dates",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:26:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "api[.]shop[.]example",
+      "id": "eval:b-llm-version-date",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:25:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "en[.]wikipedia[.]org",
+      "id": "eval:b-llm-wiki-parens",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:03:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "files[.]shop[.]example",
+      "id": "eval:b-llm-windows-path",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-03T09:12:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.markdown_new"
+      ],
+      "host": "docs[.]python[.]org",
+      "id": "eval:b-markdown-docs",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-05T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.microlink"
+      ],
+      "host": "www[.]example[.]com",
+      "id": "eval:b-microlink-preview",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-07T08:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [],
+      "host": "data[.]portal[.]example",
+      "id": "eval:b-portal-paging",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-14T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]example[.]com",
+      "id": "eval:b-search-equals",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-13T09:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]example[.]com",
+      "id": "eval:b-search-sql-words",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-13T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "public[.]tableau[.]com",
+      "id": "eval:b-tableau-embed",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-18T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.translate_goog"
+      ],
+      "host": "www[.]example[.]com",
+      "id": "eval:b-translate",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-11T07:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "www[.]example[.]com",
+      "id": "eval:b-utm",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-17T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "custom_program",
+      "fired_rules": [
+        "antibot.ocr_captcha"
+      ],
+      "host": "apps[.]bea[.]gov",
+      "id": "eval:bea-captcha-ocr",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-bea",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-20T08:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "anti_bot",
+      "fired_rules": [],
+      "host": "cal-access[.]sos[.]ca[.]gov",
+      "id": "eval:calaccess-incapsula",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-calaccess",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-01T16:20:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "fuzzing",
+      "fired_rules": [],
+      "host": "cal-access[.]sos[.]ca[.]gov",
+      "id": "eval:calaccess-pdfgen",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-calaccess",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-07-01T16:22:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [
+        "header.via_ats"
+      ],
+      "host": "www[.]news[.]example",
+      "id": "eval:cov-ats-cdn",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-09T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "infrastructure",
+      "cluster": "k-323bd6db",
+      "fired_rules": [
+        "header.gzip_only_requests",
+        "header.scripted_ua",
+        "header.via_ats",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-ats-via",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-09T09:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "anti_bot",
+      "fired_rules": [
+        "antibot.baxia",
+        "marker.uq_tags"
+      ],
+      "host": "shop[.]marketplace[.]example",
+      "id": "eval:cov-baxia",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-08T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "agent_marker",
+      "cluster": "k-3d8e048c",
+      "fired_rules": [
+        "marker.callback_seq",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "portal[.]agency[.]example",
+      "id": "eval:cov-callback-seq",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-b",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-05T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "anti_bot",
+      "fired_rules": [
+        "antibot.captcha_solver",
+        "relay.jina"
+      ],
+      "host": "portal[.]agency[.]example",
+      "id": "eval:cov-captcha-solver",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-08T09:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "wiki[.]linux[.]example",
+      "id": "eval:cov-cmd-docs",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-04T08:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]shop[.]example",
+      "id": "eval:cov-cmd-search",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-04T08:12:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-21e5a81d",
+      "fired_rules": [
+        "exploit.cmdi"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-cmdi-semicolon",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-a",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-03T09:01:10Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-21e5a81d",
+      "fired_rules": [
+        "exploit.cmdi"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-cmdi-subshell",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-a",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-03T09:01:40Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "cluster": "k-2a0dbcd7",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.inline_fetch_program",
+        "exfil.cookie",
+        "exfil.requestbin",
+        "exploit.xss"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-cookie",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-d",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-07T12:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "relay.corsproxy"
+      ],
+      "host": "www[.]news[.]example",
+      "id": "eval:cov-corsproxy-read",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-03T11:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "indirection",
+      "cluster": "k-15c03b5e",
+      "fired_rules": [
+        "exploit.sqli_quote",
+        "relay.corsproxy"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-corsproxy-sqli",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-a",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-03T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]jobs[.]example",
+      "id": "eval:cov-credit-union",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-20T09:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "cluster": "k-3d8e048c",
+      "fired_rules": [
+        "exfil.disposable_mail",
+        "marker.uq_tags"
+      ],
+      "host": "portal[.]agency[.]example",
+      "id": "eval:cov-disposable-mail",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-b",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-07T13:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "anti_bot",
+      "cluster": "k-323bd6db",
+      "fired_rules": [
+        "header.headless_ua",
+        "marker.uq_tags",
+        "outcome.challenge"
+      ],
+      "host": "portal[.]agency[.]example",
+      "id": "eval:cov-headless",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-09T11:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "infrastructure",
+      "fired_rules": [
+        "infra.hysandbox_host",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-hysandbox-host",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-09T13:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "infrastructure",
+      "fired_rules": [
+        "header.via_ats",
+        "header.via_hysandbox"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-hysandbox-via",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-09T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "indirection",
+      "cluster": "k-323bd6db",
+      "fired_rules": [
+        "header.headless_ua",
+        "marker.uq_tags",
+        "outcome.neterror",
+        "relay.jina"
+      ],
+      "host": "internal[.]agency[.]example",
+      "id": "eval:cov-neterror",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-09T11:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "cluster": "k-3cff30a9",
+      "fired_rules": [
+        "exfil.ntfy"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-ntfy",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-e",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-07T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "cluster": "k-3cff30a9",
+      "fired_rules": [
+        "exfil.ntfy"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:cov-ntfy-2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-e",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-07T09:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "docs[.]ntfy[.]sh",
+      "id": "eval:cov-ntfy-docs",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-20T09:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "fired_rules": [
+        "exfil.oast_service"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-oast-bare",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-06T18:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "www[.]security-blog[.]example",
+      "id": "eval:cov-oast-blog",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-06T18:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "fired_rules": [
+        "exfil.paste",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-paste",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-07T11:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [],
+      "host": "pipedream[.]com",
+      "id": "eval:cov-pipedream-docs",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-06T17:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "cluster": "k-2a0dbcd7",
+      "fired_rules": [
+        "exfil.requestbin"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-requestbin",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-d",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-06T16:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "cluster": "k-2a0dbcd7",
+      "fired_rules": [
+        "exfil.requestbin"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:cov-requestbin-2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-d",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-06T16:00:40Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [
+        "header.gzip_only_requests",
+        "header.scripted_ua"
+      ],
+      "host": "api[.]weather[.]example",
+      "id": "eval:cov-scripted-api",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-09T12:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "docs[.]db[.]example",
+      "id": "eval:cov-select-union-docs",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-04T08:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "agent_marker",
+      "cluster": "k-3d8e048c",
+      "fired_rules": [
+        "marker.uq_tags",
+        "relay.jina",
+        "selfid.vendor_name"
+      ],
+      "host": "portal[.]agency[.]example",
+      "id": "eval:cov-selfid",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-b",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-05T10:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "www[.]blog[.]example",
+      "id": "eval:cov-selfid-host",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-05T12:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-15c03b5e",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-sqli-union",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-a",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-03T09:00:20Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-15c03b5e",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-sqli-union-plus",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-a",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-03T09:00:45Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]labor[.]example",
+      "id": "eval:cov-union-selection",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-20T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "www[.]transit[.]example",
+      "id": "eval:cov-union-station",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-04T08:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [],
+      "host": "docs[.]webhook[.]site",
+      "id": "eval:cov-webhook-docs",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-06T15:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [],
+      "host": "webhook[.]site",
+      "id": "eval:cov-webhook-home",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-06T15:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "cluster": "k-7714324d",
+      "fired_rules": [
+        "exfil.webhook_site"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-webhook-site",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-c",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-06T14:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "cluster": "k-7714324d",
+      "fired_rules": [
+        "exfil.webhook_site"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:cov-webhook-site-2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-c",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-06T14:00:30Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "custom_program",
+      "fired_rules": [
+        "carrier.data_url_script",
+        "carrier.html_program",
+        "carrier.inline_fetch_program",
+        "marker.title_write"
+      ],
+      "host": "api[.]datausa[.]io",
+      "id": "eval:data-url-program",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-data-url",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-20T07:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-da54fae3",
+      "fired_rules": [
+        "exploit.traversal",
+        "exploit.traversal_single"
+      ],
+      "host": "api[.]datausa[.]io",
+      "id": "eval:datausa-passwd",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-datausa",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-03T15:32:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "fired_rules": [],
+      "host": "api[.]datausa[.]io",
+      "id": "eval:datausa-redirect",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-datausa",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-03T15:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-da54fae3",
+      "fired_rules": [
+        "exploit.ssti"
+      ],
+      "host": "api[.]datausa[.]io",
+      "id": "eval:datausa-template",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-datausa",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-03T15:31:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "fuzzing",
+      "fired_rules": [],
+      "host": "civilrightsdata[.]ed[.]gov",
+      "id": "eval:ed-array",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-ed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-02T14:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-3bed0073",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "civilrightsdata[.]ed[.]gov",
+      "id": "eval:ed-sqli",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-ed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-06-02T14:00:05Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "agent_marker",
+      "cluster": "k-3bed0073",
+      "fired_rules": [
+        "marker.oai_tag"
+      ],
+      "host": "civilrightsdata[.]ed[.]gov",
+      "id": "eval:ed-zz-tag",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-ed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-06-02T14:03:10Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-7a37d335",
+      "fired_rules": [
+        "exploit.boundary_ids"
+      ],
+      "host": "recherche-collection-search[.]bac-lac[.]canada[.]ca",
+      "id": "eval:lac-overflow",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-lac",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-10T09:13:30Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-7a37d335",
+      "fired_rules": [
+        "exploit.sqli_quote"
+      ],
+      "host": "recherche-collection-search[.]bac-lac[.]canada[.]ca",
+      "id": "eval:lac-quote",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-lac",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-06-10T09:12:40Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-7a37d335",
+      "fired_rules": [
+        "exploit.sqli_boolean"
+      ],
+      "host": "recherche-collection-search[.]bac-lac[.]canada[.]ca",
+      "id": "eval:lac-sqli",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-lac",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-06-10T09:12:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.tool_call_json"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:llm-arguments-sqli",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:12:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.md_url_wrapper",
+        "relay.markdown_new"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:llm-backtick-relay",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-9df8c89d",
+      "fired_rules": [
+        "marker.truncated_output",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-cut-escape",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:07:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "exploit.traversal",
+        "exploit.traversal_single",
+        "marker.garbled_scheme",
+        "relay.jina"
+      ],
+      "host": "r[.]jina[.]ai",
+      "id": "eval:llm-defanged-relay",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:19:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.doubled_scheme",
+        "relay.microlink"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:llm-doubled-scheme-param",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:18:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-cc3501da",
+      "fired_rules": [
+        "marker.doubled_scheme",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-doubled-scheme-relay",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:17:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-9df8c89d",
+      "fired_rules": [
+        "marker.truncated_output",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-ellipsis-relay",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-6ac6b86f",
+      "fired_rules": [
+        "marker.impossible_date",
+        "relay.jina"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:llm-impossible-date-relay",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:21:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-6ac6b86f",
+      "fired_rules": [
+        "cache.buster",
+        "marker.impossible_date"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:llm-impossible-date-slashed",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:23:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.impossible_date"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-impossible-date-sqli",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:22:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-cc3501da",
+      "fired_rules": [
+        "marker.tool_call_markup",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-invoke-close",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:03:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.escaped_newline",
+        "marker.json_quote_residue"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:llm-json-tail",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:08:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.repeated_token",
+        "relay.microlink"
+      ],
+      "host": "news[.]example",
+      "id": "eval:llm-loop-phrase",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-20T13:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.repeated_token",
+        "relay.jina"
+      ],
+      "host": "www[.]permits[.]example",
+      "id": "eval:llm-loop-word",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-20T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.md_link",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-md-link-relay",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "carrier.httpbin",
+        "marker.garbled_scheme"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:llm-missing-colon-carrier",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:20:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "carrier.httpbin",
+        "exploit.sqli_boolean",
+        "marker.chat_opener"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:llm-opener-as-an-ai",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:15:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.chat_opener",
+        "relay.microlink"
+      ],
+      "host": "api[.]microlink[.]io",
+      "id": "eval:llm-opener-param",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:14:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-cc3501da",
+      "fired_rules": [
+        "marker.chat_opener",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-opener-relay",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:13:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-cc3501da",
+      "fired_rules": [
+        "marker.chat_opener",
+        "marker.uq_tags"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-opener-tagged",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:16:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-a40c5369",
+      "fired_rules": [
+        "marker.placeholder_identity",
+        "relay.jina"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-placeholder-identity-relay",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:24:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-a40c5369",
+      "fired_rules": [
+        "carrier.html_program",
+        "exploit.xss",
+        "marker.placeholder_identity"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-placeholder-identity-xss",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:25:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.example_host_value",
+        "marker.placeholder"
+      ],
+      "host": "example[.]com",
+      "id": "eval:llm-placeholder-redirect",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:09:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:llm-placeholder-sqli",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "marker.json_quote_residue",
+        "relay.microlink"
+      ],
+      "host": "api[.]microlink[.]io",
+      "id": "eval:llm-quoted-param",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:11:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "exploit.traversal",
+        "exploit.traversal_single",
+        "marker.template_unrendered"
+      ],
+      "host": "data[.]portal[.]example",
+      "id": "eval:llm-template-traversal",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:06:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "cluster": "k-cc3501da",
+      "fired_rules": [
+        "marker.tool_call_markup",
+        "marker.uq_tags"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:llm-tool-call-tag",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-07-02T10:04:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "llm_residue",
+      "fired_rules": [
+        "carrier.httpbin",
+        "marker.tool_call_json"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:llm-tool-json-carrier",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "llm-residue.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-02T10:02:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "indirection",
+      "fired_rules": [
+        "cache.buster",
+        "relay.markdown_new"
+      ],
+      "host": "portal[.]max[.]gov",
+      "id": "eval:max-markdown-uniq",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-max",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-15T13:40:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "fired_rules": [
+        "exploit.traversal_single"
+      ],
+      "host": "ojjdp[.]ojp[.]gov",
+      "id": "eval:ojjdp-traversal",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-ojjdp",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-07-08T11:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "indirection",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "www[.]oncb[.]go[.]th",
+      "id": "eval:oncb-jina",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-oncb",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-03-06T20:01:26Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "relay_reading",
+      "fired_rules": [
+        "relay.jina"
+      ],
+      "host": "records[.]plant-a[.]example",
+      "id": "eval:plant-a-decoy",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "linking-negatives.ndjson",
+      "provenance": "synthetic",
+      "run": "plant-decoy-a",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-02T14:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-131d8ae5",
+      "fired_rules": [
+        "exploit.sqli_union",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "records[.]plant-a[.]example",
+      "id": "eval:plant-a-real-1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "linking-negatives.ndjson",
+      "provenance": "synthetic",
+      "run": "plant-real-a",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-02T14:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-131d8ae5",
+      "fired_rules": [
+        "exploit.sqli_union",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "records[.]plant-a[.]example",
+      "id": "eval:plant-a-real-2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "linking-negatives.ndjson",
+      "provenance": "synthetic",
+      "run": "plant-real-a",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-02T14:03:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "api_client",
+      "fired_rules": [
+        "cache.buster"
+      ],
+      "host": "api[.]plant-b[.]example",
+      "id": "eval:plant-b-decoy",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "linking-negatives.ndjson",
+      "provenance": "synthetic",
+      "run": "plant-decoy-b",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-03T09:04:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-635475d7",
+      "fired_rules": [
+        "cache.buster",
+        "exploit.traversal",
+        "exploit.traversal_single"
+      ],
+      "host": "api[.]plant-b[.]example",
+      "id": "eval:plant-b-real-1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "linking-negatives.ndjson",
+      "provenance": "synthetic",
+      "run": "plant-real-b",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-03T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-635475d7",
+      "fired_rules": [
+        "cache.buster",
+        "exploit.traversal",
+        "exploit.traversal_single"
+      ],
+      "host": "api[.]plant-b[.]example",
+      "id": "eval:plant-b-real-2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "linking-negatives.ndjson",
+      "provenance": "synthetic",
+      "run": "plant-real-b",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-03T09:02:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-74c086a9",
+      "fired_rules": [
+        "cache.buster",
+        "header.scripted_ua",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "gist[.]githubusercontent[.]com",
+      "id": "eval:swarm-handoff-f0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-05T14:25:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-74c086a9",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "header.scripted_ua",
+        "marker.uq_tags"
+      ],
+      "host": "b0[.]permits-office[.]example",
+      "id": "eval:swarm-handoff-p0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-05T14:26:30Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-74c086a9",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "header.scripted_ua",
+        "marker.uq_tags"
+      ],
+      "host": "b1[.]permits-office[.]example",
+      "id": "eval:swarm-handoff-p1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-05T14:27:30Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-4c8b6e8f",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "gist[.]github[.]com",
+      "id": "eval:swarm-handoff-w0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-05T14:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-4c8b6e8f",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "gist[.]github[.]com",
+      "id": "eval:swarm-handoff-w1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-05T14:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-4c8b6e8f",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "gist[.]github[.]com",
+      "id": "eval:swarm-handoff-w2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-05T14:02:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-408d9c03",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "billing[.]utility-portal[.]example",
+      "id": "eval:swarm-role-x0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-408d9c03",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "outage[.]utility-portal[.]example",
+      "id": "eval:swarm-role-x1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-408d9c03",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "meter[.]utility-portal[.]example",
+      "id": "eval:swarm-role-x2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:02:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-408d9c03",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "account[.]utility-portal[.]example",
+      "id": "eval:swarm-role-x3",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:03:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-408d9c03",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "support[.]utility-portal[.]example",
+      "id": "eval:swarm-role-x4",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:04:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-a798e7e7",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "header.scripted_ua",
+        "marker.uq_tags"
+      ],
+      "host": "billing[.]utility-portal[.]example",
+      "id": "eval:swarm-role-y0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-a798e7e7",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "header.scripted_ua",
+        "marker.uq_tags"
+      ],
+      "host": "outage[.]utility-portal[.]example",
+      "id": "eval:swarm-role-y1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:31:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-a798e7e7",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "header.scripted_ua",
+        "marker.uq_tags"
+      ],
+      "host": "meter[.]utility-portal[.]example",
+      "id": "eval:swarm-role-y2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:32:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-a798e7e7",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "header.scripted_ua",
+        "marker.uq_tags"
+      ],
+      "host": "account[.]utility-portal[.]example",
+      "id": "eval:swarm-role-y3",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:33:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-a798e7e7",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "header.scripted_ua",
+        "marker.uq_tags"
+      ],
+      "host": "support[.]utility-portal[.]example",
+      "id": "eval:swarm-role-y4",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-12T16:34:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-b000dccb",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h0[.]county-records[.]example",
+      "id": "eval:swarm-shard-00",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-b000dccb",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h1[.]county-records[.]example",
+      "id": "eval:swarm-shard-01",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:00:50Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-b000dccb",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h2[.]county-records[.]example",
+      "id": "eval:swarm-shard-02",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:01:40Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-b000dccb",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h3[.]county-records[.]example",
+      "id": "eval:swarm-shard-03",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:02:30Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-b000dccb",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h4[.]county-records[.]example",
+      "id": "eval:swarm-shard-04",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:03:20Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-b000dccb",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h5[.]county-records[.]example",
+      "id": "eval:swarm-shard-05",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:04:10Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-b000dccb",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h6[.]county-records[.]example",
+      "id": "eval:swarm-shard-06",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-b000dccb",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h7[.]county-records[.]example",
+      "id": "eval:swarm-shard-07",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:05:50Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-1d59194a",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h8[.]county-records[.]example",
+      "id": "eval:swarm-shard-10",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:00:40Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-1d59194a",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h9[.]county-records[.]example",
+      "id": "eval:swarm-shard-11",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:01:30Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-1d59194a",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h10[.]county-records[.]example",
+      "id": "eval:swarm-shard-12",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:02:20Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-1d59194a",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h11[.]county-records[.]example",
+      "id": "eval:swarm-shard-13",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:03:10Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-1d59194a",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h12[.]county-records[.]example",
+      "id": "eval:swarm-shard-14",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:04:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-1d59194a",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h13[.]county-records[.]example",
+      "id": "eval:swarm-shard-15",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:04:50Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-1d59194a",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h14[.]county-records[.]example",
+      "id": "eval:swarm-shard-16",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:05:40Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-1d59194a",
+      "fired_rules": [
+        "cache.buster",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "h15[.]county-records[.]example",
+      "id": "eval:swarm-shard-17",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-02T10:06:30Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-fd3d4fb8",
+      "fired_rules": [
+        "cache.buster",
+        "exfil.webhook_site",
+        "header.headless_ua",
+        "marker.uq_tags"
+      ],
+      "host": "p0[.]transit-authority[.]example",
+      "id": "eval:swarm-sink-d0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-09T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-fd3d4fb8",
+      "fired_rules": [
+        "cache.buster",
+        "exfil.webhook_site",
+        "header.headless_ua",
+        "marker.uq_tags"
+      ],
+      "host": "p1[.]transit-authority[.]example",
+      "id": "eval:swarm-sink-d1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-09T09:02:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-fd3d4fb8",
+      "fired_rules": [
+        "cache.buster",
+        "exfil.webhook_site",
+        "header.headless_ua",
+        "marker.uq_tags"
+      ],
+      "host": "p2[.]transit-authority[.]example",
+      "id": "eval:swarm-sink-d2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-09T09:04:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-fd3d4fb8",
+      "fired_rules": [
+        "exfil.webhook_site",
+        "header.scripted_ua",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "q0[.]transit-authority[.]example",
+      "id": "eval:swarm-sink-r0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-09T09:01:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-fd3d4fb8",
+      "fired_rules": [
+        "exfil.webhook_site",
+        "header.scripted_ua",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "q1[.]transit-authority[.]example",
+      "id": "eval:swarm-sink-r1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-09T09:03:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "coordination",
+      "cluster": "k-fd3d4fb8",
+      "fired_rules": [
+        "exfil.webhook_site",
+        "header.scripted_ua",
+        "marker.uq_tags",
+        "relay.jina"
+      ],
+      "host": "q2[.]transit-authority[.]example",
+      "id": "eval:swarm-sink-r2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "swarm-interaction.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-03-09T09:05:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "custom_program",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.httpbin",
+        "carrier.inline_fetch_program"
+      ],
+      "host": "www[.]thrill-data[.]com",
+      "id": "eval:thrill-relative-jina",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-thrill",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-14T08:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "agent_marker",
+      "fired_rules": [
+        "marker.test_tag"
+      ],
+      "host": "unctadstat[.]unctad[.]org",
+      "id": "eval:unctad-chatgpt-tag",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-05-13T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "custom_program",
+      "fired_rules": [
+        "carrier.form_post_program",
+        "carrier.httpbin"
+      ],
+      "host": "unctadstat-api[.]unctad[.]org",
+      "id": "eval:unctad-form-post",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-05-13T10:20:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "indirection",
+      "cluster": "k-31edd96c",
+      "fired_rules": [
+        "marker.test_tag",
+        "relay.markdown_new"
+      ],
+      "host": "nmdigital[.]unm[.]edu",
+      "id": "eval:unm-markdown",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unm",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-05-20T19:04:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "agent_marker",
+      "cluster": "k-31edd96c",
+      "fired_rules": [
+        "marker.test_tag"
+      ],
+      "host": "nmdigital[.]unm[.]edu",
+      "id": "eval:unm-tok-expt",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unm",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-05-20T19:01:00Z",
+      "ts_kind": "unknown"
+    }
+  ],
+  "rules_sha256": "e1902276eb9a022de8014c634b8313f8ac29f77b312d4079323610831475554b",
+  "rules_version": "2026-10-10",
+  "toolkit_version": "0.1.0"
+}

@@ -72,7 +72,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`report`](src/report/mod.rs) | Markdown drafts and the public notice: per-audience wording (`audience`), cluster hint lines (`hints`), attribution and endpoints (`sections`), the agent grade block (`agentness`). |
 | [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |
-| [`eval`](src/eval.rs) | Precision and recall against labelled records; agent grades by actor (`grades`). |
+| [`eval`](src/eval.rs) | Precision and recall against labelled records, per record and per cluster (`units`); agent grades by actor (`grades`); the negative control (`control`); SC-Bench (`bench`). |
 | [`securitytxt`](src/securitytxt.rs) | RFC 9116 `security.txt` parsing. |
 | [`sort`](src/sort.rs) | Stable sorts that share one compiled routine, so each call site does not add a copy of the standard sort to the browser module. Same order as `slice::sort_by`. |
 

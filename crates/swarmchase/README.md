@@ -84,7 +84,9 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 |---|---|
 | `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`. Details: [Watch runs](../../docs/reference/watch.md). |
 | `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest` shows a local model's suggestion. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
-| `eval <input>…` | Precision and recall of the rules on labelled records, and agent grades by actor. Labels come from a `label` field or `--labels` (NDJSON or CSV). With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. `--before <date>` grades a pre-agent negative control instead. |
+| `review sample` | Writes a stratified, seeded sample of low-tier records as a queue for a [reviewed benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline); `review <queue> --all` labels it. |
+| `eval <input>…` | Precision and recall of the rules on labelled records, per record and per cluster, for all and for non-synthetic records. With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. `--before <date>` runs a pre-agent negative control instead. Details: [Evaluation](../../docs/reference/evaluation.md). |
+| `eval repro`, `eval check-results`, `eval export-bench` | Measure a saved result again; check the committed results; write an SC-Bench file (`eval --bench` scores one). |
 
 ```sh
 swarmchase watch                              # uses watchlist.toml and $SWARMCHASE_DATA (or data/)
@@ -157,9 +159,9 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
 | [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
-| [`review.rs`](src/review.rs) | Interactive labelling. |
+| [`review/`](src/review/mod.rs) | Interactive labelling; the benign-baseline sampler ([`sample.rs`](src/review/sample.rs)). |
 | [`suggest.rs`](src/suggest.rs) | Label suggestions from a local model (`review --suggest`), local hosts only. |
-| [`eval.rs`](src/eval.rs) | The `eval` command. |
+| [`eval.rs`](src/eval.rs) | The `eval` command's tables, floors and saved results; `repro` and `check-results` ([`repro.rs`](src/eval/repro.rs)); SC-Bench export and scoring ([`bench.rs`](src/eval/bench.rs)). |
 | [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, lead times ([`lead.rs`](src/case/lead.rs)), the self-review checklist ([`checklist.rs`](src/case/checklist.rs)), and the indicators the watch matches. |
 | [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |
 | [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |

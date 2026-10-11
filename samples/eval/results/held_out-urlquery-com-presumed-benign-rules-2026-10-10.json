@@ -1,76 +1,83 @@
 {
+  "result_schema": 2,
   "kind": "held_out",
-  "description": "Transluce urlquery release: held-out sample of labelled reports, fetched by id; labels from the release with this repository's overrides",
-  "rules_version": "2026-10-15",
+  "description": "Recent urlquery reports from a generic search (http.url.tld:com), fetched by id, not in Transluce's catalogue. Labelled benign by presumption and not reviewed: a false-positive check on ordinary submissions, not a reviewed benign baseline. No agent record: false-positive rate only.",
+  "rules_version": "2026-10-10",
+  "rules_sha256": "e1902276eb9a022de8014c634b8313f8ac29f77b312d4079323610831475554b",
   "toolkit": {
     "version": "0.1.0",
-    "commit": "a7a2b11b95ce7141aa86281bbbf2ac4c706c39d8"
+    "commit": "5e3698be8be05b191a6e9b8a3c914fcc047ad07a"
   },
   "records": [
     {
-      "sha256": "1260fd2f90d8b7b7426e67a3a70a0e2116fe5f45de2242cd70469e565bc4ac78",
-      "bytes": 159921
+      "path": "data/eval/baseline-com.ndjson",
+      "sha256": "cbe202a0f6e896df5e90b621e8792cb6b4b99d9bfc79040882e08aa66fcb702b",
+      "bytes": 87404
     }
   ],
   "labels": [
     {
-      "sha256": "7f976c9b889625a971328f6913c5c8e3c5c18d236a25cb75f18c49b45da2bf32",
-      "bytes": 70204
-    },
-    {
-      "sha256": "93c9e09c49172b1fc340ff345a75db983a139ae876e6660ae2c71b590614412f",
-      "bytes": 325
+      "path": "data/eval/baseline-labels.ndjson",
+      "sha256": "04d5042fcb7b913f4330afc80f18a7d46b5cd39cef05bf99091a3189fd6035f8",
+      "bytes": 39600
     }
   ],
+  "counts": {
+    "labelled": 199,
+    "agents": 0,
+    "benign": 199,
+    "non_synthetic_labelled": 199,
+    "non_synthetic_benign": 199
+  },
   "summary": {
     "schema": 1,
-    "rules_version": "2026-10-15",
-    "labelled": 150,
-    "agents": 150,
-    "benign": 0,
+    "rules_version": "2026-10-10",
+    "labelled": 199,
+    "agents": 0,
+    "benign": 199,
     "unlabelled": 0,
-    "missing_records": 1,
+    "missing_records": 0,
     "tiers": [
       {
         "tier": "suggestive",
-        "tp": 37,
+        "tp": 0,
         "fp": 0,
-        "fn": 113,
-        "tn": 0,
+        "fn": 0,
+        "tn": 199,
         "precision": {
-          "k": 37,
-          "n": 37,
-          "value": 1.0,
-          "lo": 0.9059421741627975,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "recall": {
-          "k": 37,
-          "n": 150,
-          "value": 0.24666666666666667,
-          "lo": 0.18458162955288543,
-          "hi": 0.3214032942602734
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         }
       },
       {
         "tier": "significant",
-        "tp": 28,
+        "tp": 0,
         "fp": 0,
-        "fn": 122,
-        "tn": 0,
+        "fn": 0,
+        "tn": 199,
         "precision": {
-          "k": 28,
-          "n": 28,
-          "value": 1.0,
-          "lo": 0.8793566952341542,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "recall": {
-          "k": 28,
-          "n": 150,
-          "value": 0.18666666666666668,
-          "lo": 0.13242415483319162,
-          "hi": 0.2565571983041365
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         }
       }
     ],
@@ -78,7 +85,7 @@
       {
         "rule_id": "relay.jina",
         "tactics": [
-          "untagged"
+          "T1"
         ],
         "tp": 0,
         "fp": 0,
@@ -96,25 +103,25 @@
       {
         "rule_id": "relay.markdown_new",
         "tactics": [
-          "untagged"
+          "T1"
         ],
-        "tp": 1,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 1,
-          "n": 1,
-          "value": 1.0,
-          "lo": 0.20654931437723745,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "relay.microlink",
         "tactics": [
-          "untagged"
+          "T1"
         ],
         "tp": 0,
         "fp": 0,
@@ -132,7 +139,7 @@
       {
         "rule_id": "relay.hrefli",
         "tactics": [
-          "untagged"
+          "T1"
         ],
         "tp": 0,
         "fp": 0,
@@ -150,7 +157,7 @@
       {
         "rule_id": "relay.translate_goog",
         "tactics": [
-          "untagged"
+          "T1"
         ],
         "tp": 0,
         "fp": 0,
@@ -168,7 +175,7 @@
       {
         "rule_id": "relay.allorigins",
         "tactics": [
-          "untagged"
+          "T1"
         ],
         "tp": 0,
         "fp": 0,
@@ -186,43 +193,43 @@
       {
         "rule_id": "relay.corsproxy",
         "tactics": [
-          "untagged"
+          "T1"
         ],
-        "tp": 1,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 1,
-          "n": 1,
-          "value": 1.0,
-          "lo": 0.20654931437723745,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "carrier.httpbin",
         "tactics": [
-          "untagged"
+          "T2"
         ],
-        "tp": 32,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 32,
-          "n": 32,
-          "value": 1.0,
-          "lo": 0.8928208017449293,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "carrier.livecodes",
         "tactics": [
-          "untagged"
+          "T2"
         ],
         "tp": 0,
         "fp": 0,
@@ -240,7 +247,7 @@
       {
         "rule_id": "carrier.codesandbox",
         "tactics": [
-          "untagged"
+          "T2"
         ],
         "tp": 0,
         "fp": 0,
@@ -258,7 +265,7 @@
       {
         "rule_id": "carrier.data_url_script",
         "tactics": [
-          "untagged"
+          "T2"
         ],
         "tp": 0,
         "fp": 0,
@@ -276,61 +283,61 @@
       {
         "rule_id": "carrier.inline_fetch_program",
         "tactics": [
-          "untagged"
+          "T2"
         ],
-        "tp": 7,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 7,
-          "n": 7,
-          "value": 1.0,
-          "lo": 0.6456695649333126,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "carrier.form_post_program",
         "tactics": [
-          "untagged"
+          "T2"
         ],
-        "tp": 22,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 22,
-          "n": 22,
-          "value": 1.0,
-          "lo": 0.8513451253913791,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "carrier.html_program",
         "tactics": [
-          "untagged"
+          "T2"
         ],
-        "tp": 32,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 32,
-          "n": 32,
-          "value": 1.0,
-          "lo": 0.8928208017449293,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "exploit.sqli_union",
         "tactics": [
-          "untagged"
+          "T4"
         ],
         "tp": 0,
         "fp": 0,
@@ -348,7 +355,7 @@
       {
         "rule_id": "exploit.sqli_boolean",
         "tactics": [
-          "untagged"
+          "T4"
         ],
         "tp": 0,
         "fp": 0,
@@ -366,7 +373,7 @@
       {
         "rule_id": "exploit.traversal",
         "tactics": [
-          "untagged"
+          "T4"
         ],
         "tp": 0,
         "fp": 0,
@@ -384,7 +391,7 @@
       {
         "rule_id": "exploit.traversal_single",
         "tactics": [
-          "untagged"
+          "T4"
         ],
         "tp": 0,
         "fp": 0,
@@ -402,7 +409,7 @@
       {
         "rule_id": "exploit.sqli_quote",
         "tactics": [
-          "untagged"
+          "T4"
         ],
         "tp": 0,
         "fp": 0,
@@ -420,25 +427,25 @@
       {
         "rule_id": "exploit.xss",
         "tactics": [
-          "untagged"
+          "T4"
         ],
-        "tp": 1,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 1,
-          "n": 1,
-          "value": 1.0,
-          "lo": 0.20654931437723745,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "exploit.ssti",
         "tactics": [
-          "untagged"
+          "T4"
         ],
         "tp": 0,
         "fp": 0,
@@ -456,7 +463,7 @@
       {
         "rule_id": "exploit.cmdi",
         "tactics": [
-          "untagged"
+          "T4"
         ],
         "tp": 0,
         "fp": 0,
@@ -474,7 +481,7 @@
       {
         "rule_id": "exploit.boundary_ids",
         "tactics": [
-          "untagged"
+          "T4"
         ],
         "tp": 0,
         "fp": 0,
@@ -494,42 +501,45 @@
         "tactics": [
           "untagged"
         ],
-        "tp": 3,
+        "artifact": true,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 3,
-          "n": 3,
-          "value": 1.0,
-          "lo": 0.43850296824495455,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "marker.test_tag",
         "tactics": [
           "untagged"
         ],
-        "tp": 1,
+        "artifact": true,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 1,
-          "n": 1,
-          "value": 1.0,
-          "lo": 0.20654931437723745,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "marker.oai_tag",
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -546,7 +556,7 @@
       {
         "rule_id": "marker.callback_seq",
         "tactics": [
-          "untagged"
+          "T7"
         ],
         "tp": 0,
         "fp": 0,
@@ -564,26 +574,27 @@
       {
         "rule_id": "marker.title_write",
         "tactics": [
-          "untagged"
+          "T7"
         ],
-        "tp": 2,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 2,
-          "n": 2,
-          "value": 1.0,
-          "lo": 0.34238022750665303,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "marker.md_link",
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -602,6 +613,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -620,6 +632,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -638,6 +651,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -656,6 +670,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -674,6 +689,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -692,6 +708,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -710,6 +727,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -728,24 +746,26 @@
         "tactics": [
           "untagged"
         ],
-        "tp": 3,
+        "artifact": true,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 3,
-          "n": 3,
-          "value": 1.0,
-          "lo": 0.43850296824495455,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "marker.truncated_output",
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -764,6 +784,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -782,6 +803,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -800,6 +822,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -818,6 +841,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -834,8 +858,28 @@
       {
         "rule_id": "marker.placeholder_identity",
         "tactics": [
+          "T5"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.repeated_token",
+        "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -852,26 +896,27 @@
       {
         "rule_id": "cache.buster",
         "tactics": [
-          "untagged"
+          "T1"
         ],
-        "tp": 3,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 3,
-          "n": 3,
-          "value": 1.0,
-          "lo": 0.43850296824495455,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "selfid.vendor_name",
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -888,7 +933,7 @@
       {
         "rule_id": "exfil.webhook_site",
         "tactics": [
-          "untagged"
+          "T7"
         ],
         "tp": 0,
         "fp": 0,
@@ -906,7 +951,7 @@
       {
         "rule_id": "exfil.requestbin",
         "tactics": [
-          "untagged"
+          "T7"
         ],
         "tp": 0,
         "fp": 0,
@@ -924,7 +969,7 @@
       {
         "rule_id": "exfil.oast_service",
         "tactics": [
-          "untagged"
+          "T7"
         ],
         "tp": 0,
         "fp": 0,
@@ -942,7 +987,7 @@
       {
         "rule_id": "exfil.ntfy",
         "tactics": [
-          "untagged"
+          "T7"
         ],
         "tp": 0,
         "fp": 0,
@@ -960,25 +1005,25 @@
       {
         "rule_id": "exfil.paste",
         "tactics": [
-          "untagged"
+          "T7"
         ],
-        "tp": 1,
+        "tp": 0,
         "fp": 0,
         "precision": {
-          "k": 1,
-          "n": 1,
-          "value": 1.0,
-          "lo": 0.20654931437723745,
-          "hi": 1.0
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "exfil.cookie",
         "tactics": [
-          "untagged"
+          "T6"
         ],
         "tp": 0,
         "fp": 0,
@@ -996,7 +1041,7 @@
       {
         "rule_id": "exfil.disposable_mail",
         "tactics": [
-          "untagged"
+          "T5"
         ],
         "tp": 0,
         "fp": 0,
@@ -1014,7 +1059,7 @@
       {
         "rule_id": "antibot.baxia",
         "tactics": [
-          "untagged"
+          "T3"
         ],
         "tp": 0,
         "fp": 0,
@@ -1032,7 +1077,7 @@
       {
         "rule_id": "antibot.captcha_solver",
         "tactics": [
-          "untagged"
+          "T3"
         ],
         "tp": 0,
         "fp": 0,
@@ -1050,7 +1095,7 @@
       {
         "rule_id": "antibot.ocr_captcha",
         "tactics": [
-          "untagged"
+          "T3"
         ],
         "tp": 0,
         "fp": 0,
@@ -1070,6 +1115,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -1088,6 +1134,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -1106,6 +1153,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -1124,6 +1172,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -1142,6 +1191,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -1158,25 +1208,25 @@
       {
         "rule_id": "outcome.neterror",
         "tactics": [
-          "untagged"
+          "T3"
         ],
-        "tp": 19,
-        "fp": 0,
+        "tp": 0,
+        "fp": 3,
         "precision": {
-          "k": 19,
-          "n": 19,
-          "value": 1.0,
-          "lo": 0.8318207759473837,
-          "hi": 1.0
+          "k": 0,
+          "n": 3,
+          "value": 0.0,
+          "lo": 0.0,
+          "hi": 0.5614970317550455
         },
         "hard_negatives": 0,
         "hard_negatives_fired": 0,
-        "covered": true
+        "covered": false
       },
       {
         "rule_id": "outcome.challenge",
         "tactics": [
-          "untagged"
+          "T3"
         ],
         "tp": 0,
         "fp": 0,
@@ -1196,6 +1246,7 @@
         "tactics": [
           "untagged"
         ],
+        "artifact": true,
         "tp": 0,
         "fp": 0,
         "precision": {
@@ -1211,28 +1262,38 @@
       }
     ],
     "coverage": {
-      "rules": 63,
-      "covered": 14,
+      "rules": 64,
+      "covered": 0,
       "allowed": 0,
       "uncovered": [
         "relay.jina",
+        "relay.markdown_new",
         "relay.microlink",
         "relay.hrefli",
         "relay.translate_goog",
         "relay.allorigins",
+        "relay.corsproxy",
+        "carrier.httpbin",
         "carrier.livecodes",
         "carrier.codesandbox",
         "carrier.data_url_script",
+        "carrier.inline_fetch_program",
+        "carrier.form_post_program",
+        "carrier.html_program",
         "exploit.sqli_union",
         "exploit.sqli_boolean",
         "exploit.traversal",
         "exploit.traversal_single",
         "exploit.sqli_quote",
+        "exploit.xss",
         "exploit.ssti",
         "exploit.cmdi",
         "exploit.boundary_ids",
+        "marker.uq_tags",
+        "marker.test_tag",
         "marker.oai_tag",
         "marker.callback_seq",
+        "marker.title_write",
         "marker.md_link",
         "marker.md_url_wrapper",
         "marker.placeholder",
@@ -1241,17 +1302,21 @@
         "marker.tool_call_markup",
         "marker.tool_call_json",
         "marker.json_quote_residue",
+        "marker.escaped_newline",
         "marker.truncated_output",
         "marker.chat_opener",
         "marker.doubled_scheme",
         "marker.garbled_scheme",
         "marker.impossible_date",
         "marker.placeholder_identity",
+        "marker.repeated_token",
+        "cache.buster",
         "selfid.vendor_name",
         "exfil.webhook_site",
         "exfil.requestbin",
         "exfil.oast_service",
         "exfil.ntfy",
+        "exfil.paste",
         "exfil.cookie",
         "exfil.disposable_mail",
         "antibot.baxia",
@@ -1262,117 +1327,507 @@
         "header.gzip_only_requests",
         "header.scripted_ua",
         "header.headless_ua",
+        "outcome.neterror",
         "outcome.challenge",
         "infra.hysandbox_host"
       ],
       "with_hard_negatives": 0,
       "unknown_hard_negative_ids": []
     },
-    "agent_classes": [
+    "agent_classes": [],
+    "benign_classes": [
       {
-        "name": "custom_program",
-        "n": 31,
+        "name": "presumed_benign",
+        "n": 199,
         "suggestive": {
-          "k": 31,
-          "n": 31,
-          "value": 1.0,
-          "lo": 0.889744604539564,
-          "hi": 1.0
-        },
-        "significant": {
-          "k": 27,
-          "n": 31,
-          "value": 0.8709677419354839,
-          "lo": 0.7114759374369357,
-          "hi": 0.9486571562537085
-        }
-      },
-      {
-        "name": "indirection",
-        "n": 6,
-        "suggestive": {
-          "k": 2,
-          "n": 6,
-          "value": 0.3333333333333333,
-          "lo": 0.09677141110578041,
-          "hi": 0.700006684861608
+          "k": 0,
+          "n": 199,
+          "value": 0.0,
+          "lo": 0.0,
+          "hi": 0.018938233056634942
         },
         "significant": {
           "k": 0,
-          "n": 6,
+          "n": 199,
           "value": 0.0,
           "lo": 0.0,
-          "hi": 0.39033428790216534
-        }
-      },
-      {
-        "name": "source_request",
-        "n": 113,
-        "suggestive": {
-          "k": 4,
-          "n": 113,
-          "value": 0.035398230088495575,
-          "lo": 0.013850178551374825,
-          "hi": 0.08749620089486373
-        },
-        "significant": {
-          "k": 1,
-          "n": 113,
-          "value": 0.008849557522123894,
-          "lo": 0.0015638760684392287,
-          "hi": 0.0484308679175844
+          "hi": 0.018938233056634942
         }
       }
     ],
-    "benign_classes": [],
-    "tactics": [
-      {
-        "name": "no_rule_fired",
-        "n": 95,
-        "suggestive": {
-          "k": 0,
-          "n": 95,
-          "value": 0.0,
-          "lo": 0.0,
-          "hi": 0.038864853539472964
-        },
-        "significant": {
-          "k": 0,
-          "n": 95,
-          "value": 0.0,
-          "lo": 0.0,
-          "hi": 0.038864853539472964
-        }
-      },
-      {
-        "name": "untagged",
-        "n": 55,
-        "suggestive": {
-          "k": 37,
-          "n": 55,
-          "value": 0.6727272727272727,
-          "lo": 0.5410322355657868,
-          "hi": 0.7818693440483107
-        },
-        "significant": {
-          "k": 28,
-          "n": 55,
-          "value": 0.509090909090909,
-          "lo": 0.380762598469722,
-          "hi": 0.6362322215099672
-        }
-      }
-    ],
+    "tactics": [],
     "clusters": {
       "run_labelled": 0,
       "runs": 0,
       "bcubed_precision": null,
       "bcubed_recall": null,
       "bcubed_f1": null,
-      "clusters_checked": 1,
+      "clusters_checked": 0,
       "false_merges": [],
-      "false_merge_rate": 0.0,
+      "false_merge_rate": null,
       "false_splits": []
+    },
+    "cluster_tiers": [
+      {
+        "tier": "suggestive",
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 199,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "recall": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        }
+      },
+      {
+        "tier": "significant",
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 199,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "recall": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        }
+      }
+    ],
+    "non_synthetic": {
+      "name": "non_synthetic",
+      "labelled": 199,
+      "agents": 0,
+      "benign": 199,
+      "tiers": [
+        {
+          "tier": "suggestive",
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "tn": 199,
+          "precision": {
+            "k": 0,
+            "n": 0,
+            "value": null,
+            "lo": null,
+            "hi": null
+          },
+          "recall": {
+            "k": 0,
+            "n": 0,
+            "value": null,
+            "lo": null,
+            "hi": null
+          }
+        },
+        {
+          "tier": "significant",
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "tn": 199,
+          "precision": {
+            "k": 0,
+            "n": 0,
+            "value": null,
+            "lo": null,
+            "hi": null
+          },
+          "recall": {
+            "k": 0,
+            "n": 0,
+            "value": null,
+            "lo": null,
+            "hi": null
+          }
+        }
+      ],
+      "cluster_tiers": [
+        {
+          "tier": "suggestive",
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "tn": 199,
+          "precision": {
+            "k": 0,
+            "n": 0,
+            "value": null,
+            "lo": null,
+            "hi": null
+          },
+          "recall": {
+            "k": 0,
+            "n": 0,
+            "value": null,
+            "lo": null,
+            "hi": null
+          }
+        },
+        {
+          "tier": "significant",
+          "tp": 0,
+          "fp": 0,
+          "fn": 0,
+          "tn": 199,
+          "precision": {
+            "k": 0,
+            "n": 0,
+            "value": null,
+            "lo": null,
+            "hi": null
+          },
+          "recall": {
+            "k": 0,
+            "n": 0,
+            "value": null,
+            "lo": null,
+            "hi": null
+          }
+        }
+      ]
+    },
+    "by_provenance": [
+      {
+        "name": "collected",
+        "labelled": 199,
+        "agents": 0,
+        "benign": 199,
+        "tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          }
+        ],
+        "cluster_tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          }
+        ]
+      }
+    ],
+    "by_source": [
+      {
+        "name": "urlquery",
+        "labelled": 199,
+        "agents": 0,
+        "benign": 199,
+        "tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          }
+        ],
+        "cluster_tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          }
+        ]
+      }
+    ],
+    "by_file": [
+      {
+        "name": "baseline-labels.ndjson",
+        "labelled": 199,
+        "agents": 0,
+        "benign": 199,
+        "tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          }
+        ],
+        "cluster_tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 199,
+            "precision": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            },
+            "recall": {
+              "k": 0,
+              "n": 0,
+              "value": null,
+              "lo": null,
+              "hi": null
+            }
+          }
+        ]
+      }
+    ],
+    "calibration": {
+      "by_tier": [
+        {
+          "name": "noise",
+          "precision": {
+            "k": 0,
+            "n": 199,
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.018938233056634942
+          }
+        }
+      ],
+      "by_agent_level": [
+        {
+          "name": "unflagged",
+          "precision": {
+            "k": 0,
+            "n": 196,
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.019222531917868147
+          }
+        },
+        {
+          "name": "unclustered",
+          "precision": {
+            "k": 0,
+            "n": 3,
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.5614970317550455
+          }
+        }
+      ]
     }
   }
 }

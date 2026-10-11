@@ -122,10 +122,9 @@ pub fn cluster_eval(a: &Analysis, labels: &LabelSet) -> ClusterEval {
     for (c, (runs, kinds)) in &by_cluster {
         let mixes_labels = kinds.len() > 1;
         if runs.len() > 1 || mixes_labels {
-            let cl = &a.clusters[*c];
             out.false_merges.push(FalseMerge {
-                cluster: cl.key.clone(),
-                members: cl.members.len(),
+                cluster: super::view::cluster_key(a, *c).to_string(),
+                members: super::view::cluster_size(a, *c),
                 runs: runs.iter().map(|s| s.to_string()).collect(),
                 mixes_labels,
             });
