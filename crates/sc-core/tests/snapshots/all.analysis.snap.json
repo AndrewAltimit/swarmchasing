@@ -1,9 +1,9 @@
 {
   "rules_version": "2026-10-11",
-  "total": 251,
+  "total": 252,
   "flagged": 193,
   "tier_counts": {
-    "noise": 91,
+    "noise": 92,
     "suggestive": 76,
     "significant": 84
   },
@@ -7093,6 +7093,40 @@
     },
     {
       "obs": {
+        "id": "eval:cov-nested-cache-url",
+        "source": "eval",
+        "ts": 1785920400,
+        "url": "https://cache.archive.example/index.php?url=https%3A%2F%2Fdocs.example%2Fview%3Fq%3Dhttps%253A%252F%252Ffiles.example%252Fa.pdf%253Fdl%253D1"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "cache.archive.example",
+          "text": "https://cache.archive.example/index.php?url=https://docs.example/view?q=https%3A%2F%2Ffiles.example%2Fa.pdf%3Fdl%3D1"
+        },
+        {
+          "via": "param:url",
+          "depth": 1,
+          "host": "docs.example",
+          "text": "https://docs.example/view?q=https://files.example/a.pdf?dl=1"
+        },
+        {
+          "via": "param:q",
+          "depth": 2,
+          "host": "files.example",
+          "text": "https://files.example/a.pdf?dl=1"
+        }
+      ],
+      "target_host": "files.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
         "id": "eval:swarm-shard-00",
         "source": "eval",
         "ts": 1772445600,
@@ -9763,12 +9797,12 @@
       "id": "C3",
       "key": "k-fd3d4fb8",
       "members": [
-        235,
         236,
         237,
         238,
         239,
-        240
+        240,
+        241
       ],
       "start": 1773046800,
       "end": 1773047100,
@@ -9934,12 +9968,12 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              235,
               236,
               237,
               238,
               239,
-              240
+              240,
+              241
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -10162,11 +10196,11 @@
       "id": "C5",
       "key": "k-a798e7e7",
       "members": [
-        246,
         247,
         248,
         249,
-        250
+        250,
+        251
       ],
       "start": 1773333000,
       "end": 1773333240,
@@ -10320,11 +10354,11 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              246,
               247,
               248,
               249,
-              250
+              250,
+              251
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -11331,9 +11365,9 @@
       "id": "C11",
       "key": "k-74c086a9",
       "members": [
-        232,
         233,
-        234
+        234,
+        235
       ],
       "start": 1772720700,
       "end": 1772720850,
@@ -11500,8 +11534,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              233,
-              234
+              234,
+              235
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -13735,14 +13769,14 @@
       "id": "C24",
       "key": "k-b000dccb",
       "members": [
-        213,
         214,
         215,
         216,
         217,
         218,
         219,
-        220
+        220,
+        221
       ],
       "start": 1772445600,
       "end": 1772445950,
@@ -13925,14 +13959,14 @@
       "id": "C25",
       "key": "k-1d59194a",
       "members": [
-        221,
         222,
         223,
         224,
         225,
         226,
         227,
-        228
+        228,
+        229
       ],
       "start": 1772445640,
       "end": 1772445990,
@@ -14115,11 +14149,11 @@
       "id": "C26",
       "key": "k-408d9c03",
       "members": [
-        241,
         242,
         243,
         244,
-        245
+        245,
+        246
       ],
       "start": 1773331200,
       "end": 1773331440,
@@ -14292,9 +14326,9 @@
       "id": "C27",
       "key": "k-4c8b6e8f",
       "members": [
-        229,
         230,
-        231
+        231,
+        232
       ],
       "start": 1772719200,
       "end": 1772719320,

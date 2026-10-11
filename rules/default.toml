@@ -907,7 +907,7 @@ target = "param_value"
 # layer of decoding (`%253Cscript%253E` arrives as `%3Cscript%3E`). An
 # ordinary once-encoded value decodes to the character itself, so this fires
 # only on the surviving escape of a deliberate double-encoding.
-pattern = "%(3[cde]|27|22|28|29)"
+pattern = "%(3[ce]|27|22|28|29)"
 weight = 4
 significant = true
 description = "Double-encoded injection metacharacter in a parameter value (%253C -> %3C)"

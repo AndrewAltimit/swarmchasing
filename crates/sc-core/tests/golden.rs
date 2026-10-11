@@ -47,10 +47,10 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (126, 0, 7, 81),
+        (126, 0, 7, 82),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (52, 0, 81, 81), "significant");
+    assert_eq!(counts(Tier::Significant), (52, 0, 81, 82), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
