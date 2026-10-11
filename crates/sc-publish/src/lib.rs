@@ -48,6 +48,8 @@ mod tests {
                 providers: vec![],
                 affected: vec!["portal.example.gov".into()],
                 sector: None,
+                scope: None,
+                agent_grade: None,
                 rules_version: "2026-10-12".into(),
                 toolkit: "0.1.0".into(),
                 updates: vec![

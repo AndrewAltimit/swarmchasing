@@ -1,24 +1,23 @@
-//! Lead time: how long after its report each party has before the public
+//! Lead time: how long after its report each party has before the indicator
 //! notice may be added (docs/policies.md, SC-FM 10.2).
 //!
-//! The AI provider gets none: its report and the notice may go the same
-//! hour. Operators of targeted and historical endpoints get 4 to 12 hours
-//! (6 unless the admin sets the case otherwise), operators of compromised
-//! endpoints 24. Each party's clock runs from the latest recorded send to
-//! it. Nothing a recipient says lengthens it, and nothing shortens it: the
-//! tool has no override. A party no contact was found for (`case
-//! no-contact`) has no clock, and the notice says contact was attempted.
+//! The indicator notice names no affected organisation or host, so the
+//! clock is short: the AI provider and the operators of targeted and
+//! historical endpoints get none beyond their report going first, operators
+//! of compromised endpoints 24 hours. Each party's clock runs from the
+//! latest recorded send to it. Nothing a recipient says lengthens it, and
+//! nothing shortens it: the tool has no override. A party no contact was
+//! found for (`case no-contact`) has no clock, and the notice says contact
+//! was attempted. Names wait longer, on the naming clock ([`crate::naming`]).
 
 use crate::model::{Case, Contact, ContactRole, EndpointState, parse_time, show_time};
-use crate::{Result, bail};
+use crate::naming;
 
 /// The AI provider's lead time, in hours.
 pub const PROVIDER: u32 = 0;
-/// The bounds and default of the lead for targeted and historical
-/// endpoints' operators, in hours.
-pub const OPERATOR_MIN: u32 = 4;
-pub const OPERATOR_MAX: u32 = 12;
-pub const OPERATOR_DEFAULT: u32 = 6;
+/// The lead for targeted and historical endpoints' operators, in hours: the
+/// report reaches them before the indicator notice does.
+pub const OPERATOR: u32 = 0;
 /// The lead for compromised endpoints' operators, in hours.
 pub const COMPROMISED: u32 = 24;
 
@@ -32,6 +31,9 @@ pub struct Party {
     /// `provider Example AI`, `operator of portal[.]example[.]gov (targeted)`.
     pub name: String,
     pub provider: bool,
+    /// For an operator: its endpoint's host and state.
+    pub host: Option<String>,
+    pub state: Option<EndpointState>,
     pub lead_hours: u32,
     /// The latest recorded send to it.
     pub sent: Option<i64>,
@@ -66,31 +68,11 @@ pub struct Clock {
     pub not_before: Option<i64>,
 }
 
-/// The lead for targeted and historical endpoints' operators.
-pub fn operator_lead(c: &Case) -> u32 {
-    c.lead_hours.unwrap_or(OPERATOR_DEFAULT)
-}
-
-/// Set the operator lead, within its bounds.
-pub fn set_operator_lead(c: &mut Case, hours: u32, today: &str) -> Result<()> {
-    if !(OPERATOR_MIN..=OPERATOR_MAX).contains(&hours) {
-        bail!(
-            "the lead time for targeted endpoints' operators is {OPERATOR_MIN} to {OPERATOR_MAX} hours; it cannot be set to {hours}"
-        );
-    }
-    c.lead_hours = Some(hours);
-    c.log(
-        today,
-        format!("lead time for targeted and historical endpoints' operators: {hours} h"),
-    );
-    Ok(())
-}
-
 /// A party's lead for an endpoint in `state`, if its operator is a party.
-pub fn endpoint_lead(c: &Case, state: EndpointState) -> Option<u32> {
+pub fn endpoint_lead(state: EndpointState) -> Option<u32> {
     match state {
         EndpointState::Compromised => Some(COMPROMISED),
-        EndpointState::Targeted | EndpointState::Historical => Some(operator_lead(c)),
+        EndpointState::Targeted | EndpointState::Historical => Some(OPERATOR),
         EndpointState::Unreviewed | EndpointState::NotAffected => None,
     }
 }
@@ -142,6 +124,8 @@ pub fn parties(c: &Case) -> Vec<Party> {
         out.push(Party {
             name: format!("provider {org}"),
             provider: true,
+            host: None,
+            state: None,
             lead_hours: PROVIDER,
             sent: latest_send(c, contacts),
             no_contact: no_contact(c, org),
@@ -151,13 +135,15 @@ pub fn parties(c: &Case) -> Vec<Party> {
         out.push(Party {
             name: "the AI provider (no provider contact in the case)".into(),
             provider: true,
+            host: None,
+            state: None,
             lead_hours: PROVIDER,
             sent: None,
             no_contact: no_contact(c, ANY_PROVIDER),
         });
     }
     for e in &c.endpoints {
-        let Some(lead) = endpoint_lead(c, e.state) else {
+        let Some(lead) = endpoint_lead(e.state) else {
             continue;
         };
         let contacts = c
@@ -171,6 +157,8 @@ pub fn parties(c: &Case) -> Vec<Party> {
                 e.state.label()
             ),
             provider: false,
+            host: Some(e.host.clone()),
+            state: Some(e.state),
             lead_hours: lead,
             sent: latest_send(c, contacts),
             no_contact: no_contact(c, &e.host),
@@ -198,8 +186,9 @@ pub fn clock(c: &Case) -> Clock {
     }
 }
 
-/// When the notice is scheduled, as a report draft states it: each party's
-/// lead from its latest send, or from `now` for a party not sent to yet.
+/// When the indicator notice is scheduled, as a report draft states it:
+/// each party's lead from its latest send, or from `now` for a party not
+/// sent to yet.
 pub fn scheduled(c: &Case, now: i64) -> i64 {
     parties(c)
         .iter()
@@ -210,32 +199,66 @@ pub fn scheduled(c: &Case, now: i64) -> i64 {
         .max(now)
 }
 
-/// The lead times of case `c` in one line.
-pub fn summary(c: &Case) -> String {
+/// The indicator notice's lead times in one line.
+pub fn summary() -> String {
     format!(
-        "the AI provider {PROVIDER} h, operators of targeted and historical endpoints {} h, operators of compromised endpoints {COMPROMISED} h",
-        operator_lead(c)
+        "the AI provider {PROVIDER} h, operators of targeted and historical endpoints {OPERATOR} h, operators of compromised endpoints {COMPROMISED} h"
     )
 }
 
-/// The "Publication" section of a report draft: when the notice is
-/// scheduled, that the time is fixed, and that a statement is appended
-/// verbatim.
-pub fn publication_section(c: &Case, now: i64) -> String {
+/// The "Publication" section of a report draft: when the indicator notice
+/// is scheduled, that it will not name or locate the recipient, from when
+/// an operator may be named and how to consent to earlier naming, that the
+/// times are fixed, and that a statement is appended verbatim. `to` is the
+/// recipient; for an endpoint's operator the section gives its own naming
+/// time, counted from now when no report to it is recorded yet.
+pub fn publication_section(c: &Case, to: Option<&Contact>, now: i64) -> String {
+    let lead = |state| naming::days(c, state);
+    let own = to
+        .filter(|x| x.role.for_endpoint())
+        .and_then(|x| x.endpoint.as_deref())
+        .and_then(|h| c.endpoint(h))
+        .filter(|e| e.state.affected())
+        .map(|e| {
+            let from = parties(c)
+                .into_iter()
+                .find(|p| p.host.as_deref() == Some(e.host.as_str()))
+                .and_then(|p| p.recorded())
+                .unwrap_or(now);
+            format!(
+                "You may be named, with your host, in a later dated update from **{}** ({} working days, Monday to Friday UTC, after this report), not before.",
+                show_time(naming::working_days_after(from, lead(e.state))),
+                lead(e.state)
+            )
+        })
+        .unwrap_or_else(|| {
+            format!(
+                "Affected operators may be named, with their hosts, in a later dated update: no earlier than {} working days (Monday to Friday, UTC) after the report to each, {} for an operator whose systems were compromised.",
+                lead(EndpointState::Targeted),
+                lead(EndpointState::Compromised)
+            )
+        });
     format!(
         "## Publication\n\n\
-         A public notice on this incident is scheduled for **{}**. The time is fixed by our disclosure policy's lead times ({}, each counted from the report's send); nothing in a reply moves it. \
+         A public notice on this incident is published in two stages.\n\n\
+         1. **Indicators**, not before **{}**: what the activity was and how to recognise it. This stage will not name or locate you or any other affected organisation; it describes targets by kind only (for example \"a government data portal\"). The time is fixed by our disclosure policy's lead times ({}, each counted from the report's send); nothing in a reply moves it.\n\
+         2. **Names**: {own} If you agree to be named earlier, tell us so in writing (a reply to this report is enough); your name may then go in the next update. That is the only thing that shortens the wait. A request to wait longer is recorded and considered, but does not bind us.\n\n\
          This is not an embargo: no condition is attached to it and it is not negotiated. \
+         A second reviewer checks each stage before it is published. \
          If you send a statement for the notice, it is appended verbatim as a dated update (SC-FM 10.5). The notice withholds callback channels, credentials and the attack details of compromised endpoints.\n",
         show_time(scheduled(c, now)),
-        summary(c)
+        summary(),
     )
 }
 
-/// `case status`'s lead-time block.
+/// `case status`'s lead-time block for the indicator notice.
 pub fn show(c: &Case, now: i64, out: &mut impl std::io::Write) -> std::io::Result<()> {
     let k = clock(c);
-    writeln!(out, "\nLead time ({})", summary(c))?;
+    writeln!(
+        out,
+        "\nStage 1, indicator notice: lead time ({})",
+        summary()
+    )?;
     for p in &k.parties {
         let state = match (p.sent, p.no_contact) {
             (Some(t), _) => format!(
@@ -259,13 +282,14 @@ pub fn show(c: &Case, now: i64, out: &mut impl std::io::Write) -> std::io::Resul
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::model::*;
 
-    const T0: i64 = 1_791_000_000;
+    /// Wednesday 2026-10-07, 10:00 UTC.
+    pub const T0: i64 = 1_791_367_200;
 
-    fn case() -> Case {
+    pub fn case() -> Case {
         let mut c: Case = toml::from_str(
             "id = \"t\"\ntitle = \"T\"\nstatus = \"open\"\nnotice = \"active\"\nopened = \"2026-10-12\"\n",
         )
@@ -322,7 +346,7 @@ mod tests {
         c
     }
 
-    fn send(c: &mut Case, to: &str, at: i64) {
+    pub fn send(c: &mut Case, to: &str, at: i64) {
         c.sent.push(Sent {
             date: "2026-10-12".into(),
             recipient: to.into(),
@@ -350,24 +374,12 @@ mod tests {
         // A compromised endpoint's operator gets 24 hours.
         send(&mut c, "abuse@reg.example", T0 + 600);
         assert_eq!(clock(&c).not_before, Some(T0 + 600 + 24 * 3600));
+        // A targeted endpoint's operator only needs its report first.
+        c.endpoints[1].state = EndpointState::Targeted;
+        assert_eq!(clock(&c).not_before, Some(T0 + 600));
         // A later send restarts that party's clock.
         send(&mut c, "A", T0 + 30 * 3600);
-        assert_eq!(clock(&c).not_before, Some(T0 + 36 * 3600));
-    }
-
-    #[test]
-    fn the_operator_lead_is_bounded() {
-        let mut c = case();
-        assert_eq!(operator_lead(&c), OPERATOR_DEFAULT);
-        for bad in [0, 3, 13, 48] {
-            assert!(set_operator_lead(&mut c, bad, "d").is_err(), "{bad}");
-        }
-        set_operator_lead(&mut c, 12, "d").unwrap();
-        c.endpoints[1].state = EndpointState::Historical;
-        send(&mut c, "abuse@ai.example", T0);
-        send(&mut c, "security@a.example.org", T0);
-        send(&mut c, "abuse@reg.example", T0);
-        assert_eq!(clock(&c).not_before, Some(T0 + 12 * 3600));
+        assert_eq!(clock(&c).not_before, Some(T0 + 30 * 3600));
     }
 
     #[test]
@@ -388,10 +400,23 @@ mod tests {
             searched: "self-identified vendor unknown".into(),
             at: rfc3339(T0),
         });
-        assert_eq!(clock(&c).not_before, Some(T0 + 6 * 3600));
+        assert_eq!(clock(&c).not_before, Some(T0));
         // A draft made before the sends states the full lead from now.
         assert_eq!(scheduled(&case(), T0), T0 + 24 * 3600);
-        assert!(publication_section(&case(), T0).contains("not an embargo"));
+        let p = publication_section(&case(), None, T0);
+        assert!(p.contains("not an embargo"), "{p}");
+        assert!(p.contains("no earlier than 3 working days"), "{p}");
+        assert!(p.contains("10 for an operator"), "{p}");
+        assert!(p.contains("will not name or locate you"), "{p}");
+        // An operator's report gives its own naming time.
+        let c = case();
+        let p = publication_section(&c, Some(&c.contacts[2]), T0);
+        assert!(
+            p.contains("from **2026-10-12 10:00 UTC** (3 working days"),
+            "{p}"
+        );
+        let p = publication_section(&c, Some(&c.contacts[3]), T0);
+        assert!(p.contains("(10 working days"), "{p}");
     }
 
     #[test]
