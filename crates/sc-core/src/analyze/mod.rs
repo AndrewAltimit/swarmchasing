@@ -147,6 +147,11 @@ pub struct Cluster {
     /// ([`crate::agentness`]). Descriptive: never scored, never linked on.
     #[serde(default)]
     pub agent: crate::agentness::AgentAssessment,
+    /// Whether the activity went beyond its evident task, and the FM-15.3
+    /// tests that decide it ([`crate::scope`]). Inference for review: never
+    /// scored, never linked on.
+    #[serde(default, skip_serializing_if = "crate::scope::Scope::is_default")]
+    pub scope: crate::scope::Scope,
 }
 
 /// What the members' targets say about the agent's knowledge

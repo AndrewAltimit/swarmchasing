@@ -30,6 +30,10 @@ impl Report<'_> {
             {
                 let _ = writeln!(s, "  - {line}");
             }
+            // Scope (FM chapter 15): internal and provider reports only.
+            if matches!(self.opts.audience, Audience::Internal | Audience::Provider) {
+                scope_line(s, c);
+            }
             habits(s, c, view.as_deref());
             knowledge(s, c);
             prose(s, c);
@@ -142,6 +146,32 @@ impl Report<'_> {
             );
         }
     }
+}
+
+/// The cluster's scope finding and the FM-15.3 tests that failed, with the
+/// records each rests on. Internal and provider reports only.
+fn scope_line(s: &mut String, c: &Cluster) {
+    let sc = &c.scope;
+    if sc.is_default() {
+        return;
+    }
+    let failed: Vec<String> = sc
+        .tests
+        .iter()
+        .filter(|t| t.outcome == crate::scope::ScopeOutcome::Fail)
+        .map(|t| format!("{} ({})", t.id, t.detail))
+        .collect();
+    let tail = if failed.is_empty() {
+        String::new()
+    } else {
+        format!("; failed: {}", failed.join("; "))
+    };
+    let _ = writeln!(
+        s,
+        "  - scope: {} · task class {}{tail}",
+        sc.finding.label(),
+        sc.task_class.label()
+    );
 }
 
 /// The features that joined the cluster, as a public notice may show them.

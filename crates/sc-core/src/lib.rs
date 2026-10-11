@@ -30,6 +30,7 @@ pub mod recurrence;
 pub mod redact;
 pub mod report;
 pub mod rules;
+pub mod scope;
 pub mod securitytxt;
 pub mod sort;
 pub mod stamp;

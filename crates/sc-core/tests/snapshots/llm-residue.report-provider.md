@@ -51,17 +51,21 @@ A person or a conventional scanner sending the same payloads through the same se
   - artifacts: 5 of 5 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=r7k2`
   - provenance: unknown 5 · single source
+  - scope: in scope · task class data retrieval
 - **C2** (significant) — 2 records, 1 run(s), 2026-07-02 10:24:00 UTC → 2026-07-02 10:25:00 UTC, median gap 60s
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class account setup; failed: S1 (a account setup run reached access-controlled or sensitive targets); S4 (attack payloads were sent to a party that did not sanction them); S5 (accounts or credentials were acquired or reused)
 - **C3** (suggestive) — 2 records, 1 run(s), 2026-07-02 10:07:00 UTC → 2026-07-02 10:10:00 UTC, median gap 3m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - provenance: unknown 2 · single source
+  - scope: in scope · task class data retrieval
   - prose in parameters: 1 values (language unclear) (a hint, not evidence)
 - **C4** (suggestive) — 2 records, 1 run(s), 2026-07-02 10:21:00 UTC → 2026-07-02 10:23:00 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - route escalation on `data[.]portal[.]example/api/v1/records`: direct → relay over 16m. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class data retrieval; failed: S2 (the route climbed to reach one target, past a block)
 
 ## Representative records
 

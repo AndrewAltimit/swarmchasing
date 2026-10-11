@@ -1,11 +1,11 @@
 {
   "rules_version": "2026-10-10",
-  "total": 249,
-  "flagged": 191,
+  "total": 251,
+  "flagged": 193,
   "tier_counts": {
     "noise": 91,
     "suggestive": 76,
-    "significant": 82
+    "significant": 84
   },
   "rule_counts": {
     "antibot.baxia": 1,
@@ -16,7 +16,7 @@
     "carrier.codesandbox": 1,
     "carrier.data_url_script": 1,
     "carrier.form_post_program": 2,
-    "carrier.html_program": 11,
+    "carrier.html_program": 12,
     "carrier.httpbin": 14,
     "carrier.inline_fetch_program": 6,
     "carrier.livecodes": 1,
@@ -32,13 +32,13 @@
     "exploit.cmdi": 2,
     "exploit.double_encoded_meta": 2,
     "exploit.double_encoded_path": 3,
-    "exploit.sqli_boolean": 28,
+    "exploit.sqli_boolean": 29,
     "exploit.sqli_quote": 4,
     "exploit.sqli_union": 9,
     "exploit.ssti": 4,
     "exploit.traversal": 7,
     "exploit.traversal_single": 8,
-    "exploit.xss": 12,
+    "exploit.xss": 13,
     "header.agent_ua": 1,
     "header.gzip_only_requests": 2,
     "header.headless_ua": 5,
@@ -67,7 +67,7 @@
     "marker.tool_call_json": 2,
     "marker.tool_call_markup": 2,
     "marker.truncated_output": 2,
-    "marker.uq_tags": 53,
+    "marker.uq_tags": 55,
     "outcome.challenge": 1,
     "outcome.neterror": 1,
     "relay.allorigins": 1,
@@ -1454,7 +1454,7 @@
       "features": [
         "param:uqtag=pl4nt1"
       ],
-      "cluster": 20
+      "cluster": 21
     },
     {
       "obs": {
@@ -1509,7 +1509,7 @@
       "features": [
         "param:uqtag=pl4nt1"
       ],
-      "cluster": 20
+      "cluster": 21
     },
     {
       "obs": {
@@ -1595,7 +1595,7 @@
       "features": [
         "param:run=pb7781"
       ],
-      "cluster": 21
+      "cluster": 22
     },
     {
       "obs": {
@@ -1644,7 +1644,7 @@
       "features": [
         "param:run=pb7781"
       ],
-      "cluster": 21
+      "cluster": 22
     },
     {
       "obs": {
@@ -2021,7 +2021,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 28
+      "cluster": 29
     },
     {
       "obs": {
@@ -2150,7 +2150,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 28
+      "cluster": 29
     },
     {
       "obs": {
@@ -2649,7 +2649,7 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": 29
+      "cluster": 30
     },
     {
       "obs": {
@@ -2727,7 +2727,7 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": 29
+      "cluster": 30
     },
     {
       "obs": {
@@ -3908,7 +3908,7 @@
         "marker.test_tag:tok=expt",
         "param:tok=expt3"
       ],
-      "cluster": 27
+      "cluster": 28
     },
     {
       "obs": {
@@ -3956,7 +3956,7 @@
         "marker.test_tag:tok=expt",
         "param:tok=expt4"
       ],
-      "cluster": 27
+      "cluster": 28
     },
     {
       "obs": {
@@ -4042,7 +4042,7 @@
       ],
       "target_host": "vizprod.aihw.gov.au",
       "features": [],
-      "cluster": 19
+      "cluster": 20
     },
     {
       "obs": {
@@ -4108,7 +4108,7 @@
       ],
       "target_host": "vizprod.aihw.gov.au",
       "features": [],
-      "cluster": 19
+      "cluster": 20
     },
     {
       "obs": {
@@ -5796,7 +5796,7 @@
       "features": [
         "exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de"
       ],
-      "cluster": 30
+      "cluster": 31
     },
     {
       "obs": {
@@ -5835,7 +5835,7 @@
       "features": [
         "exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de"
       ],
-      "cluster": 30
+      "cluster": 31
     },
     {
       "obs": {
@@ -6045,7 +6045,7 @@
       "features": [
         "exfil.ntfy:/ntfy.sh/covrun7results"
       ],
-      "cluster": 31
+      "cluster": 32
     },
     {
       "obs": {
@@ -6084,7 +6084,7 @@
       "features": [
         "exfil.ntfy:/ntfy.sh/covrun7results"
       ],
-      "cluster": 31
+      "cluster": 32
     },
     {
       "obs": {
@@ -6451,7 +6451,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 26
+      "cluster": 27
     },
     {
       "obs": {
@@ -6537,7 +6537,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 26
+      "cluster": 27
     },
     {
       "obs": {
@@ -6602,7 +6602,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 26
+      "cluster": 27
     },
     {
       "obs": {
@@ -7003,6 +7003,96 @@
     },
     {
       "obs": {
+        "id": "eval:cov-scope-bench-1",
+        "source": "eval",
+        "ts": 1786438800,
+        "url": "https://demo.testfire.net/search?query=%3Cscript%3Ealert(1)%3C/script%3E&uqtag=covscope"
+      },
+      "score": 9,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "carrier.html_program",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "<script",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "exploit.xss",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "query=<script",
+          "layer": 0,
+          "tactic": "T4"
+        },
+        {
+          "rule_id": "marker.uq_tags",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "uqtag=covscope",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "demo.testfire.net",
+          "text": "https://demo.testfire.net/search?query=<script>alert(1)</script>&uqtag=covscope"
+        }
+      ],
+      "target_host": "demo.testfire.net",
+      "features": [
+        "param:uqtag=covscope"
+      ],
+      "cluster": 19
+    },
+    {
+      "obs": {
+        "id": "eval:cov-scope-bench-2",
+        "source": "eval",
+        "ts": 1786438830,
+        "url": "https://demo.testfire.net/login?uid=%27%20OR%201=1--&uqtag=covscope"
+      },
+      "score": 7,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.sqli_boolean",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "uid=' OR 1=1",
+          "layer": 0,
+          "tactic": "T4"
+        },
+        {
+          "rule_id": "marker.uq_tags",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "uqtag=covscope",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "demo.testfire.net",
+          "text": "https://demo.testfire.net/login?uid=' OR 1=1--&uqtag=covscope"
+        }
+      ],
+      "target_host": "demo.testfire.net",
+      "features": [
+        "param:uqtag=covscope"
+      ],
+      "cluster": 19
+    },
+    {
+      "obs": {
         "id": "eval:swarm-shard-00",
         "source": "eval",
         "ts": 1772445600,
@@ -7056,7 +7146,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 22
+      "cluster": 23
     },
     {
       "obs": {
@@ -7113,7 +7203,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 22
+      "cluster": 23
     },
     {
       "obs": {
@@ -7170,7 +7260,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 22
+      "cluster": 23
     },
     {
       "obs": {
@@ -7227,7 +7317,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 22
+      "cluster": 23
     },
     {
       "obs": {
@@ -7284,7 +7374,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 22
+      "cluster": 23
     },
     {
       "obs": {
@@ -7341,7 +7431,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 22
+      "cluster": 23
     },
     {
       "obs": {
@@ -7398,7 +7488,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 22
+      "cluster": 23
     },
     {
       "obs": {
@@ -7455,7 +7545,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 22
+      "cluster": 23
     },
     {
       "obs": {
@@ -7512,7 +7602,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 23
+      "cluster": 24
     },
     {
       "obs": {
@@ -7569,7 +7659,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 23
+      "cluster": 24
     },
     {
       "obs": {
@@ -7626,7 +7716,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 23
+      "cluster": 24
     },
     {
       "obs": {
@@ -7683,7 +7773,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 23
+      "cluster": 24
     },
     {
       "obs": {
@@ -7740,7 +7830,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 23
+      "cluster": 24
     },
     {
       "obs": {
@@ -7797,7 +7887,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 23
+      "cluster": 24
     },
     {
       "obs": {
@@ -7854,7 +7944,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 23
+      "cluster": 24
     },
     {
       "obs": {
@@ -7911,7 +8001,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 23
+      "cluster": 24
     },
     {
       "obs": {
@@ -7974,7 +8064,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 25
+      "cluster": 26
     },
     {
       "obs": {
@@ -8037,7 +8127,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 25
+      "cluster": 26
     },
     {
       "obs": {
@@ -8100,7 +8190,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 25
+      "cluster": 26
     },
     {
       "obs": {
@@ -8738,7 +8828,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 24
+      "cluster": 25
     },
     {
       "obs": {
@@ -8795,7 +8885,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 24
+      "cluster": 25
     },
     {
       "obs": {
@@ -8852,7 +8942,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 24
+      "cluster": 25
     },
     {
       "obs": {
@@ -8909,7 +8999,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 24
+      "cluster": 25
     },
     {
       "obs": {
@@ -8966,7 +9056,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 24
+      "cluster": 25
     },
     {
       "obs": {
@@ -9408,6 +9498,64 @@
             "records": 4
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 8
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "fail",
+            "detail": "the route climbed to reach one target, past a block"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -9552,18 +9700,75 @@
             "records": 8
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 7
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
       "id": "C3",
       "key": "k-fd3d4fb8",
       "members": [
-        233,
-        234,
         235,
         236,
         237,
-        238
+        238,
+        239,
+        240
       ],
       "start": 1773046800,
       "end": 1773047100,
@@ -9693,6 +9898,62 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "third_party_channel": 6
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "fail",
+            "records": [
+              235,
+              236,
+              237,
+              238,
+              239,
+              240
+            ],
+            "detail": "data was sent to a callback inbox or side channel"
+          },
+          {
+            "id": "S7",
+            "outcome": "fail",
+            "detail": "an interaction edge ties this cluster's runs to another's"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": true
       }
     },
     {
@@ -9839,17 +10100,73 @@
             "records": 6
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 6
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
       "id": "C5",
       "key": "k-a798e7e7",
       "members": [
-        244,
-        245,
         246,
         247,
-        248
+        248,
+        249,
+        250
       ],
       "start": 1773333000,
       "end": 1773333240,
@@ -9977,6 +10294,61 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "access_controlled": 5
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              246,
+              247,
+              248,
+              249,
+              250
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "fail",
+            "detail": "an interaction edge ties this cluster's runs to another's"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": true
       }
     },
     {
@@ -10137,6 +10509,61 @@
             "records": 1
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 5
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "fail",
+            "detail": "the route climbed to reach one target, past a block"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              30,
+              32,
+              33,
+              34,
+              35
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -10268,6 +10695,55 @@
             "detail": "marker.tool_call_markup, marker.chat_opener, marker.doubled_scheme"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "public_content": 2,
+          "interactive": 3
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "in_scope",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": false,
+        "coordinated": false
       }
     },
     {
@@ -10408,6 +10884,60 @@
       "corroboration": "single_source",
       "agent": {
         "level": "payloads_only"
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 4
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              6,
+              7,
+              8,
+              9
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -10552,6 +11082,60 @@
             "records": 4
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "access_controlled": 4
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              10,
+              11,
+              12,
+              13
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -10687,15 +11271,69 @@
             "records": 4
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 4
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              110,
+              111,
+              112,
+              162
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
       "id": "C11",
       "key": "k-74c086a9",
       "members": [
-        230,
-        231,
-        232
+        232,
+        233,
+        234
       ],
       "start": 1772720700,
       "end": 1772720850,
@@ -10836,6 +11474,58 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 3
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              233,
+              234
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "fail",
+            "detail": "an interaction edge ties this cluster's runs to another's"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": true
       }
     },
     {
@@ -10972,6 +11662,59 @@
             "records": 3
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 3
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              164,
+              166,
+              167
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -11105,6 +11848,61 @@
             "detail": "marker.uq_tags, selfid.vendor_name"
           }
         ]
+      },
+      "scope": {
+        "task_class": "account_setup",
+        "target_classes": {
+          "interactive": 2,
+          "third_party_channel": 1
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "fail",
+            "records": [
+              190
+            ],
+            "detail": "accounts or credentials were acquired or reused"
+          },
+          {
+            "id": "S6",
+            "outcome": "fail",
+            "records": [
+              190
+            ],
+            "detail": "data was sent to a callback inbox or side channel"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -11241,6 +12039,65 @@
       "corroboration": "single_source",
       "agent": {
         "level": "payloads_only"
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "third_party_channel": 3
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              189
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "fail",
+            "records": [
+              189
+            ],
+            "detail": "accounts or credentials were acquired or reused"
+          },
+          {
+            "id": "S6",
+            "outcome": "fail",
+            "records": [
+              181,
+              182,
+              189
+            ],
+            "detail": "data was sent to a callback inbox or side channel"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -11371,6 +12228,57 @@
             "detail": "marker.oai_tag"
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              107
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -11505,6 +12413,65 @@
             "detail": "marker.placeholder_identity"
           }
         ]
+      },
+      "scope": {
+        "task_class": "account_setup",
+        "target_classes": {
+          "interactive": 1,
+          "access_controlled": 1
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "fail",
+            "records": [
+              70
+            ],
+            "detail": "a account setup run reached access-controlled or sensitive targets"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              70
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "fail",
+            "records": [
+              69,
+              70
+            ],
+            "detail": "accounts or credentials were acquired or reused"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -11626,6 +12593,58 @@
       "corroboration": "single_source",
       "agent": {
         "level": "payloads_only"
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              170,
+              171
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -11752,6 +12771,58 @@
             "records": 3
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              125,
+              126
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
@@ -11869,10 +12940,265 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              209
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
       "id": "C20",
+      "key": "k-11b00947",
+      "members": [
+        211,
+        212
+      ],
+      "start": 1786438800,
+      "end": 1786438830,
+      "tier": "significant",
+      "score": 13,
+      "rules": {
+        "carrier.html_program": 1,
+        "exploit.sqli_boolean": 1,
+        "exploit.xss": 1,
+        "marker.uq_tags": 2
+      },
+      "kinds": {
+        "carrier": 1,
+        "exploit": 2,
+        "agent_marker": 2
+      },
+      "tactics": {
+        "T2": 1,
+        "T4": 2
+      },
+      "artifacts": 2,
+      "target_hosts": {
+        "demo.testfire.net": 2
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "hexU.sorted.noslash": 1,
+        "sp20.sorted.noslash": 1
+      },
+      "dialect": {
+        "variants": {
+          "sqli.quote_or_1eq1": 1,
+          "xss.script_alert": 1
+        },
+        "records": 2,
+        "first_seen": [
+          "xss.script_alert",
+          "sqli.quote_or_1eq1"
+        ],
+        "signature": "58b48d2f"
+      },
+      "fanout": {
+        "batches": 2,
+        "widths": {
+          "1": 2
+        },
+        "modal_share": 1.0
+      },
+      "relay_stacks": {
+        "carrier.html_program → target": 1
+      },
+      "benchmarks": {
+        "altoro_mutual": 2
+      },
+      "link_features": [
+        "param:uqtag=covscope"
+      ],
+      "runs": [
+        {
+          "start": 1786438800,
+          "end": 1786438830,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1786438800,
+        "end": 1786438830,
+        "median_gap_secs": 30.0,
+        "p90_gap_secs": 30.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786438800,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.008333333333333333,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 2,
+            "detail": "marker.uq_tags"
+          }
+        ],
+        "counter": [
+          {
+            "kind": "benchmark",
+            "records": 2,
+            "detail": "altoro_mutual"
+          }
+        ]
+      },
+      "scope": {
+        "task_class": "site_testing",
+        "target_classes": {
+          "benchmark": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "not_assessable",
+            "records": [
+              211,
+              212
+            ],
+            "detail": "attack payloads reached a benchmark target built to be tested"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "in_scope",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": false,
+        "coordinated": false
+      }
+    },
+    {
+      "id": "C21",
       "key": "k-93ae0ac9",
       "members": [
         122,
@@ -11995,10 +13321,61 @@
       "corroboration": "single_source",
       "agent": {
         "level": "payloads_only"
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              122
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
-      "id": "C21",
+      "id": "C22",
       "key": "k-131d8ae5",
       "members": [
         39,
@@ -12126,10 +13503,62 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              39,
+              40
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
-      "id": "C22",
+      "id": "C23",
       "key": "k-635475d7",
       "members": [
         42,
@@ -12248,20 +13677,72 @@
       "corroboration": "single_source",
       "agent": {
         "level": "payloads_only"
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              42,
+              43
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
-      "id": "C23",
+      "id": "C24",
       "key": "k-b000dccb",
       "members": [
-        211,
-        212,
         213,
         214,
         215,
         216,
         217,
-        218
+        218,
+        219,
+        220
       ],
       "start": 1772445600,
       "end": 1772445950,
@@ -12390,20 +13871,68 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 8
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "fail",
+            "detail": "an interaction edge ties this cluster's runs to another's"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": true
       }
     },
     {
-      "id": "C24",
+      "id": "C25",
       "key": "k-1d59194a",
       "members": [
-        219,
-        220,
         221,
         222,
         223,
         224,
         225,
-        226
+        226,
+        227,
+        228
       ],
       "start": 1772445640,
       "end": 1772445990,
@@ -12532,17 +14061,65 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 8
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "fail",
+            "detail": "an interaction edge ties this cluster's runs to another's"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": true
       }
     },
     {
-      "id": "C25",
+      "id": "C26",
       "key": "k-408d9c03",
       "members": [
-        239,
-        240,
         241,
         242,
-        243
+        243,
+        244,
+        245
       ],
       "start": 1773331200,
       "end": 1773331440,
@@ -12661,15 +14238,63 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 5
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "fail",
+            "detail": "an interaction edge ties this cluster's runs to another's"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": true
       }
     },
     {
-      "id": "C26",
+      "id": "C27",
       "key": "k-4c8b6e8f",
       "members": [
-        227,
-        228,
-        229
+        229,
+        230,
+        231
       ],
       "start": 1772719200,
       "end": 1772719320,
@@ -12784,10 +14409,58 @@
             "detail": "marker.uq_tags"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "public_content": 3
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "fail",
+            "detail": "an interaction edge ties this cluster's runs to another's"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": true
       }
     },
     {
-      "id": "C27",
+      "id": "C28",
       "key": "k-323bd6db",
       "members": [
         194,
@@ -12933,10 +14606,67 @@
             "detail": "direct → relay"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 1,
+          "access_controlled": 1,
+          "sensitive": 1
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "fail",
+            "records": [
+              196,
+              197
+            ],
+            "detail": "a data retrieval run reached access-controlled or sensitive targets"
+          },
+          {
+            "id": "S2",
+            "outcome": "fail",
+            "detail": "the route climbed to reach one target, past a block"
+          },
+          {
+            "id": "S3",
+            "outcome": "fail",
+            "records": [
+              197
+            ],
+            "detail": "requests reached configuration, source or administration paths"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
-      "id": "C28",
+      "id": "C29",
       "key": "k-31edd96c",
       "members": [
         118,
@@ -13064,10 +14794,58 @@
             "detail": "marker.test_tag"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "in_scope",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": false,
+        "coordinated": false
       }
     },
     {
-      "id": "C29",
+      "id": "C30",
       "key": "k-9df8c89d",
       "members": [
         52,
@@ -13189,10 +14967,59 @@
             "detail": "marker.truncated_output"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "public_content": 1,
+          "interactive": 1
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "in_scope",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": false,
+        "coordinated": false
       }
     },
     {
-      "id": "C30",
+      "id": "C31",
       "key": "k-6ac6b86f",
       "members": [
         66,
@@ -13310,10 +15137,58 @@
             "detail": "direct → relay"
           }
         ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "fail",
+            "detail": "the route climbed to reach one target, past a block"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
-      "id": "C31",
+      "id": "C32",
       "key": "k-7714324d",
       "members": [
         177,
@@ -13422,10 +15297,62 @@
       "corroboration": "single_source",
       "agent": {
         "level": "payloads_only"
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "third_party_channel": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "fail",
+            "records": [
+              177,
+              178
+            ],
+            "detail": "data was sent to a callback inbox or side channel"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     },
     {
-      "id": "C32",
+      "id": "C33",
       "key": "k-3cff30a9",
       "members": [
         186,
@@ -13527,11 +15454,63 @@
       "corroboration": "single_source",
       "agent": {
         "level": "payloads_only"
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "third_party_channel": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "fail",
+            "records": [
+              186,
+              187
+            ],
+            "detail": "data was sent to a callback inbox or side channel"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
       }
     }
   ],
   "timing": {
-    "count": 191,
+    "count": 193,
     "start": 1764320400,
     "end": 1788426240,
     "median_gap_secs": 90.0,
@@ -38234,7 +40213,7 @@
       ],
       [
         1786438800,
-        0
+        2
       ],
       [
         1786442400,
@@ -40456,7 +42435,7 @@
         0,
         2,
         5,
-        14,
+        15,
         10,
         6,
         3,
@@ -40472,9 +42451,9 @@
         1,
         0
       ],
-      "entropy": 0.7849672103020154,
+      "entropy": 0.7802636550357691,
       "longest_idle_hours": 2257.0,
-      "days": 48,
+      "days": 49,
       "verdict": {
         "kind": "daytime",
         "utc_offset_guess": 0,
@@ -40784,7 +42763,7 @@
       "start": 1782986700,
       "end": 1782987660,
       "clusters": [
-        "C30"
+        "C31"
       ]
     },
     {
@@ -40805,21 +42784,21 @@
       "start": 1786266000,
       "end": 1786266600,
       "clusters": [
-        "C27"
+        "C28"
       ]
     }
   ],
   "soft_links": [
     {
       "a": "C3",
-      "b": "C31",
+      "b": "C32",
       "kind": "callback_service",
       "strength": 0.3,
       "detail": "callback service: exfil.webhook_site"
     },
     {
       "a": "C5",
-      "b": "C21",
+      "b": "C22",
       "kind": "encoding",
       "strength": 0.2,
       "detail": "encoding style: sp20.sorted.noslash"
@@ -40856,7 +42835,7 @@
     {
       "kind": "handoff",
       "a": {
-        "cluster": "C26",
+        "cluster": "C27",
         "key": "k-4c8b6e8f",
         "run": 1,
         "records": [
@@ -40877,7 +42856,7 @@
     {
       "kind": "role_sequence",
       "a": {
-        "cluster": "C25",
+        "cluster": "C26",
         "key": "k-408d9c03",
         "run": 1,
         "records": [
@@ -40897,13 +42876,13 @@
         ]
       },
       "strength": "moderate",
-      "chance": 0.00020750087503651482,
-      "detail": "the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 2.1e-4)"
+      "chance": 0.00018881795019454195,
+      "detail": "the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.9e-4)"
     },
     {
       "kind": "disjoint_partition",
       "a": {
-        "cluster": "C23",
+        "cluster": "C24",
         "key": "k-b000dccb",
         "run": 1,
         "records": [
@@ -40913,7 +42892,7 @@
         ]
       },
       "b": {
-        "cluster": "C24",
+        "cluster": "C25",
         "key": "k-1d59194a",
         "run": 1,
         "records": [

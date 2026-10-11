@@ -4,7 +4,7 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-03 09:02:00 UTC
-- **Records:** 119 linked public records in 32 cluster(s) (of 249 records reviewed, 191 flagged)
+- **Records:** 121 linked public records in 33 cluster(s) (of 251 records reviewed, 193 flagged)
 - **Evidence tier:** significant
 - **Method:** swarmchasing 0.1.0, rules version 2026-10-10
 
@@ -21,19 +21,19 @@ Public scan and archive records show automated agents sending requests to system
 | Relay / fetch-through services | `relay.corsproxy` | 1 |
 | Relay / fetch-through services | `relay.jina` | 41 |
 | Relay / fetch-through services | `relay.markdown_new` | 1 |
-| Carrier services and inline programs | `carrier.html_program` | 7 |
+| Carrier services and inline programs | `carrier.html_program` | 8 |
 | Carrier services and inline programs | `carrier.httpbin` | 1 |
 | Carrier services and inline programs | `carrier.inline_fetch_program` | 2 |
 | Attack payloads | `exploit.boundary_ids` | 1 |
 | Attack payloads | `exploit.cmdi` | 2 |
 | Attack payloads | `exploit.double_encoded_meta` | 2 |
-| Attack payloads | `exploit.sqli_boolean` | 24 |
+| Attack payloads | `exploit.sqli_boolean` | 25 |
 | Attack payloads | `exploit.sqli_quote` | 4 |
 | Attack payloads | `exploit.sqli_union` | 9 |
 | Attack payloads | `exploit.ssti` | 4 |
 | Attack payloads | `exploit.traversal` | 5 |
 | Attack payloads | `exploit.traversal_single` | 5 |
-| Attack payloads | `exploit.xss` | 10 |
+| Attack payloads | `exploit.xss` | 11 |
 | Agent tags and markers | `marker.callback_seq` | 1 |
 | Agent tags and markers | `marker.chat_opener` | 2 |
 | Agent tags and markers | `marker.doubled_scheme` | 1 |
@@ -45,7 +45,7 @@ Public scan and archive records show automated agents sending requests to system
 | Agent tags and markers | `marker.title_write` | 1 |
 | Agent tags and markers | `marker.tool_call_markup` | 2 |
 | Agent tags and markers | `marker.truncated_output` | 2 |
-| Agent tags and markers | `marker.uq_tags` | 51 |
+| Agent tags and markers | `marker.uq_tags` | 53 |
 | Cache-busting parameters | `cache.buster` | 31 |
 | Self-identification strings (unreliable) | `selfid.vendor_name` | 1 |
 | Callback / exfiltration channels | `exfil.cookie` | 1 |
@@ -102,6 +102,7 @@ Every flagged request to each host, including requests outside the linked cluste
 | `api[.]plant-b[.]example` | 2 | 2026-09-03 09:00:00 UTC | 2026-09-03 09:02:00 UTC | ongoing | `exploit.traversal`, `exploit.traversal_single` |
 | `billing[.]utility-portal[.]example` | 2 | 2026-03-12 16:00:00 UTC | 2026-03-12 16:30:00 UTC | historical | `exploit.sqli_boolean` |
 | `civilrightsdata[.]ed[.]gov` | 2 | 2026-06-02 14:00:05 UTC | 2026-06-02 14:03:10 UTC | historical | `exploit.sqli_boolean` |
+| `demo[.]testfire[.]net` | 2 | 2026-08-11 09:00:00 UTC | 2026-08-11 09:00:30 UTC | historical | `exploit.sqli_boolean`, `exploit.xss` |
 | `meter[.]utility-portal[.]example` | 2 | 2026-03-12 16:02:00 UTC | 2026-03-12 16:32:00 UTC | historical | `exploit.sqli_boolean` |
 | `outage[.]utility-portal[.]example` | 2 | 2026-03-12 16:01:00 UTC | 2026-03-12 16:31:00 UTC | historical | `exploit.sqli_boolean` |
 | `records[.]plant-a[.]example` | 2 | 2026-09-02 14:00:00 UTC | 2026-09-02 14:03:00 UTC | ongoing | `exploit.sqli_union` |
@@ -192,35 +193,39 @@ Every flagged request to each host, including requests outside the linked cluste
   - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace); 1 of its requests matched no rule
   - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C19** (significant) — 2 records, 1 run(s), 2026-08-10 09:20:00 UTC → 2026-08-10 09:30:00 UTC, median gap 10m
-- **C20** (significant) — 2 records, 1 run(s), 2026-08-12 02:10:00 UTC → 2026-08-12 02:14:00 UTC, median gap 4m
+- **C20** (significant) — 2 records, 1 run(s), 2026-08-11 09:00:00 UTC → 2026-08-11 09:00:30 UTC, median gap 30s
+  - linked by: `param:uqtag=covscope`
+  - payload dialect `58b48d2f` over 2 records: sqli (quote_or_1eq1 ×1); xss (script_alert ×1); first seen xss.script_alert → sqli.quote_or_1eq1. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+  - benchmark or practice targets: `altoro_mutual` ×2. Evaluation or training activity is likely, not malice (a hint)
+- **C21** (significant) — 2 records, 1 run(s), 2026-08-12 02:10:00 UTC → 2026-08-12 02:14:00 UTC, median gap 4m
   - relay stack `carrier.httpbin → carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
-- **C21** (significant) — 2 records, 1 run(s), 2026-09-02 14:00:00 UTC → 2026-09-02 14:03:00 UTC, median gap 3m
+- **C22** (significant) — 2 records, 1 run(s), 2026-09-02 14:00:00 UTC → 2026-09-02 14:03:00 UTC, median gap 3m
   - linked by: `param:uqtag=pl4nt1`
   - all 2 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C22** (significant) — 2 records, 1 run(s), 2026-09-03 09:00:00 UTC → 2026-09-03 09:02:00 UTC, median gap 2m
+- **C23** (significant) — 2 records, 1 run(s), 2026-09-03 09:00:00 UTC → 2026-09-03 09:02:00 UTC, median gap 2m
   - linked by: `param:run=pb7781`
   - all 2 records share one URL encoding style (`hexU.unsorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `804cd67a` over 2 records: traversal (depth4 ×2, etc_passwd ×1); first seen traversal.depth4 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C23** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
+- **C24** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
   - linked by: `param:uqtag=shardA7`
-- **C24** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
+- **C25** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
   - linked by: `param:uqtag=shardB7`
-- **C25** (suggestive) — 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
+- **C26** (suggestive) — 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
   - linked by: `param:uqtag=map31z`
-- **C26** (suggestive) — 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
+- **C27** (suggestive) — 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
   - linked by: `param:uqtag=scout7f`
-- **C27** (suggestive) — 3 records, 2 run(s), 2026-08-09 09:10:00 UTC → 2026-08-09 11:05:00 UTC, median gap 110m
+- **C28** (suggestive) — 3 records, 2 run(s), 2026-08-09 09:10:00 UTC → 2026-08-09 11:05:00 UTC, median gap 110m
   - route escalation on `records[.]agency[.]example/api/items`: direct → relay over 10m. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - linked by: `param:uqtag=covrun9`
-- **C28** (suggestive) — 2 records, 1 run(s), 2026-05-20 19:01:00 UTC → 2026-05-20 19:04:00 UTC, median gap 3m
-- **C29** (suggestive) — 2 records, 1 run(s), 2026-07-02 10:07:00 UTC → 2026-07-02 10:10:00 UTC, median gap 3m
+- **C29** (suggestive) — 2 records, 1 run(s), 2026-05-20 19:01:00 UTC → 2026-05-20 19:04:00 UTC, median gap 3m
+- **C30** (suggestive) — 2 records, 1 run(s), 2026-07-02 10:07:00 UTC → 2026-07-02 10:10:00 UTC, median gap 3m
   - prose in parameters: 1 values (language unclear) (a hint, not evidence)
-- **C30** (suggestive) — 2 records, 1 run(s), 2026-07-02 10:21:00 UTC → 2026-07-02 10:23:00 UTC, median gap 2m
+- **C31** (suggestive) — 2 records, 1 run(s), 2026-07-02 10:21:00 UTC → 2026-07-02 10:23:00 UTC, median gap 2m
   - route escalation on `data[.]portal[.]example/api/v1/records`: direct → relay over 16m. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
-- **C31** (suggestive) — 2 records, 1 run(s), 2026-08-06 14:00:00 UTC → 2026-08-06 14:00:30 UTC, median gap 30s
+- **C32** (suggestive) — 2 records, 1 run(s), 2026-08-06 14:00:00 UTC → 2026-08-06 14:00:30 UTC, median gap 30s
   - linked by: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
-- **C32** (suggestive) — 2 records, 1 run(s), 2026-08-07 09:00:00 UTC → 2026-08-07 09:01:00 UTC, median gap 60s
+- **C33** (suggestive) — 2 records, 1 run(s), 2026-08-07 09:00:00 UTC → 2026-08-07 09:01:00 UTC, median gap 60s
   - linked by: `exfil.ntfy:/ntfy.sh/covrun7results`
 
 ## Representative records
@@ -233,6 +238,8 @@ URLs are defanged. Records are listed by evidence strength.
    - rules: relay.jina, exploit.sqli_union, marker.uq_tags
 1. 2026-09-02 14:03:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://records[.]plant-a[.]example/item?id=2%20UNION%20SELECT%20null,version()--&uqtag=pl4nt1`
    - rules: relay.jina, exploit.sqli_union, marker.uq_tags
+1. 2026-08-11 09:00:00 UTC — `hxxps://demo[.]testfire[.]net/search?query=%3Cscript%3Ealert(1)%3C/script%3E&uqtag=covscope`
+   - rules: carrier.html_program, exploit.xss, marker.uq_tags
 1. 2026-03-05 14:26:30 UTC — `hxxps://b0[.]permits-office[.]example/item?id=1'%20OR%201=1--&uqtag=exec4k`
    - rules: exploit.sqli_boolean, marker.uq_tags, header.scripted_ua
 1. 2026-03-05 14:27:30 UTC — `hxxps://b1[.]permits-office[.]example/item?id=1'%20OR%201=1--&uqtag=exec4k`
@@ -245,8 +252,6 @@ URLs are defanged. Records are listed by evidence strength.
    - rules: exfil.webhook_site, marker.uq_tags, cache.buster, header.headless_ua
 1. 2026-03-09 09:03:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q1[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
    - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
-1. 2026-03-09 09:04:00 UTC — `hxxps://p2[.]transit-authority[.]example/api/routes?uqtag=ag1x&cb=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
-   - rules: exfil.webhook_site, marker.uq_tags, cache.buster, header.headless_ua
 
 ## Method and limitations
 

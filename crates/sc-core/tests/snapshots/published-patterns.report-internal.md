@@ -65,21 +65,26 @@ Every flagged request to each host, including requests outside the linked cluste
 - **C1** (significant) — 4 records, 1 run(s), 2026-06-10 09:12:00 UTC → 2026-06-10 09:14:30 UTC, median gap 50s
   - iterative probing: 4 variants of `IdNumber` on `recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record` over 2m (median gap 50s, model pace)
   - provenance: unknown 4 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `341cb867` over 2 records: sqli (numeric_or ×1); xss (script_alert ×1); first seen sqli.numeric_or → xss.script_alert. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C2** (significant) — 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
   - artifacts: 1 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - iterative probing: 3 variants of `Measure_Id`, `State_Id`, `State_Id[]`, `survey_Year_Key` on `civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation` over 4m (median gap 3m, slow pace); 1 of its requests matched no rule
   - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
 - **C3** (significant) — 2 records, 1 run(s), 2026-08-03 15:31:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
   - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace); 1 of its requests matched no rule
   - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C4** (significant) — 2 records, 1 run(s), 2026-08-12 02:10:00 UTC → 2026-08-12 02:14:00 UTC, median gap 4m
   - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - relay stack `carrier.httpbin → carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
 - **C5** (suggestive) — 2 records, 1 run(s), 2026-05-20 19:01:00 UTC → 2026-05-20 19:04:00 UTC, median gap 3m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - provenance: unknown 2 · single source
+  - scope: in scope · task class data retrieval
 
 Common features, not used to link (a popular or copied value, not one operator's):
 

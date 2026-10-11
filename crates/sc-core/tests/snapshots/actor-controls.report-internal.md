@@ -81,30 +81,36 @@ Every flagged request to each host, including requests outside the linked cluste
   - iterative probing: 8 variants of `page` on `files[.]depot[.]example/index.php` over 9s (median gap 0s, tool pace); 7 variants followed an error response
   - route escalation on `files[.]depot[.]example/index.php`: direct → program carrier over 6s. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - provenance: unknown 8 · single source
+  - scope: scope exceeded · task class unclear; failed: S2 (the route climbed to reach one target, past a block); S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `66a801d8` over 8 records: sqli (quote_or_quoted ×1, sleep ×1); ssti (dollar_brace ×1, double_brace ×1); traversal (depth4 ×2, etc_passwd ×1, win_ini ×1); xss (attr_breakout ×1, script_alert ×1, svg_onload ×1); first seen traversal.depth4 → traversal.etc_passwd → traversal.win_ini → ssti.double_brace → ssti.dollar_brace → xss.script_alert → xss.attr_breakout → xss.svg_onload. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
   - parallel fan-out: 4 of 4 one-second batches were 2 alike requests wide (width×batches: 2×4), like an agent issuing tool calls in parallel; a scanner submitting a list in bulk looks the same (a hint, not evidence)
 - **C2** (significant) — 7 records, 1 run(s), 2026-05-14 03:20:00 UTC → 2026-05-14 03:20:04 UTC, median gap 1s
   - iterative probing: 8 variants of `id` on `api[.]parts[.]example/v1/item` over 5s (median gap 1s, tool pace); 1 of its requests matched no rule
   - provenance: unknown 7 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 7 records share one URL encoding style (`sp20.noslash`): consistent with one client, not evidence on its own
   - payload dialect `9361fd33` over 3 records: sqli (sleep ×1, union_select ×2); first seen sqli.sleep → sqli.union_select. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C3** (significant) — 6 records, 1 run(s), 2026-05-11 14:02:10 UTC → 2026-05-11 14:07:35 UTC, median gap 62s
   - iterative probing: 6 variants of `name` on `portal[.]clinic[.]example/patients/search` over 5m (median gap 62s, model pace); 3 variants followed an error response
   - provenance: unknown 6 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `02883d99` over 5 records: sqli (quote_or_quoted ×2, union_select ×3); first seen sqli.quote_or_quoted → sqli.union_select. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
   - prose in parameters: 1 values (language unclear) (a hint, not evidence)
 - **C4** (significant) — 5 records, 1 run(s), 2026-05-16 09:30:00 UTC → 2026-05-16 09:30:04 UTC, median gap 1s
   - iterative probing: 7 variants of `name` on `intranet[.]lab[.]example/profile` over 5s (median gap 1s, tool pace); 2 of its requests matched no rule; 1 variant followed an error response
   - route escalation on `intranet[.]lab[.]example/profile`: direct → program carrier over 3s. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - provenance: unknown 5 · single source
+  - scope: scope exceeded · task class unclear; failed: S2 (the route climbed to reach one target, past a block); S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `afcb3117` over 2 records: ssti (dollar_brace ×1); xss (script_alert ×1); first seen xss.script_alert → ssti.dollar_brace. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C5** (significant) — 4 records, 1 run(s), 2026-05-12 10:15:00 UTC → 2026-05-12 10:39:30 UTC, median gap 8m
   - provenance: unknown 4 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `c78df6d2` over 4 records: xss (attr_breakout ×1, img_onerror ×1, js_uri ×1, script_alert ×1, svg_onload ×1); first seen xss.script_alert → xss.attr_breakout → xss.img_onerror → xss.svg_onload → xss.js_uri. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C6** (significant) — 4 records, 1 run(s), 2026-05-13 16:40:00 UTC → 2026-05-13 16:44:00 UTC, median gap 75s
   - artifacts: 4 of 4 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - iterative probing: 4 variants of `user` on `login[.]coop[.]example/account/login` over 4m (median gap 75s, model pace); 2 variants followed an error response
   - provenance: unknown 4 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `c1f3671f` over 2 records: sqli (quote_or_1eq1 ×1, quote_or_quoted ×1); first seen sqli.quote_or_quoted → sqli.quote_or_1eq1. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 
 ## Representative records
