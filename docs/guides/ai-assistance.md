@@ -48,7 +48,7 @@ Before leaning on a model's suggestions, measure it:
 swarmchase review agreement
 ```
 
-For each model it prints a confusion matrix of the admin's label against the suggestion, raw agreement and Cohen's κ, the same split by agent grade, the `agent` suggestions that break the L2 rule, and the opposite calls (agent against benign). The grade is the one the model saw when the line records it, else the grade now. It also lists admin `agent` labels on records graded below L2, and the rules models flagged as misfires.
+For each model it prints a confusion matrix of the admin's label against the suggestion, raw agreement and Cohen's κ, the same split by agent grade, the `agent` suggestions that break the L2 rule, and the opposite calls (agent against benign). The grade is the one the model saw when the suggestion records it, else the grade stored with the admin's label, else the grade now. It also lists the admin's `agent` labels below L2 with their grade and reason, and the rules models flagged as misfires.
 
 ### Rule upkeep
 

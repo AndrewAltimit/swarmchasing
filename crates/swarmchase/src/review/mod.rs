@@ -95,6 +95,9 @@ pub enum ReviewCmd {
     /// Rules whose reviewed hits are mostly benign, with candidate hard
     /// negatives written to the data directory.
     Misfires(misfires::MisfiresArgs),
+    /// Ask Claude through Claude Code (headless, no tools) for suggestions
+    /// on `--export-hosted` files, appended to a suggestions file.
+    SuggestClaude(crate::suggest::claude::SuggestArgs),
 }
 
 #[derive(clap::Args)]
@@ -180,6 +183,7 @@ pub fn run(args: ReviewArgs) -> Result<()> {
         Some(ReviewCmd::CheckSuggestions(c)) => return hosted::check(&c),
         Some(ReviewCmd::Agreement(g)) => return agreement::run(&g),
         Some(ReviewCmd::Misfires(m)) => return misfires::run(&m),
+        Some(ReviewCmd::SuggestClaude(s)) => return crate::suggest::claude::run(&s),
         None => {}
     }
     let data = &args.data;
