@@ -20,6 +20,7 @@ Each term links to the section that defines it.
 | Cluster | Records joined by hard links. | [FM-1.3](01-scope.md#fm-13-groupings) |
 | Commonness cap | The limit above which a link feature only soft-links. | [FM-5.2](05-linking.md#fm-52-shared-link-features) |
 | Confidence level | High, moderate or low: the basis for a judgment. | [FM-8.2](08-confidence.md#fm-82-confidence-levels) |
+| Corroboration | One kind of source, several, or confirmed in operator logs. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Declared testing | Request text announcing a test; checked, never believed. | [FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing), [FM-10.6](10-disclosure.md#fm-106-authorised-testing) |
 | Escalation sequence | The order in which tactics appear in a run or fleet. | [FM-5.9](05-linking.md#fm-59-escalation-sequences) |
 | Evidence level | A rung of the developer ladder, `self_id` to `provider_confirmed`. | [FM-7.2](07-attribution.md#fm-72-developer-and-operator-ladder) |
@@ -35,7 +36,9 @@ Each term links to the section that defines it.
 | Notice | The public page for one incident. | [FM-1.4](01-scope.md#fm-14-casework-terms), [chapter 11](11-notices.md) |
 | Passivity test | The conditions every source must pass. | [FM-3.2](03-sources.md#fm-32-passivity-test) |
 | Pause | A gap long in absolute terms and against the median gap. | [FM-6.2](06-timing.md#fm-62-cadence-bursts-and-pauses) |
+| Plant signal | A sign a cluster's records were placed to be found. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Probe chain | One client trying variants of one request. | [FM-5.4](05-linking.md#fm-54-probe-chains) |
+| Provenance | Who can create a record: observed, submit- or publish-anywhere. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Provider | The organisation whose agents are attributed. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
 | Public record | A third-party trace of a request, published to anyone. | [FM-3.1](03-sources.md#fm-31-what-counts-as-a-public-record) |
 | Published tag | A tag quoted in a public report; never a hard link. | [FM-5.2](05-linking.md#fm-52-shared-link-features), [FM-14.5](14-limits.md#fm-145-tags-get-copied-after-publication) |

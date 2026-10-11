@@ -23,6 +23,7 @@ pub mod knowledge;
 pub mod model;
 pub mod notice;
 pub mod paths;
+pub mod plant;
 pub mod prose;
 pub mod recurrence;
 pub mod redact;
@@ -49,10 +50,11 @@ pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tactic, Tier, TsKind, fmt_ts,
-    parse_ts, top_counts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, Tactic, Tier,
+    TsKind, fmt_ts, parse_ts, top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
+pub use plant::{Corroboration, PlantSignal, PlantSignalKind};
 pub use recurrence::{ClusterRun, RecurrenceOptions, Rerun, TargetRun, cluster_reruns, reruns};
 pub use redact::{redact_observation, redact_url};
 pub use report::{Audience, Notice, ReportOptions, render_markdown, render_notice};

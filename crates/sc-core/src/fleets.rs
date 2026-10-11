@@ -281,7 +281,14 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             add(SoftLinkKind::HeaderSet, h.clone(), &c.id);
         }
     }
-    let common: BTreeSet<&LinkFeature> = s.common_features.iter().map(|c| &c.feature).collect();
+    // A burned identifier (quoted in a public report) ties nothing: anyone
+    // can copy it.
+    let common: BTreeSet<&LinkFeature> = s
+        .common_features
+        .iter()
+        .filter(|c| !c.published)
+        .map(|c| &c.feature)
+        .collect();
     for c in &shown {
         let feats: BTreeSet<&LinkFeature> = c
             .members

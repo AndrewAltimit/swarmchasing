@@ -71,17 +71,27 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
     for cl in &a.clusters {
         writeln!(
             out,
-            "  {} {} [{}] {} records, {} → {}{}",
+            "  {} {} [{}] {} records, {} → {} · {}{}",
             cl.id,
             cl.key,
             cl.tier.label(),
             cl.members.len(),
             fmt_ts(cl.start),
             fmt_ts(cl.end),
+            cl.corroboration.label(),
             c.fleet_of(&cl.key)
                 .map(|f| format!(" · {}", f.id))
                 .unwrap_or_default()
         )?;
+        if !cl.plant_signals.is_empty() {
+            let kinds: std::collections::BTreeSet<&str> =
+                cl.plant_signals.iter().map(|p| p.kind.label()).collect();
+            writeln!(
+                out,
+                "      plant review: {} (see the case-notes report)",
+                kinds.into_iter().collect::<Vec<_>>().join(", ")
+            )?;
+        }
     }
 
     writeln!(out, "\nEndpoints")?;
