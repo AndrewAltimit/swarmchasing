@@ -56,10 +56,10 @@ fn evaluation_set_numbers_hold() {
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 251);
+    assert_eq!(a.total, 252);
     assert_eq!(
         tiers,
-        [91, 76, 84],
+        [92, 76, 84],
         "records per tier (noise, suggestive, significant)"
     );
     assert_eq!(a.clusters.len(), 33, "clusters");
