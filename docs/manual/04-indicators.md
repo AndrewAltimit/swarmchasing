@@ -7,7 +7,7 @@
 Indicators are rules kept as data, versioned, and shared by every tool that grades records. Before rules run, each recorded URL is unwrapped: relays, translate proxies, URL-valued parameters, `data:` URLs and base64 values are peeled into layers, so rules see every hop and the real target ([methodology](../methodology.md#unwrapping)).
 
 - Each rule counts at most once per record, whichever layer it matched.
-- A record's score is the sum of the weights of the distinct rules that fired. Rules that read the same artifact are one piece of evidence, not several, and count once per independence group ([FM-4.11](#fm-411-independence-groups-and-the-context-cap)).
+- A record's score adds the weights of the distinct rules that fired. Rules that read the same artifact are one piece of evidence, not several, and count once per independence group; context kinds together count at most one below the suggestive threshold ([FM-4.11](#fm-411-independence-groups-and-the-context-cap)).
 - The score is graded against two thresholds into a tier ([FM-1.5](01-scope.md#fm-15-evidence-tiers)). A rule marked significant puts a record in the top tier on its own.
 - **One relay hit is never enough.** No rule for something ordinary users do may reach the suggestive threshold alone. A relay, a cache-buster or a self-identification needs a second, independent indicator, and that indicator is not another context hit ([FM-4.11](#fm-411-independence-groups-and-the-context-cap)).
 - **A tier measures payload and tool use.** It says what a record contains, not whether an agent sent it or whether the agent went beyond its task. Those are separate questions with their own evidence ([chapter 15](15-misalignment.md)).
