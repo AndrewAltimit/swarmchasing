@@ -20,7 +20,7 @@ use std::fmt::Write as _;
 
 /// The stable key of the cluster `sel` names (`C3` or `k-3f9a2c1b`) in the
 /// case's analysis.
-fn resolve(a: &Analysis, sel: &str) -> Result<String> {
+pub(crate) fn resolve(a: &Analysis, sel: &str) -> Result<String> {
     match a.cluster(sel) {
         Some(c) if !c.key.is_empty() => Ok(c.key.clone()),
         _ => bail!(
@@ -729,7 +729,9 @@ pub(crate) mod tests {
         let keys: Vec<String> = a.clusters.iter().map(|c| c.key.clone()).collect();
         update(&root, "n-1", |c| merge(c, &a, &keys, None, "d").map(|_| ())).unwrap();
         let draft = |force| {
-            let (p, _) = crate::notice::notice_draft(&root, "n-1", force, "2026-10-15").unwrap();
+            let (p, _) =
+                crate::notice::notice_draft(&root, "n-1", force, "2026-10-15", 1_791_000_000)
+                    .unwrap();
             std::fs::read_to_string(p).unwrap()
         };
         assert!(!draft(false).contains("## Swarm"));

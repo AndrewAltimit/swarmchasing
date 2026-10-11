@@ -22,10 +22,11 @@ pub enum CaseStatus {
 /// The public notice draft inside a case directory.
 pub const NOTICE_DRAFT: &str = "notice.md";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum EndpointState {
     /// Not yet decided by the admin.
+    #[default]
     Unreviewed,
     /// Evidence that an attack succeeded.
     Compromised,
@@ -49,12 +50,21 @@ impl EndpointState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CaseEndpoint {
     pub host: String,
     pub state: EndpointState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// For a compromised endpoint: what shows the attack succeeded, beyond
+    /// the inbound requests (an operator's statement, its logs, a leaked
+    /// artifact). A notice says "compromised" only with one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub basis: Option<String>,
+    /// Why the notice names this endpoint's operator although every record
+    /// on it is submit-anywhere (anyone can submit a URL to a scan service).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub single_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,13 +95,129 @@ pub struct Decision {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Sent {
     pub date: String,
     pub recipient: String,
     pub channel: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub report: Option<String>,
+    /// When it was sent (RFC 3339, UTC). The lead time runs from here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<String>,
+}
+
+impl Sent {
+    /// The send time as a Unix timestamp. A send recorded with a date only
+    /// counts from the end of that day.
+    pub fn time(&self) -> Option<i64> {
+        match &self.at {
+            Some(at) => parse_time(at),
+            None => parse_time(&format!("{}T23:59:59Z", self.date)),
+        }
+    }
+}
+
+/// A Unix timestamp from RFC 3339 text.
+pub fn parse_time(s: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(s.trim())
+        .ok()
+        .map(|d| d.timestamp())
+}
+
+/// RFC 3339 text (UTC, seconds) for a Unix timestamp.
+pub fn rfc3339(ts: i64) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
+        .map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+        .unwrap_or_default()
+}
+
+/// A time as the admin reads it: `2026-10-12 18:00 UTC`.
+pub fn show_time(ts: i64) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
+        .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+        .unwrap_or_default()
+}
+
+/// A party the admin could not reach: no security, abuse or registrar
+/// contact was found (`case no-contact`). The notice may publish without a
+/// send to it, and says contact was attempted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoContact {
+    /// An endpoint's host, or a provider's organisation.
+    pub party: String,
+    /// What was tried.
+    pub searched: String,
+    /// RFC 3339.
+    pub at: String,
+}
+
+/// An innocent or misleading explanation the self-review checklist asks
+/// about before a notice is added.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, clap::ValueEnum,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum AlternativeKind {
+    /// An authorised red-team or research evaluation.
+    AuthorisedTest,
+    /// A honeypot or canary that drew or staged the activity.
+    Honeypot,
+    /// A research or commercial scanner, not an agent.
+    ResearchScanner,
+    /// Self-identification written by someone else to mislead.
+    SpoofedSelfId,
+    /// Records placed in public sources to be found.
+    PlantedRecords,
+}
+
+impl AlternativeKind {
+    pub const ALL: [AlternativeKind; 5] = [
+        Self::AuthorisedTest,
+        Self::Honeypot,
+        Self::ResearchScanner,
+        Self::SpoofedSelfId,
+        Self::PlantedRecords,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::AuthorisedTest => "authorised-test",
+            Self::Honeypot => "honeypot",
+            Self::ResearchScanner => "research-scanner",
+            Self::SpoofedSelfId => "spoofed-self-id",
+            Self::PlantedRecords => "planted-records",
+        }
+    }
+}
+
+/// The admin's decision on one alternative explanation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Alternative {
+    pub kind: AlternativeKind,
+    /// `rejected`, or `accepted` (an authorised test its owner confirmed).
+    pub verdict: String,
+    /// Why, with links.
+    pub why: String,
+    pub date: String,
+}
+
+/// The admin's acknowledgement of a cluster's plant signals.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlantReview {
+    /// The cluster's stable key.
+    pub cluster: String,
+    pub note: String,
+    pub date: String,
+}
+
+/// A notice draft's content hash and a time: when `case notice` wrote it,
+/// or when the admin re-read it (`case reread`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DraftStamp {
+    pub sha256: String,
+    /// RFC 3339.
+    pub at: String,
 }
 
 /// Clusters the admin decided to treat as one fleet (`case fleet merge`):
@@ -177,6 +303,29 @@ pub struct Case {
     /// L5 (documented). Reports show it beside the computed grades.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_grade: Option<sc_core::GradeDecision>,
+    /// The lead time for targeted and historical endpoints' operators, in
+    /// hours (4 to 12); unset is the default ([`super::lead::OPERATOR_DEFAULT`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_hours: Option<u32>,
+    /// Parties no contact was found for.
+    #[serde(default, rename = "no_contact", skip_serializing_if = "Vec::is_empty")]
+    pub no_contact: Vec<NoContact>,
+    /// Alternative explanations the admin decided on.
+    #[serde(default, rename = "alternative", skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<Alternative>,
+    /// Plant signals the admin reviewed, per cluster.
+    #[serde(
+        default,
+        rename = "plant_review",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub plant_reviews: Vec<PlantReview>,
+    /// The notice draft `case notice` last wrote.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drafted: Option<DraftStamp>,
+    /// The admin's last re-read of the notice draft (`case reread`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reread: Option<DraftStamp>,
 }
 
 impl Case {
@@ -202,8 +351,7 @@ impl Case {
             if !known.contains(&v.host) {
                 self.endpoints.push(CaseEndpoint {
                     host: v.host,
-                    state: EndpointState::Unreviewed,
-                    note: None,
+                    ..Default::default()
                 });
                 added += 1;
             }

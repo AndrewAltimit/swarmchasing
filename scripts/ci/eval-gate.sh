@@ -5,7 +5,7 @@
 # The floors are a ratchet. Raise them when a rules change improves the
 # numbers; never lower one to land a change - fix the rule, or argue the label
 # in samples/eval/ instead. Precision floors stay at 90%:
-# with no embargo, a false positive is published as soon as it is acted on.
+# with no embargo, a false positive is published within a day of being acted on.
 #
 # The `-lower` floors apply to the lower end of the 95% Wilson interval for
 # precision, so a precision of 100% on a handful of records does not pass

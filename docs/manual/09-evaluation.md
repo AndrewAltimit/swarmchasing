@@ -2,7 +2,7 @@
 
 [Manual index](README.md) · Previous: [8. Confidence language](08-confidence.md) · Next: [10. Disclosure](10-disclosure.md)
 
-With no embargo, a false positive is published the moment the admin acts on it. Precision therefore matters most, and every number quoted about the method says what it was measured on.
+With no embargo, a false positive is published within a day of the admin acting on it. Precision therefore matters most, and every number quoted about the method says what it was measured on.
 
 ## FM-9.1 Three kinds of evaluation
 

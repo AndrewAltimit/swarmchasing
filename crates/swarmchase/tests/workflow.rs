@@ -1,8 +1,11 @@
 //! The admin workflow end to end, offline: a watch over a fixture store,
 //! review from scripted answers, a case opened from a cluster key, endpoint
 //! decisions, a hand-added contact, a draft with its bundle, verification,
-//! the notice draft, `notice add` into a scratch notices directory, and the
-//! notice lint. No step touches the network.
+//! timed sends and missing contacts, the alternative explanations, the
+//! notice draft and its re-read, `notice add` refused by the self-review
+//! checklist until the cooling-off and the lead time have passed, then
+//! added into a scratch notices directory, and the notice lint. No step
+//! touches the network.
 
 use crate::common::{Run, Scratch, ok, run};
 use std::io::Write;
@@ -66,6 +69,34 @@ fn with_stdin(dir: &Path, args: &[&str], input: &str) -> Run {
         .write_all(input.as_bytes())
         .unwrap();
     child.wait_with_output().unwrap().into()
+}
+
+fn rfc3339(ts: i64) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
+        .unwrap()
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string()
+}
+
+/// Move every time `case.toml` records (`at = "…"`: sends, missing
+/// contacts, the draft and its re-read) `secs` into the past, as if that
+/// long had passed. The test's clock: nothing in the binary can be told
+/// the time.
+fn shift_times(case_toml: &Path, secs: i64) {
+    let text = std::fs::read_to_string(case_toml).unwrap();
+    let out: Vec<String> = text
+        .lines()
+        .map(|l| match l.strip_prefix("at = \"") {
+            Some(rest) => {
+                let t = chrono::DateTime::parse_from_rfc3339(rest.trim_end_matches('"'))
+                    .unwrap()
+                    .timestamp();
+                format!("at = \"{}\"", rfc3339(t - secs))
+            }
+            None => l.to_string(),
+        })
+        .collect();
+    std::fs::write(case_toml, out.join("\n") + "\n").unwrap();
 }
 
 fn hosts(case_toml: &str) -> Vec<String> {
@@ -225,38 +256,222 @@ fn from_a_watch_digest_to_a_linted_notice() {
     let r = ok(dir, &["case", "--data", data, "verify", &bundle]);
     assert!(r.stdout.contains("verified"), "{}", r.stdout);
     assert!(r.stdout.contains("SC-FM"), "{}", r.stdout);
+    // The report states when the notice goes public, and that it is fixed.
     ok(
         dir,
-        &["case", "--data", data, "sent", "wf-1", "--to", &address],
+        &[
+            "case",
+            "--data",
+            data,
+            "report",
+            "wf-1",
+            "--audience",
+            "affected",
+            "-o",
+            "aff.md",
+        ],
     );
+    let aff = std::fs::read_to_string(dir.join("aff.md")).unwrap();
+    assert!(
+        aff.contains("## Publication") && aff.contains("is scheduled for **"),
+        "{aff}"
+    );
+    assert!(aff.contains("appended verbatim"), "{aff}");
 
-    // 7. The notice: drafted in the case, added to a scratch notices
-    // directory (publish pending), and linted.
-    ok(dir, &["case", "--data", data, "notice", "wf-1"]);
-    let r = ok(
+    // 7. Sends, each with the time it was made: the operator's report three
+    // hours ago. No provider was reported (none can be named, and the
+    // directory had no channel for the case), and the other hosts had no
+    // contact: both are recorded, so the notice says contact was attempted.
+    let three_hours_ago = rfc3339(now - 3 * 3600);
+    ok(
         dir,
-        &["notice", "--dir", "notices", "add", "wf-1", "--data", data],
+        &[
+            "case",
+            "--data",
+            data,
+            "sent",
+            "wf-1",
+            "--to",
+            &address,
+            "--at",
+            &three_hours_ago,
+        ],
     );
+    let c: toml::Value = toml::from_str(&std::fs::read_to_string(&toml_path).unwrap()).unwrap();
+    let providers: Vec<String> = c
+        .get("contact")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter(|x| x["role"].as_str() == Some("provider"))
+        .map(|x| x["address"].as_str().unwrap().to_string())
+        .collect();
+    for p in &providers {
+        ok(
+            dir,
+            &[
+                "case",
+                "--data",
+                data,
+                "sent",
+                "wf-1",
+                "--to",
+                p,
+                "--at",
+                &three_hours_ago,
+            ],
+        );
+    }
+    if providers.is_empty() {
+        ok(
+            dir,
+            &[
+                "case",
+                "--data",
+                data,
+                "no-contact",
+                "wf-1",
+                "provider",
+                "--searched",
+                "provider directory: no entry for the vendor the requests name",
+            ],
+        );
+    }
+    for h in &hs[1..] {
+        ok(
+            dir,
+            &[
+                "case",
+                "--data",
+                data,
+                "no-contact",
+                "wf-1",
+                h,
+                "--searched",
+                "security.txt and RDAP: nothing found",
+            ],
+        );
+    }
+    // A send cannot be recorded in the future.
+    let r = run(
+        dir,
+        &[
+            "case",
+            "--data",
+            data,
+            "sent",
+            "wf-1",
+            "--to",
+            &address,
+            "--at",
+            &rfc3339(now + 86_400),
+        ],
+    );
+    assert!(!r.ok && r.stderr.contains("future"), "{}", r.stderr);
+    for kind in [
+        "authorised-test",
+        "honeypot",
+        "research-scanner",
+        "spoofed-self-id",
+        "planted-records",
+    ] {
+        ok(
+            dir,
+            &[
+                "case",
+                "--data",
+                data,
+                "alternative",
+                "wf-1",
+                kind,
+                "--rejected",
+                "checked against the records; see case notes",
+            ],
+        );
+    }
+    let r = ok(dir, &["case", "--data", data, "status", "wf-1"]);
+    assert!(r.stdout.contains("publish not before:"), "{}", r.stdout);
+
+    // 8. The notice: drafted in the case after the sends, then refused until
+    // the self-review checklist passes.
+    ok(dir, &["case", "--data", data, "notice", "wf-1"]);
+    let add = |dir: &Path| {
+        run(
+            dir,
+            &["notice", "--dir", "notices", "add", "wf-1", "--data", data],
+        )
+    };
+    let r = add(dir);
+    assert!(!r.ok, "{}", r.stdout);
+    assert!(
+        r.stdout.contains("[FAIL] the current draft was re-read"),
+        "{}",
+        r.stdout
+    );
+    assert!(
+        r.stdout.contains("[pass] the withholding scan passes"),
+        "{}",
+        r.stdout
+    );
+    // Re-read straight away: inside the cooling-off, so it does not count.
+    let r = ok(dir, &["case", "--data", data, "reread", "wf-1"]);
+    assert!(r.stdout.contains("less than an hour"), "{}", r.stdout);
+    assert!(!add(dir).ok);
+    // The clock moves by moving the case's recorded times back: the draft
+    // was written two hours ago (after the sends), the re-read is now.
+    shift_times(&toml_path, 2 * 3600);
+    ok(dir, &["case", "--data", data, "reread", "wf-1"]);
+    // The operator's six-hour lead has one hour left; there is no override.
+    let r = add(dir);
+    assert!(!r.ok, "{}", r.stdout);
+    assert!(
+        r.stderr.contains("The lead time runs until"),
+        "{}",
+        r.stderr
+    );
+    assert!(
+        r.stdout.contains("[FAIL] the lead time has passed"),
+        "{}",
+        r.stdout
+    );
+    assert!(!dir.join("notices/wf-1.md").exists());
+    // Two hours on, it has passed.
+    shift_times(&toml_path, 2 * 3600);
+    let r = add(dir);
+    assert!(r.ok, "{}\n{}", r.stdout, r.stderr);
+    assert!(!r.stdout.contains("[FAIL]"), "{}", r.stdout);
     assert!(
         r.stdout.contains("not public until you commit and push"),
         "{}",
         r.stdout
     );
-    // Only the operator was sent a report, so the notice says only that.
     let notice = std::fs::read_to_string(dir.join("notices/wf-1.md")).unwrap();
     assert!(
-        notice
-            .contains("Notice published. Reports went to the affected operators at the same time."),
+        notice.contains(
+            "before publication, each with the fixed lead time of our disclosure policy."
+        ),
         "{notice}"
     );
-    assert!(
-        notice.contains("Reports went to the affected operators when this notice was published."),
-        "{notice}"
-    );
-    assert!(
-        !notice.contains("Reports went to the AI provider"),
-        "{notice}"
-    );
+    if hs.len() > 1 {
+        assert!(notice.contains("contact was attempted"), "{notice}");
+    }
+    if providers.is_empty() {
+        // Only the operator was sent a report, so the notice says only that.
+        assert!(
+            notice.contains(
+                "Reports went to the affected operators before this notice was published."
+            ),
+            "{notice}"
+        );
+        assert!(
+            !notice.contains("Reports went to the AI provider"),
+            "{notice}"
+        );
+        assert!(
+            notice.contains("No contact could be found for the AI provider"),
+            "{notice}"
+        );
+    }
     let r = ok(dir, &["notice", "--dir", "notices", "lint"]);
     assert!(r.stdout.contains("notices OK (1 checked)"), "{}", r.stdout);
     let r = ok(dir, &["case", "--data", data, "status", "wf-1"]);

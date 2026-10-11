@@ -136,7 +136,7 @@ jobs:
         run: cargo test --workspace --profile release-test
 
       # Precision/recall floors on samples/eval/. With no embargo a
-      # false positive goes public as soon as it is acted on, so a rules change
+      # false positive goes public within a day of being acted on, so a rules change
       # that costs precision fails here.
       - name: Detection eval gate
         run: scripts/ci/eval-gate.sh --profile release-test

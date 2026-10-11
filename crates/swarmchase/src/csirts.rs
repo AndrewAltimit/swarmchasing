@@ -297,7 +297,7 @@ mod tests {
             c.endpoints.push(CaseEndpoint {
                 host: h.to_string(),
                 state: *s,
-                note: None,
+                ..Default::default()
             });
         }
         c

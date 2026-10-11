@@ -864,7 +864,7 @@ mod tests {
             c.endpoints.push(CaseEndpoint {
                 host: h.into(),
                 state: EndpointState::Targeted,
-                note: None,
+                ..Default::default()
             });
         }
         let fake = Fake {

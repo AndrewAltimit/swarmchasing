@@ -176,7 +176,9 @@ fn gather(
         },
         super::reported(c)
             .parties()
-            .map(|p| format!(" Reported to {p} at the same time as the public notice."))
+            .map(|p| format!(
+                " Reported to {p} before the public notice, each with a fixed lead time."
+            ))
             .unwrap_or_default()
     );
     Ok(Public {

@@ -88,10 +88,17 @@ pub(crate) fn report(
         &case_rules(root, &c)?,
     );
     let md = render_markdown(&a, &report_options(&c, audience, reporter, today));
-    Ok(super::fleet::with_fleets(
-        md,
-        &super::fleet::report_section(&c, &a, audience),
-    ))
+    let md = super::fleet::with_fleets(md, &super::fleet::report_section(&c, &a, audience));
+    // A recipient learns when the notice goes public, and that the time is
+    // fixed.
+    Ok(match audience {
+        Audience::Provider | Audience::Affected => format!(
+            "{}\n\n{}",
+            md.trim_end(),
+            super::lead::publication_section(&c, chrono::Utc::now().timestamp())
+        ),
+        _ => md,
+    })
 }
 
 /// Write the report for one contact into the outbox: an unsent .eml with a

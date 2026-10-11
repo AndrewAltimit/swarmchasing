@@ -26,6 +26,7 @@ mod store;
 mod suggest;
 mod util;
 mod watch;
+mod wording;
 
 #[derive(Parser)]
 #[command(name = "swarmchase", version, about)]
