@@ -24,8 +24,10 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | `URLQUERY_APIKEY` | `swarmchase` | urlquery.net collectors and watch sources. |
 | `URLSCAN_APIKEY` | `swarmchase` | Optional: raises urlscan.io's search quota ([urlscan.io](#urlscanio)). |
 | `SWARMCHASE_SITE_URL` | `swarmchase notice build`, `site build` | `--base-url`. |
-| `SWARMCHASE_LLM_URL` | `swarmchase review --suggest` | A local OpenAI-compatible model server; loopback, private or link-local hosts only ([label suggestions](watch.md#label-suggestions)). |
-| `SWARMCHASE_LLM_MODEL` | `swarmchase review --suggest` | The model name sent to that server. |
+| `SWARMCHASE_LLM_URL` | `swarmchase review --suggest`, `watch --triage` | A local OpenAI-compatible model server; loopback, private or link-local hosts only ([label suggestions](watch.md#label-suggestions)). |
+| `SWARMCHASE_LLM_MODEL` | `swarmchase review --suggest`, `watch --triage` | The model name sent to that server. |
+| `SWARMCHASE_WATCH_TRIAGE` | `swarmchase watch` | `1`, `true` or `yes` turns on [model triage](watch.md#model-triage) of new leads, as `--triage` does. |
+| `SWARMCHASE_TRIAGE_MAX`, `SWARMCHASE_TRIAGE_SECS` | `swarmchase watch` | Leads triage asks about per run (default 20) and seconds it may spend (default 600). |
 | `SWARMCHASE_UA` | collectors | Overrides the collectors' user agent. |
 | `SWARMCHASE_BACKUP_DIR` | `swarmchase backup` | Where encrypted backups go, one subdirectory per host ([backups](#backups)). |
 | `SWARMCHASE_BACKUP_RECIPIENT` | `swarmchase backup create` | The age public key backups are encrypted to. |

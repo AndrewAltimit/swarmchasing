@@ -216,8 +216,32 @@ impl Suggester {
         &self.url
     }
 
+    /// The model name as a suggestion records it.
+    pub fn model(&self) -> &str {
+        if self.model.is_empty() {
+            "local model"
+        } else {
+            &self.model
+        }
+    }
+
     /// A suggestion for record `idx`, or `None` on any failure.
     pub fn suggest(&self, a: &Analysis, idx: usize) -> Option<Suggestion> {
+        self.ask(a, idx, None)
+    }
+
+    /// As [`Self::suggest`], giving up after `timeout` when that is shorter
+    /// than the client's own: the watch's triage runs on a time budget.
+    pub fn suggest_within(
+        &self,
+        a: &Analysis,
+        idx: usize,
+        timeout: Duration,
+    ) -> Option<Suggestion> {
+        self.ask(a, idx, Some(timeout))
+    }
+
+    fn ask(&self, a: &Analysis, idx: usize, timeout: Option<Duration>) -> Option<Suggestion> {
         let body = json!({
             "model": self.model,
             "temperature": 0,
@@ -227,21 +251,20 @@ impl Suggester {
                 {"role": "user", "content": record_text(a, idx)},
             ],
         });
-        let r = self.http.post(self.url.clone()).json(&body).send().ok()?;
+        let mut req = self.http.post(self.url.clone()).json(&body);
+        if let Some(t) = timeout {
+            req = req.timeout(t);
+        }
+        let r = req.send().ok()?;
         if !r.status().is_success() {
             return None;
         }
-        let model = if self.model.is_empty() {
-            "local model"
-        } else {
-            &self.model
-        };
-        parse_reply(&r.text().ok()?, model)
+        parse_reply(&r.text().ok()?, self.model())
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use sc_core::{Observation, Rules, analyze};
     use std::io::{Read, Write};
@@ -334,7 +357,7 @@ mod tests {
         );
     }
 
-    fn reply(content: &str) -> String {
+    pub(crate) fn reply(content: &str) -> String {
         json!({"choices": [{"message": {"role": "assistant", "content": content}}]}).to_string()
     }
 
@@ -361,9 +384,32 @@ mod tests {
     /// A one-shot local server: reads one request, answers with `answer`
     /// (or nothing), and hands back what it was sent.
     fn serve(answer: Option<String>) -> (String, std::thread::JoinHandle<String>) {
+        let (addr, h) = serve_many(vec![answer]);
+        (
+            addr,
+            std::thread::spawn(move || h.join().unwrap().remove(0)),
+        )
+    }
+
+    /// A local fake model server for `answers.len()` requests in turn, each
+    /// answered with its body or left unanswered for 1.5 s. Hands back what
+    /// each request sent.
+    pub(crate) fn serve_many(
+        answers: Vec<Option<String>>,
+    ) -> (String, std::thread::JoinHandle<Vec<String>>) {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = format!("http://{}", l.local_addr().unwrap());
         let h = std::thread::spawn(move || {
+            answers
+                .into_iter()
+                .map(|answer| answer_one(&l, answer))
+                .collect()
+        });
+        (addr, h)
+    }
+
+    fn answer_one(l: &std::net::TcpListener, answer: Option<String>) -> String {
+        {
             let (mut s, _) = l.accept().unwrap();
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let mut buf = Vec::new();
@@ -401,8 +447,7 @@ mod tests {
                 None => std::thread::sleep(Duration::from_millis(1500)),
             }
             req
-        });
-        (addr, h)
+        }
     }
 
     #[test]

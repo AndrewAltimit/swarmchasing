@@ -6,9 +6,15 @@
 //! <out>/state.json              per-source cursors and pending resume keys
 //! <out>/store/<source>.ndjson   every record collected within retention, redacted, deduplicated
 //! <out>/summary.json            clusters and endpoints as of the last run (digest baseline)
-//! <out>/runs/<stamp>/           new records per source, analysis, case notes, digest
+//! <out>/runs/<stamp>/           new records per source, analysis, case notes, digest, run.json
 //! <out>/LATEST                  stamp of the most recent run
 //! ```
+//!
+//! The digest opens with the run's priority ([`priority`]), set from
+//! deterministic facts only, and `run.json` ([`run_summary`]) says the same
+//! in a stable JSON for scripts. With `--triage`, a model on the admin's own
+//! machine or network suggests a label for each new lead ([`triage`]); the
+//! suggestions are shown in the digest and saved for review, never as labels.
 //!
 //! Every run also checks source health and rule drift against the trailing
 //! history in `state.json` (see `health.rs`) and reports both in the digest.
@@ -37,13 +43,16 @@
 
 mod cases;
 mod digest;
+mod priority;
 mod pull;
+mod run_summary;
+mod triage;
 
 use crate::health::{RuleHistory, RuleRun};
 use crate::store::{append, load_store, prune, read_json, to_ndjson, write_json};
 use anyhow::{Context, Result, bail};
 use cases::{CaseCheck, CaseWatch};
-use digest::{DigestInput, Health, SourceReport, Summary, digest, summarise};
+use digest::{Alert, AlertKind, DigestInput, Health, SourceReport, Summary, digest, summarise};
 use pull::{SourceState, pull};
 use sc_collect::{CdxQuery, Client, Kind};
 use sc_core::bursts::archive_bursts;
@@ -138,14 +147,35 @@ pub struct WatchArgs {
     /// Committed notices, for the case status proposals in the digest.
     #[arg(long, default_value = "notices")]
     notices: PathBuf,
+    /// Ask the local model at SWARMCHASE_LLM_URL for a label suggestion on
+    /// each new lead (also on with SWARMCHASE_WATCH_TRIAGE=1). Suggestions
+    /// only: shown in the digest and saved beside labels, never as them.
+    #[arg(long)]
+    triage: bool,
+    /// Most leads triage asks about per run.
+    #[arg(long, default_value_t = 20, env = "SWARMCHASE_TRIAGE_MAX")]
+    triage_max: usize,
+    /// Most seconds triage spends per run.
+    #[arg(long, default_value_t = 600, env = "SWARMCHASE_TRIAGE_SECS")]
+    triage_secs: u64,
 }
 
 pub fn run(args: WatchArgs) -> Result<()> {
     let rules = crate::input::load_rules(args.rules.as_deref())?;
-    watch(&args.watchlist, &args.out, &args.notices, &rules)
+    let triage = triage::enabled(args.triage).then_some(triage::Limits {
+        max: args.triage_max,
+        budget: Duration::from_secs(args.triage_secs),
+    });
+    watch(&args.watchlist, &args.out, &args.notices, &rules, triage)
 }
 
-fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<()> {
+fn watch(
+    watchlist: &Path,
+    out: &Path,
+    notices: &Path,
+    rules: &Rules,
+    triage_limits: Option<triage::Limits>,
+) -> Result<()> {
     let wl: Watchlist = toml::from_str(
         &std::fs::read_to_string(watchlist)
             .with_context(|| format!("reading {}", watchlist.display()))?,
@@ -196,7 +226,11 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
             let why = format!("{} not set", kind.key_env().unwrap_or("API key"));
             eprintln!("skipped: {why}");
             let st = state.sources.entry(s.name.clone()).or_default();
-            alerts.extend(st.health.observe_skip(&s.name, &why));
+            alerts.extend(
+                st.health
+                    .observe_skip(&s.name, &why)
+                    .map(|t| Alert::new(AlertKind::SourceSkipped, &s.name, t)),
+            );
             reports.push(SourceReport {
                 skipped: Some(format!("skipped: {why}")),
                 ..SourceReport::new(&s.name, &s.kind)
@@ -221,7 +255,16 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
                 (Err(_), Some(why)) => Err(why.as_str()),
                 (Err(_), None) => Err("unknown error"),
             };
-            alerts.extend(st.health.observe(&s.name, outcome));
+            let kind = if outcome.is_ok() {
+                AlertKind::SourceCollapsed
+            } else {
+                AlertKind::SourceFailed
+            };
+            alerts.extend(
+                st.health
+                    .observe(&s.name, outcome)
+                    .map(|t| Alert::new(kind, &s.name, t)),
+            );
         }
         match res {
             Ok(p) => {
@@ -234,10 +277,14 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
                 if let Some(c) = &p.coverage
                     && c.canary == Some(false)
                 {
-                    alerts.push(format!(
-                        "`{}` read {} but its canary failed: nothing came back in the shape the parser expects, so an empty pull here proves nothing. Check the source's format.",
-                        s.name,
-                        c.line()
+                    alerts.push(Alert::new(
+                        AlertKind::CanaryFailed,
+                        &s.name,
+                        format!(
+                            "`{}` read {} but its canary failed: nothing came back in the shape the parser expects, so an empty pull here proves nothing. Check the source's format.",
+                            s.name,
+                            c.line()
+                        ),
                     ));
                 }
                 rep.coverage = p.coverage;
@@ -276,8 +323,12 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
     }
 
     for (host, why) in client.down_hosts() {
-        alerts.push(format!(
-            "`{host}` was unavailable ({why}); later requests to it this run were not sent, and its sources continue from their checkpoints next run"
+        alerts.push(Alert::new(
+            AlertKind::HostDown,
+            &host,
+            format!(
+                "`{host}` was unavailable ({why}); later requests to it this run were not sent, and its sources continue from their checkpoints next run"
+            ),
         ));
     }
 
@@ -308,7 +359,11 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
             .collect(),
     );
     write_json(&state_path, &state)?;
-    alerts.extend(drifts.iter().map(|d| d.line()));
+    alerts.extend(
+        drifts
+            .iter()
+            .map(|d| Alert::new(AlertKind::RuleDrift, &d.source, d.line())),
+    );
     let mut notes = Vec::new();
     if restarted {
         notes.push(format!(
@@ -334,7 +389,14 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
 
     let summary_path = out.join("summary.json");
     let prev: Summary = read_json(&summary_path)?.unwrap_or_default();
-    let next = summarise(&a, &prev, now.format("%Y-%m-%dT%H:%M:%SZ").to_string());
+    let generated = now.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let next = summarise(&a, &prev, generated.clone());
+    let mut leads = triage::leads(&a, &prev, &next, &new_ids);
+    let triaged = match triage_limits {
+        Some(limits) => triage::run(true, out, &a, &mut leads, &stamp, limits),
+        None => triage::TriageReport::default(),
+    };
+    let priority = priority::assess(&leads, &health.alerts, &cases.due);
     let digest = digest(&DigestInput {
         stamp: &stamp,
         analysis: &a,
@@ -345,8 +407,26 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
         bursts: &bursts,
         cases: &cases,
         window_days: wl.analysis_window_days,
+        leads: &leads,
+        triage: &triaged,
+        priority: &priority,
     });
     std::fs::write(run_dir.join("digest.md"), &digest.text)?;
+    write_json(
+        &run_dir.join(run_summary::FILE),
+        &run_summary::build(&run_summary::Input {
+            stamp: &stamp,
+            generated: &generated,
+            analysis: &a,
+            new_records: new_ids.len(),
+            changed: digest.changed,
+            priority: &priority,
+            leads: &leads,
+            triage: &triaged,
+            health: &health,
+            cases: &cases,
+        }),
+    )?;
     write_json(&run_dir.join("summary.json"), &next)?;
     write_json(&summary_path, &next)?;
     std::fs::write(out.join("LATEST"), &stamp)?;
@@ -365,13 +445,14 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
         }
     }
     eprintln!(
-        "wrote {} ({})",
+        "wrote {} ({}, priority {})",
         run_dir.display(),
         if digest.changed {
             "changes"
         } else {
             "no changes"
-        }
+        },
+        priority.level.label()
     );
 
     // Hand the result to the workflow (digest email, artifact upload).
@@ -382,6 +463,7 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
             .open(p)?;
         writeln!(f, "run_dir={}", run_dir.display())?;
         writeln!(f, "changed={}", digest.changed)?;
+        writeln!(f, "priority={}", priority.level.label())?;
     }
     let ran: Vec<_> = health
         .sources
