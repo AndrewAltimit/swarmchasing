@@ -94,9 +94,10 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <p class="lede">Small tools that run in this page: check an evidence bundle, read a <code>security.txt</code>, defang URLs. Each loads what it needs the first time you use it, and nothing you pick or paste leaves the page. Also: <a href="../unwrap/">unwrap a URL</a>.</p></header>
 <section class="card" aria-labelledby="bundle-h">
 <h2 id="bundle-h">Check an evidence bundle</h2>
+<p class="lede-card">Got a report? Pick the files attached to the email.</p>
 <p class="hint">Pick the files of a bundle from <code>swarmchase case bundle</code> (<code>records.ndjson</code>, <code>analysis.json</code>, <code>stamp.json</code>, <code>MANIFEST.sha256</code>) or its folder. The page checks each SHA-256 against the manifest, re-runs the analysis with the bundled rules (or your edited ones), and compares every tier and cluster with the stamp, as <code>swarmchase case verify</code> does. It then shows the method and evaluation the stamp cites, the attribution layers the records support (add a <code>claims.json</code> from case work to include its claims), the runs, any candidate fleets and escalations, and the records. The files are read in this page only.</p>
 <div class="row">
-<label class="file button">Pick files<input type="file" id="case-files" multiple accept=".ndjson,.json,.sha256"></label>
+<label class="file button primary">Pick files<input type="file" id="case-files" multiple accept=".ndjson,.json,.sha256"></label>
 <label class="file button">Pick folder<input type="file" id="case-dir" webkitdirectory></label>
 <button type="button" id="case-example">Load the showcase bundle</button>
 <span id="case-picked" class="hint"></span></div>

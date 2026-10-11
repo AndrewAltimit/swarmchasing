@@ -17,7 +17,8 @@
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
 // defang on the tools page. It also checks layout: no page scrolls sideways
 // at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
-// one column, and the theme toggle cycles system, light and dark.
+// one column, and each press of the theme toggle flips the look, storing it
+// only while it differs from the system's.
 //
 // Usage (after scripts/ci/build-site.sh, which builds site/pkg):
 //     node scripts/site-xss-check.mjs [path/to/chrome]
@@ -309,7 +310,7 @@ try {
 
   // Layout: at 390 px no page scrolls sideways and every nav menu opens
   // inside the viewport; at 1440 px a menu is one column of full-width
-  // items. Then the theme toggle cycles system, light, dark, system.
+  // items. Then the theme toggle flips the look on each press.
   const menuBoxes = `(async () => {
     const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     const out = [];
@@ -351,15 +352,20 @@ try {
   await open("");
   const themes = await run(`(() => {
     const b = document.querySelector("[data-theme-toggle]");
+    const sys = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     const seen = [];
-    for (let i = 0; i < 4; i++) {
-      seen.push((document.documentElement.dataset.theme ?? "system") + "/" + (localStorage.getItem("swarmchase.theme") ?? "-") + "/" + b.dataset.mode);
+    for (let i = 0; i < 3; i++) {
+      seen.push({ look: b.dataset.look, auto: b.dataset.auto, stored: localStorage.getItem("swarmchase.theme"), sys });
       b.click();
     }
-    return seen.join(" ");
+    return seen;
   })()`);
-  if (themes !== "system/-/system light/light/light dark/dark/dark system/-/system")
-    failures.push(`the theme toggle did not cycle system, light, dark: ${themes}`);
+  // Each press flips the look; a look is stored only while it differs from
+  // the system's, and the toggle says whether it follows the system.
+  const flips = themes.every((t, i) => i === 0 || t.look !== themes[i - 1].look);
+  const stored = themes.every((t) => (t.look === t.sys ? t.stored === null && t.auto === "true" : t.stored === t.look && t.auto === "false"));
+  if (themes[0].look !== themes[0].sys || !flips || !stored)
+    failures.push(`the theme toggle did not flip the look: ${JSON.stringify(themes)}`);
   await audit("layout and theme");
 
   // The hostile notice: its page, and its row on the index.
