@@ -3,6 +3,7 @@
 
 use crate::model::{Case, ContactRole, EndpointState};
 use sc_core::{Analysis, Audience, Claim, ReportOptions, Reported, Role};
+use std::collections::BTreeMap;
 
 pub fn report_options(
     c: &Case,
@@ -41,6 +42,24 @@ pub fn affected_hosts(c: &Case) -> Vec<String> {
         .filter(|e| e.state.affected())
         .map(|e| e.host.clone())
         .collect()
+}
+
+/// How an indicator notice describes each affected endpoint in place of
+/// its host: the admin's description (`case endpoint --sector`), else "an
+/// affected organisation". Keyed by lowercased host.
+pub fn target_descriptions(c: &Case) -> BTreeMap<String, String> {
+    c.endpoints
+        .iter()
+        .filter(|e| e.state.affected())
+        .map(|e| (e.host.to_ascii_lowercase(), description(e)))
+        .collect()
+}
+
+/// How an indicator notice describes affected endpoint `e`.
+pub fn description(e: &crate::model::CaseEndpoint) -> String {
+    e.sector
+        .clone()
+        .unwrap_or_else(|| "an affected organisation".into())
 }
 
 /// Which parties the case's recorded sends reached. A send's recipient is

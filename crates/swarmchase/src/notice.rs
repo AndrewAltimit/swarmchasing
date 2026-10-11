@@ -540,20 +540,7 @@ pub(crate) fn notice_draft(
     // The indicator notice names and locates no affected party: each
     // affected endpoint appears by the admin's description, or as an
     // affected organisation.
-    opts.target_descriptions = Some(
-        c.endpoints
-            .iter()
-            .filter(|e| e.state.affected())
-            .map(|e| {
-                (
-                    e.host.to_ascii_lowercase(),
-                    e.sector
-                        .clone()
-                        .unwrap_or_else(|| "an affected organisation".into()),
-                )
-            })
-            .collect(),
-    );
+    opts.target_descriptions = Some(sc_case::report::target_descriptions(&c));
     let mut notice = render_notice(&a, &opts);
     // An endpoint seen only in records anyone could have submitted is named
     // later only with the admin's logged reason.

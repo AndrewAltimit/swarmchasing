@@ -267,6 +267,8 @@ The event is unpublished, with distribution "your organisation only". Sharing it
 
 The OECD draft also carries an `eu_ai_act_article_73` section: a serious-incident report laid out as Article 73 of the EU AI Act asks of the provider of a high-risk AI system, with the fields the case cannot fill (the system and its classification, the incident category, corrective measures) listed under `missing`. The duty to report under Article 73 rests on that provider, and the case does not establish that the agent is a high-risk system; the section is labelled a draft, not a filing, for the admin to pass to the provider or an authority.
 
+Both drafts follow the naming stage. An affected organisation appears by host only once a published naming update has named it, and until then by its description (`case endpoint --sector`, else "an affected organisation"). Public record links that would show an unnamed operator's host are left out. The draft is refused if its text still identifies an operator no naming update has named. Draft again after each naming update.
+
 All of these are JSON files in `exports/` for the admin to complete and submit by hand after the notice is public ([SC-FM 12.3](../manual/12-interoperability.md#fm-123-ai-incident-databases)); the tool never submits anything.
 
 Both take the public scope: the notice's withholding, developers only through the naming gate with their label and likelihood word, no harness or model-family candidates. They are refused while an endpoint is unreviewed or when the lint finds anything a notice must not carry. The notice link needs `--site-url` (or `SWARMCHASE_SITE_URL`); the text is the committed notice, else the case's draft.

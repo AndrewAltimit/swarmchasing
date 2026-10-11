@@ -125,6 +125,12 @@ fn oecd_draft_lists_what_the_admin_must_fill() {
         missing.contains(&"Serious incident category (Article 3(49))"),
         "{missing:?}"
     );
+    // No naming update yet: the operator appears by description only.
+    assert!(d["criteria"].as_array().unwrap().iter().any(|c| {
+        c["criterion"] == "Affected stakeholders"
+            && c["value"] == serde_json::json!(["an affected organisation (not named)"])
+    }));
+    assert!(!d.to_string().contains("portal.example"));
     assert!(d["criteria"].as_array().unwrap().iter().any(|c| {
         c["criterion"] == "Sources"
             && c["value"]
