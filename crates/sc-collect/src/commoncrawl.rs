@@ -176,6 +176,7 @@ impl Source for CommonCrawl {
             records,
             next: next.map(Cursor::Key),
             truncated,
+            coverage: None,
         })
     }
 }
