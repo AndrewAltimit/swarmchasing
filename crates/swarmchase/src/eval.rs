@@ -9,6 +9,7 @@
 
 use anyhow::{Context, Result, bail};
 use sc_core::eval::coverage::{AllowList, Coverage, coverage_failures};
+use sc_core::eval::grades::{COLUMNS, GradeTable};
 use sc_core::eval::stats::Proportion;
 use sc_core::eval::summary::Summary;
 use sc_core::eval::{EvalReport, LabelSet, Threshold};
@@ -57,6 +58,7 @@ pub fn load_labels(labels: &[PathBuf], inputs: &[PathBuf]) -> Result<LabelSet> {
         }
         all.skipped += l.skipped;
         all.labels.extend(l.labels);
+        all.actors.extend(l.actors);
     }
     if all.labels.is_empty() {
         bail!(
@@ -76,10 +78,12 @@ pub fn restrict(labels: &mut LabelSet, only: Option<&[String]>, exclude: Option<
     if let Some(only) = only {
         let keep: std::collections::HashSet<&str> = only.iter().map(String::as_str).collect();
         labels.labels.retain(|k, _| keep.contains(k.as_str()));
+        labels.actors.retain(|k, _| keep.contains(k.as_str()));
     }
     if let Some(ex) = exclude {
         for id in ex {
             labels.labels.remove(id);
+            labels.actors.remove(id);
         }
     }
 }
@@ -194,6 +198,8 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
         );
     }
     print_clusters(s);
+    print_grades(&r.grades, "actor");
+    print_swarm(&r.swarm);
     println!(
         "\ncoverage: {}/{} rules have a positive · {} allow-listed · {} uncovered · {} with hard negatives",
         s.coverage.covered,
@@ -215,6 +221,48 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
                 crate::util::truncate(&m.url, 140)
             );
         }
+    }
+}
+
+/// Interaction edges against `swarm` group labels. Report only.
+fn print_swarm(w: &sc_core::swarm::SwarmEval) {
+    if w.edges == 0 && w.groups.is_empty() {
+        return;
+    }
+    let kinds = |m: &[usize; 5]| {
+        sc_core::SwarmEdgeKind::ALL
+            .iter()
+            .zip(m)
+            .filter(|(_, n)| **n > 0)
+            .map(|(k, n)| format!("{} {n}", k.id()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    println!(
+        "\ninteraction edges (report only): {} ({}) · swarm groups with an edge inside {}/{} · edges inside a group {} · across groups {} · on runs labelled none {}{}",
+        w.edges,
+        kinds(&w.by_kind),
+        w.found.len(),
+        w.groups.len(),
+        w.on_groups,
+        w.across_groups,
+        w.on_non_swarm.iter().sum::<usize>(),
+        if w.on_non_swarm.iter().all(|n| *n == 0) {
+            String::new()
+        } else {
+            format!(" ({})", kinds(&w.on_non_swarm))
+        }
+    );
+    let missed: Vec<&String> = w.groups.iter().filter(|g| !w.found.contains(g)).collect();
+    if !missed.is_empty() {
+        println!(
+            "  groups with no edge: {}",
+            missed
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 }
 
@@ -254,6 +302,27 @@ fn print_clusters(s: &Summary) {
     }
     if !c.false_splits.is_empty() {
         println!("  split runs: {}", c.false_splits.join(", "));
+    }
+}
+
+/// The agent-grade confusion table: rows by actor (or the control), columns
+/// by grade. Report only.
+pub fn print_grades(t: &GradeTable, rows: &str) {
+    if t.is_empty() {
+        return;
+    }
+    println!("\nagent grade by {rows} (report only, not gated; records, graded by their cluster)");
+    print!("  {:<22}", rows);
+    for c in COLUMNS {
+        print!(" {c:>11}");
+    }
+    println!();
+    for (name, cols) in &t.rows {
+        print!("  {name:<22}");
+        for c in COLUMNS {
+            print!(" {:>11}", cols.get(c).copied().unwrap_or(0));
+        }
+        println!();
     }
 }
 

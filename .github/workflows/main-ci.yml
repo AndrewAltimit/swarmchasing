@@ -89,6 +89,13 @@ jobs:
       - name: Site safety (CSP, no HTML sinks)
         run: python3 scripts/ci/check-site.py
 
+      # A tag a notice prints is public and anyone can copy it, so it must be
+      # in [linking] published_tags or it would still link clusters.
+      - name: Published tags (burned identifiers)
+        run: |
+          python3 scripts/ci/check-published-tags.py --self-test
+          python3 scripts/ci/check-published-tags.py
+
       # RustSec advisories (vulnerable, unmaintained, yanked), permissive
       # licenses only, crates.io as the only source, no wildcard versions.
       # The first run on a runner installs the pinned cargo-deny.
@@ -129,7 +136,7 @@ jobs:
         run: cargo test --workspace --profile release-test
 
       # Precision/recall floors on samples/eval/. With no embargo a
-      # false positive goes public as soon as it is acted on, so a rules change
+      # false positive goes public within a day of being acted on, so a rules change
       # that costs precision fails here.
       - name: Detection eval gate
         run: scripts/ci/eval-gate.sh --profile release-test

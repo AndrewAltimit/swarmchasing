@@ -1,8 +1,8 @@
 //! Measure the rules against labelled records.
 //!
-//! With no embargo, a false positive is published the moment the admin acts on
-//! it, so precision is the number that matters most. [`evaluate`] scores an
-//! [`Analysis`] against labels and reports, at each tier threshold, how many
+//! With no embargo, a false positive is published within a day of the admin
+//! acting on it, so precision is the number that matters most. [`evaluate`]
+//! scores an [`Analysis`] against labels and reports, at each tier threshold, how many
 //! flagged records were really agent activity (precision) and how much of the
 //! labelled agent activity was flagged (recall). It also reports precision per
 //! rule, so a noisy rule can be found and down-weighted, and recall per label
@@ -24,14 +24,18 @@
 //! `hard_negative_for` (the rule ids it was written to resemble, for
 //! [`coverage`]). Benign records' `class` says what kind of ordinary traffic
 //! they are (`relay_reading`, `api_client`, `crawler`, ...), so false
-//! positives are reported per benign class.
+//! positives are reported per benign class. Any record may carry `actor`
+//! (`agent`, `human`, `tool`) for the grade table in [`grades`]; a record
+//! with an actor and no label is graded but not scored.
 //!
 //! Submodules: [`stats`] (Wilson intervals, Cohen's κ), [`clusters`],
-//! [`coverage`], [`split`] (frozen held-out splits) and [`summary`] (the
-//! whole evaluation as one JSON-ready value, for the CLI and the site).
+//! [`coverage`], [`grades`], [`split`] (frozen held-out splits) and
+//! [`summary`] (the whole evaluation as one JSON-ready value, for the CLI
+//! and the site).
 
 pub mod clusters;
 pub mod coverage;
+pub mod grades;
 pub mod split;
 pub mod stats;
 pub mod summary;
@@ -66,6 +70,10 @@ pub struct Labelled {
     /// For a benign record: the rules it was written to resemble.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hard_negative_for: Vec<String>,
+    /// The interacting group (a swarm) the record's run belongs to, or
+    /// `none` for a run known not to interact; for the swarm-edge summary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swarm: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -73,6 +81,9 @@ pub struct LabelSet {
     pub labels: HashMap<String, Labelled>,
     /// Rows with no usable label (e.g. `review_required`), skipped.
     pub skipped: usize,
+    /// Who really sent a record, by id, for every row that says
+    /// ([`grades`]), labelled or not.
+    pub actors: HashMap<String, grades::Actor>,
     pub warnings: Vec<String>,
 }
 
@@ -163,6 +174,12 @@ pub struct EvalReport {
     /// Linking against labelled runs (report only).
     #[serde(default)]
     pub clusters: clusters::ClusterEval,
+    /// Agent grade by actor (report only).
+    #[serde(default, skip_serializing_if = "grades::GradeTable::is_empty")]
+    pub grades: grades::GradeTable,
+    /// Swarm edges against `swarm` group labels (report only).
+    #[serde(default)]
+    pub swarm: crate::swarm::SwarmEval,
     /// Labeller's tier → our tier → count, for labels that carry a tier.
     pub agreement: BTreeMap<String, BTreeMap<String, usize>>,
     /// Benign records we flagged, strongest first.
@@ -324,6 +341,8 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
         benign_classes: benign_classes.into_values().collect(),
         hard_negatives,
         clusters: clusters::cluster_eval(a, labels),
+        grades: grades::grade_table(a, labels, None),
+        swarm: crate::swarm::swarm_eval(a, labels),
         agreement,
         false_positives: fps,
     }
@@ -381,8 +400,12 @@ fn parse_ndjson_labels(text: &str) -> LabelSet {
             }
         };
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string);
+        let actor = s("actor").and_then(|x| grades::Actor::parse(&x));
+        if let (Some(id), Some(x)) = (s("id"), actor) {
+            out.actors.insert(id, x);
+        }
         let (Some(id), Some(word)) = (s("id"), s("label")) else {
-            out.skipped += 1;
+            out.skipped += usize::from(actor.is_none());
             continue;
         };
         let Some((label, ref_tier)) = label_word(&word) else {
@@ -397,6 +420,7 @@ fn parse_ndjson_labels(text: &str) -> LabelSet {
                 class: s("class"),
                 cite: s("cite"),
                 run: s("run"),
+                swarm: s("swarm"),
                 hard_negative_for: v
                     .get("hard_negative_for")
                     .and_then(|x| x.as_array())
@@ -434,6 +458,7 @@ fn parse_csv_labels(text: &str) -> LabelSet {
     let class_col = col(&["class", "broad_class"]);
     let cite_col = col(&["cite", "report_url"]);
     let run_col = col(&["run"]);
+    let actor_col = col(&["actor"]);
     if label_col.is_none() && disp_col.is_none() {
         out.warnings
             .push("CSV has neither a label nor a disposition column".into());
@@ -444,6 +469,9 @@ fn parse_csv_labels(text: &str) -> LabelSet {
         let Some(id) = get(Some(id_col)).filter(|s| !s.is_empty()) else {
             continue;
         };
+        if let Some(x) = get(actor_col).and_then(grades::Actor::parse) {
+            out.actors.insert(qualify(id), x);
+        }
         let parsed = match (get(label_col), get(disp_col)) {
             (Some(l), _) if !l.is_empty() => label_word(l),
             (_, Some("included")) => get(conf_col)
@@ -465,6 +493,7 @@ fn parse_csv_labels(text: &str) -> LabelSet {
                 cite: get(cite_col).filter(|s| !s.is_empty()).map(str::to_string),
                 run: get(run_col).filter(|s| !s.is_empty()).map(str::to_string),
                 hard_negative_for: Vec::new(),
+                swarm: None,
             },
         );
     }
@@ -573,5 +602,40 @@ mod tests {
         assert_eq!((jina.on_agent, jina.on_benign), (2, 1));
         let exploit = r.classes.iter().find(|c| c.class == "exploit").unwrap();
         assert_eq!(exploit.significant, 1);
+    }
+
+    #[test]
+    fn actors_are_graded_but_unlabelled_actors_are_not_scored() {
+        let t0 = 1_791_000_000;
+        let rec = |id: &str, ts: i64, url: &str| Observation {
+            id: id.into(),
+            ts,
+            url: url.into(),
+            ..Default::default()
+        };
+        let a = analyze(
+            vec![
+                rec("h:1", t0, "https://p.example/s?q=1%27%20OR%20%271%27=%271"),
+                rec(
+                    "h:2",
+                    t0 + 60,
+                    "https://p.example/s?q=2%27%20OR%20%271%27=%271",
+                ),
+                rec("x:1", t0, "https://www.example.com/"),
+            ],
+            &Rules::default_rules(),
+        );
+        let labels = parse_labels(
+            "{\"id\":\"h:1\",\"actor\":\"human\"}\n\
+             {\"id\":\"h:2\",\"actor\":\"human\"}\n\
+             {\"id\":\"x:1\",\"label\":\"agent\"}\n",
+        );
+        assert_eq!((labels.labels.len(), labels.skipped), (1, 0));
+        let r = evaluate(&a, &labels);
+        assert_eq!((r.labelled, r.unlabelled), (1, 2));
+        assert_eq!(r.grades.rows["human"]["L0"], 2, "{:?}", r.grades);
+        assert_eq!(r.grades.rows["agent"]["unflagged"], 1);
+        let control = grades::grade_table(&a, &LabelSet::default(), Some("before"));
+        assert_eq!(control.rows["before"].values().sum::<usize>(), 3);
     }
 }

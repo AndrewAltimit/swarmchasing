@@ -68,10 +68,11 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`endpoints`](src/endpoints.rs) | Flagged activity grouped by target host. |
 | [`escalation`](src/escalation.rs) | Route escalation: one target requested directly, then through a relay, a program carrier, a remote browser. |
 | [`attribution`](src/attribution.rs) | The evidence ladder and who a report may name. |
-| [`report`](src/report/mod.rs) | Markdown drafts and the public notice: per-audience wording (`audience`), cluster hint lines (`hints`), attribution and endpoints (`sections`). |
+| [`agentness`](src/agentness.rs) | Each cluster's agent grade (L0 payloads only to L4 agent likely) with its signals, counter-signals and caps; L5 only from a case decision. |
+| [`report`](src/report/mod.rs) | Markdown drafts and the public notice: per-audience wording (`audience`), cluster hint lines (`hints`), attribution and endpoints (`sections`), the agent grade block (`agentness`). |
 | [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |
-| [`eval`](src/eval.rs) | Precision and recall against labelled records. |
+| [`eval`](src/eval.rs) | Precision and recall against labelled records; agent grades by actor (`grades`). |
 | [`securitytxt`](src/securitytxt.rs) | RFC 9116 `security.txt` parsing. |
 | [`sort`](src/sort.rs) | Stable sorts that share one compiled routine, so each call site does not add a copy of the standard sort to the browser module. Same order as `slice::sort_by`. |
 

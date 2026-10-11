@@ -77,7 +77,53 @@ pub enum CaseCmd {
         state: EndpointState,
         #[arg(long)]
         note: Option<String>,
+        /// For `compromised` (required): what shows the attack succeeded,
+        /// beyond the inbound requests, with links.
+        #[arg(long)]
+        basis: Option<String>,
+        /// Why the notice may name the operator although every record on
+        /// the endpoint is submit-anywhere.
+        #[arg(long)]
+        single_source_reason: Option<String>,
     },
+    /// Record that no contact could be found for a party: an endpoint's
+    /// host, a provider organisation, or `provider` when the case has no
+    /// provider contact. The notice may then publish without a send to it.
+    NoContact {
+        id: String,
+        party: String,
+        /// What was tried (security.txt, RDAP, the provider directory, …).
+        #[arg(long)]
+        searched: String,
+    },
+    /// Record the decision on an alternative explanation, or list them.
+    Alternative {
+        id: String,
+        /// authorised-test | honeypot | research-scanner | spoofed-self-id |
+        /// planted-records. Omit to list the decisions.
+        kind: Option<AlternativeKind>,
+        /// Why the explanation does not hold, with links.
+        #[arg(long, conflicts_with = "accepted")]
+        rejected: Option<String>,
+        /// authorised-test only: the owner confirmed it, with the link.
+        #[arg(long)]
+        accepted: Option<String>,
+    },
+    /// Record that you reviewed a cluster's plant signals.
+    PlantReview {
+        id: String,
+        /// The cluster, by C-number or stable key.
+        cluster: String,
+        /// What you checked and why the cluster stands.
+        #[arg(long)]
+        note: String,
+    },
+    /// Record that you re-read the current notice draft, by its hash. `notice
+    /// add` needs a re-read of the exact draft, an hour or more after it was
+    /// written.
+    Reread { id: String },
+    /// Print the self-review checklist `notice add` runs.
+    Checklist { id: String },
     /// Give a case a new ID. A case with a published notice keeps its ID.
     Rename { id: String, new_id: String },
     /// Record an attribution claim established by case work.
@@ -109,6 +155,22 @@ pub enum CaseCmd {
         #[arg(long = "detail", required = true)]
         details: Vec<String>,
     },
+    /// Show each cluster's agent grade (L0..L4) with its signals,
+    /// counter-signals and caps, or record the admin's grade for the case
+    /// with what it rests on. L5 (documented: operator logs matching a
+    /// harness, a provider's confirmation) is set only here.
+    Grade {
+        id: String,
+        /// L0..L5, or a name such as `model_written` or `documented`. Omit to
+        /// show the grades.
+        level: Option<sc_core::AgentLevel>,
+        /// What the decision rests on, with links. Required with a level.
+        #[arg(long)]
+        note: Option<String>,
+        /// Remove the decision.
+        #[arg(long, conflicts_with = "level")]
+        clear: bool,
+    },
     /// Change the case or notice status, or the naming threshold.
     Set {
         id: String,
@@ -118,6 +180,10 @@ pub enum CaseCmd {
         notice: Option<NoticeStatus>,
         #[arg(long)]
         min_named: Option<Evidence>,
+        /// The lead time for targeted and historical endpoints' operators,
+        /// 4 to 12 hours (default 6).
+        #[arg(long)]
+        lead_hours: Option<u32>,
     },
     /// Find contacts: the provider directory's channels for every provider a
     /// developer or host claim names, then for the case's endpoints the
@@ -181,7 +247,11 @@ pub enum CaseCmd {
         /// The draft or report that was sent.
         #[arg(long)]
         report: Option<String>,
-        /// Default: today.
+        /// When it was sent (RFC 3339, e.g. 2026-10-12T14:05:00Z), for a send
+        /// recorded afterwards. Default: now. The lead time runs from it.
+        #[arg(long, conflicts_with = "date")]
+        at: Option<String>,
+        /// The day only; the lead time then counts from the end of it.
         #[arg(long)]
         date: Option<String>,
     },
@@ -258,6 +328,31 @@ pub enum FleetCmd {
     },
     /// The case's fleets, and the candidate fleets the analysis proposes.
     Show { id: String },
+    /// Record interaction between a fleet's runs that you reviewed (SC-T9);
+    /// while it stands, reports and the notice call the fleet a swarm.
+    Interaction {
+        id: String,
+        /// The fleet (`fleet-1`).
+        fleet: String,
+        /// shared_sink | handoff | synchronized_start | role_sequence |
+        /// disjoint_partition (or S1..S5).
+        #[arg(long)]
+        kind: sc_core::SwarmEdgeKind,
+        /// A run, as <cluster>#<run> (`C3#2` or `k-3f9a2c1b#2`). Repeat.
+        #[arg(long = "run", required = true)]
+        runs: Vec<String>,
+        /// What the records show.
+        #[arg(long)]
+        note: String,
+    },
+    /// Withdraw interaction record <n> (from `fleet show`).
+    Withdraw {
+        id: String,
+        fleet: String,
+        n: usize,
+        #[arg(long)]
+        why: Option<String>,
+    },
 }
 
 /// Who a hand-added contact is for.
@@ -427,7 +522,224 @@ fn fleet_cmd(
             let c = load(root, &id)?;
             super::fleet::show(&c, &case_analysis(root, &c)?, out)
         }
+        FleetCmd::Interaction {
+            id,
+            fleet,
+            kind,
+            runs,
+            note,
+        } => {
+            let a = case_analysis(root, &load(root, &id)?)?;
+            update(root, &id, |c| {
+                super::fleet::interaction(c, &a, &fleet, kind, &runs, &note, today)?;
+                println!("{}", c.decisions.last().map_or("", |d| d.text.as_str()));
+                Ok(())
+            })
+        }
+        FleetCmd::Withdraw { id, fleet, n, why } => update(root, &id, |c| {
+            super::fleet::withdraw(c, &fleet, n, why.as_deref(), today)?;
+            println!("{}", c.decisions.last().map_or("", |d| d.text.as_str()));
+            Ok(())
+        }),
     }
+}
+
+/// Classify `hosts`. Every host is found before anything changes, so a typo
+/// changes nothing. `compromised` needs a basis beyond the inbound requests,
+/// given now or recorded before.
+pub(crate) fn classify(
+    c: &mut Case,
+    hosts: &[String],
+    state: EndpointState,
+    note: Option<&str>,
+    basis: Option<&str>,
+    single_source: Option<&str>,
+    today: &str,
+) -> Result<()> {
+    let id = c.id.clone();
+    let found = hosts
+        .iter()
+        .map(|host| {
+            c.endpoints
+                .iter()
+                .position(|e| e.host.eq_ignore_ascii_case(host))
+                .with_context(|| format!("no endpoint `{host}` in case {id}"))
+        })
+        .collect::<Result<Vec<usize>>>()?;
+    fn given(s: Option<&str>) -> Option<&str> {
+        s.map(str::trim).filter(|s| !s.is_empty())
+    }
+    if basis.is_some() && state != EndpointState::Compromised {
+        bail!("--basis is for compromised endpoints");
+    }
+    if state == EndpointState::Compromised && given(basis).is_none() {
+        let missing: Vec<&str> = found
+            .iter()
+            .filter(|&&i| c.endpoints[i].basis.is_none())
+            .map(|&i| c.endpoints[i].host.as_str())
+            .collect();
+        if !missing.is_empty() {
+            bail!(
+                "compromised needs --basis \"…\": what shows the attack succeeded beyond the inbound requests (an operator's statement, its logs, a leaked artifact), for {}",
+                missing.join(", ")
+            );
+        }
+    }
+    for (host, i) in hosts.iter().zip(found) {
+        let e = &mut c.endpoints[i];
+        e.state = state;
+        e.note = note.map(str::to_string).or(e.note.take());
+        if state != EndpointState::Compromised {
+            e.basis = None;
+        } else if let Some(b) = given(basis) {
+            e.basis = Some(b.to_string());
+        }
+        if let Some(r) = given(single_source) {
+            e.single_source = Some(r.to_string());
+        }
+        let mut text = format!("endpoint {host}: {}", state.label());
+        for (what, v) in [
+            ("", note),
+            ("basis: ", given(basis)),
+            (
+                "named on submit-anywhere records only: ",
+                given(single_source),
+            ),
+        ] {
+            if let Some(v) = v {
+                text += &format!(" ({what}{v})");
+            }
+        }
+        c.log(today, text);
+    }
+    Ok(())
+}
+
+/// Record that no contact was found for `party`: an endpoint's host, a
+/// provider organisation among the contacts, or [`super::lead::ANY_PROVIDER`].
+pub(crate) fn no_contact(c: &mut Case, party: &str, searched: &str, now: i64) -> Result<()> {
+    let is_host = c
+        .endpoints
+        .iter()
+        .any(|e| e.host.eq_ignore_ascii_case(party));
+    let is_provider = party.eq_ignore_ascii_case(super::lead::ANY_PROVIDER)
+        || c.contacts
+            .iter()
+            .any(|x| x.role == "provider" && x.org.eq_ignore_ascii_case(party));
+    if !(is_host || is_provider) {
+        bail!(
+            "`{party}` is neither an endpoint nor a provider organisation in case {}",
+            c.id
+        );
+    }
+    if searched.trim().is_empty() {
+        bail!("--searched: what was tried (security.txt, RDAP, the provider directory, …)");
+    }
+    let addresses: Vec<&str> = c
+        .contacts
+        .iter()
+        .filter(|x| {
+            x.endpoint
+                .as_deref()
+                .is_some_and(|h| h.eq_ignore_ascii_case(party))
+                || (x.role == "provider" && x.org.eq_ignore_ascii_case(party))
+        })
+        .map(|x| x.address.as_str())
+        .collect();
+    if !addresses.is_empty() {
+        bail!(
+            "case {} lists a contact for `{party}` ({}); send it the report, or remove a contact that does not work with `case contact rm`",
+            c.id,
+            addresses.join(", ")
+        );
+    }
+    c.no_contact.push(NoContact {
+        party: party.to_string(),
+        searched: searched.to_string(),
+        at: rfc3339(now),
+    });
+    let today = rfc3339(now)[..10].to_string();
+    c.log(
+        &today,
+        format!("no contact found for {party} (searched: {searched}); the notice says contact was attempted"),
+    );
+    Ok(())
+}
+
+/// Record the admin's decision on one alternative explanation.
+pub(crate) fn alternative(
+    c: &mut Case,
+    kind: AlternativeKind,
+    rejected: Option<&str>,
+    accepted: Option<&str>,
+    today: &str,
+) -> Result<()> {
+    let (verdict, why) = match (rejected, accepted) {
+        (Some(w), None) => ("rejected", w),
+        (None, Some(w)) if kind == AlternativeKind::AuthorisedTest => ("accepted", w),
+        (None, Some(_)) => bail!(
+            "only an authorised test is accepted here (its owner confirmed it); if another explanation holds, the case is not an incident: close it"
+        ),
+        _ => bail!("give --rejected \"why\" (or, for authorised-test, --accepted \"link\")"),
+    };
+    if why.trim().is_empty() {
+        bail!("say why, with links");
+    }
+    c.alternatives.push(Alternative {
+        kind,
+        verdict: verdict.into(),
+        why: why.to_string(),
+        date: today.to_string(),
+    });
+    c.log(
+        today,
+        format!("alternative {}: {verdict} ({why})", kind.id()),
+    );
+    Ok(())
+}
+
+/// Record a send. `at` (RFC 3339) or `date` say when; default now. A send
+/// time in the future is refused: the lead time runs from the real send.
+pub(crate) fn sent(
+    c: &mut Case,
+    to: &str,
+    channel: &str,
+    report: Option<String>,
+    at: Option<&str>,
+    date: Option<&str>,
+    now: i64,
+) -> Result<String> {
+    let at = match (at, date) {
+        (Some(a), _) => {
+            let t = parse_time(a).with_context(|| {
+                format!("--at `{a}`: give an RFC 3339 time, e.g. 2026-10-12T14:05:00Z")
+            })?;
+            Some(t)
+        }
+        (None, Some(_)) => None,
+        (None, None) => Some(now),
+    };
+    if at.is_some_and(|t| t > now + 300) {
+        bail!("a send cannot be recorded in the future");
+    }
+    let date = at
+        .map(|t| rfc3339(t)[..10].to_string())
+        .or(date.map(str::to_string))
+        .unwrap_or_default();
+    c.sent.push(Sent {
+        date: date.clone(),
+        recipient: to.to_string(),
+        channel: channel.to_string(),
+        report,
+        at: at.map(rfc3339),
+    });
+    let when = at.map(show_time).unwrap_or_else(|| date.clone());
+    c.log(&date, format!("sent to {to} by {channel} at {when}"));
+    if c.status == CaseStatus::Open {
+        c.status = CaseStatus::Reported;
+        c.log(&date, "status: reported");
+    }
+    Ok(format!("send to {to} at {when}"))
 }
 
 pub fn run(args: CaseArgs) -> Result<()> {
@@ -464,32 +776,79 @@ pub fn run(args: CaseArgs) -> Result<()> {
             hosts,
             state,
             note,
+            basis,
+            single_source_reason,
         } => update(&root, &id, |c| {
-            // Every host is found before anything changes, so a typo changes nothing.
-            let found = hosts
-                .iter()
-                .map(|host| {
-                    c.endpoints
-                        .iter()
-                        .position(|e| e.host.eq_ignore_ascii_case(host))
-                        .with_context(|| format!("no endpoint `{host}` in case {id}"))
-                })
-                .collect::<Result<Vec<usize>>>()?;
-            for (host, i) in hosts.iter().zip(found) {
-                let e = &mut c.endpoints[i];
-                e.state = state;
-                e.note = note.clone().or(e.note.take());
-                let text = format!(
-                    "endpoint {host}: {}{}",
-                    state.label(),
-                    note.as_deref()
-                        .map(|n| format!(" ({n})"))
-                        .unwrap_or_default()
-                );
-                c.log(&today, text);
-            }
+            classify(
+                c,
+                &hosts,
+                state,
+                note.as_deref(),
+                basis.as_deref(),
+                single_source_reason.as_deref(),
+                &today,
+            )
+        }),
+        CaseCmd::NoContact {
+            id,
+            party,
+            searched,
+        } => update(&root, &id, |c| {
+            no_contact(c, &party, &searched, now)?;
+            println!("{}", c.decisions.last().map_or("", |d| d.text.as_str()));
             Ok(())
         }),
+        CaseCmd::Alternative {
+            id,
+            kind,
+            rejected,
+            accepted,
+        } => match kind {
+            None => {
+                let c = load(&root, &id)?;
+                for k in AlternativeKind::ALL {
+                    match c.alternatives.iter().rev().find(|x| x.kind == k) {
+                        Some(x) => println!("{:<18} {} {}: {}", k.id(), x.verdict, x.date, x.why),
+                        None => println!("{:<18} not decided", k.id()),
+                    }
+                }
+                Ok(())
+            }
+            Some(k) => update(&root, &id, |c| {
+                alternative(c, k, rejected.as_deref(), accepted.as_deref(), &today)
+            }),
+        },
+        CaseCmd::PlantReview { id, cluster, note } => {
+            let c = load(&root, &id)?;
+            let a = case_analysis(&root, &c)?;
+            let key = super::fleet::resolve(&a, &cluster)?;
+            let n = super::fleet::by_key(&a, &key).map_or(0, |cl| cl.plant_signals.len());
+            update(&root, &id, |c| {
+                if note.trim().is_empty() {
+                    bail!("--note: what you checked and why the cluster stands");
+                }
+                c.plant_reviews.retain(|r| r.cluster != key);
+                c.plant_reviews.push(PlantReview {
+                    cluster: key.clone(),
+                    note: note.clone(),
+                    date: today.clone(),
+                });
+                c.log(
+                    &today,
+                    format!("plant signals reviewed on {key} ({n} signal(s)): {note}"),
+                );
+                Ok(())
+            })
+        }
+        CaseCmd::Reread { id } => {
+            println!("{}", super::checklist::reread(&root, &id, &today, now)?);
+            Ok(())
+        }
+        CaseCmd::Checklist { id } => {
+            let items = crate::notice::checklist_for(&root, &id, now)?;
+            super::checklist::print(&items, &mut out)?;
+            Ok(())
+        }
         CaseCmd::Rename { id, new_id } => {
             rename(&root, &id, &new_id, &today)?;
             println!(
@@ -542,12 +901,22 @@ pub fn run(args: CaseArgs) -> Result<()> {
             c.claims.push(claim);
             Ok(())
         }),
+        CaseCmd::Grade {
+            id,
+            level,
+            note,
+            clear,
+        } => super::grade::grade(&root, &id, level, note.as_deref(), clear, &today, &mut out),
         CaseCmd::Set {
             id,
             status,
             notice,
             min_named,
+            lead_hours,
         } => update(&root, &id, |c| {
+            if let Some(h) = lead_hours {
+                super::lead::set_operator_lead(c, h, &today)?;
+            }
             if let Some(s) = status {
                 c.status = s;
                 c.log(&today, format!("status: {s:?}").to_lowercase());
@@ -644,19 +1013,24 @@ pub fn run(args: CaseArgs) -> Result<()> {
             to,
             channel,
             report,
+            at,
             date,
         } => update(&root, &id, |c| {
-            let date = date.clone().unwrap_or_else(|| today.clone());
-            c.sent.push(Sent {
-                date: date.clone(),
-                recipient: to.clone(),
-                channel: channel.clone(),
-                report: report.clone(),
-            });
-            c.log(&date, format!("sent to {to} by {channel}"));
-            if c.status == CaseStatus::Open {
-                c.status = CaseStatus::Reported;
-                c.log(&date, "status: reported");
+            let s = sent(
+                c,
+                &to,
+                &channel,
+                report.clone(),
+                at.as_deref(),
+                date.as_deref(),
+                now,
+            )?;
+            if let Some(t) = super::lead::clock(c).not_before {
+                println!(
+                    "{} recorded; the notice may be added from {} if nothing else is sent",
+                    s,
+                    show_time(t)
+                );
             }
             Ok(())
         }),
@@ -671,7 +1045,7 @@ pub fn run(args: CaseArgs) -> Result<()> {
             rules_cmd(&root, &id, &current, update, &today, &mut out)
         }
         CaseCmd::Notice { id, force } => {
-            let (path, review) = crate::notice::notice_draft(&root, &id, force, &today)?;
+            let (path, review) = crate::notice::notice_draft(&root, &id, force, &today, now)?;
             for w in &review.withheld {
                 println!("withheld: {w}");
             }

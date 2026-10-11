@@ -101,7 +101,7 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
     let mut s = String::new();
     s.push_str(
         "<header class=\"page-head\"><h1>Notices</h1>\
-<p class=\"lede\">One public notice per confirmed incident. A notice is published at the same moment the reports go to the AI provider and the affected operators: there is no embargo, because a swarm is an active incident. Each notice keeps its dated updates, corrections and statements in place.</p>\
+<p class=\"lede\">One public notice per confirmed incident. A notice is published on a fixed lead time after the reports go to the AI provider and the affected operators: none for the provider, 4 to 12 hours for an operator whose systems were targeted, 24 hours for one whose systems were compromised. It is not an embargo: nothing a recipient says moves it, because a swarm is an active incident. Each notice keeps its dated updates, corrections and statements in place.</p>\
 <p class=\"lede\">Notices withhold callback channels, captured credentials and the details of weaknesses that may still be open. Hosts are defanged (<code>a[.]b</code>).</p>\
 <p><a class=\"button\" href=\"feed.xml\">Atom feed</a></p></header>\n",
     );

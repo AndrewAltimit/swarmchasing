@@ -179,6 +179,7 @@ pub fn export(
         .filter(|e| e.state == EndpointState::Compromised)
         .map(|e| e.host.clone())
         .collect();
+    let affected = case::affected_hosts(&c);
     let opts = Options {
         case_id: &c.id,
         title: &c.title,
@@ -186,6 +187,7 @@ pub fn export(
         reporter: reporter.unwrap_or("swarmchasing"),
         today,
         exposed: &exposed,
+        affected: &affected,
         claims: &c.claims,
         min_named: c.min_named,
         fleets: &c.fleets,
@@ -201,6 +203,9 @@ struct Options<'a> {
     reporter: &'a str,
     today: &'a str,
     exposed: &'a [String],
+    /// The hosts the case classified affected; a public export names no
+    /// other ([`case::affected_hosts`], as the notice).
+    affected: &'a [String],
     /// The case's own attribution claims.
     claims: &'a [Claim],
     min_named: Evidence,
@@ -356,6 +361,15 @@ mod tests {
             url: "https://hit.example.org/login?user=admin'--&uqtag=zz9".into(),
             ..Default::default()
         });
+        // A host the admin classified not affected (a page the agents read).
+        obs.push(Observation {
+            id: "b1".into(),
+            source: "urlquery".into(),
+            ts: 1_791_000_240,
+            url: "https://bystander.example.net/q?id=1%20UNION%20SELECT%201&uqtag=zz9".into(),
+            target_asn: Some(64500),
+            ..Default::default()
+        });
         let dir = root.join("t-1");
         std::fs::create_dir_all(dir.join("raw")).unwrap();
         std::fs::write(dir.join("raw").join("records.ndjson"), ndjson(&obs)).unwrap();
@@ -380,6 +394,7 @@ opened = \"2026-10-12\"
         for (host, state) in [
             ("portal.example.gov", "targeted"),
             ("hit.example.org", "compromised"),
+            ("bystander.example.net", "not_affected"),
         ] {
             toml += &format!(
                 "[[endpoint]]
@@ -776,6 +791,13 @@ kept = 1
         assert!(!public.contains("User-Agent"));
         assert!(public.contains("TLP:WHITE"));
         assert!(public.contains("uqtag=zz9"));
+        // A host not classified affected is not named, as in the notice:
+        // not its domain, its URLs or the network a scanner reached it on.
+        assert!(public.contains("portal.example.gov"), "{public}");
+        assert!(!public.contains("bystander"), "{public}");
+        assert!(!public.contains("64500"), "{public}");
+        let provider = export(&root, "t-1", Audience::Provider, None, None, "2026-10-14").unwrap();
+        assert!(provider.contains("bystander.example.net"));
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

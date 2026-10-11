@@ -4,9 +4,11 @@ A notice is the public page for one incident. It is drafted inside its case and 
 
 ## From draft to published
 
-1. `case notice <id>` renders the public notice into `<data>/cases/<id>/notice.md`. It prints each thing it withheld, each thing it could not classify (withheld until the admin decides), and anything that got through the withholding anyway.
-2. The admin reviews and edits the draft.
-3. `notice add <id>` checks the draft and copies it to `notices/<id>.md`, with front matter that holds the status and the dated updates. The check uses the case's pinned rules, and the current rules too when they differ. It refuses while any endpoint is unreviewed, and it never overwrites a notice that exists. The case moves to `reported` and is marked *publish pending*.
+1. After the reports are sent and recorded, `case notice <id>` renders the public notice into `<data>/cases/<id>/notice.md` and records its hash and time. It prints each thing it withheld, each thing it could not classify (withheld until the admin decides), and anything that got through the withholding anyway.
+2. The admin reviews and edits the draft, and an hour or more after it was written re-reads it and records that (`case reread`).
+3. `notice add <id>` runs the self-review checklist ([cases](cases.md#self-review-checklist)) and prints it as a pass/fail list. Once every item passes, including the lead time ([cases](cases.md#lead-time)), it copies the draft to `notices/<id>.md`, with front matter that holds the status and the dated updates. Before the lead time has run it refuses and prints the time it runs until; there is no override. It never overwrites a notice that exists. The case moves to `reported` and is marked *publish pending*.
+   - The first update and the draft's summary name only the parties the case's recorded sends reached (`case sent`) and say the reports went before publication; the first update also names the parties no contact was found for.
+   - The withholding scan uses the case's pinned rules, and the current rules too when they differ.
 4. The admin commits and pushes the file, which publishes it.
 5. `notice published <id>` finds the file on the remote (`origin/HEAD` or `origin/main`, from local refs only: it never fetches or pushes) and moves the case to `published`. `--force` marks it without the check.
 
@@ -42,6 +44,7 @@ Each update appends a dated entry and never rewrites an earlier one.
 | Linking parameters that could be credentials | `tok`, `sid`, `session`, `nonce`. Run tags such as `uqtag` stay. |
 | E-mail addresses | The local part of every address. |
 | Compromised endpoints | Their attack details and request URLs. |
+| Hosts not classified as affected | Not named: the summary and endpoint table give a count, and their records, chains and escalations are left out. |
 | Operator-supplied logs | Everything from them, until the operator agrees to publication ([operator evidence](cases.md#operator-evidence)). |
 
 A report to one operator never carries another operator's logs. Records used with agreement are marked as provided by the operator.
@@ -53,9 +56,16 @@ A report to one operator never carries another operator's logs. Records used wit
 - callback channel identifiers;
 - e-mail addresses other than role mailboxes;
 - credential shapes;
-- valid front matter and update order.
+- valid front matter and update order;
+- attribution statements without a layer, a label (`Label: …`, or a Conclusion line's leading label) or a tag;
+- likelihood words stronger than their label allows: in the attribution section, each line's own label; in the summary, the strongest label the notice states; anywhere, off-table words of certainty ([SC-FM 8](../manual/08-confidence.md));
+- a title naming a model provider from the [provider directory](cases.md#the-provider-directory) that `providers` does not list.
 
 CI runs it on every pull request and push, and so does the pre-commit hook when `notices/` is staged ([scripts](../../scripts/README.md)).
+
+## Burned tags
+
+A run tag or marker a notice prints is public: anyone can copy it, so it no longer identifies one operator. [`check-published-tags.py`](../../scripts/ci/check-published-tags.py) fails when a committed notice shows a linking tag (`uqtag`, `run` and the other tag parameters notices keep) or a linking marker value that `[linking] published_tags` in [`rules/default.toml`](../../rules/default.toml) does not list. A listed value never links; its records appear as a common feature instead. Add each value with the notice as its source when the notice is added. The rules change passes the eval gate like any other.
 
 ## Build
 

@@ -16,7 +16,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_core::Rules;
 use sc_core::notice::lint_public;
-use sc_core::{Audience, Role, analyze, render_notice};
+use sc_core::{Audience, Reported, Role, analyze, render_notice};
 use sc_publish::{
     NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind, build_site, check_notice,
     parse_notice, strip_draft_banner, write_notice,
@@ -98,7 +98,8 @@ pub fn run(args: NoticeArgs) -> Result<()> {
     match args.cmd {
         NoticeCmd::Add { case: id, data } => {
             crate::store::hint_if_empty(&data);
-            let p = add(&data.join("cases"), &id, &args.dir, &rules, &today)?;
+            let now = chrono::Utc::now().timestamp();
+            let p = add(&data.join("cases"), &id, &args.dir, &rules, &today, now)?;
             println!(
                 "wrote {}; it is not public until you commit and push it, then `swarmchase notice published {id}`",
                 p.display()
@@ -247,37 +248,94 @@ fn lint_file(p: &Path, rules: &Rules) -> Vec<String> {
             if stem != n.meta.id {
                 problems.push(format!("file name does not match id `{}`", n.meta.id));
             }
+            problems.extend(wording_problems(&n));
             problems
         }
     }
+}
+
+/// What the self-review checks that a committed notice shows on its own:
+/// attribution statements with a layer, label and tag, likelihood words
+/// within their labels, and no provider in the title that the notice does
+/// not name as a developer.
+fn wording_problems(n: &NoticeFile) -> Vec<String> {
+    let text = format!("{}\n{}", n.meta.title, n.body);
+    let mut out = crate::wording::claim_problems(&n.body);
+    out.extend(crate::wording::likelihood_problems(&text));
+    out.extend(crate::wording::title_problems(
+        &n.meta.title,
+        &n.meta.providers,
+        &crate::contacts::Directory::builtin(),
+    ));
+    out
 }
 
 fn append(n: &mut NoticeFile, u: NoticeUpdate, status: Option<NoticeStatus>) -> Result<()> {
     n.append(u, status).map_err(anyhow::Error::msg)
 }
 
-/// Turn the case's reviewed draft into a notice file in `dir`.
-fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result<PathBuf> {
-    let target = notice_path(dir, id)?;
-    if target.exists() {
-        bail!(
-            "{} exists; use `swarmchase notice update {id}`",
-            target.display()
+/// The first update's text: published, who the recorded sends reached
+/// before it, and the parties no contact was found for.
+fn published_text(r: &Reported, unreached: &[String]) -> String {
+    let mut s = match r.parties() {
+        Some(p) => format!(
+            "Notice published. Reports went to {p} before publication, each with the fixed lead time of our disclosure policy."
+        ),
+        None => "Notice published.".into(),
+    };
+    if !unreached.is_empty() {
+        s += &format!(
+            " No contact could be found for {}; contact was attempted.",
+            and_list(unreached)
         );
     }
-    let c = case::load(cases, id)?;
-    let unreviewed: Vec<&str> = c
-        .endpoints
+    s
+}
+
+fn and_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+    }
+}
+
+/// The parties recorded as having no contact, as a notice names them:
+/// the AI provider, or an affected operator by its defanged host.
+fn unreached(c: &case::Case) -> Vec<String> {
+    let mut v: Vec<String> = c
+        .no_contact
         .iter()
-        .filter(|e| e.state == case::EndpointState::Unreviewed)
-        .map(|e| e.host.as_str())
+        .filter(|n| {
+            !c.sent
+                .iter()
+                .any(|s| s.recipient.eq_ignore_ascii_case(&n.party))
+        })
+        .map(|n| {
+            if c.endpoints
+                .iter()
+                .any(|e| e.host.eq_ignore_ascii_case(&n.party))
+            {
+                format!("the operator of {}", sc_core::defang_host(&n.party))
+            } else {
+                "the AI provider".to_string()
+            }
+        })
         .collect();
-    if !unreviewed.is_empty() {
-        bail!(
-            "classify every endpoint first (unreviewed: {})",
-            unreviewed.join(", ")
-        );
-    }
+    v.sort();
+    v.dedup();
+    v
+}
+
+/// The notice `notice add` would write for case `id`, the draft it comes
+/// from, and what the withholding scan finds in it.
+fn prepare(
+    cases: &Path,
+    id: &str,
+    rules: &Rules,
+    today: &str,
+) -> Result<(case::Case, NoticeFile, PathBuf, Vec<String>)> {
+    let c = case::load(cases, id)?;
     let draft = case::case_dir(cases, id)?.join(case::NOTICE_DRAFT);
     let mut n = read(&draft).context("run `swarmchase case notice` first")?;
     n.body = strip_draft_banner(&n.body);
@@ -289,11 +347,7 @@ fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result
         date: today.to_string(),
         kind: UpdateKind::Published,
         from: None,
-        text: if c.sent.is_empty() {
-            "Notice published.".into()
-        } else {
-            "Notice published. Reports went to the AI provider and the affected operators at the same time.".into()
-        },
+        text: published_text(&case::reported(&c), &unreached(&c)),
     }];
     let mut problems = leak_check(cases, &c, |r| check_notice(&n, r))?;
     for p in check_notice(&n, rules) {
@@ -301,19 +355,62 @@ fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result
             problems.push(p);
         }
     }
-    if !problems.is_empty() {
-        for p in &problems {
-            eprintln!("{}: {p}", draft.display());
-        }
-        bail!("not added: fix the draft first");
+    Ok((c, n, draft, problems))
+}
+
+/// The self-review checklist for case `id`'s notice draft at `now`.
+pub(crate) fn checklist_for(
+    cases: &Path,
+    id: &str,
+    now: i64,
+) -> Result<Vec<case::checklist::Item>> {
+    let today = case::rfc3339(now)[..10].to_string();
+    let (c, n, _, problems) = prepare(cases, id, &Rules::default_rules(), &today)?;
+    case::checklist::checklist(cases, &c, &n, problems, now)
+}
+
+/// Turn the case's reviewed draft into a notice file in `dir`, once every
+/// item of the self-review checklist passes.
+fn add(
+    cases: &Path,
+    id: &str,
+    dir: &Path,
+    rules: &Rules,
+    today: &str,
+    now: i64,
+) -> Result<PathBuf> {
+    let target = notice_path(dir, id)?;
+    if target.exists() {
+        bail!(
+            "{} exists; use `swarmchase notice update {id}`",
+            target.display()
+        );
     }
-    if c.sent.is_empty() {
-        eprintln!(
-            "warning: no sends recorded for case {id}; reports and the notice go out together (`swarmchase case sent`)"
+    let (c, n, draft, problems) = prepare(cases, id, rules, today)?;
+    for p in &problems {
+        eprintln!("{}: {p}", draft.display());
+    }
+    let items = case::checklist::checklist(cases, &c, &n, problems, now)?;
+    case::checklist::print(&items, &mut std::io::stdout())?;
+    let failing = case::checklist::failing(&items);
+    if !failing.is_empty() {
+        let clock = case::lead::clock(&c);
+        let lead = match clock.not_before {
+            Some(t) if t > now => format!(
+                " The lead time runs until {}; the notice cannot be added before then.",
+                case::show_time(t)
+            ),
+            _ => String::new(),
+        };
+        bail!(
+            "not added: {} checklist item(s) fail ({}).{lead}",
+            failing.len(),
+            failing.join("; ")
         );
     }
     std::fs::create_dir_all(dir)?;
     std::fs::write(&target, write_notice(&n))?;
+    let not_before = case::lead::clock(&c).not_before.unwrap_or(now);
     case::update(cases, id, |c| {
         // Added is not published: the notice is public once it is pushed.
         if c.status == case::CaseStatus::Open {
@@ -321,6 +418,14 @@ fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result
             c.log(today, "status: reported");
         }
         c.publish_pending = Some(today.to_string());
+        c.log(
+            today,
+            format!(
+                "self-review checklist passed; lead time ({}) ran out {}",
+                case::lead::summary(c),
+                case::show_time(not_before)
+            ),
+        );
         c.log(
             today,
             format!(
@@ -428,6 +533,7 @@ pub(crate) fn notice_draft(
     id: &str,
     force: bool,
     today: &str,
+    now: i64,
 ) -> Result<(PathBuf, NoticeReview)> {
     let c = load(root, id)?;
     let path = case_dir(root, id)?.join(NOTICE_DRAFT);
@@ -437,12 +543,39 @@ pub(crate) fn notice_draft(
             path.display()
         );
     }
-    let a = analyze(
-        case_records(root, &c, &Scope::Public)?,
-        &case_rules(root, &c)?,
-    );
+    let rules = case_rules(root, &c)?;
+    let a = analyze(case_records(root, &c, &Scope::Public)?, &rules);
     let opts = report_options(&c, Audience::Public, None, today);
-    let notice = render_notice(&a, &opts);
+    let mut notice = render_notice(&a, &opts);
+    // An endpoint seen only in records anyone could have submitted is named
+    // only with the admin's logged reason, and in words that do not say a
+    // request reached it.
+    let all = analyze(case_records(root, &c, &Scope::All)?, &rules);
+    let mut single = Vec::new();
+    for h in case::checklist::single_source_hosts(&c, &all) {
+        let reason = c
+            .endpoints
+            .iter()
+            .find(|e| e.host.eq_ignore_ascii_case(&h))
+            .and_then(|e| e.single_source.as_deref());
+        match reason {
+            Some(_) => single.push(case::checklist::single_source_line(&c, &h)),
+            None => notice.flags.push(format!(
+                "every record on {} is submit-anywhere: name its operator only with `swarmchase case endpoint {id} {h} <state> --single-source-reason \"…\"`, or mark it not-affected",
+                sc_core::defang_host(&h)
+            )),
+        }
+    }
+    if !single.is_empty() {
+        let para = format!(
+            "**Submitted, not observed.** {} No server log or owner-published record shows a request reaching them.\n\n",
+            single.join(" ")
+        );
+        notice.markdown = match notice.markdown.find("## Indicators") {
+            Some(i) => format!("{}{para}{}", &notice.markdown[..i], &notice.markdown[i..]),
+            None => format!("{}\n{para}", notice.markdown),
+        };
+    }
     let claims = a.clusters.iter().fold(c.claims.clone(), |acc, cl| {
         sc_core::attribution::merge(acc, &sc_core::attribute(&a, cl))
     });
@@ -460,27 +593,25 @@ pub(crate) fn notice_draft(
             published: today.to_string(),
             updated: today.to_string(),
             providers,
-            affected: c
-                .endpoints
-                .iter()
-                .filter(|e| {
-                    matches!(
-                        e.state,
-                        EndpointState::Compromised
-                            | EndpointState::Targeted
-                            | EndpointState::Historical
-                    )
-                })
-                .map(|e| e.host.clone())
-                .collect(),
+            affected: case::affected_hosts(&c),
             sector: None,
             rules_version: a.rules_version.clone(),
             toolkit: env!("CARGO_PKG_VERSION").to_string(),
             updates: Vec::new(),
         },
-        body: notice.markdown.clone(),
+        // A swarm the case recorded reviewed interaction for; fleets alone
+        // stay out of the notice.
+        body: crate::case::fleet::with_fleets(
+            notice.markdown.clone(),
+            &crate::case::fleet::report_section(&c, &a, Audience::Public),
+        ),
     };
-    std::fs::write(&path, write_notice(&n))?;
+    let text = write_notice(&n);
+    std::fs::write(&path, &text)?;
+    let stamp = case::DraftStamp {
+        sha256: crate::bundle::sha256_hex(text.as_bytes()),
+        at: case::rfc3339(now),
+    };
     let mut withheld = notice.withheld;
     for e in c
         .evidence
@@ -508,12 +639,14 @@ pub(crate) fn notice_draft(
             .collect(),
     };
     update(root, id, |c| {
+        c.drafted = Some(stamp.clone());
         c.log(
             today,
             format!(
-                "notice drafted ({} withheld, {} to decide)",
+                "notice drafted ({} withheld, {} to decide; sha256 {})",
                 review.withheld.len(),
-                review.flags.len()
+                review.flags.len(),
+                &stamp.sha256[..12]
             ),
         );
         Ok(())
@@ -528,8 +661,9 @@ pub fn add_for_test(
     dir: &Path,
     rules: &Rules,
     today: &str,
+    now: i64,
 ) -> Result<PathBuf> {
-    add(cases, id, dir, rules, today)
+    add(cases, id, dir, rules, today, now)
 }
 
 #[cfg(test)]
@@ -546,6 +680,61 @@ pub fn published_for_test(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn published_text_names_only_the_parties_sent() {
+        let r = |provider, operators, others| Reported {
+            provider,
+            operators,
+            others,
+        };
+        let lead = "before publication, each with the fixed lead time of our disclosure policy.";
+        assert_eq!(
+            published_text(&r(false, false, false), &[]),
+            "Notice published."
+        );
+        assert_eq!(
+            published_text(&r(false, true, false), &[]),
+            format!("Notice published. Reports went to the affected operators {lead}")
+        );
+        assert_eq!(
+            published_text(&r(true, false, false), &[]),
+            format!("Notice published. Reports went to the AI provider {lead}")
+        );
+        assert_eq!(
+            published_text(&r(true, true, true), &[]),
+            format!(
+                "Notice published. Reports went to the AI provider, the affected operators and other responders {lead}"
+            )
+        );
+        let unreached = ["the operator of a[.]example".to_string()];
+        assert_eq!(
+            published_text(&r(true, false, false), &unreached),
+            format!(
+                "Notice published. Reports went to the AI provider {lead} No contact could be found for the operator of a[.]example; contact was attempted."
+            )
+        );
+    }
+
+    #[test]
+    fn lint_checks_wording() {
+        let n = parse_notice(
+            "+++\nid = \"n-1\"\ntitle = \"Claude agents probe a portal\"\nstatus = \"active\"\npublished = \"2026-10-16\"\nupdated = \"2026-10-16\"\nrules_version = \"r\"\ntoolkit = \"0\"\n\n[[update]]\ndate = \"2026-10-16\"\nkind = \"published\"\ntext = \"Published.\"\n+++\n\n# Notice\n\n## Attribution\n\n- Anthropic ran it. Label: Possible; tag: Inference.\n- Suspected: almost certain operated by **Anthropic**. Tag: Conclusion.\n",
+        )
+        .unwrap();
+        let p = wording_problems(&n);
+        assert_eq!(p.len(), 3, "{p:?}");
+        assert!(p.iter().any(|x| x.contains("without a layer")), "{p:?}");
+        assert!(
+            p.iter()
+                .any(|x| x.contains("`almost certain` is stronger than Suspected")),
+            "{p:?}"
+        );
+        assert!(
+            p.iter().any(|x| x.contains("the title names `claude`")),
+            "{p:?}"
+        );
+    }
 
     #[test]
     fn updates_append_in_order_and_build_writes_site_files() {

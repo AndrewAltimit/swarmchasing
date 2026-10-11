@@ -12,6 +12,7 @@
 #   *.md              check-md-links.py --staged, check-doc-density.py --staged
 #   site/             check-site.py (CSP, no HTML sinks)
 #   notices/          swarmchase notice lint (nothing a notice withholds)
+#   notices/, rules/  check-published-tags.py (shown tags are published tags)
 #   Cargo.lock,       cargo-deny (scripts/ci/deny.sh); skipped with a warning
 #   deny.toml         when cargo-deny is not installed
 #   Rust / Cargo      cargo fmt --check (auto-fixed), cargo clippy -D warnings
@@ -71,6 +72,14 @@ if grep -q '^site/' <<<"$STAGED"; then
     printf '[pre-commit] site safety check\n'
     if ! "$PY" scripts/ci/check-site.py >/dev/null; then
         printf '[pre-commit] fix the site code (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+fi
+
+if grep -qE '^(notices|rules)/' <<<"$STAGED"; then
+    printf '[pre-commit] published-tags check\n'
+    if ! "$PY" scripts/ci/check-published-tags.py --quiet; then
+        printf '[pre-commit] list the tag in [linking] published_tags (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
         exit 1
     fi
 fi

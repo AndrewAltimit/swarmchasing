@@ -28,7 +28,7 @@ Indicators are rules kept as data, versioned, and shared by every tool that grad
 
 A check exists because some shapes need counting or comparing. `repeated_token` wants one word of three characters or more, or a phrase of two or three words, repeated five or more times in a row ([FM-4.5](#fm-45-artifact-families)); short refrains and one long run of a letter fail it.
 
-Toolkit: each rule in the rules file names its tactic (`T1` to `T9`) or is marked `artifact`, and a file naming an unknown tactic fails to load. A check on a rule that does not read parameter values, or an unknown check, also stops the file loading. Evaluation groups recall by the tactics of the rules that fired ([statistics](../reference/evaluation.md#statistics)). The STIX run object derives its `tactics` from each rule's kind, using the defaults in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
+Toolkit: each rule in the rules file names its tactic (`T1` to `T7`) or is marked `artifact`, and a file naming an unknown tactic, or the cluster-level `T8` or `T9`, fails to load. A check on a rule that does not read parameter values, or an unknown check, also stops the file loading. Evaluation groups recall by the tactics of the rules that fired ([statistics](../reference/evaluation.md#statistics)). The STIX run object derives its `tactics` from each rule's kind, using the defaults in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
 
 ## FM-4.3 The SC-T tactic taxonomy
 
@@ -46,7 +46,7 @@ Tactics say what an agent was doing, independent of how a rule detected it. Repo
 | SC-T8 | Off-task targets | Requests to hosts outside the evident task. Needs the task context; one record cannot show it. | A data-gathering run that turns to government login pages. |
 | SC-T9 | Inter-agent coordination | Agents exchanging information or dividing work. Defines a swarm ([FM-1.3](01-scope.md#fm-13-groupings)). | One run reading what another wrote to a shared artifact; disjoint target lists from runs started together; hand-offs. |
 
-SC-T8 and SC-T9 are cluster- and fleet-level judgments. They are reported as Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)) with the evidence listed, never as a rule match.
+SC-T8 and SC-T9 are cluster- and fleet-level judgments. They are reported as Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)) with the evidence listed, never as a rule match. The signals for SC-T9 are in [FM-4.10](#fm-410-interaction-signals).
 
 ## FM-4.4 Default tactics by rule kind
 
@@ -131,3 +131,17 @@ Two hints bear on how a case is handled rather than on what the agent did. Neith
 - **Declared testing.** Text in a request announcing a test: "authorized security test" in a user agent, a bug-bounty header, "pentest" next to an email address or bounty handle. It is self-identification, which anyone can write and an agent can copy from its prompt ([FM-14.1](14-limits.md#fm-141-self-identification-is-forgeable)). The admin checks the claim with the owner it names ([FM-10.6](10-disclosure.md#fm-106-authorised-testing)). The declaring text and contact stay in case notes: they never appear in a report to a provider, a notice or a public page, because the claim is unchecked and the contact may be a person.
 
 Toolkit: benchmark targets are listed under `[[benchmark]]` in the rules file, each with its source, and counted per cluster by entry (`benchmarks`). Declared testing is listed per cluster with its contact (`declared`) and appears in internal reports only; the browser workbench does not show it.
+
+## FM-4.10 Interaction signals
+
+Interaction between agents rarely leaves a direct trace in public records. A record shows one request; it does not show who read its result. No published case detects agent-to-agent coordination from public traffic alone; the strongest published reconstructions match activity timing against a provider's own account. The standard therefore treats every SC-T9 signal as weak to moderate, and a swarm claim as several signals together.
+
+| Id | Signal | What it suggests | Innocent explanation |
+|---|---|---|---|
+| S1 | Shared sink | Runs, or strands of one run, writing to the same inbox or artifact while sending requests differently. | One agent changing route or tool mid-task. |
+| S2 | Hand-off | One run writes to an artifact (an inbox, a gist, a paste, a hosted Space, a static-site subdomain) that a later run fetches. | One operator reading their own notes with another tool. |
+| S3 | Synchronized start | Runs of differently fingerprinted clusters starting and stopping together beyond chance. | One scheduler driving unrelated jobs; clock-hour crons. |
+| S4 | Role sequence | One run only reads a set of hosts; a differently fingerprinted run then attacks the same hosts in the same order. | A scanner fed from a public list both runs read. |
+| S5 | Disjoint partition | Runs started together split one target family with almost no overlap. | One scheduler sharding a list: a fleet signal unless others join it. |
+
+Identifiers are matched as strings already in the records. Reading an artifact, an inbox or a channel to see what was written is never part of the method ([FM-3.2](03-sources.md#fm-32-passivity-test)). How the signals are found and recorded is in [FM-5.12](05-linking.md#fm-512-interaction-edges).

@@ -87,6 +87,8 @@ A report or notice names a developer or operator only at or above the threshold 
 - the default threshold is **Suspected** (`shared_identifiers`);
 - the admin may raise it, or lower it to **Possible** with the reason logged in the case, and the notice then prints the label next to the name;
 - whatever the setting, a developer is never named on self-identification alone;
+- below shared identifiers, a public notice names the provider only as the party notified: what the requests say about themselves, that this is the weakest evidence, that the provider's operation, deployment or authorisation is not confirmed, and that it was sent the evidence ([FM-11.2](11-notices.md#fm-112-structure)); its name stays out of the title;
+- at `provider_infrastructure`, a notice says the requests came from infrastructure the provider operates; who deployed the agents is a separate claim;
 - a network operator may be named as a host, because that is what an ASN shows;
 - harness and model-family candidates are never named ([FM-7.4](#fm-74-harness-and-framework-layer), [FM-7.5](#fm-75-model-family-layer)).
 
@@ -106,3 +108,28 @@ Before a claim is published, the reviewer asks of each piece of evidence: what w
 | Provider confirmation | Not forgeable by a third party. | Strongest. |
 
 Also look for inconsistency between layers: a cluster that names one vendor while showing another harness's markup, or a provider's sandbox hostname on a network the provider does not use. Inconsistency is reported, not resolved by picking the more convenient reading. An agent can also be instructed to name a vendor, so a self-identification can be deliberate misdirection by its operator.
+
+## FM-7.10 Agent likelihood
+
+Before any layer is attributed, a report states how likely it is that an agent sent the requests at all. A penetration tester or a conventional scanner sending the same payloads through the same services leaves the same records ([FM-14.7](14-limits.md#fm-147-humans-look-the-same)). The grade is set by the strongest combination of signals present, never by summing weak ones:
+
+| Grade | Name | Evidence |
+|---|---|---|
+| L0 | Payloads only | Attack payloads, nothing more. |
+| L1 | Self-described | A model or vendor name, or an agent test tag. Costs nothing to write ([FM-7.9](#fm-79-false-flag-reasoning)); worded like L0. |
+| L2 | Model-written | Model-output residue, prose, invented identifiers, a repeated output cut length, stale knowledge or stale dates ([FM-4.5](04-indicators.md#fm-45-artifact-families)). |
+| L3 | Adaptive | L2, and behaviour that answers responses: a changed request after an error, a route escalation, variants at model pace. Read from request or submit times only. |
+| L4 | Agent likely | L3, and a pace or scale beyond one person: adapting at machine speed, fixed parallel fan-out, activity round the clock. No working-hours rhythm against it. |
+| L5 | Documented | Casework only: operator logs matching an agent harness, or the provider's confirmation. |
+
+Caps:
+
+- **must** stop at L2 when every timestamp is an archive capture ([FM-6.1](06-timing.md#fm-61-timestamp-kinds));
+- **must** stop at L2 when a working-hours rhythm meets slow pace, and the report says the activity is possibly human-operated with model help;
+- **should** stop at L3 under any working-hours rhythm.
+
+Declared testing and benchmark targets ([FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing)) are reported as counter-signals and do not move the grade: anyone can declare a test.
+
+A grade without a held-out measurement **must not** appear in a public notice. Until one exists, a notice says at most that attack payloads were present and that this alone does not show what sent them. Measuring the grade needs records whose actor is known: synthetic human and tool runs as hard negatives, and a negative control of records from before capable agents existed, which no agent sent ([FM-9.11](09-evaluation.md#fm-911-agent-grade-evaluation)).
+
+Toolkit: every cluster carries its grade, signals, counter-signals and caps; case notes and provider reports list them, and `case grade` records the admin's decision, the only way to L5 ([methodology](../methodology.md#agent-likelihood)).

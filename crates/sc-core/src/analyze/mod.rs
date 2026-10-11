@@ -6,7 +6,7 @@
 mod hints;
 mod link;
 
-pub(crate) use hints::target_text;
+pub(crate) use hints::{is_context_kind, relay_stack, target_text};
 
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::{Layer, extract};
@@ -42,8 +42,9 @@ pub struct Cluster {
     /// Position in this analysis (`C1` is the strongest). Another run over
     /// more records can give the same cluster another number.
     pub id: String,
-    /// Stable name (`k-3f9a2c1b`): a hash of the smallest member record id,
-    /// so the cluster keeps it while its earliest-named record stays in it.
+    /// Stable name (`k-3f9a2c1b`): a hash of its earliest member's record id
+    /// (by timestamp, then id), so the cluster keeps it while that record
+    /// stays in it, and a record placed beside it later cannot re-key it.
     #[serde(default)]
     pub key: String,
     pub members: Vec<usize>,
@@ -123,6 +124,24 @@ pub struct Cluster {
     pub link_features: Vec<LinkFeature>,
     pub runs: Vec<Span>,
     pub timing: TimingStats,
+    /// Members by who can put such a record into its source, keyed by
+    /// [`crate::model::Provenance::label`] (`submit-anywhere`, `observed`).
+    /// Descriptive: never scored.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub provenance: BTreeMap<String, usize>,
+    /// Whether more than one kind of source, or an operator's logs, stand
+    /// behind it ([`crate::plant::corroboration`]). Descriptive: the tier
+    /// does not read it.
+    #[serde(default)]
+    pub corroboration: crate::plant::Corroboration,
+    /// Signs it was planted ([`crate::plant`]): for internal review only,
+    /// never scored, never linked on, never in a public notice.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plant_signals: Vec<crate::plant::PlantSignal>,
+    /// How likely an agent, not a person or a tool, sent the requests
+    /// ([`crate::agentness`]). Descriptive: never scored, never linked on.
+    #[serde(default)]
+    pub agent: crate::agentness::AgentAssessment,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,6 +195,10 @@ pub struct Analysis {
     /// admin, never findings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub candidate_fleets: Vec<crate::fleets::CandidateFleet>,
+    /// Pairs of runs whose records suggest agents interacting (SC-T9):
+    /// hints for the admin, never scored, never a link or a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub swarm_edges: Vec<crate::swarm::SwarmEdge>,
 }
 
 /// A linking feature whose carriers were not joined because it is common:
@@ -192,6 +215,10 @@ pub struct CommonFeature {
     pub end: i64,
     /// Which limit it passed.
     pub reason: String,
+    /// Its value is quoted in a public report (`linking.published_tags`): a
+    /// burned identifier, which is no soft link either.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub published: bool,
 }
 
 impl Cluster {
@@ -266,6 +293,14 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
     link::number(&mut clusters, &mut results);
     let cluster_ids: Vec<String> = clusters.iter().map(|c| c.id.clone()).collect();
     let escalations = crate::escalation::escalations(&results, &cluster_ids, &rules.set.escalation);
+    let plants =
+        crate::plant::plant_signals(&results, &clusters, &escalations, &common_features, cfg);
+    for (c, p) in clusters.iter_mut().zip(plants) {
+        c.plant_signals = p;
+    }
+    for c in clusters.iter_mut() {
+        c.agent = crate::agentness::assess(c, &results, &chains, &escalations, &rules.set.chains);
+    }
 
     let mut tier_counts = BTreeMap::new();
     let mut rule_counts = BTreeMap::new();
@@ -335,6 +370,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
     );
     let candidate_fleets =
         crate::fleets::candidate_fleets(&soft_links, &cluster_ids, &rules.set.soft_links);
+    let swarm_edges = crate::swarm::swarm_edges(&clusters, &results, rules);
 
     Analysis {
         rules_version: rules.set.meta.version.clone(),
@@ -358,6 +394,7 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         escalations,
         soft_links,
         candidate_fleets,
+        swarm_edges,
         results,
         clusters,
     }
@@ -403,7 +440,8 @@ mod tests {
         assert_eq!(a.clusters.len(), 1);
         let key = a.clusters[0].key.clone();
         assert!(key.starts_with("k-") && key.len() == 10, "{key}");
-        assert_eq!(key, cluster_key("w:1"));
+        // The earliest record names it, not the smallest id.
+        assert_eq!(key, cluster_key("w:2"));
 
         // A stronger cluster arrives and takes C1; the first keeps its key.
         let mut more = small;
@@ -426,6 +464,87 @@ mod tests {
     }
 
     #[test]
+    fn a_planted_record_with_a_smaller_id_keeps_the_key() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let rec = |id: &str, ts: i64, url: &str| Observation {
+            id: id.into(),
+            source: "urlquery".into(),
+            ..o(ts, url)
+        };
+        let real = vec![
+            rec("uq-7f", 1000, &format!("{inbox}?kind=headers0")),
+            rec("uq-9c", 1040, &format!("{inbox}?kind=body0-0")),
+        ];
+        let key = analyze(real.clone(), &Rules::default_rules()).clusters[0]
+            .key
+            .clone();
+        // Submitted later with the same inbox and an id that sorts first.
+        let mut planted = real;
+        planted.push(rec("uq-00", 5000, &format!("{inbox}?kind=done")));
+        let b = analyze(planted, &Rules::default_rules());
+        assert_eq!(b.clusters.len(), 1);
+        assert_eq!(b.clusters[0].members.len(), 3);
+        assert_eq!(b.clusters[0].key, key);
+        assert_eq!(key, cluster_key("uq-7f"));
+        // Untimed records name a cluster only when none is timed.
+        let untimed = vec![
+            rec("a", 0, &format!("{inbox}?kind=headers0")),
+            rec("b", 0, &format!("{inbox}?kind=body0-0")),
+        ];
+        let mut mixed = untimed.clone();
+        mixed.push(rec("c", 1000, &format!("{inbox}?kind=done")));
+        assert_eq!(
+            analyze(untimed, &Rules::default_rules()).clusters[0].key,
+            cluster_key("a")
+        );
+        assert_eq!(
+            analyze(mixed, &Rules::default_rules()).clusters[0].key,
+            cluster_key("c")
+        );
+    }
+
+    #[test]
+    fn a_record_sharing_only_a_context_rule_does_not_join_by_timing() {
+        // A run on one host, joined by its run tag, and a record placed two
+        // minutes later through the same relay (or with the same cache
+        // buster) and nothing else.
+        let run = [
+            "https://r.jina.ai/https://records.t.example/s?id=1%20UNION%20SELECT%201--&uqtag=pl4nt1",
+            "https://r.jina.ai/https://records.t.example/i?id=2%20UNION%20SELECT%202--&uqtag=pl4nt1",
+        ];
+        for decoy in [
+            "https://r.jina.ai/https://records.t.example/about",
+            "https://records.t.example/status?_=1788426240789",
+        ] {
+            let obs: Vec<Observation> = run
+                .iter()
+                .chain([&decoy])
+                .enumerate()
+                .map(|(i, u)| o(1_791_000_000 + 120 * i as i64, u))
+                .collect();
+            let a = analyze(obs, &Rules::default_rules());
+            assert!(a.results[2].score > 0, "{decoy} is flagged");
+            assert_eq!(a.clusters.len(), 1, "{decoy}");
+            assert_eq!(a.clusters[0].members, [0, 1], "{decoy}");
+            assert_eq!(a.results[2].cluster, None, "{decoy}");
+        }
+        // A shared rule of another kind still links by timing.
+        let obs = vec![
+            o(1_791_000_000, run[0]),
+            o(
+                1_791_000_120,
+                "https://r.jina.ai/https://records.t.example/x?id=3%20UNION%20SELECT%203--",
+            ),
+        ];
+        assert_eq!(
+            analyze(obs, &Rules::default_rules()).clusters[0]
+                .members
+                .len(),
+            2
+        );
+    }
+
+    #[test]
     fn links_by_inbox_and_host() {
         let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
         let obs = vec![
@@ -434,14 +553,20 @@ mod tests {
                 1040,
                 &format!("https://r.jina.ai/https://data.portal.example/p/1?uqtag=a1b2&cb={inbox}"),
             ),
-            o(1090, "https://r.jina.ai/https://data.portal.example/p/2"),
+            o(
+                1090,
+                "https://r.jina.ai/https://data.portal.example/p/2?uqtag=c3d4",
+            ),
+            o(1120, "https://r.jina.ai/https://data.portal.example/p/3"),
             o(99999, "https://www.example.org/"),
         ];
         let a = analyze(obs, &Rules::default_rules());
-        assert_eq!(a.flagged, 3);
+        assert_eq!(a.flagged, 4);
         assert_eq!(a.clusters.len(), 1);
         assert_eq!(a.clusters[0].members.len(), 3);
+        // The bare relay read shares only the relay rule: not joined.
         assert_eq!(a.results[3].cluster, None);
+        assert_eq!(a.results[4].cluster, None);
     }
 
     /// Every hour for four days, three records a second apart each hour, all

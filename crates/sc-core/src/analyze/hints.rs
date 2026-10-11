@@ -187,6 +187,8 @@ pub(super) fn cluster(
             .collect();
         (r.target_host.as_deref(), values)
     }));
+    let provenance = crate::plant::provenance_counts(results, &members);
+    let corroboration = crate::plant::corroboration(results, &members);
     Cluster {
         id: String::new(),
         key: String::new(),
@@ -229,6 +231,10 @@ pub(super) fn cluster(
             .collect(),
         runs,
         timing: t,
+        provenance,
+        corroboration,
+        plant_signals: Vec::new(),
+        agent: Default::default(),
     }
 }
 
@@ -266,7 +272,7 @@ pub(super) fn cluster_tier(results: &[ObsResult], members: &[usize]) -> Tier {
 }
 
 /// Kinds that describe how a request was sent rather than what it did.
-fn is_context_kind(k: IndicatorKind) -> bool {
+pub(crate) fn is_context_kind(k: IndicatorKind) -> bool {
     matches!(
         k,
         IndicatorKind::Relay

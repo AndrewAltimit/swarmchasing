@@ -6,6 +6,7 @@
 //! against the same target with a rule in common, and by a probe chain. Everything else about
 //! a cluster is description ([`super::hints`]).
 
+use super::hints::is_context_kind;
 use super::{Cluster, CommonFeature, ObsResult};
 use crate::chains::Chain;
 use crate::model::LinkFeature;
@@ -70,9 +71,12 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
         a.start.cmp(&b.start).then(a.feature.cmp(&b.feature))
     });
 
-    // Same target host, close in time, and sharing at least one rule. Only
-    // request-like times count: two archive captures minutes apart say when
-    // a crawler saved them, not that one client sent them together.
+    // Same target host, close in time, and sharing at least one rule that is
+    // not a context kind (relay, cache buster, self-identification, header,
+    // outcome): every relay user shares the relay rule, and a record placed
+    // beside a cluster needs only that to join it. Only request-like times
+    // count: two archive captures minutes apart say when a crawler saved
+    // them, not that one client sent them together.
     let mut by_host: HashMap<&str, Vec<usize>> = HashMap::new();
     for &i in flagged {
         if let Some(h) = results[i].target_host.as_deref()
@@ -89,6 +93,7 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
             let shared = a
                 .hits
                 .iter()
+                .filter(|h| !is_context_kind(h.kind))
                 .any(|h| b.hits.iter().any(|g| g.rule_id == h.rule_id));
             if close && shared {
                 dsu.union(w[0], w[1]);
@@ -167,11 +172,8 @@ fn common_feature(
     let ts = group.iter().map(|&i| results[i].obs.ts).filter(|&t| t > 0);
     let (start, end) = (ts.clone().min().unwrap_or(0), ts.max().unwrap_or(0));
     let records = group.len();
-    let reason = if cfg
-        .published_tags
-        .iter()
-        .any(|t| t.eq_ignore_ascii_case(f.value()))
-    {
+    let published = crate::plant::burned(cfg, f.value());
+    let reason = if published {
         "quoted in a public report (linking.published_tags)".to_string()
     } else if cfg.feature_max_hosts > 0 && hosts.len() > cfg.feature_max_hosts {
         format!(
@@ -204,6 +206,7 @@ fn common_feature(
         start,
         end,
         reason,
+        published,
     })
 }
 
@@ -241,15 +244,21 @@ pub(super) fn cluster_key(seed: &str) -> String {
     format!("k-{hex}")
 }
 
-/// What a cluster's key is made from: the smallest non-empty member record
-/// id, or, when no member has an id, the earliest timestamp and URL.
+/// What a cluster's key is made from: the id of its earliest member that has
+/// one (by timestamp, then id; untimed members last), or, when no member has
+/// an id, the earliest timestamp and URL.
+///
+/// Earliest first, not smallest id first: anyone can submit a record to a
+/// public scanner and retry until its id sorts low, but its timestamp is
+/// when it was sent, so a record placed beside a cluster later cannot take
+/// over its key.
 fn key_seed(results: &[ObsResult], members: &[usize]) -> String {
     members
         .iter()
-        .map(|&m| results[m].obs.id.as_str())
-        .filter(|id| !id.is_empty())
-        .min()
-        .map(str::to_string)
+        .map(|&m| &results[m].obs)
+        .filter(|o| !o.id.is_empty())
+        .min_by_key(|o| (o.ts <= 0, o.ts, o.id.as_str()))
+        .map(|o| o.id.clone())
         .unwrap_or_else(|| {
             members
                 .iter()

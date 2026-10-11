@@ -3,6 +3,7 @@
 //! No I/O, no clock, no threads, so the same code runs in the CLI, on CI, and
 //! in the browser via `sc-wasm`.
 
+pub mod agentness;
 pub mod analyze;
 pub mod asn;
 pub mod attribution;
@@ -23,6 +24,7 @@ pub mod knowledge;
 pub mod model;
 pub mod notice;
 pub mod paths;
+pub mod plant;
 pub mod prose;
 pub mod recurrence;
 pub mod redact;
@@ -31,9 +33,11 @@ pub mod rules;
 pub mod securitytxt;
 pub mod sort;
 pub mod stamp;
+pub mod swarm;
 pub mod timing;
 pub mod urlquery;
 
+pub use agentness::{AgentAssessment, AgentLevel, AgentSignal, GradeDecision};
 pub use analyze::{Analysis, Cluster, ObsResult, analyze};
 pub use attribution::{AttributionLabel, Claim, Evidence, Role, Tag, attribute};
 pub use bursts::{ArchiveBurst, archive_bursts};
@@ -49,14 +53,16 @@ pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Tactic, Tier, TsKind, fmt_ts,
-    parse_ts, top_counts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, Tactic, Tier,
+    TsKind, fmt_ts, parse_ts, top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
+pub use plant::{Corroboration, PlantSignal, PlantSignalKind};
 pub use recurrence::{ClusterRun, RecurrenceOptions, Rerun, TargetRun, cluster_reruns, reruns};
 pub use redact::{redact_observation, redact_url};
-pub use report::{Audience, Notice, ReportOptions, render_markdown, render_notice};
+pub use report::{Audience, Notice, ReportOptions, Reported, render_markdown, render_notice};
 pub use rules::{DEFAULT_RULES, RuleSet, Rules};
 pub use securitytxt::{SecurityTxt, parse_security_txt};
 pub use stamp::{EvalSnapshot, Stamp, StampCluster};
+pub use swarm::{EdgeStrength, RunRef, SwarmEdge, SwarmEdgeKind};
 pub use timing::{SharedPause, SharedPauseOptions, StaleDates, shared_pauses, stale_dates};

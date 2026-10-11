@@ -33,7 +33,9 @@ fn evaluation_set_numbers_hold() {
     let text = eval_set();
     let rules = Rules::default_rules();
     let mut labels = LabelSet::default();
-    labels.labels.extend(parse_labels(&text).labels);
+    let parsed_labels = parse_labels(&text);
+    labels.labels.extend(parsed_labels.labels);
+    labels.actors.extend(parsed_labels.actors);
     let parsed = parse_input(&text, Format::Ndjson, &FieldMap::default());
     let a = analyze(parsed.observations, &rules);
     let report = evaluate(&a, &labels);
@@ -45,22 +47,36 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (69, 0, 6, 75),
+        (111, 0, 6, 77),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (29, 0, 46, 75), "significant");
+    assert_eq!(counts(Tier::Significant), (71, 0, 46, 77), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 150);
+    assert_eq!(a.total, 231);
     assert_eq!(
         tiers,
-        [81, 40, 29],
+        [86, 42, 103],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 15, "clusters");
+    assert_eq!(a.clusters.len(), 31, "clusters");
+
+    // Agent grades by actor: no scanner run and no hand-typed pentest grades
+    // above L0; a person pasting chatbot payloads reaches L3, the grade's
+    // documented limit.
+    let g = &report.grades.rows;
+    let above = |actor: &str, from: usize| -> usize {
+        sc_core::eval::grades::COLUMNS[from..]
+            .iter()
+            .map(|c| g[actor].get(*c).copied().unwrap_or(0))
+            .sum()
+    };
+    assert_eq!(above("tool", 3), 0, "tool runs above L0: {g:?}");
+    assert_eq!(g["human"].get("L3"), Some(&4), "{g:?}");
+    assert_eq!(above("human", 6), 0, "human runs at L4: {g:?}");
 
     // Every benign record says what kind of traffic it is.
     assert!(
@@ -77,5 +93,22 @@ fn evaluation_set_numbers_hold() {
             .any(|m| m.runs == ["benign-tag-reader-1", "benign-tag-reader-2"]),
         "{c:?}"
     );
+    // A record planted beside a run, minutes later on the same host and
+    // sharing only a context rule (a relay, a cache buster), stays out of it.
+    assert!(
+        !c.false_merges
+            .iter()
+            .any(|m| m.runs.iter().any(|r| r.starts_with("plant-"))),
+        "{c:?}"
+    );
     assert!(c.run_labelled > 0 && c.bcubed_precision.is_some());
+
+    // Interaction edges: each labelled swarm has one inside it; the sharded
+    // scheduler (labelled `none`) gets only a disjoint partition, the fleet
+    // signal that one scheduler produces alone.
+    let w = &report.swarm;
+    assert_eq!(w.found, w.groups, "{w:?}");
+    assert_eq!(w.groups.len(), 3, "{w:?}");
+    assert_eq!((w.edges, w.on_groups, w.across_groups), (4, 3, 0), "{w:?}");
+    assert_eq!(w.on_non_swarm, [0, 0, 0, 0, 1], "S5 only: {w:?}");
 }

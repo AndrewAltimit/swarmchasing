@@ -37,6 +37,8 @@ From the smallest to the largest:
 
 **Fleet or swarm.** Many agents doing the same thing do not make a swarm. A report calls a grouping a swarm only when it cites evidence of interaction, such as one run reading what another wrote to a shared artifact, targets divided without overlap across runs that started together, or one run handing a lead to another. Without such evidence it is a fleet. This follows the distinction drawn in published fleet reporting ([swarmcha.se](references.md#incident-reports)) and the separate treatment of agent communication (AML.T0118) and orchestration (AML.T0124) in [MITRE ATLAS](references.md#threat-frameworks).
 
+The evidence is a reviewer's reading of the records, not a detector's output. The signals that point to interaction ([FM-4.10](04-indicators.md#fm-410-interaction-signals)) are each weak or moderate, and each has an innocent explanation, so a swarm claim rests on several of them together, is tagged Inference ([FM-7.6](07-attribution.md#fm-76-claim-tags)) and lists them. Toolkit: the analysis lists possible interaction as edges between runs and never calls anything a swarm; a case fleet becomes a swarm, in reports, the notice and exports, only once the admin records the interaction they reviewed, and stops being one when that record is withdrawn ([cases](../reference/cases.md#swarms)).
+
 ## FM-1.4 Casework terms
 
 | Term | Definition |
