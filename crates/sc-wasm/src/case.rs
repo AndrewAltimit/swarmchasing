@@ -1,96 +1,16 @@
-//! Evidence bundle check for the Case tab. The page checks the manifest
-//! hashes itself (Web Crypto); this re-runs the analysis and compares it with
-//! the stamp, as `swarmchase case verify` does, and lists the attribution
-//! layers the re-run supports, with any claims from case work merged in.
+//! Evidence bundle check for the Tools page, in the tools module. The page
+//! checks the manifest hashes itself (Web Crypto); this re-runs the analysis
+//! and compares it with the stamp through `sc_case::bundle::check`, the same
+//! check `swarmchase case verify` runs, and lists the attribution layers the
+//! re-run supports, with any claims from case work merged in.
 
+use sc_case::bundle::Checked;
 use sc_core::attribution::{LayerSummary, merge, summaries};
-use sc_core::{Claim, Evidence, Rules, Stamp, StampCluster, Tier, analyze};
-use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet};
+use sc_core::{Claim, Evidence, Rules};
 use wasm_bindgen::prelude::*;
 
-/// What the stamp check reads of a bundle's `analysis.json`. Reading only
-/// these fields, rather than a whole `Analysis`, keeps the module small.
-#[derive(Deserialize)]
-struct Stored {
-    total: usize,
-    results: Vec<StoredResult>,
-    clusters: Vec<StoredCluster>,
-}
-
-#[derive(Deserialize)]
-struct StoredResult {
-    obs: StoredObs,
-    tier: Tier,
-}
-
-#[derive(Deserialize)]
-struct StoredObs {
-    id: String,
-}
-
-#[derive(Deserialize)]
-struct StoredCluster {
-    tier: Tier,
-    members: Vec<usize>,
-}
-
-/// The stored analysis's differences from the stamp, worded as
-/// `Stamp::differences` words them.
-fn stored_differences(st: &Stamp, text: &str) -> Result<Vec<String>, String> {
-    let a: Stored = serde_json::from_str(text).map_err(|e| e.to_string())?;
-    let id = |m: usize| {
-        a.results
-            .get(m)
-            .map(|r| r.obs.id.clone())
-            .ok_or_else(|| format!("cluster member {m} is not a record"))
-    };
-    let mut clusters = Vec::with_capacity(a.clusters.len());
-    for c in &a.clusters {
-        let mut members = c
-            .members
-            .iter()
-            .map(|&m| id(m))
-            .collect::<Result<Vec<_>, _>>()?;
-        sc_core::sort::sort(&mut members);
-        clusters.push(StampCluster {
-            tier: c.tier,
-            members,
-        });
-    }
-    sc_core::sort::by(&mut clusters, |x, y| x.members.cmp(&y.members));
-    let flagged: BTreeMap<&str, Tier> = a
-        .results
-        .iter()
-        .filter(|r| r.tier > Tier::Noise)
-        .map(|r| (r.obs.id.as_str(), r.tier))
-        .collect();
-    let mut diffs = Vec::new();
-    if a.total != st.records {
-        diffs.push(format!("{} records, stamp says {}", a.total, st.records));
-    }
-    let ids: BTreeSet<&str> = st
-        .flagged
-        .keys()
-        .map(String::as_str)
-        .chain(flagged.keys().copied())
-        .collect();
-    for i in ids {
-        let (was, now) = (st.flagged.get(i), flagged.get(i));
-        if was != now {
-            let label = |t: Option<&Tier>| t.map_or("noise", |t| t.label());
-            diffs.push(format!("record {i}: {} → {}", label(was), label(now)));
-        }
-    }
-    if clusters != st.clusters {
-        diffs.push(format!(
-            "clusters differ: {} in the stamp, {} now (or members or tiers changed)",
-            st.clusters.len(),
-            clusters.len()
-        ));
-    }
-    Ok(diffs)
-}
+/// Where the page says to find the rules a bundle was made with.
+const RULES_HINT: &str = "load the rules it was made with in the Rules tab";
 
 /// Re-run a bundle's analysis and compare it with its stamp. `rules_json`
 /// empty means the bundled rules; `claims_json` is the claims array from
@@ -121,66 +41,38 @@ fn check(
     stamp_json: &str,
     rules: &Rules,
     case_claims: &[Claim],
-) -> Result<Checked, String> {
-    let st: Stamp = serde_json::from_str(stamp_json).map_err(|e| format!("stamp.json: {e}"))?;
-    let records = sc_core::stamp::parse_records(records_ndjson)
-        .map_err(|e| format!("records.ndjson: {e}"))?;
-    let mut differences = Vec::new();
-    let mut notes = Vec::new();
-    if st.rules_version != rules.set.meta.version {
-        differences.push(format!(
-            "rules version {} differs from the bundle's {}; load the rules it was made with in the Rules tab",
-            rules.set.meta.version, st.rules_version
-        ));
-    }
-    let a = analyze(records, rules);
-    differences.extend(st.differences(&a));
-    // The bundle's own analysis should match its stamp too. A copy this
-    // toolkit version cannot read is noted, not failed: the re-run above is
-    // what the check rests on.
-    if !analysis_json.trim().is_empty() {
-        match stored_differences(&st, analysis_json) {
-            Ok(d) => differences.extend(d.into_iter().map(|d| format!("analysis.json: {d}"))),
-            Err(e) => notes.push(format!("analysis.json not compared: {e}")),
-        }
-    }
-    if st.toolkit_version != env!("CARGO_PKG_VERSION") {
-        notes.push(format!(
-            "made with toolkit {}, checked with {}",
-            st.toolkit_version,
-            env!("CARGO_PKG_VERSION")
-        ));
-    }
+) -> Result<Verified, String> {
+    let checked = sc_case::bundle::check(
+        records_ndjson,
+        analysis_json,
+        stamp_json,
+        rules,
+        env!("CARGO_PKG_VERSION"),
+        RULES_HINT,
+    )?;
     // The claims every report on this bundle would see: case work's, then
     // each cluster's own, merged as the CLI merges them.
+    let a = &checked.analysis;
     let claims = a.clusters.iter().fold(case_claims.to_vec(), |acc, c| {
-        merge(acc, &sc_core::attribute(&a, c))
+        merge(acc, &sc_core::attribute(a, c))
     });
     let layers = summaries(&claims, Evidence::default());
     let withheld = claims
         .iter()
         .filter(|c| c.role == sc_core::Role::Developer && !c.nameable(Evidence::default()))
         .count();
-    Ok(Checked {
-        stamp: st,
-        differences,
-        notes,
-        rules_version: rules.set.meta.version.clone(),
-        analysis: a,
+    Ok(Verified {
+        checked,
         layers,
         withheld,
     })
 }
 
-/// `verify_bundle`'s result. A struct rather than `json!`, which would
-/// serialise the analysis through a `Value` and double the code for it.
+/// `verify_bundle`'s result: the check, then the layers.
 #[derive(serde::Serialize)]
-struct Checked {
-    stamp: Stamp,
-    differences: Vec<String>,
-    notes: Vec<String>,
-    rules_version: String,
-    analysis: sc_core::Analysis,
+struct Verified {
+    #[serde(flatten)]
+    checked: Checked,
     layers: Vec<LayerSummary>,
     withheld: usize,
 }
@@ -188,7 +80,7 @@ struct Checked {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sc_core::Observation;
+    use sc_core::{Observation, Stamp, analyze};
 
     fn bundle(rules: &Rules) -> (String, String, String) {
         let records: Vec<Observation> = (0..4)
@@ -214,29 +106,24 @@ mod tests {
         )
     }
 
-    fn checkv(r: &str, a: &str, st: &str, rules: &Rules) -> Result<serde_json::Value, String> {
-        check(r, a, st, rules, &[]).map(|c| serde_json::to_value(c).unwrap())
-    }
-
-    fn diffs(v: &serde_json::Value) -> Vec<String> {
-        serde_json::from_value(v["differences"].clone()).unwrap()
+    fn checkv(r: &str, a: &str, st: &str, claims: &[Claim]) -> serde_json::Value {
+        serde_json::to_value(check(r, a, st, &Rules::default_rules(), claims).unwrap()).unwrap()
     }
 
     #[test]
-    fn a_fresh_bundle_verifies() {
-        let rules = Rules::default_rules();
-        let (nd, a, st) = bundle(&rules);
-        let v = checkv(&nd, &a, &st, &rules).unwrap();
-        assert!(diffs(&v).is_empty(), "{v}");
+    fn a_fresh_bundle_verifies_with_its_layers() {
+        let (nd, a, st) = bundle(&Rules::default_rules());
+        let v = checkv(&nd, &a, &st, &[]);
+        assert_eq!(v["differences"].as_array().unwrap().len(), 0, "{v}");
         assert_eq!(v["stamp"]["case"], "t-1");
         assert_eq!(v["analysis"]["total"], 4);
-        assert_eq!(v["notes"].as_array().unwrap().len(), 0);
-        // The binding's own path, with bundled rules.
-        assert!(verify_bundle(&nd, &a, &st, "", "").is_ok());
-        // Case claims join the layers; a bad array is an error.
-        let claims = r#"[{"party":"Example AI","role":"developer","evidence":"provider_confirmed","details":["confirmed in writing"]}]"#;
-        let v: serde_json::Value =
-            serde_json::from_str(&verify_bundle(&nd, &a, &st, "", claims).unwrap()).unwrap();
+        assert!(v["withheld"].is_number());
+        // Case claims join the layers.
+        let claims: Vec<Claim> = serde_json::from_str(
+            r#"[{"party":"Example AI","role":"developer","evidence":"provider_confirmed","details":["confirmed in writing"]}]"#,
+        )
+        .unwrap();
+        let v = checkv(&nd, &a, &st, &claims);
         let dev = v["layers"]
             .as_array()
             .unwrap()
@@ -245,78 +132,24 @@ mod tests {
             .unwrap();
         assert_eq!(dev["party"], "Example AI");
         assert_eq!(dev["label"], "confirmed");
-        assert_eq!(dev["tag"], "documented");
-        assert!(v["withheld"].is_number());
-        assert!(check(&nd, &a, &st, &rules, &[]).is_ok());
     }
 
     #[test]
-    fn dropped_records_and_other_rules_are_differences() {
+    fn other_rules_name_the_rules_tab() {
         let rules = Rules::default_rules();
         let (nd, a, st) = bundle(&rules);
-        let fewer: String = nd.lines().skip(1).map(|l| format!("{l}\n")).collect();
-        let d = diffs(&checkv(&fewer, &a, &st, &rules).unwrap());
-        assert!(d.iter().any(|x| x == "3 records, stamp says 4"), "{d:?}");
-        assert!(!d.iter().any(|x| x.starts_with("analysis.json")), "{d:?}");
-
         let other = st.replace(&rules.set.meta.version, "0000-00-00");
-        let d = diffs(&checkv(&nd, &a, &other, &rules).unwrap());
-        assert!(d[0].starts_with("rules version "), "{d:?}");
-    }
-
-    #[test]
-    fn analysis_copy_is_compared_or_noted() {
-        let rules = Rules::default_rules();
-        let (nd, _, st) = bundle(&rules);
-        let empty = serde_json::to_string(&analyze(Vec::new(), &rules)).unwrap();
-        let d = diffs(&checkv(&nd, &empty, &st, &rules).unwrap());
-        assert!(d.iter().any(|x| x.starts_with("analysis.json: ")), "{d:?}");
-
-        let v = checkv(&nd, "{}", &st, &rules).unwrap();
-        assert!(diffs(&v).is_empty(), "{v}");
+        let v = checkv(&nd, &a, &other, &[]);
+        let d = v["differences"][0].as_str().unwrap();
         assert!(
-            v["notes"][0]
-                .as_str()
+            d.starts_with("rules version ") && d.ends_with(RULES_HINT),
+            "{d}"
+        );
+        assert!(
+            check("{bad", &a, &st, &rules, &[])
+                .err()
                 .unwrap()
-                .starts_with("analysis.json not compared")
-        );
-    }
-
-    // The lean reading of analysis.json says what Stamp::differences says of
-    // the full analysis.
-    #[test]
-    fn stored_check_matches_the_stamp_checkv() {
-        let rules = Rules::default_rules();
-        let (nd, _, st) = bundle(&rules);
-        let st: Stamp = serde_json::from_str(&st).unwrap();
-        let all = sc_core::stamp::parse_records(&nd).unwrap();
-        for records in [all.clone(), all[1..].to_vec(), Vec::new()] {
-            let a = analyze(records, &rules);
-            let text = serde_json::to_string(&a).unwrap();
-            assert_eq!(stored_differences(&st, &text).unwrap(), st.differences(&a));
-        }
-        assert!(
-            stored_differences(
-                &st,
-                r#"{"total":1,"results":[],"clusters":[{"tier":"noise","members":[3]}]}"#
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn bad_input_is_an_error() {
-        let rules = Rules::default_rules();
-        let (nd, a, st) = bundle(&rules);
-        assert!(
-            checkv(&nd, &a, "{", &rules)
-                .unwrap_err()
-                .starts_with("stamp.json")
-        );
-        assert!(
-            checkv("{bad", &a, &st, &rules)
-                .unwrap_err()
-                .starts_with("records.ndjson: line 1")
+                .starts_with("records.ndjson")
         );
     }
 }

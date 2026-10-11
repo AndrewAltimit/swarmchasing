@@ -5,11 +5,15 @@
 // id, a view), never hosts, URLs or other record data.
 import { $, el, activate, download, fetchRoot, showError } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
-import { engine, host as hostOf, pageRules } from "../lib/wasm.js";
-import { figure, legend, legendKey, edgeKey, tierLegend, rampLegend, swimlanes, fleetGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
-import { kindClass, kindLabel, tactic, route, fleetItems, language } from "../lib/hints.js";
+import { engine, tools, host as hostOf, pageRules } from "../lib/wasm.js";
+import { figure, legend, legendKey, edgeKey, swarmKey, tierLegend, rampLegend, swimlanes, runExtent, zoomWindow, fleetGraph, swarmGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
+import {
+  kindClass, kindLabel, tactic, route, fleetItems, language, levelOf, swarmKind, provenanceLabel, corroborationLabel, plantLabel,
+} from "../lib/hints.js";
+import { layersTable } from "../lib/layers.js";
+import { agentLadder as ladderOf } from "../lib/agent.js";
 
-const VIEWS = ["runs", "fleet", "heat", "rhythm", "strip", "hourly"];
+const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
 const MAX_LANES = 40;
 const MAX_ROWS = 300;
@@ -29,6 +33,13 @@ let endpointsCache = null;
 let sel = { c: null, r: null, rule: null };
 let view = "runs";
 let lastWidth = 0; // the views panel width the current view was drawn at
+let zoom = null; // the swim-lanes' time window, null for all of it
+// The input the shown analysis came from, for the tools module, which
+// re-runs it (deterministically) to draft reports and attribution layers.
+let source = null;
+let generation = 0; // bumped per analysis
+let preparedGen = -1; // the generation the tools module holds
+let wantReport = false; // the visitor reached the report: load the tools module
 
 const host = (h) => hostOf(sc, h);
 const safe = (s, n = 120) => trunc(sc.defang(String(s ?? "")), n);
@@ -104,8 +115,9 @@ function runAnalysis() {
   const warn = $("warnings");
   warn.hidden = true;
   let out;
+  const src = { input: $("input").value, format: $("format").value, map: $("map").value };
   try {
-    out = JSON.parse(sc.analyze($("input").value, $("format").value, $("map").value, rules));
+    out = JSON.parse(sc.analyze(src.input, src.format, src.map, rules));
   } catch (e) {
     warn.hidden = false;
     warn.textContent = String(e?.message ?? e);
@@ -119,6 +131,9 @@ function runAnalysis() {
     warn.textContent = notes.join(" ");
   }
   a = out.analysis;
+  source = src;
+  generation++;
+  zoom = null;
   // Declared testing (the declaring text and the contact it names) is for
   // case notes only, never a public page: the page drops it on receipt, so
   // no view and no download shows it. The report draft follows the engine's
@@ -128,7 +143,7 @@ function runAnalysis() {
   endpointsCache = null;
   const h = readHash();
   sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
-  for (const b of ["copy-report", "dl-report", "dl-json"]) $(b).disabled = false;
+  $("dl-json").disabled = false;
   renderAll();
   if (mobile()) goStep("explore");
   return true;
@@ -204,11 +219,11 @@ function renderClusterList() {
   box.replaceChildren(...a.clusters.slice(0, 200).map((c) => {
     const k = keyOf(c);
     const b = el("button", { type: "button", class: "cluster-row", "aria-pressed": String(sel.c === k), "data-focus-key": `cl:${k}` },
-      el("span", { class: "cid" }, c.id), pill(c.tier), el("span", { class: "crecs" }, `${c.members.length} rec · ${c.runs.length} run${c.runs.length === 1 ? "" : "s"}`),
+      el("span", { class: "cid" }, c.id), pill(c.tier), el("span", { class: "crecs" }, `${c.members.length} rec · ${c.runs.length} run${c.runs.length === 1 ? "" : "s"}${levelOf(c.agent?.level) ? ` · ${levelOf(c.agent.level).code}` : ""}`),
       el("span", { class: "ctargets" }, topEntries(c.target_hosts, 2).map(([h]) => host(h)).join(", ") || "–"));
     b.addEventListener("click", () => select({ c: sel.c === k ? null : k, r: null, rule: null }));
     return b;
-  }), a.clusters.length > 200 ? el("p", { class: "hint" }, `${a.clusters.length - 200} more clusters not listed.`) : null);
+  }), ...(a.clusters.length > 200 ? [el("p", { class: "hint" }, `${a.clusters.length - 200} more clusters not listed.`)] : []));
 }
 
 function renderFilterBar() {
@@ -244,10 +259,35 @@ function sharedPauseBands() {
   return out;
 }
 
+function setZoom(next) {
+  zoom = next;
+  renderView();
+  refocus("swim-chart");
+}
+
+function zoomTools(full) {
+  const b = (label, text, fn, disabled = false) => {
+    const x = el("button", { type: "button", "aria-label": label, disabled }, text);
+    x.addEventListener("click", fn);
+    return x;
+  };
+  const [t0, t1] = zoom ?? full;
+  return el("div", { class: "zoom-tools" },
+    b("Zoom in", "+", () => setZoom(zoomWindow(full, zoom, 0.5))),
+    b("Zoom out", "−", () => setZoom(zoomWindow(full, zoom, 2)), !zoom),
+    b("Earlier", "◀", () => setZoom(zoomWindow(full, zoom, 1, -0.25)), !zoom),
+    b("Later", "▶", () => setZoom(zoomWindow(full, zoom, 1, 0.25)), !zoom),
+    b("Show the whole span", "Reset", () => setZoom(null), !zoom),
+    el("span", { class: "hint", "aria-live": "polite" }, zoom ? `${fmtTs(t0)} → ${fmtTs(t1)} (${dur(t1 - t0)})` : "Drag across the chart to zoom; with the chart focused, + − ← → and 0."));
+}
+
 function viewRuns() {
   const cl = a.clusters.filter((c) => arr(c.runs).some((r) => r.start > 0)).slice(0, MAX_LANES);
   const lanes = cl.map((c) => ({ key: keyOf(c), label: c.id, tier: c.tier, runs: c.runs.filter((r) => r.start > 0) }));
-  const chart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), bands: sharedPauseBands(), selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth(), label: "Runs per cluster over time, UTC" });
+  const full = runExtent(lanes);
+  const svgChart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), bands: sharedPauseBands(), selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth(), label: "Runs per cluster over time, UTC", domain: zoom, onZoom: setZoom });
+  if (svgChart instanceof SVGElement) svgChart.setAttribute("data-focus-key", "swim-chart");
+  const chart = full ? el("div", {}, zoomTools(full), svgChart) : svgChart;
   return figure({
     chart,
     legend: legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"), legendKey("k-pause", "pause (all records)"), legendKey("k-band", "shared pause")),
@@ -314,6 +354,58 @@ function viewFleet() {
     caption: `Hints, not evidence: no edge changes a score or merges clusters. Node area is the cluster's record count; clusters sit in order of first activity.${edges.length ? "" : " No hints connect these clusters."}`,
     head: ["Hint", "From", "To", "Detail"],
     rows: edges.map((e) => [e.name, idOf(e.a), idOf(e.b), e.label]),
+  });
+}
+
+/** Runs as nodes and the interaction hints (S1–S5) between them. */
+function swarmData() {
+  const nodes = new Map();
+  const lanes = new Map();
+  const node = (ref) => {
+    ref = obj(ref);
+    const c = clusterBy(String(ref.key || ref.cluster || ""));
+    if (!c) return null;
+    const run = arr(c.runs)[(num(ref.run) ?? 1) - 1];
+    const strand = ref.strand ? safe(ref.strand, 40) : "";
+    const id = `${keyOf(c)}#${ref.run}${strand ? `|${strand}` : ""}`;
+    if (!nodes.has(id)) {
+      const t = run && run.start > 0 ? (run.start + run.end) / 2 : c.start;
+      const label = `${c.id}#${ref.run ?? "?"}${strand ? ` (${strand})` : ""}`;
+      nodes.set(id, { id, lane: keyOf(c), t, label, short: `#${ref.run ?? "?"}`, sub: run ? `${fmtShort(run.start)} → ${fmtShort(run.end)} UTC, ${run.count ?? 0} record(s)` : `cluster ${c.id}` });
+      lanes.set(keyOf(c), c);
+    }
+    return id;
+  };
+  const edges = [];
+  for (const e of arr(a.swarm_edges)) {
+    const x = node(e.a), y = node(e.b);
+    if (!x || !y) continue;
+    const k = swarmKind(e.kind);
+    const chance = num(e.chance);
+    edges.push({
+      a: x, b: y, kind: String(e.kind ?? "other").replace(/[^a-z_]/g, ""), strength: String(e.strength ?? "weak").replace(/[^a-z]/g, ""),
+      name: `${k.id} ${k.label}`, from: nodes.get(x).label, to: nodes.get(y).label, chance,
+      detail: safe(e.detail ?? "", 200),
+      label: `${k.id} ${k.label} (${e.strength ?? "?"}): ${nodes.get(x).label} → ${nodes.get(y).label}. ${safe(e.detail ?? "", 160)}${chance != null ? ` Chance ${chance.toExponential(1)}.` : ""} A hint to review, not evidence.`,
+    });
+  }
+  const order = new Map(a.clusters.map((c, i) => [keyOf(c), i]));
+  const laneList = [...lanes.values()].sort((p, q) => order.get(keyOf(p)) - order.get(keyOf(q))).slice(0, MAX_LANES)
+    .map((c) => ({ key: keyOf(c), label: c.id, tier: c.tier }));
+  const keep = new Set(laneList.map((l) => l.key));
+  return { lanes: laneList, nodes: [...nodes.values()].filter((n) => keep.has(n.lane)), edges };
+}
+
+function viewSwarm() {
+  const { lanes, nodes, edges } = swarmData();
+  const kinds = [...new Set(edges.map((e) => e.kind))];
+  const chart = swarmGraph({ lanes, nodes, edges, selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth() });
+  return figure({
+    chart,
+    legend: legend(...kinds.map((k) => swarmKey(`sk-${k} st-moderate`, `${swarmKind(k).id} ${swarmKind(k).label}`)), swarmKey("st-weak", "weak"), swarmKey("st-strong", "strong")),
+    caption: `Interaction hints (SC-T9) between runs: a fleet is many agents doing the same thing, a swarm one whose agents act on each other's output. Each arc is one weak-to-moderate hint; a claim of interaction needs several together and review. None changes a score, links records or merges clusters.${edges.length ? "" : " This input has none."}`,
+    head: ["Kind", "Strength", "From", "To", "Chance", "Detail"],
+    rows: edges.map((e) => [e.name, e.strength, e.from, e.to, e.chance != null ? e.chance.toExponential(1) : "–", e.detail]),
   });
 }
 
@@ -394,7 +486,7 @@ function renderView() {
   const panel = $("viz-panel");
   if (!a) return;
   lastWidth = panel.clientWidth;
-  const make = { runs: viewRuns, fleet: viewFleet, heat: viewHeat, rhythm: viewRhythm, strip: viewStrip, hourly: viewHourly }[view];
+  const make = { runs: viewRuns, fleet: viewFleet, swarm: viewSwarm, heat: viewHeat, rhythm: viewRhythm, strip: viewStrip, hourly: viewHourly }[view];
   try {
     panel.replaceChildren(make());
   } catch (e) {
@@ -520,6 +612,10 @@ function clusterContext(c) {
   const runs = arr(c.runs);
   row("Records", `${c.members.length} (score ${c.score})`);
   row("Seen", `${fmtTs(c.start)} → ${fmtTs(c.end)}`);
+  const prov = topEntries(c.provenance, 4);
+  row("Sources", prov.length ? chips(prov.map(([p, n]) => `${provenanceLabel(p)} ×${n}`)) : el("span", { class: "hint" }, "provenance not recorded"),
+    c.corroboration ? el("span", { class: `corr ${String(c.corroboration).replace(/[^a-z_]/g, "")}` }, corroborationLabel(c.corroboration)) : null,
+    el("div", { class: "hint" }, "who can put such a record into its source; one kind of source alone could be one person submitting URLs"));
   row("Targets", chips(topEntries(c.target_hosts, 6).map(([h, n]) => `${host(h)} ×${n}`)));
   row("Top rules", chips(topEntries(c.rules, 8).map(([r, n]) => `${r} ×${n}`)));
   const tac = topEntries(c.tactics, 9);
@@ -591,14 +687,50 @@ function clusterContext(c) {
   if (chains.length) row("Probe chains", el("ul", {}, chains.slice(0, 10).map((ch) => el("li", {}, chainLine(ch)))), el("div", { class: "hint" }, "the pace is a hint, not evidence"));
   const toReport = el("button", { type: "button" }, "Draft a report for this cluster");
   toReport.addEventListener("click", () => {
+    startReport();
     goStep("report");
     $("h-report").scrollIntoView({ block: "start" });
   });
   return [
     el("div", { class: "ctx-head" }, el("h3", {}, `Cluster ${c.id}`), pill(c.tier), el("span", { class: "chip" }, keyOf(c))),
+    ladderOf(c.agent, safe),
     el("dl", { class: "kv" }, rows),
+    attributionPanel(c),
+    plantReview(c),
     el("div", { class: "row" }, toReport),
   ];
+}
+
+/** Attribution layers, from the tools module (loaded on request). */
+function attributionPanel(c) {
+  const box = el("div", { class: "attr-box" });
+  const btn = el("button", { type: "button" }, "Show attribution layers");
+  const load = async () => {
+    btn.disabled = true;
+    try {
+      const t = await prepared();
+      const res = JSON.parse(t.attribution(JSON.stringify({ cluster: keyOf(c), claims: readClaims() ?? [], min_named: $("min-named").value })));
+      box.replaceChildren(
+        el("p", { class: "hint" }, `What the records support at each layer, gated as a report at the naming level chosen under Report, with any claims from case work there.${res.withheld ? ` ${res.withheld} developer candidate(s) below that level are not shown.` : ""}`),
+        layersTable(res.layers));
+    } catch (e) {
+      showError(box, e);
+    }
+  };
+  btn.addEventListener("click", load);
+  box.append(el("p", { class: "hint" }, "Developer, host, harness and model family: who the records point at, and on what evidence. Loads the report tools."), btn);
+  return el("section", { class: "ctx-section", "aria-label": "Attribution layers" }, el("h4", {}, "Attribution"), box);
+}
+
+/** Plant signals: for internal review only, never on a public page. */
+function plantReview(c) {
+  const ps = arr(c.plant_signals);
+  return el("details", { class: "internal-review" },
+    el("summary", {}, "Internal review: plant signals ", el("span", { class: "badge" }, ps.length ? String(ps.length) : "none")),
+    el("p", { class: "hint" }, "Signs a cluster may have been planted, for whoever reviews this file. A prompt to check, never a finding: never scored, never linked on, never in a public notice or report."),
+    ps.length
+      ? el("ul", {}, ps.map((p) => el("li", {}, el("strong", {}, plantLabel(p.kind)), p.detail ? `: ${safe(p.detail, 200)}` : "", el("span", { class: "hint" }, ` (${plural(arr(p.records).length, "record")})`))))
+      : el("p", { class: "hint" }, "No plant signals on this cluster."));
 }
 
 function recordContext(i) {
@@ -674,6 +806,12 @@ function renderLinks() {
     out.push(el("h4", {}, `Soft links (${edges.length})`));
     out.push(edges.length ? el("ul", {}, edges.slice(0, 40).map((e) => el("li", {}, el("strong", {}, `${idOf(e.a)} and ${idOf(e.b)}`), ` ${e.label}`))) : el("p", { class: "hint" }, "None between these clusters beyond the shared pauses and dialects above."));
   }
+  const sw = swarmData().edges;
+  if (sw.length) {
+    out.push(el("h4", {}, `Interaction hints (${sw.length})`));
+    out.push(el("p", { class: "hint" }, "Runs that may act on each other's output (S1–S5): weak-to-moderate hints, never a merge. See the Swarm view."));
+    out.push(el("ul", {}, sw.slice(0, 40).map((e) => el("li", {}, el("strong", {}, `${e.name} (${e.strength})`), ` ${e.from} → ${e.to}: ${e.detail}`))));
+  }
   $("links").replaceChildren(...out);
 }
 
@@ -693,11 +831,26 @@ function readClaims() {
   }
 }
 
-function renderReport() {
+/** The tools module, holding this analysis (re-run on the same input). */
+async function prepared() {
+  const t = await tools();
+  if (preparedGen !== generation) {
+    t.prepare(source.input, source.format, source.map, rules);
+    preparedGen = generation;
+  }
+  return t;
+}
+
+let reportSeq = 0;
+async function renderReport() {
   if (!a) return;
   const claims = readClaims();
   if (claims == null) {
     $("report").textContent = "Fix the claims JSON to draft a report.";
+    return;
+  }
+  if (!wantReport) {
+    $("report").textContent = `Drafting loads the report tools (~${document.body.dataset.toolsSize || "1.5 MB"}). Press "Draft the report", or scroll here.`;
     return;
   }
   const opts = {
@@ -709,11 +862,28 @@ function renderReport() {
     min_named: $("min-named").value,
     claims,
   };
+  const my = ++reportSeq;
   try {
-    $("report").textContent = sc.report(JSON.stringify(opts));
+    const t = await prepared();
+    if (my !== reportSeq) return;
+    $("report").textContent = t.report(JSON.stringify(opts));
+    for (const b of ["copy-report", "dl-report"]) $(b).disabled = false;
   } catch (e) {
-    $("report").textContent = String(e?.message ?? e);
+    if (my === reportSeq) $("report").textContent = String(e?.message ?? e);
   }
+}
+
+function startReport() {
+  if (wantReport) return;
+  wantReport = true;
+  renderReport();
+}
+$("draft-report").addEventListener("click", startReport);
+// Reaching the report section starts the draft (and the module download).
+if ("IntersectionObserver" in window) {
+  new IntersectionObserver((entries) => {
+    if (a && entries.some((e) => e.isIntersecting)) startReport();
+  }).observe($("report"));
 }
 
 // ── Wiring ─────────────────────────────────────────────────────────────────
@@ -751,7 +921,8 @@ $("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.
 
 {
   const h = readHash();
-  if (h.v) setView(h.v);
+  // The view is set after the example loads: setting it rewrites the hash,
+  // which still holds the selection the example's analysis reads.
   if (h.preset === "access-log") {
     $("format").value = "access_log";
     $("map").placeholder = "host=www.example.org (your own host)";
@@ -760,4 +931,5 @@ $("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.
   } else if (h.example) {
     await loadExample();
   }
+  if (h.v) setView(h.v);
 }

@@ -2,14 +2,19 @@
 //! labelled set with the bundled rules, computed at build time: precision
 //! and recall per tier with Wilson intervals, the confusion matrices, hits
 //! and coverage per rule, recall per class and per tactic, false positives
-//! per benign class, and the cluster-level numbers. The page recomputes the
-//! tier numbers in the browser with edited rules.
+//! per benign class, and the cluster-level numbers. Each tier card puts the
+//! non-synthetic records beside all records, and forest plots show every
+//! slice the summary carries (record and cluster units, synthetic or not,
+//! by provenance, source and file) with its interval; a slice the summary
+//! does not carry is left out. The page recomputes the tier numbers in the
+//! browser with edited rules.
 
 use super::html::{esc, table};
 use super::rules::tactic_label;
 use super::svg::{BarRow, hbars};
 use sc_core::Summary;
 use sc_core::eval::stats::Proportion;
+use sc_core::eval::summary::TierSummary;
 use std::fmt::Write;
 
 fn pc(p: &Proportion) -> String {
@@ -54,7 +59,7 @@ pub fn body(s: &Summary, files: &[String]) -> String {
 <table class=\"confusion\"><caption>Confusion matrix, {} or above</caption>\
 <thead><tr><td></td><th scope=\"col\">Flagged</th><th scope=\"col\">Not flagged</th></tr></thead>\
 <tbody><tr><th scope=\"row\">Agent</th><td class=\"tp\">{} <span>true positive</span></td><td class=\"fn\">{} <span>false negative</span></td></tr>\
-<tr><th scope=\"row\">Benign</th><td class=\"fp\">{} <span>false positive</span></td><td class=\"tn\">{} <span>true negative</span></td></tr></tbody></table></article>",
+<tr><th scope=\"row\">Benign</th><td class=\"fp\">{} <span>false positive</span></td><td class=\"tn\">{} <span>true negative</span></td></tr></tbody></table>{}</article>",
             esc(tier),
             pc(&t.precision),
             ci(&t.precision),
@@ -68,10 +73,12 @@ pub fn body(s: &Summary, files: &[String]) -> String {
             t.tp,
             t.fn_,
             t.fp,
-            t.tn
+            t.tn,
+            non_synthetic_block(s, t)
         );
     }
     o.push_str("</div></section>\n");
+    o.push_str(&forest_section(s));
 
     // Hits per rule: agent records and benign records, on one scale.
     let mut rules: Vec<_> = s.rules.iter().filter(|x| x.tp + x.fp > 0).collect();
@@ -367,4 +374,244 @@ fn recall_section(
             &trows
         )
     );
+}
+
+/// The same tier on the records that are not synthetic, as prominent as
+/// the numbers above it, or nothing when the summary has none.
+fn non_synthetic_block(s: &Summary, t: &TierSummary) -> String {
+    let ns = &s.non_synthetic;
+    let Some(n) = ns.tiers.iter().find(|x| x.tier == t.tier) else {
+        return String::new();
+    };
+    if ns.labelled == 0 {
+        return String::new();
+    }
+    format!(
+        "<div class=\"non-synthetic\"><h4>Non-synthetic records only ({} labelled: {} agent, {} benign)</h4>\
+<dl class=\"stats\"><div><dt>Precision</dt><dd class=\"big\">{}</dd><dd class=\"hint\">95% CI {} · {} of {}</dd></div>\
+<div><dt>Recall</dt><dd class=\"big\">{}</dd><dd class=\"hint\">95% CI {} · {} of {}</dd></div></dl></div>",
+        ns.labelled,
+        ns.agents,
+        ns.benign,
+        pc(&n.precision),
+        ci(&n.precision),
+        n.precision.k,
+        n.precision.n,
+        pc(&n.recall),
+        ci(&n.recall),
+        n.recall.k,
+        n.recall.n
+    )
+}
+
+/// One row of a forest plot: a label and a proportion with its interval.
+struct ForestRow {
+    group: String,
+    label: String,
+    p: Proportion,
+}
+
+/// A forest plot: a point and its 95% interval per row, 0 to 100%.
+fn forest(rows: &[ForestRow], title: &str) -> String {
+    let (w, rh, l, r, t) = (960.0, 22.0, 330.0, 150.0, 26.0);
+    let h = t + 8.0 + rh * rows.len() as f64;
+    let x = |v: f64| l + v.clamp(0.0, 1.0) * (w - l - r);
+    let mut s = format!(
+        "<svg class=\"chart forest\" viewBox=\"0 0 {w} {h}\" role=\"img\" aria-label=\"{0}\"><title>{0}</title><g class=\"grid\">",
+        esc(title)
+    );
+    for i in 0..=4 {
+        let v = i as f64 / 4.0;
+        let _ = write!(
+            s,
+            "<line x1=\"{0:.1}\" x2=\"{0:.1}\" y1=\"{1}\" y2=\"{2:.1}\"/>",
+            x(v),
+            t - 6.0,
+            h - 4.0
+        );
+    }
+    s.push_str("</g><g class=\"axis\">");
+    for i in 0..=4 {
+        let v = i as f64 / 4.0;
+        let _ = write!(
+            s,
+            "<text x=\"{:.1}\" y=\"14\" text-anchor=\"middle\">{}%</text>",
+            x(v),
+            i * 25
+        );
+    }
+    s.push_str("</g>");
+    let mut last = "";
+    for (i, row) in rows.iter().enumerate() {
+        let y = t + rh * i as f64 + rh / 2.0;
+        if row.group != last {
+            last = &row.group;
+            if i > 0 {
+                let _ = write!(
+                    s,
+                    "<line class=\"sep\" x1=\"8\" x2=\"{:.1}\" y1=\"{1:.1}\" y2=\"{1:.1}\"/>",
+                    w - 8.0,
+                    y - rh / 2.0
+                );
+            }
+        }
+        let _ = write!(
+            s,
+            "<text class=\"label\" x=\"{:.1}\" y=\"{:.1}\" text-anchor=\"end\">{}</text>",
+            l - 12.0,
+            y + 4.0,
+            esc(&format!("{} · {}", row.group, row.label))
+        );
+        if let (Some(v), Some(lo), Some(hi)) = (row.p.value, row.p.lo, row.p.hi) {
+            let _ = write!(
+                s,
+                "<line class=\"ci\" x1=\"{:.1}\" x2=\"{:.1}\" y1=\"{y:.1}\" y2=\"{y:.1}\"/>\
+<line class=\"ci\" x1=\"{0:.1}\" x2=\"{0:.1}\" y1=\"{2:.1}\" y2=\"{3:.1}\"/><line class=\"ci\" x1=\"{1:.1}\" x2=\"{1:.1}\" y1=\"{2:.1}\" y2=\"{3:.1}\"/>\
+<circle class=\"pt\" cx=\"{4:.1}\" cy=\"{y:.1}\" r=\"4.5\"><title>{5}</title></circle>",
+                x(lo),
+                x(hi),
+                y - 5.0,
+                y + 5.0,
+                x(v),
+                esc(&format!(
+                    "{} · {}: {} (95% CI {}), {} of {}",
+                    row.group,
+                    row.label,
+                    pc(&row.p),
+                    ci(&row.p),
+                    row.p.k,
+                    row.p.n
+                ))
+            );
+        }
+        let _ = write!(
+            s,
+            "<text class=\"note\" x=\"{:.1}\" y=\"{:.1}\">{} · n={}</text>",
+            w - r + 10.0,
+            y + 4.0,
+            esc(&pc(&row.p)),
+            row.p.n
+        );
+    }
+    s.push_str("</svg>");
+    s
+}
+
+/// The slices the summary carries, as (name, record-unit tiers,
+/// cluster-unit tiers); empty ones left out.
+fn slices(s: &Summary) -> Vec<(String, &[TierSummary], &[TierSummary])> {
+    let mut out: Vec<(String, &[TierSummary], &[TierSummary])> =
+        vec![("All records".into(), &s.tiers, &s.cluster_tiers)];
+    if s.non_synthetic.labelled > 0 {
+        out.push((
+            "Non-synthetic".into(),
+            &s.non_synthetic.tiers,
+            &s.non_synthetic.cluster_tiers,
+        ));
+    }
+    for (kind, list) in [
+        ("provenance", &s.by_provenance),
+        ("source", &s.by_source),
+        ("file", &s.by_file),
+    ] {
+        for x in list.iter().filter(|x| x.labelled > 0) {
+            out.push((format!("{kind}: {}", x.name), &x.tiers, &x.cluster_tiers));
+        }
+    }
+    out
+}
+
+fn forest_rows(
+    s: &Summary,
+    pick: impl Fn(&TierSummary) -> &Proportion,
+    cluster: bool,
+) -> Vec<ForestRow> {
+    let mut rows = Vec::new();
+    for (name, rec, cl) in slices(s) {
+        let tiers = if cluster { cl } else { rec };
+        for t in tiers {
+            let p = pick(t);
+            if p.n > 0 {
+                rows.push(ForestRow {
+                    group: name.clone(),
+                    label: format!("{} or above", t.tier.label()),
+                    p: *p,
+                });
+            }
+        }
+    }
+    rows
+}
+
+fn forest_section(s: &Summary) -> String {
+    let mut o = String::from(
+        "<section aria-labelledby=\"forest\"><h2 id=\"forest\">Every slice, with its interval</h2>\
+<p class=\"hint\">Each point is a rate and each bar its 95% Wilson interval, so a slice with few records shows a wide bar. Synthetic records were written to match the rules; the non-synthetic rows are the closer guide to real data. The record unit counts every flagged record; the cluster unit counts each cluster once.</p>",
+    );
+    let mut any = false;
+    for (unit, cluster) in [("record unit", false), ("cluster unit", true)] {
+        for (what, prec) in [("Precision", true), ("Recall", false)] {
+            let rows = forest_rows(s, |t| if prec { &t.precision } else { &t.recall }, cluster);
+            if rows.is_empty() {
+                continue;
+            }
+            any = true;
+            let title = format!("{what}, {unit}");
+            let trows: Vec<Vec<String>> = rows
+                .iter()
+                .map(|r| {
+                    vec![
+                        esc(&r.group),
+                        esc(&r.label),
+                        pc(&r.p),
+                        ci(&r.p),
+                        format!("{} of {}", r.p.k, r.p.n),
+                    ]
+                })
+                .collect();
+            let _ = write!(
+                o,
+                "<h3>{}</h3><figure class=\"chart-box scroll-x\">{}</figure><details class=\"as-table\"><summary>View as table</summary>{}</details>",
+                esc(&title),
+                forest(&rows, &title),
+                table(
+                    "",
+                    &["Slice", "Threshold", "Rate", "95% CI", "Count"],
+                    &trows
+                )
+            );
+        }
+    }
+    let cal = &s.calibration;
+    for (title, list) in [
+        ("Precision at each record tier", &cal.by_tier),
+        ("Precision at each agent grade", &cal.by_agent_level),
+    ] {
+        let rows: Vec<ForestRow> = list
+            .iter()
+            .filter(|r| r.precision.n > 0)
+            .map(|r| ForestRow {
+                group: "calibration".into(),
+                label: r.name.clone(),
+                p: r.precision,
+            })
+            .collect();
+        if rows.is_empty() {
+            continue;
+        }
+        any = true;
+        let _ = write!(
+            o,
+            "<h3>{}</h3><p class=\"hint\">The share of agent records among records at exactly this {}: how far each step can be trusted.</p><figure class=\"chart-box scroll-x\">{}</figure>",
+            esc(title),
+            if title.contains("grade") {
+                "grade (records graded by their cluster; unmeasured on held-out data)"
+            } else {
+                "tier"
+            },
+            forest(&rows, title)
+        );
+    }
+    o.push_str("</section>\n");
+    if any { o } else { String::new() }
 }

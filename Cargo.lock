@@ -1794,6 +1794,7 @@ dependencies = [
 name = "sc-wasm"
 version = "0.1.0"
 dependencies = [
+ "sc-case",
  "sc-core",
  "sc-rules-wasm",
  "serde",

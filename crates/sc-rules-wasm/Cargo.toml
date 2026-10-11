@@ -18,4 +18,4 @@ wasm-bindgen.workspace = true
 sc-core.workspace = true
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz"]
+wasm-opt = ["--gufa", "-Oz", "--converge", "--strip-producers"]

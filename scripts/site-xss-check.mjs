@@ -361,8 +361,20 @@ try {
       hostile ||= document.getElementById("context").textContent.includes("<svg");
     }
     for (const b of document.querySelectorAll("#viz-panel .chart-tools button")) b.click();
+    // Drafting loads the tools module and re-runs the analysis there.
+    document.getElementById("draft-report").click();
+    const drafted = () => /^# /.test(document.getElementById("report").textContent);
+    for (let i = 0; i < 100 && !drafted(); i++) await wait(100);
+    // Attribution layers (tools module) for the selected cluster.
+    const firstRow = document.querySelector(".cluster-row");
+    if (firstRow && firstRow.getAttribute("aria-pressed") !== "true") firstRow.click();
+    await wait();
+    const attr = [...document.querySelectorAll("#context button")].find((b) => b.textContent.includes("attribution"));
+    attr?.click();
+    for (let i = 0; i < 50 && !document.querySelector("#context table.layers"); i++) await wait(100);
+    const layersShown = !!document.querySelector("#context table.layers");
     const box = document.getElementById("claims");
-    const type = async (v) => { box.value = v; box.dispatchEvent(new Event("input")); await wait(); };
+    const type = async (v) => { box.value = v; box.dispatchEvent(new Event("input")); await wait(400); };
     await type(${JSON.stringify(badClaims)});
     const claimsError = document.getElementById("claims-status").textContent;
     await type(${JSON.stringify(claims)});
@@ -374,12 +386,12 @@ try {
     for (const o of aud.options) {
       aud.value = o.value;
       aud.dispatchEvent(new Event("change"));
-      await wait();
+      await wait(400);
       named ||= document.getElementById("report").textContent.includes("<script>");
       if (o.value !== "internal") declared ||= document.getElementById("report").textContent.includes(${JSON.stringify(DECLARED)});
     }
     declared ||= document.getElementById("links").textContent.includes(${JSON.stringify(DECLARED)});
-    return { detail, hostile, marks, claimsError, named, declared, hints: [...hints], links: document.querySelectorAll("#links li").length, records: document.querySelectorAll("table.records tbody tr").length };
+    return { detail, hostile, marks, claimsError, named, declared, layersShown, drafted: drafted(), hints: [...hints], links: document.querySelectorAll("#links li").length, records: document.querySelectorAll("table.records tbody tr").length };
   })()`);
   Object.assign(stats, { records: views.records, detailRows: views.detail, chartMarks: views.marks, linkItems: views.links });
   if (!views.detail) failures.push("the context panel rendered nothing for a cluster");
@@ -387,6 +399,8 @@ try {
   if (!views.marks) failures.push("the views drew nothing");
   if (!views.links) failures.push("the links panel listed nothing (the probe chain should be there)");
   if (!views.claimsError) failures.push("the invalid claims raised no error");
+  if (!views.drafted) failures.push("the report draft did not load (tools module)");
+  if (!views.layersShown) failures.push("the attribution layers did not load (tools module)");
   if (!views.named) failures.push("the hostile claims did not reach the report as text");
   if (views.declared) failures.push("declared testing reached the page outside an internal draft");
   for (const h of ["Relay stacks", "Benchmark targets", "Stale knowledge", "Prose in parameters"])

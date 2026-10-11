@@ -10,16 +10,78 @@ use std::fmt::Write;
 /// anywhere. `scripts/ci/check-site.py` checks it on every page.
 pub const CSP: &str = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'";
 
-/// Top-level sections, in nav order: (key, label, path under the site root).
-pub const NAV: &[(&str, &str, &str)] = &[
-    ("notices", "Notices", "notices/"),
-    ("analyze", "Analyze", "analyze/"),
-    ("rules", "Rules", "rules/"),
-    ("eval", "Evaluation", "eval/"),
-    ("methodology", "Methodology", "methodology/"),
-    ("operators", "For operators", "operators/"),
-    ("docs", "Docs", "docs/"),
-    ("tools", "Tools", "tools/"),
+/// One entry of a nav group: (key, label, path under the site root, what
+/// it is).
+pub type NavItem = (&'static str, &'static str, &'static str, &'static str);
+
+/// The notices, then three groups, in nav order: (group label, items). A
+/// page's [`Page::nav`] key marks its item and its group current.
+pub const NAV_NOTICES: (&str, &str, &str) = ("notices", "Notices", "notices/");
+pub const NAV: &[(&str, &[NavItem])] = &[
+    (
+        "Learn",
+        &[
+            (
+                "manual",
+                "Field Manual",
+                "docs/manual/",
+                "The method as a citable standard",
+            ),
+            (
+                "methodology",
+                "Methodology",
+                "methodology/",
+                "How this toolkit implements it",
+            ),
+            (
+                "operators",
+                "For operators",
+                "operators/",
+                "Your site was named: what to do",
+            ),
+        ],
+    ),
+    (
+        "Investigate",
+        &[
+            (
+                "analyze",
+                "Workbench",
+                "analyze/",
+                "Grade, link and time records in the browser",
+            ),
+            (
+                "unwrap",
+                "Unwrap a URL",
+                "unwrap/",
+                "The layers inside one URL",
+            ),
+            (
+                "tools",
+                "Tools",
+                "tools/",
+                "Check a bundle, read security.txt, defang",
+            ),
+        ],
+    ),
+    (
+        "Reference",
+        &[
+            (
+                "rules",
+                "Rules",
+                "rules/",
+                "Every indicator rule, with a URL tester",
+            ),
+            (
+                "eval",
+                "Evaluation",
+                "eval/",
+                "Precision and recall on the labelled set",
+            ),
+            ("docs", "Docs", "docs/", "Guides and reference"),
+        ],
+    ),
 ];
 
 /// One generated page.
@@ -93,25 +155,49 @@ pub fn render(p: &Page, ctx: &Ctx, root: &str) -> String {
     }
     let _ = write!(
         s,
-        "</head>\n<body data-root=\"{root}\" data-engine-size=\"{}\">\n\
+        "</head>\n<body data-root=\"{root}\" data-engine-size=\"{}\" data-tools-size=\"{}\">\n\
 <a class=\"skip\" href=\"#main\">Skip to content</a>\n\
 <header class=\"site-head\"><div class=\"wrap head-row\">\n\
 <a class=\"brand\" href=\"{root}\"{}><span class=\"brand-mark\" aria-hidden=\"true\"></span>Swarmchasing</a>\n\
 <nav class=\"site-nav\" aria-label=\"Site\"><ul>",
         esc(&ctx.engine_size),
+        esc(&ctx.tools_size),
         if p.nav == "home" {
             " aria-current=\"page\""
         } else {
             ""
         },
     );
-    for (key, label, href) in NAV {
-        let cur = if *key == p.nav {
+    {
+        let (key, label, href) = NAV_NOTICES;
+        let cur = if key == p.nav {
             " aria-current=\"page\""
         } else {
             ""
         };
         let _ = write!(s, "<li><a href=\"{root}{href}\"{cur}>{label}</a></li>");
+    }
+    // Groups open as menus: <details>, so they work without the script,
+    // which only closes one when another opens or focus leaves.
+    for (group, items) in NAV {
+        let here = items.iter().any(|(k, ..)| *k == p.nav);
+        let _ = write!(
+            s,
+            "<li class=\"nav-group\"><details data-nav-menu><summary{}>{group}</summary><ul class=\"nav-menu\">",
+            if here { " class=\"current\"" } else { "" }
+        );
+        for (key, label, href, what) in *items {
+            let cur = if *key == p.nav {
+                " aria-current=\"page\""
+            } else {
+                ""
+            };
+            let _ = write!(
+                s,
+                "<li><a href=\"{root}{href}\"{cur}><strong>{label}</strong><span>{what}</span></a></li>"
+            );
+        }
+        s.push_str("</ul></details></li>");
     }
     let _ = write!(
         s,
