@@ -32,6 +32,13 @@ env:
   MAIL_TO: ${{ secrets.MAIL_TO }}
   # If it is missing, urlquery sources are skipped and the digest says so.
   URLQUERY_APIKEY: ${{ secrets.URLQUERY_APIKEY }}
+  # Opt-in model triage: `true` asks a model server on the runner or its
+  # private network for a label suggestion on each new lead. The URL must be
+  # loopback, private or link-local; any other host is refused before
+  # anything is sent. Unset, no model is asked.
+  SWARMCHASE_WATCH_TRIAGE: ${{ vars.SWARMCHASE_WATCH_TRIAGE }}
+  SWARMCHASE_LLM_URL: ${{ vars.SWARMCHASE_LLM_URL }}
+  SWARMCHASE_LLM_MODEL: ${{ vars.SWARMCHASE_LLM_MODEL }}
 
 jobs:
   watch:
@@ -57,7 +64,7 @@ jobs:
 
       # `cargo run --release` builds the release binary here when the code
       # changed and reuses the cached one otherwise; main-ci.yml does not
-      # prebuild it. The step writes `changed` and `run_dir` to
+      # prebuild it. The step writes `changed`, `priority` and `run_dir` to
       # $GITHUB_OUTPUT for the email steps below. A failed source, an
       # unavailable host or a failed canary sets `changed`, so the digest
       # carrying the alert is mailed the same run.
@@ -68,10 +75,13 @@ jobs:
           mkdir -p "$SWARMCHASE_DATA"
           cargo run --release -p swarmchase -- watch watchlist.toml 2>&1 | tee "$RUNNER_TEMP/watch.log"
 
+      # The subject leads with the run's priority (high, medium or low).
       - name: Email digest
         if: steps.watch.outputs.changed == 'true' && env.SMTP_URL != ''
+        env:
+          PRIORITY: ${{ steps.watch.outputs.priority }}
         run: |
-          bash scripts/ci/send-mail.sh "[swarmchase] watch digest $(basename '${{ steps.watch.outputs.run_dir }}')" \
+          bash scripts/ci/send-mail.sh "[swarmchase] [${PRIORITY^^}] watch digest $(basename '${{ steps.watch.outputs.run_dir }}')" \
             "${{ steps.watch.outputs.run_dir }}/digest.md"
 
       - name: Email failure alert

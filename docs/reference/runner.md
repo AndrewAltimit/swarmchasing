@@ -20,7 +20,9 @@ All workflows use `runs-on: self-hosted`. The runner is Ubuntu Linux arm64 (DGX 
 
 Results are not uploaded as artifacts: a public repo's artifacts are downloadable by anyone, and these are unreviewed leads. They stay in `$SWARMCHASE_DATA` on the runner and reach the admin only by email. Without the SMTP secrets, runs still write digests on the runner. One watch runs at a time, since runs share the state file and the record store.
 
-A source failure, an unavailable host or a failed canary is a health alert, which makes the run count as changed, so the digest reporting it is mailed the same run ([health](watch.md#health)). The job's timeout leaves room for one host's ten minutes of retries on HTTP 503: after those the run stops sending to that host, and its sources continue from their checkpoints next run.
+A source failure, an unavailable host or a failed canary is a health alert, which makes the run count as changed, so the digest reporting it is mailed the same run ([health](watch.md#health)). The mail's subject starts with the run's priority, which the watch step writes to its outputs beside `changed` ([needs attention](watch.md#needs-attention)).
+
+Model triage is opt-in through the variables below, and only for a model server the runner reaches on loopback or a private network; the watch refuses any other host before sending anything. The workflow wires no hosted model API. The job's timeout leaves room for one host's ten minutes of retries on HTTP 503: after those the run stops sending to that host, and its sources continue from their checkpoints next run.
 
 ## Secrets and variables
 
@@ -31,6 +33,8 @@ A source failure, an unavailable host or a failed canary is a health alert, whic
 | `MAIL_FROM`, `MAIL_TO` | secret | `watch.yml` | Sender and the admin's address. |
 | `URLQUERY_APIKEY` | secret | `watch.yml` | Enables the urlquery sources. |
 | `SWARMCHASE_DATA` | variable | `watch.yml` | Data directory on the runner; default `~/swarmchase-data`. |
+| `SWARMCHASE_WATCH_TRIAGE` | variable | `watch.yml` | `true` turns on [model triage](watch.md#model-triage) of new leads. Unset, no model is asked. |
+| `SWARMCHASE_LLM_URL`, `SWARMCHASE_LLM_MODEL` | variable | `watch.yml` | The model server triage asks, on the runner or its private network, and the model name. |
 | `SWARMCHASE_REQUIRE_BROWSER` | variable | `main-ci.yml` | `true` makes the deploy fail when the site XSS check cannot find Chrome, instead of skipping it with a warning. |
 
 Email goes out through [`send-mail.sh`](../../scripts/ci/send-mail.sh) (`curl` over SMTP), to the admin only.

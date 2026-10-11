@@ -39,6 +39,83 @@ pub struct CaseHit {
 pub struct CaseReport {
     pub lines: Vec<String>,
     pub changed: bool,
+    /// Cases with a publication clock that has run and an admin step due.
+    pub due: Vec<DueClock>,
+}
+
+/// A case whose clock has run: the indicator notice may be added, or an
+/// operator may be named. A fact for the admin, never acted on here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DueClock {
+    pub case: String,
+    /// `indicators` (the indicator notice may be added) or `naming` (a
+    /// naming update may name an operator).
+    pub clock: &'static str,
+    /// When it ran, as Unix seconds.
+    pub since: i64,
+    /// For `naming`: the hosts a naming update may name, defanged.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub hosts: Vec<String>,
+}
+
+impl DueClock {
+    /// The digest line, with the command that starts the step.
+    pub fn line(&self) -> String {
+        let id = &self.case;
+        match self.clock {
+            "naming" => format!(
+                "`{id}`: naming clock has run for {}; a naming update may name {}. Start with `swarmchase case notice {id} --naming`",
+                self.hosts.join(", "),
+                if self.hosts.len() == 1 { "it" } else { "them" }
+            ),
+            _ => format!(
+                "`{id}`: indicator notice clock ran {}; the notice may be added once its checks pass. Start with `swarmchase notice add {id}`",
+                sc_case::model::show_time(self.since)
+            ),
+        }
+    }
+
+    fn key(&self) -> String {
+        format!("clock:{}:{}", self.clock, self.hosts.join(","))
+    }
+}
+
+/// The clocks of case `c` that have run at `now` with the step still to
+/// take. The indicator clock counts only once a report has been sent, and
+/// only until the notice is added; the naming clock only after it.
+pub fn due_clocks(c: &case::Case, now: i64) -> Vec<DueClock> {
+    if c.status == CaseStatus::Closed {
+        return Vec::new();
+    }
+    if !c.notice_added() {
+        let clock = sc_case::lead::clock(c);
+        return match clock.not_before {
+            Some(t) if !c.sent.is_empty() && t <= now => vec![DueClock {
+                case: c.id.clone(),
+                clock: "indicators",
+                since: t,
+                hosts: Vec::new(),
+            }],
+            _ => Vec::new(),
+        };
+    }
+    let ready: Vec<sc_case::naming::Operator> = sc_case::naming::operators(c)
+        .into_iter()
+        .filter(|o| o.may_name(now))
+        .collect();
+    if ready.is_empty() {
+        return Vec::new();
+    }
+    vec![DueClock {
+        case: c.id.clone(),
+        clock: "naming",
+        since: ready
+            .iter()
+            .filter_map(|o| o.consent.or(o.not_before))
+            .min()
+            .unwrap_or(now),
+        hosts: ready.iter().map(|o| defang_host(&o.host)).collect(),
+    }]
 }
 
 /// A case as the status check sees it.
@@ -86,7 +163,7 @@ impl CaseCheck<'_> {
         watched.retain(|id, _| cases.iter().any(|c| &c.id == id));
         for c in &cases {
             let cw = watched.entry(c.id.clone()).or_default();
-            let (lines, keys) = match self.check(c, fresh, cw) {
+            let (mut lines, mut keys) = match self.check(c, fresh, cw) {
                 Ok(x) => x,
                 Err(e) => {
                     let l = format!(
@@ -97,6 +174,11 @@ impl CaseCheck<'_> {
                     (vec![l.clone()], BTreeSet::from([l]))
                 }
             };
+            for d in due_clocks(c, self.now) {
+                keys.insert(d.key());
+                lines.push(d.line());
+                report.due.push(d);
+            }
             report.changed |= keys.iter().any(|k| !cw.proposed.contains(k));
             cw.proposed = keys;
             report.lines.extend(lines);
@@ -424,6 +506,9 @@ mod tests {
             bursts: &[],
             cases: &r,
             window_days: 30,
+            leads: &[],
+            triage: &crate::watch::triage::TriageReport::default(),
+            priority: &crate::watch::priority::assess(&[], &[], &r.due),
         });
         assert!(
             d.changed && d.text.contains("## Case status (1)"),
@@ -527,6 +612,58 @@ mod tests {
         )
         .unwrap();
         assert!(!line.contains("propose"), "{line}");
+    }
+
+    /// A case with one provider and one targeted operator, both sent a
+    /// report at `CASE_TS` when `sent`.
+    fn clock_case(status: &str, sent: bool) -> case::Case {
+        let mut text = format!(
+            "id = \"p-1\"\ntitle = \"T\"\nstatus = \"{status}\"\nnotice = \"active\"\nopened = \"2026-09-22\"\n\
+             [[endpoint]]\nhost = \"portal.example.gov\"\nstate = \"targeted\"\n"
+        );
+        for (org, role, endpoint, address) in [
+            ("Example AI", "provider", "", "security@ai.example"),
+            (
+                "Portal",
+                "affected",
+                "endpoint = \"portal.example.gov\"\n",
+                "security@portal.example.gov",
+            ),
+        ] {
+            text += &format!(
+                "[[contact]]\norg = \"{org}\"\nrole = \"{role}\"\n{endpoint}channel = \"email\"\naddress = \"{address}\"\nsource = \"\"\nconfidence = \"high\"\nfound_on = \"2026-09-22\"\n"
+            );
+            if sent {
+                text += &format!(
+                    "[[sent]]\ndate = \"2026-09-22\"\nrecipient = \"{address}\"\nchannel = \"email\"\nat = \"{}\"\n",
+                    sc_case::model::rfc3339(CASE_TS)
+                );
+            }
+        }
+        case::Case::parse(&text).unwrap()
+    }
+
+    #[test]
+    fn due_case_clocks_are_found() {
+        // Nothing sent: no clock runs.
+        assert!(due_clocks(&clock_case("open", false), CASE_TS + 30 * DAY).is_empty());
+        // Reports sent: the indicator clock (0 h for these parties) has run.
+        let c = clock_case("reported", true);
+        let due = due_clocks(&c, CASE_TS + 60);
+        assert_eq!(due.len(), 1, "{due:?}");
+        assert_eq!((due[0].clock, due[0].since), ("indicators", CASE_TS));
+        assert!(due[0].line().contains("`swarmchase notice add p-1`"));
+        assert!(due_clocks(&c, CASE_TS - 60).is_empty());
+        // Once the notice is added, the naming clock: not yet, then due.
+        let c = clock_case("published", true);
+        assert!(due_clocks(&c, CASE_TS + DAY).is_empty());
+        let due = due_clocks(&c, CASE_TS + 60 * DAY);
+        assert_eq!(due.len(), 1, "{due:?}");
+        assert_eq!(due[0].clock, "naming");
+        assert_eq!(due[0].hosts, ["portal[.]example[.]gov"]);
+        assert!(due[0].line().contains("case notice p-1 --naming"));
+        // A closed case has none.
+        assert!(due_clocks(&clock_case("closed", true), CASE_TS + 60 * DAY).is_empty());
     }
 
     #[test]

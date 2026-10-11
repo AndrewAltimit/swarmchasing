@@ -11,7 +11,9 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `state.json` | Each source's time cursor, resume key or stream checkpoint, and health history. |
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
 | `runs/<stamp>/digest.md` | One directory per run, with its digest. |
+| `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
+| `labels/suggestions-local.ndjson` | The local model's suggestions on new leads ([model triage](#model-triage)). |
 | `cases/<id>/` | Case files ([cases](cases.md)). |
 | `rules/<version>.toml` | Rules versions that cases pin. |
 | `cache/http/` | Cached collector responses; safe to delete. |
@@ -56,7 +58,21 @@ Streamed and feed kinds read a bounded amount each run and report their coverage
 
 ## The digest
 
-Each run writes `runs/<stamp>/digest.md`. It opens with source health, then covers new clusters, tier changes and endpoints hit for the first time. When something changed, the scheduled workflow emails it to the admin; nothing else leaves the runner.
+Each run writes `runs/<stamp>/digest.md`. It opens with the run's priority and source health, then covers new clusters, tier changes and endpoints hit for the first time. When something changed, the scheduled workflow emails it to the admin, with the priority in the subject (`[swarmchase] [HIGH] watch digest <stamp>`); nothing else leaves the runner.
+
+### Needs attention
+
+The first block gives the run a priority, `high`, `medium` or `low`, and lists the facts that set it, highest first. Only deterministic facts count:
+
+| Priority | Set by |
+|---|---|
+| `high` | A new or escalated significant cluster at agent grade L2 or higher; a new significant record outside any cluster at L2; a case clock that has run. |
+| `medium` | Any health alert (a source failed, skipped, collapsed or failed its canary, a host down, rule drift); a significant lead below L2; a suggestive lead at L2 or higher. |
+| `low` | None of these. |
+
+A lead is a cluster above noise that is new since the last run or rose a tier, or a new significant record that joined no cluster. A case clock has run when reports were sent and the indicator notice's lead time has passed with the notice not yet added, or when the notice is added and an operator may now be named. Each due clock is also a *Case status* line with the command that starts the step; the watch takes no step itself.
+
+A model's suggestion never sets the priority: the same facts give the same priority whatever a model said. A new significant record outside any cluster at L2 or higher makes the run count as changed, like a new cluster.
 
 ### Health
 
@@ -101,6 +117,17 @@ Over the whole window, up to ten lines each:
 
 Clusters are named by number and stable key throughout (`C3 k-3f9a2c1b`), and hosts and values are defanged. These sections alone never make a run count as changed.
 
+### Model triage
+
+Off by default. With `watch --triage`, or `SWARMCHASE_WATCH_TRIAGE=1`, and `SWARMCHASE_LLM_URL` set, the watch asks the model at that URL for a label on each new lead's strongest record. It uses the client of [label suggestions](#label-suggestions), with the same rules: a loopback, private or link-local endpoint only, defanged text, no IP addresses, no tools, no proxy, no redirect.
+
+- **Limits.** Leads are asked strongest first, up to `--triage-max` per run (default 20, `SWARMCHASE_TRIAGE_MAX`) and within `--triage-secs` (default 600, `SWARMCHASE_TRIAGE_SECS`), each ask at most 60 s. After three failed asks in a row the rest are left for the next run.
+- **Failures.** A missing or refused endpoint, a timeout or a reply that is not the asked-for JSON is no suggestion. The run carries on and the digest says how many were asked, answered and left.
+- **Saved.** Answers are appended to `labels/suggestions-local.ndjson`, one `{"id", "label", "reason", "model", "run"}` per line, the format review reads. A record already in the file is not asked again; its earlier suggestion is shown.
+- **Shown.** *Model suggestions* lists each lead's suggestion with its tier and agent grade. An `agent` suggestion on a lead below L2 is marked as against the labelling rule, under which `unsure` is the most that grade allows.
+
+A suggestion is never a label: review saves it beside the admin's label as `suggested`, and eval reads only the admin's.
+
 ### Case status
 
 The watch matches new records against every case's indicators: its clusters' linking features and its endpoints, under the case's pinned rules. The *Case status* section then proposes:
@@ -110,6 +137,38 @@ The watch matches new records against every case's indicators: its clusters' lin
 - re-checking cases whose records would change tier under the current rules.
 
 The watch changes nothing itself. Apply an approved proposal with `swarmchase notice update <id> --kind status --status <s>`, which also updates the case.
+
+## The run summary
+
+Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for scripts, local dashboards and agents. `LATEST` names the newest run's stamp. The file stays in the data directory with the digest. Hosts in it are defanged, and it carries no record URL, IP address or model prompt. `schema` is `swarmchase-watch-run/1`; fields are only added within a version.
+
+| Field | Holds |
+|---|---|
+| `schema` | `swarmchase-watch-run/1`. |
+| `stamp`, `generated` | The run's stamp (its directory name) and its time, RFC 3339 UTC. |
+| `rules_version` | The rules the analysis ran with. |
+| `changed` | Whether the digest counts as changed, and so is emailed. |
+| `priority`, `reasons` | `high`, `medium` or `low`, and the facts behind it ([needs attention](#needs-attention)). |
+| `counts` | `records`, `new_records`, `significant`, `suggestive` and `clusters_above_noise` over the window. |
+| `leads` | The run's new leads, strongest first ([leads](#lead-fields)). |
+| `triage` | `enabled`, `model`, `asked`, `answered`, `reused`, `left` and an optional `note` ([model triage](#model-triage)). |
+| `health` | `alerts`, the `lost` capability lines, and `sources` with `name`, `kind`, `pulled`, `new` and `status`. |
+| `cases` | `due` clocks (`case`, `clock`, `since`, `hosts`) and the number of case status `lines`. |
+| `digest` | The digest's file name in the same directory. |
+
+A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
+
+### Lead fields
+
+| Field | Holds |
+|---|---|
+| `kind`, `change` | `cluster` or `record`; `new`, or `escalated` for a cluster that rose a tier. |
+| `id`, `key` | The cluster's number in this run (`C3`) and stable key, or the record id. |
+| `record`, `source` | The record a model is asked about (the cluster's strongest) and its source. |
+| `tier`, `score`, `records` | As the analysis gives them. |
+| `grade` | The agent grade, `L0` to `L4`. |
+| `targets` | Target hosts, defanged. |
+| `suggestion` | `label`, `reason` and `model` from the local model, when there is one. Never a label. |
 
 ## Retention
 
