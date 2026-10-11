@@ -68,18 +68,19 @@ function writeHash() {
 }
 
 // ── Steps (phones) ─────────────────────────────────────────────────────────
-function goStep(step) {
+function goStep(step, scroll = true) {
   for (const b of document.querySelectorAll(".steps button")) {
     if (b.dataset.step === step) b.setAttribute("aria-current", "step");
     else b.removeAttribute("aria-current");
   }
   for (const p of document.querySelectorAll("[data-pane]")) p.classList.toggle("on", p.dataset.pane === step);
-  if (mobile()) document.querySelector(".steps")?.scrollIntoView({ block: "start" });
+  // The pane's top, just under the sticky step bar (its scroll-margin-top).
+  if (mobile() && scroll) document.querySelector(`[data-pane="${step}"]`)?.scrollIntoView({ block: "start" });
   // A view drawn while its pane was hidden had no width: redraw it at its size.
   if (a && step === "explore" && Math.abs($("viz-panel").clientWidth - lastWidth) > 24) renderView();
 }
 for (const b of document.querySelectorAll(".steps button")) b.addEventListener("click", () => goStep(b.dataset.step));
-goStep("input");
+goStep("input", false);
 
 // ── Views (tabs) ───────────────────────────────────────────────────────────
 const tabs = [...document.querySelectorAll(".viz-tabs [role=tab]")];
@@ -198,6 +199,7 @@ function runAnalysis() {
   source = src;
   generation++;
   zoom = null;
+  allRecords = false;
   // Declared testing (the declaring text and the contact it names) is for
   // case notes only, never a public page: the page drops it on receipt, so
   // no view and no download shows it. The report draft follows the engine's
@@ -577,24 +579,41 @@ const ENDPOINT_HEAD = ["Host", "Tier", "Hits", "First seen", "Last seen", "Statu
 /** A cell labelled with its column, so the rows stack as cards on phones. */
 const cell = (head, col, attrs, ...kids) => el("td", { ...attrs, "data-label": head[col] }, ...kids);
 
+// The records list opens short (on phones, where each record is a card,
+// and on wide screens alike) with a button for the rest of the selection.
+const FEW_ROWS = 10;
+let allRecords = false; // the visitor asked for every record of this analysis
+
 function renderRecords() {
   const idx = [...scopeIdx()].sort((x, y) => a.results[y].score - a.results[x].score || a.results[x].obs.ts - a.results[y].obs.ts);
   $("records-h").textContent = `Flagged records (${scopeText()}: ${idx.length})`;
-  const shown = idx.slice(0, MAX_ROWS);
+  const capped = idx.slice(0, MAX_ROWS);
+  // A selected record past the short list shows the whole list.
+  const few = !allRecords && capped.length > FEW_ROWS + 2 && !(sel.r != null && capped.indexOf(sel.r) >= FEW_ROWS);
+  const shown = few ? capped.slice(0, FEW_ROWS) : capped;
   const body = el("tbody", {}, shown.map((i) => {
     const r = a.results[i];
     const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, tabindex: 0, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}`, "data-focus-key": `rec:${i}` },
-      cell(RECORD_HEAD, 0, {}, pill(r.tier)), cell(RECORD_HEAD, 1, { class: "num" }, r.score), cell(RECORD_HEAD, 2, { class: "nowrap", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
-      cell(RECORD_HEAD, 3, {}, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"),
+      cell(RECORD_HEAD, 0, { class: "rc-head" }, pill(r.tier)), cell(RECORD_HEAD, 1, { class: "num rc-head rc-lab" }, r.score),
+      cell(RECORD_HEAD, 2, { class: "nowrap rc-head", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
+      cell(RECORD_HEAD, 3, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"),
       cell(RECORD_HEAD, 4, { class: "url" }, safe(r.obs.url, 300)),
       cell(RECORD_HEAD, 5, {}, arr(r.hits).map((h) => el("span", { class: "chip" }, h.rule_id))));
     activate(tr, () => select({ r: sel.r === i ? null : i }));
     return tr;
   }));
-  if (idx.length > shown.length) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - shown.length} more not shown; download the analysis JSON for all.`)));
+  if (idx.length > capped.length && !few) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - capped.length} more not shown; download the analysis JSON for all.`)));
   if (!idx.length) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, "No flagged records in this selection.")));
+  const more = few ? el("button", { type: "button", class: "more-rows" }, `Show all ${capped.length}${idx.length > capped.length ? ` of ${idx.length}` : ""} records`) : null;
+  more?.addEventListener("click", () => {
+    allRecords = true;
+    renderRecords();
+    // Focus moves to the first record the button revealed.
+    const next = $("records").querySelectorAll("tbody tr.pick")[FEW_ROWS];
+    next?.focus();
+  });
   $("records").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "records" },
-    el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)));
+    el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)), ...(more ? [more] : []));
 }
 
 function renderEndpoints() {
@@ -923,6 +942,18 @@ async function prepared() {
   return t;
 }
 
+/**
+ * The audience choice as report options. The public notice has two stages
+ * (docs/policies.md): the indicator notice names no host, so it passes an
+ * empty set of target descriptions, which makes the engine name none and
+ * count the rest; the naming update is the public report with hosts.
+ */
+function audienceOpts(v) {
+  if (v === "indicator") return { audience: "public", target_descriptions: {} };
+  if (v === "naming" || v === "public") return { audience: "public" };
+  return { audience: v };
+}
+
 let reportSeq = 0;
 async function renderReport() {
   if (!a) return;
@@ -936,7 +967,7 @@ async function renderReport() {
     return;
   }
   const opts = {
-    audience: $("audience").value,
+    ...audienceOpts($("audience").value),
     cluster: sel.c,
     reporter: $("reporter").value || null,
     generated: new Date().toISOString().slice(0, 10),
@@ -977,6 +1008,7 @@ async function loadExample() {
   }
   syncRun();
   $("format").value = "ndjson";
+  syncPlaceholder();
   $("map").value = "";
   $("preset-note").hidden = true;
   if (runAnalysis()) $("example-note").hidden = false;
@@ -1001,6 +1033,14 @@ $("file").addEventListener("change", async (e) => {
   runAnalysis();
 });
 syncRun();
+// The records box shows a sample of the format picked: a Common Log Format
+// line for an access log (a documentation address and a placeholder path).
+const NDJSON_PLACEHOLDER = $("input").placeholder;
+const ACCESS_LOG_PLACEHOLDER = '203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET /search?q=... HTTP/1.1" 200 512 "-" "Mozilla/5.0"';
+function syncPlaceholder() {
+  $("input").placeholder = $("format").value === "access_log" ? ACCESS_LOG_PLACEHOLDER : NDJSON_PLACEHOLDER;
+}
+$("format").addEventListener("change", syncPlaceholder);
 for (const id of ["audience", "min-named"]) $(id).addEventListener("change", renderReport);
 $("reporter").addEventListener("input", renderReport);
 $("claims").addEventListener("input", () => (a ? renderReport() : readClaims()));
@@ -1014,7 +1054,10 @@ $("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.
   // which still holds the selection the example's analysis reads.
   if (h.preset === "access-log") {
     $("format").value = "access_log";
+    syncPlaceholder();
     $("map").placeholder = "host=www.example.org (your own host)";
+    // The preset's instructions come before the box they are about.
+    $("input-box").prepend($("preset-note"));
     $("preset-note").hidden = false;
     $("input").focus();
   } else if (h.example) {
