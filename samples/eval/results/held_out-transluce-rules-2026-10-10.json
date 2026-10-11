@@ -1,0 +1,2018 @@
+{
+  "result_schema": 2,
+  "kind": "held_out",
+  "description": "Transluce urlquery release: held-out sample of agent-labelled reports, fetched by id; labels from the release with this repository's overrides. No benign record: recall only.",
+  "rules_version": "2026-10-10",
+  "rules_sha256": "e1902276eb9a022de8014c634b8313f8ac29f77b312d4079323610831475554b",
+  "toolkit": {
+    "version": "0.1.0",
+    "commit": "5e3698be8be05b191a6e9b8a3c914fcc047ad07a"
+  },
+  "records": [
+    {
+      "path": "data/eval/transluce-holdout.ndjson",
+      "sha256": "1260fd2f90d8b7b7426e67a3a70a0e2116fe5f45de2242cd70469e565bc4ac78",
+      "bytes": 159921
+    }
+  ],
+  "labels": [
+    {
+      "path": "data/transluce/holdout.csv",
+      "sha256": "7f976c9b889625a971328f6913c5c8e3c5c18d236a25cb75f18c49b45da2bf32",
+      "bytes": 70204
+    },
+    {
+      "path": "samples/eval/overrides/transluce-labels.ndjson",
+      "sha256": "93c9e09c49172b1fc340ff345a75db983a139ae876e6660ae2c71b590614412f",
+      "bytes": 325
+    }
+  ],
+  "counts": {
+    "labelled": 150,
+    "agents": 150,
+    "benign": 0,
+    "non_synthetic_labelled": 150,
+    "non_synthetic_benign": 0
+  },
+  "allow_no_benign": true,
+  "summary": {
+    "schema": 1,
+    "rules_version": "2026-10-10",
+    "labelled": 150,
+    "agents": 150,
+    "benign": 0,
+    "unlabelled": 0,
+    "missing_records": 1,
+    "tiers": [
+      {
+        "tier": "suggestive",
+        "tp": 37,
+        "fp": 0,
+        "fn": 113,
+        "tn": 0,
+        "precision": {
+          "k": 37,
+          "n": 37,
+          "value": 1.0,
+          "lo": 0.9059421741627975,
+          "hi": 1.0
+        },
+        "recall": {
+          "k": 37,
+          "n": 150,
+          "value": 0.24666666666666667,
+          "lo": 0.18458162955288543,
+          "hi": 0.3214032942602734
+        }
+      },
+      {
+        "tier": "significant",
+        "tp": 28,
+        "fp": 0,
+        "fn": 122,
+        "tn": 0,
+        "precision": {
+          "k": 28,
+          "n": 28,
+          "value": 1.0,
+          "lo": 0.8793566952341542,
+          "hi": 1.0
+        },
+        "recall": {
+          "k": 28,
+          "n": 150,
+          "value": 0.18666666666666668,
+          "lo": 0.13242415483319162,
+          "hi": 0.2565571983041365
+        }
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "relay.jina",
+        "tactics": [
+          "T1"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "relay.markdown_new",
+        "tactics": [
+          "T1"
+        ],
+        "tp": 1,
+        "fp": 0,
+        "precision": {
+          "k": 1,
+          "n": 1,
+          "value": 1.0,
+          "lo": 0.20654931437723745,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "relay.microlink",
+        "tactics": [
+          "T1"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "relay.hrefli",
+        "tactics": [
+          "T1"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "relay.translate_goog",
+        "tactics": [
+          "T1"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "relay.allorigins",
+        "tactics": [
+          "T1"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "relay.corsproxy",
+        "tactics": [
+          "T1"
+        ],
+        "tp": 1,
+        "fp": 0,
+        "precision": {
+          "k": 1,
+          "n": 1,
+          "value": 1.0,
+          "lo": 0.20654931437723745,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "carrier.httpbin",
+        "tactics": [
+          "T2"
+        ],
+        "tp": 32,
+        "fp": 0,
+        "precision": {
+          "k": 32,
+          "n": 32,
+          "value": 1.0,
+          "lo": 0.8928208017449293,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "carrier.livecodes",
+        "tactics": [
+          "T2"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "carrier.codesandbox",
+        "tactics": [
+          "T2"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "carrier.data_url_script",
+        "tactics": [
+          "T2"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "carrier.inline_fetch_program",
+        "tactics": [
+          "T2"
+        ],
+        "tp": 7,
+        "fp": 0,
+        "precision": {
+          "k": 7,
+          "n": 7,
+          "value": 1.0,
+          "lo": 0.6456695649333126,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "carrier.form_post_program",
+        "tactics": [
+          "T2"
+        ],
+        "tp": 22,
+        "fp": 0,
+        "precision": {
+          "k": 22,
+          "n": 22,
+          "value": 1.0,
+          "lo": 0.8513451253913791,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "carrier.html_program",
+        "tactics": [
+          "T2"
+        ],
+        "tp": 32,
+        "fp": 0,
+        "precision": {
+          "k": 32,
+          "n": 32,
+          "value": 1.0,
+          "lo": 0.8928208017449293,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "exploit.sqli_union",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exploit.sqli_boolean",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exploit.traversal",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exploit.traversal_single",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exploit.sqli_quote",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exploit.xss",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 1,
+        "fp": 0,
+        "precision": {
+          "k": 1,
+          "n": 1,
+          "value": 1.0,
+          "lo": 0.20654931437723745,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "exploit.ssti",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exploit.cmdi",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exploit.boundary_ids",
+        "tactics": [
+          "T4"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.uq_tags",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 3,
+        "fp": 0,
+        "precision": {
+          "k": 3,
+          "n": 3,
+          "value": 1.0,
+          "lo": 0.43850296824495455,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "marker.test_tag",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 1,
+        "fp": 0,
+        "precision": {
+          "k": 1,
+          "n": 1,
+          "value": 1.0,
+          "lo": 0.20654931437723745,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "marker.oai_tag",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.callback_seq",
+        "tactics": [
+          "T7"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.title_write",
+        "tactics": [
+          "T7"
+        ],
+        "tp": 2,
+        "fp": 0,
+        "precision": {
+          "k": 2,
+          "n": 2,
+          "value": 1.0,
+          "lo": 0.34238022750665303,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "marker.md_link",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.md_url_wrapper",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.placeholder",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.template_unrendered",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.example_host_value",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.tool_call_markup",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.tool_call_json",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.json_quote_residue",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.escaped_newline",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 3,
+        "fp": 0,
+        "precision": {
+          "k": 3,
+          "n": 3,
+          "value": 1.0,
+          "lo": 0.43850296824495455,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "marker.truncated_output",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.chat_opener",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.doubled_scheme",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.garbled_scheme",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.impossible_date",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.placeholder_identity",
+        "tactics": [
+          "T5"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "marker.repeated_token",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "cache.buster",
+        "tactics": [
+          "T1"
+        ],
+        "tp": 3,
+        "fp": 0,
+        "precision": {
+          "k": 3,
+          "n": 3,
+          "value": 1.0,
+          "lo": 0.43850296824495455,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "selfid.vendor_name",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exfil.webhook_site",
+        "tactics": [
+          "T7"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exfil.requestbin",
+        "tactics": [
+          "T7"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exfil.oast_service",
+        "tactics": [
+          "T7"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exfil.ntfy",
+        "tactics": [
+          "T7"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exfil.paste",
+        "tactics": [
+          "T7"
+        ],
+        "tp": 1,
+        "fp": 0,
+        "precision": {
+          "k": 1,
+          "n": 1,
+          "value": 1.0,
+          "lo": 0.20654931437723745,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "exfil.cookie",
+        "tactics": [
+          "T6"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "exfil.disposable_mail",
+        "tactics": [
+          "T5"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "antibot.baxia",
+        "tactics": [
+          "T3"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "antibot.captcha_solver",
+        "tactics": [
+          "T3"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "antibot.ocr_captcha",
+        "tactics": [
+          "T3"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "header.via_hysandbox",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "header.via_ats",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "header.gzip_only_requests",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "header.scripted_ua",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "header.headless_ua",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "outcome.neterror",
+        "tactics": [
+          "T3"
+        ],
+        "tp": 19,
+        "fp": 0,
+        "precision": {
+          "k": 19,
+          "n": 19,
+          "value": 1.0,
+          "lo": 0.8318207759473837,
+          "hi": 1.0
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": true
+      },
+      {
+        "rule_id": "outcome.challenge",
+        "tactics": [
+          "T3"
+        ],
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      },
+      {
+        "rule_id": "infra.hysandbox_host",
+        "tactics": [
+          "untagged"
+        ],
+        "artifact": true,
+        "tp": 0,
+        "fp": 0,
+        "precision": {
+          "k": 0,
+          "n": 0,
+          "value": null,
+          "lo": null,
+          "hi": null
+        },
+        "hard_negatives": 0,
+        "hard_negatives_fired": 0,
+        "covered": false
+      }
+    ],
+    "coverage": {
+      "rules": 64,
+      "covered": 14,
+      "allowed": 0,
+      "uncovered": [
+        "relay.jina",
+        "relay.microlink",
+        "relay.hrefli",
+        "relay.translate_goog",
+        "relay.allorigins",
+        "carrier.livecodes",
+        "carrier.codesandbox",
+        "carrier.data_url_script",
+        "exploit.sqli_union",
+        "exploit.sqli_boolean",
+        "exploit.traversal",
+        "exploit.traversal_single",
+        "exploit.sqli_quote",
+        "exploit.ssti",
+        "exploit.cmdi",
+        "exploit.boundary_ids",
+        "marker.oai_tag",
+        "marker.callback_seq",
+        "marker.md_link",
+        "marker.md_url_wrapper",
+        "marker.placeholder",
+        "marker.template_unrendered",
+        "marker.example_host_value",
+        "marker.tool_call_markup",
+        "marker.tool_call_json",
+        "marker.json_quote_residue",
+        "marker.truncated_output",
+        "marker.chat_opener",
+        "marker.doubled_scheme",
+        "marker.garbled_scheme",
+        "marker.impossible_date",
+        "marker.placeholder_identity",
+        "marker.repeated_token",
+        "selfid.vendor_name",
+        "exfil.webhook_site",
+        "exfil.requestbin",
+        "exfil.oast_service",
+        "exfil.ntfy",
+        "exfil.cookie",
+        "exfil.disposable_mail",
+        "antibot.baxia",
+        "antibot.captcha_solver",
+        "antibot.ocr_captcha",
+        "header.via_hysandbox",
+        "header.via_ats",
+        "header.gzip_only_requests",
+        "header.scripted_ua",
+        "header.headless_ua",
+        "outcome.challenge",
+        "infra.hysandbox_host"
+      ],
+      "with_hard_negatives": 0,
+      "unknown_hard_negative_ids": []
+    },
+    "agent_classes": [
+      {
+        "name": "custom_program",
+        "n": 31,
+        "suggestive": {
+          "k": 31,
+          "n": 31,
+          "value": 1.0,
+          "lo": 0.889744604539564,
+          "hi": 1.0
+        },
+        "significant": {
+          "k": 27,
+          "n": 31,
+          "value": 0.8709677419354839,
+          "lo": 0.7114759374369357,
+          "hi": 0.9486571562537085
+        }
+      },
+      {
+        "name": "indirection",
+        "n": 6,
+        "suggestive": {
+          "k": 2,
+          "n": 6,
+          "value": 0.3333333333333333,
+          "lo": 0.09677141110578041,
+          "hi": 0.700006684861608
+        },
+        "significant": {
+          "k": 0,
+          "n": 6,
+          "value": 0.0,
+          "lo": 0.0,
+          "hi": 0.39033428790216534
+        }
+      },
+      {
+        "name": "source_request",
+        "n": 113,
+        "suggestive": {
+          "k": 4,
+          "n": 113,
+          "value": 0.035398230088495575,
+          "lo": 0.013850178551374825,
+          "hi": 0.08749620089486373
+        },
+        "significant": {
+          "k": 1,
+          "n": 113,
+          "value": 0.008849557522123894,
+          "lo": 0.0015638760684392287,
+          "hi": 0.0484308679175844
+        }
+      }
+    ],
+    "benign_classes": [],
+    "tactics": [
+      {
+        "name": "T1",
+        "n": 5,
+        "suggestive": {
+          "k": 3,
+          "n": 5,
+          "value": 0.6,
+          "lo": 0.2307242812760128,
+          "hi": 0.882379225767352
+        },
+        "significant": {
+          "k": 2,
+          "n": 5,
+          "value": 0.4,
+          "lo": 0.11762077423264783,
+          "hi": 0.769275718723987
+        }
+      },
+      {
+        "name": "T2",
+        "n": 34,
+        "suggestive": {
+          "k": 32,
+          "n": 34,
+          "value": 0.9411764705882353,
+          "lo": 0.80906393095719,
+          "hi": 0.9837173447898772
+        },
+        "significant": {
+          "k": 28,
+          "n": 34,
+          "value": 0.8235294117647058,
+          "lo": 0.6648626260015724,
+          "hi": 0.9165103095462768
+        }
+      },
+      {
+        "name": "T3",
+        "n": 19,
+        "suggestive": {
+          "k": 6,
+          "n": 19,
+          "value": 0.3157894736842105,
+          "lo": 0.1536437908779228,
+          "hi": 0.5398959232467253
+        },
+        "significant": {
+          "k": 4,
+          "n": 19,
+          "value": 0.21052631578947367,
+          "lo": 0.0850767663291625,
+          "hi": 0.43334278443814167
+        }
+      },
+      {
+        "name": "T4",
+        "n": 1,
+        "suggestive": {
+          "k": 1,
+          "n": 1,
+          "value": 1.0,
+          "lo": 0.20654931437723745,
+          "hi": 1.0
+        },
+        "significant": {
+          "k": 1,
+          "n": 1,
+          "value": 1.0,
+          "lo": 0.20654931437723745,
+          "hi": 1.0
+        }
+      },
+      {
+        "name": "T7",
+        "n": 3,
+        "suggestive": {
+          "k": 2,
+          "n": 3,
+          "value": 0.6666666666666666,
+          "lo": 0.20765960080204765,
+          "hi": 0.9385080552796037
+        },
+        "significant": {
+          "k": 2,
+          "n": 3,
+          "value": 0.6666666666666666,
+          "lo": 0.20765960080204765,
+          "hi": 0.9385080552796037
+        }
+      },
+      {
+        "name": "no_rule_fired",
+        "n": 95,
+        "suggestive": {
+          "k": 0,
+          "n": 95,
+          "value": 0.0,
+          "lo": 0.0,
+          "hi": 0.038864853539472964
+        },
+        "significant": {
+          "k": 0,
+          "n": 95,
+          "value": 0.0,
+          "lo": 0.0,
+          "hi": 0.038864853539472964
+        }
+      },
+      {
+        "name": "untagged",
+        "n": 7,
+        "suggestive": {
+          "k": 7,
+          "n": 7,
+          "value": 1.0,
+          "lo": 0.6456695649333126,
+          "hi": 1.0
+        },
+        "significant": {
+          "k": 1,
+          "n": 7,
+          "value": 0.14285714285714285,
+          "lo": 0.02567962434474355,
+          "hi": 0.5131278292743189
+        }
+      }
+    ],
+    "clusters": {
+      "run_labelled": 0,
+      "runs": 0,
+      "bcubed_precision": null,
+      "bcubed_recall": null,
+      "bcubed_f1": null,
+      "clusters_checked": 1,
+      "false_merges": [],
+      "false_merge_rate": 0.0,
+      "false_splits": []
+    },
+    "cluster_tiers": [
+      {
+        "tier": "suggestive",
+        "tp": 36,
+        "fp": 0,
+        "fn": 113,
+        "tn": 0,
+        "precision": {
+          "k": 36,
+          "n": 36,
+          "value": 1.0,
+          "lo": 0.9035813714055363,
+          "hi": 1.0
+        },
+        "recall": {
+          "k": 36,
+          "n": 149,
+          "value": 0.24161073825503357,
+          "lo": 0.179932173819402,
+          "hi": 0.31627781662348886
+        }
+      },
+      {
+        "tier": "significant",
+        "tp": 27,
+        "fp": 0,
+        "fn": 122,
+        "tn": 0,
+        "precision": {
+          "k": 27,
+          "n": 27,
+          "value": 1.0,
+          "lo": 0.8754449702581327,
+          "hi": 1.0
+        },
+        "recall": {
+          "k": 27,
+          "n": 149,
+          "value": 0.18120805369127516,
+          "lo": 0.12763054722889805,
+          "hi": 0.2508103500707724
+        }
+      }
+    ],
+    "non_synthetic": {
+      "name": "non_synthetic",
+      "labelled": 150,
+      "agents": 150,
+      "benign": 0,
+      "tiers": [
+        {
+          "tier": "suggestive",
+          "tp": 37,
+          "fp": 0,
+          "fn": 113,
+          "tn": 0,
+          "precision": {
+            "k": 37,
+            "n": 37,
+            "value": 1.0,
+            "lo": 0.9059421741627975,
+            "hi": 1.0
+          },
+          "recall": {
+            "k": 37,
+            "n": 150,
+            "value": 0.24666666666666667,
+            "lo": 0.18458162955288543,
+            "hi": 0.3214032942602734
+          }
+        },
+        {
+          "tier": "significant",
+          "tp": 28,
+          "fp": 0,
+          "fn": 122,
+          "tn": 0,
+          "precision": {
+            "k": 28,
+            "n": 28,
+            "value": 1.0,
+            "lo": 0.8793566952341542,
+            "hi": 1.0
+          },
+          "recall": {
+            "k": 28,
+            "n": 150,
+            "value": 0.18666666666666668,
+            "lo": 0.13242415483319162,
+            "hi": 0.2565571983041365
+          }
+        }
+      ],
+      "cluster_tiers": [
+        {
+          "tier": "suggestive",
+          "tp": 36,
+          "fp": 0,
+          "fn": 113,
+          "tn": 0,
+          "precision": {
+            "k": 36,
+            "n": 36,
+            "value": 1.0,
+            "lo": 0.9035813714055363,
+            "hi": 1.0
+          },
+          "recall": {
+            "k": 36,
+            "n": 149,
+            "value": 0.24161073825503357,
+            "lo": 0.179932173819402,
+            "hi": 0.31627781662348886
+          }
+        },
+        {
+          "tier": "significant",
+          "tp": 27,
+          "fp": 0,
+          "fn": 122,
+          "tn": 0,
+          "precision": {
+            "k": 27,
+            "n": 27,
+            "value": 1.0,
+            "lo": 0.8754449702581327,
+            "hi": 1.0
+          },
+          "recall": {
+            "k": 27,
+            "n": 149,
+            "value": 0.18120805369127516,
+            "lo": 0.12763054722889805,
+            "hi": 0.2508103500707724
+          }
+        }
+      ]
+    },
+    "by_provenance": [
+      {
+        "name": "collected",
+        "labelled": 150,
+        "agents": 150,
+        "benign": 0,
+        "tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 37,
+            "fp": 0,
+            "fn": 113,
+            "tn": 0,
+            "precision": {
+              "k": 37,
+              "n": 37,
+              "value": 1.0,
+              "lo": 0.9059421741627975,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 37,
+              "n": 150,
+              "value": 0.24666666666666667,
+              "lo": 0.18458162955288543,
+              "hi": 0.3214032942602734
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 28,
+            "fp": 0,
+            "fn": 122,
+            "tn": 0,
+            "precision": {
+              "k": 28,
+              "n": 28,
+              "value": 1.0,
+              "lo": 0.8793566952341542,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 28,
+              "n": 150,
+              "value": 0.18666666666666668,
+              "lo": 0.13242415483319162,
+              "hi": 0.2565571983041365
+            }
+          }
+        ],
+        "cluster_tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 36,
+            "fp": 0,
+            "fn": 113,
+            "tn": 0,
+            "precision": {
+              "k": 36,
+              "n": 36,
+              "value": 1.0,
+              "lo": 0.9035813714055363,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 36,
+              "n": 149,
+              "value": 0.24161073825503357,
+              "lo": 0.179932173819402,
+              "hi": 0.31627781662348886
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 27,
+            "fp": 0,
+            "fn": 122,
+            "tn": 0,
+            "precision": {
+              "k": 27,
+              "n": 27,
+              "value": 1.0,
+              "lo": 0.8754449702581327,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 27,
+              "n": 149,
+              "value": 0.18120805369127516,
+              "lo": 0.12763054722889805,
+              "hi": 0.2508103500707724
+            }
+          }
+        ]
+      }
+    ],
+    "by_source": [
+      {
+        "name": "urlquery",
+        "labelled": 150,
+        "agents": 150,
+        "benign": 0,
+        "tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 37,
+            "fp": 0,
+            "fn": 113,
+            "tn": 0,
+            "precision": {
+              "k": 37,
+              "n": 37,
+              "value": 1.0,
+              "lo": 0.9059421741627975,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 37,
+              "n": 150,
+              "value": 0.24666666666666667,
+              "lo": 0.18458162955288543,
+              "hi": 0.3214032942602734
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 28,
+            "fp": 0,
+            "fn": 122,
+            "tn": 0,
+            "precision": {
+              "k": 28,
+              "n": 28,
+              "value": 1.0,
+              "lo": 0.8793566952341542,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 28,
+              "n": 150,
+              "value": 0.18666666666666668,
+              "lo": 0.13242415483319162,
+              "hi": 0.2565571983041365
+            }
+          }
+        ],
+        "cluster_tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 36,
+            "fp": 0,
+            "fn": 113,
+            "tn": 0,
+            "precision": {
+              "k": 36,
+              "n": 36,
+              "value": 1.0,
+              "lo": 0.9035813714055363,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 36,
+              "n": 149,
+              "value": 0.24161073825503357,
+              "lo": 0.179932173819402,
+              "hi": 0.31627781662348886
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 27,
+            "fp": 0,
+            "fn": 122,
+            "tn": 0,
+            "precision": {
+              "k": 27,
+              "n": 27,
+              "value": 1.0,
+              "lo": 0.8754449702581327,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 27,
+              "n": 149,
+              "value": 0.18120805369127516,
+              "lo": 0.12763054722889805,
+              "hi": 0.2508103500707724
+            }
+          }
+        ]
+      }
+    ],
+    "by_file": [
+      {
+        "name": "holdout.csv",
+        "labelled": 150,
+        "agents": 150,
+        "benign": 0,
+        "tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 37,
+            "fp": 0,
+            "fn": 113,
+            "tn": 0,
+            "precision": {
+              "k": 37,
+              "n": 37,
+              "value": 1.0,
+              "lo": 0.9059421741627975,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 37,
+              "n": 150,
+              "value": 0.24666666666666667,
+              "lo": 0.18458162955288543,
+              "hi": 0.3214032942602734
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 28,
+            "fp": 0,
+            "fn": 122,
+            "tn": 0,
+            "precision": {
+              "k": 28,
+              "n": 28,
+              "value": 1.0,
+              "lo": 0.8793566952341542,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 28,
+              "n": 150,
+              "value": 0.18666666666666668,
+              "lo": 0.13242415483319162,
+              "hi": 0.2565571983041365
+            }
+          }
+        ],
+        "cluster_tiers": [
+          {
+            "tier": "suggestive",
+            "tp": 36,
+            "fp": 0,
+            "fn": 113,
+            "tn": 0,
+            "precision": {
+              "k": 36,
+              "n": 36,
+              "value": 1.0,
+              "lo": 0.9035813714055363,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 36,
+              "n": 149,
+              "value": 0.24161073825503357,
+              "lo": 0.179932173819402,
+              "hi": 0.31627781662348886
+            }
+          },
+          {
+            "tier": "significant",
+            "tp": 27,
+            "fp": 0,
+            "fn": 122,
+            "tn": 0,
+            "precision": {
+              "k": 27,
+              "n": 27,
+              "value": 1.0,
+              "lo": 0.8754449702581327,
+              "hi": 1.0
+            },
+            "recall": {
+              "k": 27,
+              "n": 149,
+              "value": 0.18120805369127516,
+              "lo": 0.12763054722889805,
+              "hi": 0.2508103500707724
+            }
+          }
+        ]
+      }
+    ],
+    "calibration": {
+      "by_tier": [
+        {
+          "name": "noise",
+          "precision": {
+            "k": 113,
+            "n": 113,
+            "value": 1.0,
+            "lo": 0.967122467834048,
+            "hi": 1.0
+          }
+        },
+        {
+          "name": "suggestive",
+          "precision": {
+            "k": 9,
+            "n": 9,
+            "value": 1.0,
+            "lo": 0.7008549515804559,
+            "hi": 1.0
+          }
+        },
+        {
+          "name": "significant",
+          "precision": {
+            "k": 28,
+            "n": 28,
+            "value": 1.0,
+            "lo": 0.8793566952341542,
+            "hi": 1.0
+          }
+        }
+      ],
+      "by_agent_level": [
+        {
+          "name": "unflagged",
+          "precision": {
+            "k": 95,
+            "n": 95,
+            "value": 1.0,
+            "lo": 0.9611351464605271,
+            "hi": 1.0
+          }
+        },
+        {
+          "name": "unclustered",
+          "precision": {
+            "k": 53,
+            "n": 53,
+            "value": 1.0,
+            "lo": 0.932418011423458,
+            "hi": 1.0
+          }
+        },
+        {
+          "name": "L0",
+          "precision": {
+            "k": 2,
+            "n": 2,
+            "value": 1.0,
+            "lo": 0.34238022750665303,
+            "hi": 1.0
+          }
+        }
+      ]
+    }
+  }
+}
