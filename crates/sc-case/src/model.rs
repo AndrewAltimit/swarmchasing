@@ -1,12 +1,30 @@
 //! What `case.toml` holds.
+//!
+//! The enums parse from the words the CLI takes (`FromStr`), so a command
+//! line can use them directly; serde names are the `case.toml` spelling.
 
 use crate::evidence::OperatorEvidence;
+pub use crate::notice::NoticeStatus;
 use sc_core::{Analysis, Claim, EndpointOptions, Evidence, SwarmEdgeKind, endpoints};
-pub use sc_publish::NoticeStatus;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
+/// Parse `s` as one of `options` (`(word, value)`), ignoring case and
+/// treating `-` and `_` alike; the error lists the words.
+fn parse_word<T: Copy>(what: &str, s: &str, options: &[(&str, T)]) -> Result<T, String> {
+    let norm = |x: &str| x.trim().to_ascii_lowercase().replace('-', "_");
+    let want = norm(s);
+    options
+        .iter()
+        .find(|(w, _)| norm(w) == want)
+        .map(|(_, v)| *v)
+        .ok_or_else(|| {
+            let words: Vec<&str> = options.iter().map(|(w, _)| *w).collect();
+            format!("unknown {what} `{s}` ({})", words.join("|"))
+        })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CaseStatus {
     /// Gathering evidence; nothing sent.
@@ -19,10 +37,37 @@ pub enum CaseStatus {
     Closed,
 }
 
+impl CaseStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Reported => "reported",
+            Self::Published => "published",
+            Self::Closed => "closed",
+        }
+    }
+}
+
+impl std::str::FromStr for CaseStatus {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        parse_word(
+            "case status",
+            s,
+            &[
+                ("open", Self::Open),
+                ("reported", Self::Reported),
+                ("published", Self::Published),
+                ("closed", Self::Closed),
+            ],
+        )
+    }
+}
+
 /// The public notice draft inside a case directory.
 pub const NOTICE_DRAFT: &str = "notice.md";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EndpointState {
     /// Not yet decided by the admin.
@@ -48,6 +93,28 @@ impl EndpointState {
             Self::NotAffected => "not affected",
         }
     }
+
+    /// Compromised, targeted or historical: an endpoint a notice names.
+    pub fn affected(self) -> bool {
+        matches!(self, Self::Compromised | Self::Targeted | Self::Historical)
+    }
+}
+
+impl std::str::FromStr for EndpointState {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        parse_word(
+            "endpoint state",
+            s,
+            &[
+                ("unreviewed", Self::Unreviewed),
+                ("compromised", Self::Compromised),
+                ("targeted", Self::Targeted),
+                ("historical", Self::Historical),
+                ("not-affected", Self::NotAffected),
+            ],
+        )
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -67,12 +134,78 @@ pub struct CaseEndpoint {
     pub single_source: Option<String>,
 }
 
+/// Who a contact is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContactRole {
+    /// The AI provider or agent host.
+    Provider,
+    /// An affected operator.
+    Affected,
+    /// The registrar's abuse contact for an affected endpoint's domain.
+    Registrar,
+    /// The hosting network of an affected endpoint.
+    Host,
+    /// A national or sector CSIRT.
+    Csirt,
+    /// The declared owner of an "authorised test".
+    DeclaredOwner,
+    /// A role this toolkit version does not know.
+    #[serde(other)]
+    Other,
+}
+
+impl ContactRole {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Provider => "provider",
+            Self::Affected => "affected",
+            Self::Registrar => "registrar",
+            Self::Host => "host",
+            Self::Csirt => "csirt",
+            Self::DeclaredOwner => "declared_owner",
+            Self::Other => "other",
+        }
+    }
+
+    /// Whether the contact speaks for an affected endpoint (its operator,
+    /// registrar or host) rather than for the provider or a responder.
+    pub fn for_endpoint(self) -> bool {
+        matches!(self, Self::Affected | Self::Registrar | Self::Host)
+    }
+}
+
+impl std::str::FromStr for ContactRole {
+    type Err = String;
+    /// The parties a hand-added contact may be for (`case contact add
+    /// --party`): `operator` is the affected operator.
+    fn from_str(s: &str) -> Result<Self, String> {
+        parse_word(
+            "party",
+            s,
+            &[
+                ("provider", Self::Provider),
+                ("operator", Self::Affected),
+                ("affected", Self::Affected),
+                ("registrar", Self::Registrar),
+                ("host", Self::Host),
+                ("csirt", Self::Csirt),
+                ("declared-owner", Self::DeclaredOwner),
+            ],
+        )
+    }
+}
+
+impl std::fmt::Display for ContactRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.id())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contact {
     pub org: String,
-    /// provider | affected (an operator) | registrar | host | csirt |
-    /// declared_owner
-    pub role: String,
+    pub role: ContactRole,
     /// The endpoint this contact is for, when it is for one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
@@ -87,6 +220,15 @@ pub struct Contact {
     /// security | abuse, for provider contacts from the directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purpose: Option<String>,
+}
+
+impl Contact {
+    /// Whether this contact is for endpoint `host`.
+    pub fn is_for(&self, host: &str) -> bool {
+        self.endpoint
+            .as_deref()
+            .is_some_and(|h| h.eq_ignore_ascii_case(host))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,9 +296,7 @@ pub struct NoContact {
 
 /// An innocent or misleading explanation the self-review checklist asks
 /// about before a notice is added.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, clap::ValueEnum,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AlternativeKind {
     /// An authorised red-team or research evaluation.
@@ -188,6 +328,14 @@ impl AlternativeKind {
             Self::SpoofedSelfId => "spoofed-self-id",
             Self::PlantedRecords => "planted-records",
         }
+    }
+}
+
+impl std::str::FromStr for AlternativeKind {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        let options: Vec<(&str, Self)> = Self::ALL.iter().map(|k| (k.id(), *k)).collect();
+        parse_word("alternative", s, &options)
     }
 }
 
@@ -304,7 +452,7 @@ pub struct Case {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_grade: Option<sc_core::GradeDecision>,
     /// The lead time for targeted and historical endpoints' operators, in
-    /// hours (4 to 12); unset is the default ([`super::lead::OPERATOR_DEFAULT`]).
+    /// hours (4 to 12); unset is the default ([`crate::lead::OPERATOR_DEFAULT`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead_hours: Option<u32>,
     /// Parties no contact was found for.
@@ -328,7 +476,62 @@ pub struct Case {
     pub reread: Option<DraftStamp>,
 }
 
+/// Check a case id: lowercase letters, digits and hyphens, at most 64
+/// characters, not starting with a hyphen. It names a directory.
+pub fn check_id(id: &str) -> crate::Result<()> {
+    let ok = !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && !id.starts_with('-');
+    if !ok {
+        crate::bail!(
+            "case id `{id}`: use lowercase letters, digits and hyphens (e.g. 2026-10-portal-sqli)"
+        );
+    }
+    Ok(())
+}
+
 impl Case {
+    /// A new open case, pinned to `rules_version`, with no endpoints yet.
+    pub fn new(id: &str, title: &str, opened: &str, rules_version: Option<String>) -> Case {
+        Case {
+            id: id.to_string(),
+            title: title.to_string(),
+            status: CaseStatus::Open,
+            notice: NoticeStatus::Active,
+            opened: opened.to_string(),
+            publish_pending: None,
+            min_named: Evidence::default(),
+            rules_version,
+            endpoints: Vec::new(),
+            claims: Vec::new(),
+            contacts: Vec::new(),
+            decisions: Vec::new(),
+            sent: Vec::new(),
+            evidence: Vec::new(),
+            fleets: Vec::new(),
+            agent_grade: None,
+            lead_hours: None,
+            no_contact: Vec::new(),
+            alternatives: Vec::new(),
+            plant_reviews: Vec::new(),
+            drafted: None,
+            reread: None,
+        }
+    }
+
+    /// `case.toml` text.
+    pub fn parse(text: &str) -> crate::Result<Case> {
+        toml::from_str(text).map_err(|e| crate::Error(e.to_string()))
+    }
+
+    /// The case as `case.toml` text.
+    pub fn to_toml(&self) -> crate::Result<String> {
+        toml::to_string_pretty(self).map_err(|e| crate::Error(e.to_string()))
+    }
+
     pub fn log(&mut self, today: &str, text: impl Into<String>) {
         self.decisions.push(Decision {
             date: today.to_string(),
@@ -343,8 +546,29 @@ impl Case {
             .find(|f| f.clusters.iter().any(|k| k == key))
     }
 
+    /// The endpoint for `host`, any case.
+    pub fn endpoint(&self, host: &str) -> Option<&CaseEndpoint> {
+        self.endpoints
+            .iter()
+            .find(|e| e.host.eq_ignore_ascii_case(host))
+    }
+
+    /// Hosts of endpoints still unreviewed.
+    pub fn unreviewed(&self) -> Vec<&str> {
+        self.endpoints
+            .iter()
+            .filter(|e| e.state == EndpointState::Unreviewed)
+            .map(|e| e.host.as_str())
+            .collect()
+    }
+
+    /// Contacts in `role`.
+    pub fn contacts_in(&self, role: ContactRole) -> impl Iterator<Item = &Contact> {
+        self.contacts.iter().filter(move |x| x.role == role)
+    }
+
     /// Add every flagged target host not yet listed, as unreviewed.
-    pub(crate) fn add_endpoints(&mut self, a: &Analysis) -> usize {
+    pub fn add_endpoints(&mut self, a: &Analysis) -> usize {
         let known: BTreeSet<String> = self.endpoints.iter().map(|e| e.host.clone()).collect();
         let mut added = 0;
         for v in endpoints(a, &EndpointOptions::default()) {
@@ -357,5 +581,65 @@ impl Case {
             }
         }
         added
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn words_parse_as_the_cli_takes_them() {
+        assert_eq!(
+            "not-affected".parse::<EndpointState>(),
+            Ok(EndpointState::NotAffected)
+        );
+        assert_eq!(
+            "Not_Affected".parse::<EndpointState>(),
+            Ok(EndpointState::NotAffected)
+        );
+        assert!(
+            "nope"
+                .parse::<EndpointState>()
+                .unwrap_err()
+                .contains("not-affected")
+        );
+        assert_eq!("closed".parse::<CaseStatus>(), Ok(CaseStatus::Closed));
+        assert_eq!(
+            "spoofed-self-id".parse::<AlternativeKind>(),
+            Ok(AlternativeKind::SpoofedSelfId)
+        );
+        assert_eq!("operator".parse::<ContactRole>(), Ok(ContactRole::Affected));
+        assert_eq!(
+            "declared-owner".parse::<ContactRole>(),
+            Ok(ContactRole::DeclaredOwner)
+        );
+    }
+
+    #[test]
+    fn roles_keep_their_case_toml_spelling() {
+        let c: Contact = toml::from_str(
+            "org = \"o\"\nrole = \"declared_owner\"\nchannel = \"email\"\naddress = \"a@b.example\"\nsource = \"s\"\nconfidence = \"low\"\nfound_on = \"d\"\n",
+        )
+        .unwrap();
+        assert_eq!(c.role, ContactRole::DeclaredOwner);
+        assert!(
+            toml::to_string(&c)
+                .unwrap()
+                .contains("role = \"declared_owner\"")
+        );
+        let odd: Contact = toml::from_str(
+            "org = \"o\"\nrole = \"press\"\nchannel = \"email\"\naddress = \"a@b.example\"\nsource = \"s\"\nconfidence = \"low\"\nfound_on = \"d\"\n",
+        )
+        .unwrap();
+        assert_eq!(odd.role, ContactRole::Other);
+    }
+
+    #[test]
+    fn ids_are_slugs() {
+        assert!(check_id("2026-10-portal-sqli").is_ok());
+        for bad in ["", "../x", "A", "-x", "a b", "a/b"] {
+            assert!(check_id(bad).is_err(), "{bad}");
+        }
     }
 }

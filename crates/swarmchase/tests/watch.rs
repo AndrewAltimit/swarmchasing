@@ -27,7 +27,18 @@ fn a_run_without_the_urlquery_key_skips_the_source_and_writes_a_digest() {
     assert_eq!(runs.len(), 1);
     let digest = std::fs::read_to_string(runs[0].join("digest.md")).unwrap();
     assert!(
-        digest.contains("| uq | 0 | 0 | 0 | skipped: URLQUERY_APIKEY not set |"),
+        digest.contains("| uq | 0 | 0 | 0 |  | skipped: URLQUERY_APIKEY not set |"),
+        "{digest}"
+    );
+    // The health block opens the digest and names what the skip costs.
+    assert!(
+        digest
+            .find("**No submit-time source ran.**")
+            .is_some_and(|i| i < digest.find("## Sources").unwrap()),
+        "{digest}"
+    );
+    assert!(
+        digest.contains("`uq` was skipped: URLQUERY_APIKEY not set"),
         "{digest}"
     );
     assert!(s.path().join("data/state.json").is_file());

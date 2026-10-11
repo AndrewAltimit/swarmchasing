@@ -2,10 +2,10 @@
 //! domains, networks, addresses), indicator drafts, and one `observed-data`
 //! per cluster.
 
-use super::Options;
-use super::ids::stix_ts;
-use super::indicators::{Draft, indicators};
-use super::objects::{Head, add_sco, observed_data};
+use crate::Options;
+use crate::ids::stix_ts;
+use crate::indicators::{Draft, indicators};
+use crate::objects::{Head, add_sco, observed_data};
 use sc_core::notice::{PublicView, WITHHELD};
 use sc_core::rules::Target;
 use sc_core::{Analysis, Audience, IndicatorKind, Rules, Tier};
@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::IpAddr;
 
-pub(super) struct Observed {
+pub(crate) struct Observed {
     /// Cyber-observables by id.
     pub scos: BTreeMap<String, Value>,
     /// Indicators by STIX pattern.
@@ -22,7 +22,7 @@ pub(super) struct Observed {
     pub observed: Vec<(usize, Value)>,
 }
 
-pub(super) fn observe(a: &Analysis, rules: &Rules, h: &Head, o: &Options) -> Observed {
+pub(crate) fn observe(a: &Analysis, rules: &Rules, h: &Head, o: &Options) -> Observed {
     let public = o.audience == Audience::Public;
     let mut view = PublicView::new(a, o.exposed).with_affected(Some(o.affected));
     let kinds: BTreeMap<&str, IndicatorKind> = rules

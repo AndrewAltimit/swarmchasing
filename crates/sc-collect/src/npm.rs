@@ -14,7 +14,7 @@
 //! no time, so they cannot be placed on a timeline without fetching each
 //! package document.
 
-use crate::pager::{Cursor, Page};
+use crate::pager::{Coverage, Cursor, Page};
 use crate::{CdxQuery, Client, Kind, Source, parse_date};
 use anyhow::{Context, Result};
 use sc_core::{Observation, TsKind, redact_observation};
@@ -25,7 +25,8 @@ const SEARCH: &str = "https://registry.npmjs.org/-/v1/search";
 const MAX_PAGE: usize = 250;
 
 /// An npm search as a [`Source`]. `query.pattern` is the search text (npm
-/// search syntax, e.g. `keywords:foo` or a run tag).
+/// search syntax, e.g. `keywords:foo` or a run tag); `query.canary` a search
+/// that always has hits, run once per pull as a canary.
 pub struct Npm {
     pub query: CdxQuery,
 }
@@ -55,13 +56,28 @@ impl Source for Npm {
             Some(c) => anyhow::bail!("npm pages by offset, not {c:?}"),
             None => 0,
         };
-        let mut u = url::Url::parse(SEARCH)?;
-        u.query_pairs_mut()
-            .append_pair("text", &self.query.pattern)
-            .append_pair("size", &size.to_string())
-            .append_pair("from", &offset.to_string());
-        let body = client.get(u.as_str()).context("npm search")?;
+        let search = |text: &str, size: usize, from: usize| -> Result<String> {
+            let mut u = url::Url::parse(SEARCH)?;
+            u.query_pairs_mut()
+                .append_pair("text", text)
+                .append_pair("size", &size.to_string())
+                .append_pair("from", &from.to_string());
+            client.get(u.as_str()).context("npm search")
+        };
+        let body = search(&self.query.pattern, size, offset)?;
         let (mut records, total, n) = parse_npm_search(&body)?;
+        let mut cov = Coverage {
+            unit: "packages",
+            read: n as u64,
+            available: if offset == 0 { total as u64 } else { 0 },
+            ..Default::default()
+        };
+        // Once per pull: a search known to match proves an empty result is
+        // the pattern's, not a changed API's.
+        if let (0, Some(c)) = (offset, self.query.canary.as_deref()) {
+            let (_, hits, _) = parse_npm_search(&search(c, 1, 0)?)?;
+            cov.canary = Some(hits > 0);
+        }
         let from = since.or_else(|| self.query.from.as_deref().and_then(sc_core::parse_ts));
         let to = self.query.to.as_deref().and_then(sc_core::parse_ts);
         records.retain(|o| from.is_none_or(|t| o.ts >= t) && to.is_none_or(|t| o.ts <= t));
@@ -70,6 +86,7 @@ impl Source for Npm {
             records,
             next,
             truncated: false,
+            coverage: Some(cov),
         })
     }
 }

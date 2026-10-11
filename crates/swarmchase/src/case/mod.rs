@@ -10,71 +10,55 @@
 //! reports/             drafts rendered from the records and case.toml
 //! bundles/<date>/      evidence bundles (records, analysis, stamp, manifest)
 //! outbox/              unsent e-mail drafts and paste-ready text for the admin
+//! exports/             STIX, MISP and incident-framework drafts
 //! evidence/<eid>.ndjson  logs affected operators sent us (`case evidence`)
 //! notice.md            the public notice draft (`case notice`), edited by the
 //!                      admin, then added to notices/ with `swarmchase notice add`
 //! ```
 //!
-//! The rules a case was opened with are pinned ([`crate::pinning`]), so its
-//! reports, notice and bundles do not change when the bundled rules do.
+//! What a case is and every decision on it are in the `sc-case` crate; this
+//! module reads and writes the files. The rules a case was opened with are
+//! pinned ([`crate::pinning`]), and every analysis of a case goes through
+//! [`Pinned`], so its reports, notice and bundles do not change when the
+//! bundled rules do.
 //!
 //! Cases stay private until the admin publishes: an open case names
 //! organisations on unconfirmed evidence, and private reports include details
 //! that public notices withhold (docs/policies.md).
 //!
-//! [`model`] is what `case.toml` holds, [`cli`] the subcommands, [`select`]
-//! picks records, [`status`] shows a case, [`fleet`] records the admin's
-//! fleet merges and splits and the interaction evidence that makes a fleet a
-//! swarm, [`grade`] shows agent grades and records the admin's, [`report`]
-//! drafts reports and
-//! e-mail drafts, and [`indicators`] is what the watch matches new records
-//! against. Contacts, operator evidence and the notice draft are in
-//! [`crate::contacts`], [`crate::evidence`] and [`crate::notice`].
+//! [`cli`] holds the subcommands, one module per group; [`select`] picks
+//! records, [`status`] shows a case, [`report`] drafts reports and e-mail
+//! drafts, [`checklist`] gathers the self-review checklist's inputs,
+//! [`incident`] the incident-framework drafts, and [`indicators`] is what
+//! the watch matches new records against.
 
-pub(crate) mod checklist;
+pub mod checklist;
 mod cli;
-pub(crate) mod fleet;
-mod grade;
-pub(crate) mod incident;
+pub mod fleet;
+pub mod incident;
 mod indicators;
-pub(crate) mod lead;
-mod model;
 mod report;
 mod select;
 mod status;
 
 pub use cli::{CaseArgs, run};
 pub(crate) use indicators::{CaseIndicators, indicators};
-pub use model::*;
-pub(crate) use report::{affected_hosts, report_options, reported};
 #[cfg(test)]
 pub(crate) use report::{draft, report};
+pub use sc_case::evidence::Scope;
+pub use sc_case::model::*;
+pub use sc_case::report::{affected_hosts, report_options, reported};
 #[cfg(test)]
 pub(crate) use status::status;
 
-use crate::evidence::{self, Scope};
 use crate::pinning::{RulesText, case_rules, pin_rules};
-use crate::store::{read_json, to_ndjson, write_json};
+use crate::store::{read_json, write_json};
 use anyhow::{Context, Result, bail};
-use sc_core::{Analysis, Audience, Evidence, Observation, analyze};
+use sc_case::bundle::to_ndjson;
+use sc_core::{Analysis, Audience, Observation, Rules, analyze};
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-
-fn check_id(id: &str) -> Result<()> {
-    let ok = !id.is_empty()
-        && id.len() <= 64
-        && id
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        && !id.starts_with('-');
-    if !ok {
-        bail!(
-            "case id `{id}`: use lowercase letters, digits and hyphens (e.g. 2026-10-portal-sqli)"
-        );
-    }
-    Ok(())
-}
 
 pub fn case_dir(root: &Path, id: &str) -> Result<PathBuf> {
     check_id(id)?;
@@ -85,7 +69,7 @@ pub fn load(root: &Path, id: &str) -> Result<Case> {
     let p = case_dir(root, id)?.join("case.toml");
     let text =
         std::fs::read_to_string(&p).with_context(|| format!("no case at {}", p.display()))?;
-    toml::from_str(&text).with_context(|| format!("parsing {}", p.display()))
+    Case::parse(&text).with_context(|| format!("parsing {}", p.display()))
 }
 
 pub(crate) fn save(root: &Path, c: &Case) -> Result<()> {
@@ -93,7 +77,7 @@ pub(crate) fn save(root: &Path, c: &Case) -> Result<()> {
     std::fs::create_dir_all(&dir)?;
     let p = dir.join("case.toml");
     let tmp = dir.join("case.toml.tmp");
-    std::fs::write(&tmp, toml::to_string_pretty(c)?)?;
+    std::fs::write(&tmp, c.to_toml()?)?;
     std::fs::rename(&tmp, &p).with_context(|| format!("writing {}", p.display()))
 }
 
@@ -105,22 +89,10 @@ pub fn update(root: &Path, id: &str, f: impl FnOnce(&mut Case) -> Result<()>) ->
     Ok(())
 }
 
-/// Which operator evidence a report for `audience` may use: all of it in case
-/// notes and provider reports, an operator's own logs in a report to that
-/// operator, and in the notice only logs the operator agreed to publish.
+/// Which operator evidence a report for `audience` may use
+/// ([`Scope::for_audience`]).
 pub(crate) fn scope(audience: Audience, to: Option<&Contact>) -> Scope<'_> {
-    match (audience, to) {
-        (Audience::Internal | Audience::Provider, _) => Scope::All,
-        (Audience::Public, _) => Scope::Public,
-        (Audience::Affected, Some(c)) => Scope::Operator {
-            org: &c.org,
-            host: c.endpoint.as_deref(),
-        },
-        (Audience::Affected, None) => Scope::Operator {
-            org: "",
-            host: None,
-        },
-    }
+    Scope::for_audience(audience, to)
 }
 
 /// The case's records plus the operator evidence `scope` allows.
@@ -128,7 +100,7 @@ pub fn case_records(root: &Path, c: &Case, scope: &Scope) -> Result<Vec<Observat
     let mut all = load_records(root, &c.id)?;
     let dir = case_dir(root, &c.id)?;
     for e in c.evidence.iter().filter(|e| e.in_scope(scope)) {
-        let p = evidence::file(&dir, &e.id);
+        let p = crate::evidence::file(&dir, &e.id);
         let text =
             std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
         for l in text.lines().filter(|l| !l.trim().is_empty()) {
@@ -136,6 +108,38 @@ pub fn case_records(root: &Path, c: &Case, scope: &Scope) -> Result<Vec<Observat
         }
     }
     Ok(all)
+}
+
+/// A case with the rules it is pinned to. Every analysis of a case is made
+/// here, so each one renders under the same rules.
+pub struct Pinned<'a> {
+    pub root: &'a Path,
+    pub case: &'a Case,
+    pub rules: Rules,
+}
+
+impl<'a> Pinned<'a> {
+    /// Load the rules case `c` is pinned to.
+    pub fn new(root: &'a Path, c: &'a Case) -> Result<Self> {
+        Ok(Self {
+            root,
+            case: c,
+            rules: case_rules(root, c)?,
+        })
+    }
+
+    /// The analysis of the records `scope` allows.
+    pub fn analysis(&self, scope: &Scope) -> Result<Analysis> {
+        Ok(analyze(
+            case_records(self.root, self.case, scope)?,
+            &self.rules,
+        ))
+    }
+}
+
+/// The case's analysis of the records `scope` allows, under its pinned rules.
+pub fn analysis(root: &Path, c: &Case, scope: &Scope) -> Result<Analysis> {
+    Pinned::new(root, c)?.analysis(scope)
 }
 
 /// Every case under `root`, by ID. A case file that does not parse is an error.
@@ -192,32 +196,9 @@ pub(crate) fn new_case(
     }
     std::fs::create_dir_all(dir.join("raw"))?;
     let pin = pin_rules(root, rules)?;
-    std::fs::write(records_path(root, id)?, to_ndjson(&records)?)?;
+    std::fs::write(records_path(root, id)?, to_ndjson(&records))?;
     let a = analyze(records, &rules.rules);
-    let mut c = Case {
-        id: id.to_string(),
-        title: title.to_string(),
-        status: CaseStatus::Open,
-        notice: NoticeStatus::Active,
-        opened: today.to_string(),
-        publish_pending: None,
-        min_named: Evidence::default(),
-        rules_version: Some(pin.clone()),
-        endpoints: Vec::new(),
-        claims: Vec::new(),
-        contacts: Vec::new(),
-        decisions: Vec::new(),
-        sent: Vec::new(),
-        evidence: Vec::new(),
-        fleets: Vec::new(),
-        agent_grade: None,
-        lead_hours: None,
-        no_contact: Vec::new(),
-        alternatives: Vec::new(),
-        plant_reviews: Vec::new(),
-        drafted: None,
-        reread: None,
-    };
+    let mut c = Case::new(id, title, today, Some(pin.clone()));
     c.add_endpoints(&a);
     c.log(
         today,
@@ -251,10 +232,12 @@ pub(crate) fn add_records(
     let mut f = std::fs::OpenOptions::new()
         .append(true)
         .open(records_path(root, id)?)?;
-    f.write_all(to_ndjson(&fresh)?.as_bytes())?;
+    f.write_all(to_ndjson(&fresh).as_bytes())?;
     let n = fresh.len();
     all.extend(fresh);
-    let hosts = c.add_endpoints(&analyze(all, &case_rules(root, &c)?));
+    // The case's own records only: an operator's logs add no endpoints.
+    let a = analyze(all, &Pinned::new(root, &c)?.rules);
+    let hosts = c.add_endpoints(&a);
     c.log(
         today,
         format!("added {n} record(s), {hosts} new endpoint(s)"),
@@ -344,7 +327,8 @@ mod tests {
     use super::test_support::*;
     use super::*;
     use crate::notice::notice_draft;
-    use sc_core::{Claim, Role};
+    use sc_case::actions;
+    use sc_core::{Claim, Evidence, Role};
 
     #[test]
     fn rename_moves_the_case_and_its_watch_hits() {
@@ -386,14 +370,6 @@ mod tests {
         .unwrap();
         assert!(rename(&root, "new-1", "newer-1", "2026-10-14").is_err());
         cleanup(&root);
-    }
-
-    #[test]
-    fn ids_are_slugs() {
-        assert!(check_id("2026-10-portal-sqli").is_ok());
-        for bad in ["", "../x", "A", "-x", "a b", "a/b"] {
-            assert!(check_id(bad).is_err(), "{bad}");
-        }
     }
 
     #[test]
@@ -453,7 +429,7 @@ mod tests {
         update(&root, "t-1", |c| {
             c.contacts.push(Contact {
                 org: "portal.example.gov".into(),
-                role: "affected".into(),
+                role: ContactRole::Affected,
                 endpoint: Some("portal.example.gov".into()),
                 channel: "email".into(),
                 address: "security@portal.example.gov".into(),
@@ -496,7 +472,7 @@ mod tests {
         );
         let c = load(&root, "t-1").unwrap();
         assert_eq!(c.decisions.len(), 2);
-        assert!(toml::to_string_pretty(&c).unwrap().contains("[[claim]]"));
+        assert!(c.to_toml().unwrap().contains("[[claim]]"));
         assert!(
             draft(
                 &root,
@@ -535,7 +511,7 @@ mod tests {
         assert!(e.contains("every party was sent"), "{e}");
         update(&root, "t-1", |c| {
             c.endpoints[1].state = EndpointState::NotAffected;
-            cli::sent(
+            actions::sent(
                 c,
                 "security@portal.example.gov",
                 "email",
@@ -544,14 +520,14 @@ mod tests {
                 None,
                 t0 + 120,
             )?;
-            cli::no_contact(
+            actions::no_contact(
                 c,
-                lead::ANY_PROVIDER,
+                sc_case::lead::ANY_PROVIDER,
                 "no directory entry for the self-named vendor",
                 t0 + 60,
             )?;
             for k in AlternativeKind::ALL {
-                cli::alternative(c, k, Some("checked; see case notes"), None, "2026-10-15")?;
+                actions::alternative(c, k, Some("checked; see case notes"), None, "2026-10-15")?;
             }
             Ok(())
         })

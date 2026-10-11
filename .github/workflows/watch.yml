@@ -36,7 +36,10 @@ env:
 jobs:
   watch:
     runs-on: [self-hosted]
-    timeout-minutes: 120
+    # A host answering HTTP 503 gets ten minutes of retries once per run,
+    # then is skipped for the rest of it; the margin covers that on top of
+    # an ordinary run.
+    timeout-minutes: 150
     defaults:
       run:
         shell: bash
@@ -55,7 +58,9 @@ jobs:
       # `cargo run --release` builds the release binary here when the code
       # changed and reuses the cached one otherwise; main-ci.yml does not
       # prebuild it. The step writes `changed` and `run_dir` to
-      # $GITHUB_OUTPUT for the email steps below.
+      # $GITHUB_OUTPUT for the email steps below. A failed source, an
+      # unavailable host or a failed canary sets `changed`, so the digest
+      # carrying the alert is mailed the same run.
       - name: Collect and analyse
         id: watch
         run: |

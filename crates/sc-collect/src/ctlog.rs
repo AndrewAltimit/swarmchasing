@@ -2,7 +2,10 @@
 //! `get-entries`), as an alternative to crt.sh for watching names. A pull
 //! reads the newest `scan` entries of one log and keeps certificates whose
 //! DNS names match the query, so it is a bounded sample of a fast-growing
-//! log, not a full monitor; crt.sh stays the per-name lookup.
+//! log, not a full monitor; crt.sh stays the per-name lookup. Its coverage
+//! is the entries read against the entries the log grew by since the last
+//! pull's checkpoint; entries that parse to no DNS name at all are the
+//! canary for a broken parser.
 //!
 //! Certificates are parsed only as far as their subjectAltName dNSNames, by
 //! a small DER walker: no certificate is validated or fetched from anywhere
@@ -13,7 +16,7 @@
 //! `get-entries` publicly). Operators publish no use restrictions beyond
 //! fair request rates, so requests are paced and the scan is small.
 
-use crate::pager::{Cursor, Page};
+use crate::pager::{Coverage, Cursor, Page};
 use crate::{CdxQuery, Client, Kind, Needles, Source};
 use anyhow::{Context, Result};
 use base64::Engine as _;
@@ -53,6 +56,10 @@ impl CtLog {
         })
     }
 
+    fn scan(&self) -> u64 {
+        self.query.scan.unwrap_or(DEFAULT_SCAN).clamp(1, 100_000) as u64
+    }
+
     fn log_id(&self) -> String {
         self.base
             .trim_start_matches("https://")
@@ -81,25 +88,40 @@ impl Source for CtLog {
         cursor: Option<&Cursor>,
         size: usize,
     ) -> Result<Page> {
-        let start = match cursor {
-            Some(Cursor::Offset(i)) => *i as u64,
+        let at = match cursor {
+            Some(Cursor::Offset(i)) => Some(*i as u64),
             Some(c) => anyhow::bail!("ctlog pages by entry index, not {c:?}"),
-            None => {
-                let sth: Value =
-                    serde_json::from_str(&client.get(&format!("{}ct/v1/get-sth", self.base))?)
-                        .context("get-sth: not JSON")?;
-                let size = sth
-                    .get("tree_size")
-                    .and_then(Value::as_u64)
-                    .context("get-sth: no tree_size")?;
-                self.end.set(size);
-                let scan = self.query.scan.unwrap_or(DEFAULT_SCAN).clamp(1, 100_000) as u64;
-                size.saturating_sub(scan)
-            }
+            None => None,
+        };
+        let mut cov = Coverage {
+            unit: "entries",
+            ..Default::default()
+        };
+        // The first page reads the tree size and plans the pull from the
+        // checkpoint; later pages continue at the index the pager hands back.
+        let start = if self.end.get() == 0 {
+            let sth: Value =
+                serde_json::from_str(&client.get(&format!("{}ct/v1/get-sth", self.base))?)
+                    .context("get-sth: not JSON")?;
+            let size = sth
+                .get("tree_size")
+                .and_then(Value::as_u64)
+                .context("get-sth: no tree_size")?;
+            self.end.set(size);
+            let (start, available, skipped) = plan(at, size, self.scan());
+            cov.available = available;
+            cov.skipped = skipped;
+            start
+        } else {
+            at.unwrap_or(self.end.get())
         };
         let end = self.end.get();
         if start >= end {
-            return Ok(Page::default());
+            cov.next = Some(start.max(end));
+            return Ok(Page {
+                coverage: Some(cov),
+                ..Default::default()
+            });
         }
         let last = (start + BATCH).min(end) - 1;
         let body = client.get(&format!(
@@ -108,6 +130,13 @@ impl Source for CtLog {
         ))?;
         let entries = parse_entries(&body)?;
         let got = entries.len() as u64;
+        cov.read = got;
+        cov.next = Some(start + got);
+        // Nearly every certificate names a host: entries with no names at
+        // all mean the leaf format or the parser broke.
+        if got > 0 {
+            cov.canary = Some(entries.iter().any(|(_, n)| !n.is_empty()));
+        }
         let needles = Needles::new(&self.query.pattern);
         let mut records = Vec::new();
         for (i, (ts_ms, names)) in entries.into_iter().enumerate() {
@@ -138,7 +167,26 @@ impl Source for CtLog {
             records,
             next,
             truncated,
+            coverage: Some(cov),
         })
+    }
+
+    fn checkpointed(&self) -> bool {
+        true
+    }
+}
+
+/// Where a pull starts, given its checkpoint (the next entry to read), the
+/// tree size and the entries one pull may read: (first entry, entries
+/// added since the checkpoint, entries skipped). A log grows far faster
+/// than a polite reader, so a pull reads the newest `scan` entries and
+/// counts the rest as skipped; a checkpoint within reach is read from.
+fn plan(checkpoint: Option<u64>, size: u64, scan: u64) -> (u64, u64, u64) {
+    let newest = size.saturating_sub(scan);
+    match checkpoint {
+        Some(c) if c >= newest => (c, size.saturating_sub(c), 0),
+        Some(c) => (newest, size - c, newest - c),
+        None => (newest, size - newest, 0),
     }
 }
 
@@ -297,6 +345,19 @@ mod tests {
         assert_eq!(e[1].1, ["a.example"]);
         assert!(e[2].1.is_empty());
         assert!(parse_entries("{}").is_err());
+    }
+
+    #[test]
+    fn plans_the_newest_entries_and_counts_the_rest() {
+        // No checkpoint: the newest `scan`.
+        assert_eq!(plan(None, 10_000, 512), (9_488, 512, 0));
+        // A checkpoint within reach is read from.
+        assert_eq!(plan(Some(9_700), 10_000, 512), (9_700, 300, 0));
+        // One further back: the newest `scan`, the gap counted as skipped.
+        assert_eq!(plan(Some(1_000), 10_000, 512), (9_488, 9_000, 8_488));
+        // Caught up, and a log smaller than the scan.
+        assert_eq!(plan(Some(10_000), 10_000, 512), (10_000, 0, 0));
+        assert_eq!(plan(None, 100, 512), (0, 100, 0));
     }
 
     #[test]

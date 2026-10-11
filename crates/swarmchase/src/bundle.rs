@@ -1,42 +1,17 @@
-//! Evidence bundles and e-mail drafts for private reports.
+//! Evidence bundles and e-mail drafts for private reports, as files.
 //!
-//! A bundle is a directory sent with a report:
-//!
-//! ```text
-//! records.ndjson    the redacted records the report rests on
-//! analysis.json     the analysis of those records
-//! stamp.json        rules version, toolkit version and commit, method version,
-//!                   the rules' figures on the committed evaluation set, and
-//!                   the tier of every flagged record and cluster at the time
-//! MANIFEST.sha256   SHA-256 of each file above
-//! ```
-//!
-//! `verify` checks the manifest, re-runs the analysis from `records.ndjson`
-//! and fails if any tier or cluster differs from the stamp, so a recipient (or
-//! we, later) can confirm the report follows from the records.
+//! What a bundle holds, its manifest and the stamp check are
+//! [`sc_case::bundle`]; this module writes bundles into a case directory,
+//! reads them back to verify them, adds the rules' figures on the committed
+//! evaluation set to the stamp, and builds unsent `.eml` drafts.
 
 use anyhow::{Context, Result, bail};
 use base64::Engine as _;
-use sc_core::{Analysis, Observation, Rules, Stamp, analyze};
-use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use sc_case::bundle::{FILES, MANIFEST, check, contents, manifest_differences};
+use sc_core::{Observation, Rules, Stamp, analyze};
 use std::path::{Path, PathBuf};
 
-const FILES: [&str; 3] = ["records.ndjson", "analysis.json", "stamp.json"];
-
-/// The stamp of an analysis, with this toolkit's version and, when the
-/// committed evaluation set can be found, the rules' figures on it.
-pub fn stamp(
-    case: &str,
-    generated: &str,
-    commit: Option<String>,
-    a: &Analysis,
-    rules: &Rules,
-) -> Stamp {
-    let mut st = Stamp::new(case, generated, env!("CARGO_PKG_VERSION"), commit, a);
-    st.eval = eval_dir().and_then(|d| eval_snapshot(&d, rules));
-    st
-}
+pub use sc_case::bundle::sha256_hex;
 
 /// The committed evaluation set: `SWARMCHASE_EVAL_DIR`, else `samples/eval`
 /// in the working directory, else the one in the checkout this was built from.
@@ -84,14 +59,9 @@ pub fn git_commit() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
-}
-
-/// Write a bundle into a new directory under `parent`, named by date.
+/// Write a bundle into a new directory under `parent`, named by date. The
+/// stamp carries this toolkit's version and, when the committed evaluation
+/// set can be found, the rules' figures on it.
 pub fn write(
     parent: &Path,
     case: &str,
@@ -107,19 +77,20 @@ pub fn write(
         n += 1;
     }
     std::fs::create_dir_all(&dir)?;
-    let a = analyze(records.to_vec(), rules);
-    let st = stamp(case, today, commit, &a, rules);
-    let contents = [
-        crate::store::to_ndjson(records)?,
-        serde_json::to_string(&a)?,
-        serde_json::to_string_pretty(&st)?,
-    ];
-    let mut manifest = String::new();
-    for (name, text) in FILES.iter().zip(&contents) {
+    let eval = eval_dir().and_then(|d| eval_snapshot(&d, rules));
+    let b = contents(
+        case,
+        today,
+        env!("CARGO_PKG_VERSION"),
+        commit,
+        records,
+        rules,
+        eval,
+    )
+    .map_err(anyhow::Error::msg)?;
+    for (name, text) in &b.files {
         std::fs::write(dir.join(name), text)?;
-        manifest.push_str(&format!("{}  {name}\n", sha256_hex(text.as_bytes())));
     }
-    std::fs::write(dir.join("MANIFEST.sha256"), manifest)?;
     Ok(dir)
 }
 
@@ -131,48 +102,28 @@ pub fn read_stamp(dir: &Path) -> Result<Stamp> {
 }
 
 /// Check a bundle. Returns the differences found; empty means it verifies.
+/// What was noticed but does not fail it is printed to stderr.
 pub fn verify(dir: &Path, rules: &Rules) -> Result<Vec<String>> {
-    let mut diffs = Vec::new();
-    let manifest = std::fs::read_to_string(dir.join("MANIFEST.sha256"))
-        .with_context(|| format!("no MANIFEST.sha256 in {}", dir.display()))?;
-    let listed: BTreeMap<&str, &str> = manifest
-        .lines()
-        .filter_map(|l| l.split_once("  "))
-        .map(|(h, f)| (f.trim(), h.trim()))
-        .collect();
-    for f in FILES {
-        let Some(want) = listed.get(f) else {
-            diffs.push(format!("{f}: not in the manifest"));
-            continue;
-        };
-        let got = sha256_hex(&std::fs::read(dir.join(f)).with_context(|| format!("reading {f}"))?);
-        if &got != want {
-            diffs.push(format!("{f}: SHA-256 differs from the manifest"));
-        }
-    }
-    let st = read_stamp(dir)?;
-    if st.rules_version != rules.set.meta.version {
-        diffs.push(format!(
-            "rules version {} differs from the bundle's {}; verify with the rules it was made with (--rules)",
-            rules.set.meta.version, st.rules_version
-        ));
-    }
-    let records =
-        sc_core::stamp::parse_records(&std::fs::read_to_string(dir.join("records.ndjson"))?)
-            .map_err(anyhow::Error::msg)
-            .context("parsing records.ndjson")?;
-    diffs.extend(st.differences(&analyze(records, rules)));
-    // The bundle's own analysis should match its stamp too. One written by an
-    // older toolkit may not parse; that is noted, not counted.
-    let shipped =
-        std::fs::read_to_string(dir.join("analysis.json")).context("reading analysis.json")?;
-    match serde_json::from_str::<Analysis>(&shipped) {
-        Ok(a) => diffs.extend(
-            st.differences(&a)
-                .into_iter()
-                .map(|d| format!("analysis.json: {d}")),
-        ),
-        Err(e) => eprintln!("analysis.json not compared: {e}"),
+    let manifest = std::fs::read_to_string(dir.join(MANIFEST))
+        .with_context(|| format!("no {MANIFEST} in {}", dir.display()))?;
+    let mut diffs = manifest_differences(&manifest, |f| {
+        std::fs::read(dir.join(f)).map_err(|e| e.to_string())
+    })
+    .map_err(anyhow::Error::msg)?;
+    let read =
+        |f: &str| std::fs::read_to_string(dir.join(f)).with_context(|| format!("reading {f}"));
+    let checked = check(
+        &read("records.ndjson")?,
+        &read("analysis.json")?,
+        &read("stamp.json")?,
+        rules,
+        env!("CARGO_PKG_VERSION"),
+        "verify with the rules it was made with (--rules)",
+    )
+    .map_err(anyhow::Error::msg)?;
+    diffs.extend(checked.differences);
+    for n in &checked.notes {
+        eprintln!("{n}");
     }
     Ok(diffs)
 }
@@ -232,7 +183,7 @@ fn wrap_b64(bytes: &[u8]) -> Vec<String> {
 pub fn attachments(dir: &Path) -> Result<Vec<(String, Vec<u8>)>> {
     FILES
         .iter()
-        .chain(std::iter::once(&"MANIFEST.sha256"))
+        .chain(std::iter::once(&MANIFEST))
         .map(|f| Ok((f.to_string(), std::fs::read(dir.join(f))?)))
         .collect()
 }
