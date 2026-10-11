@@ -1,13 +1,13 @@
 //! What each SC-T tactic corresponds to in other frameworks, for the
-//! `external_references` and tags of an export.
+//! `external_references`, `kill_chain_phases` and MISP tags of an export.
 //!
 //! The rules carry the SC-T tactic of each indicator (`tactic`), not other
 //! frameworks' ids, so the cross-walk is this table, keyed by tactic. The
-//! MITRE ATLAS and ATT&CK columns follow the Field Manual's cross-walk
-//! (SC-FM 4.6). The OWASP Top 10 for Agentic Applications column (ASI01 to
-//! ASI10) lists only the entries whose risk the tactic's behaviour shows;
-//! a tactic with no defensible entry has none. A mapping says what the
-//! agent did, not that anyone intended it.
+//! Field Manual is the source: the ATT&CK column and the first ATLAS ids
+//! follow SC-FM 4.6, the agent-specific ATLAS ids and the OWASP Top 10 for
+//! Agentic Applications column (ASI01 to ASI10) follow SC-FM 12.4. A test
+//! reads both manual tables and fails when this one differs. A mapping says
+//! what the agent did, not that anyone intended it.
 
 use serde_json::{Value, json};
 
@@ -41,23 +41,23 @@ pub const CROSSWALK: &[Crosswalk] = &[
     Crosswalk {
         tactic: "SC-T2",
         phase: "tool-escalation",
-        atlas: &["AML.T0117"],
+        atlas: &["AML.T0117", "AML.T0053"],
         attack: &["T1059"],
-        owasp_agentic: &["ASI02"],
+        owasp_agentic: &["ASI02", "ASI05"],
     },
     Crosswalk {
         tactic: "SC-T3",
         phase: "access-control-circumvention",
         atlas: &["AML.T0117"],
         attack: &["T1090.002"],
-        owasp_agentic: &[],
+        owasp_agentic: &["ASI02"],
     },
     Crosswalk {
         tactic: "SC-T4",
         phase: "vulnerability-probing",
         atlas: &["AML.T0049", "AML.T0006"],
         attack: &["T1190", "T1595.002"],
-        owasp_agentic: &[],
+        owasp_agentic: &["ASI10", "ASI01"],
     },
     Crosswalk {
         tactic: "SC-T5",
@@ -76,23 +76,23 @@ pub const CROSSWALK: &[Crosswalk] = &[
     Crosswalk {
         tactic: "SC-T7",
         phase: "callback-channels",
-        atlas: &["AML.T0072", "AML.T0025"],
+        atlas: &["AML.T0072", "AML.T0025", "AML.T0086"],
         attack: &["T1567.004", "T1567.003", "T1102"],
-        owasp_agentic: &[],
+        owasp_agentic: &["ASI02"],
     },
     Crosswalk {
         tactic: "SC-T8",
         phase: "off-task-targets",
         atlas: &[],
         attack: &[],
-        owasp_agentic: &["ASI10"],
+        owasp_agentic: &["ASI01", "ASI10"],
     },
     Crosswalk {
         tactic: "SC-T9",
         phase: "inter-agent-coordination",
         atlas: &["AML.T0118", "AML.T0124"],
         attack: &[],
-        owasp_agentic: &["ASI07"],
+        owasp_agentic: &["ASI07", "ASI08"],
     },
 ];
 
@@ -185,6 +185,7 @@ pub fn misp_tags(tactics: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     #[test]
     fn every_tactic_is_mapped_once() {
@@ -199,6 +200,81 @@ mod tests {
                 assert!((1..=10).contains(&n), "{id}");
             }
             assert!(c.atlas.iter().all(|a| a.starts_with("AML.T")));
+        }
+    }
+
+    /// The rows of the Markdown table under the heading starting with
+    /// `heading` whose first cell names a tactic.
+    fn manual_table(md: &str, heading: &str) -> Vec<Vec<String>> {
+        let section = md
+            .split("\n## ")
+            .find(|s| s.starts_with(heading))
+            .unwrap_or_else(|| panic!("no section {heading}"));
+        section
+            .lines()
+            .filter(|l| {
+                l.strip_prefix("| SC-T")
+                    .is_some_and(|r| r.starts_with(|c: char| c.is_ascii_digit()))
+            })
+            .map(|l| {
+                l.trim_matches('|')
+                    .split('|')
+                    .map(|c| c.trim().to_string())
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The framework ids in a manual cell: tokens starting with `prefix`
+    /// and a digit.
+    fn ids(cell: &str, prefix: &str) -> BTreeSet<String> {
+        cell.split(|c: char| !(c.is_ascii_alphanumeric() || c == '.'))
+            .map(|t| t.trim_end_matches('.'))
+            .filter(|t| {
+                t.strip_prefix(prefix)
+                    .is_some_and(|r| r.starts_with(|c: char| c.is_ascii_digit()))
+            })
+            .map(str::to_string)
+            .collect()
+    }
+
+    fn set(ids: &[&str]) -> BTreeSet<String> {
+        ids.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// The table matches the Field Manual's cross-walks: SC-FM 4.6 (ATLAS
+    /// and ATT&CK) and SC-FM 12.4 (agent-specific ATLAS, and OWASP).
+    #[test]
+    fn matches_the_field_manual() {
+        let fm4 = manual_table(
+            include_str!("../../../docs/manual/04-indicators.md"),
+            "FM-4.6 ",
+        );
+        let fm12 = manual_table(
+            include_str!("../../../docs/manual/12-interoperability.md"),
+            "FM-12.4 ",
+        );
+        assert_eq!(fm4.len(), CROSSWALK.len());
+        assert_eq!(fm12.len(), CROSSWALK.len());
+        for c in CROSSWALK {
+            let row = |table: &[Vec<String>]| {
+                table
+                    .iter()
+                    .find(|r| r[0].split_whitespace().next() == Some(c.tactic))
+                    .cloned()
+                    .unwrap_or_else(|| panic!("{} missing from the manual", c.tactic))
+            };
+            let (r4, r12) = (row(&fm4), row(&fm12));
+            let mut atlas = ids(&r4[1], "AML.T");
+            atlas.extend(ids(&r12[2], "AML.T"));
+            assert_eq!(set(c.atlas), atlas, "{} ATLAS", c.tactic);
+            assert_eq!(set(c.attack), ids(&r4[2], "T"), "{} ATT&CK", c.tactic);
+            assert_eq!(
+                set(c.owasp_agentic),
+                ids(&r12[1], "ASI"),
+                "{} OWASP",
+                c.tactic
+            );
         }
     }
 

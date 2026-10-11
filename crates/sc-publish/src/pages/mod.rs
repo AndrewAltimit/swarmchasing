@@ -371,7 +371,15 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     rendered.sort_by(|a, b| {
         let key = |d: &docs::Doc| {
             let rel = d.src.strip_prefix("docs/").unwrap_or(&d.src).to_string();
-            (rel != "README.md", rel.contains('/'), rel)
+            // Each directory's README (its index) leads its group.
+            let (dir, file) = rel.rsplit_once('/').unwrap_or(("", &rel));
+            (
+                rel != "README.md",
+                rel.contains('/'),
+                dir.to_string(),
+                file != "README.md",
+                rel.clone(),
+            )
         };
         key(a).cmp(&key(b))
     });

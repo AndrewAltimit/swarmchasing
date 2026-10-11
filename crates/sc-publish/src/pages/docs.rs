@@ -257,6 +257,15 @@ pub fn render_doc(src: &str, text: &str, links: &Links) -> Doc {
         }
         body_lines.push(*l);
     }
+    // A manual chapter opens with a hand-written "Manual index · Previous ·
+    // Next" line for reading on the code host. The site renders its own
+    // pager, so the line is dropped here, and it is not the summary.
+    if in_manual
+        && let Some(i) = body_lines.iter().position(|l| !l.trim().is_empty())
+        && body_lines[i].starts_with("[Manual index](")
+    {
+        body_lines.remove(i);
+    }
     let summary = body_lines
         .iter()
         .skip_while(|l| l.trim().is_empty())
@@ -899,6 +908,17 @@ mod tests {
                 terms: None,
             },
         )
+    }
+
+    #[test]
+    fn drops_the_hand_written_manual_nav() {
+        let text = "# 2. Principles\n\n[Manual index](README.md) · Previous: [1. Scope](01-scope.md)\n\nThe body.\n";
+        let d = render("docs/manual/02-principles.md", text);
+        assert_eq!(d.summary, "The body.");
+        assert!(!d.html.contains("Manual index"), "{}", d.html);
+        // Elsewhere the same line is ordinary text.
+        let d = render("docs/reference/cases.md", text);
+        assert!(d.html.contains("Manual index"));
     }
 
     #[test]

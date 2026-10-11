@@ -79,7 +79,7 @@ The last step drafts a disclosure, loading the tools module on *Draft the report
 
 ## The Field Manual
 
-The manual's pages link `FM-n.m` section ids and `SC-Tn` tactic ids in running text to their sections, and the first use on a page of each multi-word glossary term to its definition, with the short definition as a tooltip. Each page ends with previous and next. The section index lists every section; its search runs in the page over `assets/fm-index.json` (ids, titles, chapters and the start of each section's text), so no module loads.
+The manual's pages link `FM-n.m` section ids and `SC-Tn` tactic ids in running text to their sections, and the first use on a page of each multi-word glossary term to its definition, with the short definition as a tooltip. Each page ends with previous and next; the hand-written index, previous and next line each chapter opens with, for reading on GitHub, is dropped. The section index lists every section; its search runs in the page over `assets/fm-index.json` (ids, titles, chapters and the start of each section's text), so no module loads.
 
 ## Rules explorer
 

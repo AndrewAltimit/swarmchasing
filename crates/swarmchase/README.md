@@ -55,12 +55,19 @@ swarmchase unwrap 'https://r.jina.ai/https://portal.example.gov/q?id=1%20UNION%2
 
 ### Collect
 
-Collectors read indexes and public records only. They never open a capture or a URL an agent submitted. Requests go one at a time per host with an identifying user agent (override with `SWARMCHASE_UA`), and retry on HTTP 429 and 5xx with jittered backoff, honouring `Retry-After`. Every `collect` source also takes `--endpoint`, `--scan` and `--cache` ([source kinds](../../docs/reference/watch.md#source-kinds)).
+Collectors read indexes and public records only. They never open a capture or a URL an agent submitted. Requests go one at a time per host with an identifying user agent (override with `SWARMCHASE_UA`), and retry on HTTP 429 and 5xx with jittered backoff, honouring `Retry-After`. Every `collect` source also takes `--endpoint`, `--scan` and `--cache` ([source kinds](../../docs/reference/watch.md#source-kinds)), and some take a source-specific option:
+
+| Option | Source | Does |
+|---|---|---|
+| `--filter <f>` | Wayback, Arquivo.pt | A CDX filter the index server applies, repeatable; `collection:SAWP.*` keeps Arquivo.pt's on-demand saves. |
+| `--slice-days <n>` | Wayback | Reads the time range in windows of `n` days; a sliced pull resumes by window. |
+| `--canary <query>` | npm | A query known to match, run once first, so an empty result is told apart from a broken search. |
+| `--max-mb <n>` | GH Archive | The most compressed megabytes streamed per run. |
 
 | Command | What it does |
 |---|---|
-| `collect wayback <pattern>` | Wayback Machine CDX index, e.g. `'r.jina.ai/*'`. `--from`/`--to` (`yyyyMMdd[hhmmss]`), `--match-type`, `--limit`, `--page-size`, `-o`, and `--resume` to continue an interrupted pull. |
-| `collect arquivo <pattern>` | Arquivo.pt CDX index, same options. |
+| `collect wayback <pattern>` | Wayback Machine CDX index, e.g. `'r.jina.ai/*'`. `--from`/`--to` (`yyyyMMdd[hhmmss]`), `--match-type`, `--limit`, `--page-size`, `-o`, `--resume` to continue an interrupted pull, and `--slice-days N` to read the range in windows of N days. |
+| `collect arquivo <pattern>` | Arquivo.pt CDX index, same options. It cannot page, so a full result is cut at `--limit`. |
 | `collect urlquery <query>` | urlquery.net report search. Needs `URLQUERY_APIKEY`. |
 | `collect commoncrawl <pattern>` | Common Crawl CDX index rows, newest crawl by default. |
 | `collect urlscan <query>` | urlscan.io public search, per case. `URLSCAN_APIKEY` optional. |
@@ -68,6 +75,8 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect gharchive <substrings>` | Public GitHub events matching repo names or payload URLs. |
 | `collect npm <text>`, `collect pypi <substrings>` | Package names, versions and publish times; never code. |
 | `collect ctlog <substrings> --endpoint <log>` | Certificates in a CT log's newest entries whose names match. |
+| `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |
+| `collect mcp <substrings>` | Official MCP Registry servers whose name or declared URLs match (`*` for all), updated since `--from`. Metadata only; no server is contacted. |
 | `asn fetch`, `asn lookup <ip>…` | The offline IP-to-ASN table in `<data>/asn/`. |
 | `collect urlquery-reports <ids> -o <out>` | Fetches urlquery reports by ID, or every ID in a labels file such as Transluce's `reports.csv`. Appends to `--out` and skips IDs already there; `--sample N` caps the agent-labelled reports. |
 | `certs <query>` | Certificate Transparency lookup via crt.sh, e.g. `'%.example.com'`. |
@@ -75,6 +84,7 @@ Collectors read indexes and public records only. They never open a capture or a 
 
 ```sh
 swarmchase collect wayback 'r.jina.ai/*' --from 20260901 -o data/jina.ndjson
+swarmchase collect arquivo 'r.jina.ai/*' --filter 'collection:SAWP.*' --from 20260901 -o data/spn.ndjson
 scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o data/uq.ndjson
 ```
 
@@ -110,7 +120,7 @@ swarmchase case verify data/cases/2026-10-portal/bundles/2026-10-12
 swarmchase case status
 ```
 
-Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1, MISP, OECD and AIID drafts), `no-contact`, `alternative`, `plant-review` and `checklist` for the self-review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
+Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (`--format stix`, `misp`, `oecd` with its EU AI Act Article 73 section, or `aiid`), `no-contact`, `alternative`, `plant-review` and `checklist` for the self-review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
 ### Notices
 

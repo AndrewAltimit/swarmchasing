@@ -19,7 +19,7 @@ A case study, whether a published write-up or the reasoning behind a notice, use
 
 ## FM-13.2 Worked example (synthetic)
 
-**Every record in this example is synthetic.** The records were written by hand to exercise the rules, use reserved `.example` hosts, and were never collected. They are the toolkit's example records ([`llm-residue.ndjson`](../../samples/eval/llm-residue.ndjson)), which the browser toolkit loads under *Try an example*. Their times and groupings are artefacts of how they were written. Results below are as the toolkit grades them at rules version 2026-10-15; a later rules version may grade them differently.
+**Every record in this example is synthetic.** The records were written by hand to exercise the rules, use reserved `.example` hosts, and were never collected. They are the toolkit's example records ([`llm-residue.ndjson`](../../samples/eval/llm-residue.ndjson)), which the browser toolkit loads under *Try an example*. Their times and groupings are artefacts of how they were written. Results below are as the toolkit grades them at rules version 2026-10-10; a later rules version may grade them differently.
 
 **Header.** Case: synthetic example. Method: SC-FM 1.1. Source: hand-written records with no timestamp kind (unknown).
 
@@ -74,12 +74,12 @@ The case studies below apply the template to public incident write-ups. They sho
 
 - **The write-up's observations are Documented.** What the authors say a record shows is Documented ([FM-7.6](07-attribution.md#fm-76-claim-tags)), cited to the write-up, until the practitioner pulls the record and sees it. Nothing in these studies is Observed at first hand.
 - **Quote shapes, not records.** Only short indicator shapes the write-up itself publishes are quoted here. Record URLs and scan-service content are not reproduced ([FM-3.4](03-sources.md#fm-34-terms-of-use)); the write-up links its records.
-- **Rule matches are checked on stand-ins.** Each rule id given for a published shape was checked with `swarmchase unwrap` or `swarmchase scan` at rules version 2026-10-15, on a reconstructed record from the [regression set](../../samples/eval/README.md#published-patternsndjson) or a synthetic `.example` record of the same shape, with headers or a final URL where the rule reads them.
+- **Rule matches are checked on stand-ins.** Each rule id given for a published shape was checked with `swarmchase unwrap` or `swarmchase scan` at rules version 2026-10-10, on a reconstructed record from the [regression set](../../samples/eval/README.md#published-patternsndjson) or a synthetic `.example` record of the same shape, with headers or a final URL where the rule reads them.
 - **Two parts are added** after the template's attribution part: what a notice following [chapter 11](11-notices.md) would withhold, and where the write-up's claims go beyond the evidence it shows. The second part compares claims with this manual's rules; it is not a judgment of the authors, who in each case state many of the same limits themselves.
 
 ## FM-13.4 Case study: urlquery.net agent activity
 
-**Header.** Source: [Transluce, *Early rogue AI agent activity and attempts to hack found on urlquery.net*](references.md#incident-reports), published 23 September 2026. Records: urlquery.net reports, timestamped at submission (submit, [FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Period: November 2025 to September 2026, with the strongest evidence from March to June 2026. Method: SC-FM 1.1; departure: the records were not re-pulled, so the write-up's observations enter as Documented. Rules version 2026-10-15.
+**Header.** Source: [Transluce, *Early rogue AI agent activity and attempts to hack found on urlquery.net*](references.md#incident-reports), published 23 September 2026. Records: urlquery.net reports, timestamped at submission (submit, [FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Period: November 2025 to September 2026, with the strongest evidence from March to June 2026. Method: SC-FM 1.1; departure: the records were not re-pulled, so the write-up's observations enter as Documented. Rules version 2026-10-10.
 
 **Conclusions.**
 
@@ -148,7 +148,7 @@ The provider's acknowledgement covers the swarm. It would raise these clusters t
 
 ## FM-13.5 Case study: US and Canadian government targets
 
-**Header.** Source: [Transluce, *AI Agents Targeted U.S. and Canadian Government Websites*](references.md#incident-reports), published 30 September 2026, a follow-up to the write-up in [FM-13.4](#fm-134-case-study-urlquerynet-agent-activity). Records: urlquery.net reports (submit times) and Arquivo.pt captures (capture times), including captures the agents requested through the archive's save-now feature. Period: April to July 2026. Method: SC-FM 1.1, departure as in FM-13.4. Rules version 2026-10-15.
+**Header.** Source: [Transluce, *AI Agents Targeted U.S. and Canadian Government Websites*](references.md#incident-reports), published 30 September 2026, a follow-up to the write-up in [FM-13.4](#fm-134-case-study-urlquerynet-agent-activity). Records: urlquery.net reports (submit times) and Arquivo.pt captures (capture times), including captures the agents requested through the archive's save-now feature. Period: April to July 2026. Method: SC-FM 1.1, departure as in FM-13.4. Rules version 2026-10-10.
 
 **Conclusions.**
 
@@ -216,7 +216,7 @@ The provider's acknowledgement covers the swarm. It would raise these clusters t
 
 **Header.** Source: [swarmcha.se, *We found a Chinese agent fleet*](references.md#incident-reports), a preliminary report dated 4 October 2026, first published 5 October 2026, with a dated changelog. Records: urlquery.net reports (submit times); webhook.site inbox logs and creation records, read through the service's public API (request times); Wayback Machine and archive.today listings (capture times); certificate logs; the authors' own tests of models and services. Method: SC-FM 1.1, departure as in FM-13.4.
 
-Two of the sources fall outside this manual: reading an agent's inbox fails the passivity test ([FM-3.2](03-sources.md#fm-32-passivity-test)), and testing models is out of scope ([FM-1.1](01-scope.md#fm-11-scope)). Their results enter only as Documented, cited to the write-up. Rules version 2026-10-15.
+Two of the sources fall outside this manual: reading an agent's inbox fails the passivity test ([FM-3.2](03-sources.md#fm-32-passivity-test)), and testing models is out of scope ([FM-1.1](01-scope.md#fm-11-scope)). Their results enter only as Documented, cited to the write-up. Rules version 2026-10-10.
 
 **Conclusions.**
 
