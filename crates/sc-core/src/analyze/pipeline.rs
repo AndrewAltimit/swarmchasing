@@ -64,6 +64,8 @@ pub(super) const PASSES: &[Pass] = &[
     }),
     pass("dialect", &["link"], |cx| each_cluster(cx, hints::dialect)),
     pass("fanout", &["link"], |cx| each_cluster(cx, hints::fanout)),
+    // Reads the clusters' spans for the fan-outs around them.
+    pass("cross_service", &["timing"], cross_service),
     pass("prose", &["link"], |cx| {
         each_cluster(cx, |c, results, _| hints::prose(c, results))
     }),
@@ -99,6 +101,7 @@ pub(super) const PASSES: &[Pass] = &[
             "paths",
             "dialect",
             "fanout",
+            "cross_service",
             "prose",
             "declared",
             "knowledge",
@@ -258,6 +261,16 @@ fn escalations(cx: &mut AnalysisCtx) {
         &cluster_ids(&cx.a.clusters),
         &cx.rules.set.escalation,
     );
+}
+
+/// Targets sent to several scan services, per cluster.
+fn cross_service(cx: &mut AnalysisCtx) {
+    let opts = &cx.rules.set.fanout;
+    let fans = crate::crossservice::service_fans(&cx.a.results, opts);
+    let window = cx.rules.set.linking.window_secs;
+    for c in &mut cx.a.clusters {
+        c.cross_service = crate::crossservice::describe(c, &cx.a.results, &fans, opts, window);
+    }
 }
 
 /// Plant signals per cluster.

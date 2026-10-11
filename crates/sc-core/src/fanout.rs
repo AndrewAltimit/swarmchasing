@@ -24,6 +24,15 @@ pub struct FanOutOptions {
     pub min_width: usize,
     /// Share of batches the modal width must cover.
     pub min_share: f64,
+    /// Cross-service fan-out ([`crate::crossservice`]): submissions of one
+    /// target at most this many seconds after its first one count together.
+    pub cross_service_secs: i64,
+    /// Distinct services one target must reach within that window (below 2:
+    /// off).
+    pub cross_service_min: usize,
+    /// Ordinary targets on other hosts fanned out alike around a cluster
+    /// that mark an auto-submitter (0: never).
+    pub cross_service_ambient: usize,
 }
 
 impl Default for FanOutOptions {
@@ -33,6 +42,9 @@ impl Default for FanOutOptions {
             min_batches: 4,
             min_width: 2,
             min_share: 0.6,
+            cross_service_secs: 60,
+            cross_service_min: 2,
+            cross_service_ambient: 3,
         }
     }
 }

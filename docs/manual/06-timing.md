@@ -31,6 +31,10 @@ Cadence separates scripts (sub-second, regular) from agents choosing each step (
 
 **Fan-out width** is how many alike requests land in the same second, as when an agent issues tool calls in parallel. A fixed width that repeats across runs can reflect a harness setting ([FM-7.4](07-attribution.md#fm-74-harness-and-framework-layer)).
 
+**Cross-service fan-out** is one target, compared after unwrapping, submitted to several scan services within seconds to a minute. A person checking a link uses one service, or a second one minutes later; an agent's tool loop or a script holding keys for several services sends each URL to all of them at once. It reads submit or request times only, never capture times.
+
+A mail gateway or security product that submits every link it sees does the same, and then whoever mailed the link made the records ([FM-5.11](05-linking.md#fm-511-provenance-and-planted-records)). Its sign is ordinary links on other hosts fanned out alike around the cluster. Without that sign, cross-service fan-out counts toward L4 as a scale beyond one person ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)); with it, it is a counter-signal. It never scores or links, and several services carrying one target are one submitter's act, not corroboration.
+
 ## FM-6.4 Rhythm
 
 A rhythm is a cluster's hour-of-day profile, counted in distinct active clock hours rather than records, so one burst does not outweigh a day. It needs enough data: records on several UTC days, a minimum number of records and of active hours.

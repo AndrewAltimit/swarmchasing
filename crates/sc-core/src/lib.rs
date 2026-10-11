@@ -10,6 +10,7 @@ pub mod attribution;
 pub mod bursts;
 pub mod capture;
 pub mod chains;
+pub mod crossservice;
 pub mod crosswalk;
 pub mod declared;
 pub mod dialect;
@@ -45,6 +46,7 @@ pub use analyze::{Analysis, Cluster, KnowledgeHints, ObsResult, Origin, analyze,
 pub use attribution::{AttributionLabel, Claim, Evidence, Role, Tag, attribute};
 pub use bursts::{ArchiveBurst, archive_bursts};
 pub use chains::{Chain, Pace};
+pub use crossservice::CrossService;
 pub use dialect::{CutLengths, Dialect, DialectPair};
 pub use endpoints::{Activity, EndpointOptions, EndpointView, endpoints};
 pub use escalation::{Escalation, Route};
