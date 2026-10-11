@@ -223,7 +223,7 @@ function renderClusterList() {
       el("span", { class: "ctargets" }, topEntries(c.target_hosts, 2).map(([h]) => host(h)).join(", ") || "–"));
     b.addEventListener("click", () => select({ c: sel.c === k ? null : k, r: null, rule: null }));
     return b;
-  }), a.clusters.length > 200 ? el("p", { class: "hint" }, `${a.clusters.length - 200} more clusters not listed.`) : null);
+  }), ...(a.clusters.length > 200 ? [el("p", { class: "hint" }, `${a.clusters.length - 200} more clusters not listed.`)] : []));
 }
 
 function renderFilterBar() {
@@ -921,7 +921,8 @@ $("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.
 
 {
   const h = readHash();
-  if (h.v) setView(h.v);
+  // The view is set after the example loads: setting it rewrites the hash,
+  // which still holds the selection the example's analysis reads.
   if (h.preset === "access-log") {
     $("format").value = "access_log";
     $("map").placeholder = "host=www.example.org (your own host)";
@@ -930,4 +931,5 @@ $("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.
   } else if (h.example) {
     await loadExample();
   }
+  if (h.v) setView(h.v);
 }

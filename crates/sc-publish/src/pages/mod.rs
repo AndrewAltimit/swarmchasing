@@ -228,7 +228,9 @@ fn manual_terms(first: &[docs::Doc], sources: &[(String, String)]) -> docs::Term
         let url = docs::doc_url(src);
         t.gloss = docs::glossary_terms(text)
             .into_iter()
-            .filter(|(term, _)| term.len() >= 4)
+            // Multi-word terms only: single words (case, record, agent)
+            // are too often used in their ordinary sense.
+            .filter(|(term, _)| term.contains(' '))
             .map(|(term, def)| {
                 let href = format!("{url}#{}", docs::term_anchor(&term));
                 (term, def, href)
@@ -284,7 +286,20 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         set.push_str(t.trim_end());
         set.push('\n');
     }
-    let labels = sc_core::parse_labels(&set);
+    // Labels per file, each marked with its file name, as `swarmchase eval`
+    // reads them: the summary's per-file slices need the origin.
+    let mut labels = sc_core::LabelSet::default();
+    for (name, text) in &inp.eval_set {
+        let mut l = sc_core::parse_labels(text);
+        for v in l.labels.values_mut() {
+            v.origin = Some(name.clone());
+        }
+        labels.skipped += l.skipped;
+        labels.labels.extend(l.labels);
+        labels.actors.extend(l.actors);
+        labels.provenance.extend(l.provenance);
+        labels.warnings.extend(l.warnings);
+    }
     let eval_analysis = sc_core::analyze(
         sc_core::parse_input(&set, Format::Ndjson, &FieldMap::default()).observations,
         &rules,

@@ -709,3 +709,13 @@ dfn:target, td:target { background: var(--code-bg); outline: 2px solid var(--acc
 .rt-out { font-size: 13px; overflow-wrap: anywhere; }
 .rt-out .verdict { margin: 6px 0 2px; }
 .rt-out ul { margin: 0; padding-left: 18px; }
+
+/* ── Evaluation: non-synthetic numbers and forest plots ──────────────── */
+.non-synthetic { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+.non-synthetic h4 { margin: 0 0 8px; font-size: 14px; }
+.chart.forest .ci { stroke: var(--text-secondary); stroke-width: 2; }
+.chart.forest .pt { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 1.5; }
+.chart.forest .sep { stroke: var(--border); stroke-width: 1; }
+.chart-box.scroll-x > svg.forest { min-width: 640px; }
+.walk-step > *, .walk, .walk-steps { min-width: 0; max-width: 100%; }
+.hero, .walk-head { overflow-wrap: anywhere; }

@@ -492,7 +492,12 @@ fn focus(a: &Analysis) -> Option<&Cluster> {
         .collect();
     a.clusters
         .iter()
-        .find(|c| fleet.contains(&c.id.as_str()) && c.origin.provenance.contains_key(&sc_core::model::Provenance::Observed))
+        .find(|c| {
+            fleet.contains(&c.id.as_str())
+                && c.origin
+                    .provenance
+                    .contains_key(&sc_core::model::Provenance::Observed)
+        })
         .or_else(|| a.clusters.first())
 }
 
