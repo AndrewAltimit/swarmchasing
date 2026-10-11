@@ -487,7 +487,10 @@ try {
     const d = document.getElementById("defang-in");
     d.value = ${JSON.stringify(program + " https://evil.example/" + tag)};
     d.dispatchEvent(new Event("input"));
-    await new Promise((r) => setTimeout(r, 50));
+    // Each card loads its module on first use: wait for both outputs.
+    const filled = (id) => document.getElementById(id).childNodes.length > 0;
+    for (let i = 0; i < 300 && !(filled("sectxt-out") && filled("defang-out")); i++)
+      await new Promise((r) => setTimeout(r, 50));
     return { sectxt: document.getElementById("sectxt-out").textContent.includes("<script>"), defang: document.getElementById("defang-out").textContent.includes("hxxps://evil[.]example") };
   })()`);
   if (!tools.sectxt) failures.push("the hostile security.txt did not render as text");
