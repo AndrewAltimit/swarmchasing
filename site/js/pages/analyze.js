@@ -3,9 +3,9 @@
 // text only, URLs and hosts defanged, and never become links. The URL hash
 // holds the selection as ids only (a cluster key, a record number, a rule
 // id, a view), never hosts, URLs or other record data.
-import { $, el, activate, download, fetchRoot, showError } from "../lib/dom.js";
+import { $, el, activate, download, fetchRoot, showAlert, showError } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
-import { engine, tools, host as hostOf, pageRules } from "../lib/wasm.js";
+import { engine, tools, host as hostOf, pageRules, sizeNote } from "../lib/wasm.js";
 import { figure, legend, legendKey, edgeKey, swarmKey, tierLegend, rampLegend, swimlanes, runExtent, zoomWindow, fleetGraph, swarmGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
 import {
   kindClass, kindLabel, tactic, route, fleetItems, language, levelOf, swarmKind, provenanceLabel, corroborationLabel, plantLabel,
@@ -111,17 +111,80 @@ tabs.forEach((t, i) => {
   });
 });
 
+// ── Input ──────────────────────────────────────────────────────────────────
+/** Analyze is offered only when there is something to analyse. */
+const syncRun = () => ($("run").disabled = !$("input").value.trim());
+
+/** After a run: the records box shrinks to a line, so the clusters come up. */
+function collapseInput(n) {
+  const hadFocus = $("input-box").contains(document.activeElement);
+  $("input-box").hidden = true;
+  $("input-count").textContent = `${plural(n, "record")} loaded`;
+  $("input-collapsed").hidden = false;
+  $("input-edit").setAttribute("aria-expanded", "false");
+  if (hadFocus) $("input-edit").focus({ preventScroll: true });
+}
+function expandInput(focus = false) {
+  $("input-box").hidden = false;
+  $("input-collapsed").hidden = true;
+  $("input-edit").setAttribute("aria-expanded", "true");
+  if (focus) $("input").focus();
+}
+
+const FORMATS_READ = "The workbench reads NDJSON (one JSON object per line, with a url field), a JSON array, Wayback CDX JSON, one URL per line (optionally after a timestamp), or a web server access log.";
+
+/** Nothing was read: say why, with the first problem, and how to fix it. */
+function nothingRead(title, first) {
+  clearAnalysis();
+  expandInput();
+  showAlert($("alert"), title,
+    first ? ["First problem: ", el("code", {}, trunc(String(first), 300))] : null,
+    `${FORMATS_READ} If auto-detect guessed wrong, pick the format; if your fields have other names, map them, e.g. ts=submitted_at,url=page.url.`,
+    "To see what an analysis looks like, press Try an example.");
+}
+
+/** Back to the empty workbench: no dashboard for an input that read nothing. */
+function clearAnalysis() {
+  a = null;
+  source = null;
+  generation++;
+  endpointsCache = null;
+  sel = { c: null, r: null, rule: null };
+  const hint = (text, cls = "hint") => el("p", { class: cls }, text);
+  $("summary").hidden = true;
+  $("summary").replaceChildren();
+  $("cluster-list").replaceChildren(hint("Analyse records to see their clusters: records linked by shared inbox IDs, unique tags, or the same target in a short window."));
+  $("viz-panel").replaceChildren(hint("Views appear here after an analysis.", "hint empty-state"));
+  $("filter-bar").replaceChildren();
+  $("records-h").textContent = "Flagged records";
+  $("records").replaceChildren(hint("No records yet."));
+  $("endpoints").replaceChildren(hint("No endpoints yet."));
+  $("context").replaceChildren(hint("Select a cluster, a run, a graph node or a record to see its timing, hints and records here."));
+  $("links").replaceChildren(hint("None yet."));
+  $("report").textContent = "Analyse records to draft a report.";
+  for (const b of ["copy-report", "dl-report", "dl-json"]) $(b).disabled = true;
+  writeHash();
+}
+
 // ── Analysis ───────────────────────────────────────────────────────────────
 function runAnalysis() {
   const warn = $("warnings");
   warn.hidden = true;
+  $("alert").hidden = true;
   let out;
   const src = { input: $("input").value, format: $("format").value, map: $("map").value };
+  if (!src.input.trim()) {
+    nothingRead("There is nothing to analyse yet.", null);
+    return false;
+  }
   try {
     out = JSON.parse(sc.analyze(src.input, src.format, src.map, rules));
   } catch (e) {
-    warn.hidden = false;
-    warn.textContent = String(e?.message ?? e);
+    nothingRead("The input could not be read.", e?.message ?? e);
+    return false;
+  }
+  if (!num(out.analysis?.total)) {
+    nothingRead("Nothing was read from this input: no line held a record.", arr(out.warnings)[0]);
     return false;
   }
   const notes = [];
@@ -146,6 +209,7 @@ function runAnalysis() {
   sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
   $("dl-json").disabled = false;
   renderAll();
+  collapseInput(a.total);
   if (mobile()) goStep("explore");
   return true;
 }
@@ -196,7 +260,7 @@ function renderSummary() {
   const t = (k) => obj(a.tier_counts)[k] ?? 0;
   const tiles = [
     [a.total, "records"], [a.flagged, "flagged"], [t("significant"), "significant"],
-    [t("suggestive"), "suggestive"], [a.clusters.length, "clusters"], [a.max_concurrent_clusters, "max concurrent runs"],
+    [t("suggestive"), "suggestive"], [a.clusters.length, "clusters"], [a.max_concurrent_clusters, "peak overlap", "the most clusters active at the same time"],
   ];
   const notes = [];
   const tm = obj(a.timing);
@@ -209,7 +273,7 @@ function renderSummary() {
   const box = $("summary");
   box.hidden = false;
   box.replaceChildren(
-    el("div", { class: "tiles" }, tiles.map(([v, k]) => el("div", { class: "tile" }, el("div", { class: "v" }, Number(v ?? 0).toLocaleString()), el("div", { class: "k" }, k)))),
+    el("div", { class: "tiles" }, tiles.map(([v, k, what]) => el("div", { class: "tile", title: what ?? null }, el("div", { class: "v" }, Number(v ?? 0).toLocaleString()), el("div", { class: "k" }, k)))),
     el("p", { class: "hint" }, notes.join(" · ")),
   );
 }
@@ -508,6 +572,11 @@ window.addEventListener("resize", () => {
 });
 
 // ── Records and endpoints ──────────────────────────────────────────────────
+const RECORD_HEAD = ["Tier", "Score", "Time (UTC)", "Cluster", "URL (defanged)", "Rules"];
+const ENDPOINT_HEAD = ["Host", "Tier", "Hits", "First seen", "Last seen", "Status", "Attack payloads"];
+/** A cell labelled with its column, so the rows stack as cards on phones. */
+const cell = (head, col, attrs, ...kids) => el("td", { ...attrs, "data-label": head[col] }, ...kids);
+
 function renderRecords() {
   const idx = [...scopeIdx()].sort((x, y) => a.results[y].score - a.results[x].score || a.results[x].obs.ts - a.results[y].obs.ts);
   $("records-h").textContent = `Flagged records (${scopeText()}: ${idx.length})`;
@@ -515,17 +584,17 @@ function renderRecords() {
   const body = el("tbody", {}, shown.map((i) => {
     const r = a.results[i];
     const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, tabindex: 0, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}`, "data-focus-key": `rec:${i}` },
-      el("td", {}, pill(r.tier)), el("td", { class: "num" }, r.score), el("td", { class: "nowrap", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
-      el("td", {}, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"),
-      el("td", { class: "url" }, safe(r.obs.url, 300)),
-      el("td", {}, arr(r.hits).map((h) => el("span", { class: "chip" }, h.rule_id))));
+      cell(RECORD_HEAD, 0, {}, pill(r.tier)), cell(RECORD_HEAD, 1, { class: "num" }, r.score), cell(RECORD_HEAD, 2, { class: "nowrap", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
+      cell(RECORD_HEAD, 3, {}, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"),
+      cell(RECORD_HEAD, 4, { class: "url" }, safe(r.obs.url, 300)),
+      cell(RECORD_HEAD, 5, {}, arr(r.hits).map((h) => el("span", { class: "chip" }, h.rule_id))));
     activate(tr, () => select({ r: sel.r === i ? null : i }));
     return tr;
   }));
   if (idx.length > shown.length) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - shown.length} more not shown; download the analysis JSON for all.`)));
   if (!idx.length) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, "No flagged records in this selection.")));
   $("records").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "records" },
-    el("thead", {}, el("tr", {}, ["Tier", "Score", "Time (UTC)", "Cluster", "URL (defanged)", "Rules"].map((h) => el("th", { scope: "col" }, h)))), body)));
+    el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)));
 }
 
 function renderEndpoints() {
@@ -538,13 +607,14 @@ function renderEndpoints() {
   const body = el("tbody");
   if (!views.length) body.append(el("tr", {}, el("td", { colspan: 7, class: "hint" }, "No target host has a suggestive or significant hit.")));
   for (const v of views) {
+    const c = (col, attrs, ...kids) => cell(ENDPOINT_HEAD, col, attrs, ...kids);
     body.append(el("tr", {},
-      el("td", { class: "url" }, host(v.host)), el("td", {}, pill(v.max_tier)), el("td", { class: "num" }, `${v.hits} / ${v.records}`),
-      el("td", { class: "nowrap" }, fmtTs(v.first_seen)), el("td", { class: "nowrap" }, fmtTs(v.last_seen)), el("td", {}, String(v.activity ?? "")),
-      el("td", {}, v.payloads ? Object.keys(obj(v.payload_rules)).map((r) => el("span", { class: "chip" }, r)) : el("span", { class: "hint" }, "none seen"))));
+      c(0, { class: "url" }, host(v.host)), c(1, {}, pill(v.max_tier)), c(2, { class: "num" }, `${v.hits} / ${v.records}`),
+      c(3, { class: "nowrap" }, fmtTs(v.first_seen)), c(4, { class: "nowrap" }, fmtTs(v.last_seen)), c(5, {}, String(v.activity ?? "")),
+      c(6, {}, v.payloads ? Object.keys(obj(v.payload_rules)).map((r) => el("span", { class: "chip" }, r)) : el("span", { class: "hint" }, "none seen"))));
   }
-  $("endpoints").replaceChildren(el("div", { class: "scroll" }, el("table", {},
-    el("thead", {}, el("tr", {}, ["Host", "Tier", "Hits", "First seen", "Last seen", "Status", "Attack payloads"].map((h) => el("th", { scope: "col" }, h)))), body)));
+  $("endpoints").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "endpoints" },
+    el("thead", {}, el("tr", {}, ENDPOINT_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)));
 }
 
 // ── Context ────────────────────────────────────────────────────────────────
@@ -862,7 +932,7 @@ async function renderReport() {
     return;
   }
   if (!wantReport) {
-    $("report").textContent = `Drafting loads the report tools (~${document.body.dataset.toolsSize || "1.5 MB"}). Press "Draft the report", or scroll here.`;
+    $("report").textContent = `Drafting loads the report tools${sizeNote("toolsSize")}. Press "Draft the report", or scroll here.`;
     return;
   }
   const opts = {
@@ -903,8 +973,9 @@ async function loadExample() {
   try {
     $("input").value = await fetchRoot("assets/example.ndjson", "text");
   } catch (e) {
-    return showError($("warnings"), e);
+    return showAlert($("alert"), "The example did not load.", String(e?.message ?? e));
   }
+  syncRun();
   $("format").value = "ndjson";
   $("map").value = "";
   $("preset-note").hidden = true;
@@ -916,14 +987,20 @@ $("run").addEventListener("click", () => {
   runAnalysis();
 });
 $("example").addEventListener("click", loadExample);
-$("input").addEventListener("input", () => ($("example-note").hidden = true));
+$("input").addEventListener("input", () => {
+  $("example-note").hidden = true;
+  syncRun();
+});
+$("input-edit").addEventListener("click", () => expandInput(true));
 $("file").addEventListener("change", async (e) => {
   const f = e.target.files[0];
   if (!f) return;
   $("example-note").hidden = true;
   $("input").value = await f.text();
+  syncRun();
   runAnalysis();
 });
+syncRun();
 for (const id of ["audience", "min-named"]) $(id).addEventListener("change", renderReport);
 $("reporter").addEventListener("input", renderReport);
 $("claims").addEventListener("input", () => (a ? renderReport() : readClaims()));

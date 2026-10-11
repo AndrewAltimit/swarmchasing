@@ -41,10 +41,13 @@
 # cache; with none found, wasm-pack optimises (uncached) and downloads it.
 #
 # The pages: the sc-site binary (crates/sc-publish) reads committed inputs
-# only (notices/, docs/, rules/default.toml, samples/eval/, site/), refuses
-# anything under data/ or $SWARMCHASE_DATA, and writes the site. Then
-# check-site.py checks every generated page and that every input it read is
-# tracked by git.
+# only (notices/, docs/, rules/default.toml, samples/eval/, samples/showcase/,
+# site/), refuses anything under data/ or $SWARMCHASE_DATA, and writes the
+# site, including the synthetic showcase bundle the tools page checks
+# (assets/showcase-bundle/, made from samples/showcase/ as `case bundle`
+# makes one). The loading messages quote each module's gzip size, so build
+# the modules before the pages. Then check-site.py checks every generated
+# page and that every input it read is tracked by git.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

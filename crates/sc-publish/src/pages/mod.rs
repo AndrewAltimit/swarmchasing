@@ -31,6 +31,15 @@ use std::fmt::Write;
 /// marked synthetic.
 pub const EXAMPLE_FILE: &str = "showcase.ndjson";
 
+/// Where the synthetic showcase bundle is published: the files of
+/// [`sc_case::bundle::FILES`] and the manifest, for the tools page's bundle
+/// check.
+pub const SHOWCASE_BUNDLE_DIR: &str = "assets/showcase-bundle";
+
+/// The case id the showcase bundle's stamp names. It says the bundle is
+/// synthetic wherever the stamp is shown.
+pub const SHOWCASE_CASE: &str = "synthetic-showcase";
+
 /// Fields of a labelled record that carry the answer, stripped from the
 /// example the workbench loads.
 const LABEL_FIELDS: [&str; 5] = ["label", "class", "cite", "hard_negative_for", "run"];
@@ -54,9 +63,10 @@ pub struct SiteInputs {
     /// `https://github.com/<owner>/<repo>`.
     pub repo: String,
     pub version: String,
-    /// Size of the engine module in bytes, when it was built first.
+    /// Download size of the engine module in bytes (gzip-compressed, as the
+    /// host serves it), when it was built first.
     pub engine_bytes: Option<u64>,
-    /// Size of the tools module (reports, bundle check, eval) in bytes.
+    /// The same for the tools module (reports, bundle check, eval).
     pub tools_bytes: Option<u64>,
 }
 
@@ -65,7 +75,8 @@ pub struct Ctx {
     pub version: String,
     pub rules_version: String,
     pub repo: String,
-    /// "1.3 MB", for the engine's loading message.
+    /// "0.5 MB", the engine's download size for its loading message; empty
+    /// when the module was not built first.
     pub engine_size: String,
     /// The same for the tools module.
     pub tools_size: String,
@@ -96,6 +107,34 @@ pub fn example_records(ndjson: &str) -> Result<String, String> {
         out.push(v.to_string());
     }
     Ok(out.join("\n") + "\n")
+}
+
+/// The synthetic showcase bundle: what `swarmchase case bundle` writes,
+/// made from the showcase records under the bundled rules, with the rules'
+/// figures on the labelled set. (published path, text) per file. The stamp
+/// is dated by the newest record, so the build is reproducible.
+pub fn showcase_bundle(
+    example: &str,
+    rules: &Rules,
+    version: &str,
+    eval: sc_core::EvalSnapshot,
+) -> Result<Vec<(String, String)>, String> {
+    let records = sc_core::parse_input(example, Format::Ndjson, &FieldMap::default()).observations;
+    let newest = records.iter().map(|o| o.ts).max().unwrap_or(0);
+    let generated = sc_core::fmt_ts(newest);
+    let c = sc_case::bundle::contents(
+        SHOWCASE_CASE,
+        &generated,
+        version,
+        None,
+        &records,
+        rules,
+        Some(eval),
+    )?;
+    Ok(c.files
+        .into_iter()
+        .map(|(name, text)| (format!("{SHOWCASE_BUNDLE_DIR}/{name}"), text))
+        .collect())
 }
 
 fn page(path: &str, nav: &'static str, title: &str, description: &str, body: String) -> Page {
@@ -184,10 +223,12 @@ fn doc_body(d: &docs::Doc, all: &[docs::Doc], repo: &str, before: &str, after: &
     )
 }
 
+/// A module's download size for its loading message ("0.5 MB"), or empty
+/// when it is not known (the pages were built before the modules).
 fn module_size(bytes: Option<u64>) -> String {
     match bytes {
-        Some(b) => format!("{:.1} MB", b as f64 / 1_048_576.0),
-        None => "1.5 MB".into(),
+        Some(b) => format!("{:.1} MB", (b as f64 / 1_048_576.0).max(0.1)),
+        None => String::new(),
     }
 }
 
@@ -279,6 +320,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         sc_core::parse_input(&example, Format::Ndjson, &FieldMap::default()).observations,
         &rules,
     );
+    let example_bundle_records = example.clone();
     out.push(("assets/example.ndjson".into(), example));
     let files: Vec<String> = inp.eval_set.iter().map(|(n, _)| n.clone()).collect();
     let mut set = String::new();
@@ -318,6 +360,12 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "assets/eval-set.json".into(),
         serde_json::json!({ "files": files, "ndjson": set }).to_string(),
     ));
+    out.extend(showcase_bundle(
+        &example_bundle_records,
+        &rules,
+        &inp.version,
+        sc_core::EvalSnapshot::of(&report),
+    )?);
 
     // Notices.
     let mut idx = page(
@@ -498,8 +546,8 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "Check an evidence bundle, read a security.txt, defang URLs.",
         shells::TOOLS.to_string(),
     );
+    // No preload: each tool loads its module on first use.
     p.scripts.push("js/pages/tools.js");
-    p.engine = true;
     pages.push(p);
 
     let mut sitemap = String::from(
@@ -727,6 +775,47 @@ mod tests {
         assert!(p.iter().any(|x| x.starts_with("unknown sector")), "{p:?}");
         let text = crate::write_notice(&synthetic_notices()[0]);
         assert!(text.contains("sector = \"government\""), "{text}");
+    }
+
+    #[test]
+    fn the_showcase_bundle_verifies_and_says_it_is_synthetic() {
+        let files = build_pages(&mut inputs()).unwrap();
+        let get = |name: &str| {
+            &files
+                .iter()
+                .find(|(p, _)| *p == format!("{SHOWCASE_BUNDLE_DIR}/{name}"))
+                .unwrap_or_else(|| panic!("{name} missing"))
+                .1
+        };
+        let rules = Rules::default_rules();
+        let checked = sc_case::bundle::check(
+            get("records.ndjson"),
+            get("analysis.json"),
+            get("stamp.json"),
+            &rules,
+            "0.1.0",
+            "",
+        )
+        .unwrap();
+        assert!(checked.differences.is_empty(), "{:?}", checked.differences);
+        assert_eq!(checked.stamp.case, SHOWCASE_CASE);
+        assert!(checked.stamp.eval.is_some());
+        assert!(!checked.stamp.flagged.is_empty());
+        let diffs = sc_case::bundle::manifest_differences(get("MANIFEST.sha256"), |n| {
+            Ok(get(n).as_bytes().to_vec())
+        })
+        .unwrap();
+        assert!(diffs.is_empty(), "{diffs:?}");
+        for l in get("records.ndjson").lines() {
+            assert!(l.contains("showcase:"), "{l}");
+        }
+        // The tools page no longer preloads the engine.
+        let tools = &files
+            .iter()
+            .find(|(p, _)| p == "tools/index.html")
+            .unwrap()
+            .1;
+        assert!(!tools.contains("rel=\"preload\""));
     }
 
     #[test]
