@@ -17,6 +17,7 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 - attribution claims established by case work, each with its layer, evidence and tag;
 - contacts;
 - fleets: clusters the admin treats as one operator's, by stable key;
+- the admin's agent grade, with its date and basis ([agent grade](#agent-grade));
 - a dated decision log;
 - the reports sent.
 
@@ -31,6 +32,7 @@ Each change is logged with its date.
 | `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits. Refused once its notice is published. |
 | `case claim <id> --party … [--layer …] --evidence … [--tag …] --detail …` | Records an attribution claim ([attribution claims](#attribution-claims)). |
 | `case set <id> --status … --notice … --min-named …` | Changes the status or the naming threshold. |
+| `case grade <id> [<L0..L5> --note … \| --clear]` | Shows each cluster's agent grade, or records the admin's ([agent grade](#agent-grade)). |
 | `case note <id> "…"` | Adds a dated entry to the decision log. |
 | `case fleet merge\|split\|show <id> …` | Groups soft-linked clusters into one fleet, splits one off, or lists fleets and candidates ([fleets](#fleets)). |
 | `case add <id> …` | Adds new records. |
@@ -53,6 +55,18 @@ Each change is logged with its date.
 A claim is about one of four layers ([SC-FM 7.1](../manual/07-attribution.md#fm-71-four-layers)): `developer` (the default), `host`, `harness` or `model_family`. Developer and host claims need `--evidence` on the ladder; `--tag observed|documented|inference|conclusion` overrides the derived tag. A model-family claim needs `--likelihood`, `--accuracy` (the method's, on a held-out set) and `--corpus-size`, and is refused without them.
 
 Each claim's label (Confirmed, Suspected, Possible, Unattributed) follows from its layer and evidence ([SC-FM 7.7](../manual/07-attribution.md#fm-77-attribution-labels)). The records add their own claims on every report: self-identified developers, client networks and runtime markers as hosts, and harness candidates from user agents and header and encoding fingerprints. Harness and model-family candidates are ranked in private reports and never named in a notice or a public export, whatever their evidence. Case files written before layers and tags existed read unchanged.
+
+## Agent grade
+
+Every cluster carries a computed agent grade from L0 (payloads only) to L4 (agent likely), with the signals, counter-signals and caps behind it ([methodology](../methodology.md#agent-likelihood), [SC-FM 7.10](../manual/07-attribution.md#fm-710-agent-likelihood)). `case grade <id>` lists them for the case's clusters above noise, and the decision if there is one; `case status` shows each cluster's grade.
+
+```sh
+swarmchase case grade <id>                                      # computed grades and their signals
+swarmchase case grade <id> L5 --note "provider confirmed: <link>"
+swarmchase case grade <id> --clear
+```
+
+The decision is the admin's, stored as `agent_grade` (level, date, note) in `case.toml` and logged. It needs `--note`, what it rests on with links. It is the only way to L5 (documented: operator logs matching an agent harness, or the provider's confirmation), and it may also set a lower grade than the records reach, such as L0 for a confirmed human tester. Case notes and provider reports show it beside the computed grades; the note appears in case notes only. A public notice prints no grade either way.
 
 ## Fleets
 

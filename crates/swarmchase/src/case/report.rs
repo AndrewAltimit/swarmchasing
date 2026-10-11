@@ -19,6 +19,7 @@ pub(crate) fn report_options(
         generated: Some(today.to_string()),
         min_named: c.min_named,
         claims: c.claims.clone(),
+        agent_grade: c.agent_grade.clone(),
         exposed_hosts: c
             .endpoints
             .iter()

@@ -123,6 +123,10 @@ pub struct Cluster {
     pub link_features: Vec<LinkFeature>,
     pub runs: Vec<Span>,
     pub timing: TimingStats,
+    /// How likely an agent, not a person or a tool, sent the requests
+    /// ([`crate::agentness`]). Descriptive: never scored, never linked on.
+    #[serde(default)]
+    pub agent: crate::agentness::AgentAssessment,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -266,6 +270,9 @@ pub fn analyze(observations: Vec<Observation>, rules: &Rules) -> Analysis {
     link::number(&mut clusters, &mut results);
     let cluster_ids: Vec<String> = clusters.iter().map(|c| c.id.clone()).collect();
     let escalations = crate::escalation::escalations(&results, &cluster_ids, &rules.set.escalation);
+    for c in clusters.iter_mut() {
+        c.agent = crate::agentness::assess(c, &results, &chains, &escalations, &rules.set.chains);
+    }
 
     let mut tier_counts = BTreeMap::new();
     let mut rule_counts = BTreeMap::new();

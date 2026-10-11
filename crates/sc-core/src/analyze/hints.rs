@@ -229,6 +229,7 @@ pub(super) fn cluster(
             .collect(),
         runs,
         timing: t,
+        agent: Default::default(),
     }
 }
 

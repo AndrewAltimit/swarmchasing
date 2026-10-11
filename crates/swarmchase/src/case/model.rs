@@ -144,6 +144,10 @@ pub struct Case {
     /// The admin's fleet grouping of the case's clusters, by stable key.
     #[serde(default, rename = "fleet", skip_serializing_if = "Vec::is_empty")]
     pub fleets: Vec<Fleet>,
+    /// The admin's agent grade for the case (`case grade`), the only way to
+    /// L5 (documented). Reports show it beside the computed grades.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_grade: Option<sc_core::GradeDecision>,
 }
 
 impl Case {

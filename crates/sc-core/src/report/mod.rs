@@ -4,6 +4,7 @@
 //! one-line cluster hints, `sections` attribution and the endpoint table;
 //! this module selects the clusters and lays the report out.
 
+mod agentness;
 mod audience;
 mod hints;
 mod sections;
@@ -48,6 +49,11 @@ pub struct ReportOptions {
     /// compromised: the weakness may still be open).
     #[serde(default)]
     pub exposed_hosts: Vec<String>,
+    /// The admin's agent grade for the case ([`crate::agentness`]), shown
+    /// beside the computed grades; the only way to L5. Set by the case, never
+    /// read from options JSON, so the browser module carries no decoder.
+    #[serde(skip)]
+    pub agent_grade: Option<crate::agentness::GradeDecision>,
 }
 
 /// A public notice draft and what the admin must look at before publishing.
@@ -79,6 +85,7 @@ impl Default for ReportOptions {
             min_named: Evidence::default(),
             claims: Vec::new(),
             exposed_hosts: Vec::new(),
+            agent_grade: None,
         }
     }
 }
@@ -197,7 +204,12 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     if kinds.contains_key(&IndicatorKind::Exploit) {
         let _ = writeln!(
             s,
-            "\n**Attack payloads were present** (see Indicators). We did not test whether they succeeded."
+            "\n**Attack payloads were present** (see Indicators). We did not test whether they succeeded.{}",
+            if opts.audience == Audience::Public {
+                agentness::public_note(&clusters, opts)
+            } else {
+                ""
+            }
         );
     }
     let _ = writeln!(s);
@@ -221,6 +233,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
         .iter()
         .fold(Vec::new(), |acc, c| merge(acc, &attribute(a, c)));
     attribution_section(&mut s, &merge(claims, &opts.claims), opts);
+    agentness::section(&mut s, &clusters, opts);
 
     if opts.audience != Audience::Provider {
         endpoint_table(&mut s, a, &hosts, view.as_deref_mut());
