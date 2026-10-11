@@ -54,6 +54,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 <aside class="pane pane-context" data-pane="context" aria-labelledby="h-ctx">
 <h2 id="h-ctx">Context</h2>
 <div id="context" aria-live="polite"><p class="hint">Select a cluster, a run, a graph node or a record to see its timing, hints and records here.</p></div>
+<template id="tpl-fm15"><a href="../docs/manual/15-misalignment/#fm-153-scope-tests">SC-FM chapter 15</a></template>
 <h3 class="pane-sub">Links between clusters</h3>
 <p class="hint">Hints to check, not evidence: none changes a score or merges clusters.</p>
 <div id="links"><p class="hint">None yet.</p></div>

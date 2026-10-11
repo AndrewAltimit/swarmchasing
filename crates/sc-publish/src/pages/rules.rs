@@ -22,6 +22,8 @@ pub struct RuleCard {
     pub description: String,
     pub tactic: Option<String>,
     pub artifact: bool,
+    /// The independence group: rules in one group count once per record.
+    pub group: Option<String>,
 }
 
 /// `T2 tool escalation`: a tactic id with its name, or the id alone when
@@ -73,6 +75,11 @@ pub fn parse_rules(toml_text: &str) -> Result<(String, i64, i64, Vec<RuleCard>),
                 .filter(|s| !s.is_empty())
                 .map(String::from),
             artifact: r.get("artifact").and_then(|x| x.as_bool()).unwrap_or(false),
+            group: r
+                .get("group")
+                .and_then(|x| x.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from),
         });
     }
     Ok((version, th("suggestive"), th("significant"), cards))
@@ -106,13 +113,15 @@ pub fn body(
     for t in cards.iter().filter_map(|c| c.tactic.as_deref()) {
         *tactic_n.entry(t).or_insert(0) += 1;
     }
+    let ctx = (sug - 1).max(0);
     let mut s = String::new();
     let _ = writeln!(
         s,
         "<header class=\"page-head\"><h1>Rules</h1>\
-<p class=\"lede\">The indicator rules every analysis on this site and in the CLI runs: rules version <code>{}</code>. A record's score is the sum of the weights of the distinct rules it matches; a score of {sug} or more is <em>suggestive</em>, {sig} or more is <em>significant</em>, and a rule marked <em>significant alone</em> is enough for that tier by itself. A single relay hit is never enough: people use those services too.</p>\
+<p class=\"lede\">The indicator rules every analysis on this site and in the CLI runs: rules version <code>{}</code>. Each rule counts once per record. Rules that read the same artifact share an <em>independence group</em>, which counts once, at the largest weight among its rules that fired; other rules add their weight. Context hits (relays, cache-busters, self-identification, headers, outcomes) together count at most {ctx}, so context alone stays below suggestive: people use those services too ({}). A score of {sug} or more is <em>suggestive</em>, {sig} or more is <em>significant</em>, and a rule marked <em>significant alone</em> is enough for that tier by itself.</p>\
 <p class=\"lede\">Rules marked <em>links records</em> join the records they match into one cluster, because only one operator would share that value. How each kind is read is in the <a href=\"../methodology/\">methodology</a> and the Field Manual ({}, {}); how the rules score on the labelled set is on the <a href=\"../eval/\">evaluation</a> page. Every card can test a URL in this page: it is decoded, never opened.</p></header>",
         esc(&version),
+        fm_link(fm, "FM-4.11", "FM-4.11"),
         fm_link(fm, "FM-4.2", "rule anatomy"),
         fm_link(fm, "FM-4.3", "tactics")
     );
@@ -181,7 +190,14 @@ pub fn body(
             c.significant,
             c.link,
             c.artifact,
-            esc(&format!("{} {} {}", c.id, c.pattern, c.description).to_lowercase()),
+            esc(&format!(
+                "{} {} {} {}",
+                c.id,
+                c.pattern,
+                c.description,
+                c.group.as_deref().unwrap_or("")
+            )
+            .to_lowercase()),
             esc(&c.id),
             esc(&slug_class(&c.kind)),
             esc(&kind_label(&c.kind)),
@@ -195,6 +211,14 @@ pub fn body(
             c.weight,
             esc(&c.target.replace('_', " "))
         );
+        if let Some(g) = &c.group {
+            let _ = write!(
+                s,
+                "<div><dt>Group</dt><dd><code>{}</code> <span class=\"hint\">counts once per record ({})</span></dd></div>",
+                esc(g),
+                fm_link(fm, "FM-4.11", "FM-4.11")
+            );
+        }
         if let Some(t) = &c.tactic {
             let _ = write!(
                 s,
@@ -295,6 +319,7 @@ target = "host"
 pattern = "x.example"
 weight = 4
 link = true
+group = "oast"
 "#;
         let (v, sug, sig, cards) = parse_rules(toml).unwrap();
         assert_eq!((v.as_str(), sug, sig, cards.len()), ("v<1>", 3, 6, 2));
@@ -316,6 +341,9 @@ link = true
         assert!(b.contains("data-rule-test=\"a.&lt;script&gt;\""));
         assert_eq!(tactic_label("T2"), "T2 tool escalation");
         assert!(b.contains("data-link=\"true\""));
+        assert_eq!(cards[1].group.as_deref(), Some("oast"));
+        assert!(b.contains("<dt>Group</dt><dd><code>oast</code>"));
+        assert!(!b.contains("the sum of the weights"));
     }
 
     #[test]

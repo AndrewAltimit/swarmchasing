@@ -94,9 +94,9 @@ Each rule has a kind, a target, a pattern and a weight. The kinds:
 
 A rule's target says what it reads: the host of each layer (suffix match), each layer's decoded text, parameter names, parameter values, request headers, the user agent, or the final URL. Patterns are case-insensitive regular expressions unless a rule says otherwise. A parameter-value rule can also name a `check`, a test its matches must pass for what a regular expression cannot say: `repeated_token` ([`prose.rs`](../crates/sc-core/src/prose.rs)) wants a word of three characters or more, or a phrase of two or three words, repeated five or more times in a row. Short refrains (`na na na`) and one long run of a letter do not pass.
 
-**Scoring.** Each rule counts at most once per record, whatever layer it matched in. A record's score is the sum of the weights of the distinct rules that fired. Weights are deliberately low for anything ordinary users also do: a relay is worth 1 or 2, a self-identification 1.
+**Scoring.** Each rule counts at most once per record, whatever layer it matched in. A record's score adds the weights of the distinct rules that fired, with two constraints below. Weights are deliberately low for anything ordinary users also do: a relay is worth 1 or 2, a self-identification 1.
 
-Rules that read the same artifact are summed as if independent: one fetch program carried through httpbin fires `carrier.httpbin`, `carrier.html_program`, `carrier.inline_fetch_program` and often `marker.title_write`, and reaches significant on tool use alone, and a run tag fires both `marker.uq_tags` and `marker.test_tag`. The method counts such rules once per independence group, at the largest weight among them ([FM-4.11](manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap)); the toolkit does this in `Rules::score`, from the `group` field ([SC-Rules v1](specs/rules-v1.md)).
+Rules that read the same artifact are not independent: one fetch program carried through httpbin fires `carrier.html_program`, `carrier.inline_fetch_program` and often `marker.title_write`, and a run tag fires both `marker.uq_tags` and `marker.test_tag`. Such rules share an independence group, which counts once, at the largest weight among its rules that fired; context kinds together count at most one below the suggestive threshold ([FM-4.11](manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap)). The toolkit does both in `Rules::score`, from the `group` field ([SC-Rules v1](specs/rules-v1.md)). A program through an echo service is suggestive on its own and significant with a run tag or another independent indicator.
 
 **Significant rules.** A rule marked `significant = true` puts a record in the top tier on its own. These are the unambiguous attack payloads (UNION SELECT, boolean and time-based SQL injection, multi-step traversal and sensitive files, XSS, template and command injection) and a small number of infrastructure fingerprints. Weaker exploit rules, such as a single traversal step or a lone quote, are not significant on their own.
 
@@ -126,7 +126,7 @@ Both thresholds are set in the rules file. A tier says the record's contents loo
 
 A cluster gets its own tier: the highest tier among its members, raised one step only by corroboration. A suggestive cluster becomes significant when two of its suggestive-or-above members each carry a kind of evidence the other lacks: one record shows a callback channel and model residue, another the same channel and a carrier program. Context kinds, which ordinary clients produce too, do not count towards that: `relay`, `cache_buster`, `self_id`, `header` and `outcome`. A cluster of noise records stays noise, and weak rules collected across many members never add up to a higher tier.
 
-The cluster's `score`, the sum of the weights of the distinct rules seen in any member, is listed for reference and does not set the tier. Code: `cluster_tier` in [`hints.rs`](../crates/sc-core/src/analyze/hints.rs).
+The cluster's `score`, the distinct rules seen in any member scored as one record's would be, is listed for reference and does not set the tier. Code: `cluster_tier` in [`hints.rs`](../crates/sc-core/src/analyze/hints.rs).
 
 ## Linking into clusters
 
@@ -331,7 +331,7 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **Humans look the same.** The rules detect agent-like activity. A security researcher, a penetration tester or a conventional scanner sending the same payloads through the same services produces the same records. A significant tier means attack payloads were present, not that an AI agent sent them. Context, rhythm, residue and case work separate the two; the [agent grade](#agent-likelihood) states which of them a cluster shows.
 
-**A tier is not misalignment.** A benign data task done with fetch programs through an echo service grades significant. Whether activity was out of scope is a separate finding ([FM-14.21](manual/14-limits.md#fm-1421-a-tier-is-not-misalignment)).
+**A tier is not misalignment.** A benign data task done with fetch programs through an echo service grades suggestive, and significant once an independent indicator such as a run tag comes with the program. Whether activity was out of scope is a separate finding ([FM-14.21](manual/14-limits.md#fm-1421-a-tier-is-not-misalignment)).
 
 **Model-output residue from people.** A person who pastes a chatbot answer into a scan form leaves the same Markdown, placeholders and JSON. This is why residue rules carry low weights and never link.
 

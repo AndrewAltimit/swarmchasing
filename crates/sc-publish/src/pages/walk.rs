@@ -75,14 +75,26 @@ pub fn layer_stack(layers: &[UrlLayer], label: &str) -> String {
     s
 }
 
-/// A record's rule hits as one stacked bar against the two thresholds.
-/// `hits`: (rule id, weight).
-pub fn score_bar(hits: &[(String, i32)], suggestive: i32, significant: i32, label: &str) -> String {
-    let total: i32 = hits.iter().map(|h| h.1.max(0)).sum();
-    let max = (total.max(significant) as f64 * 1.15).max(1.0);
+/// One contribution to a record's score: a rule, or an independence group
+/// counted once. `counted` is what reaches the score; `dropped` is weight
+/// that fired but does not count (the rest of a group, or context above
+/// the cap), with `note` saying why.
+pub struct ScorePart {
+    pub label: String,
+    pub counted: i32,
+    pub dropped: i32,
+    pub note: String,
+}
+
+/// A record's score as one stacked bar against the two thresholds: one
+/// segment per contribution, then the weight that fired but does not count
+/// as dashed outlines past the score.
+pub fn score_bar(parts: &[ScorePart], suggestive: i32, significant: i32, label: &str) -> String {
+    let total: i32 = parts.iter().map(|p| p.counted.max(0)).sum();
+    let dropped: i32 = parts.iter().map(|p| p.dropped.max(0)).sum();
+    let max = ((total + dropped).max(significant) as f64 * 1.15).max(1.0);
     let (w, l, r) = (720.0, 12.0, 12.0);
-    let rows = hits.len().div_ceil(2);
-    let h = 96.0 + rows as f64 * 20.0;
+    let h = 96.0 + parts.len() as f64 * 20.0;
     let x = |v: f64| l + v / max * (w - l - r);
     let mut s = open("score-fig", w, h, label);
     let _ = write!(
@@ -91,27 +103,44 @@ pub fn score_bar(hits: &[(String, i32)], suggestive: i32, significant: i32, labe
         w - l - r
     );
     let mut at = 0.0;
-    for (i, (id, wt)) in hits.iter().enumerate() {
-        let v = (*wt).max(0) as f64;
+    for (i, p) in parts.iter().enumerate() {
+        let v = p.counted.max(0) as f64;
         if v <= 0.0 {
             continue;
         }
         let (x0, x1) = (x(at), x(at + v));
         let _ = write!(
             s,
-            "<rect class=\"seg s{}\" x=\"{:.1}\" y=\"30\" width=\"{:.1}\" height=\"26\" rx=\"3\"><title>{} +{wt}</title></rect>",
+            "<rect class=\"seg s{}\" x=\"{:.1}\" y=\"30\" width=\"{:.1}\" height=\"26\" rx=\"3\"><title>{} +{}</title></rect>",
             i % 3 + 1,
-            x0 + if i > 0 { 1.0 } else { 0.0 },
-            (x1 - x0 - if i > 0 { 1.0 } else { 0.0 }).max(1.0),
-            esc(id)
+            x0 + if at > 0.0 { 1.0 } else { 0.0 },
+            (x1 - x0 - if at > 0.0 { 1.0 } else { 0.0 }).max(1.0),
+            esc(&p.label),
+            p.counted
         );
         if x1 - x0 > 26.0 {
             let _ = write!(
                 s,
-                "<text class=\"seg-v\" x=\"{:.1}\" y=\"47\" text-anchor=\"middle\">+{wt}</text>",
-                (x0 + x1) / 2.0
+                "<text class=\"seg-v\" x=\"{:.1}\" y=\"47\" text-anchor=\"middle\">+{}</text>",
+                (x0 + x1) / 2.0,
+                p.counted
             );
         }
+        at += v;
+    }
+    // Weight that fired but does not count, past the score.
+    for p in parts.iter().filter(|p| p.dropped > 0) {
+        let v = p.dropped as f64;
+        let (x0, x1) = (x(at), x(at + v));
+        let _ = write!(
+            s,
+            "<rect class=\"seg dropped\" x=\"{:.1}\" y=\"33\" width=\"{:.1}\" height=\"20\" rx=\"3\"><title>{}: {} not counted ({})</title></rect>",
+            x0 + 2.0,
+            (x1 - x0 - 2.0).max(1.0),
+            esc(&p.label),
+            p.dropped,
+            esc(&p.note)
+        );
         at += v;
     }
     for (v, name, cls) in [
@@ -127,22 +156,32 @@ pub fn score_bar(hits: &[(String, i32)], suggestive: i32, significant: i32, labe
     }
     let _ = write!(
         s,
-        "<text class=\"label\" x=\"{:.1}\" y=\"78\" text-anchor=\"end\">score {total}</text>",
-        w - r
+        "<text class=\"label\" x=\"{:.1}\" y=\"78\" text-anchor=\"end\">score {total}{}</text>",
+        w - r,
+        if dropped > 0 {
+            format!(" (+{dropped} fired, not counted: dashed)")
+        } else {
+            String::new()
+        }
     );
-    for (i, (id, wt)) in hits.iter().enumerate() {
-        let (col, row) = (i % 2, i / 2);
-        let kx = l + col as f64 * 360.0;
-        let ky = 92.0 + row as f64 * 20.0;
+    for (i, p) in parts.iter().enumerate() {
+        let ky = 92.0 + i as f64 * 20.0;
+        let key = if p.counted > 0 {
+            format!("seg s{}", i % 3 + 1)
+        } else {
+            "seg dropped".to_string()
+        };
+        let mut text = format!("{} +{}", cut(&p.label, 56), p.counted);
+        if p.dropped > 0 {
+            let _ = write!(text, " · {} not counted: {}", p.dropped, cut(&p.note, 48));
+        }
         let _ = write!(
             s,
-            "<rect class=\"seg s{}\" x=\"{kx:.1}\" y=\"{:.1}\" width=\"10\" height=\"10\" rx=\"2\"/>\
-<text class=\"mono-sm\" x=\"{:.1}\" y=\"{:.1}\">{} +{wt}</text>",
-            i % 3 + 1,
+            "<rect class=\"{key}\" x=\"{l:.1}\" y=\"{:.1}\" width=\"10\" height=\"10\" rx=\"2\"/>\
+<text class=\"mono-sm\" x=\"{:.1}\" y=\"{ky:.1}\">{}</text>",
             ky - 9.0,
-            kx + 16.0,
-            ky,
-            esc(&cut(id, 40))
+            l + 16.0,
+            esc(&text)
         );
     }
     s.push_str("</svg>");
@@ -497,6 +536,132 @@ pub fn disclosure_flow(steps: &[(&str, &str)], label: &str) -> String {
     s
 }
 
+/// One cluster's scope assessment as a grid row: label, tier, the four
+/// FM-15.1 answers (payload, agent, out of scope, coordinated), the tests
+/// as (id, outcome name), and the finding label.
+pub struct ScopeRow {
+    pub label: String,
+    pub tier: String,
+    pub questions: [bool; 4],
+    pub tests: Vec<(String, String)>,
+    pub finding: String,
+}
+
+/// The scope assessment of every cluster: the four questions, then the
+/// S1–S7 tests, then the finding. Shapes keep the questions apart: a payload
+/// is a grey disc (observed), out of scope a filled square (inferred from
+/// the tests), coordination a dashed ring. A failed test is a filled
+/// square, a pass an open circle, not assessable a dashed one.
+pub fn scope_grid(rows: &[ScopeRow], label: &str) -> String {
+    const QUESTIONS: [(&str, &str); 4] = [
+        ("payload", "Payload"),
+        ("agent", "Agent"),
+        ("scope", "Out of scope"),
+        ("coord", "Coordinated"),
+    ];
+    let (w, top, rh) = (720.0, 46.0, 24.0);
+    let (qx, qw) = (80.0, 79.0);
+    let tx = qx + qw * 4.0 + 18.0;
+    let tests = rows.iter().map(|r| r.tests.len()).max().unwrap_or(0).max(1);
+    let tw = 28.0;
+    let fx = tx + tw * tests as f64 + 14.0;
+    let h = top + rh * rows.len().max(1) as f64 + 6.0;
+    let mut s = open("scope-fig", w, h, label);
+    let _ = write!(
+        s,
+        "<text class=\"via\" x=\"{qx:.1}\" y=\"12\">FOUR QUESTIONS</text>\
+<text class=\"via\" x=\"{tx:.1}\" y=\"12\">SCOPE TESTS</text>\
+<text class=\"via\" x=\"{fx:.1}\" y=\"12\">FINDING</text>"
+    );
+    for (i, (_, name)) in QUESTIONS.iter().enumerate() {
+        let _ = write!(
+            s,
+            "<text class=\"label\" x=\"{:.1}\" y=\"32\" text-anchor=\"middle\">{}</text>",
+            qx + qw * i as f64 + qw / 2.0,
+            esc(name)
+        );
+    }
+    if let Some(first) = rows.first() {
+        for (i, (id, _)) in first.tests.iter().enumerate() {
+            let _ = write!(
+                s,
+                "<text class=\"label\" x=\"{:.1}\" y=\"32\" text-anchor=\"middle\">{}</text>",
+                tx + tw * i as f64 + tw / 2.0,
+                esc(id)
+            );
+        }
+    }
+    for (r, row) in rows.iter().enumerate() {
+        let cy = top + rh * r as f64 + rh / 2.0;
+        let _ = write!(
+            s,
+            "<rect class=\"scope-band r{}\" x=\"4\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\"/>\
+<circle class=\"node tier-{}\" cx=\"14\" cy=\"{cy:.1}\" r=\"5\"/><text class=\"label\" x=\"26\" y=\"{:.1}\">{}</text>",
+            r % 2,
+            cy - rh / 2.0,
+            w - 8.0,
+            rh,
+            esc(&slug_class(&row.tier)),
+            cy + 4.0,
+            esc(&cut(&row.label, 7))
+        );
+        for (i, ((key, name), yes)) in QUESTIONS.iter().zip(row.questions).enumerate() {
+            let cx = qx + qw * i as f64 + qw / 2.0;
+            let title = format!("{}: {} {}", row.label, name, if yes { "yes" } else { "no" });
+            let _ = if !yes {
+                write!(
+                    s,
+                    "<circle class=\"sqm no\" cx=\"{cx:.1}\" cy=\"{cy:.1}\" r=\"2.5\"><title>{}</title></circle>",
+                    esc(&title)
+                )
+            } else if *key == "scope" {
+                write!(
+                    s,
+                    "<rect class=\"sqm q-scope\" x=\"{:.1}\" y=\"{:.1}\" width=\"14\" height=\"14\" rx=\"2\"><title>{}</title></rect>",
+                    cx - 7.0,
+                    cy - 7.0,
+                    esc(&title)
+                )
+            } else {
+                write!(
+                    s,
+                    "<circle class=\"sqm q-{key}\" cx=\"{cx:.1}\" cy=\"{cy:.1}\" r=\"6.5\"><title>{}</title></circle>",
+                    esc(&title)
+                )
+            };
+        }
+        for (i, (id, outcome)) in row.tests.iter().enumerate() {
+            let cx = tx + tw * i as f64 + tw / 2.0;
+            let title = format!("{}: {} {}", row.label, id, outcome.replace('_', " "));
+            let _ = if outcome == "fail" {
+                write!(
+                    s,
+                    "<rect class=\"tc fail\" x=\"{:.1}\" y=\"{:.1}\" width=\"12\" height=\"12\" rx=\"2\"><title>{}</title></rect>",
+                    cx - 6.0,
+                    cy - 6.0,
+                    esc(&title)
+                )
+            } else {
+                write!(
+                    s,
+                    "<circle class=\"tc {}\" cx=\"{cx:.1}\" cy=\"{cy:.1}\" r=\"5\"><title>{}</title></circle>",
+                    esc(&slug_class(outcome)),
+                    esc(&title)
+                )
+            };
+        }
+        let _ = write!(
+            s,
+            "<text class=\"label finding {}\" x=\"{fx:.1}\" y=\"{:.1}\">{}</text>",
+            esc(&slug_class(&row.finding)),
+            cy + 4.0,
+            esc(&row.finding)
+        );
+    }
+    s.push_str("</svg>");
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -513,7 +678,27 @@ mod tests {
                 }],
                 p,
             ),
-            score_bar(&[(p.into(), 3)], 3, 5, p),
+            score_bar(
+                &[ScorePart {
+                    label: p.into(),
+                    counted: 3,
+                    dropped: 2,
+                    note: p.into(),
+                }],
+                3,
+                5,
+                p,
+            ),
+            scope_grid(
+                &[ScopeRow {
+                    label: p.into(),
+                    tier: p.into(),
+                    questions: [true, false, true, false],
+                    tests: vec![(p.into(), p.into())],
+                    finding: p.into(),
+                }],
+                p,
+            ),
             cluster_graph(
                 &[GNode {
                     label: p.into(),

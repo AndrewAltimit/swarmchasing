@@ -84,7 +84,7 @@ A check on any other target, or a name not in the table, stops the file loading.
 
 ## Choosing a weight
 
-A record's score is the sum of the weights of the distinct rules that fired, each counted once however many layers it matched. The `[thresholds]` table grades it: suggestive at 3, significant at 6.
+A record's score adds the weights of the distinct rules that fired, each counted once however many layers it matched. Rules in one `group` count once, at the largest weight that fired, and context kinds (relay, cache buster, self-identification, header, outcome) together count at most one below suggestive ([FM-4.11](../manual/04-indicators.md#fm-411-independence-groups-and-the-context-cap)). The `[thresholds]` table grades it: suggestive at 3, significant at 6.
 
 - **Anything ordinary users also do stays below suggestive alone.** People read pages through relays, use echo services and add cache-busters. Relays weigh 1 or 2, so one relay hit never flags a record; it needs a second, independent indicator.
 - **Artifacts stay low.** Model-output residue and self-identification come from people pasting chatbot answers too. Weight 1 or 2.

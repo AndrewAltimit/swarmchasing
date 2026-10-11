@@ -82,7 +82,7 @@ Regular expressions are case-insensitive and use the syntax of the Rust `regex` 
 For one record:
 
 1. Each rule counts at most once, whichever layer or target it matched.
-2. The score is the sum of the weights of the distinct rules that fired.
+2. The score is the sum of the weights of the distinct rules that fired, with the [independence groups](#independence-groups) and the [context cap](#context-cap) below applied.
 3. The tier is **significant** when a rule marked `significant` fired or the score reaches `thresholds.significant`; else **suggestive** when the score reaches `thresholds.suggestive`; else **noise**.
 
 A cluster's tier is not a summed score: it is its strongest member's tier, raised one step only by corroboration between members ([FM-14.9](../manual/14-limits.md#fm-149-stacking-across-a-cluster)).

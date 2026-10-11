@@ -74,6 +74,12 @@ jobs:
       - name: Committed data (no dumps, no live secrets)
         run: python3 scripts/ci/check-committed-data.py
 
+      # The bundled rules file against the published SC-Rules v1 schema, so a
+      # field the schema does not know (or a missing one) fails here, not in
+      # someone else's tooling. Stdlib only.
+      - name: Rules schema (SC-Rules v1)
+        run: python3 scripts/ci/check-rules-schema.py
+
       - name: Doc links + heading anchors
         run: python3 scripts/ci/check-md-links.py
 

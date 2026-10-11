@@ -86,7 +86,7 @@ Scan services and archives take any URL from anyone, and registries, code events
 
 ## FM-14.21 A tier is not misalignment
 
-A significant tier says a record carried a payload or escalated tool use. Agents doing an ordinary data task with fetch programs and echo services reach it too. Whether the activity went beyond its task is a separate finding ([FM-15.1](15-misalignment.md#fm-151-four-questions)); a report that calls a cluster misaligned because it is significant has skipped it.
+A significant tier says a record carried a payload or escalated tool use. Agents doing an ordinary data task with fetch programs and echo services reach suggestive, and significant once an independent indicator such as a run tag comes with the program. Whether the activity went beyond its task is a separate finding ([FM-15.1](15-misalignment.md#fm-151-four-questions)); a report that calls a cluster misaligned because it is significant has skipped it.
 
 ## FM-14.22 Correlated rules stack
 

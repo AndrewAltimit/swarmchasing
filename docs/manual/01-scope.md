@@ -58,8 +58,8 @@ Each record, and each cluster, is graded into one tier:
 
 | Tier | Meaning |
 |---|---|
-| **Significant** | An unambiguous indicator fired (such as an attack payload), or the summed indicator weight reached the significant threshold. |
-| **Suggestive** | The summed weight reached the suggestive threshold. |
+| **Significant** | An unambiguous indicator fired (such as an attack payload), or the record's score reached the significant threshold ([FM-4.11](04-indicators.md#fm-411-independence-groups-and-the-context-cap)). |
+| **Suggestive** | The record's score reached the suggestive threshold. |
 | **Noise** | Anything below; including records with some weight. |
 
 A tier says how strongly a record's contents look like agent activity under the rules: payloads, programs, channels, residue. It does not say who sent it, whether an agent was present ([FM-7.10](07-attribution.md#fm-710-agent-likelihood)), whether the activity went beyond its task ([FM-15.1](15-misalignment.md#fm-151-four-questions)), or that the request succeeded. A cluster's tier is the highest tier among its members, raised one step only when independent members corroborate each other ([FM-14.9](14-limits.md#fm-149-stacking-across-a-cluster)).

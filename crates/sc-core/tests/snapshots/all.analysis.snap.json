@@ -9980,7 +9980,7 @@
           {
             "id": "S7",
             "outcome": "fail",
-            "detail": "an interaction edge ties this cluster's runs to another's"
+            "detail": "an interaction edge ties this cluster's runs to another's while S6 fails"
           }
         ],
         "finding": "scope_exceeded",
@@ -10375,7 +10375,7 @@
           {
             "id": "S7",
             "outcome": "fail",
-            "detail": "an interaction edge ties this cluster's runs to another's"
+            "detail": "an interaction edge ties this cluster's runs to another's while S4 fails"
           }
         ],
         "finding": "scope_exceeded",
@@ -11552,7 +11552,7 @@
           {
             "id": "S7",
             "outcome": "fail",
-            "detail": "an interaction edge ties this cluster's runs to another's"
+            "detail": "an interaction edge ties this cluster's runs to another's while S4 fails"
           }
         ],
         "finding": "scope_exceeded",
@@ -13944,14 +13944,14 @@
           },
           {
             "id": "S7",
-            "outcome": "fail",
-            "detail": "an interaction edge ties this cluster's runs to another's"
+            "outcome": "not_assessable",
+            "detail": "an interaction edge touches this cluster, but no other test fails for it to widen"
           }
         ],
-        "finding": "scope_exceeded",
+        "finding": "in_scope",
         "payload_present": true,
         "agent_present": false,
-        "out_of_scope": true,
+        "out_of_scope": false,
         "coordinated": true
       }
     },
@@ -14134,14 +14134,14 @@
           },
           {
             "id": "S7",
-            "outcome": "fail",
-            "detail": "an interaction edge ties this cluster's runs to another's"
+            "outcome": "not_assessable",
+            "detail": "an interaction edge touches this cluster, but no other test fails for it to widen"
           }
         ],
-        "finding": "scope_exceeded",
+        "finding": "in_scope",
         "payload_present": true,
         "agent_present": false,
-        "out_of_scope": true,
+        "out_of_scope": false,
         "coordinated": true
       }
     },
@@ -14311,14 +14311,14 @@
           },
           {
             "id": "S7",
-            "outcome": "fail",
-            "detail": "an interaction edge ties this cluster's runs to another's"
+            "outcome": "not_assessable",
+            "detail": "an interaction edge touches this cluster, but no other test fails for it to widen"
           }
         ],
-        "finding": "scope_exceeded",
+        "finding": "in_scope",
         "payload_present": true,
         "agent_present": false,
-        "out_of_scope": true,
+        "out_of_scope": false,
         "coordinated": true
       }
     },
@@ -14482,14 +14482,14 @@
           },
           {
             "id": "S7",
-            "outcome": "fail",
-            "detail": "an interaction edge ties this cluster's runs to another's"
+            "outcome": "not_assessable",
+            "detail": "an interaction edge touches this cluster, but no other test fails for it to widen"
           }
         ],
-        "finding": "scope_exceeded",
+        "finding": "in_scope",
         "payload_present": true,
         "agent_present": false,
-        "out_of_scope": true,
+        "out_of_scope": false,
         "coordinated": true
       }
     },

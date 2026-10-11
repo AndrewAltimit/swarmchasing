@@ -9,8 +9,8 @@
 use super::html::{esc, pill, table};
 use super::svg::{Lane, swimlanes};
 use super::walk::{
-    GEdge, GNode, LadderCol, RunEdge, RunNode, UrlLayer, cluster_graph, disclosure_flow, ladder,
-    layer_bands, layer_stack, score_bar, swarm_arcs,
+    GEdge, GNode, LadderCol, RunEdge, RunNode, ScopeRow, ScorePart, UrlLayer, cluster_graph,
+    disclosure_flow, ladder, layer_bands, layer_stack, scope_grid, score_bar, swarm_arcs,
 };
 use crate::file::NoticeFile;
 use crate::markdown::md_blocks;
@@ -141,52 +141,148 @@ fn unwrap_step(a: &Analysis, links: &FmLinks) -> String {
     })
 }
 
+/// A record's score as its contributions ([`Rules::score`]): each
+/// independence group once, at its heaviest rule that fired; each
+/// ungrouped rule at its weight; context kinds together capped one below
+/// suggestive. Evidence first, then context, each in hit order.
+pub(crate) fn score_parts(r: &ObsResult, rules: &Rules) -> Vec<ScorePart> {
+    // A group (or one ungrouped rule) and its members: (rule id, weight, context).
+    type Unit = (Option<String>, Vec<(String, i32, bool)>);
+    let mut units: Vec<Unit> = Vec::new();
+    for h in &r.hits {
+        let group = rules.rule(&h.rule_id).and_then(|d| d.group.clone());
+        let member = (h.rule_id.clone(), h.weight.max(0), h.kind.is_context());
+        match units.iter_mut().find(|(g, _)| g.is_some() && *g == group) {
+            Some((_, m)) => m.push(member),
+            None => units.push((group, vec![member])),
+        }
+    }
+    let mut parts: Vec<(ScorePart, bool)> = units
+        .into_iter()
+        .map(|(group, members)| {
+            // The heaviest member counts; a non-context member wins a tie.
+            let best = members
+                .iter()
+                .enumerate()
+                .max_by_key(|(i, m)| (m.1, !m.2, std::cmp::Reverse(*i)))
+                .map_or(0, |(i, _)| i);
+            let (id, weight, ctx) = members[best].clone();
+            let others: Vec<String> = members
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != best)
+                .map(|(_, m)| format!("{} +{}", m.0, m.1))
+                .collect();
+            let label = match &group {
+                Some(g) if members.len() > 1 => format!("{id} (group {g})"),
+                _ => id,
+            };
+            let part = ScorePart {
+                label,
+                counted: weight,
+                dropped: members.iter().map(|m| m.1).sum::<i32>() - weight,
+                note: if others.is_empty() {
+                    String::new()
+                } else {
+                    format!("{} in the same group", others.join(", "))
+                },
+            };
+            (part, ctx)
+        })
+        .collect();
+    parts.sort_by_key(|(_, ctx)| *ctx);
+    let mut room = (rules.set.thresholds.suggestive - 1).max(0);
+    for (p, _) in parts.iter_mut().filter(|(_, ctx)| *ctx) {
+        let keep = p.counted.min(room);
+        if keep < p.counted {
+            p.dropped += p.counted - keep;
+            p.note = if p.note.is_empty() {
+                "context cap".into()
+            } else {
+                format!("{}; context cap", p.note)
+            };
+            p.counted = keep;
+        }
+        room -= keep;
+    }
+    parts.into_iter().map(|(p, _)| p).collect()
+}
+
 fn match_step(a: &Analysis, rules: &Rules, links: &FmLinks) -> String {
-    let Some(r) = richest(a) else {
+    // The richest record whose score grouping or the context cap changes,
+    // else the richest.
+    let changed = a
+        .results
+        .iter()
+        .filter(|r| r.tier > Tier::Noise)
+        .filter(|r| score_parts(r, rules).iter().any(|p| p.dropped > 0))
+        .max_by_key(|r| (r.hits.len(), r.score, std::cmp::Reverse(r.obs.id.clone())));
+    let Some(r) = changed.or_else(|| richest(a)) else {
         return String::new();
     };
     let t = &rules.set.thresholds;
-    let hits: Vec<(String, i32)> = r
-        .hits
-        .iter()
-        .map(|h| (h.rule_id.clone(), h.weight))
-        .collect();
+    let parts = score_parts(r, rules);
     let rows: Vec<Vec<String>> = r
         .hits
         .iter()
         .map(|h| {
+            let group = rules.rule(&h.rule_id).and_then(|d| d.group.as_deref());
             vec![
                 format!("<code>{}</code>", esc(&h.rule_id)),
                 format!("+{}", h.weight),
+                group.map_or_else(|| "–".into(), |g| format!("<code>{}</code>", esc(g))),
+                if h.kind.is_context() {
+                    "context"
+                } else {
+                    "evidence"
+                }
+                .into(),
                 h.tactic.map_or_else(|| "–".into(), |t| esc(t.id())),
                 format!("<code>{}</code>", esc(&sc_core::defang(&h.matched))),
             ]
         })
         .collect();
+    let raw: i32 = r.hits.iter().map(|h| h.weight.max(0)).sum();
     step(&Step {
         id: "match",
         n: 2,
         title: "Match",
         prose: format!(
-            "<p>The <a href=\"rules/\">indicator rules</a> run on every layer. Each rule counts once per record and adds its weight; the sum grades the record <strong>suggestive</strong> at {} and <strong>significant</strong> at {}, and some rules are significant on their own. A relay alone is never enough. This record is graded {}.</p><p class=\"rec-url\"><code>{}</code></p>",
+            "<p>The <a href=\"rules/\">indicator rules</a> run on every layer, and each counts once per record. Rules that read the same artifact (one program, one fetch route, one tag) share an <strong>independence group</strong>, which counts once, at its heaviest rule that fired. Context hits (relays, cache-busters, self-identification, headers, outcomes) together count at most {}, one below suggestive, so context alone is never enough. The score grades the record <strong>suggestive</strong> at {} and <strong>significant</strong> at {}, and some rules are significant on their own. This record is graded {}.</p><p class=\"rec-url\"><code>{}</code></p>",
+            (t.suggestive - 1).max(0),
             t.suggestive,
             t.significant,
             pill(r.tier.label()),
             esc(&sc_core::defang(&r.obs.url))
         ),
         figure: score_bar(
-            &hits,
+            &parts,
             t.suggestive,
             t.significant,
-            "Synthetic example: one record's rule weights against the thresholds",
+            "Synthetic example: one record's score contributions against the thresholds",
         ),
         caption: format!(
-            "Score {} from {} rules. The tactic (SC-T) says what the match shows the agent doing.",
+            "Score {} from {} rules{}. One segment per contribution; weight that fired but does not count is dashed. The tactic (SC-T) says what the match shows the agent doing.",
             r.score,
-            r.hits.len()
+            r.hits.len(),
+            if raw != r.score {
+                format!(", whose weights add to {raw}")
+            } else {
+                String::new()
+            }
         ),
-        table: rows_table(&["Rule", "Weight", "Tactic", "Matched (defanged)"], &rows),
-        refs: fm(links, &["FM-4.2", "FM-4.3"]),
+        table: rows_table(
+            &[
+                "Rule",
+                "Weight",
+                "Group",
+                "Counts as",
+                "Tactic",
+                "Matched (defanged)",
+            ],
+            &rows,
+        ),
+        refs: fm(links, &["FM-4.2", "FM-4.11", "FM-4.3"]),
     })
 }
 
@@ -482,7 +578,103 @@ fn grade_step(a: &Analysis, links: &FmLinks) -> String {
     })
 }
 
-/// The cluster steps 6 and 7 follow: the first in a candidate fleet seen
+fn scope_step(a: &Analysis, links: &FmLinks) -> String {
+    let assessed: Vec<&Cluster> = a
+        .clusters
+        .iter()
+        .filter(|c| !c.scope.is_default())
+        .collect();
+    if assessed.is_empty() {
+        return String::new();
+    }
+    let grid: Vec<ScopeRow> = assessed
+        .iter()
+        .map(|c| ScopeRow {
+            label: c.id.clone(),
+            tier: c.tier.label().to_string(),
+            questions: [
+                c.scope.payload_present,
+                c.scope.agent_present,
+                c.scope.out_of_scope,
+                c.scope.coordinated,
+            ],
+            tests: c
+                .scope
+                .tests
+                .iter()
+                .map(|t| (t.id.clone(), name(&t.outcome)))
+                .collect(),
+            finding: c.scope.finding.label().to_string(),
+        })
+        .collect();
+    let yes = |b: bool| if b { "yes" } else { "no" };
+    let rows: Vec<Vec<String>> = assessed
+        .iter()
+        .map(|c| {
+            let s = &c.scope;
+            let failed: Vec<String> = s
+                .tests
+                .iter()
+                .filter(|t| t.outcome == sc_core::scope::ScopeOutcome::Fail)
+                .map(|t| format!("{} ({})", t.id, sc_core::defang(&t.detail)))
+                .collect();
+            vec![
+                esc(&c.id),
+                pill(c.tier.label()),
+                yes(s.payload_present).into(),
+                yes(s.agent_present).into(),
+                yes(s.out_of_scope).into(),
+                yes(s.coordinated).into(),
+                esc(s.task_class.label()),
+                esc(s.finding.label()),
+                esc(&failed.join("; ")),
+            ]
+        })
+        .collect();
+    let in_scope_payload = assessed
+        .iter()
+        .filter(|c| c.scope.payload_present && !c.scope.out_of_scope)
+        .count();
+    step(&Step {
+        id: "scope",
+        n: 6,
+        title: "Assess scope",
+        prose: format!(
+            "<p>A tier measures payloads and tool use; a grade, how likely an agent is. Neither says the activity went beyond its task. Each cluster answers four separate questions: is a <strong>payload present</strong> (observed), is an <strong>agent present</strong>, is it <strong>out of scope</strong> (an inference from seven tests: off-task targets, getting past a block, sensitive paths, unsanctioned probing, identities and credentials, data sent out, coordination that widens any of them), and is it <strong>coordinated</strong>. Tool use alone fails no test: a fetch program through an echo service is how agents read, not misbehaviour{}.</p>",
+            if in_scope_payload > 0 {
+                format!(
+                    ". Here {in_scope_payload} cluster{} with a payload present {} in scope",
+                    if in_scope_payload == 1 { "" } else { "s" },
+                    if in_scope_payload == 1 { "is" } else { "are" }
+                )
+            } else {
+                String::new()
+            }
+        ),
+        figure: format!(
+            "<div class=\"scroll-x\">{}</div><p class=\"legend\"><span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><circle class=\"sqm q-payload\" cx=\"7\" cy=\"7\" r=\"6\"/></svg>payload present (observed)</span> <span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><rect class=\"sqm q-scope\" x=\"1\" y=\"1\" width=\"12\" height=\"12\" rx=\"2\"/></svg>out of scope (inferred)</span> <span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><rect class=\"tc fail\" x=\"2\" y=\"2\" width=\"10\" height=\"10\" rx=\"2\"/></svg>test failed</span> <span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><circle class=\"tc pass\" cx=\"7\" cy=\"7\" r=\"5\"/></svg>passed</span> <span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><circle class=\"tc not-assessable\" cx=\"7\" cy=\"7\" r=\"5\"/></svg>not assessable</span></p>",
+            scope_grid(&grid, "Synthetic example: each cluster's four questions and scope tests")
+        ),
+        caption: "A row per cluster. An inference for review: the finding never changes a score, a tier or a link, and the admin decides the incident.".into(),
+        table: rows_table(
+            &[
+                "Cluster",
+                "Tier",
+                "Payload",
+                "Agent",
+                "Out of scope",
+                "Coordinated",
+                "Task",
+                "Finding",
+                "Failed tests",
+            ],
+            &rows,
+        ),
+        refs: fm(links, &["FM-15.1", "FM-15.3", "FM-15.4"]),
+    })
+}
+
+/// The cluster steps 7 and 8 follow: the first in a candidate fleet seen
 /// by a server (observed), else the strongest.
 fn focus(a: &Analysis) -> Option<&Cluster> {
     let fleet: Vec<&str> = a
@@ -533,7 +725,7 @@ fn attribute_step(a: &Analysis, links: &FmLinks) -> String {
     }
     step(&Step {
         id: "attribute",
-        n: 6,
+        n: 7,
         title: "Attribute",
         prose: format!(
             "<p>Who is behind cluster {} is answered in four layers: the developer or operator, the hosting network, the harness, the model family. Each claim carries a label (Confirmed, Suspected, Possible) that follows its evidence. A network names a host, not a developer; a model's name inside a request names no one. A developer is named only at the naming gate.</p>",
@@ -562,7 +754,7 @@ fn report_step(links: &FmLinks) -> String {
     ];
     step(&Step {
         id: "report",
-        n: 7,
+        n: 8,
         title: "Report, then publish",
         prose: "<p>The tools draft; a person sends. Reports go to the AI provider responsible and to the affected operators, and the public notice follows on a fixed lead time that nothing a recipient says extends. A notice informs without enabling: it withholds working payloads, inbox and tag values, and anything that would help repeat the attack. The example notice below is drafted from these synthetic records.</p>".into(),
         figure: disclosure_flow(&steps, "Who hears first, and when the notice may follow"),
@@ -634,12 +826,13 @@ fn notices_section(notices: &[NoticeFile], a: &Analysis) -> String {
     s
 }
 
-const STEPS: [(&str, &str); 7] = [
+const STEPS: [(&str, &str); 8] = [
     ("unwrap", "Unwrap"),
     ("match", "Match"),
     ("link", "Link"),
     ("time", "Time"),
     ("grade", "Grade"),
+    ("scope", "Scope"),
     ("attribute", "Attribute"),
     ("report", "Report"),
 ];
@@ -675,6 +868,7 @@ pub fn body(a: &Analysis, rules: &Rules, notices: &[NoticeFile], links: &FmLinks
     s.push_str(&link_step(a, links));
     s.push_str(&time_step(a, links));
     s.push_str(&grade_step(a, links));
+    s.push_str(&scope_step(a, links));
     s.push_str(&attribute_step(a, links));
     s.push_str(&report_step(links));
     s.push_str("</ol><p class=\"walk-foot\">Ground rules: collection is passive (no URL an agent submitted is ever opened), model names in requests are weak evidence, and a developer is named only when the evidence reaches the naming gate. Details: <a href=\"methodology/\">methodology</a>, <a href=\"docs/policies/\">policies</a>, the <a href=\"docs/manual/\">Field Manual</a>.</p></section>\n");
@@ -694,6 +888,38 @@ mod tests {
                 .observations,
             &rules,
         )
+    }
+
+    #[test]
+    fn score_parts_add_up_to_the_engine_score() {
+        let a = showcase();
+        let rules = Rules::default_rules();
+        let mut changed = 0;
+        for r in &a.results {
+            let parts = score_parts(r, &rules);
+            let counted: i32 = parts.iter().map(|p| p.counted).sum();
+            assert_eq!(counted, r.score, "{}", r.obs.id);
+            if parts.iter().any(|p| p.dropped > 0) {
+                changed += 1;
+            }
+        }
+        assert!(changed > 0, "no showcase record shows grouping or the cap");
+    }
+
+    #[test]
+    fn scope_step_keeps_payload_and_scope_apart() {
+        let a = showcase();
+        // The showcase holds both: a payload in scope, and scope exceeded.
+        assert!(
+            a.clusters
+                .iter()
+                .any(|c| c.scope.payload_present && !c.scope.out_of_scope)
+        );
+        assert!(a.clusters.iter().any(|c| c.scope.out_of_scope));
+        let html = scope_step(&a, &FmLinks::new());
+        assert!(html.contains("id=\"step-scope\""));
+        assert!(html.contains("class=\"sqm q-payload\""));
+        assert!(html.contains("class=\"sqm q-scope\""));
     }
 
     #[test]
