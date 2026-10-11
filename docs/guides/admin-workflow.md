@@ -132,6 +132,7 @@ Details: [notices](../reference/notices.md#from-draft-to-published).
   swarmchase case evidence add 2026-10-portal access.log --org "Example Agency" --host portal.example.gov
   ```
 - **Rules changes.** `case rules <id>` shows records whose tier would change under the current rules; `--update` re-pins.
+- **Exports.** For a recipient's tooling, `case export <id> --format stix|misp --audience provider|affected|public` writes a STIX bundle or a MISP event; after the notice is public, `--format oecd|aiid` drafts an incident-framework submission (the OECD draft with an EU AI Act Article 73 section). Each is a file to review and pass on by hand ([exports](../reference/cases.md#stix-export)).
 
 Close the case with `case set <id> --status closed` when nothing is left to do. Its records stay with the case for the retention period in [policies](../policies.md#collection).
 
