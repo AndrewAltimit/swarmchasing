@@ -513,7 +513,7 @@ mod tests {
             .map(|i| {
                 (
                     t0 + i * gap,
-                    format!("{base}{i}%27%20OR%201=1--%20YOUR_API_KEY&page={i}"),
+                    format!("{base}{i}%27%20OR%201=1--%20YOUR_API_KEY&page={i}&uqtag=resz"),
                     Some(if i < 3 { 500 } else { 200 }),
                 )
             })

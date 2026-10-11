@@ -25,7 +25,13 @@ pub const PLANT_SIGNALS: usize = 2;
 /// The plant signals on cluster `cl` that count toward a required review
 /// ([`PLANT_SIGNALS`]). Every count of them goes through here.
 pub fn plant_signals(cl: &sc_core::Cluster) -> usize {
-    cl.origin.plant_signals.len()
+    // A signal carried by most clusters of the analysis is context: it
+    // carries a base rate and does not count ([FM-5.11]).
+    cl.origin
+        .plant_signals
+        .iter()
+        .filter(|p| p.counts())
+        .count()
 }
 
 /// One checklist item.

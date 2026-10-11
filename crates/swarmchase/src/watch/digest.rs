@@ -581,11 +581,7 @@ fn outer_host(url: &str) -> String {
 /// than "this record came from the source it was pulled from".
 fn indicative_hit(h: &Hit, host: &str) -> bool {
     match h.kind {
-        IndicatorKind::Relay
-        | IndicatorKind::CacheBuster
-        | IndicatorKind::SelfId
-        | IndicatorKind::Header
-        | IndicatorKind::Outcome => false,
+        k if sc_core::is_context_kind(k) => false,
         IndicatorKind::Carrier => {
             let m = h.matched.to_ascii_lowercase();
             m.is_empty() || !host.contains(&m)

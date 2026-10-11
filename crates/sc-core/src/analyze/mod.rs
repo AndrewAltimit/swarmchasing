@@ -9,7 +9,8 @@ mod hints;
 mod link;
 mod pipeline;
 
-pub(crate) use hints::{is_context_kind, relay_stack, target_text};
+pub use hints::is_context_kind;
+pub(crate) use hints::{relay_stack, target_text};
 
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::Layer;

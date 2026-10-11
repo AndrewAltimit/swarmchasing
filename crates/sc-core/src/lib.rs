@@ -39,7 +39,7 @@ pub mod urlquery;
 mod weburl;
 
 pub use agentness::{AgentAssessment, AgentLevel, AgentSignal, GradeDecision};
-pub use analyze::{Analysis, Cluster, KnowledgeHints, ObsResult, Origin, analyze};
+pub use analyze::{Analysis, Cluster, KnowledgeHints, ObsResult, Origin, analyze, is_context_kind};
 pub use attribution::{AttributionLabel, Claim, Evidence, Role, Tag, attribute};
 pub use bursts::{ArchiveBurst, archive_bursts};
 pub use chains::{Chain, Pace};

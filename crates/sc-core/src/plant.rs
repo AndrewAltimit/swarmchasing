@@ -43,7 +43,7 @@ impl Corroboration {
 }
 
 /// What a plant signal points at.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlantSignalKind {
     /// Every record comes from a service anyone can submit a URL to.
@@ -78,6 +78,22 @@ pub struct PlantSignal {
     /// The records it rests on (indexes into `Analysis::results`).
     pub records: Vec<usize>,
     pub detail: String,
+    /// The share of the analysis's clusters that carry this signal kind,
+    /// set only when it is high enough to make the signal context: more
+    /// than half of the clusters, and at least four clusters in all
+    /// ([FM-5.11](../../docs/manual/05-linking.md)). A signal with a base
+    /// rate is reported with it and does not count toward the plant-review
+    /// threshold; one without (`None`) counts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_rate: Option<f64>,
+}
+
+impl PlantSignal {
+    /// Whether this signal counts toward the plant-review threshold: one
+    /// whose base rate marks it as context does not.
+    pub fn counts(&self) -> bool {
+        self.base_rate.is_none()
+    }
 }
 
 /// Plant signals kept per cluster.
@@ -144,10 +160,41 @@ pub(crate) fn plant_signals(
         })
         .collect();
     habit_mismatches(results, clusters, common, cfg, &mut out);
+    base_rates(&mut out, clusters.len());
     for v in &mut out {
         v.truncate(MAX_SIGNALS);
     }
     out
+}
+
+/// At least this many clusters before a signal's base rate is read: below
+/// it, "most clusters carry it" says too little.
+const BASE_RATE_MIN_CLUSTERS: usize = 4;
+
+/// Set each signal kind's base rate when it is context: the kind is on more
+/// than half of the analysis's `clusters`, and there are at least
+/// [`BASE_RATE_MIN_CLUSTERS`] of them. A signal carried by most clusters of
+/// a collection tells the reviewer nothing about one cluster, so it is
+/// reported with its base rate and does not count toward the review
+/// threshold ([FM-5.11]).
+fn base_rates(out: &mut [Vec<PlantSignal>], clusters: usize) {
+    if clusters < BASE_RATE_MIN_CLUSTERS {
+        return;
+    }
+    let mut carrying: BTreeMap<PlantSignalKind, usize> = BTreeMap::new();
+    for v in out.iter() {
+        for kind in v.iter().map(|p| p.kind).collect::<BTreeSet<_>>() {
+            *carrying.entry(kind).or_default() += 1;
+        }
+    }
+    for v in out.iter_mut() {
+        for p in v.iter_mut() {
+            let n = carrying.get(&p.kind).copied().unwrap_or(0);
+            if n * 2 > clusters {
+                p.base_rate = Some(n as f64 / clusters as f64);
+            }
+        }
+    }
 }
 
 fn monoculture(results: &[ObsResult], c: &Cluster) -> Option<PlantSignal> {
@@ -169,6 +216,7 @@ fn monoculture(results: &[ObsResult], c: &Cluster) -> Option<PlantSignal> {
             "all {all} records come from services anyone can submit a URL to ({}); no server log or owner-published record stands behind them",
             sources.join(", ")
         ),
+        base_rate: None,
     })
 }
 
@@ -191,6 +239,7 @@ fn burned_in(results: &[ObsResult], c: &Cluster, cfg: &Linking, out: &mut Vec<Pl
                 defang(&truncate(&g[0].0.to_string(), 90)),
                 g.len()
             ),
+            base_rate: None,
         });
     }
 }
@@ -241,6 +290,7 @@ fn too_perfect(
             "every one of its {} records is significant on three or more kinds of evidence, with no unflagged request on its hosts, no route escalation and no task retrieval: a textbook cluster, as a planted one would be",
             c.members.len()
         ),
+        base_rate: None,
     })
 }
 
@@ -296,6 +346,7 @@ fn habit_mismatches(
                     first.id,
                     differs.join(", ")
                 ),
+                base_rate: None,
             });
         }
     }
@@ -371,6 +422,13 @@ pub(crate) fn plant_review(s: &mut String, a: &Analysis, clusters: &[&Cluster]) 
                 .collect();
             let more = p.records.len().saturating_sub(5);
             let _ = write!(s, "  - {}: {}", p.kind.label(), p.detail);
+            if let Some(rate) = p.base_rate {
+                let _ = write!(
+                    s,
+                    " (base rate {:.0}% of clusters carry this signal: context, not counted toward the review threshold)",
+                    rate * 100.0
+                );
+            }
             if !ids.is_empty() {
                 let _ = write!(s, " (records `{}`", ids.join("`, `"));
                 if more > 0 {

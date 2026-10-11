@@ -266,8 +266,9 @@ pub(super) fn cluster_tier(results: &[ObsResult], members: &[usize]) -> Tier {
     if corroborated { Tier::Significant } else { top }
 }
 
-/// Kinds that describe how a request was sent rather than what it did.
-pub(crate) fn is_context_kind(k: IndicatorKind) -> bool {
+/// Kinds that describe how a request was sent rather than what it did
+/// ([`IndicatorKind::is_context`]).
+pub fn is_context_kind(k: IndicatorKind) -> bool {
     k.is_context()
 }
 

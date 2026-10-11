@@ -74,7 +74,7 @@ impl TsKind {
         match SourceKind::of(source) {
             SourceKind::Wayback | SourceKind::Arquivo if bare => Self::Capture,
             SourceKind::Urlquery if bare => Self::Submit,
-            SourceKind::AccessLog if bare => Self::Request,
+            SourceKind::AccessLog | SourceKind::Mcp if bare => Self::Request,
             SourceKind::Operator if !bare => Self::Request,
             _ => Self::Unknown,
         }
@@ -102,12 +102,14 @@ pub enum SourceKind {
     Pypi,
     Ctlog,
     Commoncrawl,
+    /// The MCP server registry (`mcp`).
+    Mcp,
     /// Any other source (`manual`, `lines`, an import, a fixture, none).
     Other,
 }
 
 impl SourceKind {
-    const NAMED: [(SourceKind, &'static str); 12] = [
+    const NAMED: [(SourceKind, &'static str); 13] = [
         (Self::AccessLog, "access_log"),
         (Self::Operator, OPERATOR_SOURCE),
         (Self::Urlquery, "urlquery"),
@@ -120,6 +122,7 @@ impl SourceKind {
         (Self::Pypi, "pypi"),
         (Self::Ctlog, "ctlog"),
         (Self::Commoncrawl, "commoncrawl"),
+        (Self::Mcp, "mcp"),
     ];
 
     /// The kind of `source`, by the part before any `:`.
@@ -170,7 +173,7 @@ impl Provenance {
         match SourceKind::of(source) {
             AccessLog | Operator => Self::Observed,
             Urlquery | Urlscan | Wayback | Arquivo | Memento => Self::SubmitAnywhere,
-            Gharchive | Npm | Pypi | Ctlog | Commoncrawl => Self::PublishAnywhere,
+            Gharchive | Npm | Pypi | Ctlog | Commoncrawl | Mcp => Self::PublishAnywhere,
             Other => Self::Unknown,
         }
     }
