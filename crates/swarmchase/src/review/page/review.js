@@ -5,8 +5,12 @@
 // checks), remembered per browser. The labelling rule (agent needs L2 or
 // higher) comes from the server as flags on each record and group: a
 // suggestion of agent below L2 is never accepted, and labelling agent below
-// L2 asks twice. A session panel (`p`) counts labels, agreement with the
-// suggestions and how far the labels are from a precision estimate.
+// L2 opens a confirmation that shows the grade, its signals and caps and
+// the rule, and asks for a reason. The server saves such a label with the
+// grade it was judged against (`label_grade`, marked below L2), and the
+// page shows that context wherever the label appears. A session panel (`p`)
+// counts labels, agreement with the suggestions and how far the labels are
+// from a precision estimate.
 //
 // Extensions (guide.js, context.js, ...) load after this file and add to the
 // `Review` registries below; boot.js starts the page last. Every element that
@@ -80,8 +84,10 @@ function tierOf(g) { return g.cluster ? g.cluster.tier : g.items[0].tier; }
 function gradeCode(g) { return g.level == null ? "no grade" : "L" + g.level; }
 /** Unlabelled records whose suggestion says agent below L2: never to accept. */
 function conflicts(g) { return g.items.filter((i) => i.conflict && !i.label); }
+/** An agent label below L2: by the grade now, or the grade it was saved with. */
+function exception(i) { return i.label === "agent" && (i.breaks_rule || !!(i.label_grade && i.label_grade.below_rule)); }
 /** Records labelled agent below L2. */
-function breaks(g) { return g.items.filter((i) => i.breaks_rule); }
+function breaks(g) { return g.items.filter(exception); }
 function split(g) { const s = suggestionOf(g); return !!s && Object.keys(s.by).length > 1; }
 
 // Higher needs a look sooner: a rule conflict, split suggestions, then
@@ -165,10 +171,11 @@ function suggestionOf(g) {
 
 // ---- actions --------------------------------------------------------------
 
-async function apply(ids, label, note, { record = true, restore = false } = {}) {
+async function apply(ids, label, note, { record = true, restore = false, grades = {} } = {}) {
+  // An undo puts back each label with the grade it was saved with.
   const before = state.data.groups.flatMap((g) => g.items).filter((i) => ids.includes(i.id))
-    .map((i) => ({ id: i.id, label: i.label, note: i.note }));
-  const res = await api.post("label", { ids, label, note: note || null, restore });
+    .map((i) => ({ id: i.id, label: i.label, note: i.note, grade: i.label_grade && i.label_grade.stored ? i.label_grade : null }));
+  const res = await api.post("label", { ids, label, note: note || null, restore, grades });
   for (const g of state.data.groups) {
     g.items = g.items.map((i) => res.items[i.id] || i);
     g.rule_breaks = breaks(g).length;
@@ -183,41 +190,75 @@ async function apply(ids, label, note, { record = true, restore = false } = {}) 
 }
 
 // The labelling rule: agent needs L2 or higher. Below it the page asks
-// twice: a second press within a few seconds, or the toast's button.
-let armed = null; // {scope, until}
-function guardAgent(scope, records, run) {
+// once more in a dialog that shows the grade, its signals and caps and the
+// rule, and asks for a reason (saved as the note, never required). The
+// server saves the label with its grade, marked below L2.
+function gradeLines(gr) {
+  if (!gr) return el("p.muted.small", "No agent grade: no signal beyond the payloads.");
+  const sig = (x) => typeof x === "string" ? x : `${x.label} (${plural(x.records, "record")})`;
+  return [
+    el("p.big", el("span.grade", gr.code), " ", gr.label || ""),
+    gr.signals && gr.signals.length
+      ? el("ul.signals", gr.signals.map((x) => el("li", el("span.plus", { "aria-label": "for" }, "+"), sig(x))))
+      : el("p.muted.small", "No agent signals beyond the payloads."),
+    gr.counter && gr.counter.length ? el("ul.signals", gr.counter.map((x) => el("li", el("span.minus", { "aria-label": "against" }, "\u2212"), sig(x)))) : null,
+    (gr.caps || []).map((cap) => el("p.cap.small", cap)),
+  ];
+}
+
+function confirmAgent(records, run) {
   const below = records.filter((i) => !i.agent_allowed);
   if (!below.length) return true;
-  if (armed && armed.scope === scope && Date.now() < armed.until) { armed = null; return true; }
-  armed = { scope, until: Date.now() + 6000 };
   const g = current();
-  const grade = g ? gradeCode(g) : "its grade";
-  toast(`${plural(below.length, "record")} at ${grade}: agent needs L2 or higher, so unsure is the most the evidence allows. Press again to label agent anyway.`,
-    { kind: "unsure", action: "Label agent", onAction: () => { armed = null; run(); }, ms: 6000 });
+  const grade = g ? gradeCode(g) : "below L2";
+  const prior = document.getElementById("note")?.value.trim() || "";
+  const reason = el("input.input#below-reason", {
+    value: prior, placeholder: "What the grade misses, e.g. the same run as cluster c4", autocomplete: "off",
+    "aria-describedby": "below-reason-help",
+  });
+  const go = (label) => { const r = reason.value.trim(); UI.closeDialog(); run(label, r); };
+  reason.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go("agent"); } });
+  const body = el("div.below-confirm",
+    el("p", el("b", `${plural(below.length, "record")} of ${records.length} ${below.length === 1 ? "is" : "are"} graded ${grade}.`),
+      " The labelling rule: agent needs an agent grade of L2 or higher; below it, unsure is the most the evidence allows."),
+    el("section.card.gcard.below-grade", { "aria-label": "Agent grade" },
+      el("h3.section-title", g && g.grade_basis === "records" ? "Agent grade (records graded alone)" : "Agent grade"),
+      gradeLines(g && g.grade)),
+    el("p.small", "Labelled agent anyway, the label is saved as an exception: marked below L2 with this grade, its signals and caps, and shown that way on this page, in review stats, review agreement, eval and the dashboard."),
+    el("label.below-field", { for: "below-reason" }, el("span.tri-name", "Reason (saved as the note; optional)"), reason),
+    el("p.muted.small#below-reason-help", "Say what the grade does not capture, so a later reader can weigh the exception."),
+    el("div.below-actions",
+      el("button.btn.primary", { type: "button", "data-focus": "below-unsure", onclick: () => go("unsure") }, "Label unsure instead"),
+      el("button.btn.below-agent", { type: "button", "data-focus": "below-agent", onclick: () => go("agent") }, "Label agent below L2"),
+      el("button.btn.ghost", { type: "button", onclick: () => UI.closeDialog() }, "Cancel")));
+  UI.dialog({ id: "below", title: "Agent below L2?", body });
+  reason.focus();
   return false;
 }
 
 /** Label the selected group; `rest` labels only its unlabelled records. */
-async function labelGroup(label, { rest = false, force = false } = {}) {
+async function labelGroup(label, { rest = false, force = false, reason = null } = {}) {
   const g = current();
   if (!g) return;
   const items = rest ? g.items.filter((i) => !i.label) : g.items;
   if (!items.length) { toast(rest ? "Every record here has a label" : "Nothing to label"); return; }
-  if (label === "agent" && !force && !guardAgent((rest ? "rest:" : "group:") + g.key, items, () => labelGroup(label, { rest, force: true }))) return;
-  const note = document.getElementById("note")?.value.trim();
+  if (label === "agent" && !force && !confirmAgent(items, (l, r) => labelGroup(l, { rest, force: true, reason: l === "agent" ? r : null }))) return;
+  const note = reason || document.getElementById("note")?.value.trim();
   const order = visible().map((x) => x.key);
   try {
     const n = await apply(items.map((i) => i.id), label, note);
-    toast(label === "clear" ? `Cleared ${plural(n, "label")}` : `${plural(n, "record")} labelled ${label}${rest ? ", the rest of the group" : ""}`,
+    const below = label === "agent" ? items.filter((i) => !i.agent_allowed).length : 0;
+    toast(label === "clear" ? `Cleared ${plural(n, "label")}`
+      : `${plural(n, "record")} labelled ${label}${rest ? ", the rest of the group" : ""}${below ? `; ${below} below L2, saved as ${below === 1 ? "an exception" : "exceptions"} with the grade` : ""}`,
       { action: "Undo", onAction: undo, kind: label === "clear" ? undefined : label });
     advance(order, g.key);
   } catch (e) { toast("Not saved: " + e.message, { error: true }); }
 }
 
-async function labelOne(id, label, force = false) {
+async function labelOne(id, label, force = false, reason = null) {
   const i = allItems().find((x) => x.id === id);
-  if (label === "agent" && i && !force && !guardAgent("rec:" + id, [i], () => labelOne(id, label, true))) return;
-  try { await apply([id], label, null); render(); }
+  if (label === "agent" && i && !force && !confirmAgent([i], (l, r) => labelOne(id, l, true, l === "agent" ? r : null))) return;
+  try { await apply([id], label, reason || null); render(); }
   catch (e) { toast("Not saved: " + e.message, { error: true }); }
 }
 
@@ -264,13 +305,18 @@ async function acceptSuggestions() {
 async function undo() {
   const last = state.undo.pop();
   if (!last) { toast("Nothing to undo"); return; }
-  // Restore each record's label and note as they were.
+  // Restore each record's label, note and saved grade as they were.
   const groups = {};
-  for (const r of last) (groups[JSON.stringify([r.label || "clear", r.note || null])] ||= []).push(r.id);
+  const grades = {};
+  for (const r of last) {
+    (groups[JSON.stringify([r.label || "clear", r.note || null])] ||= []).push(r.id);
+    if (r.grade) grades[r.id] = r.grade;
+  }
   try {
     for (const [k, ids] of Object.entries(groups)) {
       const [label, note] = JSON.parse(k);
-      await apply(ids, label, note, { record: false, restore: true });
+      const own = Object.fromEntries(ids.filter((id) => grades[id]).map((id) => [id, grades[id]]));
+      await apply(ids, label, note, { record: false, restore: true, grades: own });
     }
     const g = state.data.groups.find((g) => g.items.some((i) => i.id === last[0].id));
     if (g) state.sel = g.key;
@@ -312,7 +358,7 @@ function topbar() {
   const done = items.filter((i) => i.label).length;
   const session = items.filter((i) => i.label && state.touched.has(i.id)).length;
   const pct = items.length ? Math.round((100 * done) / items.length) : 0;
-  const broken = items.filter((i) => i.breaks_rule).length;
+  const broken = items.filter(exception).length;
   return el("header.topbar",
     el("div.brand", el("span.brand-mark", "swarmchase"), el("span.brand-sub", "Lead review")),
     progress([{ cls: "agent", n: c.agent }, { cls: "benign", n: c.benign }, { cls: "unsure", n: c.unsure }],
@@ -323,7 +369,7 @@ function topbar() {
       session ? el("span.chip.outline", `${session} this session`) : null),
     broken ? el("button.chip.rulebreak", {
       type: "button", "data-focus": "top-breaks", onclick: showBreaks,
-      title: "Records labelled agent below L2, against the labelling rule. Show them.",
+      title: "Agent labels below L2: exceptions to the labelling rule, each saved with its grade. Show them.",
     }, icon("alert"), `${broken} agent below L2`) : null,
     el("div.spacer"),
     Review.topbarItems.map((f) => f()),
@@ -441,11 +487,12 @@ function row(g) {
   const tier = g.cluster ? g.cluster.tier : g.items[0].tier;
   const s = suggestionOf(g);
   const on = g.key === state.sel;
-  const status = v === "mixed" ? el("span.chip.mixed", `${done}/${g.items.length}`)
-    : v ? el("span.chip." + v, v)
-      : g.items.length > 1 ? el("span.qcount", `0/${g.items.length}`) : null;
   const conflict = conflicts(g).length;
   const broken = breaks(g).length;
+  const status = v === "mixed" ? el("span.chip.mixed", `${done}/${g.items.length}`)
+    : v === "agent" && broken ? el("span.chip.agent.exception", { title: "Labelled agent below L2: an exception to the labelling rule" }, "agent < L2")
+      : v ? el("span.chip." + v, v)
+        : g.items.length > 1 ? el("span.qcount", `0/${g.items.length}`) : null;
   return el("button.qrow.t-" + tier + (on ? ".on" : "") + (v && v !== "mixed" ? ".labelled" : ""), {
     type: "button", "aria-current": on ? "true" : null,
     onclick: () => { state.sel = g.key; render(); }, dataset: { key: g.key },
@@ -459,7 +506,7 @@ function row(g) {
         g.grade ? ` · ${g.grade.code}` : "",
         s ? el("span.suggestion-ui", " · ", el("span." + s.label, `suggests ${s.label}`)) : ""),
       broken || conflict ? el("span.qflags",
-        broken ? el("span.flag.break", { title: "Labelled agent below L2, against the labelling rule" }, icon("alert"), `${broken} agent below L2`) : null,
+        broken ? el("span.flag.break", { title: "Labelled agent below L2: exceptions to the labelling rule, saved with their grade" }, icon("alert"), `${broken} agent below L2`) : null,
         conflict ? el("span.flag.conflict.suggestion-ui", { title: "The suggestion says agent below L2: do not accept it" }, icon("alert"), `${conflict} agent ${conflict === 1 ? "suggestion" : "suggestions"} below L2`) : null) : null,
       g.items.length > 1 && done ? miniBar(g) : null),
     status);
@@ -493,7 +540,7 @@ function detail() {
         const gate = x.label === "agent" && gated;
         return el("button.btn.verdict." + x.label + (v === x.label ? ".on" : "") + (gate ? ".gated" : ""), {
           type: "button", "aria-pressed": String(v === x.label), "aria-keyshortcuts": x.key, "data-focus": "verdict-" + x.label,
-          title: gate ? `Agent needs L2 or higher; this group is ${gradeCode(g)}. Asks again before labelling (${x.key})` : `Label every record in the group ${x.label} (${x.key})`,
+          title: gate ? `Agent needs L2 or higher; this group is ${gradeCode(g)}. Shows the grade and asks for a reason first (${x.key})` : `Label every record in the group ${x.label} (${x.key})`,
           "aria-describedby": gate ? "gate-note" : null,
           onclick: () => labelGroup(x.label),
         }, x.name, gate ? el("span.gate", { "aria-hidden": "true" }, "< L2") : null, el("kbd", x.key.toUpperCase()));
@@ -506,7 +553,7 @@ function detail() {
       el("button.btn.ghost", { type: "button", onclick: () => labelGroup("clear"), disabled: !g.items.some((i) => i.label), "aria-keyshortcuts": "x", "data-focus": "clear" }, "Clear", el("kbd", "X"))),
     el("input.input.note#note", { placeholder: "Note for this group (N)", value: commonNote(g), "aria-label": "Note for this group, saved with the next label", "aria-keyshortcuts": "n" }),
     el("span.vstate" + (v ? "." + v : ""),
-      v === "mixed" ? `Mixed · ${done} of ${g.items.length}` : v ? `Labelled ${v}` : "Unlabelled"),
+      v === "mixed" ? `Mixed · ${done} of ${g.items.length}` : v === "agent" && breaks(g).length ? `Labelled agent below L2 (${gradeCode(g)})` : v ? `Labelled ${v}` : "Unlabelled"),
     gated ? el("span.sr-only#gate-note", `Agent needs L2 or higher; this group is ${gradeCode(g)}.`) : null,
     done && left ? el("div.vrest", { role: "group", "aria-label": "Label the rest of the group" },
       el("span.vrest-n", `${plural(left, "record")} left:`),
@@ -539,13 +586,28 @@ function ruleNotes(g) {
   return el("div.rule-notes",
     broken.length ? el("div.callout.danger.rule-note", { role: "note" },
       icon("alert"),
-      el("p", el("b", `${plural(broken.length, "record")} labelled agent at ${gradeCode(g)}.`),
-        " Agent needs an agent grade of L2 or higher; below it, unsure is the most the evidence allows."),
+      el("p", el("b", `${plural(broken.length, "record")} labelled agent below L2: ${broken.length === 1 ? "an exception" : "exceptions"} to the labelling rule.`),
+        " Agent needs an agent grade of L2 or higher; below it, unsure is the most the evidence allows. ",
+        exceptionSummary(broken)),
       el("button.btn.small", { type: "button", onclick: () => fixBreaks(g), "data-focus": "fix-breaks" }, `Relabel ${broken.length === 1 ? "it" : "them"} unsure`)) : null,
     conflict.length ? el("div.callout.warn.rule-note.suggestion-ui", { role: "note" },
       icon("alert"),
       el("p", el("b", `The suggestion says agent for ${plural(conflict.length, "record")}, but the grade is ${gradeCode(g)}.`),
         " It breaks the labelling rule, so it is not one to accept; Accept suggestion leaves those records for you.")) : null);
+}
+
+/** What the exceptions were saved with: grades, and how many give a reason. */
+function exceptionSummary(list) {
+  const codes = [...new Set(list.map((i) => (i.label_grade ? i.label_grade.code : "?")))].join(", ");
+  const now = list.filter((i) => i.label_grade && !i.label_grade.stored).length;
+  const noted = list.filter((i) => i.note).length;
+  return `Saved with grade ${codes}${now ? ` (${now} graded now: ${now === 1 ? "its line stores" : "their lines store"} no grade)` : ""}; ${noted} of ${list.length} with a reason noted.`;
+}
+
+/** A saved label's grade, as one line: code and name, basis, stored or now. */
+function gradeAtLabel(lg) {
+  const basis = lg.basis === "cluster" ? ` · cluster ${lg.cluster || ""}` : lg.basis === "record" ? " · record alone" : "";
+  return `${lg.code}${lg.label ? " " + lg.label : ""}${basis} · ${lg.stored ? "stored with the label" : "graded now; this label's line stores no grade"}`;
 }
 
 function headMeta(g) {
@@ -629,7 +691,14 @@ function record(i) {
     i.target ? field("Target", el("code", i.target)) : null,
     i.final ? field("Final URL", el("code", i.final)) : null,
     i.reference ? field("Record", el("span.ref", el("code", i.reference), el("button.btn.ghost.small", { type: "button", onclick: () => copy(i.reference), title: "Copy (defanged)", "aria-label": "Copy the record reference (defanged)" }, icon("copy"), "Copy"))) : null,
-    i.note ? field("Note", el("span", i.note)) : null,
+    i.label_grade ? field(exception(i) ? "Exception" : "Judged at", exception(i)
+      ? el("div.exception-box",
+        el("p", el("b", "Agent below L2."), " Labelled against the labelling rule (agent needs L2 or higher) at ", el("span.grade", i.label_grade.code), " ", gradeAtLabel(i.label_grade).replace(/^\S+ /, ""), "."),
+        (i.label_grade.signals || []).length ? el("p.small", "Signals: " + i.label_grade.signals.join(", ")) : el("p.small", "No agent signals beyond the payloads."),
+        (i.label_grade.caps || []).length ? el("p.small.muted", "Caps: " + i.label_grade.caps.join("; ")) : null,
+        el("p.small", i.note ? "Reason: " + i.note : el("span.muted", "No reason noted.")))
+      : el("span.muted", gradeAtLabel(i.label_grade))) : null,
+    i.note && !exception(i) ? field("Note", el("span", i.note)) : null,
     i.suggested ? el("div.suggestion-ui", field("Suggests", el("span", el("span.chip." + i.suggested.label, i.suggested.label), " ", i.suggested.reason))) : null,
     Review.recordExtras.map((f) => f(i)));
   return el("article.card.rec" + (differs(i) ? ".disagree" : "") + (i.label ? ".is-" + i.label : ""),
@@ -638,7 +707,7 @@ function record(i) {
       el("span.rmeta", `score ${i.score} · ${i.source} · ${i.time}`),
       el("span.rid", { title: i.id }, i.id),
       differs(i) ? el("span.chip.unsure.suggestion-ui", { title: `Suggestion was ${i.suggested.label}` }, "differs") : null,
-      i.breaks_rule ? el("span.flag.break", { title: "Labelled agent below L2, against the labelling rule" }, icon("alert"), "agent below L2") : null,
+      exception(i) ? el("span.flag.break", { title: "Labelled agent below L2: an exception to the labelling rule, saved with its grade" }, icon("alert"), `agent below L2 \u00b7 ${i.label_grade ? i.label_grade.code : "?"}`) : null,
       i.conflict && !i.label ? el("span.flag.conflict.suggestion-ui", { title: "The suggestion says agent below L2: do not accept it" }, icon("alert"), "suggestion breaks L2 rule") : null,
       el("div.spacer"),
       verdict),
@@ -776,17 +845,25 @@ function sessionBody() {
     pending ? el("p.muted.small", `${plural(pending, "suggested record")} not labelled yet.`) : null);
 
   // Rule checks.
-  const broken = items.filter((i) => i.breaks_rule).length;
+  const brokenList = items.filter(exception);
+  const broken = brokenList.length;
   const conflictsLeft = items.filter((i) => i.conflict && !i.label).length;
+  const fileBelow = st.agent_below_rule || { total: 0 };
   const checks = el("section.ss-sec",
     el("h3.section-title", "Labelling rule"),
-    el("p", broken ? el("span.ss-bad", `${plural(broken, "record")} labelled agent below L2. `) : "No agent label below L2. ",
+    el("p", broken ? el("span.ss-bad", `${plural(broken, "record")} in this queue labelled agent below L2. `) : "No agent label below L2 in this queue. ",
       broken ? el("button.btn.small", { type: "button", onclick: () => { UI.closeDialog(); showBreaks(); } }, "Show them") : null),
+    broken ? el("p.muted.small", exceptionSummary(brokenList)) : null,
+    fileBelow.total ? el("p.small", `Review file: ${fileBelow.total} of ${plural(fileBelow.agents, "agent label")} below L2, ${fileBelow.with_reason} with a reason` +
+      (fileBelow.graded_now ? `; ${fileBelow.graded_now} graded now, their lines storing no grade` : "") + ".") : null,
+    fileBelow.unknown ? el("p.muted.small", `${plural(fileBelow.unknown, "agent label")} from older lines not in this analysis: grade unknown.`) : null,
     conflictsLeft ? el("p.muted.small", `${plural(conflictsLeft, "unlabelled record")} with a suggestion of agent below L2, never accepted by the page.`) : null);
 
-  // Precision of the flagged queue: agent share of decided flagged labels.
+  // Precision of the flagged queue: agent share of decided flagged labels,
+  // and the same without the agent labels below L2.
   const f = st.flagged || {};
   const k = f.agent || 0, n = k + (f.benign || 0);
+  const kb = (st.agent_below_rule || {}).flagged || 0;
   const w = wilson(k, n);
   const half = w ? (w[1] - w[0]) / 2 : 0.5;
   const need = needed(n ? k / n : 0.5, 0.1);
@@ -796,6 +873,8 @@ function sessionBody() {
     n ? el("p", "Agent share of decided flagged records: ", el("b", pctOf(k / n)),
       ` (${k} of ${n}; 95% interval ${pctOf(w[0])} to ${pctOf(w[1])}, \u00b1${Math.round(100 * half)} points).`)
       : el("p", "No flagged record has an agent or benign label yet."),
+    kb && n ? el("p.small", `Includes ${plural(kb, "agent label")} below L2; without ${kb === 1 ? "it" : "them"}: `,
+      el("b", n - kb ? pctOf((k - kb) / (n - kb)) : "n/a"), ` (${k - kb} of ${n - kb}).`) : null,
     el("div.ss-meter", { role: "img", "aria-label": `${n} of about ${need} decided labels for plus or minus 10 points` },
       el("span.ss-fill", { dataset: { w: String(Math.min(1, n / need)) } })),
     el("p.muted.small", half <= 0.1
@@ -848,7 +927,7 @@ document.addEventListener("keydown", (e) => {
 // render and returns a node or null; `onSelect` runs when the selected group
 // changes, for loading context lazily.
 const Review = {
-  state, render, current, verdictOf, suggestionOf, differs, field, count, VERDICTS, conflicts, breaks,
+  state, render, current, verdictOf, suggestionOf, differs, field, count, VERDICTS, conflicts, breaks, gradeAtLabel,
   /** fn(group) -> Node: a section in the detail pane, after the summary cards. */
   panels: [],
   /** fn(item) -> Node: extra fields at the end of a record's body. */

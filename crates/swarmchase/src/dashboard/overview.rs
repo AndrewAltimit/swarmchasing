@@ -771,6 +771,9 @@ fn review(data: &Path, a: &Analysis, d: &str) -> Value {
         "labelled_in_window": window,
         "labelled_total": labelled,
         "reviewed_any_labeller": any,
+        // Agent labels below L2: exceptions, shown with their count so none
+        // is read as an ordinary agent label.
+        "agent_below_rule": crate::review::count_below_rule(&store, a),
         "file": shell_path(&ReviewStore::path_in(data)),
         "class": CLASS_FLAGGED,
         "command": format!("swarmchase review --serve -d {d}"),

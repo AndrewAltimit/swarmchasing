@@ -12,9 +12,12 @@
 //! The labelling rule is checked here, not left to the page: `agent` needs an
 //! agent grade of L2 or higher, so each record and group says whether the
 //! label is open to it, and flags a suggestion or a saved label that says
-//! `agent` below it.
+//! `agent` below it. The server still saves an `agent` label below L2 when
+//! the admin confirms it, with the grade it was judged against
+//! ([`LabelGrade`], marked `below_l2`), so the label is never read without
+//! its context.
 
-use super::{CLASS_FLAGGED, Item, Review, ReviewStore};
+use super::{CLASS_FLAGGED, GradeFrom, Item, LabelGrade, Review, ReviewStore};
 use crate::localui::{App, Response};
 use crate::suggest::{Suggestion, defang_all};
 use crate::util::truncate;
@@ -99,6 +102,31 @@ struct LabelRequest {
     /// missing note keeps the one already saved.
     #[serde(default)]
     restore: bool,
+    /// With `restore`: the grade each record's earlier label was saved
+    /// with, by id, so an undo puts back the label as it was judged.
+    #[serde(default)]
+    grades: BTreeMap<String, LabelGrade>,
+}
+
+/// A saved label's grade for the page: what it was judged against, with
+/// `stored` false when the line predates stored grades and the grade is
+/// the one now.
+pub(super) fn label_grade_json(v: &Review, now: impl FnOnce() -> Option<LabelGrade>) -> Value {
+    match v.judged_grade(now) {
+        Some((g, from)) => {
+            let mut j = serde_json::to_value(&g).unwrap_or(Value::Null);
+            if let Value::Object(m) = &mut j {
+                m.insert("stored".into(), json!(from == GradeFrom::Stored));
+                m.insert("below_rule".into(), json!(g.below_rule()));
+                m.insert("code".into(), json!(g.code()));
+                for k in ["signals", "counter", "caps"] {
+                    m.entry(k).or_insert_with(|| json!([]));
+                }
+            }
+            j
+        }
+        None => Value::Null,
+    }
 }
 
 pub struct ReviewApp {
@@ -166,7 +194,13 @@ impl ReviewApp {
                 *flagged.entry(v.label.as_str()).or_default() += 1;
             }
         }
-        json!({ "total": self.store.entries.len(), "by_label": all, "flagged": flagged })
+        // Agent labels below L2, by the grade stored with them, else (an
+        // older line) the grade now when the record is in this analysis.
+        let below = super::count_below_rule(&self.store, &self.a);
+        json!({
+            "total": self.store.entries.len(), "by_label": all, "flagged": flagged,
+            "agent_below_rule": below,
+        })
     }
 
     fn item_json(&self, it: Item) -> Value {
@@ -203,6 +237,9 @@ impl ReviewApp {
             .or_else(|| review.and_then(|v| v.suggested.as_ref()));
         let allowed = self.agent_allowed(it.idx);
         let says_agent = |l: Option<&str>| l == Some("agent") && !allowed;
+        let label_grade = review.map_or(Value::Null, |v| {
+            label_grade_json(v, || Some(LabelGrade::of(&self.a, it.idx, &v.label)))
+        });
         json!({
             "id": r.obs.id,
             "class": it.class,
@@ -226,6 +263,8 @@ impl ReviewApp {
             "conflict": says_agent(suggested.map(|s| s.label.as_str())),
             // A saved `agent` label the rule does not allow.
             "breaks_rule": says_agent(review.map(|v| v.label.as_str())),
+            // What the saved label was judged against.
+            "label_grade": label_grade,
         })
     }
 
@@ -352,6 +391,16 @@ impl ReviewApp {
                     note.clone()
                         .or_else(|| before.as_ref().and_then(|b| b.note.clone()))
                 };
+                // An undo puts back the grade the label was saved with;
+                // anything else is judged against the grade now.
+                let grade = match req.grades.get(&id) {
+                    Some(g) if req.restore => LabelGrade {
+                        rule: (label == "agent" && !g.agent_allowed)
+                            .then(|| super::BELOW_L2.to_string()),
+                        ..g.clone()
+                    },
+                    _ => LabelGrade::of(&self.a, it.idx, label),
+                };
                 self.store.entries.insert(
                     id.clone(),
                     Review {
@@ -366,6 +415,7 @@ impl ReviewApp {
                         rules_version: self.a.rules_version.clone(),
                         suggested,
                         tuned: before.as_ref().is_some_and(|b| b.tuned),
+                        grade: Some(grade),
                     },
                 );
             }
@@ -566,6 +616,73 @@ mod tests {
         let q = app.queue_json();
         assert!(!q.to_string().contains("\"breaks_rule\":true"));
         assert_eq!(q["stored"]["by_label"]["unsure"], 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn labels_carry_the_grade_they_were_judged_against() {
+        let (mut app, dir) = app("grade");
+        // Agent below L2, with a reason: saved, with the grade and the marker.
+        let r = post(
+            &mut app,
+            r#"{"ids":["s1"],"label":"agent","note":"same run as cluster c1"}"#,
+        );
+        assert_eq!(r.status, 200);
+        let body: Value = serde_json::from_slice(&r.body).unwrap();
+        let lg = &body["items"]["s1"]["label_grade"];
+        assert_eq!(lg["rule"], "below_l2", "{lg}");
+        assert_eq!(lg["below_rule"], true);
+        assert_eq!(lg["agent_allowed"], false);
+        assert_eq!(lg["stored"], true);
+        assert!(lg["code"].as_str().unwrap().starts_with('L'), "{lg}");
+        assert!(lg["signals"].is_array() && lg["caps"].is_array(), "{lg}");
+        assert_eq!(body["stored"]["agent_below_rule"]["total"], 1);
+        assert_eq!(body["stored"]["agent_below_rule"]["with_reason"], 1);
+        assert_eq!(body["stored"]["agent_below_rule"]["graded_now"], 0);
+        let saved = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        let s1 = &saved.entries["s1"];
+        let g = s1.grade.as_ref().expect("stored with the label");
+        assert!(g.below_rule());
+        assert_eq!(g.basis, "cluster");
+        assert!(g.cluster.is_some());
+        assert_eq!(s1.note.as_deref(), Some("same run as cluster c1"));
+        let line = std::fs::read_to_string(ReviewStore::path_in(&dir)).unwrap();
+        assert!(line.contains(r#""rule":"below_l2""#), "{line}");
+
+        // Any other label stores its grade too, with no marker.
+        post(&mut app, r#"{"ids":["s2"],"label":"benign"}"#);
+        let saved = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        let g2 = saved.entries["s2"].grade.as_ref().unwrap();
+        assert!(g2.rule.is_none() && !g2.below_rule());
+
+        // Undo puts back the grade the label was saved with, not the one now.
+        let mut then = g.clone();
+        then.code = Some("L0".into());
+        let req = json!({"ids": ["s1"], "label": "agent", "note": "x", "restore": true, "grades": {"s1": then}});
+        assert_eq!(post(&mut app, &req.to_string()).status, 200);
+        let saved = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        let back = saved.entries["s1"].grade.as_ref().unwrap();
+        assert_eq!(back.code.as_deref(), Some("L0"));
+        assert!(back.below_rule(), "the marker follows the restored label");
+        // Outside an undo, a sent grade is ignored.
+        let req = json!({"ids": ["s1"], "label": "agent", "grades": {"s1": then}});
+        post(&mut app, &req.to_string());
+        let saved = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        assert_eq!(saved.entries["s1"].grade.as_ref(), Some(g));
+
+        // An older line, without a grade: graded now, and said so.
+        app.store.entries.get_mut("s1").unwrap().grade = None;
+        let q = app.queue_json();
+        let item = q["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|g| g["items"].as_array().unwrap())
+            .find(|i| i["id"] == "s1")
+            .unwrap();
+        assert_eq!(item["label_grade"]["stored"], false, "{item}");
+        assert_eq!(item["label_grade"]["below_rule"], true);
+        assert_eq!(q["stored"]["agent_below_rule"]["graded_now"], 1);
         let _ = std::fs::remove_dir_all(dir);
     }
 

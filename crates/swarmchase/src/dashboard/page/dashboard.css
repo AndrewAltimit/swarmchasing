@@ -98,6 +98,8 @@
 .review .big b { font-size: 26px; }
 .review .progress { max-width: 520px; flex: none; }
 .review details summary { cursor: pointer; color: var(--ink-2); }
+.review .below-rule p { margin: 0; }
+.review .below-rule .icon { vertical-align: -2px; color: var(--unsure); }
 .cases { display: grid; gap: var(--sp-3); }
 .case { display: grid; gap: var(--sp-3); }
 .case-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-2); }

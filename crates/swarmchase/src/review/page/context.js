@@ -172,6 +172,9 @@
       el("div.cx-tally", Object.entries(e.by_label).map(([l, n]) => el("span.chip." + l, el("b", n), " " + l))),
       el("ul.cx-list", e.records.map((r) => recRow(r, [
         why(r.why),
+        r.label_grade && r.label_grade.below_rule
+          ? el("p.cx-exception", el("span.flag.break", "agent below L2"), ` An exception to the labelling rule, judged at ${Review.gradeAtLabel(r.label_grade)}.`)
+          : null,
         r.note ? el("p.cx-note", r.note) : null,
         el("p.muted.small", `reviewed ${r.reviewed_at} · rules ${r.rules.join(", ") || "none"}`),
       ]))),

@@ -4,17 +4,20 @@
 //! a confusion matrix (admin label by suggested label), raw agreement and
 //! Cohen's κ, the same split by agent grade, and the suggestions that break
 //! the labelling rule (`agent` below L2). The grade is the one the model saw
-//! when its line records it, else the grade now. Suggestions come from
+//! when its line records it, else the one stored with the admin's label,
+//! else the grade now. Suggestions come from
 //! `labels/suggestions-*.ndjson` and from `suggested` in the review file (a
-//! local model's, `review --suggest`). Admin labels that break the rule and
-//! the rules models flagged as misfires are listed after.
+//! local model's, `review --suggest`). Admin agent labels below the rule,
+//! each with the grade stored with it (or the grade now, for a line that
+//! stores none, said as such) and its noted reason, and the rules models
+//! flagged as misfires are listed after.
 //!
 //! The records are analysed from the review file itself, so the grade now
 //! is over the reviewed records, not the whole store; a cluster with
 //! unreviewed members may grade differently in `review --serve`.
 
 use super::hosted::{self, Loaded, code_allows_agent};
-use super::{Review, ReviewStore};
+use super::{GradeFrom, LabelGrade, Review, ReviewStore};
 use anyhow::Result;
 use sc_core::Analysis;
 use std::collections::BTreeMap;
@@ -45,10 +48,24 @@ pub struct Pair {
     pub id: String,
     pub admin: String,
     pub suggested: String,
-    /// The grade the model saw, else the grade now; `none` when ungraded.
+    /// The grade the model saw, else the one stored with the admin's
+    /// label, else the grade now; `none` when ungraded.
     pub grade: String,
     /// Whether `grade` is the one the model saw.
     pub seen: bool,
+    /// Whether `grade` is the one stored with the admin's label.
+    pub stored: bool,
+}
+
+/// An admin `agent` label below the labelling rule.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdminBreak {
+    pub id: String,
+    /// The grade the label was judged against.
+    pub grade: LabelGrade,
+    pub from: GradeFrom,
+    /// The admin's reason, from the label's note.
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -57,8 +74,9 @@ pub struct Report {
     pub models: BTreeMap<String, Vec<Pair>>,
     /// Suggestion lines for records the admin has not labelled.
     pub unlabelled: usize,
-    /// Admin `agent` labels on records graded below L2 now: (id, grade).
-    pub admin_breaks: Vec<(String, String)>,
+    /// Admin `agent` labels below L2, by the grade stored with each, else
+    /// the grade now.
+    pub admin_breaks: Vec<AdminBreak>,
     /// Rule id to (suggestions flagging it, of which admin benign, admin agent).
     pub misfires: BTreeMap<String, (usize, usize, usize)>,
 }
@@ -92,6 +110,20 @@ pub fn compare(store: &ReviewStore, a: &Analysis, loaded: &Loaded) -> Report {
             .unwrap_or("none")
             .to_string()
     };
+    // The grade stored with the admin's label, when the line has one.
+    let stored = |id: &str| -> Option<String> {
+        store
+            .entries
+            .get(id)
+            .and_then(|r| r.grade.as_ref())
+            .map(|g| g.code().replace("no grade", "none"))
+    };
+    let at_label = |id: &str| -> (String, bool) {
+        match stored(id) {
+            Some(g) => (g, true),
+            None => (now(id), false),
+        }
+    };
     let admin = |id: &str| -> Option<&Review> {
         store
             .entries
@@ -107,14 +139,16 @@ pub fn compare(store: &ReviewStore, a: &Analysis, loaded: &Loaded) -> Report {
         if !LABELS.contains(&r.label.as_str()) {
             continue;
         }
+        let (grade, stored) = at_label(&r.record.id);
         pairs.insert(
             (s.model.clone(), r.record.id.clone()),
             Pair {
                 id: r.record.id.clone(),
                 admin: r.label.clone(),
                 suggested: s.label.clone(),
-                grade: now(&r.record.id),
+                grade,
                 seen: false,
+                stored,
             },
         );
     }
@@ -132,9 +166,12 @@ pub fn compare(store: &ReviewStore, a: &Analysis, loaded: &Loaded) -> Report {
                 _ => {}
             }
         }
-        let (grade, seen) = match &s.grade_seen {
-            Some(g) if !g.is_empty() => (g.clone(), true),
-            _ => (now(&s.id), false),
+        let (grade, seen, stored) = match &s.grade_seen {
+            Some(g) if !g.is_empty() => (g.clone(), true, false),
+            _ => {
+                let (g, stored) = at_label(&s.id);
+                (g, false, stored)
+            }
         };
         pairs.insert(
             (s.model.clone(), s.id.clone()),
@@ -144,6 +181,7 @@ pub fn compare(store: &ReviewStore, a: &Analysis, loaded: &Loaded) -> Report {
                 suggested: s.label.clone(),
                 grade,
                 seen,
+                stored,
             },
         );
     }
@@ -154,8 +192,19 @@ pub fn compare(store: &ReviewStore, a: &Analysis, loaded: &Loaded) -> Report {
         .entries
         .values()
         .filter(|r| r.label == "agent")
-        .map(|r| (r.record.id.clone(), now(&r.record.id)))
-        .filter(|(_, g)| !code_allows_agent(g))
+        .filter_map(|r| {
+            let now = || {
+                idx.get(r.record.id.as_str())
+                    .map(|&i| LabelGrade::of(a, i, &r.label))
+            };
+            let (grade, from) = r.judged_grade(now)?;
+            grade.below_rule().then(|| AdminBreak {
+                id: r.record.id.clone(),
+                grade,
+                from,
+                note: r.note.clone(),
+            })
+        })
         .collect();
     rep
 }
@@ -205,9 +254,10 @@ pub fn render(rep: &Report, show: usize, out: &mut impl Write) -> Result<()> {
             writeln!(out, "  {a:<18} {}", row.join("  "))?;
         }
         let seen = pairs.iter().filter(|p| p.seen).count();
+        let stored = pairs.iter().filter(|p| p.stored).count();
         writeln!(
             out,
-            "  by grade ({seen} of {} at the grade the model saw, the rest at the grade now):",
+            "  by grade ({seen} of {} at the grade the model saw, {stored} at the grade stored with the admin's label, the rest at the grade now):",
             pairs.len()
         )?;
         let mut grades: BTreeMap<&str, Vec<&Pair>> = BTreeMap::new();
@@ -265,13 +315,31 @@ pub fn render(rep: &Report, show: usize, out: &mut impl Write) -> Result<()> {
         }
     }
     if !rep.admin_breaks.is_empty() {
+        let now = rep
+            .admin_breaks
+            .iter()
+            .filter(|b| b.from == GradeFrom::Now)
+            .count();
         writeln!(
             out,
-            "\nadmin agent labels on records graded below L2 now: {} (relabel unsure, or note what the grade misses)",
-            rep.admin_breaks.len()
+            "\nadmin agent labels below L2, exceptions to the labelling rule: {} ({} at the grade stored with the label, {now} at the grade now, their lines storing none). Each needs a reason in its note; otherwise relabel it unsure:",
+            rep.admin_breaks.len(),
+            rep.admin_breaks.len() - now,
         )?;
-        for (id, g) in rep.admin_breaks.iter().take(show) {
-            writeln!(out, "  {id} grade {g}")?;
+        for b in rep.admin_breaks.iter().take(show) {
+            writeln!(
+                out,
+                "  {} · {} (grade {}) · {}",
+                b.id,
+                b.grade.short(),
+                b.from.word(),
+                b.note
+                    .as_deref()
+                    .map_or("no reason noted".into(), |n| format!(
+                        "reason: {}",
+                        crate::suggest::defang_all(n)
+                    ))
+            )?;
         }
     }
     if !rep.misfires.is_empty() {
@@ -381,6 +449,7 @@ mod tests {
                         model: "local".into(),
                     }),
                     tuned: false,
+                    grade: None,
                 },
             );
         }
@@ -438,7 +507,12 @@ mod tests {
         assert_eq!(breaks, ["l0"]);
         // The admin's own agent label on a payload-only record breaks the rule.
         assert_eq!(rep.admin_breaks.len(), 1);
-        assert_eq!(rep.admin_breaks[0].0, "l0");
+        assert_eq!(rep.admin_breaks[0].id, "l0");
+        assert_eq!(
+            rep.admin_breaks[0].from,
+            GradeFrom::Now,
+            "an older line: graded now"
+        );
         assert_eq!(rep.misfires["relay.jina"], (1, 0, 1));
 
         let mut out = Vec::new();
@@ -461,9 +535,60 @@ mod tests {
         assert!(out.contains("1 agent suggestion(s) below L2"), "{out}");
         assert!(out.contains("    l0 grade L1 · admin agent"), "{out}");
         assert!(
-            out.contains("admin agent labels on records graded below L2 now: 1"),
+            out.contains("admin agent labels below L2, exceptions to the labelling rule: 1 (0 at the grade stored with the label, 1 at the grade now"),
             "{out}"
         );
+        assert!(out.contains("  l0 · L"), "{out}");
+        assert!(out.contains("(grade now) · no reason noted"), "{out}");
         assert!(out.contains("relay.jina"), "{out}");
+    }
+
+    #[test]
+    fn stored_grades_are_used_before_the_grade_now() {
+        let (a, mut store) = fixture();
+        let grade_now = |id: &str| {
+            let i = a.results.iter().position(|r| r.obs.id == id).unwrap();
+            LabelGrade::of(&a, i, "agent")
+        };
+        // l2 is L2 now, but was labelled agent when its grade was L1: the
+        // stored grade marks it an exception, with its reason.
+        let mut then = grade_now("l2");
+        assert!(then.agent_allowed);
+        then.code = Some("L1".into());
+        then.agent_allowed = false;
+        then.rule = Some(crate::review::BELOW_L2.into());
+        let l2 = store.entries.get_mut("l2").unwrap();
+        l2.grade = Some(then);
+        l2.note = Some("same run as https://t.example".into());
+        // l0 stores the grade it was labelled at, below L2.
+        store.entries.get_mut("l0").unwrap().grade = Some(grade_now("l0"));
+        let loaded = Loaded {
+            all: vec![stored("l2", "agent", None, &[])],
+            ..Default::default()
+        };
+        let rep = compare(&store, &a, &loaded);
+        let p = &rep.models["claude"][0];
+        assert_eq!((p.grade.as_str(), p.seen, p.stored), ("L1", false, true));
+        let ids: Vec<(&str, GradeFrom)> = rep
+            .admin_breaks
+            .iter()
+            .map(|b| (b.id.as_str(), b.from))
+            .collect();
+        assert_eq!(ids, [("l0", GradeFrom::Stored), ("l2", GradeFrom::Stored)]);
+        let mut out = Vec::new();
+        render(&rep, 10, &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(
+            out.contains("1 at the grade stored with the admin's label"),
+            "{out}"
+        );
+        assert!(
+            out.contains("exceptions to the labelling rule: 2 (2 at the grade stored"),
+            "{out}"
+        );
+        assert!(
+            out.contains("(grade stored) · reason: same run as hxxps://t[.]example"),
+            "{out}"
+        );
     }
 }

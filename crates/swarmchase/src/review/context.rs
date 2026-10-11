@@ -568,6 +568,13 @@ fn earlier_json(
                 "id": rv.record.id,
                 "label": rv.label,
                 "note": rv.note.as_deref().map(defang_all),
+                // What the label was judged against, so an agent label
+                // below L2 reads as the exception it is.
+                "label_grade": super::serve::label_grade_json(rv, || {
+                    ix.by_id
+                        .get(&rv.record.id)
+                        .map(|&i| super::LabelGrade::of(a, i, &rv.label))
+                }),
                 "reviewed_at": rv.reviewed_at,
                 "tier": rv.tier.label(),
                 "rules": rule_set(&rv.rules),
@@ -740,6 +747,7 @@ mod tests {
                 rules_version: "x".into(),
                 suggested: None,
                 tuned: false,
+                grade: None,
             },
         );
         // The group's own label is not an earlier decision.

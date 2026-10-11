@@ -189,7 +189,7 @@ It answers four questions, in this order:
 
 - **What is new.** Clusters above noise that are new or rose a tier, with their agent grade, and significant records outside any cluster, collected since a baseline run. The baseline is the run before the latest, as in the digest, or the run the admin marked seen (`s` on the page, remembered in that browser only; `--since` for `--json`). When that run was deleted by retention, the nearest kept run before it is used.
 - **Whether monitoring is healthy.** Each source's status from `state.json` (failing, skipped, quiet, catching up, ok), its recent pulls, what its absence loses, the latest digest's health alerts, and rule drift recomputed on the latest run.
-- **What waits on the admin.** The review queue as `review --serve` builds it from the latest run's analysis, with label progress, and each open case's clocks and what `case status` says it still needs.
+- **What waits on the admin.** The review queue as `review --serve` builds it from the latest run's analysis, with label progress and the agent labels below L2 counted apart, and each open case's clocks and what `case status` says it still needs.
 - **What to run next.** Each item comes with its command, with the data directory filled in: `review --serve`, `case … new --cluster <key>`, a case's next step, or `scan` on a drifting source's records.
 
 `d` shows the latest digest; `1` to `4` jump to the sections; `?` lists the keys.
@@ -208,7 +208,7 @@ The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<sta
 | `health.sources` | Per source: `status`, `reason`, `pulled` history, `new_latest`, streak counts, and `lost` when failing or skipped. |
 | `health.alerts` | The latest digest's health lines. |
 | `health.drift` | Rules that fired well above their baseline on the latest run, per source, with both rates. |
-| `waiting.review` | `unreviewed`, `groups`, counts by tier and label, `with_suggestion`, and the `command`. |
+| `waiting.review` | `unreviewed`, `groups`, counts by tier and label, `with_suggestion`, `agent_below_rule` (agent labels below L2: `total`, `flagged`, `graded_now`, `with_reason`, `unknown`), and the `command`. |
 | `waiting.cases` | Each open case: status, `clock` lines, `notice_not_before`, `naming_ready`, `watch_hits`, and `needs` with commands. |
 | `actions` | The next steps, most urgent first: `kind`, `title`, `detail`, `command`. |
 
@@ -226,6 +226,8 @@ The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<sta
 
 Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing.
 
+Each record shows its agent grade. Labelling agent below L2 prints the grade, its signals and caps and the labelling rule, then asks for a reason, saved as the note: Enter saves the label with none, and `u` labels unsure instead. A note typed after the key is taken as the reason.
+
 - `--unflagged N` adds a stable sample of unflagged records, which grows the benign baseline and catches misses.
 - `review sample` writes a stratified, seeded sample as a queue file, and `review <queue> --all` labels every record in it ([a reviewed benign baseline](evaluation.md#a-reviewed-benign-baseline)).
 - `--stats` counts reviews and disagreements, and Cohen's κ between labellers; `--list` prints the queue.
@@ -234,6 +236,29 @@ Text after the key is saved as a note (`b ordinary article read`). Answers are s
 - `--serve` labels the same queue in a browser on this machine ([the review page](#the-review-page)); `--export-hosted <file>` writes it for a hosted model's suggestions ([hosted suggestions](#hosted-suggestions)).
 
 Each answer goes to `labels/reviewed.ndjson` with the record, so `swarmchase eval <data>/labels/reviewed.ndjson` measures the rules against everything reviewed ([evaluation](evaluation.md)). The file stays in the data directory and is never committed.
+
+### Label lines
+
+Each line is the stored record with these fields beside it:
+
+| Field | Holds |
+|---|---|
+| `label` | `agent`, `benign` or `unsure`. |
+| `note` | The admin's note; for an agent label below L2, the reason. |
+| `class` | Why the record was queued: flagged, the unflagged sample, or the baseline sample. |
+| `reviewed_at` | When it was labelled. |
+| `tier`, `score`, `rules`, `rules_version` | What the rules said then. |
+| `grade` | The agent grade the label was judged against ([below](#the-grade-on-a-label)). |
+| `suggested` | A model's suggestion shown before the label, never the label. |
+| `tuned` | Looked at while changing a rule ([evaluation](evaluation.md#a-reviewed-benign-baseline)). |
+
+### The grade on a label
+
+`grade` is the grade that decides the record's labels when it is labelled: its cluster's, else its own. It holds `code` and `label` (absent for an ungraded record), `basis` (`cluster`, `record` or `none`), `cluster`, `signals` and `counter` as `<signal> (<n> records)`, `caps`, and `agent_allowed`. An agent label below L2 also carries `"rule": "below_l2"`: an exception the admin chose, with the reason in `note` ([evaluating leads](../guides/evaluating-leads.md#exceptions-to-the-labelling-rule)).
+
+A line without `grade` comes from before grades were stored. Its grade is unknown, so each reader grades it from the analysis it has and says so. The review page and the dashboard use their own analysis. `review --stats` and `review agreement` analyse the review file's own records, so a cluster with members outside the file may grade differently. `eval` uses the analysis of its inputs and does not judge a line whose record is not among them.
+
+`review --stats` lists the agent labels below L2 with their grades and reasons. `review agreement` lists them too, and reads the stored grade before the grade now when a suggestion line records none.
 
 ### Label suggestions
 
@@ -269,9 +294,10 @@ swarmchase review <queue> --all --export-hosted data/labels/hosted-baseline.ndjs
 - **Groups.** Records are grouped by cluster, or by shape (the rules that fired and the start of the URL) when unclustered, so a run of near-identical records is labelled at once. Each record can still be labelled alone.
 - **Flow.** Labelling a group moves to the next one. `z` undoes the last action, label and note included.
 - **Triage.** The queue sorts in queue order, needs attention first (rule conflicts, then split suggestions, then mixed or differing labels), largest groups first, or by grade. Filters narrow it by grade (`L2 or higher`, `below L2`, or one rung), tier, source, suggestion and check. The browser remembers both.
-- **Labelling rule.** `agent` needs an agent grade of L2 or higher. The server marks each record and group with whether the rule allows it, a suggestion of agent below L2, and a saved agent label below L2. The page shows these in the queue and on the group; labelling agent below L2 asks a second time, and a group labelled so can be relabelled unsure in one step.
+- **Labelling rule.** `agent` needs an agent grade of L2 or higher. The server marks each record and group with whether the rule allows it, a suggestion of agent below L2, and a saved agent label below L2. The page shows these in the queue and on the group, and a group labelled so can be relabelled unsure in one step.
+- **Exceptions.** Labelling agent below L2 opens a dialog with the grade, its signals and caps and the rule, and a reason field saved as the note; it offers unsure instead. The server saves every label with its grade ([the grade on a label](#the-grade-on-a-label)). An agent label below L2 shows as `agent < L2` in the queue and the done tab, with an exception field on each record giving the grade, signals, caps and reason, and in earlier decisions. The top bar counts them, and the session panel lists them with the review file's count and the precision estimate without them. An older line without a stored grade shows the grade now and says so.
 - **Suggestions.** `accept suggestion` labels the selected group's unlabelled records as suggested, never across groups, and leaves any suggestion of agent below L2 for the admin. The suggestion is saved beside the label as `suggested`.
-- **Bulk.** `A` / `B` / `U` (with Shift) label only the group's unlabelled records. Every bulk label is one undoable step.
+- **Bulk.** `A` / `B` / `U` (with Shift) label only the group's unlabelled records. Every bulk label is one undoable step, and an undo puts back each label with the grade it was saved with.
 - **Session.** `p` opens the session panel: labels this session and in the review file, agreement between the labels and the suggestions as a table, labels that break the rule, and the agent share of decided flagged records with its 95% Wilson interval, the labels still needed for ±10 points, and the `swarmchase eval` command to run next.
 - **Changing labels.** Reviewed records stay on the page, so a label can be changed or cleared. Labels go to the same file as the terminal session (`--labeller` included).
 - **Rule context.** Each rule in the group shows its description, kind, weight and tactic from the rules the analysis ran with, how many records it fired on in the analysis and how many of those were flagged. With a pre-era control summary, it also shows how often the rule fired and flagged before agents existed ([negative control](evaluation.md#negative-control)). `--control <file>` names the summary; the default is `<data>/controls/pre-era/summary.json`, then `data/controls/pre-era/summary.json`.
