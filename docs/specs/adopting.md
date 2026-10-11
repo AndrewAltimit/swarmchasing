@@ -13,7 +13,7 @@ This page is for a group that wants to apply swarmchasing with its own data, too
 | Incident records | One SC-Incident v1 document per published incident. | [SC-Incident v1](incident-v1.md) |
 | Threat-intelligence export | The STIX 2.1 profile and its `x-sc-agent-run` object. | [FM-12.1](../manual/12-interoperability.md#fm-121-stix-21-export-profile), [FM-12.2](../manual/12-interoperability.md#fm-122-the-x-sc-agent-run-extension) |
 | Evaluation | The three kinds of evaluation and what to publish with a number. | [FM-9.1](../manual/09-evaluation.md#fm-91-three-kinds-of-evaluation), [FM-9.9](../manual/09-evaluation.md#fm-99-what-to-publish-with-a-number) |
-| A benchmark | Record ids, labels, derived features and split, never restricted content. | [FM-9.10](../manual/09-evaluation.md#fm-910-benchmark-publication-rules) |
+| A benchmark | An SC-Bench file: record ids, labels, derived features and split, never restricted content. | [FM-9.10](../manual/09-evaluation.md#fm-910-benchmark-publication-rules), [`schemas/sc-bench-v1.json`](../../schemas/sc-bench-v1.json) |
 
 ## Steps
 

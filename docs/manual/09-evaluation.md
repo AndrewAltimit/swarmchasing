@@ -18,6 +18,8 @@ A claimed number names its kind. Only held-out and prospective numbers may be qu
 
 The regression set holds reconstructed records from published incident reports, synthetic records for each artifact family, and benign records, including hard negatives built to trip the rules ([FM-4.7](04-indicators.md#fm-47-rule-writing-standard)). A gate runs on every change and fails when precision or recall at either tier falls below its floor. Floors only go up.
 
+Synthetic records are written to exercise a rule, so the rules catch them by construction and they lift every number they are counted in. Every headline number is therefore given twice: over all labelled records, and over the records not marked synthetic (reconstructions and collected records). The gate holds floors on both, so hand-written fixtures cannot hold a number up on their own. Read the non-synthetic numbers first.
+
 In this repository the set is [`samples/eval/`](../../samples/eval/README.md) and the gate is described in [evaluation](../reference/evaluation.md#the-eval-gate).
 
 ## FM-9.3 Frozen held-out split
@@ -31,7 +33,7 @@ A frozen split is used for measurement only. Looking at its errors to change a r
 
 Labels from an external release are used with documented overrides, each with its reason. The [Transluce release](references.md#incident-reports) is such a source: it labels scan reports and ships report ids, not contents, so a practitioner fetches the reports under their own access and measures record by record ([held-out steps](../../samples/eval/README.md#held-out-evaluation-on-the-transluce-release)). Its labels draw on context a single record cannot show, so the per-class table matters more than the total.
 
-Toolkit: the Transluce measurement runs record by record, and `eval --split time|cluster` freezes a split of any labelled set ([frozen splits](../reference/evaluation.md#frozen-splits)). Results are saved as numbers and hashes ([saved results](../reference/evaluation.md#saved-results)).
+Toolkit: the Transluce measurement runs record by record, and `eval --split time|cluster` freezes a split of any labelled set ([frozen splits](../reference/evaluation.md#frozen-splits)). Results are saved as numbers and hashes ([saved results](../reference/evaluation.md#saved-results)). `eval repro <result>` finds the inputs by hash, measures again and diffs every number ([reproducing a result](../reference/evaluation.md#reproducing-a-result)); `eval check-results`, run by the gate, checks that every saved result names committed rules and code, has a benign record when held out or prospective, and holds no URL ([checking saved results](../reference/evaluation.md#checking-saved-results)).
 
 ## FM-9.4 Prospective evaluation
 
@@ -45,7 +47,8 @@ Detection is measured as precision and recall:
 
 - **per tier**: significant, and suggestive or above;
 - **per tactic** ([FM-4.3](04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)), so a strong tactic does not hide a weak one;
-- **per unit**: by record and by cluster. A cluster of ten records counts ten times by record and once by cluster; give both.
+- **per unit**: by record and by cluster. A cluster of ten records counts ten times by record and once by cluster; give both. By cluster, a predicted group whose labelled members mix agent and benign is wrong whether flagged or not: flagged, reporting it would misattribute the benign members;
+- **per provenance**: over all records and over the non-synthetic ones ([FM-9.2](#fm-92-regression-set)).
 
 Every proportion carries a 95% Wilson score interval ([Wilson 1927](references.md#statistics)), which behaves at small counts and near 0 or 1 where the plain normal interval does not. For `k` successes in `n` trials, `p = k/n` and `z = 1.96`:
 
@@ -54,7 +57,9 @@ centre    = (p + z²/(2n)) / (1 + z²/n)
 halfwidth = (z / (1 + z²/n)) · sqrt( p(1−p)/n + z²/(4n²) )
 ```
 
-Toolkit: precision and recall per tier, recall per class and per tactic, and false positives per benign class, each with its Wilson interval ([statistics](../reference/evaluation.md#statistics)). Detection scored with the cluster as the unit is (planned).
+**Zero errors.** With none of `n` benign records flagged, the observed false-positive rate is 0 but the 95% upper bound is not: it is close to `3/n`, the rule of three ([Hanley and Lippman-Hand 1983](references.md#statistics)). Bounding a false-positive rate at 0.5% takes more than 600 benign records with none flagged. A clean result on fewer says less than that, and is quoted with its bound.
+
+Toolkit: precision and recall per tier, by record and by cluster, over all and non-synthetic records, recall per class and per tactic, and false positives per benign class, each with its Wilson interval; the `3/n` bound where nothing was flagged ([statistics](../reference/evaluation.md#statistics), [units](../reference/evaluation.md#record-and-cluster-units)).
 
 ## FM-9.6 Cluster metrics
 
@@ -105,6 +110,8 @@ A published benchmark contains:
 - the split assignment (tuning or held-out) and the freeze date.
 
 It never contains a source's content where the source's terms forbid redistribution ([FM-3.4](03-sources.md#fm-34-terms-of-use)), captured secrets, or operator-supplied logs. Users fetch records themselves, under the source's terms.
+
+SC-Bench is this form as a file: the JSON Schema [`schemas/sc-bench-v1.json`](../../schemas/sc-bench-v1.json) holds a header (freeze date, rules version and hash, toolkit version) and one entry per record (id, defanged host, label, labellers, split, timestamp kind, provenance, and the reference rules' fired rules, tier and cluster), never a URL. Toolkit: `eval export-bench` writes one, and `eval --bench` scores another detector's predictions against it, by record and by cluster, over all and non-synthetic records ([SC-Bench](../reference/evaluation.md#sc-bench)).
 
 ## FM-9.11 Agent-grade evaluation
 

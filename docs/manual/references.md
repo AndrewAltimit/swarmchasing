@@ -78,12 +78,13 @@ Every source the manual cites, grouped by use. Where a standard is paywalled, th
 | E. Amigó, J. Gonzalo, J. Artiles, F. Verdejo, "A comparison of extrinsic clustering evaluation metrics based on formal constraints", *Information Retrieval* 12(4), 2009, 461–486. <https://doi.org/10.1007/s10791-008-9066-8> | Why B-cubed suits cluster evaluation ([FM-9.6](09-evaluation.md#fm-96-cluster-metrics)). |
 | J. Cohen, "A coefficient of agreement for nominal scales", *Educational and Psychological Measurement* 20(1), 1960, 37–46. <https://doi.org/10.1177/001316446002000104> | Cohen's κ ([FM-9.8](09-evaluation.md#fm-98-inter-rater-agreement)). |
 | J. L. Fleiss, "Measuring nominal scale agreement among many raters", *Psychological Bulletin* 76(5), 1971, 378–382. <https://doi.org/10.1037/h0031619> | Fleiss' κ ([FM-9.8](09-evaluation.md#fm-98-inter-rater-agreement)). |
+| J. A. Hanley, A. Lippman-Hand, "If nothing goes wrong, is everything all right? Interpreting zero numerators", *JAMA* 249(13), 1983, 1743–1745. <https://doi.org/10.1001/jama.1983.03330370053031> | The rule of three for a zero count ([FM-9.5](09-evaluation.md#fm-95-detection-metrics)). |
 
 ## Interoperability
 
 | Source | Cited for |
 |---|---|
-| OASIS, *STIX Version 2.1*, OASIS Standard, 10 June 2021. <https://docs.oasis-open.org/cti/stix/v2.1/os/stix-v2.1-os.html> | The export profile; extension definitions (§7.3) and custom object naming ([chapter 12](12-interoperability.md)). |
+| OASIS, *STIX Version 2.1*, OASIS Standard, 10 June 2021. <https://docs.oasis-open.org/cti/stix/v2.1/os/stix-v2.1-os.html> | The export profile; extension definitions (section 7.3) and custom object naming ([chapter 12](12-interoperability.md)). |
 | Responsible AI Collaborative, *AI Incident Database* and its editors' guide. <https://incidentdatabase.ai/editors-guide/> | Report and incident fields ([FM-12.3](12-interoperability.md#fm-123-ai-incident-databases)). |
 | OECD, *Towards a common reporting framework for AI incidents*, OECD Artificial Intelligence Papers, 2025. <https://www.oecd.org/en/publications/towards-a-common-reporting-framework-for-ai-incidents_f326d4ac-en.html> | The 29-criterion common reporting framework and its dimensions ([FM-12.3](12-interoperability.md#fm-123-ai-incident-databases), [FM-12.4](12-interoperability.md#fm-124-crosswalk-to-agent-security-frameworks)). |
 | OECD.AI, *AI Incidents and Hazards Monitor*, methodology. <https://oecd.ai/en/incidents-methodology> | AIM's definitions and planned submission process ([FM-12.3](12-interoperability.md#fm-123-ai-incident-databases)). |

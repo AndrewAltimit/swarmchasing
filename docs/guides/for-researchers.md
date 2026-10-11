@@ -48,7 +48,7 @@ Pull requests from forks run nothing on the project's runner, so run the gates y
 
 ## Citing the method
 
-Cite the Field Manual by version and section id: `SC-FM 1.0 §FM-5.2`. Section ids, tactic ids and attribution labels are stable within a major version; a section whose meaning changes gets a new id ([how to cite](../manual/README.md#how-to-cite)). Say which sections you follow and where you depart.
+Cite the Field Manual by version and section id: `SC-FM 1.1 §FM-5.2`. Section ids, tactic ids and attribution labels are stable within a major version; a section whose meaning changes gets a new id ([how to cite](../manual/README.md#how-to-cite)). Say which sections you follow and where you depart. A group that adopts the method for its own work, with its own rules or engine, states conformance as [adopting the method](../specs/adopting.md) describes; to compare detectors, use [SC-Bench](#scoring-your-own-detector-sc-bench).
 
 Cite a rule by its id and the rules version (`[meta] version` in the rules file), and a number by its evaluation kind and the context [FM-9.9](../manual/09-evaluation.md#fm-99-what-to-publish-with-a-number) lists. For worked examples of the method applied to published incidents, see the case studies from [FM-13.3](../manual/13-case-study.md#fm-133-reading-a-published-write-up-with-the-template) on.
 

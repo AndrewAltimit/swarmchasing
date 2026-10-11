@@ -65,7 +65,7 @@ pub fn sections_page(sections: &[FmSection], order: &[&Doc]) -> String {
     let root = rel_root("docs/manual/sections/index.html");
     let mut s = String::from(
         "<header class=\"page-head\"><p class=\"crumbs\"><a href=\"../\">Field Manual</a></p><h1>Field Manual sections</h1>\
-<p class=\"lede\">Every section of the Swarmchasing Field Manual (SC-FM) by its id. Cite a section as <code>SC-FM 1.0 §FM-3.2</code>. Search matches ids, titles and the sections' text; it runs in this page.</p></header>\
+<p class=\"lede\">Every section of the Swarmchasing Field Manual (SC-FM) by its id. Cite a section as <code>SC-FM 1.1 §FM-3.2</code>. Search matches ids, titles and the sections' text; it runs in this page.</p></header>\
 <form class=\"filters card fm-search\" role=\"search\" aria-label=\"Search the Field Manual\" data-fm-search>\
 <label class=\"grow\">Search the manual<input name=\"q\" type=\"search\" spellcheck=\"false\" placeholder=\"e.g. capture time, naming gate, FM-7\" autocomplete=\"off\"></label>\
 <p class=\"hint\" data-fm-count aria-live=\"polite\"></p></form>",
