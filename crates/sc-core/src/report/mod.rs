@@ -26,6 +26,7 @@ use crate::attribution::{Claim, Evidence, attribute, merge};
 use crate::model::{IndicatorKind, Tier};
 use crate::notice::PublicView;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt::Write;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +64,12 @@ pub struct ReportOptions {
     /// went out only to these parties, and says nothing about sends without it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reported: Option<Reported>,
+    /// For the indicator notice: each affected host, lowercase, with how the
+    /// notice describes it without identifying it ("a national government
+    /// data portal"). When given, a public notice names no host at all: the
+    /// described hosts appear by their description, the rest are counted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_descriptions: Option<BTreeMap<String, String>>,
     /// The admin's agent grade for the case ([`crate::agentness`]), shown
     /// beside the computed grades; the only way to L5. Set by the case, never
     /// read from options JSON, so the browser module carries no decoder.
@@ -101,6 +108,7 @@ impl Default for ReportOptions {
             exposed_hosts: Vec::new(),
             affected_hosts: None,
             reported: None,
+            target_descriptions: None,
             agent_grade: None,
         }
     }
@@ -137,7 +145,20 @@ pub fn render_markdown(a: &Analysis, opts: &ReportOptions) -> String {
 }
 
 fn public_view(a: &Analysis, opts: &ReportOptions) -> PublicView {
-    PublicView::new(a, &opts.exposed_hosts).with_affected(opts.affected_hosts.as_deref())
+    // The indicator notice names no host, so its view names none either.
+    let affected = match &opts.target_descriptions {
+        Some(_) => Some(&[][..]),
+        None => opts.affected_hosts.as_deref(),
+    };
+    PublicView::new(a, &opts.exposed_hosts).with_affected(affected)
+}
+
+/// The descriptions that stand in for hosts, when the report is an
+/// indicator notice.
+fn descriptions(opts: &ReportOptions) -> Option<&BTreeMap<String, String>> {
+    opts.target_descriptions
+        .as_ref()
+        .filter(|_| opts.audience == Audience::Public)
 }
 
 /// The public notice for these clusters, with what it withheld.
@@ -191,7 +212,14 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     agentness::section(&mut s, &r.clusters, opts);
 
     if opts.audience != Audience::Provider {
-        endpoint_table(&mut s, a, &hosts, unnamed, view.as_deref_mut());
+        endpoint_table(
+            &mut s,
+            a,
+            &hosts,
+            unnamed,
+            descriptions(opts),
+            view.as_deref_mut(),
+        );
     }
 
     r.timeline(&mut s, view.as_deref_mut());

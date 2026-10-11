@@ -69,10 +69,10 @@ impl Reported {
 /// The report's title.
 pub(super) fn title(audience: Audience) -> &'static str {
     match audience {
-        Audience::Provider => "Report of suspected misaligned agent activity",
+        Audience::Provider => "Report of suspected AI agent activity",
         Audience::Affected => "Notice: automated agent activity targeting your systems",
         Audience::Internal => "Case notes: agent activity",
-        Audience::Public => "Public notice: suspected misaligned agent activity",
+        Audience::Public => "Public notice: suspected AI agent activity",
     }
 }
 
