@@ -143,11 +143,17 @@ mod tests {
         let text = include_str!("../../../../samples/eval/bench/sc-bench-v1-example.json");
         let b: Bench = serde_json::from_str(text).unwrap();
         assert!(bench::validate(&b).is_empty(), "{:?}", bench::validate(&b));
+        // Every record was written or rebuilt by hand. The cross-service
+        // fixtures name a scan service as their source, since fan-out reads
+        // it, but are synthetic like the rest.
+        assert!(
+            b.records.iter().all(|r| r.provenance != "collected"),
+            "the example is built from committed samples only"
+        );
         assert!(
             b.records
                 .iter()
-                .all(|r| r.provenance != "collected" && r.source == "eval"),
-            "the example is built from committed samples only"
+                .all(|r| r.source == "eval" || r.provenance == "synthetic")
         );
         // The only URL is the schema's.
         assert_eq!(text.matches("://").count(), 1);
