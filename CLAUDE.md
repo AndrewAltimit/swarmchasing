@@ -46,6 +46,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`docs/README.md`](docs/README.md) | Index of every doc. |
 | [`guides/admin-workflow.md`](docs/guides/admin-workflow.md) | Digest → review → case → contacts → drafts → send → notice → updates. |
 | [`guides/for-operators.md`](docs/guides/for-operators.md) | For a reported site: what the report means, checking logs, replies, bundles. |
+| [`guides/for-providers.md`](docs/guides/for-providers.md) | AI providers' trust and safety: the report, verifying bundles, exports, the clock, replies. |
 | [`guides/for-researchers.md`](docs/guides/for-researchers.md) | Outside researchers: workbench, rules, citing SC-FM, reproducing eval, data never shared. |
 | [`guides/writing-rules.md`](docs/guides/writing-rules.md) | A rule change step by step: fields, weights, hard negatives, eval and coverage. |
 | [`reference/watch.md`](docs/reference/watch.md) | Data directory, incremental collection, digest, retention, review. |

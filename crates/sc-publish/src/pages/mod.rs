@@ -265,6 +265,10 @@ fn manual_terms(first: &[docs::Doc], sources: &[(String, String)]) -> docs::Term
         }
         t.fm.insert(f.id, format!("{}#{}", f.url, f.anchor));
     }
+    t.titles = first
+        .iter()
+        .map(|d| (d.src.clone(), d.title.clone()))
+        .collect();
     if let Some((src, text)) = sources.iter().find(|(p, _)| p == "docs/manual/glossary.md") {
         let url = docs::doc_url(src);
         t.gloss = docs::glossary_terms(text)
@@ -441,6 +445,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         let nav = match d.url.as_str() {
             "methodology/" => "methodology",
             "operators/" => "operators",
+            "providers/" => "providers",
             u if u.starts_with("docs/manual/") => "manual",
             _ => "docs",
         };
