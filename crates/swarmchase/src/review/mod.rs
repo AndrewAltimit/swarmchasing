@@ -34,6 +34,16 @@
 //! With `--suggest`, a model running locally ([`crate::suggest`]) proposes a
 //! label before each prompt; it is saved beside the admin's label as
 //! `suggested`, never as the label.
+//!
+//! `review sample` ([`sample`]) writes a stratified, seeded sample of the
+//! records below suggestive as a queue file, and `review <queue> --all`
+//! queues every record in it, as `review:baseline-sample`. Two labellers
+//! label it; `review --stats` reports their agreement and what the benign
+//! records reviewed so far can bound: the rule of three gives a 95% upper
+//! bound of `3/n` on the false-positive rate when none of `n` benign
+//! records was flagged.
+
+pub mod sample;
 
 use crate::suggest::Suggestion;
 use crate::util::truncate;
@@ -46,9 +56,24 @@ use std::path::{Path, PathBuf};
 
 pub const CLASS_FLAGGED: &str = "review:flagged";
 pub const CLASS_SAMPLE: &str = "review:unflagged-sample";
+pub const CLASS_BASELINE: &str = "review:baseline-sample";
+
+#[derive(clap::Subcommand)]
+pub enum ReviewCmd {
+    /// Write a stratified, seeded sample of records below suggestive as a
+    /// review queue, to grow a reviewed benign baseline.
+    Sample(sample::SampleArgs),
+}
 
 #[derive(clap::Args)]
+#[command(args_conflicts_with_subcommands = true)]
 pub struct ReviewArgs {
+    #[command(subcommand)]
+    cmd: Option<ReviewCmd>,
+    /// Queue every record of the input files, in file order (a queue
+    /// `review sample` wrote), as `review:baseline-sample`.
+    #[arg(long, requires = "input")]
+    all: bool,
     /// Records to review. Default: the watch store's last `--days` days.
     input: Vec<PathBuf>,
     /// Data directory (the watch's `--out`).
@@ -83,6 +108,9 @@ pub struct ReviewArgs {
 }
 
 pub fn run(args: ReviewArgs) -> Result<()> {
+    if let Some(ReviewCmd::Sample(s)) = args.cmd {
+        return sample::run(s);
+    }
     let data = &args.data;
     if args.input.is_empty() || args.stats {
         crate::store::hint_if_empty(data);
@@ -115,14 +143,19 @@ pub fn run(args: ReviewArgs) -> Result<()> {
     };
     let a = sc_core::analyze(obs, &rules.rules);
     let done = store.entries.keys().cloned().collect();
-    let items = queue(&a, &done, min, args.unflagged);
+    let items = if args.all {
+        queue_all(&a, &done)
+    } else {
+        queue(&a, &done, min, args.unflagged)
+    };
     println!(
-        "{} records · {} reviewed before · {} in the queue ({} flagged, {} unflagged sample)",
+        "{} records · {} reviewed before · {} in the queue ({} flagged, {} unflagged sample, {} baseline sample)",
         a.total,
         store.entries.len(),
         items.len(),
         items.iter().filter(|i| i.class == CLASS_FLAGGED).count(),
         items.iter().filter(|i| i.class == CLASS_SAMPLE).count(),
+        items.iter().filter(|i| i.class == CLASS_BASELINE).count(),
     );
     if args.list {
         for it in &items {
@@ -334,6 +367,21 @@ pub fn queue(a: &Analysis, done: &BTreeSet<String>, min_tier: Tier, unflagged: u
             idx,
             class: CLASS_SAMPLE,
         }))
+        .collect()
+}
+
+/// Every unreviewed record, once, in input order, as the baseline sample.
+pub fn queue_all(a: &Analysis, done: &BTreeSet<String>) -> Vec<Item> {
+    let mut queued = BTreeSet::new();
+    (0..a.results.len())
+        .filter(|&i| {
+            let id = &a.results[i].obs.id;
+            !done.contains(id) && queued.insert(id.clone())
+        })
+        .map(|idx| Item {
+            idx,
+            class: CLASS_BASELINE,
+        })
         .collect()
 }
 
@@ -706,6 +754,7 @@ pub fn stats(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
         out,
         "flagged at review but labelled benign: {fp} · labelled agent but not flagged: {missed}"
     )?;
+    baseline(store, out)?;
     if fp + missed > 0 {
         writeln!(
             out,
@@ -713,6 +762,51 @@ pub fn stats(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
             store.path.display()
         )?;
     }
+    Ok(())
+}
+
+/// The baseline sample reviewed so far (`review:baseline-sample`) and what
+/// its benign records bound: the false-positive rate at suggestive or above
+/// (tier at review time) with its Wilson interval, and with none flagged the
+/// rule of three, `3/n`. Agent labels in it are misses.
+pub fn baseline(store: &ReviewStore, out: &mut impl Write) -> Result<()> {
+    let sampled: Vec<&Review> = store
+        .entries
+        .values()
+        .filter(|r| r.class == CLASS_BASELINE)
+        .collect();
+    let benign: Vec<&&Review> = sampled.iter().filter(|r| r.label == "benign").collect();
+    let agents = sampled.iter().filter(|r| r.label == "agent").count();
+    let n = benign.len();
+    if sampled.is_empty() {
+        return Ok(());
+    }
+    let k = benign.iter().filter(|r| r.tier >= Tier::Suggestive).count();
+    let p = sc_core::eval::stats::Proportion::new(k, n);
+    let pct = |x: Option<f64>| x.map_or("n/a".into(), |v| format!("{:.2}%", v * 100.0));
+    writeln!(
+        out,
+        "benign baseline: {} baseline-sample reviews · {n} benign · {agents} agent (misses) · benign flagged suggestive+ at review {k} · FP rate {} [{}–{}]",
+        sampled.len(),
+        pct(p.value),
+        pct(p.lo),
+        pct(p.hi)
+    )?;
+    if n == 0 {
+        return Ok(());
+    }
+    if k == 0 {
+        writeln!(
+            out,
+            "  none flagged: by the rule of three the FP rate is below 3/{n} = {:.2}% (95%); below 0.5% needs more than 600 benign records with none flagged",
+            300.0 / n as f64
+        )?;
+    }
+    writeln!(
+        out,
+        "  for the current rules, run `swarmchase eval {}`",
+        store.path.display()
+    )?;
     Ok(())
 }
 
@@ -949,6 +1043,39 @@ mod tests {
         assert!(out.contains("ann vs bob: n 3 · agree 2 · κ 0.400"), "{out}");
         assert!(out.contains("c2: ann agent · bob benign"), "{out}");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn all_queues_every_record_and_stats_bound_the_baseline() {
+        let a = analysis();
+        let q = queue_all(&a, &BTreeSet::new());
+        assert_eq!(q.len(), a.results.len());
+        assert!(q.iter().all(|i| i.class == CLASS_BASELINE));
+        let mut store = tmp_store("baseline");
+        for it in q.iter().filter(|it| a.results[it.idx].score == 0) {
+            let r = &a.results[it.idx];
+            store.entries.insert(
+                r.obs.id.clone(),
+                Review {
+                    record: r.obs.clone(),
+                    label: "benign".into(),
+                    note: None,
+                    class: CLASS_BASELINE.into(),
+                    reviewed_at: "x".into(),
+                    tier: r.tier,
+                    score: r.score,
+                    rules: Vec::new(),
+                    rules_version: a.rules_version.clone(),
+                    suggested: None,
+                },
+            );
+        }
+        let n = store.entries.len();
+        let mut out = Vec::new();
+        baseline(&store, &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains(&format!("{n} benign · 0 agent")), "{out}");
+        assert!(out.contains(&format!("below 3/{n}")), "{out}");
     }
 
     #[test]

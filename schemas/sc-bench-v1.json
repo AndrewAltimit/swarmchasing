@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/sc-bench-v1.json",
+  "title": "SC-Bench v1",
+  "description": "A shareable labelled set for scoring detectors of AI agent activity in public records (Swarmchasing Field Manual 9.10). It names records by id and carries labels, labellers, splits, timestamp kinds, provenance, defanged target hosts and what the reference rules said at the freeze. It never carries a record's URL or other content: a reader obtains the records from their source, under its terms. Written by `swarmchase eval export-bench`, scored by `swarmchase eval --bench`. Version 1.0.0.",
+  "type": "object",
+  "required": [
+    "format",
+    "name",
+    "description",
+    "freeze_date",
+    "rules_version",
+    "rules_sha256",
+    "toolkit_version",
+    "records"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "sc-bench-v1" },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "freeze_date": {
+      "description": "The day the labels and splits were frozen.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "rules_version": {
+      "description": "The `[meta] version` of the rules that produced the reference fields.",
+      "type": "string"
+    },
+    "rules_sha256": {
+      "description": "SHA-256 of that rules file, line endings normalised to LF.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "toolkit_version": { "type": "string" },
+    "records": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/record" }
+    }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "required": [
+        "id",
+        "labellers",
+        "split",
+        "ts_kind",
+        "source",
+        "provenance",
+        "fired_rules",
+        "tier"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The record's id in its source (`urlquery:<report id>`, a CDX timestamp and digest, a sample id). Unique within the file.",
+          "type": "string",
+          "minLength": 1
+        },
+        "host": {
+          "description": "The record's target host, defanged: every dot written `[.]`.",
+          "type": "string",
+          "pattern": "^([^.]|\\[\\.\\])*$"
+        },
+        "label": {
+          "description": "Absent for a record that is graded by actor, not scored.",
+          "enum": ["agent", "benign"]
+        },
+        "actor": {
+          "description": "Who sent it, when known.",
+          "enum": ["agent", "human", "tool"]
+        },
+        "class": {
+          "description": "Agent records: the kind of activity. Benign records: the kind of ordinary traffic.",
+          "type": "string"
+        },
+        "labellers": {
+          "description": "Who labelled it: people or groups, never a model.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "split": {
+          "description": "`regression`: used to tune the reference rules; `held_out`: frozen before tuning; `prospective`: collected after the freeze.",
+          "enum": ["regression", "held_out", "prospective"]
+        },
+        "ts": {
+          "description": "The record's timestamp, RFC 3339 UTC. Absent when unknown.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "ts_kind": {
+          "description": "What the timestamp is the time of (SC-FM 6.1).",
+          "enum": ["request", "capture", "submit", "unknown"]
+        },
+        "source": {
+          "description": "The record's source (`urlquery`, `wayback`, `access_log`, `eval` for written samples, ...).",
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance": {
+          "description": "How the record came to exist: written by hand to exercise rules, rebuilt from a published write-up, or collected.",
+          "enum": ["synthetic", "reconstructed", "collected"]
+        },
+        "origin": {
+          "description": "Where to obtain the record: a file or dataset name.",
+          "type": "string"
+        },
+        "run": {
+          "description": "The true run the record belongs to, for cluster-level scoring.",
+          "type": "string"
+        },
+        "fired_rules": {
+          "description": "Reference: the rule ids the reference rules fired on the record.",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "tier": {
+          "description": "Reference: the record's tier under the reference rules.",
+          "enum": ["noise", "suggestive", "significant"]
+        },
+        "cluster": {
+          "description": "Reference: the stable key of the record's cluster.",
+          "type": "string",
+          "pattern": "^k-[0-9a-f]+$"
+        }
+      }
+    }
+  }
+}

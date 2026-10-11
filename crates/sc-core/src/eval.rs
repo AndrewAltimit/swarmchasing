@@ -28,17 +28,29 @@
 //! (`agent`, `human`, `tool`) for the grade table in [`grades`]; a record
 //! with an actor and no label is graded but not scored.
 //!
+//! A record may also say how it came to exist: `synthetic` (written by hand
+//! to exercise the rules) or `reconstructed` (rebuilt from a published
+//! write-up). The summary reports every number for all records and again
+//! without the synthetic ones, so hand-written fixtures cannot carry a
+//! headline number on their own.
+//!
 //! Submodules: [`stats`] (Wilson intervals, Cohen's κ), [`clusters`],
-//! [`coverage`], [`grades`], [`split`] (frozen held-out splits) and
-//! [`summary`] (the whole evaluation as one JSON-ready value, for the CLI
-//! and the site).
+//! [`coverage`], [`grades`], [`split`] (frozen held-out splits), [`units`]
+//! (record- and cluster-unit counts over a slice of the set, and the
+//! calibration table), [`control`] (the label-free negative control),
+//! [`bench`] (the shareable SC-Bench file and its scorer) and [`summary`]
+//! (the whole evaluation as one JSON-ready value, for the CLI and the site).
 
+pub mod bench;
 pub mod clusters;
+pub mod control;
 pub mod coverage;
 pub mod grades;
 pub mod split;
 pub mod stats;
 pub mod summary;
+pub mod units;
+mod view;
 
 use crate::analyze::Analysis;
 use crate::model::Tier;
@@ -74,6 +86,34 @@ pub struct Labelled {
     /// `none` for a run known not to interact; for the swarm-edge summary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub swarm: Option<String>,
+    /// Written by hand to exercise the rules (`"synthetic": true`), not
+    /// collected or reconstructed from a published incident.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub synthetic: bool,
+    /// Rebuilt from a published write-up (`"reconstructed": true`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reconstructed: bool,
+    /// Who labelled it (`labeller` or `labellers`), when the row says.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labellers: Vec<String>,
+    /// The label file it came from, set by the caller that read the file
+    /// (for the per-file breakdown); `None` when unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
+impl Labelled {
+    /// `synthetic`, `reconstructed` or `collected`: how the record came to
+    /// exist, for the per-provenance breakdown.
+    pub fn provenance(&self) -> &'static str {
+        if self.synthetic {
+            "synthetic"
+        } else if self.reconstructed {
+            "reconstructed"
+        } else {
+            "collected"
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -84,6 +124,9 @@ pub struct LabelSet {
     /// Who really sent a record, by id, for every row that says
     /// ([`grades`]), labelled or not.
     pub actors: HashMap<String, grades::Actor>,
+    /// Rows marked `synthetic` or `reconstructed`, labelled or not, by id:
+    /// the value is [`Labelled::provenance`]'s word.
+    pub provenance: HashMap<String, &'static str>,
     pub warnings: Vec<String>,
 }
 
@@ -400,9 +443,27 @@ fn parse_ndjson_labels(text: &str) -> LabelSet {
             }
         };
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string);
+        let b = |k: &str| v.get(k).and_then(|x| x.as_bool()).unwrap_or(false);
+        let strings = |k: &str| -> Vec<String> {
+            v.get(k)
+                .and_then(|x| x.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
         let actor = s("actor").and_then(|x| grades::Actor::parse(&x));
         if let (Some(id), Some(x)) = (s("id"), actor) {
             out.actors.insert(id, x);
+        }
+        if let Some(id) = s("id") {
+            if b("synthetic") {
+                out.provenance.insert(id, "synthetic");
+            } else if b("reconstructed") {
+                out.provenance.insert(id, "reconstructed");
+            }
         }
         let (Some(id), Some(word)) = (s("id"), s("label")) else {
             out.skipped += usize::from(actor.is_none());
@@ -421,15 +482,14 @@ fn parse_ndjson_labels(text: &str) -> LabelSet {
                 cite: s("cite"),
                 run: s("run"),
                 swarm: s("swarm"),
-                hard_negative_for: v
-                    .get("hard_negative_for")
-                    .and_then(|x| x.as_array())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|x| x.as_str().map(str::to_string))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                hard_negative_for: strings("hard_negative_for"),
+                synthetic: b("synthetic"),
+                reconstructed: b("reconstructed"),
+                labellers: match s("labeller") {
+                    Some(one) => vec![one],
+                    None => strings("labellers"),
+                },
+                origin: None,
             },
         );
     }
@@ -459,6 +519,7 @@ fn parse_csv_labels(text: &str) -> LabelSet {
     let cite_col = col(&["cite", "report_url"]);
     let run_col = col(&["run"]);
     let actor_col = col(&["actor"]);
+    let labeller_col = col(&["labeller"]);
     if label_col.is_none() && disp_col.is_none() {
         out.warnings
             .push("CSV has neither a label nor a disposition column".into());
@@ -494,6 +555,13 @@ fn parse_csv_labels(text: &str) -> LabelSet {
                 run: get(run_col).filter(|s| !s.is_empty()).map(str::to_string),
                 hard_negative_for: Vec::new(),
                 swarm: None,
+                synthetic: false,
+                reconstructed: false,
+                labellers: get(labeller_col)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| vec![s.to_string()])
+                    .unwrap_or_default(),
+                origin: None,
             },
         );
     }
