@@ -84,6 +84,7 @@ impl Source for Urlscan {
             records,
             next: next.map(Cursor::Key),
             truncated: false,
+            coverage: None,
         })
     }
 }

@@ -12,7 +12,7 @@ contained_after_days = 14   # digest proposes "contained" for an active notice a
 http_cache_ttl_secs = 3600  # reuse cached responses (<data>/cache/http) this long, then revalidate; 0 = off
 #
 # Kinds: wayback | arquivo | urlquery | commoncrawl | urlscan | memento |
-# gharchive | npm | pypi | ctlog (docs/reference/watch.md#source-kinds).
+# gharchive | npm | pypi | ctlog | wellknown | mcp (docs/reference/watch.md#source-kinds).
 # Every source's terms of use are summarised in its rationale, with the URL.
 
 # ── Relays: agents wrap targets so the request comes from someone else's server ──
@@ -98,14 +98,44 @@ limit = 2000
 
 # Rationale: request echo service; agents use it to turn a GET into a POST, test
 # headers, or check their own egress IP before probing. Feeds carrier.httpbin.
-# Noise: very high (developer tests), so the limit is low and only the paths
-# agents use are worth reading in the digest.
+# Noise: very high (developer tests). The whole host is too big for one index
+# query (`httpbin.org/*` times out at the gateway), so only the paths agents
+# use to carry a request are read, each as its own prefix, in week-long
+# windows of small pages that resume where a failure stopped them.
+#
+# `/base64/<payload>` echoes the decoded payload back: how programs were
+# delivered to a remote browser. The unwrapper decodes it, so the program's
+# own fetches feed carrier.inline_fetch_program and the exploit rules.
 [[source]]
-name = "httpbin"
+name = "httpbin-base64"
 kind = "wayback"
-pattern = "httpbin.org/*"
+pattern = "httpbin.org/base64/*"
 from = "20260901"
+slice_days = 7            # read the range a week at a time
 limit = 1000
+page_size = 500
+
+# `/anything` echoes whatever request it gets, so an agent sends its payload
+# there to see what a server would receive, or to launder a GET into a POST.
+[[source]]
+name = "httpbin-anything"
+kind = "wayback"
+pattern = "httpbin.org/anything*"
+from = "20260901"
+slice_days = 7
+limit = 1000
+page_size = 500
+
+# `/redirect-to?url=<target>` bounces a fetch to the target from httpbin's
+# origin; the target is in the parameter.
+[[source]]
+name = "httpbin-redirect"
+kind = "wayback"
+pattern = "httpbin.org/redirect-to*"
+from = "20260901"
+slice_days = 7
+limit = 1000
+page_size = 500
 
 # Rationale: in-browser code playground. Share links carry the whole program in
 # the URL, so a fetch program aimed at a target is visible in the capture itself,
@@ -133,6 +163,36 @@ from = "20260901"
 limit = 1000
 page_size = 100
 
+# Rationale: Arquivo.pt's SavePageNow archives any URL anyone submits, and
+# agents have used it the way they use urlquery: a neutral origin that
+# fetches the target for them. Its crawls reach the index months late, but
+# on-demand saves are merged within days into collections named `SAWP<n>`,
+# so only those are read (`filter`). Feeds relay.jina and the payload and
+# marker rules, as captures (capture time, not submission time). Noise:
+# people saving a Jina-rendered article. One request per run; Arquivo.pt's
+# index cannot page, so the digest warns when a pull fills `limit`. Terms
+# (https://sobre.arquivo.pt/en/about/terms-and-conditions/): free access for
+# research, no commercial use, no interfering with the service, cite
+# Arquivo.pt; index rows only, captures cited by link.
+[[source]]
+name = "arquivo-spn-jina"
+kind = "arquivo"
+pattern = "r.jina.ai/*"
+filter = ["collection:SAWP.*"]
+from = "20260901"
+limit = 2000
+
+# Rationale: the same channel for the echo carrier: an agent that saves an
+# httpbin URL through Arquivo.pt gets the request sent from Arquivo.pt's
+# origin. Feeds carrier.httpbin and what the unwrapper finds inside.
+[[source]]
+name = "arquivo-spn-httpbin"
+kind = "arquivo"
+pattern = "httpbin.org/*"
+filter = ["collection:SAWP.*"]
+from = "20260901"
+limit = 2000
+
 # ── Code hosts, registries and certificates ───────────────────────────────────
 
 # Rationale: agents that work through GitHub (issues, comments, new repos)
@@ -140,8 +200,10 @@ page_size = 100
 # after their runs. Keeps public events whose repo name or payload URLs match;
 # the record is the event's public link, so the URL rules do not fire on it:
 # these are leads for review, linked by time and name. Noise: developers
-# discussing Jina Reader or proxies. Reads the newest hour of the GH Archive
-# stream per run (~10 MB, streamed). Terms: GH Archive republishes GitHub's
+# discussing Jina Reader or proxies. Reads on from the last hour read, up to
+# six hours (one per hour between scheduled runs, so the whole stream) and
+# 256 compressed MB per run, streamed; hours run a few MB each. Every hour
+# read must parse events (the canary). Terms: GH Archive republishes GitHub's
 # public API events with no further terms; GitHub's Acceptable Use Policies
 # section 7 (https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)
 # allow research use of public, non-personal information with open-access
@@ -150,7 +212,8 @@ page_size = 100
 name = "gharchive-relays"
 kind = "gharchive"
 pattern = "r.jina.ai/http|api.allorigins.win/get|uqtag="
-scan = 1                  # hours per run
+scan = 6                  # hours per run, read on from the last one read
+max_mb = 256              # compressed bytes per run
 limit = 500
 
 # Rationale: swarms told to "ship" or prove reach publish throwaway packages
@@ -172,19 +235,28 @@ limit = 200
 # whose descriptions mention the tag text. Terms
 # (https://docs.npmjs.com/policies/open-source-terms): programmatic access
 # through the documented public APIs; no automating the website, no
-# unreasonable volume, no use as a general-purpose database.
+# unreasonable volume, no use as a general-purpose database. The tag search
+# finds nothing most runs, so one extra search for a package name every
+# registry holds is the canary that the API still answers in the expected
+# shape.
 [[source]]
 name = "npm-tags"
 kind = "npm"
 pattern = "uqtag"
+canary = "react"
 limit = 250
 page_size = 250
 
 # Rationale: new certificates for relay look-alikes and mirrors (self-hosted
 # allorigins and corsproxy copies, Jina Reader clones) that agents switch to
-# when a public relay blocks them. Reads the newest 512 entries of one log
-# per run, so it is a small sample, not a monitor; crt.sh stays the per-name
-# lookup (`swarmchase certs`). The record is the certificate's name, a lead for
+# when a public relay blocks them. Each log grows by about a thousand entries
+# a minute, so a pull reads its newest entries and the digest shows how much
+# of the growth since the last run that was: a sample, not a monitor; crt.sh
+# stays the per-name lookup (`swarmchase certs`). Three logs from two
+# operators widen the sample. Google's logs return 32 entries a request and
+# Cloudflare's 256, so the scans differ to keep each log to a few dozen paced
+# requests. Let's Encrypt now logs only to tiled (static-ct) logs, which this
+# reader does not speak. The record is the certificate's name, a lead for
 # review. Noise: legitimate self-hosted proxies. Terms: CT logs are public by
 # design (RFC 6962, RFC 9162) and publish no restrictions beyond fair rates.
 [[source]]
@@ -192,8 +264,62 @@ name = "ct-relay-lookalikes"
 kind = "ctlog"
 endpoint = "https://ct.googleapis.com/logs/us1/argon2026h2/"
 pattern = "allorigins|corsproxy|jina-reader|r-jina"
-scan = 512
+scan = 1024
 limit = 200
+
+[[source]]
+name = "ct-relay-lookalikes-xenon"
+kind = "ctlog"
+endpoint = "https://ct.googleapis.com/logs/eu1/xenon2026h2/"
+pattern = "allorigins|corsproxy|jina-reader|r-jina"
+scan = 1024
+limit = 200
+
+[[source]]
+name = "ct-relay-lookalikes-nimbus"
+kind = "ctlog"
+endpoint = "https://ct.cloudflare.com/logs/nimbus2026/"
+pattern = "allorigins|corsproxy|jina-reader|r-jina"
+scan = 4096
+limit = 200
+
+# ── Agent platforms ───────────────────────────────────────────────────────────
+
+# Rationale: agents and agent platforms announce themselves in well-known
+# files: A2A agent cards (`agent-card.json`, `agent.json`), agent registration
+# files, and the Web Bot Auth key directory a signing agent serves
+# (`http-message-signatures-directory`). A capture of one on a throwaway
+# tunnel or free-hosting subdomain is a lead for the platform a run used,
+# for linking later. Reads Wayback index rows for those paths only (a
+# server-side filter); the files are never fetched. The index cannot search
+# one path across all hosts, so the pattern lists tunnel and free-hosting
+# domains whose index answers within the gateway's time (`*.workers.dev` does
+# not). Noise: developers testing agent frameworks. Terms: as for the other
+# Wayback sources.
+[[source]]
+name = "agent-footprints"
+kind = "wellknown"
+pattern = "*.trycloudflare.com|*.ngrok-free.app|*.ngrok.app|*.loca.lt|*.hf.space|*.onrender.com"
+from = "20260901"
+limit = 500
+page_size = 500
+
+# Rationale: the official MCP Registry lists the tool servers agents are
+# given, with the repository, website and remote endpoint each declares.
+# Stored as metadata (name, version, publish time, declared hosts) so a host
+# in a run can later be matched to a tool server; nothing here is a lead by
+# itself, and no server is contacted. Reads only servers updated since the
+# last run (`updated_since`), 100 a page. Noise: all of it, by design; it is
+# reference data. Terms (https://modelcontextprotocol.io/registry/terms-of-service):
+# Registry Data is dedicated to the public domain (CC0 1.0) and may be
+# processed by others; no interfering with or disrupting the Registry.
+[[source]]
+name = "mcp-registry"
+kind = "mcp"
+pattern = "*"
+from = "20260901"
+limit = 2000
+page_size = 100
 
 # ── Per-case sources (not scheduled) ─────────────────────────────────────────
 # - urlscan.io public search (`swarmchase collect urlscan`, URLSCAN_APIKEY
@@ -215,8 +341,11 @@ limit = 200
 # - Callback channels (webhook.site, requestbin, ntfy.sh, paste sites): listing
 #   captures of those URLs means reading the swarm's channels, which the passive
 #   rule forbids. They are matched in records found through other sources.
-# - Arquivo.pt: its index lags by over a year, so it adds nothing to a 30-day
-#   window. Use `swarmchase collect arquivo` per case for an endpoint's history.
+# - Arquivo.pt crawls: they reach the index months after capture, so they add
+#   nothing to a 30-day window; only its on-demand saves are watched (above).
+#   Use `swarmchase collect arquivo` per case for an endpoint's history.
+# - httpbin.org as a whole: the host-wide index query times out at the gateway;
+#   the paths agents use are watched one by one (above).
 # - href.li (referrer-stripping redirector, relay.hrefli): the Wayback CDX
 #   query for `href.li/*` times out at the server's gateway (HTTP 504) even
 #   with a small limit and a recent `from`, because the host has too many

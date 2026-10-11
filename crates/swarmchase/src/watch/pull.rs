@@ -1,12 +1,13 @@
 //! Incremental pulls: each source's cursor, the IDs still inside the overlap
-//! window, and a resumable pull (Wayback, Common Crawl) that continues on the
-//! next run. Records that carry an IP but no network get their ASN from the
+//! window, a resumable pull (Wayback, Common Crawl, footprints, the MCP
+//! Registry) that continues on the next run, and the checkpoint a stream
+//! source (GH Archive, CT logs) reads on from. Records that carry an IP but no network get their ASN from the
 //! offline table when one has been fetched (`swarmchase asn fetch`).
 
 use super::WatchSource;
 use crate::health::SourceHealth;
 use anyhow::{Context, Result};
-use sc_collect::{Client, Cursor, Kind, cdx_ts};
+use sc_collect::{Client, Coverage, Cursor, Kind, cdx_ts};
 use sc_core::Observation;
 use sc_core::asn::AsnTable;
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,10 @@ pub struct SourceState {
     /// A pull that stopped at `limit` and continues on the next run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending: Option<Pending>,
+    /// Where a stream source (GH Archive hours, CT log entries) continues:
+    /// the next hour or entry index to read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_run: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -44,14 +49,28 @@ pub struct Pending {
     pub started: i64,
 }
 
-/// Pull one source incrementally. Returns (records pulled, records not seen before).
+/// What one pull got.
+#[derive(Debug, Default)]
+pub struct Pulled {
+    /// Records pulled, seen before or not.
+    pub pulled: usize,
+    /// Records not seen before.
+    pub new: Vec<Observation>,
+    /// How much of a stream or feed it read (see [`Coverage`]).
+    pub coverage: Option<Coverage>,
+    /// A page failed after earlier pages succeeded; the pull kept what it
+    /// had and continues from its checkpoint next run.
+    pub stopped: Option<String>,
+}
+
+/// Pull one source incrementally.
 pub fn pull(
     client: &Client,
     s: &WatchSource,
     st: &mut SourceState,
     overlap: i64,
     asn: Option<&AsnTable>,
-) -> Result<(usize, Vec<Observation>)> {
+) -> Result<Pulled> {
     let kind: Kind = s.kind.parse()?;
     let mut q = s.query.clone();
     let configured_from = q.from.as_deref().and_then(sc_core::parse_ts).unwrap_or(0);
@@ -71,17 +90,26 @@ pub fn pull(
     };
     let src = sc_collect::source(kind, q, key)?;
     let resumable = src.resumable();
-    let cursor = st
-        .pending
-        .as_ref()
-        .filter(|_| resumable)
-        .map(|p| Cursor::Key(p.resume_key.clone()));
+    let checkpointed = src.checkpointed();
+    let cursor = if checkpointed {
+        st.mark.map(|m| Cursor::Offset(m as usize))
+    } else {
+        st.pending
+            .as_ref()
+            .filter(|_| resumable)
+            .map(|p| Cursor::Key(p.resume_key.clone()))
+    };
     let mut res = src.pull(client, since, cursor, limit)?;
-    if !resumable {
+    let mut stopped = None;
+    if !resumable && !checkpointed {
         res = res.strict()?;
-    } else if let Some(e) = &res.stopped {
+    } else if let Some(e) = res.stopped.take() {
         // Keep what we have; continue from the last good key next run.
         eprint!("(stopped early: {e:#}) ");
+        stopped = Some(super::digest::short_reason(&e));
+    }
+    if checkpointed && let Some(next) = res.coverage.as_ref().and_then(|c| c.next) {
+        st.mark = Some(next);
     }
     let started = match &st.pending {
         Some(p) => p.started,
@@ -105,10 +133,12 @@ pub fn pull(
     if let Some(t) = asn {
         t.enrich(&mut res.observations);
     }
-    Ok((
-        res.observations.len(),
-        keep_fresh(st, res.observations, overlap, finished),
-    ))
+    Ok(Pulled {
+        pulled: res.observations.len(),
+        coverage: res.coverage.take(),
+        new: keep_fresh(st, res.observations, overlap, finished),
+        stopped,
+    })
 }
 
 /// The records not seen before, recorded as seen; IDs the next pull cannot

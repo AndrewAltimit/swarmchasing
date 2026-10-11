@@ -1,6 +1,12 @@
 //! The Wayback Machine CDX index. Sorted by URL, not time, and paged with
 //! resume keys that stay valid across runs, so a pull cut short by its limit
 //! can continue later.
+//!
+//! A host with very many captures can time out at the server's gateway when
+//! one query spans its whole index. `slice_days` reads the time range in
+//! windows instead, oldest first; the resume key then names the window too
+//! ([`SliceKey`]), so a pull cut short continues in the same window. CDX
+//! `filter` expressions narrow a query on the server.
 
 use crate::pager::{Cursor, Page};
 use crate::{CdxQuery, Client, Kind, Source, cdx_ts};
@@ -39,21 +45,72 @@ impl Source for Wayback {
         cursor: Option<&Cursor>,
         size: usize,
     ) -> Result<Page> {
-        let key = match cursor {
-            Some(Cursor::Key(k)) => Some(k.as_str()),
+        let (slice, key) = match cursor {
+            Some(Cursor::Key(k)) => SliceKey::parse(k),
             Some(c) => anyhow::bail!("wayback pages by resume key, not {c:?}"),
-            None => None,
+            None => (None, None),
         };
         let mut q = self.query.clone();
         if let Some(t) = since {
             q.from = Some(cdx_ts(t));
         }
-        let p = client.wayback_cdx_page(&q, size, key)?;
+        let from = q.from.as_deref().and_then(sc_core::parse_ts);
+        let days = self.query.slice_days.filter(|&d| d > 0);
+        let (Some(days), Some(from)) = (days, from) else {
+            let p = client.wayback_cdx_page(&q, size, key.as_deref())?;
+            return Ok(Page {
+                records: p.records,
+                next: p.resume_key.map(Cursor::Key),
+                ..Default::default()
+            });
+        };
+        // A window of `days` from where the last one ended.
+        let start = slice.unwrap_or(from);
+        let to = q.to.as_deref().and_then(sc_core::parse_ts);
+        let end = (start + i64::from(days) * 86_400 - 1).min(to.unwrap_or(i64::MAX));
+        q.from = Some(cdx_ts(start));
+        q.to = Some(cdx_ts(end));
+        let p = client.wayback_cdx_page(&q, size, key.as_deref())?;
+        let now = crate::client::now_secs();
+        let next = match p.resume_key {
+            Some(k) => Some(SliceKey::format(start, Some(&k))),
+            None if end < now && to.is_none_or(|t| end < t) => {
+                Some(SliceKey::format(end + 1, None))
+            }
+            None => None,
+        };
         Ok(Page {
             records: p.records,
-            next: p.resume_key.map(Cursor::Key),
-            truncated: false,
+            next: next.map(Cursor::Key),
+            ..Default::default()
         })
+    }
+}
+
+/// The resume key of a pull read in time windows (`slice_days`): the
+/// window's start and the CDX resume key within it, as
+/// `slice:<yyyyMMddhhmmss>:<resume key>`. Valid across runs, like a plain
+/// resume key.
+struct SliceKey;
+
+impl SliceKey {
+    const PREFIX: &'static str = "slice:";
+
+    fn format(start: i64, key: Option<&str>) -> String {
+        format!("{}{}:{}", Self::PREFIX, cdx_ts(start), key.unwrap_or(""))
+    }
+
+    /// (window start, resume key). A key without the prefix is a plain
+    /// resume key.
+    fn parse(k: &str) -> (Option<i64>, Option<String>) {
+        let Some(rest) = k.strip_prefix(Self::PREFIX) else {
+            return (None, Some(k.to_string()));
+        };
+        let (ts, key) = rest.split_once(':').unwrap_or((rest, ""));
+        (
+            sc_core::parse_ts(ts),
+            Some(key.to_string()).filter(|k| !k.is_empty()),
+        )
     }
 }
 
@@ -96,6 +153,9 @@ impl Client {
             }
             if q.collapse_digest {
                 p.append_pair("collapse", "digest");
+            }
+            for f in &q.filter {
+                p.append_pair("filter", f);
             }
         }
         let body = self.get(u.as_str())?;
@@ -169,5 +229,21 @@ mod tests {
         assert_eq!(p.records.len(), 1);
         assert!(p.resume_key.is_none());
         assert!(parse_wayback_cdx("").unwrap().records.is_empty());
+    }
+
+    #[test]
+    fn slice_keys_round_trip() {
+        let t = 1_791_000_000;
+        let k = SliceKey::format(t, Some("ai,jina,r)/x 20261004081500"));
+        assert_eq!(
+            SliceKey::parse(&k),
+            (Some(t), Some("ai,jina,r)/x 20261004081500".into()))
+        );
+        assert_eq!(SliceKey::parse(&SliceKey::format(t, None)), (Some(t), None));
+        // A resume key saved before slicing is a plain key.
+        assert_eq!(
+            SliceKey::parse("ai,jina,r)/ 2026"),
+            (None, Some("ai,jina,r)/ 2026".into()))
+        );
     }
 }

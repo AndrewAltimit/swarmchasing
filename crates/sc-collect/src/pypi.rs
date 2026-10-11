@@ -9,7 +9,7 @@
 //! spam or selling personal information. The feeds are public, cached and
 //! revalidated with ETags; one request per feed per run.
 
-use crate::pager::{Cursor, Page};
+use crate::pager::{Coverage, Cursor, Page};
 use crate::{CdxQuery, Client, Kind, Needles, Source, parse_date};
 use anyhow::Result;
 use sc_core::{Observation, TsKind, redact_observation};
@@ -55,10 +55,20 @@ impl Source for Pypi {
             .collect();
         let truncated = records.len() > size;
         records.truncate(size);
+        // The feed always holds its last few dozen items: an empty one means
+        // the feed or its format changed.
+        let items = body.matches("<item>").count() as u64;
         Ok(Page {
             records,
             next: None,
             truncated,
+            coverage: Some(Coverage {
+                unit: "items",
+                read: items,
+                available: items,
+                canary: Some(items > 0),
+                ..Default::default()
+            }),
         })
     }
 }

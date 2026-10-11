@@ -105,7 +105,8 @@ fn default_contained_after() -> i64 {
 pub struct WatchSource {
     pub name: String,
     /// A source kind (`sc_collect::Kind`): wayback, arquivo, urlquery,
-    /// commoncrawl, urlscan, memento, gharchive, npm, pypi or ctlog.
+    /// commoncrawl, urlscan, memento, gharchive, npm, pypi, ctlog, wellknown
+    /// or mcp.
     pub kind: String,
     #[serde(flatten)]
     pub query: CdxQuery,
@@ -192,11 +193,13 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
             && kind.needs_key()
             && kind.key_from_env().is_none()
         {
-            let why = format!("skipped: {} not set", kind.key_env().unwrap_or("API key"));
-            eprintln!("{why}");
+            let why = format!("{} not set", kind.key_env().unwrap_or("API key"));
+            eprintln!("skipped: {why}");
+            let st = state.sources.entry(s.name.clone()).or_default();
+            alerts.extend(st.health.observe_skip(&s.name, &why));
             reports.push(SourceReport {
-                skipped: Some(why),
-                ..SourceReport::new(&s.name)
+                skipped: Some(format!("skipped: {why}")),
+                ..SourceReport::new(&s.name, &s.kind)
             });
             continue;
         }
@@ -207,21 +210,41 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
         st.last_run = Some(stamp.clone());
         let mut rep = SourceReport {
             requests: client.requests() - before,
-            ..SourceReport::new(&s.name)
+            ..SourceReport::new(&s.name, &s.kind)
         };
+        let short = res.as_ref().err().map(digest::short_reason);
         if res.is_ok() && (first_or_resumed || st.pending.is_some()) {
             st.health.observe_catch_up();
         } else {
-            alerts.extend(
-                st.health
-                    .observe(&s.name, res.as_ref().ok().map(|(pulled, _)| *pulled)),
-            );
+            let outcome = match (&res, &short) {
+                (Ok(p), _) => Ok(p.pulled),
+                (Err(_), Some(why)) => Err(why.as_str()),
+                (Err(_), None) => Err("unknown error"),
+            };
+            alerts.extend(st.health.observe(&s.name, outcome));
         }
         match res {
-            Ok((pulled, new)) => {
+            Ok(p) => {
+                let pulled = p.pulled;
+                let new = p.new;
                 rep.pulled = pulled;
                 rep.new = new.len();
                 rep.pending = st.pending.is_some();
+                rep.stopped = p.stopped;
+                if let Some(c) = &p.coverage
+                    && c.canary == Some(false)
+                {
+                    alerts.push(format!(
+                        "`{}` read {} but its canary failed: nothing came back in the shape the parser expects, so an empty pull here proves nothing. Check the source's format.",
+                        s.name,
+                        c.line()
+                    ));
+                }
+                rep.coverage = p.coverage;
+                rep.quiet = st
+                    .health
+                    .observe_yield(pulled)
+                    .map(|n| (n, st.health.ever_pulled));
                 st.last_error = None;
                 eprintln!(
                     "{pulled} pulled, {} new{}",
@@ -244,12 +267,18 @@ fn watch(watchlist: &Path, out: &Path, notices: &Path, rules: &Rules) -> Result<
             Err(e) => {
                 eprintln!("error: {e:#}");
                 st.last_error = Some(format!("{e:#}"));
-                rep.error = Some(digest::short_reason(&e));
+                rep.error = short;
             }
         }
         // Save after every source so an interrupted run keeps its progress.
         write_json(&state_path, &state)?;
         reports.push(rep);
+    }
+
+    for (host, why) in client.down_hosts() {
+        alerts.push(format!(
+            "`{host}` was unavailable ({why}); later requests to it this run were not sent, and its sources continue from their checkpoints next run"
+        ));
     }
 
     // Rolling analysis over everything recent, not just this run's records,

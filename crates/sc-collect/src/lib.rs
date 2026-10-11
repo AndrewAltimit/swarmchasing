@@ -28,6 +28,7 @@ mod commoncrawl;
 mod crtsh;
 mod ctlog;
 mod gharchive;
+mod mcp;
 mod memento;
 mod npm;
 pub mod pager;
@@ -38,6 +39,7 @@ pub mod securitytxt;
 mod urlquery;
 mod urlscan;
 mod wayback;
+mod wellknown;
 
 pub use arquivo::{Arquivo, parse_arquivo_cdx};
 pub use client::{Client, DEFAULT_MAX_BODY, Retry, USER_AGENT, parse_retry_after};
@@ -45,13 +47,15 @@ pub use commoncrawl::{CommonCrawl, parse_cc_cdx, parse_collinfo};
 pub use crtsh::CertRecord;
 pub use ctlog::{CtLog, parse_entries, san_dns_names};
 pub use gharchive::{GhArchive, filter_events};
+pub use mcp::{McpRegistry, parse_mcp_servers};
 pub use memento::{Memento, parse_timemap};
 pub use npm::{Npm, parse_npm_search};
-pub use pager::{Cursor, Page, Pull};
+pub use pager::{Coverage, Cursor, Page, Pull};
 pub use pypi::{Pypi, parse_pypi_rss};
 pub use urlquery::{Urlquery, UrlqueryPage, parse_urlquery_search};
 pub use urlscan::{Urlscan, parse_urlscan_search};
 pub use wayback::{CdxPage, Wayback, parse_wayback_cdx};
+pub use wellknown::{FOOTPRINTS, WellKnown};
 
 /// A query against a record source: a CDX URL pattern, a search query, or
 /// the filter a streamed source keeps records by. Also a `watchlist.toml`
@@ -83,6 +87,23 @@ pub struct CdxQuery {
     /// pull reads (CT log entries, GH Archive hours).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scan: Option<usize>,
+    /// CDX `filter` expressions (`collection:SAWP.*`, `!statuscode:404`),
+    /// applied by the index server (Wayback, Arquivo.pt, Common Crawl).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub filter: Vec<String>,
+    /// Wayback: read the time range in windows of this many days, oldest
+    /// first, so a host with many captures is never asked for all of them in
+    /// one index scan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slice_days: Option<u32>,
+    /// A query known to match, run once per pull to prove the source still
+    /// answers the way the parser expects (npm). Its results are not kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canary: Option<String>,
+    /// For streamed sources: most compressed megabytes one pull downloads
+    /// (GH Archive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_mb: Option<u64>,
 }
 
 fn default_limit() -> usize {
@@ -105,6 +126,10 @@ impl Default for CdxQuery {
             page_size: default_page_size(),
             endpoint: None,
             scan: None,
+            filter: Vec::new(),
+            slice_days: None,
+            canary: None,
+            max_mb: None,
         }
     }
 }
@@ -122,10 +147,12 @@ pub enum Kind {
     Npm,
     Pypi,
     CtLog,
+    WellKnown,
+    Mcp,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 10] = [
+    pub const ALL: [Kind; 12] = [
         Self::Wayback,
         Self::Arquivo,
         Self::Urlquery,
@@ -136,6 +163,8 @@ impl Kind {
         Self::Npm,
         Self::Pypi,
         Self::CtLog,
+        Self::WellKnown,
+        Self::Mcp,
     ];
 
     pub fn name(self) -> &'static str {
@@ -150,7 +179,15 @@ impl Kind {
             Self::Npm => "npm",
             Self::Pypi => "pypi",
             Self::CtLog => "ctlog",
+            Self::WellKnown => "wellknown",
+            Self::Mcp => "mcp",
         }
+    }
+
+    /// Whether its records carry the time a URL was submitted (a scan
+    /// service), the only request-like time most public records have.
+    pub fn submit_time(self) -> bool {
+        matches!(self, Self::Urlquery | Self::Urlscan)
     }
 
     /// The environment variable holding the source's API key, if it takes one.
@@ -198,6 +235,13 @@ pub trait Source {
     /// Whether its cursor stays valid across runs, so a pull cut short can
     /// continue on the next one.
     fn resumable(&self) -> bool {
+        false
+    }
+
+    /// Whether it reads a stream from a position kept across runs: the
+    /// pull's [`Coverage::next`] is passed back as `Cursor::Offset` to start
+    /// the next pull there (GH Archive hours, CT log entries).
+    fn checkpointed(&self) -> bool {
         false
     }
 
@@ -264,6 +308,8 @@ pub fn source(kind: Kind, query: CdxQuery, api_key: Option<String>) -> Result<Bo
         Kind::Npm => Box::new(Npm { query }),
         Kind::Pypi => Box::new(Pypi { query }),
         Kind::CtLog => Box::new(CtLog::new(query)?),
+        Kind::WellKnown => Box::new(WellKnown::new(query)?),
+        Kind::Mcp => Box::new(McpRegistry { query }),
     })
 }
 
