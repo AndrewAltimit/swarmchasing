@@ -22,6 +22,7 @@ pub mod eval;
 pub mod evidence;
 pub mod health;
 pub mod input;
+pub mod localui;
 pub mod notice;
 pub mod pinning;
 pub mod review;

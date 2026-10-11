@@ -32,7 +32,7 @@
 use crate::analyze::{Cluster, ObsResult};
 use crate::chains::{Chain, ChainOptions, Pace};
 use crate::escalation::Escalation;
-use crate::model::IndicatorKind;
+use crate::model::{Hit, IndicatorKind, TsKind};
 use crate::timing::{RhythmVerdict, TimeBasis};
 use serde::{Deserialize, Serialize};
 
@@ -267,6 +267,57 @@ fn timed(b: TimeBasis) -> bool {
 
 /// Grade cluster `c`. `chains` and `escalations` are the analysis's; those
 /// touching the cluster are read.
+/// The rule ids among `hits` that self-describe (L1) and that are
+/// model-output residue (L2).
+fn hit_marks(hits: &[Hit]) -> (Vec<&str>, Vec<&str>) {
+    let (mut tags, mut residue) = (Vec::new(), Vec::new());
+    for h in hits {
+        let id = h.rule_id.as_str();
+        let list = if h.kind == IndicatorKind::SelfId || SELF_DESCRIBED.contains(&id) {
+            &mut tags
+        } else if h.artifact && h.kind == IndicatorKind::AgentMarker {
+            &mut residue
+        } else {
+            continue;
+        };
+        if !list.contains(&id) {
+            list.push(id);
+        }
+    }
+    (tags, residue)
+}
+
+/// Grade a flagged record that is in no cluster, from its own hits:
+/// self-description (L1) and model-output residue (L2). One record shows no
+/// pace, retries or rhythm, so it never reaches L3; an archive capture is
+/// capped as a cluster of captures is.
+pub fn assess_record(r: &ObsResult) -> AgentAssessment {
+    let mut out = AgentAssessment::default();
+    let (tags, residue) = hit_marks(&r.hits);
+    let mut push = |kind: SignalKind, ids: &[&str]| {
+        if !ids.is_empty() {
+            out.signals.push(AgentSignal {
+                kind,
+                records: 1,
+                detail: ids.join(", "),
+            });
+        }
+    };
+    push(SignalKind::SelfId, &tags);
+    push(SignalKind::Residue, &residue);
+    if r.obs.ts_kind == TsKind::Capture {
+        out.caps.push(AgentCap::CaptureTimes);
+    }
+    out.level = if !residue.is_empty() {
+        AgentLevel::ModelWritten
+    } else if !tags.is_empty() {
+        AgentLevel::SelfDescribed
+    } else {
+        AgentLevel::PayloadsOnly
+    };
+    out
+}
+
 pub fn assess(
     c: &Cluster,
     results: &[ObsResult],
@@ -293,24 +344,19 @@ pub fn assess(
     let (mut tags, mut residue): (Vec<&str>, Vec<&str>) = (Vec::new(), Vec::new());
     let (mut n_tag, mut n_res) = (0, 0);
     for &i in &c.members {
-        let (mut t, mut r) = (false, false);
-        for h in &results[i].hits {
-            let id = h.rule_id.as_str();
-            let list = if h.kind == IndicatorKind::SelfId || SELF_DESCRIBED.contains(&id) {
-                t = true;
-                &mut tags
-            } else if h.artifact && h.kind == IndicatorKind::AgentMarker {
-                r = true;
-                &mut residue
-            } else {
-                continue;
-            };
-            if !list.contains(&id) {
-                list.push(id);
+        let (t, r) = hit_marks(&results[i].hits);
+        n_tag += usize::from(!t.is_empty());
+        n_res += usize::from(!r.is_empty());
+        for id in t {
+            if !tags.contains(&id) {
+                tags.push(id);
             }
         }
-        n_tag += usize::from(t);
-        n_res += usize::from(r);
+        for id in r {
+            if !residue.contains(&id) {
+                residue.push(id);
+            }
+        }
     }
     push(SignalKind::SelfId, n_tag, tags.join(", "));
     push(SignalKind::Residue, n_res, residue.join(", "));
@@ -487,6 +533,41 @@ mod tests {
             })
             .collect();
         crate::analyze(obs, &Rules::default_rules())
+    }
+
+    #[test]
+    fn an_unclustered_record_is_graded_from_its_own_hits() {
+        let t0 = 1_791_000_000;
+        let a = run(
+            &[
+                (
+                    t0,
+                    "https://r.jina.ai/https://t.example/?q=1%20OR%201=1",
+                    None,
+                ),
+                (
+                    t0 + 9_000,
+                    "https://u.example/search?uqtag=r7k2&q=permits",
+                    None,
+                ),
+                (
+                    t0 + 18_000,
+                    "https://v.example/login?user=admin%27--&k=YOUR_API_KEY",
+                    None,
+                ),
+            ],
+            TsKind::Capture,
+        );
+        let grade = |id: &str| {
+            let r = a.results.iter().find(|r| r.obs.id == id).unwrap();
+            assert!(r.cluster.is_none(), "{id} is unclustered");
+            r.agent.as_ref().map(|g| g.level)
+        };
+        assert_eq!(grade("t:0"), Some(AgentLevel::PayloadsOnly));
+        assert_eq!(grade("t:1"), Some(AgentLevel::SelfDescribed));
+        assert_eq!(grade("t:2"), Some(AgentLevel::ModelWritten));
+        let r = a.results.iter().find(|r| r.obs.id == "t:2").unwrap();
+        assert_eq!(r.agent.as_ref().unwrap().caps, [AgentCap::CaptureTimes]);
     }
 
     #[test]

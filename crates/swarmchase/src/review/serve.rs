@@ -1,0 +1,520 @@
+//! `review --serve`: the review queue as a local page ([`crate::localui`]).
+//!
+//! The page groups the queue by cluster, or for an unclustered record by its
+//! shape (rules that fired and the start of its URL), so a run of
+//! near-identical records is labelled at once. Each group shows its cluster's
+//! agent grade and signals, any saved suggestion ([`super::hosted`]), and
+//! every record as `review` prints it, decoded layers included, defanged and
+//! never as a link. Labels go to the same review file as the terminal
+//! session. Reviewed records stay on the page, so a label can be changed,
+//! cleared or undone.
+
+use super::{Item, Review, ReviewStore};
+use crate::localui::{App, Response};
+use crate::suggest::{Suggestion, defang_all};
+use crate::util::truncate;
+use anyhow::{Result, bail};
+use sc_core::{Analysis, defang_host, fmt_ts};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use std::collections::BTreeMap;
+
+/// The page core, its extensions, then the boot that starts it.
+const SCRIPT: &str = concat!(
+    include_str!("page/review.js"),
+    "
+",
+    include_str!("page/guide.js"),
+    "
+",
+    include_str!("page/context.js"),
+    "
+",
+    include_str!("page/boot.js"),
+);
+const STYLE: &str = concat!(
+    include_str!("page/review.css"),
+    "
+",
+    include_str!("page/guide.css"),
+    "
+",
+    include_str!("page/context.css"),
+);
+
+/// The review group of record `idx`: its cluster, or its shape. Returns the
+/// key and a title for the page, both defanged.
+pub fn group_of(a: &Analysis, idx: usize) -> (String, String) {
+    let r = &a.results[idx];
+    if let Some(c) = r.cluster {
+        let c = &a.clusters[c];
+        return (
+            format!("cluster:{}", c.id),
+            format!("Cluster {} · {}", c.id, defang_all(&c.key)),
+        );
+    }
+    let mut rules: Vec<&str> = r.hits.iter().map(|h| h.rule_id.as_str()).collect();
+    rules.sort_unstable();
+    rules.dedup();
+    let bare = r
+        .obs
+        .url
+        .split_once("://")
+        .map_or(r.obs.url.as_str(), |(_, rest)| rest);
+    let start: String = bare.chars().take(48).collect();
+    let start = defang_all(&start);
+    let rules = if rules.is_empty() {
+        "no rule".to_string()
+    } else {
+        rules.join(", ")
+    };
+    (format!("shape:{rules}|{start}"), format!("{start}…"))
+}
+
+/// An agent grade for the page: rung, signals, counter-signals and caps.
+fn grade_json(g: &sc_core::AgentAssessment) -> Value {
+    let signal = |s: &sc_core::AgentSignal| json!({ "label": s.kind.label(), "records": s.records, "detail": defang_all(&s.detail) });
+    json!({
+        "code": g.level.code(),
+        "label": g.level.label(),
+        "signals": g.signals.iter().map(signal).collect::<Vec<_>>(),
+        "counter": g.counter.iter().map(signal).collect::<Vec<_>>(),
+        "caps": g.caps.iter().map(|k| k.label()).collect::<Vec<_>>(),
+    })
+}
+
+#[derive(Deserialize)]
+struct LabelRequest {
+    ids: Vec<String>,
+    /// `agent`, `benign`, `unsure`, or `clear` to remove the review.
+    label: String,
+    #[serde(default)]
+    note: Option<String>,
+    /// Set the note exactly as sent, `None` clearing it (undo). Otherwise a
+    /// missing note keeps the one already saved.
+    #[serde(default)]
+    restore: bool,
+}
+
+pub struct ReviewApp {
+    pub(super) a: Analysis,
+    pub(super) items: Vec<Item>,
+    /// Record id to its position in `items`.
+    pub(super) pos: BTreeMap<String, usize>,
+    pub(super) store: ReviewStore,
+    pub(super) suggestions: BTreeMap<String, Suggestion>,
+    /// What is being reviewed, for the page header.
+    pub(super) from: String,
+    /// Decision context ([`super::context`]).
+    pub(super) ctx: super::context::Extra,
+}
+
+impl ReviewApp {
+    pub fn new(
+        a: Analysis,
+        items: Vec<Item>,
+        store: ReviewStore,
+        suggestions: BTreeMap<String, Suggestion>,
+        from: String,
+    ) -> Self {
+        let pos = items
+            .iter()
+            .enumerate()
+            .map(|(i, it)| (a.results[it.idx].obs.id.clone(), i))
+            .collect();
+        Self {
+            a,
+            items,
+            pos,
+            store,
+            suggestions,
+            from,
+            ctx: Default::default(),
+        }
+    }
+
+    fn item_json(&self, it: Item) -> Value {
+        let r = &self.a.results[it.idx];
+        let review = self.store.entries.get(&r.obs.id);
+        let layers: Vec<Value> = r
+            .layers
+            .iter()
+            .filter(|l| l.via != "submitted")
+            .take(8)
+            .map(|l| {
+                json!({
+                    "via": l.via,
+                    "depth": l.depth,
+                    "text": defang_all(&truncate(&l.text, 3000)),
+                })
+            })
+            .collect();
+        let hits: Vec<Value> = r
+            .hits
+            .iter()
+            .map(|h| {
+                json!({
+                    "rule": h.rule_id,
+                    "kind": h.kind,
+                    "weight": h.weight,
+                    "matched": defang_all(&truncate(&h.matched, 160)),
+                })
+            })
+            .collect();
+        let suggested = self
+            .suggestions
+            .get(&r.obs.id)
+            .or_else(|| review.and_then(|v| v.suggested.as_ref()));
+        json!({
+            "id": r.obs.id,
+            "class": it.class,
+            "tier": r.tier.label(),
+            "score": r.score,
+            "source": r.obs.source,
+            "time": fmt_ts(r.obs.ts),
+            "url": defang_all(&truncate(&r.obs.url, 1200)),
+            "layers": layers,
+            "target": r.target_host.as_deref().map(defang_host),
+            "final": r.obs.final_url.as_deref().map(|f| defang_all(&truncate(f, 300))),
+            "hits": hits,
+            "reference": r.obs.reference.as_deref().map(defang_all),
+            "label": review.map(|v| v.label.as_str()),
+            "note": review.and_then(|v| v.note.as_deref()),
+            "reviewed_at": review.map(|v| v.reviewed_at.as_str()),
+            "suggested": suggested,
+            "grade": r.agent.as_ref().map(|g| g.level.code()),
+        })
+    }
+
+    fn cluster_json(&self, idx: usize) -> Value {
+        let Some(c) = self.a.results[idx].cluster.map(|c| &self.a.clusters[c]) else {
+            return Value::Null;
+        };
+        let hosts: Vec<String> = crate::util::top_keys(&c.target_hosts, 4)
+            .iter()
+            .map(|h| defang_host(h))
+            .collect();
+        json!({
+            "id": c.id,
+            "key": defang_all(&c.key),
+            "tier": c.tier.label(),
+            "size": c.members.len(),
+            "start": fmt_ts(c.start),
+            "end": fmt_ts(c.end),
+            "targets": hosts,
+            "grade": grade_json(&c.agent),
+        })
+    }
+
+    /// The group's grade: its cluster's, or for a shape group the lowest
+    /// of its records' own grades, since a label on the group covers each.
+    fn group_grade(&self, items: &[Item]) -> (Value, &'static str) {
+        let first = &self.a.results[items[0].idx];
+        if let Some(c) = first.cluster {
+            return (grade_json(&self.a.clusters[c].agent), "cluster");
+        }
+        items
+            .iter()
+            .filter_map(|it| self.a.results[it.idx].agent.as_ref())
+            .min_by_key(|g| g.level)
+            .map_or((Value::Null, "none"), |g| (grade_json(g), "records"))
+    }
+
+    pub fn queue_json(&self) -> Value {
+        let mut order: Vec<String> = Vec::new();
+        let mut groups: BTreeMap<String, (String, Value, Vec<Item>)> = BTreeMap::new();
+        for &it in &self.items {
+            let (key, title) = group_of(&self.a, it.idx);
+            let g = groups.entry(key.clone()).or_insert_with(|| {
+                order.push(key);
+                (title, self.cluster_json(it.idx), Vec::new())
+            });
+            g.2.push(it);
+        }
+        let groups: Vec<Value> = order
+            .into_iter()
+            .filter_map(|k| {
+                let (title, cluster, items) = groups.remove(&k)?;
+                let (grade, basis) = self.group_grade(&items);
+                let items: Vec<Value> = items.into_iter().map(|it| self.item_json(it)).collect();
+                Some(json!({
+                    "key": k, "title": title, "cluster": cluster,
+                    "grade": grade, "grade_basis": basis, "items": items,
+                }))
+            })
+            .collect();
+        let labeller = self
+            .store
+            .path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.strip_prefix("reviewed-"))
+            .unwrap_or("default");
+        json!({
+            "file": self.store.path.display().to_string(),
+            "labeller": labeller,
+            "from": self.from,
+            "rules_version": self.a.rules_version,
+            "records": self.items.len(),
+            "groups": groups,
+        })
+    }
+
+    fn label(&mut self, req: &LabelRequest, now: &str) -> Result<Value> {
+        let label = match req.label.as_str() {
+            l @ ("agent" | "benign" | "unsure" | "clear") => l,
+            other => bail!("unknown label `{other}`"),
+        };
+        if req.ids.is_empty() {
+            bail!("no ids");
+        }
+        let mut targets = Vec::new();
+        for id in &req.ids {
+            let Some(&p) = self.pos.get(id) else {
+                bail!("{id} is not in this queue");
+            };
+            targets.push(self.items[p]);
+        }
+        let note = req
+            .note
+            .as_deref()
+            .map(|n| n.split_whitespace().collect::<Vec<_>>().join(" "))
+            .filter(|n| !n.is_empty())
+            .map(|n| truncate(&n, 500));
+        let mut out = serde_json::Map::new();
+        for it in targets {
+            let r = &self.a.results[it.idx];
+            let id = r.obs.id.clone();
+            let before = self.store.entries.remove(&id);
+            if label != "clear" {
+                let suggested = self
+                    .suggestions
+                    .get(&id)
+                    .cloned()
+                    .or_else(|| before.as_ref().and_then(|b| b.suggested.clone()));
+                let note = if req.restore {
+                    note.clone()
+                } else {
+                    note.clone()
+                        .or_else(|| before.as_ref().and_then(|b| b.note.clone()))
+                };
+                self.store.entries.insert(
+                    id.clone(),
+                    Review {
+                        record: r.obs.clone(),
+                        label: label.to_string(),
+                        note,
+                        class: it.class.to_string(),
+                        reviewed_at: now.to_string(),
+                        tier: r.tier,
+                        score: r.score,
+                        rules: r.hits.iter().map(|h| h.rule_id.clone()).collect(),
+                        rules_version: self.a.rules_version.clone(),
+                        suggested,
+                        tuned: before.as_ref().is_some_and(|b| b.tuned),
+                    },
+                );
+            }
+            out.insert(id, self.item_json(it));
+        }
+        self.store.save()?;
+        Ok(json!({ "items": out }))
+    }
+}
+
+impl App for ReviewApp {
+    fn title(&self) -> String {
+        "Lead review".into()
+    }
+
+    fn script(&self) -> &'static str {
+        SCRIPT
+    }
+
+    fn style(&self) -> &'static str {
+        STYLE
+    }
+
+    fn get(&mut self, path: &str) -> Option<Response> {
+        if let Some(what) = path.strip_prefix("context/") {
+            return super::context::get(self, what);
+        }
+        (path == "queue").then(|| Response::json(200, &self.queue_json()))
+    }
+
+    fn post(&mut self, path: &str, body: &[u8], now: &str) -> Response {
+        if path != "label" {
+            return Response::error(404, "not found");
+        }
+        let Ok(req) = serde_json::from_slice::<LabelRequest>(body) else {
+            return Response::error(400, "expected {ids, label, note}");
+        };
+        match self.label(&req, now) {
+            Ok(v) => Response::json(200, &v),
+            Err(e) => Response::error(400, &format!("{e:#}")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::review::{CLASS_FLAGGED, queue};
+    use sc_core::{Observation, Rules, Tier, analyze};
+    use std::collections::BTreeSet;
+
+    fn app(name: &str) -> (ReviewApp, std::path::PathBuf) {
+        let o = |id: &str, ts: i64, url: &str| Observation {
+            id: id.into(),
+            source: "wayback".into(),
+            ts,
+            url: url.into(),
+            ..Default::default()
+        };
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let a = analyze(
+            vec![
+                o("c1", 1000, &format!("{inbox}?kind=headers0")),
+                o(
+                    "c2",
+                    1040,
+                    &format!(
+                        "https://r.jina.ai/https://data.portal.example/p/1?uqtag=a1b2&cb={inbox}"
+                    ),
+                ),
+                o(
+                    "s1",
+                    5000,
+                    "https://r.jina.ai/https://t.example/?q=1%20OR%201=1",
+                ),
+                o(
+                    "s2",
+                    5100,
+                    "https://r.jina.ai/https://t.example/?q=1%20OR%201=1&x=2",
+                ),
+                o("x", 6000, "https://r.jina.ai/<script>alert(1)</script>"),
+            ],
+            &Rules::default_rules(),
+        );
+        let items = queue(&a, &BTreeSet::new(), Tier::Suggestive, 0);
+        let dir =
+            std::env::temp_dir().join(format!("swarmchase-serve-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        let mut sug = BTreeMap::new();
+        sug.insert(
+            "s1".to_string(),
+            Suggestion {
+                label: "agent".into(),
+                reason: "sqli".into(),
+                model: "m".into(),
+            },
+        );
+        (ReviewApp::new(a, items, store, sug, "test".into()), dir)
+    }
+
+    fn post(app: &mut ReviewApp, body: &str) -> Response {
+        app.post("label", body.as_bytes(), "2026-10-11T00:00:00Z")
+    }
+
+    #[test]
+    fn groups_near_duplicates_and_defangs() {
+        let (app, dir) = app("groups");
+        let q = app.queue_json();
+        let groups = q["groups"].as_array().unwrap();
+        let text = q.to_string();
+        assert!(!text.contains("https://"), "{text}");
+        assert!(!text.contains("r.jina.ai"), "{text}");
+        let with = |id: &str| {
+            groups
+                .iter()
+                .find(|g| g["items"].as_array().unwrap().iter().any(|i| i["id"] == id))
+                .unwrap()
+        };
+        let g = with("s1");
+        let ids: Vec<&str> = g["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["id"].as_str().unwrap())
+            .collect();
+        assert!(
+            ids.contains(&"s2"),
+            "same shape or cluster, one group: {ids:?}"
+        );
+        assert_eq!(g["items"][0]["suggested"]["label"], "agent");
+        assert!(g["items"][0]["label"].is_null());
+        let c = &with("c1")["cluster"];
+        assert!(c["grade"]["code"].as_str().unwrap().starts_with('L'), "{c}");
+        assert_eq!(with("c1")["grade_basis"], "cluster");
+        let x = with("x");
+        assert_eq!(
+            x["grade_basis"], "records",
+            "an unclustered group has its records' grade"
+        );
+        assert_eq!(x["grade"]["code"], x["items"][0]["grade"]);
+        assert_eq!(q["labeller"], "default");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn labels_save_with_suggestion_and_can_be_changed_cleared_or_restored() {
+        let (mut app, dir) = app("label");
+        let r = post(
+            &mut app,
+            r#"{"ids":["s1","s2"],"label":"benign","note":" a  pentester "}"#,
+        );
+        assert_eq!(r.status, 200);
+        let saved = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        let s1 = &saved.entries["s1"];
+        assert_eq!(s1.label, "benign");
+        assert_eq!(s1.note.as_deref(), Some("a pentester"));
+        assert_eq!(s1.class, CLASS_FLAGGED);
+        assert_eq!(
+            s1.suggested.as_ref().unwrap().label,
+            "agent",
+            "suggestion kept beside, not as, the label"
+        );
+        assert!(saved.entries["s2"].suggested.is_none());
+
+        // Changed: the note stays when none is sent.
+        assert_eq!(
+            post(&mut app, r#"{"ids":["s1"],"label":"agent"}"#).status,
+            200
+        );
+        let saved = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        assert_eq!(saved.entries["s1"].label, "agent");
+        assert_eq!(saved.entries["s1"].note.as_deref(), Some("a pentester"));
+
+        // Restored (undo): the note is set exactly, here cleared.
+        let r = r#"{"ids":["s1"],"label":"unsure","note":null,"restore":true}"#;
+        assert_eq!(post(&mut app, r).status, 200);
+        let saved = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        assert_eq!(saved.entries["s1"].label, "unsure");
+        assert!(saved.entries["s1"].note.is_none());
+
+        // Cleared.
+        assert_eq!(
+            post(&mut app, r#"{"ids":["s2"],"label":"clear"}"#).status,
+            200
+        );
+        let saved = ReviewStore::open(ReviewStore::path_in(&dir)).unwrap();
+        assert!(!saved.entries.contains_key("s2"));
+
+        assert_eq!(
+            post(&mut app, r#"{"ids":["nope"],"label":"agent"}"#).status,
+            400
+        );
+        assert_eq!(
+            post(&mut app, r#"{"ids":["s1"],"label":"maybe"}"#).status,
+            400
+        );
+        assert_eq!(app.post("other", b"{}", "t").status, 404);
+        assert!(
+            app.queue_json()
+                .to_string()
+                .contains("\"label\":\"unsure\"")
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

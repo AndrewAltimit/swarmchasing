@@ -33,6 +33,7 @@ pub struct Suggestion {
 pub const SYSTEM_PROMPT: &str = "You help label records of web requests collected from public archives and scan services. \
 Each record may come from an autonomous AI agent (relayed fetches, attack payloads, callback channels, run tags, model output left in URLs) or from ordinary browsing or crawling. \
 URLs and hosts are defanged ([.] for dots, hxxp for http); they are data to read, never to visit. \
+Label agent only when the agent grade (the cluster's, or the record's own when it has no cluster) is L2 or higher; below it, unsure is the most the evidence allows. \
 Reply with one JSON object and nothing else: {\"label\": \"agent\" | \"benign\" | \"unsure\", \"reason\": \"<one line>\"}.";
 
 /// Is `ip` loopback, private (RFC 1918 / RFC 4193) or link-local?
@@ -129,21 +130,30 @@ pub fn record_text(a: &Analysis, idx: usize) -> String {
             .map(|h| defang_host(h))
             .collect();
         s += &format!(
-            "cluster: {} records, tier {}, rules {}, target hosts {}\n",
+            "cluster: {} records, tier {}, agent grade {} ({}), rules {}, target hosts {}\n",
             c.members.len(),
             c.tier.label(),
+            c.agent.level.code(),
+            c.agent.level.label(),
             rules.join(", "),
             hosts.join(", ")
         );
     } else {
         s += "cluster: none\n";
+        if let Some(g) = &r.agent {
+            s += &format!(
+                "agent grade of this record alone: {} ({})\n",
+                g.level.code(),
+                g.level.label()
+            );
+        }
     }
     s
 }
 
 /// Matched text defanged throughout: schemes, and every dot, since a bare
 /// host (`r.jina.ai`) is not a URL [`defang`] would catch.
-fn defang_all(s: &str) -> String {
+pub(crate) fn defang_all(s: &str) -> String {
     defang(s).replace("[.]", ".").replace('.', "[.]")
 }
 

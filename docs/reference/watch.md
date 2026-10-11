@@ -134,6 +134,7 @@ Text after the key is saved as a note (`b ordinary article read`). Answers are s
 - `--stats` counts reviews and disagreements, and Cohen's κ between labellers; `--list` prints the queue.
 - `--labeller <name>` saves to `labels/reviewed-<name>.ndjson` instead, for a second, independent reviewer ([two labellers](evaluation.md#two-labellers)).
 - `--suggest` shows a local model's label suggestion before each prompt ([label suggestions](#label-suggestions)).
+- `--serve` labels the same queue in a browser on this machine ([the review page](#the-review-page)); `--export-hosted <file>` writes it for a hosted model's suggestions ([hosted suggestions](#hosted-suggestions)).
 
 Each answer goes to `labels/reviewed.ndjson` with the record, so `swarmchase eval <data>/labels/reviewed.ndjson` measures the rules against everything reviewed ([evaluation](evaluation.md)). The file stays in the data directory and is never committed.
 
@@ -147,3 +148,43 @@ It is allowed only with a model running locally:
 - **What it sees.** The defanged URL, target host and rule hits, the tier and score, and the cluster's size, tier, top rules and target hosts, with a fixed prompt asking for `{"label": "agent" | "benign" | "unsure", "reason": "…"}`. No IP addresses.
 - **No fetching.** The model gets text and no tools; the prompt says the URLs are data, never to be visited.
 - **Failures.** A timeout (60 s), an error or a reply that is not that JSON means no suggestion for the record; the review carries on.
+
+### Hosted suggestions
+
+A hosted model may suggest labels for public records only ([policies](../policies.md#evidence-and-attribution)):
+
+```sh
+swarmchase review --export-hosted data/labels/hosted.ndjson          # the flagged queue
+swarmchase review <queue> --all --export-hosted data/labels/hosted-baseline.ndjson
+```
+
+- **What it writes.** One `{"id", "group", "text"}` per record: the text the local model reads, and the record's review group. Records from `wayback`, `arquivo`, `memento`, `commoncrawl` and `urlquery` only; operator logs and the rest are counted as withheld. The list is in code, so a new source is withheld until it is added on purpose.
+- **Where.** The file must be inside the data directory, and stays there.
+- **Answers.** The model's suggestions go in `labels/suggestions-<name>.ndjson`, one `{"id", "label", "reason", "model"}` per line. `review --serve` reads every such file; a line for a record from any other source is dropped.
+- **No fetching.** Whoever runs the model gives it the file and no web access.
+
+### The review page
+
+`review --serve` serves the queue on `http://127.0.0.1:8765/` (`--port`) instead of prompting, with the same inputs and options as the terminal session. It is built on the shared [local pages](#local-pages).
+
+- **Layout.** The queue of groups is on the left, with tabs for what is left to do, labels that differ from a suggestion, what is done, and everything, and a filter by rule, host or id. The selected group is on the right: its agent grade and signals, its suggestion, the rules that fired, and each record with its decoded layers.
+- **Groups.** Records are grouped by cluster, or by shape (the rules that fired and the start of the URL) when unclustered, so a run of near-identical records is labelled at once. Each record can still be labelled alone.
+- **Flow.** Labelling a group moves to the next one. `z` undoes the last action, label and note included.
+- **Suggestions.** `accept suggestion` labels a group's unlabelled records as suggested. The suggestion is saved beside the label as `suggested`.
+- **Changing labels.** Reviewed records stay on the page, so a label can be changed or cleared. Labels go to the same file as the terminal session (`--labeller` included).
+- **Rule context.** Each rule in the group shows its description, kind, weight and tactic from the rules the analysis ran with, how many records it fired on in the analysis and how many of those were flagged. With a pre-era control summary, it also shows how often the rule fired and flagged before agents existed ([negative control](evaluation.md#negative-control)). `--control <file>` names the summary; the default is `<data>/controls/pre-era/summary.json`, then `data/controls/pre-era/summary.json`.
+- **Timeline.** When the group's records happened, binned, with the median step and the largest gaps, and whether the times are requests, submissions or archive captures ([FM-6.1](../manual/06-timing.md#fm-61-timestamp-kinds)).
+- **Earlier decisions.** Reviewed records outside the group sharing its rule set, cluster or target host, with their labels and notes.
+- **Related records.** Records anywhere in the analysis sharing a target host or a linking feature with the group, with tier and label, and a jump to their group when it is in the queue.
+- **Programs and copying.** A decoded layer that reads as a program can be laid out as text with its outbound and page-reading calls marked. It is never run or rendered. Buttons copy a record's id, and the group's ids or defanged references, one per line.
+- **Loading.** Context loads when a group is selected, from the analysis, the review file and the control summary only. Nothing is fetched.
+- **Keys.** `j` / `k` move, `a` / `b` / `u` label the group, `s` accepts its suggestion, `x` clears, `z` undoes, `n` writes a note, `e` shows every record, `/` filters, `1` to `4` switch tabs, `?` lists them.
+- **Guide.** `g` opens the evaluator guide, with worked examples and a practice round that saves nothing, and `h` turns on blind review, which hides suggestions until a group is labelled. The same method in prose is [evaluating leads](../guides/evaluating-leads.md).
+
+### Local pages
+
+The admin's pages run on this machine from the CLI, never on the public site. They share one server and one look ([`localui`](../../crates/swarmchase/src/localui/mod.rs)):
+
+- **Network.** The server listens on 127.0.0.1 only, refuses any other `Host` (no DNS rebinding), and accepts a change only with the token in the page it served and a same-origin `Origin`.
+- **Content.** Records are shown defanged, as text nodes, never as links, under a content security policy that loads nothing but the page's own files.
+- **Look.** Shared tokens and components (verdict buttons, chips, cards, keyboard help, toasts) follow the system's light or dark setting.

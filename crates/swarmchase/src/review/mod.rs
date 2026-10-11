@@ -35,6 +35,11 @@
 //! label before each prompt; it is saved beside the admin's label as
 //! `suggested`, never as the label.
 //!
+//! `review --serve` ([`serve`]) shows the same queue as a page on this
+//! machine, grouped by cluster or shape, and saves to the same file.
+//! `review --export-hosted` ([`hosted`]) writes the queue's public records
+//! for a hosted model, whose suggestions the page shows.
+//!
 //! `review sample` ([`sample`]) writes a stratified, seeded sample of the
 //! store as a queue file, and `review <queue> --all` queues every record in
 //! it, as `review:baseline-sample`. Two labellers label it; `review --stats`
@@ -44,7 +49,10 @@
 //! reports the same bound for the current rules. `review tuned <id>...`
 //! marks records looked at while changing a rule, which leave the baseline.
 
+pub mod context;
+pub mod hosted;
 pub mod sample;
+pub mod serve;
 
 use crate::suggest::Suggestion;
 use crate::util::truncate;
@@ -119,6 +127,26 @@ pub struct ReviewArgs {
     /// each prompt. Saved beside the label as `suggested`, never as it.
     #[arg(long)]
     suggest: bool,
+    /// Serve the queue as a page on 127.0.0.1 instead of prompting: records
+    /// grouped by cluster or shape, with saved suggestions. Reviewed records
+    /// stay on the page so a label can be changed or cleared.
+    #[arg(long, conflicts_with_all = ["list", "stats", "suggest"])]
+    serve: bool,
+    /// Port for `--serve`.
+    #[arg(long, default_value_t = 8765, requires = "serve")]
+    port: u16,
+    /// Pre-era control summary for `--serve`, whose per-rule false-alarm
+    /// counts the page shows beside each rule. Default:
+    /// `<data>/controls/pre-era/summary.json`, then
+    /// `data/controls/pre-era/summary.json`, when present.
+    #[arg(long, value_name = "FILE", requires = "serve")]
+    control: Option<PathBuf>,
+    /// Write the queue's public records (web archives and urlquery) as text
+    /// for a hosted model to suggest labels on, and exit. Operator logs and
+    /// sources not on the list are withheld. The file must be inside the
+    /// data directory.
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["list", "stats", "serve", "suggest"])]
+    export_hosted: Option<PathBuf>,
 }
 
 pub fn run(args: ReviewArgs) -> Result<()> {
@@ -158,12 +186,20 @@ pub fn run(args: ReviewArgs) -> Result<()> {
         crate::input::read_inputs(&crate::input::InputArgs::files(args.input))?
     };
     let a = sc_core::analyze(obs, &rules.rules);
-    let done = store.entries.keys().cloned().collect();
+    // The page keeps reviewed records on it, so a label can be changed.
+    let done = if args.serve {
+        BTreeSet::new()
+    } else {
+        store.entries.keys().cloned().collect()
+    };
     let items = if args.all {
         queue_all(&a, &done)
     } else {
         queue(&a, &done, min, args.unflagged)
     };
+    if let Some(out) = &args.export_hosted {
+        return hosted::export(&a, &items, data, out);
+    }
     println!(
         "{} records · {} reviewed before · {} in the queue ({} flagged, {} unflagged sample, {} baseline sample)",
         a.total,
@@ -188,6 +224,32 @@ pub fn run(args: ReviewArgs) -> Result<()> {
     }
     if items.is_empty() {
         return Ok(());
+    }
+    if args.serve {
+        let labels = data.join("labels");
+        let loaded = hosted::load_suggestions(&labels, &a)?;
+        println!(
+            "{} suggestion(s) from {}{}",
+            loaded.by_id.len(),
+            labels.join("suggestions-*.ndjson").display(),
+            if loaded.invalid + loaded.dropped > 0 {
+                format!(
+                    " ({} line(s) invalid, {} dropped: not in the queue's analysis or from a source a hosted model may not see)",
+                    loaded.invalid, loaded.dropped
+                )
+            } else {
+                String::new()
+            }
+        );
+        println!("labels go to {}", store.path.display());
+        let control = context::Control::find(args.control.as_deref(), data)?;
+        match &control {
+            Some(c) => println!("pre-era control from {} ({} records)", c.path, c.records),
+            None => println!("no pre-era control summary (swarmchase eval pre-era writes one)"),
+        }
+        let app = serve::ReviewApp::new(a, items, store, loaded.by_id, from)
+            .with_context(&rules.rules, control);
+        return crate::localui::Server::new(app, args.port).run("review page");
     }
     let suggester = if args.suggest {
         let s = crate::suggest::Suggester::from_env()?;

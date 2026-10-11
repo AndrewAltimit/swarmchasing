@@ -37,6 +37,11 @@ pub struct ObsResult {
     pub features: Vec<LinkFeature>,
     /// Index into `Analysis::clusters`.
     pub cluster: Option<usize>,
+    /// The agent grade of a flagged record in no cluster
+    /// ([`crate::agentness::assess_record`]). A clustered record reads its
+    /// cluster's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<crate::agentness::AgentAssessment>,
 }
 
 impl ObsResult {
