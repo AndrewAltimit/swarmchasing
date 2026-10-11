@@ -2,7 +2,7 @@
   "$schema": "https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/sc-bench-v1.json",
   "description": "The committed evaluation set (samples/eval/*.ndjson): synthetic fixtures and reconstructions of published incidents with hand-written benign look-alikes. The reference rules were tuned on it, so every record is in the regression split.",
   "format": "sc-bench-v1",
-  "freeze_date": "2026-10-10",
+  "freeze_date": "2026-10-11",
   "name": "sc-bench-example",
   "records": [
     {
@@ -691,7 +691,7 @@
       "run": "pub-aihw",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-08-12T02:14:00Z",
       "ts_kind": "unknown"
     },
@@ -790,6 +790,86 @@
       "ts_kind": "unknown"
     },
     {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.httpbin"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:b-echo-script-counter",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "carrier-negatives.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2021-02-12T11:15:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.httpbin"
+      ],
+      "host": "httpbun[.]com",
+      "id": "eval:b-echo-script-onload",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "carrier-negatives.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2019-06-21T16:45:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.httpbin"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:b-echo-script-page",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "carrier-negatives.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2015-03-10T14:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.httpbin"
+      ],
+      "host": "cdn[.]widgets[.]example",
+      "id": "eval:b-echo-script-widget",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "carrier-negatives.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2017-09-04T09:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
       "class": "api_client",
       "fired_rules": [],
       "host": "civilrightsdata[.]ed[.]gov",
@@ -804,6 +884,23 @@
       "split": "regression",
       "tier": "noise",
       "ts": "2026-06-12T15:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "crawler",
+      "fired_rules": [],
+      "host": "docs[.]example[.]com",
+      "id": "eval:b-encoded-space-path",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-20T10:05:00Z",
       "ts_kind": "unknown"
     },
     {
@@ -878,6 +975,25 @@
       "split": "regression",
       "tier": "noise",
       "ts": "2026-06-08T10:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "dev_tool",
+      "fired_rules": [
+        "carrier.httpbin"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:b-httpbin-longparam",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-06-20T10:00:00Z",
       "ts_kind": "unknown"
     },
     {
@@ -1807,7 +1923,9 @@
     },
     {
       "class": "anti_bot",
-      "fired_rules": [],
+      "fired_rules": [
+        "antibot.incapsula"
+      ],
       "host": "cal-access[.]sos[.]ca[.]gov",
       "id": "eval:calaccess-incapsula",
       "label": "agent",
@@ -1819,7 +1937,7 @@
       "run": "pub-calaccess",
       "source": "eval",
       "split": "regression",
-      "tier": "noise",
+      "tier": "suggestive",
       "ts": "2026-07-01T16:20:00Z",
       "ts_kind": "unknown"
     },
@@ -1839,6 +1957,44 @@
       "split": "regression",
       "tier": "noise",
       "ts": "2026-07-01T16:22:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "infrastructure",
+      "cluster": "k-e17d390c",
+      "fired_rules": [
+        "header.agent_ua",
+        "marker.uq_tags"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-agent-ua",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-10T09:20:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_browse",
+      "fired_rules": [],
+      "host": "www[.]news[.]example",
+      "id": "eval:cov-agent-ua-benign",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-10T09:25:00Z",
       "ts_kind": "unknown"
     },
     {
@@ -1880,7 +2036,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-08-09T09:10:00Z",
       "ts_kind": "unknown"
     },
@@ -2129,6 +2285,66 @@
       "ts_kind": "unknown"
     },
     {
+      "class": "exploit",
+      "fired_rules": [
+        "exploit.double_encoded_path",
+        "marker.uq_tags"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-double-encoded",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-d",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-10T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-e17d390c",
+      "fired_rules": [
+        "exploit.double_encoded_meta",
+        "marker.uq_tags"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-double-meta",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-d",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-10T09:30:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "human_form",
+      "fired_rules": [],
+      "host": "shop[.]example",
+      "id": "eval:cov-double-meta-benign",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-10T09:35:00Z",
+      "ts_kind": "unknown"
+    },
+    {
       "class": "anti_bot",
       "cluster": "k-323bd6db",
       "fired_rules": [
@@ -2148,6 +2364,27 @@
       "split": "regression",
       "tier": "suggestive",
       "ts": "2026-08-09T11:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "fired_rules": [
+        "carrier.httpbin",
+        "exfil.httpbin_data"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:cov-httpbin-exfil",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-d",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-10T09:05:00Z",
       "ts_kind": "unknown"
     },
     {
@@ -2191,6 +2428,23 @@
       "ts_kind": "unknown"
     },
     {
+      "class": "archive_link",
+      "fired_rules": [],
+      "host": "files[.]example",
+      "id": "eval:cov-nested-cache-url",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-05T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
       "class": "indirection",
       "cluster": "k-323bd6db",
       "fired_rules": [
@@ -2209,7 +2463,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-08-09T11:05:00Z",
       "ts_kind": "unknown"
     },
@@ -2270,6 +2524,25 @@
       "split": "regression",
       "tier": "noise",
       "ts": "2026-06-20T09:10:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "agent_marker",
+      "fired_rules": [
+        "marker.oai_prefix"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-oai-prefix",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-08-10T09:10:00Z",
       "ts_kind": "unknown"
     },
     {
@@ -2388,6 +2661,51 @@
       "ts_kind": "unknown"
     },
     {
+      "class": "exploit",
+      "cluster": "k-11b00947",
+      "fired_rules": [
+        "carrier.html_program",
+        "exploit.xss",
+        "marker.uq_tags"
+      ],
+      "host": "demo[.]testfire[.]net",
+      "id": "eval:cov-scope-bench-1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-scope",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-11T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-11b00947",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.uq_tags"
+      ],
+      "host": "demo[.]testfire[.]net",
+      "id": "eval:cov-scope-bench-2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "run": "cov-run-scope",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-08-11T09:00:30Z",
+      "ts_kind": "unknown"
+    },
+    {
       "class": "api_client",
       "fired_rules": [
         "header.gzip_only_requests",
@@ -2443,7 +2761,7 @@
       "run": "cov-run-b",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-08-05T10:01:00Z",
       "ts_kind": "unknown"
     },
@@ -2462,6 +2780,25 @@
       "split": "regression",
       "tier": "noise",
       "ts": "2026-08-05T12:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "infrastructure",
+      "fired_rules": [
+        "selfid.signature_agent"
+      ],
+      "host": "records[.]agency[.]example",
+      "id": "eval:cov-signature-agent",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "rule-coverage.ndjson",
+      "provenance": "synthetic",
+      "source": "eval",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-08-10T09:15:00Z",
       "ts_kind": "unknown"
     },
     {
@@ -2635,7 +2972,7 @@
       "run": "pub-data-url",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-08-20T07:00:00Z",
       "ts_kind": "unknown"
     },
@@ -2821,6 +3158,27 @@
       "split": "regression",
       "tier": "significant",
       "ts": "2026-06-10T09:12:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-7a37d335",
+      "fired_rules": [
+        "exploit.double_encoded_meta"
+      ],
+      "host": "recherche-collection-search[.]bac-lac[.]canada[.]ca",
+      "id": "eval:lac-xss-doubleenc",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-lac",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-06-10T09:14:30Z",
       "ts_kind": "unknown"
     },
     {
@@ -3417,7 +3775,7 @@
       "run": "pub-max",
       "source": "eval",
       "split": "regression",
-      "tier": "suggestive",
+      "tier": "noise",
       "ts": "2026-07-15T13:40:00Z",
       "ts_kind": "unknown"
     },
@@ -3612,7 +3970,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-05T14:25:00Z",
       "ts_kind": "unknown"
     },
@@ -3678,7 +4036,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-05T14:00:00Z",
       "ts_kind": "unknown"
     },
@@ -3700,7 +4058,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-05T14:01:00Z",
       "ts_kind": "unknown"
     },
@@ -3722,7 +4080,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-05T14:02:00Z",
       "ts_kind": "unknown"
     },
@@ -3744,7 +4102,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-12T16:00:00Z",
       "ts_kind": "unknown"
     },
@@ -3766,7 +4124,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-12T16:01:00Z",
       "ts_kind": "unknown"
     },
@@ -3788,7 +4146,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-12T16:02:00Z",
       "ts_kind": "unknown"
     },
@@ -3810,7 +4168,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-12T16:03:00Z",
       "ts_kind": "unknown"
     },
@@ -3832,7 +4190,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-12T16:04:00Z",
       "ts_kind": "unknown"
     },
@@ -3964,7 +4322,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:00:00Z",
       "ts_kind": "unknown"
     },
@@ -3986,7 +4344,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:00:50Z",
       "ts_kind": "unknown"
     },
@@ -4008,7 +4366,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:01:40Z",
       "ts_kind": "unknown"
     },
@@ -4030,7 +4388,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:02:30Z",
       "ts_kind": "unknown"
     },
@@ -4052,7 +4410,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:03:20Z",
       "ts_kind": "unknown"
     },
@@ -4074,7 +4432,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:04:10Z",
       "ts_kind": "unknown"
     },
@@ -4096,7 +4454,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:05:00Z",
       "ts_kind": "unknown"
     },
@@ -4118,7 +4476,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:05:50Z",
       "ts_kind": "unknown"
     },
@@ -4140,7 +4498,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:00:40Z",
       "ts_kind": "unknown"
     },
@@ -4162,7 +4520,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:01:30Z",
       "ts_kind": "unknown"
     },
@@ -4184,7 +4542,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:02:20Z",
       "ts_kind": "unknown"
     },
@@ -4206,7 +4564,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:03:10Z",
       "ts_kind": "unknown"
     },
@@ -4228,7 +4586,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:04:00Z",
       "ts_kind": "unknown"
     },
@@ -4250,7 +4608,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:04:50Z",
       "ts_kind": "unknown"
     },
@@ -4272,7 +4630,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:05:40Z",
       "ts_kind": "unknown"
     },
@@ -4294,7 +4652,7 @@
       "provenance": "synthetic",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-03-02T10:06:30Z",
       "ts_kind": "unknown"
     },
@@ -4454,7 +4812,7 @@
       "run": "pub-thrill",
       "source": "eval",
       "split": "regression",
-      "tier": "significant",
+      "tier": "suggestive",
       "ts": "2026-05-14T08:00:00Z",
       "ts_kind": "unknown"
     },
@@ -4479,6 +4837,68 @@
       "ts_kind": "unknown"
     },
     {
+      "class": "indirection",
+      "fired_rules": [
+        "exploit.double_encoded_path"
+      ],
+      "host": "unctadstat-api[.]unctad[.]org",
+      "id": "eval:unctad-doubleenc",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-04T08:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "indirection",
+      "fired_rules": [
+        "exploit.double_encoded_path"
+      ],
+      "host": "unctadstat-api[.]unctad[.]org",
+      "id": "eval:unctad-doubleenc-slash",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-05T08:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.inline_fetch_program",
+        "exploit.xss"
+      ],
+      "host": "public-firing-range[.]appspot[.]com",
+      "id": "eval:unctad-firing-range-xss",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-26T09:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
       "class": "custom_program",
       "fired_rules": [
         "carrier.form_post_program",
@@ -4497,6 +4917,91 @@
       "split": "regression",
       "tier": "suggestive",
       "ts": "2026-05-13T10:20:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "custom_program",
+      "fired_rules": [
+        "carrier.form_post_program",
+        "carrier.httpbin"
+      ],
+      "host": "unctadstat-api[.]unctad[.]org",
+      "id": "eval:unctad-formpost",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "suggestive",
+      "ts": "2026-05-14T05:24:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "fired_rules": [
+        "carrier.httpbin",
+        "exfil.httpbin_data"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:unctad-httpbin-error",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-04-27T11:02:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exfil",
+      "fired_rules": [
+        "carrier.httpbin",
+        "exfil.httpbin_data"
+      ],
+      "host": "httpbin[.]org",
+      "id": "eval:unctad-httpbin-exfil",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-04-27T11:00:00Z",
+      "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "fired_rules": [
+        "carrier.html_program",
+        "carrier.inline_fetch_program",
+        "exploit.xss"
+      ],
+      "host": "xss-game[.]appspot[.]com",
+      "id": "eval:unctad-xssgame",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "published-patterns.ndjson",
+      "provenance": "reconstructed",
+      "run": "pub-unctad",
+      "source": "eval",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-05-25T09:00:00Z",
       "ts_kind": "unknown"
     },
     {
@@ -4541,9 +5046,533 @@
       "tier": "suggestive",
       "ts": "2026-05-20T19:01:00Z",
       "ts_kind": "unknown"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-a0f281b4",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "permits[.]xsvc-a[.]example",
+      "id": "eval:xsvc-agent-q0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "run": "xsvc-agent-1",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T10:00:00Z",
+      "ts_kind": "submit"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-a0f281b4",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "permits[.]xsvc-a[.]example",
+      "id": "eval:xsvc-agent-q1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "run": "xsvc-agent-1",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T10:00:45Z",
+      "ts_kind": "submit"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-a0f281b4",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "permits[.]xsvc-a[.]example",
+      "id": "eval:xsvc-agent-q2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "run": "xsvc-agent-1",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T10:01:30Z",
+      "ts_kind": "submit"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-a0f281b4",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "permits[.]xsvc-a[.]example",
+      "id": "eval:xsvc-agent-q3",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "run": "xsvc-agent-1",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T10:02:15Z",
+      "ts_kind": "submit"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-a0f281b4",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "permits[.]xsvc-a[.]example",
+      "id": "eval:xsvc-agent-s0",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "run": "xsvc-agent-1",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T10:00:07Z",
+      "ts_kind": "submit"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-a0f281b4",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "permits[.]xsvc-a[.]example",
+      "id": "eval:xsvc-agent-s1",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "run": "xsvc-agent-1",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T10:00:56Z",
+      "ts_kind": "submit"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-a0f281b4",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "permits[.]xsvc-a[.]example",
+      "id": "eval:xsvc-agent-s2",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "run": "xsvc-agent-1",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T10:01:36Z",
+      "ts_kind": "submit"
+    },
+    {
+      "class": "exploit",
+      "cluster": "k-a0f281b4",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "permits[.]xsvc-a[.]example",
+      "id": "eval:xsvc-agent-s3",
+      "label": "agent",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "run": "xsvc-agent-1",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T10:02:24Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [],
+      "host": "calendar[.]xsvc-corp[.]example",
+      "id": "eval:xsvc-gw-calendar-q",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T11:59:43Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [],
+      "host": "calendar[.]xsvc-corp[.]example",
+      "id": "eval:xsvc-gw-calendar-s",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T11:59:40Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-003e3240",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "portal[.]xsvc-gw[.]example",
+      "id": "eval:xsvc-gw-crafted-q0",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T12:00:03Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-003e3240",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "portal[.]xsvc-gw[.]example",
+      "id": "eval:xsvc-gw-crafted-q1",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T12:01:03Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-003e3240",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "portal[.]xsvc-gw[.]example",
+      "id": "eval:xsvc-gw-crafted-q2",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T12:02:03Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-003e3240",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "portal[.]xsvc-gw[.]example",
+      "id": "eval:xsvc-gw-crafted-s0",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T12:00:00Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-003e3240",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "portal[.]xsvc-gw[.]example",
+      "id": "eval:xsvc-gw-crafted-s1",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T12:01:00Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-003e3240",
+      "fired_rules": [
+        "exploit.sqli_boolean",
+        "marker.placeholder",
+        "marker.uq_tags"
+      ],
+      "host": "portal[.]xsvc-gw[.]example",
+      "id": "eval:xsvc-gw-crafted-s2",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T12:02:00Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [],
+      "host": "invoices[.]xsvc-billing[.]example",
+      "id": "eval:xsvc-gw-invoice-q",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T11:58:53Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [],
+      "host": "invoices[.]xsvc-billing[.]example",
+      "id": "eval:xsvc-gw-invoice-s",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T11:58:50Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [],
+      "host": "newsletter[.]xsvc-mail[.]example",
+      "id": "eval:xsvc-gw-newsletter-q",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T11:58:03Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [],
+      "host": "newsletter[.]xsvc-mail[.]example",
+      "id": "eval:xsvc-gw-newsletter-s",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T11:58:00Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [],
+      "host": "docs[.]xsvc-share[.]example",
+      "id": "eval:xsvc-gw-share-q",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T12:00:33Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [],
+      "host": "docs[.]xsvc-share[.]example",
+      "id": "eval:xsvc-gw-share-s",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T12:00:30Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [
+        "cache.buster"
+      ],
+      "host": "shop[.]xsvc-store[.]example",
+      "id": "eval:xsvc-gw-tracker-q",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T12:01:23Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "tool",
+      "class": "mail_gateway",
+      "fired_rules": [
+        "cache.buster"
+      ],
+      "host": "shop[.]xsvc-store[.]example",
+      "id": "eval:xsvc-gw-tracker-s",
+      "label": "benign",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "origin": "cross-service.ndjson",
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "noise",
+      "ts": "2026-09-20T12:01:20Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-f3eb632e",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "intranet[.]xsvc-h[.]example",
+      "id": "eval:xsvc-human-q",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "urlquery",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T11:04:00Z",
+      "ts_kind": "submit"
+    },
+    {
+      "actor": "human",
+      "cluster": "k-f3eb632e",
+      "fired_rules": [
+        "exploit.sqli_union"
+      ],
+      "host": "intranet[.]xsvc-h[.]example",
+      "id": "eval:xsvc-human-s",
+      "labellers": [
+        "swarmchasing-maintainers"
+      ],
+      "provenance": "synthetic",
+      "source": "urlscan",
+      "split": "regression",
+      "tier": "significant",
+      "ts": "2026-09-20T11:00:00Z",
+      "ts_kind": "submit"
     }
   ],
-  "rules_sha256": "e1902276eb9a022de8014c634b8313f8ac29f77b312d4079323610831475554b",
-  "rules_version": "2026-10-10",
+  "rules_sha256": "c5fd63e14e076f11267e311819d06500a5f7d447aea9efacc9a6298ebc1a0f47",
+  "rules_version": "2026-10-11.1",
   "toolkit_version": "0.1.0"
 }
