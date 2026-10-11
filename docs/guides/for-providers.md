@@ -34,7 +34,7 @@ The requested action is to check whether the patterns match agents or sandboxes 
 
 A report sent by email carries an evidence bundle: the redacted records, their analysis, a stamp (rules version, toolkit version and commit, method version, and the tier of every flagged record and cluster) and a SHA-256 manifest. Two ways to check it:
 
-- **In the browser.** The site's **Tools** page loads the bundle and re-runs the check in the page. Nothing is uploaded and nothing needs installing.
+- **In the browser.** The site's [Tools page](../reference/browser-toolkit.md#evidence-bundles) loads the bundle and re-runs the check in the page. Nothing is uploaded and nothing needs installing.
 - **With the CLI.** From a checkout of this repository, `swarmchase case verify path/to/bundle`. It checks the manifest, re-runs the analysis and fails if any tier or cluster differs from the stamp.
 
 The check needs the rules the bundle was made with; the stamp names them. A bundle that verifies shows that the tiers and clusters follow from the records under those rules. It does not show that the records are genuine, and the manifest is not signed. Follow each record's link to the archive capture or scan report it came from. The full procedure is in [for-operators.md](for-operators.md#verify-an-evidence-bundle).

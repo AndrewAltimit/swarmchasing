@@ -3,7 +3,8 @@
 //! and the self-review checklist all call these functions.
 //!
 //! - [`front_matter`]: no DRAFT banner, a first update, updates in date
-//!   order, `updated` matching the last update, a known sector.
+//!   order, `updated` matching the last update, a known sector, and no
+//!   affected host before a naming update.
 //! - [`leaks`]: nothing a notice withholds anywhere it publishes text (body,
 //!   updates, title): callback channels, addresses, credentials
 //!   ([`sc_core::notice::lint_public`]).
@@ -47,6 +48,14 @@ pub fn front_matter(n: &NoticeFile) -> Vec<String> {
             "`updated` is {}, the last update is {}",
             n.meta.updated, last.date
         ));
+    }
+    // The indicator notice names and locates no affected party: hosts
+    // reach `affected` only with the naming update that names them.
+    if !n.meta.affected.is_empty() && !n.meta.updates.iter().any(|u| u.kind == UpdateKind::Naming) {
+        out.push(
+            "`affected` lists hosts but no naming update names them (the indicator notice names no affected party)"
+                .into(),
+        );
     }
     if let Some(s) = &n.meta.sector
         && !SECTORS.contains(&s.as_str())
@@ -163,7 +172,13 @@ mod tests {
                         date: "2026-10-20".into(),
                         kind: UpdateKind::Published,
                         from: None,
-                        text: "Initial notice.".into(),
+                        text: "Indicator notice.".into(),
+                    },
+                    NoticeUpdate {
+                        date: "2026-10-21".into(),
+                        kind: UpdateKind::Naming,
+                        from: None,
+                        text: "The portal's operator is named.".into(),
                     },
                     NoticeUpdate {
                         date: "2026-10-22".into(),
@@ -185,8 +200,18 @@ mod tests {
         let mut bad = n.clone();
         bad.body.push_str("\n> **DRAFT**: x\n");
         bad.meta.updated = "2026-10-21".into();
-        bad.meta.updates[1].text = "inbox is ntfy.sh/agent-run-77".into();
+        bad.meta.updates[2].text = "inbox is ntfy.sh/agent-run-77".into();
         assert_eq!(lint_notice(&bad, &rules).len(), 3);
+        // Hosts in `affected` need the naming update that names them.
+        let mut early = n.clone();
+        early.meta.updates.remove(1);
+        assert!(
+            front_matter(&early)
+                .iter()
+                .any(|x| x.contains("no naming update"))
+        );
+        early.meta.affected.clear();
+        assert!(front_matter(&early).is_empty());
         let mut odd = n.clone();
         odd.meta.sector = Some("Government".into());
         assert!(
@@ -236,9 +261,9 @@ mod tests {
         // A quoted statement or a correction may use the word; an update
         // in the notice's own voice may not.
         let mut n = notice();
-        n.meta.updates[1].text = "We wrongly called it misaligned.".into();
+        n.meta.updates[2].text = "We wrongly called it misaligned.".into();
         assert!(lint_notice(&n, &rules).is_empty());
-        n.meta.updates[1].kind = UpdateKind::Update;
+        n.meta.updates[2].kind = UpdateKind::Update;
         assert_eq!(lint_notice(&n, &rules).len(), 1);
     }
 }

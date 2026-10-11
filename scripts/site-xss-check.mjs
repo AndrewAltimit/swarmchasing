@@ -6,7 +6,9 @@
 //
 // It covers: every page in the sitemap (and 404.html); the hostile notice's
 // page and the index row; the index filters and their URL hash, on the
-// synthetic notices in crates/sc-publish/tests/fixtures/notices/; the
+// synthetic notices in crates/sc-publish/tests/fixtures/notices/, and the
+// two stages on them (an indicator notice shows no affected host, a naming
+// update shows its hosts defanged); the
 // bundle viewer with a hostile stamp, manifest and case claims; the workbench with XSS probes, HTML programs, a
 // probe chain, an unusual path set and a cluster with every per-cluster hint
 // in the records, every view, cluster, record and report audience, and
@@ -15,7 +17,8 @@
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
 // defang on the tools page. It also checks layout: no page scrolls sideways
 // at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
-// one column, and the theme toggle cycles system, light and dark.
+// one column, and each press of the theme toggle flips the look, storing it
+// only while it differs from the system's.
 //
 // Usage (after scripts/ci/build-site.sh, which builds site/pkg):
 //     node scripts/site-xss-check.mjs [path/to/chrome]
@@ -32,8 +35,9 @@ import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const PORT = 8790;
-const DEBUG_PORT = 9334;
+// Override with XSS_PORT and XSS_DEBUG_PORT when another check holds these.
+const PORT = Number(process.env.XSS_PORT) || 8790;
+const DEBUG_PORT = Number(process.env.XSS_DEBUG_PORT) || 9334;
 const BASE = `http://127.0.0.1:${PORT}/`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -89,6 +93,11 @@ text = ${lit(program)}
 date = "2026-10-17"
 kind = "reply"
 from = ${lit(program)}
+text = ${lit(program)}
+
+[[update]]
+date = "2026-10-17"
+kind = "naming"
 text = ${lit(program)}
 
 [[update]]
@@ -301,7 +310,7 @@ try {
 
   // Layout: at 390 px no page scrolls sideways and every nav menu opens
   // inside the viewport; at 1440 px a menu is one column of full-width
-  // items. Then the theme toggle cycles system, light, dark, system.
+  // items. Then the theme toggle flips the look on each press.
   const menuBoxes = `(async () => {
     const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     const out = [];
@@ -343,15 +352,20 @@ try {
   await open("");
   const themes = await run(`(() => {
     const b = document.querySelector("[data-theme-toggle]");
+    const sys = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     const seen = [];
-    for (let i = 0; i < 4; i++) {
-      seen.push((document.documentElement.dataset.theme ?? "system") + "/" + (localStorage.getItem("swarmchase.theme") ?? "-") + "/" + b.dataset.mode);
+    for (let i = 0; i < 3; i++) {
+      seen.push({ look: b.dataset.look, auto: b.dataset.auto, stored: localStorage.getItem("swarmchase.theme"), sys });
       b.click();
     }
-    return seen.join(" ");
+    return seen;
   })()`);
-  if (themes !== "system/-/system light/light/light dark/dark/dark system/-/system")
-    failures.push(`the theme toggle did not cycle system, light, dark: ${themes}`);
+  // Each press flips the look; a look is stored only while it differs from
+  // the system's, and the toggle says whether it follows the system.
+  const flips = themes.every((t, i) => i === 0 || t.look !== themes[i - 1].look);
+  const stored = themes.every((t) => (t.look === t.sys ? t.stored === null && t.auto === "true" : t.stored === t.look && t.auto === "false"));
+  if (themes[0].look !== themes[0].sys || !flips || !stored)
+    failures.push(`the theme toggle did not flip the look: ${JSON.stringify(themes)}`);
   await audit("layout and theme");
 
   // The hostile notice: its page, and its row on the index.
@@ -382,6 +396,21 @@ try {
     if (!ok) failures.push(`notices/#${hash}: showed ${JSON.stringify(got)}`);
   }
   await audit("notice index");
+
+  // Two stages: an indicator notice shows no affected host anywhere and says
+  // so; a naming update shows its hosts, defanged.
+  await open("notices/synthetic-indicator-only/");
+  const stage1 = await run(`({ stage: document.querySelector(".notice-stage")?.textContent ?? "", hosts: (document.querySelector("main")?.textContent ?? "").match(/[a-z0-9-]+\\[\\.\\][a-z]/gi) ?? [], chips: document.querySelectorAll("main .chip").length })`);
+  if (!/not named yet/.test(stage1.stage)) failures.push(`stage 1: stage line "${stage1.stage}"`);
+  if (stage1.hosts.length || stage1.chips) failures.push(`stage 1: a host on the indicator notice: ${JSON.stringify(stage1.hosts)}`);
+  await open("notices/synthetic-named-later/");
+  const stage2 = await run(`({ stage: document.querySelector(".notice-stage")?.textContent ?? "", chips: [...document.querySelectorAll("main .chip")].map((c) => c.textContent) })`);
+  if (!/named on 2026-09-25/.test(stage2.stage)) failures.push(`stage 2: stage line "${stage2.stage}"`);
+  if (!stage2.chips.includes("lab[.]university[.]example")) failures.push(`stage 2: hosts ${JSON.stringify(stage2.chips)}`);
+  await open("notices/");
+  const row1 = await run(`(() => { const r = [...document.querySelectorAll(".notice-table tbody tr")].find((r) => r.querySelector(".hint")?.textContent === "synthetic-indicator-only"); return r ? { hosts: r.dataset.hosts, affected: r.querySelector("[data-label=Affected]")?.textContent ?? "" } : null; })()`);
+  if (!row1 || row1.hosts.trim() || row1.affected !== "not named yet") failures.push(`stage 1 index row: ${JSON.stringify(row1)}`);
+  await audit("notice stages");
 
   // The workbench: the synthetic example, then the probes through every view.
   await open("analyze/#try=example", `document.querySelectorAll("table.records tbody tr").length > 1`);

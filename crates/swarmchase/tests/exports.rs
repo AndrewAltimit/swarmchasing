@@ -131,7 +131,7 @@ fn oecd_draft_lists_what_the_admin_must_fill() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .any(|v| v == "https://site.example/swarmchasing/#notice=fx-1")
+                .any(|v| v == "https://site.example/swarmchasing/notices/fx-1/")
     }));
     // Incident drafts are public: case notes are refused.
     let r = run(

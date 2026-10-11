@@ -27,7 +27,7 @@ A report to an affected operator says that public records, from scan services an
 Anyone can write an email that claims to come from us, so check before you act on one. A genuine report:
 
 - **carries a case id** in square brackets at the end of its subject. The public notice for the incident is published on this site under the same id, at `notices/<case id>/`, so once the notice is out you can match the two. Before then, ask us through the [private channel](#contact) and give the id.
-- **comes with an evidence bundle** that you can check yourself on the site's **Tools** page, in your browser, without installing anything or uploading the files ([verify an evidence bundle](#verify-an-evidence-bundle)).
+- **comes with an evidence bundle** that you can check yourself on the site's [Tools page](../reference/browser-toolkit.md#evidence-bundles), in your browser, without installing anything or uploading the files ([verify an evidence bundle](#verify-an-evidence-bundle)).
 - **links only to public records and this site.** Each record links to the archive capture or scan report it was taken from. A report never asks you to sign in, pay, install software or visit a host named in it.
 
 If a message fails any of these, or you are unsure, do not act on it; ask us privately with the id it gave.
@@ -144,7 +144,7 @@ It checks each file against the manifest, re-runs the analysis on `records.ndjso
 
 The check must use the rules the bundle was made with. If the rules version in `stamp.json` differs from your checkout's, the check says so. Check out the commit named in `stamp.json` (`toolkit_commit`, when present), or pass that commit's rules file with `--rules path/to/default.toml`.
 
-**In the browser.** The toolkit's **Tools** page loads a bundle and re-runs the check locally.
+**In the browser.** The site's [Tools page](../reference/browser-toolkit.md#evidence-bundles) loads a bundle and re-runs the check locally.
 
 **What verifying shows, and what it does not.** A bundle that verifies shows that the tiers and clusters in the report follow from the records under the stated rules, and that the files are the ones the manifest lists. It does not show that the records are genuine. For that, follow each record's `reference` link to the public record it was taken from: an archive capture or a scan report. The manifest is not signed, so it proves the files agree with each other, not who produced them.
 

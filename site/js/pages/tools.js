@@ -226,10 +226,6 @@ function recordTable(a) {
   return box;
 }
 
-// Most visitors arrive with a report's attachments: picking them is the
-// card's main action, and the card says so first.
-$("case-files").closest("label")?.classList.add("primary");
-$("bundle-h")?.after(el("p", { class: "lede-card" }, "Got a report? Pick the files attached to the email."));
 for (const id of ["case-files", "case-dir"]) $(id).addEventListener("change", (e) => e.target.files.length && load(e.target.files));
 $("case-example").addEventListener("click", loadShowcase);
 

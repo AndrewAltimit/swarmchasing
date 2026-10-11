@@ -70,6 +70,7 @@ A report to one operator never carries another operator's logs. Records used wit
 - e-mail addresses other than role mailboxes;
 - credential shapes;
 - valid front matter and update order;
+- hosts in `affected` before any naming update (the indicator notice names and locates no affected party);
 - attribution statements without a layer, a label (`Label: …`, or a Conclusion line's leading label) or a tag;
 - likelihood words stronger than their label allows: in the attribution section, each line's own label; in the summary, the strongest label the notice states; anywhere, off-table words of certainty ([SC-FM 8](../manual/08-confidence.md));
 - a title naming a model provider from the [provider directory](cases.md#the-provider-directory) that `providers` does not list;
