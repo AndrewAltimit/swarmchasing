@@ -35,8 +35,8 @@
 //! Archives index captures late, so each pull overlaps the previous one by
 //! `overlap_days` and drops records it has already seen ([`pull`]).
 
-mod cases;
-mod digest;
+pub(crate) mod cases;
+pub(crate) mod digest;
 mod pull;
 
 use crate::health::{RuleHistory, RuleRun};
