@@ -36,7 +36,7 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 
 ## urlquery.net
 
-urlquery's search API needs a key from a urlquery account, read from `URLQUERY_APIKEY` (the same variable `urlquery-cli` uses). Without one, `watch` skips urlquery sources and says so in the digest, and a urlquery export (search response or report JSON) can still be loaded with any command or in the browser.
+urlquery's search API needs a key from a urlquery account, read from `URLQUERY_APIKEY` (the same variable `urlquery-cli` uses). Without one, `watch` skips urlquery sources and says so at the top of the digest: urlquery is the only scheduled source with submission times, so timing links, pace, agent grades above L2 and interaction edges are lost ([health](watch.md#health)). A urlquery export (search response or report JSON) can still be loaded with any command or in the browser.
 
 urlquery's terms allow personal, non-commercial research use and forbid redistributing their content without permission. So reports and notices link to urlquery reports and quote only the indicators derived from them, and urlquery content is never committed: not in `samples/`, not in test fixtures, not in a notice.
 

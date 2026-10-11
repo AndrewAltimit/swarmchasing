@@ -5,7 +5,8 @@
 //! whose hit rate on new records jumps against its recent history usually
 //! means the rule started matching something ordinary. Both are reported in
 //! the digest before a broken source hides a swarm or a noisy rule reaches a
-//! notice.
+//! notice. A failed run alerts at once; a source that keeps pulling nothing,
+//! or is skipped run after run, is noted without alerting every time.
 
 use sc_core::Analysis;
 use serde::{Deserialize, Serialize};
@@ -20,8 +21,8 @@ const MIN_RUNS: usize = 3;
 const COLLAPSE_FRACTION: f64 = 0.2;
 /// …once the median is at least this many records.
 const MIN_MEDIAN: usize = 5;
-/// Consecutive failed runs before a source is called failing.
-const ERROR_STREAK: u32 = 2;
+/// Successful runs in a row with nothing pulled before the digest notes it.
+pub const QUIET_RUNS: u32 = 4;
 
 /// New records needed in this run and in the baseline before rates are compared.
 const MIN_RUN_RECORDS: usize = 20;
@@ -42,6 +43,15 @@ pub struct SourceHealth {
     /// Failed runs in a row.
     #[serde(default)]
     pub errors_in_row: u32,
+    /// Successful runs in a row that pulled nothing.
+    #[serde(default)]
+    pub empty_runs: u32,
+    /// Whether any run has pulled a record.
+    #[serde(default)]
+    pub ever_pulled: bool,
+    /// Runs in a row the source was skipped (no API key).
+    #[serde(default)]
+    pub skipped_runs: u32,
 }
 
 impl SourceHealth {
@@ -51,15 +61,49 @@ impl SourceHealth {
     /// set a median that every ordinary pull after it falls short of.
     pub fn observe_catch_up(&mut self) {
         self.errors_in_row = 0;
+        self.skipped_runs = 0;
     }
 
-    /// Check this run against the history, then add it. `pulled` is `None`
-    /// when the pull failed.
-    pub fn observe(&mut self, name: &str, pulled: Option<usize>) -> Option<String> {
-        let Some(n) = pulled else {
-            self.errors_in_row += 1;
-            return (self.errors_in_row >= ERROR_STREAK)
-                .then(|| format!("`{name}` has failed {} runs in a row", self.errors_in_row));
+    /// A run that skipped the source. Alerts the first time only: after
+    /// that the digest's health block still lists it, without mailing a
+    /// digest for it every run.
+    pub fn observe_skip(&mut self, name: &str, why: &str) -> Option<String> {
+        self.skipped_runs += 1;
+        (self.skipped_runs == 1).then(|| format!("`{name}` was skipped: {why}"))
+    }
+
+    /// Count a successful pull towards the quiet streak. Returns the streak
+    /// once it reaches [`QUIET_RUNS`].
+    pub fn observe_yield(&mut self, pulled: usize) -> Option<u32> {
+        if pulled > 0 {
+            self.empty_runs = 0;
+            self.ever_pulled = true;
+            return None;
+        }
+        self.empty_runs += 1;
+        (self.empty_runs >= QUIET_RUNS).then_some(self.empty_runs)
+    }
+
+    /// Check this run against the history, then add it. `pulled` is the
+    /// error's short reason when the pull failed. Every failure alerts, so it
+    /// reaches the admin within one run.
+    pub fn observe(&mut self, name: &str, pulled: Result<usize, &str>) -> Option<String> {
+        self.skipped_runs = 0;
+        let n = match pulled {
+            Ok(n) => n,
+            Err(why) => {
+                self.errors_in_row += 1;
+                return Some(if self.errors_in_row == 1 {
+                    format!(
+                        "`{name}` failed this run ({why}); it retries from its checkpoint next run"
+                    )
+                } else {
+                    format!(
+                        "`{name}` has failed {} runs in a row ({why})",
+                        self.errors_in_row
+                    )
+                });
+            }
         };
         self.errors_in_row = 0;
         let alert = (self.pulled.len() >= MIN_RUNS)
@@ -212,35 +256,57 @@ mod tests {
     fn source_collapse_and_error_streak() {
         let mut h = SourceHealth::default();
         for n in [40, 35, 50] {
-            assert_eq!(h.observe("s", Some(n)), None);
+            assert_eq!(h.observe("s", Ok(n)), None);
         }
         assert_eq!(
-            h.observe("s", Some(30)),
+            h.observe("s", Ok(30)),
             None,
             "a quiet run is not a collapse"
         );
-        let alert = h.observe("s", Some(2)).expect("collapse");
+        let alert = h.observe("s", Ok(2)).expect("collapse");
         assert!(alert.contains("median of 40"), "{alert}");
 
-        assert_eq!(
-            h.observe("s", None),
-            None,
-            "one failure is reported as an error only"
-        );
-        assert!(h.observe("s", None).unwrap().contains("2 runs in a row"));
-        assert_eq!(h.observe("s", Some(40)), None);
+        // The first failure alerts.
+        let first = h.observe("s", Err("HTTP 503 after 7 attempts")).unwrap();
+        assert!(first.contains("failed this run (HTTP 503"), "{first}");
+        assert!(first.contains("next run"), "{first}");
+        let second = h.observe("s", Err("HTTP 504")).unwrap();
+        assert!(second.contains("2 runs in a row (HTTP 504)"), "{second}");
+        assert_eq!(h.observe("s", Ok(40)), None);
         assert_eq!(h.errors_in_row, 0);
         assert_eq!(h.pulled.len(), 6);
 
         // A catch-up pull ends an error streak without joining the history.
-        assert_eq!(h.observe("s", None), None);
+        assert!(h.observe("s", Err("x")).is_some());
         h.observe_catch_up();
         assert_eq!((h.errors_in_row, h.pulled.len()), (0, 6));
 
         let mut small = SourceHealth::default();
         for n in [2, 3, 2, 0] {
-            assert_eq!(small.observe("t", Some(n)), None, "too small to judge");
+            assert_eq!(small.observe("t", Ok(n)), None, "too small to judge");
         }
+    }
+
+    #[test]
+    fn quiet_and_skipped_sources() {
+        let mut h = SourceHealth::default();
+        for _ in 1..QUIET_RUNS {
+            assert_eq!(h.observe_yield(0), None);
+        }
+        assert_eq!(h.observe_yield(0), Some(QUIET_RUNS));
+        assert!(!h.ever_pulled);
+        assert_eq!(h.observe_yield(3), None);
+        assert!(h.ever_pulled && h.empty_runs == 0);
+
+        // A skip alerts once, then stays quiet until the source runs again.
+        let a = h.observe_skip("uq", "URLQUERY_APIKEY not set").unwrap();
+        assert!(
+            a.contains("`uq` was skipped: URLQUERY_APIKEY not set"),
+            "{a}"
+        );
+        assert_eq!(h.observe_skip("uq", "URLQUERY_APIKEY not set"), None);
+        h.observe("uq", Ok(1));
+        assert!(h.observe_skip("uq", "again").is_some());
     }
 
     fn run(records: usize, hits: &[(&str, usize)]) -> RuleRun {
