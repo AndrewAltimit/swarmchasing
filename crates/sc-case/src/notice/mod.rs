@@ -20,14 +20,18 @@ use crate::model::Case;
 use crate::text::and_list;
 use sc_core::Reported;
 
+/// What a stage's update says about its review. The reviewer is not named.
+pub const REVIEWED: &str = "A second reviewer reviewed it before publication.";
+
 /// The first update's text: published, who the recorded sends reached
-/// before it, and the parties no contact was found for.
+/// before it, the parties no contact was found for, that affected
+/// organisations are named only in later updates, and the second review.
 pub fn published_text(r: &Reported, unreached: &[String]) -> String {
     let mut s = match r.parties() {
         Some(p) => format!(
-            "Notice published. Reports went to {p} before publication, each with the fixed lead time of our disclosure policy."
+            "Indicator notice published. Reports went to {p} before publication, each with the fixed lead time of our disclosure policy."
         ),
-        None => "Notice published.".into(),
+        None => "Indicator notice published.".into(),
     };
     if !unreached.is_empty() {
         s += &format!(
@@ -35,13 +39,21 @@ pub fn published_text(r: &Reported, unreached: &[String]) -> String {
             and_list(unreached)
         );
     }
+    s += " It names no affected organisation; names may follow in dated updates. ";
+    s += REVIEWED;
     s
 }
 
-/// The parties recorded as having no contact, as a notice names them:
-/// the AI provider, or an affected operator by its defanged host.
+/// A naming update's published text: the draft's text and the review.
+pub fn naming_text(draft: &str) -> String {
+    format!("{} {REVIEWED}", draft.trim())
+}
+
+/// The parties recorded as having no contact, as the indicator notice
+/// states them: the AI provider, and affected operators counted, never
+/// named.
 pub fn unreached(c: &Case) -> Vec<String> {
-    let mut v: Vec<String> = c
+    let open: Vec<&str> = c
         .no_contact
         .iter()
         .filter(|n| {
@@ -49,16 +61,24 @@ pub fn unreached(c: &Case) -> Vec<String> {
                 .iter()
                 .any(|s| s.recipient.eq_ignore_ascii_case(&n.party))
         })
-        .map(|n| {
-            if c.endpoint(&n.party).is_some() {
-                format!("the operator of {}", sc_core::defang_host(&n.party))
-            } else {
-                "the AI provider".to_string()
-            }
-        })
+        .map(|n| n.party.as_str())
         .collect();
-    v.sort();
-    v.dedup();
+    let mut operators: Vec<String> = open
+        .iter()
+        .filter(|p| c.endpoint(p).is_some())
+        .map(|p| p.to_ascii_lowercase())
+        .collect();
+    operators.sort();
+    operators.dedup();
+    let mut v = Vec::new();
+    if open.iter().any(|p| c.endpoint(p).is_none()) {
+        v.push("the AI provider".to_string());
+    }
+    match operators.len() {
+        0 => {}
+        1 => v.push("one affected operator".into()),
+        n => v.push(format!("{n} affected operators")),
+    }
     v
 }
 
@@ -74,31 +94,56 @@ mod tests {
             others,
         };
         let lead = "before publication, each with the fixed lead time of our disclosure policy.";
+        let tail = format!(
+            " It names no affected organisation; names may follow in dated updates. {REVIEWED}"
+        );
         assert_eq!(
             published_text(&r(false, false, false), &[]),
-            "Notice published."
+            format!("Indicator notice published.{tail}")
         );
         assert_eq!(
             published_text(&r(false, true, false), &[]),
-            format!("Notice published. Reports went to the affected operators {lead}")
-        );
-        assert_eq!(
-            published_text(&r(true, false, false), &[]),
-            format!("Notice published. Reports went to the AI provider {lead}")
+            format!(
+                "Indicator notice published. Reports went to the affected operators {lead}{tail}"
+            )
         );
         assert_eq!(
             published_text(&r(true, true, true), &[]),
             format!(
-                "Notice published. Reports went to the AI provider, the affected operators and other responders {lead}"
+                "Indicator notice published. Reports went to the AI provider, the affected operators and other responders {lead}{tail}"
             )
         );
-        let unreached = ["the operator of a[.]example".to_string()];
+        let unreached = ["one affected operator".to_string()];
         assert_eq!(
             published_text(&r(true, false, false), &unreached),
             format!(
-                "Notice published. Reports went to the AI provider {lead} No contact could be found for the operator of a[.]example; contact was attempted."
+                "Indicator notice published. Reports went to the AI provider {lead} No contact could be found for one affected operator; contact was attempted.{tail}"
             )
         );
+    }
+
+    #[test]
+    fn unreached_operators_are_counted_not_named() {
+        let mut c = Case::new("u-1", "U", "d", None);
+        for h in ["a.example", "b.example"] {
+            c.endpoints.push(crate::model::CaseEndpoint {
+                host: h.into(),
+                state: crate::model::EndpointState::Targeted,
+                ..Default::default()
+            });
+            c.no_contact.push(crate::model::NoContact {
+                party: h.into(),
+                searched: "rdap".into(),
+                at: "2026-10-07T10:00:00Z".into(),
+            });
+        }
+        assert_eq!(unreached(&c), ["2 affected operators"]);
+        c.no_contact.push(crate::model::NoContact {
+            party: "provider".into(),
+            searched: "directory".into(),
+            at: "2026-10-07T10:00:00Z".into(),
+        });
+        assert_eq!(unreached(&c), ["the AI provider", "2 affected operators"]);
     }
 
     #[test]

@@ -91,6 +91,7 @@ fn kind_class(k: UpdateKind) -> &'static str {
         UpdateKind::Update => "update",
         UpdateKind::Status => "status",
         UpdateKind::Correction => "correction",
+        UpdateKind::Naming => "naming",
         UpdateKind::Reply => "statement",
         UpdateKind::Retraction => "retraction",
     }
@@ -101,7 +102,7 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
     let mut s = String::new();
     s.push_str(
         "<header class=\"page-head\"><h1>Notices</h1>\
-<p class=\"lede\">One public notice per confirmed incident. A notice is published on a fixed lead time after the reports go to the AI provider and the affected operators: none for the provider, 4 to 12 hours for an operator whose systems were targeted, 24 hours for one whose systems were compromised. It is not an embargo: nothing a recipient says moves it, because a swarm is an active incident. Each notice keeps its dated updates, corrections and statements in place.</p>\
+<p class=\"lede\">One public notice per confirmed incident, in two stages. The indicator notice says what the activity was and how to recognise it, and names and locates no affected organisation. It follows the reports to the AI provider and the affected operators on a fixed clock: at once for the provider and for an operator whose systems were targeted, 24 hours for one whose systems were compromised. Names follow in dated updates, no earlier than 3 working days after an operator's report (10 if its systems were compromised), sooner only with its written consent. It is not an embargo: nothing a recipient says moves the indicator notice, because a swarm is an active incident. A second reviewer checks each stage before it is published. Each notice keeps its dated updates, corrections and statements in place.</p>\
 <p class=\"lede\">Notices withhold callback channels, captured credentials and the details of weaknesses that may still be open. Hosts are defanged (<code>a[.]b</code>).</p>\
 <p><a class=\"button\" href=\"feed.xml\">Atom feed</a></p></header>\n",
     );
@@ -222,7 +223,7 @@ pub fn page_body(n: &NoticeFile) -> String {
             esc(&m.providers.join(", "))
         },
         if m.affected.is_empty() {
-            "–".to_string()
+            "not named yet".to_string()
         } else {
             m.affected
                 .iter()

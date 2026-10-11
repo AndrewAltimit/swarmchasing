@@ -52,10 +52,11 @@ pub struct SentArgs {
     #[arg(long)]
     report: Option<String>,
     /// When it was sent (RFC 3339, e.g. 2026-10-12T14:05:00Z), for a send
-    /// recorded afterwards. Default: now. The lead time runs from it.
+    /// recorded afterwards. Default: now. The indicator and naming clocks
+    /// run from it.
     #[arg(long, conflicts_with = "date")]
     at: Option<String>,
-    /// The day only; the lead time then counts from the end of it.
+    /// The day only; the clocks then count from the end of it.
     #[arg(long)]
     date: Option<String>,
 }
@@ -102,8 +103,20 @@ pub(super) fn sent(ctx: &Ctx, a: SentArgs) -> Result<()> {
         )?;
         if let Some(t) = sc_case::lead::clock(c).not_before {
             println!(
-                "{s} recorded; the notice may be added from {} if nothing else is sent",
+                "{s} recorded; the indicator notice may be added from {} if nothing else is sent",
                 show_time(t)
+            );
+        } else {
+            println!("{s} recorded");
+        }
+        for o in sc_case::naming::operators(c)
+            .iter()
+            .filter(|o| o.from.is_some() && o.named.is_none())
+        {
+            println!(
+                "  operator of {}: {}",
+                sc_core::defang_host(&o.host),
+                o.status(ctx.now)
             );
         }
         Ok(())

@@ -69,26 +69,52 @@ impl Report<'_> {
                 *kinds.entry(*k).or_default() += n;
             }
         }
-        let unnamed = match view.as_deref() {
-            Some(v) => {
+        let described = super::descriptions(opts);
+        let unnamed = match (view.as_deref(), described) {
+            // The indicator notice: affected hosts by description only.
+            (Some(_), Some(d)) => {
+                let before = hosts.len();
+                hosts.retain(|h, _| d.contains_key(&h.to_ascii_lowercase()));
+                before - hosts.len()
+            }
+            (Some(v), None) => {
                 let before = hosts.len();
                 hosts.retain(|h, _| v.named(h));
                 before - hosts.len()
             }
-            None => 0,
+            (None, _) => 0,
         };
         if let Some(v) = view {
             v.note_unnamed(unnamed);
+            if described.is_some() && !hosts.is_empty() {
+                v.withheld.insert(format!(
+                    "names and hosts of {} affected endpoint(s) (described by kind until a naming update)",
+                    hosts.len()
+                ));
+            }
         }
-        let mut host_list: Vec<String> = top_counts(&hosts, 5)
-            .into_iter()
-            .map(|(h, n)| {
-                format!(
-                    "`{}` ({n})",
-                    defang(&format!("https://{h}")).trim_start_matches("hxxps://")
-                )
-            })
-            .collect();
+        let mut host_list: Vec<String> = match described {
+            Some(d) => {
+                let mut by: BTreeMap<&str, usize> = BTreeMap::new();
+                for (h, n) in &hosts {
+                    if let Some(x) = d.get(&h.to_ascii_lowercase()) {
+                        *by.entry(x.as_str()).or_default() += n;
+                    }
+                }
+                by.into_iter()
+                    .map(|(x, n)| format!("{x} ({n} records)"))
+                    .collect()
+            }
+            None => top_counts(&hosts, 5)
+                .into_iter()
+                .map(|(h, n)| {
+                    format!(
+                        "`{}` ({n})",
+                        defang(&format!("https://{h}")).trim_start_matches("hxxps://")
+                    )
+                })
+                .collect(),
+        };
         if unnamed > 0 {
             host_list.push(hosts_not_named(unnamed));
         }

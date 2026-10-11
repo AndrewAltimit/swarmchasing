@@ -8,7 +8,10 @@
 //! - [`fleet`]: fleet merges and splits, interaction evidence.
 //! - [`contacts`]: find contacts, add or remove one by hand.
 //! - [`sending`]: reports, drafts for one contact, sends, bundles.
-//! - [`notice`]: the notice draft, its re-read and the checklist.
+//! - [`notice`]: the notice and naming drafts, the re-read and the
+//!   checklists.
+//! - [`review`]: the second review and its packet, operators' consent to
+//!   earlier naming, and the decision not to name one.
 //! - [`export`]: STIX, MISP and incident-framework drafts.
 //!
 //! Each parses its arguments and calls the decisions in [`sc_case`]; the
@@ -21,6 +24,7 @@ mod export;
 mod fleet;
 mod notice;
 mod open;
+mod review;
 mod sending;
 
 use crate::evidence::EvidenceCmd;
@@ -75,8 +79,29 @@ pub enum CaseCmd {
     /// add` needs a re-read of the exact draft, an hour or more after it was
     /// written.
     Reread { id: String },
-    /// Print the self-review checklist `notice add` runs.
-    Checklist { id: String },
+    /// Print the checklist `notice add` runs, or once the indicator notice
+    /// is added the one `notice update --naming` runs, with both stages'
+    /// clocks and review state.
+    Checklist {
+        id: String,
+        /// The committed notices directory (for the naming checklist).
+        #[arg(long, default_value = "notices")]
+        notices: PathBuf,
+    },
+    /// Record the admin's scope finding for a cluster (SC-FM 15.4). Notices
+    /// say "misaligned" only for clusters found to exceed scope.
+    Scope(attribution::ScopeArgs),
+    /// Record a second reviewer's verdict on the current draft of the next
+    /// stage (the indicator notice, then naming updates), bound to its hash.
+    Review(review::ReviewArgs),
+    /// Write the current draft, its checklist and the internal report into
+    /// <case>/outbox/review/ for the second reviewer. Nothing is sent.
+    ReviewPacket(review::PacketArgs),
+    /// Record an operator's written consent to be named before its naming
+    /// clock runs.
+    Consent(review::ConsentArgs),
+    /// Show each operator's naming clock, or decide never to name one.
+    Naming(review::NamingArgs),
     /// Give a case a new ID. A case with a published notice keeps its ID.
     Rename { id: String, new_id: String },
     /// Record an attribution claim established by case work.
@@ -86,7 +111,8 @@ pub enum CaseCmd {
     /// with what it rests on. L5 (documented: operator logs matching a
     /// harness, a provider's confirmation) is set only here.
     Grade(attribution::GradeArgs),
-    /// Change the case or notice status, or the naming threshold.
+    /// Change the case or notice status, the developer naming threshold, the
+    /// naming lead or the admin.
     Set(open::SetArgs),
     /// Find contacts: the provider directory's channels for every provider a
     /// developer or host claim names, then for the case's endpoints the
@@ -143,14 +169,18 @@ pub enum CaseCmd {
         #[arg(long)]
         rules: Option<PathBuf>,
     },
-    /// Draft the public notice into <case>/notice.md and list what it
-    /// withheld and what needs a decision. Review and edit it, then
-    /// `swarmchase notice add <id>`.
+    /// Draft the indicator notice into <case>/notice.md and list what it
+    /// withheld and what needs a decision; with --naming, draft the next
+    /// naming update into <case>/naming.md. Review and edit it, then
+    /// `swarmchase notice add <id>` (or `notice update <id> --naming`).
     Notice {
         id: String,
         /// Replace an existing draft (and any edits made to it).
         #[arg(long)]
         force: bool,
+        /// Draft the naming update for the operators that may be named now.
+        #[arg(long)]
+        naming: bool,
     },
     /// Render a report draft from the case's records and case.toml.
     Report(sending::ReportArgs),
@@ -203,9 +233,23 @@ pub fn run(args: CaseArgs) -> Result<()> {
         CaseCmd::Bundle { id, rules } => sending::bundle(&ctx, &id, rules.as_deref()),
         CaseCmd::Verify { bundle, rules } => sending::verify(&ctx, &bundle, rules.as_deref()),
         CaseCmd::Evidence { cmd } => crate::evidence::run_evidence(&ctx.root, cmd, &ctx.today),
-        CaseCmd::Notice { id, force } => notice::draft(&ctx, &id, force),
+        CaseCmd::Notice {
+            id,
+            force,
+            naming: false,
+        } => notice::draft(&ctx, &id, force),
+        CaseCmd::Notice {
+            id,
+            force,
+            naming: true,
+        } => notice::naming_draft(&ctx, &id, force),
         CaseCmd::Reread { id } => notice::reread(&ctx, &id),
-        CaseCmd::Checklist { id } => notice::checklist(&ctx, &id, out),
+        CaseCmd::Checklist { id, notices } => notice::checklist(&ctx, &id, &notices, out),
+        CaseCmd::Scope(a) => attribution::scope(&ctx, a),
+        CaseCmd::Review(a) => review::review(&ctx, a),
+        CaseCmd::ReviewPacket(a) => review::packet(&ctx, a),
+        CaseCmd::Consent(a) => review::consent(&ctx, a),
+        CaseCmd::Naming(a) => review::naming(&ctx, a, out),
         CaseCmd::Export(a) => export::run(&ctx, a),
     }
 }

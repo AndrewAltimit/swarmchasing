@@ -328,6 +328,7 @@ mod tests {
     use super::*;
     use crate::notice::notice_draft;
     use sc_case::actions;
+    use sc_case::model::Verdict;
     use sc_core::{Claim, Evidence, Role};
 
     #[test]
@@ -486,9 +487,9 @@ mod tests {
             "notices are published, not sent"
         );
 
-        // The notice: drafted in the case, blocked by the self-review
-        // checklist until every item passes, then added to notices/ without
-        // its draft banner.
+        // The indicator notice: drafted in the case, blocked by the
+        // self-review checklist and the second review until every item
+        // passes, then added to notices/ without its draft banner.
         const H: i64 = 3600;
         let t0 = 1_791_500_000;
         let (p, review) = notice_draft(&root, "t-1", false, "2026-10-15", t0).unwrap();
@@ -500,17 +501,35 @@ mod tests {
         );
         let md = std::fs::read_to_string(&p).unwrap();
         assert!(md.contains("providers = [\"Tencent\"]"), "{md}");
-        assert!(md.contains("affected = [\"portal.example.gov\"]"), "{md}");
+        assert!(md.contains("affected = []"), "{md}");
+        assert!(!md.contains("portal[.]example"), "{md}");
         let notices = root.join("notices");
         let rules = sc_core::Rules::default_rules();
         let add =
-            |now| crate::notice::add_for_test(&root, "t-1", &notices, &rules, "2026-10-16", now);
+            |now| crate::notice::add_for_test(&root, "t-1", &notices, &rules, "2026-10-09", now);
         let e = add(t0 + 30 * H).unwrap_err().to_string();
         assert!(e.contains("every endpoint is classified"), "{e}");
         assert!(e.contains("alternative explanations"), "{e}");
         assert!(e.contains("every party was sent"), "{e}");
+        assert!(e.contains("an approved second review"), "{e}");
         update(&root, "t-1", |c| {
+            c.admin = Some("Ada Admin".into());
             c.endpoints[1].state = EndpointState::NotAffected;
+            actions::classify(
+                c,
+                &["portal.example.gov".into()],
+                EndpointState::Compromised,
+                None,
+                Some("operator statement: a web shell was found"),
+                None,
+                "2026-10-15",
+            )?;
+            actions::describe(
+                c,
+                &["portal.example.gov".into()],
+                "a national government data portal",
+                "2026-10-15",
+            )?;
             actions::sent(
                 c,
                 "security@portal.example.gov",
@@ -536,15 +555,18 @@ mod tests {
         let e = add(t0 + 30 * H).unwrap_err().to_string();
         assert!(e.contains("the draft was written after every send"), "{e}");
         notice_draft(&root, "t-1", true, "2026-10-15", t0 + 120).unwrap();
+        let md = std::fs::read_to_string(&p).unwrap();
+        assert!(md.contains("a national government data portal"), "{md}");
+        assert!(!md.contains("portal[.]example"), "{md}");
         // A re-read inside the cooling-off does not count.
         checklist::reread(&root, "t-1", "2026-10-15", t0 + 120 + H / 2).unwrap();
         let e = add(t0 + 30 * H).unwrap_err().to_string();
         assert!(e.contains("re-read at least an hour"), "{e}");
         checklist::reread(&root, "t-1", "2026-10-15", t0 + 120 + H).unwrap();
-        // The operator's 6-hour lead runs from the send; no override.
+        // The compromised endpoint's operator has 24 hours; no override.
         let e = add(t0 + 3 * H).unwrap_err().to_string();
         assert!(e.contains("The lead time runs until"), "{e}");
-        assert!(e.contains(&show_time(t0 + 60 + 6 * H)), "{e}");
+        assert!(e.contains(&show_time(t0 + 60 + 24 * H)), "{e}");
         // An edit after the re-read needs another re-read.
         let draft = std::fs::read_to_string(&p).unwrap();
         std::fs::write(
@@ -554,7 +576,33 @@ mod tests {
         .unwrap();
         assert!(add(t0 + 7 * H).unwrap_err().to_string().contains("re-read"));
         checklist::reread(&root, "t-1", "2026-10-15", t0 + 7 * H).unwrap();
-        let added = add(t0 + 7 * H).unwrap();
+
+        // The second review: never the admin, and of the exact draft.
+        let review = |reviewer: &str, verdict, now| {
+            let items = crate::notice::checklist_for(&root, "t-1", now).unwrap();
+            let blockers = sc_case::review::blockers(&items);
+            let sha = checklist::draft_sha(&root, "t-1").unwrap();
+            let mut c = load(&root, "t-1").unwrap();
+            let r = sc_case::review::record(
+                &mut c,
+                sc_case::review::Input {
+                    stage: Stage::Indicators,
+                    reviewer,
+                    verdict,
+                    note: None,
+                    sha: &sha,
+                },
+                &blockers,
+                now,
+            );
+            save(&root, &c).unwrap();
+            r
+        };
+        assert!(review(" ada admin", Verdict::Approve, t0 + 7 * H).is_err());
+        review("Rae Reviewer", Verdict::Approve, t0 + 7 * H).unwrap();
+        // Still inside the lead.
+        assert!(add(t0 + 8 * H).is_err());
+        let added = add(t0 + 25 * H).unwrap();
         let text = std::fs::read_to_string(&added).unwrap();
         assert!(!text.contains("DRAFT"), "{text}");
         assert!(text.contains("kind = \"published\""), "{text}");
@@ -562,18 +610,95 @@ mod tests {
             text.contains("Reports went to the affected operators before publication")
                 && text.contains(
                     "No contact could be found for the AI provider; contact was attempted."
-                ),
+                )
+                && text.contains(sc_case::notice::REVIEWED)
+                && !text.contains("Rae"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("portal[.]example") && !text.contains("portal.example"),
             "{text}"
         );
         // Added is not published: reported, with the push pending.
         let c = load(&root, "t-1").unwrap();
         assert_eq!(c.status, CaseStatus::Reported);
-        assert_eq!(c.publish_pending.as_deref(), Some("2026-10-16"));
+        assert_eq!(c.publish_pending.as_deref(), Some("2026-10-09"));
         let mut buf = Vec::new();
         status(&root, "t-1", &mut buf).unwrap();
         let s = String::from_utf8(buf).unwrap();
         assert!(s.contains("publish pending"), "{s}");
-        assert!(add(t0 + 8 * H).is_err());
+        assert!(s.contains("Stage 2, naming"), "{s}");
+        assert!(add(t0 + 26 * H).is_err());
+
+        // Names: the compromised endpoint's operator waits 10 working days,
+        // unless it consents.
+        let naming = |now| crate::notice::naming_draft(&root, "t-1", true, "2026-10-10", now);
+        let e = naming(t0 + 26 * H).unwrap_err().to_string();
+        assert!(e.contains("may be named from"), "{e}");
+        update(&root, "t-1", |c| {
+            Ok(sc_case::naming::consent(
+                c,
+                "portal.example.gov",
+                "operator e-mail agreeing to be named",
+                t0 + 26 * H,
+            )?)
+        })
+        .unwrap();
+        let (np, hosts) = naming(t0 + 26 * H).unwrap();
+        assert_eq!(hosts, ["portal.example.gov"]);
+        let add_naming = |now| {
+            crate::notice::add_naming_for_test(&root, "t-1", &notices, &rules, "2026-10-10", now)
+        };
+        let e = add_naming(t0 + 27 * H).unwrap_err().to_string();
+        assert!(e.contains("an approved second review"), "{e}");
+        // An objection blocks until a later approval of the current draft.
+        let naming_review = |reviewer: &str, verdict| {
+            let items =
+                crate::notice::naming_checklist_for(&root, "t-1", &notices, t0 + 27 * H).unwrap();
+            let blockers = sc_case::review::blockers(&items);
+            let sha = crate::notice::naming_sha(&root, "t-1").unwrap();
+            let mut c = load(&root, "t-1").unwrap();
+            assert_eq!(c.stage(), Stage::Naming);
+            sc_case::review::record(
+                &mut c,
+                sc_case::review::Input {
+                    stage: Stage::Naming,
+                    reviewer,
+                    verdict,
+                    note: Some("checked"),
+                    sha: &sha,
+                },
+                &blockers,
+                t0 + 27 * H,
+            )
+            .unwrap();
+            save(&root, &c).unwrap();
+        };
+        naming_review("Rae Reviewer", Verdict::Approve);
+        naming_review("Sam Second", Verdict::Object);
+        assert!(add_naming(t0 + 27 * H).is_err());
+        naming_review("Rae Reviewer", Verdict::Approve);
+        // An edit voids the approval.
+        let nd = std::fs::read_to_string(&np).unwrap();
+        std::fs::write(&np, nd.replace("was affected", "was affected (edited)")).unwrap();
+        assert!(add_naming(t0 + 27 * H).is_err());
+        std::fs::write(&np, &nd).unwrap();
+        let after = add_naming(t0 + 27 * H).unwrap();
+        let text = std::fs::read_to_string(&after).unwrap();
+        assert!(text.contains("kind = \"naming\""), "{text}");
+        assert!(
+            text.contains("affected = [\"portal.example.gov\"]"),
+            "{text}"
+        );
+        assert!(text.contains("`portal[.]example[.]gov`"), "{text}");
+        assert!(
+            crate::notice::lint_file_for_test(&after, &rules).is_empty(),
+            "{text}"
+        );
+        let c = load(&root, "t-1").unwrap();
+        assert_eq!(c.named.len(), 1);
+        assert!(naming(t0 + 28 * H).is_err(), "nobody left to name");
+
         // Not on any remote (no repository here): refused unless forced.
         let e = crate::notice::published_for_test(&root, &notices, "t-1", false, "2026-10-17");
         assert!(e.unwrap_err().to_string().contains("not on origin yet"));

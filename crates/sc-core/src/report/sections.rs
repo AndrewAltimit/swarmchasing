@@ -196,17 +196,31 @@ fn candidate_lists(s: &mut String, claims: &[Claim]) {
 /// Every flagged hit on the hosts these clusters touched, including hits
 /// outside the clusters: an operator checks its logs per host, not per cluster.
 /// `unnamed` hosts (not classified as affected) are counted, not listed.
+/// With `described` (the indicator notice), each host appears by its
+/// description, never by name.
 pub(super) fn endpoint_table(
     s: &mut String,
     a: &Analysis,
     hosts: &BTreeMap<String, usize>,
     unnamed: usize,
+    described: Option<&BTreeMap<String, String>>,
     mut view: Option<&mut PublicView>,
 ) {
-    let views: Vec<EndpointView> = endpoints(a, &EndpointOptions::default())
+    let label = |h: &str| match described {
+        Some(d) => d
+            .get(&h.to_ascii_lowercase())
+            .cloned()
+            .unwrap_or_else(|| "an affected organisation".into()),
+        None => format!("`{}`", defang_host(h)),
+    };
+    let mut views: Vec<EndpointView> = endpoints(a, &EndpointOptions::default())
         .into_iter()
         .filter(|v| hosts.contains_key(&v.host))
         .collect();
+    if described.is_some() {
+        // Ordered by description, so the order says nothing about the names.
+        views.sort_by_cached_key(|v| (label(&v.host), v.first_seen, v.hits));
+    }
     if views.is_empty() && unnamed == 0 {
         return;
     }
@@ -218,7 +232,12 @@ pub(super) fn endpoint_table(
     if !views.is_empty() {
         let _ = writeln!(
             s,
-            "| Host | Hits | First seen | Last seen | Status | Attack payloads |\n|---|---|---|---|---|---|"
+            "| {} | Hits | First seen | Last seen | Status | Attack payloads |\n|---|---|---|---|---|---|",
+            if described.is_some() {
+                "Target"
+            } else {
+                "Host"
+            }
         );
     }
     for v in &views {
@@ -239,8 +258,8 @@ pub(super) fn endpoint_table(
         };
         let _ = writeln!(
             s,
-            "| `{}` | {} | {} | {} | {} | {payloads} |",
-            defang_host(&v.host),
+            "| {} | {} | {} | {} | {} | {payloads} |",
+            label(&v.host),
             v.hits,
             fmt_ts(v.first_seen),
             fmt_ts(v.last_seen),

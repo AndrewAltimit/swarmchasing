@@ -5,6 +5,7 @@
 
 use crate::evidence::OperatorEvidence;
 pub use crate::notice::NoticeStatus;
+use sc_core::scope::ScopeFinding;
 use sc_core::{Analysis, Claim, EndpointOptions, Evidence, SwarmEdgeKind, endpoints};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -132,6 +133,11 @@ pub struct CaseEndpoint {
     /// on it is submit-anywhere (anyone can submit a URL to a scan service).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub single_source: Option<String>,
+    /// How the indicator notice describes this target without identifying
+    /// it ("a national government data portal"). Unset, it is described by
+    /// its state only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sector: Option<String>,
 }
 
 /// Who a contact is for.
@@ -244,7 +250,8 @@ pub struct Sent {
     pub channel: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub report: Option<String>,
-    /// When it was sent (RFC 3339, UTC). The lead time runs from here.
+    /// When it was sent (RFC 3339, UTC). The indicator and naming clocks
+    /// run from here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<String>,
 }
@@ -409,6 +416,146 @@ pub struct SwarmEvidence {
     pub date: String,
 }
 
+/// The draft the naming update is written from, inside a case directory.
+pub const NAMING_DRAFT: &str = "naming.md";
+
+/// The two stages of a public notice: the indicator notice, then the naming
+/// updates that add affected organisations' names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+    /// The indicator notice (`notice add`), from `notice.md`.
+    Indicators,
+    /// A naming update (`notice update --naming`), from `naming.md`.
+    Naming,
+}
+
+impl Stage {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Indicators => "indicator notice",
+            Self::Naming => "naming update",
+        }
+    }
+
+    /// The draft file this stage is written from.
+    pub fn draft(self) -> &'static str {
+        match self {
+            Self::Indicators => NOTICE_DRAFT,
+            Self::Naming => NAMING_DRAFT,
+        }
+    }
+}
+
+impl std::str::FromStr for Stage {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        parse_word(
+            "stage",
+            s,
+            &[("indicators", Self::Indicators), ("naming", Self::Naming)],
+        )
+    }
+}
+
+/// A second reviewer's verdict on a draft.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    Approve,
+    Object,
+}
+
+impl Verdict {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Approve => "approve",
+            Self::Object => "object",
+        }
+    }
+}
+
+impl std::str::FromStr for Verdict {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        parse_word(
+            "verdict",
+            s,
+            &[("approve", Self::Approve), ("object", Self::Object)],
+        )
+    }
+}
+
+/// One second review of one exact draft (`case review`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Review {
+    pub stage: Stage,
+    pub reviewer: String,
+    pub verdict: Verdict,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The SHA-256 of the draft reviewed; an edit to it voids the review.
+    pub sha256: String,
+    /// RFC 3339.
+    pub at: String,
+}
+
+/// An operator's written agreement to be named before its naming clock runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Consent {
+    /// The endpoint's host.
+    pub party: String,
+    /// What the operator said, and where.
+    pub note: String,
+    /// RFC 3339.
+    pub at: String,
+}
+
+/// The admin's decision not to name an operator.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NamingWithheld {
+    /// The endpoint's host.
+    pub party: String,
+    pub reason: String,
+    pub date: String,
+}
+
+/// An operator a published naming update named.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Named {
+    /// The endpoint's host.
+    pub party: String,
+    pub date: String,
+}
+
+/// The admin's scope finding for one cluster (`case scope`). The analysis
+/// suggests one (`Cluster.scope`); this is the decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScopeDecision {
+    /// The cluster's stable key.
+    pub cluster: String,
+    pub finding: ScopeFinding,
+    /// The scope tests that failed (`S1`..`S7`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tests: Vec<String>,
+    pub note: String,
+    pub date: String,
+}
+
+/// A scope finding as `case scope --finding` takes it.
+pub fn parse_finding(s: &str) -> Result<ScopeFinding, String> {
+    parse_word(
+        "finding",
+        s,
+        &[
+            ("in-scope", ScopeFinding::InScope),
+            ("exceeded", ScopeFinding::ScopeExceeded),
+            ("scope-exceeded", ScopeFinding::ScopeExceeded),
+            ("not-assessable", ScopeFinding::NotAssessable),
+        ],
+    )
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Case {
     pub id: String,
@@ -451,10 +598,16 @@ pub struct Case {
     /// L5 (documented). Reports show it beside the computed grades.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_grade: Option<sc_core::GradeDecision>,
-    /// The lead time for targeted and historical endpoints' operators, in
-    /// hours (4 to 12); unset is the default ([`crate::lead::OPERATOR_DEFAULT`]).
+    /// Who decides and publishes for the case. A second review must come
+    /// from someone else ([`crate::review`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lead_hours: Option<u32>,
+    pub admin: Option<String>,
+    /// The naming lead for targeted and historical endpoints' operators, in
+    /// working days ([`crate::naming::MIN_DAYS`] to [`crate::naming::MAX_DAYS`]);
+    /// unset is the minimum. Compromised endpoints' operators wait at least
+    /// [`crate::naming::COMPROMISED_DAYS`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub naming_days: Option<u32>,
     /// Parties no contact was found for.
     #[serde(default, rename = "no_contact", skip_serializing_if = "Vec::is_empty")]
     pub no_contact: Vec<NoContact>,
@@ -474,6 +627,21 @@ pub struct Case {
     /// The admin's last re-read of the notice draft (`case reread`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reread: Option<DraftStamp>,
+    /// The admin's scope findings, per cluster (`case scope`).
+    #[serde(default, rename = "scope", skip_serializing_if = "Vec::is_empty")]
+    pub scope_findings: Vec<ScopeDecision>,
+    /// Second reviews of the notice and naming drafts (`case review`).
+    #[serde(default, rename = "review", skip_serializing_if = "Vec::is_empty")]
+    pub reviews: Vec<Review>,
+    /// Operators that agreed in writing to be named early (`case consent`).
+    #[serde(default, rename = "consent", skip_serializing_if = "Vec::is_empty")]
+    pub consents: Vec<Consent>,
+    /// Operators the admin decided not to name (`case naming --withhold`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub naming_withheld: Vec<NamingWithheld>,
+    /// Operators a published naming update named.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub named: Vec<Named>,
 }
 
 /// Check a case id: lowercase letters, digits and hyphens, at most 64
@@ -513,12 +681,18 @@ impl Case {
             evidence: Vec::new(),
             fleets: Vec::new(),
             agent_grade: None,
-            lead_hours: None,
+            admin: None,
+            naming_days: None,
             no_contact: Vec::new(),
             alternatives: Vec::new(),
             plant_reviews: Vec::new(),
             drafted: None,
             reread: None,
+            scope_findings: Vec::new(),
+            reviews: Vec::new(),
+            consents: Vec::new(),
+            naming_withheld: Vec::new(),
+            named: Vec::new(),
         }
     }
 
@@ -537,6 +711,27 @@ impl Case {
             date: today.to_string(),
             text: text.into(),
         });
+    }
+
+    /// Whether the indicator notice was added (published, or pending the
+    /// push): the next stage is naming.
+    pub fn notice_added(&self) -> bool {
+        self.publish_pending.is_some() || self.status == CaseStatus::Published
+    }
+
+    /// The stage the next public text is: the indicator notice until it is
+    /// added, then naming updates.
+    pub fn stage(&self) -> Stage {
+        if self.notice_added() {
+            Stage::Naming
+        } else {
+            Stage::Indicators
+        }
+    }
+
+    /// The admin's latest scope finding for cluster `key`.
+    pub fn scope_finding(&self, key: &str) -> Option<&ScopeDecision> {
+        self.scope_findings.iter().rev().find(|d| d.cluster == key)
     }
 
     /// The fleet holding cluster `key`, if the admin grouped it.

@@ -81,6 +81,94 @@ pub fn classify(
     Ok(())
 }
 
+/// Set how the indicator notice describes `hosts` without identifying them
+/// (`case endpoint --sector`). Every host is found before anything changes.
+pub fn describe(c: &mut Case, hosts: &[String], sector: &str, today: &str) -> Result<()> {
+    let sector = sector.trim();
+    if sector.is_empty() {
+        bail!(
+            "--sector: how the notice describes the target, e.g. \"a national government data portal\""
+        );
+    }
+    for host in hosts {
+        if c.endpoint(host).is_none() {
+            bail!("no endpoint `{host}` in case {}", c.id);
+        }
+    }
+    for host in hosts {
+        if let Some(e) = c
+            .endpoints
+            .iter_mut()
+            .find(|e| e.host.eq_ignore_ascii_case(host))
+        {
+            e.sector = Some(sector.to_string());
+        }
+        c.log(today, format!("endpoint {host}: described as \"{sector}\""));
+    }
+    Ok(())
+}
+
+/// Record the admin's scope finding for cluster `key` (`case scope`).
+/// `tests` are the failed scope tests (`S1`..`S7`); scope exceeded needs at
+/// least one, and in scope none.
+pub fn scope(
+    c: &mut Case,
+    key: &str,
+    finding: sc_core::scope::ScopeFinding,
+    tests: &[String],
+    note: &str,
+    today: &str,
+) -> Result<()> {
+    use sc_core::scope::ScopeFinding as F;
+    let mut ids: Vec<String> = Vec::new();
+    for t in tests.iter().flat_map(|t| t.split(',')) {
+        let t = t.trim().to_ascii_uppercase();
+        if t.is_empty() {
+            continue;
+        }
+        let ok = t.len() == 2
+            && t.starts_with('S')
+            && ('1'..='7').contains(&t.chars().nth(1).unwrap_or('0'));
+        if !ok {
+            bail!("unknown scope test `{t}` (S1..S7)");
+        }
+        if !ids.contains(&t) {
+            ids.push(t);
+        }
+    }
+    ids.sort();
+    match finding {
+        F::ScopeExceeded if ids.is_empty() => {
+            bail!("a finding of scope exceeded needs --tests: the failed tests, e.g. S2,S4")
+        }
+        F::InScope if !ids.is_empty() => bail!("in scope means no test failed; drop --tests"),
+        _ => {}
+    }
+    if note.trim().is_empty() {
+        bail!("--note: what the finding rests on, with the records");
+    }
+    c.scope_findings.push(ScopeDecision {
+        cluster: key.to_string(),
+        finding,
+        tests: ids.clone(),
+        note: note.to_string(),
+        date: today.to_string(),
+    });
+    c.log(
+        today,
+        format!(
+            "scope finding for {key}: {}{} ({note})",
+            finding.label(),
+            if ids.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", ids.join(", "))
+            }
+        ),
+    );
+    Ok(())
+}
+
 /// Record that no contact was found for `party`: an endpoint's host, a
 /// provider organisation among the contacts, or [`ANY_PROVIDER`].
 pub fn no_contact(c: &mut Case, party: &str, searched: &str, now: i64) -> Result<()> {
@@ -383,14 +471,20 @@ pub struct Settings {
     pub status: Option<CaseStatus>,
     pub notice: Option<NoticeStatus>,
     pub min_named: Option<Evidence>,
-    pub lead_hours: Option<u32>,
+    /// The naming lead in working days ([`crate::naming::set_days`]).
+    pub naming_days: Option<u32>,
+    pub admin: Option<String>,
 }
 
-/// Change the case or notice status, the naming threshold or the operator
-/// lead time. The naming threshold never goes below [`Evidence::FLOOR`].
+/// Change the case or notice status, the developer naming threshold, the
+/// naming lead or the admin. The naming threshold never goes below
+/// [`Evidence::FLOOR`]; the naming lead only lengthens.
 pub fn set(c: &mut Case, s: Settings, today: &str) -> Result<()> {
-    if let Some(h) = s.lead_hours {
-        crate::lead::set_operator_lead(c, h, today)?;
+    if let Some(n) = s.naming_days {
+        crate::naming::set_days(c, n, today)?;
+    }
+    if let Some(a) = &s.admin {
+        crate::review::set_admin(c, a, today)?;
     }
     if let Some(st) = s.status {
         c.status = st;
@@ -517,6 +611,64 @@ mod tests {
         remove_contact(&mut c, "a@portal.example.gov", "d").unwrap();
         no_contact(&mut c, "portal.example.gov", "rdap", 1_791_000_000).unwrap();
         assert!(no_contact(&mut c, "elsewhere.example", "rdap", 1_791_000_000).is_err());
+    }
+
+    #[test]
+    fn scope_findings_need_their_tests() {
+        use sc_core::scope::ScopeFinding as F;
+        let mut c = case();
+        let t = |s: &str| vec![s.to_string()];
+        assert!(scope(&mut c, "k-1", F::ScopeExceeded, &[], "n", "d").is_err());
+        assert!(scope(&mut c, "k-1", F::ScopeExceeded, &t("S9"), "n", "d").is_err());
+        assert!(scope(&mut c, "k-1", F::InScope, &t("S2"), "n", "d").is_err());
+        assert!(scope(&mut c, "k-1", F::ScopeExceeded, &t("S4"), " ", "d").is_err());
+        scope(
+            &mut c,
+            "k-1",
+            F::ScopeExceeded,
+            &t("s4, S2,S4"),
+            "relays",
+            "d",
+        )
+        .unwrap();
+        assert_eq!(c.scope_finding("k-1").unwrap().tests, ["S2", "S4"]);
+        scope(&mut c, "k-1", F::NotAssessable, &[], "too few records", "d").unwrap();
+        assert_eq!(c.scope_finding("k-1").unwrap().finding, F::NotAssessable);
+        assert_eq!(c.scope_findings.len(), 2, "both stay on record");
+    }
+
+    #[test]
+    fn settings_lengthen_the_naming_lead_and_name_the_admin() {
+        let mut c = case();
+        let s = |n| Settings {
+            naming_days: Some(n),
+            ..Default::default()
+        };
+        assert!(set(&mut c, s(2), "d").is_err());
+        set(&mut c, s(7), "d").unwrap();
+        assert_eq!(c.naming_days, Some(7));
+        set(
+            &mut c,
+            Settings {
+                admin: Some(" Ada ".into()),
+                ..Default::default()
+            },
+            "d",
+        )
+        .unwrap();
+        assert_eq!(c.admin.as_deref(), Some("Ada"));
+        assert!(describe(&mut c, &["nope.example".into()], "a portal", "d").is_err());
+        describe(
+            &mut c,
+            &["portal.example.gov".into()],
+            "a government portal",
+            "d",
+        )
+        .unwrap();
+        assert_eq!(
+            c.endpoints[0].sector.as_deref(),
+            Some("a government portal")
+        );
     }
 
     #[test]

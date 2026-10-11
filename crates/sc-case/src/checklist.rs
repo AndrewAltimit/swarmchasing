@@ -1,19 +1,82 @@
-//! The self-review checklist `notice add` runs before it writes a notice.
-//! One admin decides and publishes, so the checks a second reviewer would
-//! make are made here, against the case record, and printed as a pass/fail
-//! list. Every item must pass; none has an override.
+//! The self-review checklists: [`checklist`] for the indicator notice
+//! `notice add` writes, [`naming_checklist`] for the naming update `notice
+//! update --naming` appends. Each checks the case record and the stage's
+//! draft, and is printed as a pass/fail list. Every item must pass; none
+//! has an override. The last item of each is the second review of the
+//! exact draft ([`crate::review`]).
 //!
-//! The caller gathers the inputs (the case, the notice it is about to add,
-//! the case's analyses under its pinned rules, the draft's hash on disk and
-//! the withholding scan) and [`checklist`] decides.
+//! The caller gathers the inputs (the case, the notice it is about to
+//! write, the case's analyses under its pinned rules, the draft's hash on
+//! disk and the withholding scan) and the checklist decides.
 
 use crate::lead;
 use crate::model::*;
-use crate::notice::{NoticeFile, wording};
+use crate::naming::{self, NamingDraft};
+use crate::notice::{NoticeFile, lint, wording};
 use crate::providers::Directory;
 use crate::report::affected_hosts;
-use sc_core::{Analysis, Claim, Evidence, Provenance, Role, Tier};
+use crate::review;
+use sc_core::scope::ScopeFinding;
+use sc_core::{AgentLevel, Analysis, Claim, Evidence, Provenance, Role, Tier};
 use std::collections::BTreeMap;
+
+/// The indicator notice's clock item.
+pub const CLOCK_ITEM: &str = "the indicator clock has run for each party";
+/// The naming update's clock item.
+pub const NAMING_CLOCK_ITEM: &str =
+    "the naming clock has run for each operator named, or it consented";
+/// The indicator notice's no-names item.
+pub const NO_PARTY_ITEM: &str = "the indicator notice names and locates no affected party";
+/// The item for the word "misaligned".
+pub const MISALIGNED_ITEM: &str =
+    "\"misaligned\" only with a scope-exceeded finding and an admin grade of L3 or higher";
+
+/// What the case allows a text covering clusters `keys` to say: the
+/// admin's scope finding over them (scope exceeded only when every one has
+/// that finding) and the admin's agent grade. These go in the notice's
+/// front matter.
+pub fn framing(c: &Case, keys: &[&str]) -> (Option<ScopeFinding>, Option<AgentLevel>) {
+    let found: Vec<Option<ScopeFinding>> = keys
+        .iter()
+        .map(|k| c.scope_finding(k).map(|d| d.finding))
+        .collect();
+    let scope = if found.iter().all(Option::is_none) {
+        None
+    } else if found
+        .iter()
+        .all(|f| *f == Some(ScopeFinding::ScopeExceeded))
+    {
+        Some(ScopeFinding::ScopeExceeded)
+    } else {
+        Some(
+            found
+                .iter()
+                .flatten()
+                .copied()
+                .find(|f| *f != ScopeFinding::ScopeExceeded)
+                .unwrap_or(ScopeFinding::NotAssessable),
+        )
+    };
+    (scope, c.agent_grade.as_ref().map(|g| g.level))
+}
+
+/// The keys of the clusters a notice over analysis `a` covers.
+pub fn covered(a: &Analysis) -> Vec<&str> {
+    a.clusters
+        .iter()
+        .filter(|cl| cl.tier > Tier::Noise)
+        .map(|cl| cl.key.as_str())
+        .collect()
+}
+
+/// The item for the word "misaligned" in `n`'s own text, against the case.
+fn misaligned_item(c: &Case, n: &NoticeFile, a: &Analysis) -> Item {
+    let (scope, grade) = framing(c, &covered(a));
+    item(
+        MISALIGNED_ITEM,
+        wording::misaligned_problems(&lint::own_text(n), scope, grade),
+    )
+}
 
 /// The cooling-off between writing a notice draft and the re-read that
 /// clears it, in seconds.
@@ -53,7 +116,16 @@ fn item(name: &'static str, problems: Vec<String>) -> Item {
 
 /// Print the checklist as a pass/fail list.
 pub fn print(items: &[Item], out: &mut impl std::io::Write) -> std::io::Result<()> {
-    writeln!(out, "Self-review checklist")?;
+    print_titled("Self-review checklist", items, out)
+}
+
+/// Print a checklist under `title` as a pass/fail list.
+pub fn print_titled(
+    title: &str,
+    items: &[Item],
+    out: &mut impl std::io::Write,
+) -> std::io::Result<()> {
+    writeln!(out, "{title}")?;
     for i in items {
         writeln!(out, "  [{}] {}", if i.ok { "pass" } else { "FAIL" }, i.name)?;
         for d in &i.detail {
@@ -263,28 +335,15 @@ pub fn checklist(x: Inputs) -> Vec<Item> {
         wording::accusation_problems(&text, &affected),
     ));
 
-    let mut p = Vec::new();
-    for h in single_source_hosts(c, x.all) {
-        if c.endpoint(&h)
-            .and_then(|e| e.single_source.as_deref())
-            .is_none()
-        {
-            p.push(format!(
-                "every record on {} is submit-anywhere: naming its operator needs `swarmchase case endpoint {} {h} <state> --single-source-reason \"…\"`, or mark it not-affected",
-                sc_core::defang_host(&h),
-                c.id
-            ));
-        } else if !body.contains(&single_source_line(c, &h)) {
-            p.push(format!(
-                "the notice must say \"{}\" (redraft with `case notice --force`)",
-                single_source_line(c, &h)
-            ));
-        }
+    let mut p = naming::identifies(c, &lint::published_text(n), &[]);
+    if !n.meta.affected.is_empty() {
+        p.push(format!(
+            "the front matter lists {} affected host(s); the indicator notice lists none until a naming update",
+            n.meta.affected.len()
+        ));
     }
-    items.push(item(
-        "single-source endpoints are named only with a logged reason and the fixed wording",
-        p,
-    ));
+    items.push(item(NO_PARTY_ITEM, p));
+    items.push(misaligned_item(c, n, x.public));
 
     let mut p = Vec::new();
     for k in AlternativeKind::ALL {
@@ -339,13 +398,13 @@ pub fn checklist(x: Inputs) -> Vec<Item> {
             .collect(),
     ));
     let mut lead_item = item(
-        "the lead time has passed",
+        CLOCK_ITEM,
         match clock.not_before {
             None => vec!["unknown until every party is accounted for".into()],
             Some(t) if t > x.now => vec![format!(
                 "the notice may be added from {} ({})",
                 show_time(t),
-                lead::summary(c)
+                lead::summary()
             )],
             Some(_) => Vec::new(),
         },
@@ -399,6 +458,138 @@ pub fn checklist(x: Inputs) -> Vec<Item> {
         p,
     ));
     items.push(item("the withholding scan passes", x.withholding));
+    items.push(review::item(c, Stage::Indicators, x.draft_sha));
+    items
+}
+
+/// The single-source item for the hosts a naming update names: each needs
+/// the admin's logged reason and the fixed wording in `text`.
+fn single_source_item(c: &Case, a: &Analysis, hosts: &[String], text: &str) -> Item {
+    let mut p = Vec::new();
+    for h in single_source_hosts(c, a)
+        .into_iter()
+        .filter(|h| hosts.iter().any(|x| x.eq_ignore_ascii_case(h)))
+    {
+        if c.endpoint(&h)
+            .and_then(|e| e.single_source.as_deref())
+            .is_none()
+        {
+            p.push(format!(
+                "every record on {} is submit-anywhere: naming its operator needs `swarmchase case endpoint {} {h} <state> --single-source-reason \"…\"`, or mark it not-affected",
+                sc_core::defang_host(&h),
+                c.id
+            ));
+        } else if !text.contains(&single_source_line(c, &h)) {
+            p.push(format!(
+                "the update must say \"{}\" (redraft with `case notice {} --naming --force`)",
+                single_source_line(c, &h),
+                c.id
+            ));
+        }
+    }
+    item(
+        "single-source endpoints are named only with a logged reason and the fixed wording",
+        p,
+    )
+}
+
+/// What the naming checklist is decided on.
+pub struct NamingInputs<'a> {
+    pub case: &'a Case,
+    /// The published notice with the naming update appended and its hosts
+    /// added to `affected`.
+    pub notice: &'a NoticeFile,
+    /// The naming draft the update comes from.
+    pub draft: &'a NamingDraft,
+    /// The case's analysis over all its records, under its pinned rules.
+    pub all: &'a Analysis,
+    /// The analysis of what the notice may use ([`crate::Scope::Public`]).
+    pub public: &'a Analysis,
+    /// The SHA-256 of the naming draft as it is on disk.
+    pub draft_sha: Option<&'a str>,
+    /// What the withholding scan found in the notice with the update.
+    pub withholding: Vec<String>,
+    pub now: i64,
+}
+
+/// The checklist for a naming update.
+pub fn naming_checklist(x: NamingInputs) -> Vec<Item> {
+    let c = x.case;
+    let hosts = &x.draft.hosts;
+    let mut items = Vec::new();
+    items.push(item(
+        "the indicator notice was added",
+        if c.notice_added() {
+            Vec::new()
+        } else {
+            vec![format!(
+                "add the indicator notice first: `swarmchase notice add {}`",
+                c.id
+            )]
+        },
+    ));
+    let ops = naming::operators(c);
+    let mut p = Vec::new();
+    let mut clock = Vec::new();
+    for h in hosts {
+        let d = sc_core::defang_host(h);
+        match ops.iter().find(|o| o.host.eq_ignore_ascii_case(h)) {
+            None => p.push(format!(
+                "{d} is not an affected endpoint of the case (classify it compromised, targeted or historical)"
+            )),
+            Some(o) if o.named.is_some() => p.push(format!("the operator of {d} is already named")),
+            Some(o) if o.withheld.is_some() => p.push(format!(
+                "the operator of {d} is not to be named ({})",
+                o.withheld.as_deref().unwrap_or_default()
+            )),
+            Some(o) if !o.may_name(x.now) => clock.push(match o.not_before {
+                Some(t) => format!(
+                    "the operator of {d} may be named from {} ({} working days), or with its consent (`swarmchase case consent {} --party {h} --note \"…\"`)",
+                    show_time(t),
+                    o.days,
+                    c.id
+                ),
+                None => format!(
+                    "no report to the operator of {d} is recorded, so its naming clock has not started"
+                ),
+            }),
+            Some(_) => {}
+        }
+    }
+    items.push(item(
+        "each operator named is affected, not yet named and not withheld",
+        p,
+    ));
+    items.push(item(NAMING_CLOCK_ITEM, clock));
+    items.push(item(
+        "the notice names no other affected party",
+        naming::identifies(c, &lint::published_text(x.notice), &x.notice.meta.affected),
+    ));
+
+    let text = &x.draft.text;
+    let compromised: Vec<String> = c
+        .endpoints
+        .iter()
+        .filter(|e| e.state == EndpointState::Compromised)
+        .filter(|e| e.basis.as_deref().is_some_and(|b| !b.trim().is_empty()))
+        .map(|e| e.host.clone())
+        .collect();
+    let others: Vec<String> = affected_hosts(c)
+        .into_iter()
+        .filter(|h| !compromised.contains(h))
+        .collect();
+    items.push(item(
+        "\"compromised\" only for endpoints classified so with a recorded basis",
+        wording::compromised_problems(text, &compromised, &others),
+    ));
+    items.push(item(
+        "each named organisation is described as targeted or affected",
+        wording::accusation_problems(text, hosts),
+    ));
+    items.push(single_source_item(c, x.all, hosts, text));
+    items.push(misaligned_item(c, x.notice, x.public));
+    items.push(item("the withholding scan passes", x.withholding));
+    items.push(review::item(c, Stage::Naming, x.draft_sha));
     items
 }
 

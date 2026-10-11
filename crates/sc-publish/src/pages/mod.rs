@@ -562,6 +562,8 @@ mod tests {
                 providers: vec![P.into()],
                 affected: vec![format!("a.example\"{P}")],
                 sector: None,
+                scope: None,
+                agent_grade: None,
                 rules_version: P.into(),
                 toolkit: P.into(),
                 updates: vec![

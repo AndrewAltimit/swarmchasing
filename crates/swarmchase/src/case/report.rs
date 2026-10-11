@@ -24,7 +24,7 @@ pub(crate) fn report(
         Audience::Provider | Audience::Affected => format!(
             "{}\n\n{}",
             md.trim_end(),
-            sc_case::lead::publication_section(&c, chrono::Utc::now().timestamp())
+            sc_case::lead::publication_section(&c, to, chrono::Utc::now().timestamp())
         ),
         _ => md,
     })
@@ -100,7 +100,7 @@ pub(crate) fn draft(
         crate::bundle::git_commit(),
     )?;
     let subject = match audience {
-        Audience::Provider => format!("Suspected misaligned agent activity: {} [{id}]", c.title),
+        Audience::Provider => format!("Suspected AI agent activity: {} [{id}]", c.title),
         _ => format!(
             "Automated agent activity targeting your systems: {} [{id}]",
             c.title
