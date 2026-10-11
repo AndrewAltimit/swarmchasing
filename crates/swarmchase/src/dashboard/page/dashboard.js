@@ -272,8 +272,20 @@ function reviewCard(r) {
     progress([{ cls: "agent", n: lw.agent }, { cls: "benign", n: lw.benign }, { cls: "unsure", n: lw.unsure }],
       total, `${done} of ${total} flagged records in the window labelled`),
     el("p.small.muted", `All time: ${lt.agent || 0} agent, ${lt.benign || 0} benign, ${lt.unsure || 0} unsure in the default review file; ${r.reviewed_any_labeller} records reviewed by any labeller.`),
+    belowRule(r.agent_below_rule),
     command(r.command, "review page"),
     el("details", el("summary.small", "Counts and agreement"), command(r.stats_command, "review stats")));
+}
+
+// Agent labels below L2 are exceptions to the labelling rule: counted apart,
+// so the agent total above is never read as ordinary agent labels alone.
+function belowRule(b) {
+  if (!b || !b.total) return null;
+  const parts = [`${b.with_reason} with a reason noted`];
+  if (b.graded_now) parts.push(`${b.graded_now} graded now, their lines storing no grade`);
+  return el("div.callout.warn.below-rule", { role: "note" },
+    el("p.small", icon("alert"), " ", el("b", `${plural(b.total, "agent label")} below L2`),
+      ` of ${b.agents}: exceptions to the labelling rule (agent needs L2 or higher). ${parts.join("; ")}. The review page and review stats show each with its grade.`));
 }
 
 function caseCard(c) {

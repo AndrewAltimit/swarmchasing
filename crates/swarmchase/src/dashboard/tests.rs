@@ -220,6 +220,18 @@ pub fn write_fixture(data: &Path) {
                 rules_version: a1.rules_version.clone(),
                 suggested: None,
                 tuned: false,
+                // The agent label was saved below L2, an exception.
+                grade: (label == "agent").then(|| crate::review::LabelGrade {
+                    code: Some("L1".into()),
+                    label: Some("self-described".into()),
+                    basis: "cluster".into(),
+                    cluster: None,
+                    signals: Vec::new(),
+                    counter: Vec::new(),
+                    caps: Vec::new(),
+                    agent_allowed: false,
+                    rule: Some(crate::review::BELOW_L2.into()),
+                }),
             },
         );
     }
@@ -331,6 +343,9 @@ fn overview_answers_new_health_waiting_and_next() {
     assert!(r["unreviewed"].as_u64().unwrap() > 0, "{r}");
     assert_eq!(r["labelled_total"]["agent"], 1);
     assert_eq!(r["labelled_total"]["benign"], 1);
+    assert_eq!(r["agent_below_rule"]["agents"], 1, "{r}");
+    assert_eq!(r["agent_below_rule"]["total"], 1, "{r}");
+    assert_eq!(r["agent_below_rule"]["graded_now"], 0, "{r}");
     assert!(
         r["command"]
             .as_str()

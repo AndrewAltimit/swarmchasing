@@ -137,6 +137,8 @@ body { overflow: hidden; }
 
 @media (max-width: 1360px) {
   .tally .chip.outline { display: none; }
+  /* Room for the agent-below-L2 counter: the bar's label says the same. */
+  .pct { display: none; }
 }
 @media (max-width: 1180px) {
   .pct, .topbar .meta { display: none; }
@@ -195,7 +197,7 @@ body { overflow: hidden; }
 .chip.rulebreak { cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 650; color: var(--agent); background: var(--agent-soft); border-color: var(--agent); }
 .chip.rulebreak .icon { width: 13px; height: 13px; }
 
-/* A label the rule does not allow here asks twice; the button says so. */
+/* A label the rule does not allow here opens a confirmation first; the button says so. */
 .btn.verdict.gated { border-style: dashed; }
 .gate { white-space: nowrap; font: 650 var(--fs-xs)/1 var(--mono); padding: 2px 4px; border-radius: 4px; color: var(--ink-2); background: var(--sunken); }
 .btn.verdict.on .gate { color: inherit; background: transparent; }
@@ -239,6 +241,21 @@ body { overflow: hidden; }
   .tri-panel { grid-template-columns: 1fr; }
   .vrest kbd { display: none; }
   .ss-grid { grid-template-columns: 1fr; }
+}
+/* Agent labels below L2: exceptions, always shown with their grade. */
+.chip.agent.exception { border: 1px dashed var(--agent); }
+.exception-box { display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--agent-soft); border: 1px dashed color-mix(in srgb, var(--agent) 55%, transparent); }
+.exception-box p { margin: 0; overflow-wrap: anywhere; }
+.exception-box .grade { font-size: var(--fs-xs); padding: 2px 5px; }
+.below-confirm { display: grid; gap: 10px; }
+.below-confirm p { margin: 0; }
+.below-grade { padding: 10px 12px; box-shadow: none; }
+.below-grade p { margin: 0 0 4px; }
+.below-field { display: grid; gap: 4px; }
+.below-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.btn.below-agent { color: var(--agent); border-color: color-mix(in srgb, var(--agent) 55%, var(--line)); }
+@media (max-width: 480px) {
+  .below-actions .btn { flex: 1 1 100%; justify-content: center; }
 }
 .tri-field.wide { grid-column: 1 / -1; }
 .tri-panel .tri-actions { grid-column: 1 / -1; }

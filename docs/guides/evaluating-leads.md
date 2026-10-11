@@ -30,6 +30,20 @@ A label does not say whether the requests did harm, whether they stayed within t
 
 A group is a cluster, or records of one shape when unclustered. Records grouped by shape are not linked and may come from different senders: label a record on its own when it differs.
 
+## Exceptions to the labelling rule
+
+The rule is that `agent` needs an agent grade of L2 or higher. The grade reads only what the records show, so it can miss what a reviewer knows from elsewhere: the same run tag in a cluster graded L3, a published write-up of the run, an operator's log of the same requests. Then an agent label below L2 is a justified exception, and the tools allow it.
+
+An exception is never an ordinary agent label. Every label is saved with the grade it was judged against, and an agent label below L2 is marked `below_l2`. The review page, `review --stats`, `review agreement`, `eval` and the dashboard each show it with its grade and the reason given.
+
+To record one:
+
+1. Label agent as usual. On the page a dialog shows the grade, its signals and caps and the rule, and offers unsure instead. In the terminal the session prints the same and asks for a reason.
+2. Give the reason. It is saved as the label's note: say what the grade does not capture and where that evidence is (a cluster id, a case, a report), without quoting urlquery content.
+3. Expect it to be counted apart. `eval` prints precision with and without the exceptions, so they never carry a precision estimate alone.
+
+Without a reason worth writing down, the label is unsure.
+
 ## What each kind of evidence shows
 
 | Kind | Shows | Does not show |

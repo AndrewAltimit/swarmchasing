@@ -415,6 +415,7 @@ mod tests {
                     rules_version: a.rules_version.clone(),
                     suggested: None,
                     tuned: false,
+                    grade: None,
                 },
             );
         }

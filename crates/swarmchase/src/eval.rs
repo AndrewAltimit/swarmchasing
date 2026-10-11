@@ -13,6 +13,7 @@ pub mod bench;
 pub mod control;
 pub mod repro;
 
+use crate::review::LabelGrade;
 use anyhow::{Context, Result, bail};
 use sc_core::eval::baseline::Baseline;
 use sc_core::eval::control::{ControlRow, ControlSummary};
@@ -794,6 +795,151 @@ pub fn check_coverage(c: &Coverage, allow: &AllowList) -> Vec<String> {
     coverage_failures(c, allow)
 }
 
+/// The admin's `agent` labels in the label files: lines `review` wrote
+/// (they carry `reviewed_at`), by id, with the grade stored with each, or
+/// `None` for a line written before grades were stored. Other label lines
+/// (the evaluation set's, a dataset's) are not admin review labels and are
+/// left out.
+pub fn admin_agent_lines(
+    files: &[PathBuf],
+) -> Result<std::collections::BTreeMap<String, Option<LabelGrade>>> {
+    let mut out = std::collections::BTreeMap::new();
+    for p in files {
+        let text =
+            std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
+        out.extend(admin_agent_text(&text));
+    }
+    Ok(out)
+}
+
+fn admin_agent_text(text: &str) -> Vec<(String, Option<LabelGrade>)> {
+    let mut out = Vec::new();
+    for line in text.lines().map(str::trim).filter(|l| l.starts_with('{')) {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let s = |k: &str| v.get(k).and_then(|x| x.as_str());
+        let (Some(id), Some("agent"), Some(_)) = (s("id"), s("label"), s("reviewed_at")) else {
+            continue;
+        };
+        let grade = v
+            .get("grade")
+            .and_then(|g| serde_json::from_value::<LabelGrade>(g.clone()).ok());
+        out.push((id.to_string(), grade));
+    }
+    out
+}
+
+/// The admin agent labels below the labelling rule among the labels eval
+/// scores, by where their grade came from.
+#[derive(Debug, Default, PartialEq)]
+pub struct BelowRule {
+    /// Admin agent labels in the label set.
+    pub agents: usize,
+    /// Below L2 by the grade stored with the label.
+    pub stored: Vec<String>,
+    /// Below L2 by the grade now: the line stores none.
+    pub now: Vec<String>,
+    /// Lines storing no grade whose record is not in this analysis.
+    pub unknown: usize,
+}
+
+impl BelowRule {
+    pub fn ids(&self) -> impl Iterator<Item = &String> {
+        self.stored.iter().chain(&self.now)
+    }
+}
+
+/// Which admin agent labels in `labels` are below L2: by the grade stored
+/// with each, else by the grade in `a`.
+pub fn below_rule(
+    a: &sc_core::Analysis,
+    labels: &LabelSet,
+    lines: &std::collections::BTreeMap<String, Option<LabelGrade>>,
+) -> BelowRule {
+    let mut idx = std::collections::HashMap::new();
+    for (i, r) in a.results.iter().enumerate() {
+        idx.entry(r.obs.id.as_str()).or_insert(i);
+    }
+    let mut b = BelowRule::default();
+    for (id, grade) in lines {
+        if labels
+            .labels
+            .get(id)
+            .is_none_or(|l| l.label != sc_core::Label::Agent)
+        {
+            continue;
+        }
+        b.agents += 1;
+        match grade {
+            Some(g) if g.below_rule() || !g.agent_allowed => b.stored.push(id.clone()),
+            Some(_) => {}
+            None => match idx.get(id.as_str()) {
+                Some(&i) if LabelGrade::of(a, i, "agent").below_rule() => b.now.push(id.clone()),
+                Some(_) => {}
+                None => b.unknown += 1,
+            },
+        }
+    }
+    b
+}
+
+/// The labels without the admin agent labels below L2: what precision and
+/// recall read when those exceptions are left unlabelled.
+pub fn without_below_rule(labels: &LabelSet, b: &BelowRule) -> LabelSet {
+    let mut l = LabelSet {
+        labels: labels.labels.clone(),
+        skipped: labels.skipped,
+        actors: labels.actors.clone(),
+        provenance: labels.provenance.clone(),
+        warnings: Vec::new(),
+    };
+    for id in b.ids() {
+        l.labels.remove(id);
+    }
+    l
+}
+
+/// The admin agent labels below L2, and precision and recall (record unit,
+/// all records) with them and without them.
+pub fn print_below_rule(b: &BelowRule, with: &Summary, without: Option<&Summary>) {
+    let n = b.stored.len() + b.now.len();
+    println!(
+        "\nadmin agent labels below the labelling rule (agent needs L2 or higher): {n} of {} admin agent label(s) · {} by the grade stored with the label · {} by the grade now, their lines storing none{}",
+        b.agents,
+        b.stored.len(),
+        b.now.len(),
+        if b.unknown > 0 {
+            format!(
+                " · {} storing none with no record in this analysis, not judged",
+                b.unknown
+            )
+        } else {
+            String::new()
+        }
+    );
+    let Some(without) = without.filter(|_| n > 0) else {
+        return;
+    };
+    println!(
+        "  each is an exception the admin chose against the rule; without them (left unlabelled), record unit:"
+    );
+    println!(
+        "  {:<22} {:>24}  {:>24}  {:>24}  {:>24}",
+        "threshold", "precision with", "precision without", "recall with", "recall without"
+    );
+    for (t, u) in with.tiers.iter().zip(&without.tiers) {
+        println!(
+            "  {:<22} {:>24}  {:>24}  {:>24}  {:>24}",
+            format!("{} or above", t.tier.label()),
+            ci(&t.precision),
+            ci(&u.precision),
+            ci(&t.recall),
+            ci(&u.recall)
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -828,6 +974,71 @@ mod tests {
         let fails = check(&s, &f);
         assert_eq!(fails.len(), 1, "{fails:?}");
         assert!(fails[0].contains("lower bound"), "{fails:?}");
+    }
+
+    #[test]
+    fn admin_agent_labels_below_the_rule_are_counted_and_left_out() {
+        let o = |id: &str, url: &str| sc_core::Observation {
+            id: id.into(),
+            source: "wayback".into(),
+            ts: 1000,
+            url: url.into(),
+            ..Default::default()
+        };
+        let a = sc_core::analyze(
+            vec![
+                // Payloads only: below L2.
+                o(
+                    "low1",
+                    "https://r.jina.ai/https://t.example/?q=1%20UNION%20SELECT%20null--",
+                ),
+                o(
+                    "low2",
+                    "https://r.jina.ai/https://u.example/?q=1%20OR%201=1",
+                ),
+                // Placeholder residue: L2.
+                o(
+                    "l2",
+                    "https://w.example/login?user=admin%27--&key=YOUR_API_KEY",
+                ),
+                o("ben", "https://v.example/?q=1%20OR%201=1"),
+                o("data", "https://x.example/?q=1%20UNION%20SELECT%20null--"),
+            ],
+            &sc_core::Rules::default_rules(),
+        );
+        let idx = |id: &str| a.results.iter().position(|r| r.obs.id == id).unwrap();
+        let stored = serde_json::to_string(&LabelGrade::of(&a, idx("low1"), "agent")).unwrap();
+        assert!(stored.contains("below_l2"), "{stored}");
+        // low1 stores its grade; low2 is an older line, graded now; l2 is
+        // allowed; `data` is an evaluation-set label, not a review line.
+        let text = format!(
+            "{{\"id\":\"low1\",\"label\":\"agent\",\"reviewed_at\":\"t\",\"grade\":{stored}}}\n\
+             {{\"id\":\"low2\",\"label\":\"agent\",\"reviewed_at\":\"t\"}}\n\
+             {{\"id\":\"l2\",\"label\":\"agent\",\"reviewed_at\":\"t\"}}\n\
+             {{\"id\":\"ben\",\"label\":\"benign\",\"reviewed_at\":\"t\"}}\n\
+             {{\"id\":\"data\",\"label\":\"agent\"}}\n\
+             {{\"id\":\"gone\",\"label\":\"agent\",\"reviewed_at\":\"t\"}}\n"
+        );
+        let labels = parse_labels(&text);
+        let lines: std::collections::BTreeMap<_, _> = admin_agent_text(&text).into_iter().collect();
+        assert_eq!(lines.len(), 4, "admin agent lines only: {lines:?}");
+        assert!(!lines.contains_key("data"));
+        let b = below_rule(&a, &labels, &lines);
+        assert_eq!(b.agents, 4);
+        assert_eq!(b.stored, ["low1"]);
+        assert_eq!(b.now, ["low2"]);
+        assert_eq!(b.unknown, 1, "no record for `gone`");
+
+        let (_, _, with) = sc_core::summarize(&a, &labels, sc_core::DEFAULT_RULES, "").unwrap();
+        let l2 = without_below_rule(&labels, &b);
+        assert_eq!(l2.labels.len(), labels.labels.len() - 2);
+        let (_, _, without) = sc_core::summarize(&a, &l2, sc_core::DEFAULT_RULES, "").unwrap();
+        // The flagged agents lose the two exceptions; the benign flag stays.
+        let (t, u) = (&with.tiers[0], &without.tiers[0]);
+        assert_eq!(u.tp + 2, t.tp, "{t:?} {u:?}");
+        assert_eq!(u.fp, t.fp);
+        assert!(u.precision.value < t.precision.value);
+        print_below_rule(&b, &with, Some(&without));
     }
 
     #[test]
