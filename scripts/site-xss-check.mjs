@@ -13,7 +13,9 @@
 // hostile claims, and that declared testing reaches no view and no draft but
 // an internal one; the rules editor and the
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
-// defang on the tools page.
+// defang on the tools page. It also checks layout: no page scrolls sideways
+// at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
+// one column, and the theme toggle cycles system, light and dark.
 //
 // Usage (after scripts/ci/build-site.sh, which builds site/pkg):
 //     node scripts/site-xss-check.mjs [path/to/chrome]
@@ -296,6 +298,61 @@ try {
     await audit(p || "/");
   }
   stats.pages = pages.length + 2;
+
+  // Layout: at 390 px no page scrolls sideways and every nav menu opens
+  // inside the viewport; at 1440 px a menu is one column of full-width
+  // items. Then the theme toggle cycles system, light, dark, system.
+  const menuBoxes = `(async () => {
+    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const out = [];
+    for (const d of document.querySelectorAll("[data-nav-menu]")) {
+      d.open = true;
+      await frame();
+      const r = d.querySelector(".nav-menu").getBoundingClientRect();
+      const items = [...d.querySelectorAll(".nav-menu > li")].map((li) => li.getBoundingClientRect());
+      out.push({ name: d.querySelector("summary").textContent, left: r.left, right: r.right, top: r.top, narrowest: Math.min(...items.map((i) => i.width)), columns: new Set(items.map((i) => Math.round(i.left))).size });
+      d.open = false;
+    }
+    return { vw: document.documentElement.clientWidth, vh: innerHeight, out };
+  })()`;
+  const viewport = (width, height) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+  await viewport(390, 844);
+  let wide = 0;
+  for (const p of [...pages, "404.html", "analyze/#try=example"]) {
+    await open(p, p.startsWith("analyze") ? `document.querySelectorAll("table.records tbody tr").length > 1` : undefined);
+    const over = await run(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);
+    if (over > 0) failures.push(`${p || "/"}: scrolls sideways by ${over}px at 390 px`);
+    wide++;
+  }
+  stats.narrowPages = wide;
+  for (const [w, h] of [[390, 844], [1440, 900]]) {
+    await viewport(w, h);
+    for (const p of ["", "docs/"]) {
+      await open(p);
+      const m = await run(menuBoxes);
+      if (!m.out.length) failures.push(`${p || "/"}: no nav menus found at ${w} px`);
+      for (const b of m.out) {
+        const at = `${p || "/"} at ${w} px: the ${b.name} menu`;
+        if (b.left < 0 || b.right > m.vw + 0.5) failures.push(`${at} spills sideways (${Math.round(b.left)} to ${Math.round(b.right)} of ${m.vw})`);
+        if (b.top < 0 || b.top > m.vh - 120) failures.push(`${at} opens off screen (top ${Math.round(b.top)} of ${m.vh})`);
+        if (b.columns !== 1 || b.narrowest < 200) failures.push(`${at} is not one column of full-width items (${b.columns} columns, narrowest ${Math.round(b.narrowest)}px)`);
+      }
+    }
+  }
+  await send("Emulation.clearDeviceMetricsOverride");
+  await open("");
+  const themes = await run(`(() => {
+    const b = document.querySelector("[data-theme-toggle]");
+    const seen = [];
+    for (let i = 0; i < 4; i++) {
+      seen.push((document.documentElement.dataset.theme ?? "system") + "/" + (localStorage.getItem("swarmchase.theme") ?? "-") + "/" + b.dataset.mode);
+      b.click();
+    }
+    return seen.join(" ");
+  })()`);
+  if (themes !== "system/-/system light/light/light dark/dark/dark system/-/system")
+    failures.push(`the theme toggle did not cycle system, light, dark: ${themes}`);
+  await audit("layout and theme");
 
   // The hostile notice: its page, and its row on the index.
   await open(`notices/${nid}/`);
