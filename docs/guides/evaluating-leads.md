@@ -73,6 +73,8 @@ A suggestion comes from a language model that read the same defanged text the re
 - Decide first, then compare. On the page, blind review (`h`) hides every suggestion until the group is labelled, and holds `s` (accept suggestion) until then.
 - Read the model's reason against the evidence. A common model error is reading payloads or a vendor name as agent evidence.
 - The Disagree tab lists groups where the label and the suggestion differ. Neither side is right by default.
+- A suggestion follows the same rule as a label: `agent` needs a grade of L2 or higher. One that breaks it shows as `unsure`.
+- `review agreement` measures each model against your labels, by grade, and `review misfires` turns benign labels into candidate hard negatives ([AI assistance](ai-assistance.md)).
 
 ## Worked examples
 

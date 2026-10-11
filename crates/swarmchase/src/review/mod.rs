@@ -38,7 +38,11 @@
 //! `review --serve` ([`serve`]) shows the same queue as a page on this
 //! machine, grouped by cluster or shape, and saves to the same file.
 //! `review --export-hosted` ([`hosted`]) writes the queue's public records
-//! for a hosted model, whose suggestions the page shows.
+//! for a hosted model, whose suggestions the page shows; `review
+//! check-suggestions` validates a suggestions file against its export.
+//! `review agreement` ([`agreement`]) compares the admin's labels with the
+//! suggestions, and `review misfires` ([`misfires`]) lists rules whose
+//! reviewed hits are mostly benign, with candidate hard negatives.
 //!
 //! `review sample` ([`sample`]) writes a stratified, seeded sample of the
 //! store as a queue file, and `review <queue> --all` queues every record in
@@ -49,8 +53,10 @@
 //! reports the same bound for the current rules. `review tuned <id>...`
 //! marks records looked at while changing a rule, which leave the baseline.
 
+pub mod agreement;
 pub mod context;
 pub mod hosted;
+pub mod misfires;
 pub mod sample;
 pub mod serve;
 
@@ -75,6 +81,17 @@ pub enum ReviewCmd {
     /// Mark reviewed records as tuned on: looked at while changing a rule.
     /// `eval` leaves them out of the benign baseline.
     Tuned(TunedArgs),
+    /// Check a suggestions file against the export it answers: format,
+    /// ids, the labelling rule (agent needs L2 or higher), recorded grades
+    /// and misfire rule ids.
+    CheckSuggestions(hosted::CheckArgs),
+    /// Compare the admin's labels with model suggestions: confusion matrix
+    /// per model and per agent grade, and suggestions that break the
+    /// labelling rule.
+    Agreement(agreement::AgreementArgs),
+    /// Rules whose reviewed hits are mostly benign, with candidate hard
+    /// negatives written to the data directory.
+    Misfires(misfires::MisfiresArgs),
 }
 
 #[derive(clap::Args)]
@@ -147,12 +164,19 @@ pub struct ReviewArgs {
     /// data directory.
     #[arg(long, value_name = "FILE", conflicts_with_all = ["list", "stats", "serve", "suggest"])]
     export_hosted: Option<PathBuf>,
+    /// With `--export-hosted`: split the export into numbered files of
+    /// about this many records, each review group whole, one per subagent.
+    #[arg(long, value_name = "N", requires = "export_hosted")]
+    batch_size: Option<usize>,
 }
 
 pub fn run(args: ReviewArgs) -> Result<()> {
     match args.cmd {
         Some(ReviewCmd::Sample(s)) => return sample::run(s),
         Some(ReviewCmd::Tuned(t)) => return mark_tuned(&t),
+        Some(ReviewCmd::CheckSuggestions(c)) => return hosted::check(&c),
+        Some(ReviewCmd::Agreement(g)) => return agreement::run(&g),
+        Some(ReviewCmd::Misfires(m)) => return misfires::run(&m),
         None => {}
     }
     let data = &args.data;
@@ -198,7 +222,7 @@ pub fn run(args: ReviewArgs) -> Result<()> {
         queue(&a, &done, min, args.unflagged)
     };
     if let Some(out) = &args.export_hosted {
-        return hosted::export(&a, &items, data, out);
+        return hosted::export(&a, &items, data, out, args.batch_size);
     }
     println!(
         "{} records · {} reviewed before · {} in the queue ({} flagged, {} unflagged sample, {} baseline sample)",
@@ -241,6 +265,12 @@ pub fn run(args: ReviewArgs) -> Result<()> {
                 String::new()
             }
         );
+        if loaded.demoted > 0 {
+            println!(
+                "{} agent suggestion(s) on records graded below L2 are shown as unsure, the most the labelling rule allows (`review agreement` lists them)",
+                loaded.demoted
+            );
+        }
         println!("labels go to {}", store.path.display());
         let control = context::Control::find(args.control.as_deref(), data)?;
         match &control {
