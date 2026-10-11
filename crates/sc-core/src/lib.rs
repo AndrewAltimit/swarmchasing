@@ -36,6 +36,7 @@ pub mod stamp;
 pub mod swarm;
 pub mod timing;
 pub mod urlquery;
+mod weburl;
 
 pub use agentness::{AgentAssessment, AgentLevel, AgentSignal, GradeDecision};
 pub use analyze::{Analysis, Cluster, KnowledgeHints, ObsResult, Origin, analyze};
