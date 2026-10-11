@@ -24,7 +24,7 @@ pub(super) struct Observed {
 
 pub(super) fn observe(a: &Analysis, rules: &Rules, h: &Head, o: &Options) -> Observed {
     let public = o.audience == Audience::Public;
-    let mut view = PublicView::new(a, o.exposed);
+    let mut view = PublicView::new(a, o.exposed).with_affected(Some(o.affected));
     let kinds: BTreeMap<&str, IndicatorKind> = rules
         .set
         .rules
@@ -66,16 +66,21 @@ pub(super) fn observe(a: &Analysis, rules: &Rules, h: &Head, o: &Options) -> Obs
             if let Some(u) = shown.as_deref().filter(|u| !u.is_empty()) {
                 refs.insert(add_sco(scos, "url", json!({ "value": u })));
             }
+            // A public export names the hosts the notice names, and no
+            // other: not the domain, nor the network a scanner reached it on.
+            let unnamed = public && r.target_host.as_deref().is_some_and(|h| !view.named(h));
             if let Some(host) = r
                 .target_host
                 .as_deref()
                 .filter(|h| h.parse::<IpAddr>().is_err())
+                .filter(|_| !unnamed)
             {
                 refs.insert(add_sco(scos, "domain-name", json!({ "value": host })));
             }
             // The network observed in the record: the client's, or the
             // target's where a scan service recorded only that.
-            if let Some(asn) = r.obs.asn.or(r.obs.target_asn) {
+            let target_asn = r.obs.target_asn.filter(|_| !unnamed);
+            if let Some(asn) = r.obs.asn.or(target_asn) {
                 let mut v = json!({ "number": asn });
                 if let Some(n) = asn_names.get(&asn).copied().or_else(|| rules.asn_org(asn)) {
                     v["name"] = json!(n);
