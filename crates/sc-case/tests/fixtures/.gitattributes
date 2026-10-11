@@ -1,0 +1,2 @@
+# Bundles are checked byte for byte against their manifest.
+bundle-v1/** -text

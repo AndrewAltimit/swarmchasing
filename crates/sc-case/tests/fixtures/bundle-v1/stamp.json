@@ -1,0 +1,33 @@
+{
+  "case": "fx-1",
+  "generated": "2026-10-11",
+  "toolkit_version": "0.1.0",
+  "rules_version": "2026-10-10",
+  "records": 4,
+  "flagged": {
+    "r0": "significant",
+    "r1": "significant",
+    "r2": "significant",
+    "r3": "significant"
+  },
+  "clusters": [
+    {
+      "tier": "significant",
+      "members": [
+        "r0",
+        "r1",
+        "r2",
+        "r3"
+      ]
+    }
+  ],
+  "method": "SC-FM 1.0",
+  "eval": {
+    "rules_version": "2026-10-10",
+    "labelled": 194,
+    "suggestive_precision": 1.0,
+    "suggestive_recall": 0.9487179487179487,
+    "significant_precision": 1.0,
+    "significant_recall": 0.6068376068376068
+  }
+}
