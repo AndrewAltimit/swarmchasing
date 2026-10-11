@@ -36,15 +36,51 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
 | Topic | Policy |
 |---|---|
 | **Publication** | Every confirmed incident gets a public notice on the site, one page per incident. Updates are appended as dated entries, and the page shows its status: active, contained or historical. |
-| **Timing** | No embargo. Swarms are active incidents. Reports to the AI provider and the affected operators and the public notice go out together, as soon as the admin judges the evidence sufficient. |
+| **Timing** | Reports go first; the notice follows on a fixed lead time: 0 hours for the AI provider, 4 to 12 hours for the operator of a targeted endpoint, 24 hours for the operator of a compromised one. Nothing a recipient says extends it. It is not an embargo. See [Lead times](#lead-times). |
 | **Admin gate** | Tools and agents draft reports, find contacts and prepare notices. Only the admin decides when evidence is sufficient, which endpoints are compromised or targeted, and sends reports and publishes notices. |
+| **Self-review** | One admin decides and publishes, so every notice passes a written checklist and a re-read at least an hour after drafting. See [Self-review](#self-review). |
 | **Channels** | Email is preferred. When an organisation has no email contact, the admin uses its web form or CERT portal. |
-| **Naming** | Public notices name the affected organisations. |
+| **Naming** | Public notices name the affected organisations as targets. A provider below shared identifiers is named only as the party that was notified. See [Naming](#naming). |
 | **What notices withhold** | Anything that lets a reader take over or reuse the swarm's channels, or exploit an unfixed weakness. See [What notices withhold](#what-notices-withhold). |
 | **Corrections** | Notices are versioned. Corrections and retractions are appended as dated updates on the notice and in the feed. Earlier entries are never rewritten. |
 | **Right of reply** | A provider's or affected operator's statement is appended verbatim to the notice as a dated update when they ask. It never delays publication. See [for-operators.md](guides/for-operators.md#right-of-reply-and-corrections). |
-| **Authorised testing** | A cluster that declares itself an authorised red-team or research evaluation is handled as a normal incident, and its declared owner is contacted at the same time as the provider. If the owner confirms it was authorised and in scope, the notice is published as "authorised test, closed". It is not withheld. |
+| **Authorised testing** | A cluster that declares itself an authorised red-team or research evaluation is handled as a normal incident, and its declared owner is contacted with the provider. If the owner confirms it was authorised and in scope, the notice is published as "authorised test, closed". It is not withheld. |
 | **Independence** | We work independently and do not depend on other groups or services for permission to publish. |
+
+### Lead times
+
+The public notice follows the reports on a fixed clock. Each party's clock starts at the latest report sent to it:
+
+| Party | Lead time |
+|---|---|
+| The AI provider | 0 hours |
+| The operator of a targeted or historical endpoint | 4 to 12 hours; 6 unless the admin sets the case otherwise |
+| The operator of a compromised endpoint | 24 hours |
+
+The notice may be published once every party's clock has run. The lead time gives an operator hours to check its logs and patch before the notice is public. It is short because a swarm is an active incident: others it targets can protect themselves only once the notice is out.
+
+- **No extension.** Nothing a recipient says, asks or offers lengthens the clock, and the admin cannot set it beyond these bounds. The tooling has no override.
+- **Not an embargo.** The clock is fixed in advance, attached to no condition and never negotiated. Recipients are told the publication time in their report.
+- **No contact.** When no contact can be found for a party, the admin records what was tried. That party does not hold the notice back, and the notice says contact was attempted.
+- **Replies.** A statement sent for publication is appended verbatim to the notice as a dated update. It never moves the time.
+
+### Self-review
+
+No second person reviews a notice. Before the tooling writes one, every item of a checklist passes, recorded in the case:
+
+- every attribution claim states its layer, label and tag, and no likelihood word is stronger than its label allows;
+- each named organisation is described as targeted or affected; "compromised" is used only for an endpoint classified compromised on a recorded basis beyond the requests it received;
+- each alternative explanation (authorised test, honeypot, research scanner, spoofed self-identification, planted records) is recorded as rejected, with the reason;
+- a cluster with two or more plant signals has a recorded review;
+- every party was sent its report or recorded as having no contact, and the lead time has run;
+- the withholding scan passes;
+- the admin re-read the exact final draft at least an hour after it was drafted.
+
+### Naming
+
+- **Affected organisations** are named as targets. When every record on an endpoint comes from a service anyone can submit a URL to, its operator is named only with the admin's reason logged in the case. The notice then says "URLs targeting <organisation>'s hosts were submitted to public scan services", not that requests reached them.
+- **Providers below shared identifiers** are named as the party notified, never as the operator: "Requests in this cluster identify themselves as using <model> from <provider>. Self-identification is the weakest evidence we use. We have not confirmed that <provider> operated, deployed or authorised them. <provider> has been sent the full evidence." No such provider appears in a notice title.
+- **Provider infrastructure** shows whose systems the requests came from: the notice says they came from infrastructure the provider operates, and treats who deployed the agents as a separate question.
 
 ### What notices withhold
 

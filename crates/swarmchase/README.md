@@ -102,20 +102,21 @@ swarmchase case new 2026-10-portal --title "Portal SQLi" --cluster C1 --host-hit
 swarmchase case endpoint 2026-10-portal portal.example.gov targeted
 swarmchase case contacts 2026-10-portal
 swarmchase case draft 2026-10-portal --audience affected --to security@example.gov   # unsent .eml + bundle
-swarmchase case sent 2026-10-portal --to security@example.gov                         # after the admin sends it
+swarmchase case sent 2026-10-portal --to security@example.gov                         # after the admin sends it; starts its lead time
+swarmchase case reread 2026-10-portal                                                # an hour after `case notice`
 swarmchase case verify data/cases/2026-10-portal/bundles/2026-10-12
 swarmchase case status
 ```
 
-Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), and `evidence add|consent|withdraw|list` for logs an operator sends back.
+Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (STIX 2.1), `no-contact`, `alternative`, `plant-review` and `checklist` for the self-review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
 ### Notices
 
 | Command | What it does |
 |---|---|
-| `notice add <case>` | Checks a case's reviewed `notice.md` and copies it to `notices/<id>.md`. Committing the file publishes it. |
+| `notice add <case>` | Runs the self-review checklist, including the lead time, and copies a case's reviewed `notice.md` to `notices/<id>.md`. Committing the file publishes it. |
 | `notice update <id> --kind …` | Appends a dated update, status change, correction, reply or retraction. |
-| `notice lint [files]` | Checks front matter, update order and that nothing withheld got through. CI and the pre-commit hook run it. |
+| `notice lint [files]` | Checks front matter, update order, attribution wording and that nothing withheld got through. CI and the pre-commit hook run it. |
 | `notice build --out <dir> --base-url <url>` | Writes the site's notice index, pages and Atom feed. |
 | `site build [--out _site] [--base-url <url>]` | Builds the whole public site from the checkout, as `sc-site` does ([how the site is built](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). |
 
@@ -159,7 +160,7 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`review.rs`](src/review.rs) | Interactive labelling. |
 | [`suggest.rs`](src/suggest.rs) | Label suggestions from a local model (`review --suggest`), local hosts only. |
 | [`eval.rs`](src/eval.rs) | The `eval` command. |
-| [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, and the indicators the watch matches. |
+| [`case/`](src/case/mod.rs) | Case files: `case.toml` ([`model.rs`](src/case/model.rs)), the subcommands ([`cli.rs`](src/case/cli.rs)), record selection, status, report and e-mail drafts, lead times ([`lead.rs`](src/case/lead.rs)), the self-review checklist ([`checklist.rs`](src/case/checklist.rs)), and the indicators the watch matches. |
 | [`pinning.rs`](src/pinning.rs) | The rules a case is pinned to, tier changes under other rules, leak checks under both. |
 | [`contacts.rs`](src/contacts.rs) | security.txt and RDAP contact lookup, `case contacts`. |
 | [`csirts.rs`](src/csirts.rs) | National CSIRTs by country ([`contacts/csirts.toml`](../../contacts/csirts.toml)). |
@@ -167,3 +168,4 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
 | [`stix/`](src/stix/mod.rs) | STIX 2.1 export: records to observables and indicators, one builder per object type, deterministic ids. |
 | [`notice.rs`](src/notice.rs) | The notice draft (`case notice`); adding, updating, linting and building notices. |
+| [`wording.rs`](src/wording.rs) | Wording checks on a notice: claim form, likelihood words, provider names in titles, "compromised", accusations. |

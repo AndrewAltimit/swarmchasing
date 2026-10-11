@@ -20,7 +20,9 @@ A report to an affected operator says that public records, from scan services an
 - **It does not prove an AI agent sent every request.** The rules detect agent-like activity. A penetration tester or conventional scanner using the same payloads and services produces the same records. See [known limits](../methodology.md#known-limits-and-false-positive-traps).
 - **It is not an accusation.** You are the target, not the subject.
 
-The report and the public notice go out at the same time. There is no embargo, because a swarm is an active incident. The notice names your organisation as affected. If an endpoint was marked compromised, the notice withholds the attack details and request URLs for it. What notices withhold is listed in [policies.md](../policies.md#reporting-and-publication).
+**When the notice goes public.** The report comes first, and states the time the public notice is scheduled for. You get a fixed lead time: 4 to 12 hours if your endpoint was targeted (6 unless we set the case otherwise), 24 hours if it was marked compromised. Use it to check your logs, block the clients and check the weakness. The time is fixed: nothing you say or ask moves it, and it is not an embargo, because a swarm is an active incident and others it targets need the notice. A statement you send is added to the notice verbatim ([right of reply](#right-of-reply-and-corrections)). See [lead times](../policies.md#lead-times).
+
+The notice names your organisation as targeted or affected, never as the actor. It says your systems were compromised only when we have a basis beyond the requests themselves, such as your own confirmation. If every record we hold on your host comes from a public scan service, the notice says that URLs targeting your hosts were submitted to public scan services, not that requests reached you. If an endpoint was marked compromised, the notice withholds the attack details and request URLs for it. What notices withhold is listed in [policies.md](../policies.md#reporting-and-publication).
 
 ## Check your own logs
 

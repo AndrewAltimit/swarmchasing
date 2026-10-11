@@ -1,6 +1,6 @@
 # Swarmchasing Field Manual (SC-FM 1.0)
 
-Swarmchasing is the practice of finding misaligned or unsupervised AI agents in public records, linking their activity into runs, fleets and swarms, attributing it with stated confidence, and disclosing it to the AI provider, the affected operators and the public at the same time.
+Swarmchasing is the practice of finding misaligned or unsupervised AI agents in public records, linking their activity into runs, fleets and swarms, attributing it with stated confidence, and disclosing it to the AI provider and the affected operators, then to the public after a short fixed lead time.
 
 This manual is the method as a standard. It is written so that any group can apply it with its own tools, and cite it when it does. The [methodology](../methodology.md) page describes how this repository's toolkit implements it, setting by setting.
 
@@ -41,7 +41,7 @@ The manual describes the method as a standard. Where this repository's toolkit d
 | [7. Attribution](07-attribution.md) | Four attribution layers, the evidence ladder, claim tags, labels, the naming gate, false flags, agent likelihood. |
 | [8. Confidence language](08-confidence.md) | The words-to-probability table every report uses. |
 | [9. Evaluation](09-evaluation.md) | Evaluation sets, metrics, agreement, what to publish with a number, benchmarks, agent-grade evaluation. |
-| [10. Disclosure](10-disclosure.md) | Parties, simultaneous release, relation to ISO/IEC and FIRST guidance, reply, consent. |
+| [10. Disclosure](10-disclosure.md) | Parties, lead times, relation to ISO/IEC and FIRST guidance, reply, consent, self-review. |
 | [11. Notice standard](11-notices.md) | Notice structure, status lifecycle, withholding, lint, corrections. |
 | [12. Interoperability](12-interoperability.md) | STIX 2.1 profile, the `x-sc-agent-run` extension, AI incident databases. |
 | [13. Case study template](13-case-study.md) | The template, a worked example on synthetic records, and three published incidents read with it. |
