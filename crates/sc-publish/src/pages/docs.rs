@@ -831,9 +831,9 @@ fn autolink(s: &str, i: usize, ctx: &Ctx) -> Option<(String, usize)> {
         )
     };
     let rest = &s[i..];
-    if rest.starts_with("FM-") {
+    if let Some(tail) = rest.strip_prefix("FM-") {
         // FM-<digits>.<digits>, not followed by more of an id.
-        let n = rest[3..]
+        let n = tail
             .bytes()
             .take_while(|c| c.is_ascii_digit() || *c == b'.')
             .count();
@@ -848,8 +848,8 @@ fn autolink(s: &str, i: usize, ctx: &Ctx) -> Option<(String, usize)> {
             return Some((link("fm-link", href, id, None), id.len()));
         }
     }
-    if rest.starts_with("SC-T") {
-        let n = rest[4..].bytes().take_while(u8::is_ascii_digit).count();
+    if let Some(tail) = rest.strip_prefix("SC-T") {
+        let n = tail.bytes().take_while(u8::is_ascii_digit).count();
         let id = &rest[..4 + n];
         if is_tactic_id(id)
             && !rest[id.len()..].bytes().next().is_some_and(word_char)

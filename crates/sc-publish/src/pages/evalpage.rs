@@ -535,7 +535,7 @@ fn forest_rows(
                 rows.push(ForestRow {
                     group: name.clone(),
                     label: format!("{} or above", t.tier.label()),
-                    p: p.clone(),
+                    p: *p,
                 });
             }
         }
@@ -593,7 +593,7 @@ fn forest_section(s: &Summary) -> String {
             .map(|r| ForestRow {
                 group: "calibration".into(),
                 label: r.name.clone(),
-                p: r.precision.clone(),
+                p: r.precision,
             })
             .collect();
         if rows.is_empty() {
