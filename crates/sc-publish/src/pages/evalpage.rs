@@ -40,7 +40,7 @@ pub fn body(s: &Summary, files: &[String]) -> String {
         o,
         "<header class=\"page-head\"><h1>Evaluation</h1>\
 <p class=\"lede\">How the bundled rules (version <code>{}</code>) score on the committed labelled set: {} labelled records, {} agent and {} benign, from {}. The numbers are computed when the site is built; the same summary is in <a href=\"../assets/eval-summary.json\">eval-summary.json</a>.</p>\
-<p class=\"callout\" role=\"note\"><strong>A regression floor, not a precision estimate.</strong> The rules were written and tuned against these records, and the tiers score records, not clusters: a cluster of ten flagged records counts ten times. Real-world precision is lower. Intervals are 95% Wilson score intervals. See <a href=\"../docs/reference/evaluation/\">evaluation</a> for the held-out measurement.</p></header>",
+<p class=\"callout\" role=\"note\"><strong>A regression floor, not a precision estimate.</strong> The rules were written and tuned against these records, and most of them are synthetic, written to match a rule. The headline counts records, so a cluster of ten flagged records counts ten times; the cluster unit and the non-synthetic rows below are the closer guide. Real-world precision is lower. Intervals are 95% Wilson score intervals. See <a href=\"../docs/reference/evaluation/\">evaluation</a> for the held-out measurement.</p></header>",
         esc(&s.rules_version),
         s.labelled,
         s.agents,
