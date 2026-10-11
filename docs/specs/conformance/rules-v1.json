@@ -1,6 +1,6 @@
 {
   "description": "Conformance vectors for SC-Rules v1 (docs/specs/rules-v1.md): each URL, analysed alone with the rules file at rules_version, yields this target host, this set of rule ids, this score and this tier. Hosts are reserved example domains or public relay and echo services; every URL is synthetic.",
-  "rules_version": "2026-10-10",
+  "rules_version": "2026-10-11",
   "spec": "SC-Rules v1",
   "thresholds": {
     "significant": 6,
