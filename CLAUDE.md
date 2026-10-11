@@ -6,7 +6,7 @@ This file is a **map**, not the manual. The detail lives in [`docs/`](docs/READM
 
 ## Mission
 
-Find misaligned AI agent swarms in public records, link their activity into runs and fleets, and report each incident to the AI provider responsible and to the affected operators, publishing a public notice after a fixed lead time. Policies (lead times, naming, channels, what notices withhold, retention) are in [`docs/policies.md`](docs/policies.md).
+Find AI agent activity in public records, link it into runs and fleets, and report each incident that harms or endangers others to the AI provider responsible and to the affected operators, then publish a public notice: indicators first, names after a fixed lead. Policies (lead times, naming, channels, what notices withhold, retention) are in [`docs/policies.md`](docs/policies.md).
 
 ## Hard rules
 

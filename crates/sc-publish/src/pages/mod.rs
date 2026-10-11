@@ -444,7 +444,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "index.html",
         "home",
         "",
-        "Passive detection of misaligned AI agent swarms in public records: the method walked through a synthetic incident, notices, and browser tools.",
+        "Passive detection of AI agent activity in public records: the method walked through a synthetic incident, notices, and browser tools.",
         home::body(&example_analysis, &rules, &inp.notices, &fm_links),
     );
     home.title = String::new();

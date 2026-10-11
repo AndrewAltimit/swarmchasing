@@ -1,6 +1,6 @@
 # For operators
 
-This page is for you if you run a website or service and either received a report from swarmchasing or found your host named in a published notice. It explains what the report means, how to check your own logs, how to send logs back, how to reply or ask for a correction, and how to check the evidence we sent.
+This page is for you if you run a website or service and either received a report from swarmchasing or found your host named in a published notice. It explains what the report means, what becomes public and when, how to check your own logs, how to send logs back, how to reply or ask for a correction, and how to check the evidence we sent.
 
 How the analysis works is in [methodology.md](../methodology.md). The policies behind reports and notices are in [policies.md](../policies.md).
 
@@ -20,9 +20,20 @@ A report to an affected operator says that public records, from scan services an
 - **It does not prove an AI agent sent every request.** The rules detect agent-like activity. A penetration tester or conventional scanner using the same payloads and services produces the same records. See [known limits](../methodology.md#known-limits-and-false-positive-traps).
 - **It is not an accusation.** You are the target, not the subject.
 
-**When the notice goes public.** The report comes first, and states the time the public notice is scheduled for. You get a fixed lead time: 4 to 12 hours if your endpoint was targeted (6 unless we set the case otherwise), 24 hours if it was marked compromised. Use it to check your logs, block the clients and check the weakness. The time is fixed: nothing you say or ask moves it, and it is not an embargo, because a swarm is an active incident and others it targets need the notice. A statement you send is added to the notice verbatim ([right of reply](#right-of-reply-and-corrections)). See [lead times](../policies.md#lead-times).
+## What happens after the report
 
-The notice names your organisation as targeted or affected, never as the actor. It says your systems were compromised only when we have a basis beyond the requests themselves, such as your own confirmation. If every record we hold on your host comes from a public scan service, the notice says that URLs targeting your hosts were submitted to public scan services, not that requests reached you. If an endpoint was marked compromised, the notice withholds the attack details and request URLs for it. What notices withhold is listed in [policies.md](../policies.md#reporting-and-publication).
+You hear first, privately. What becomes public, and when, comes in two stages, and your report states both times:
+
+1. **An indicator notice that does not name you.** Once every party has been sent its report, a public notice describes the activity and how to recognise it: relays, payload shapes, the kinds of callback service, the time window. It does not name or locate you: no organisation name, host, domain or address. Your endpoint appears only by class, such as "a national government data portal". If your endpoint was targeted, this can follow your report at once; if it was marked compromised, it waits at least 24 hours after your report.
+2. **Your name, after a lead.** A dated update to the notice then names your organisation and its hosts, defanged: 3 working days after your report if your endpoint was targeted, 10 working days if it was marked compromised. Working days are Monday to Friday, counted in UTC. Use the time to check your logs, block the clients, fix the weakness and prepare your own statement.
+
+**If you agree to be named earlier**, say so in writing in a reply; we record it, and your name can go in the next update with no wait. Consent is the only thing that shortens the lead.
+
+**If you want more time**, ask; we record the request. We may lengthen the naming lead for the case, up to 20 working days, but are not bound to. Nothing you say or ask moves the indicator notice. It is not an embargo: a swarm is an active incident and others it targets need the indicators now; only names wait.
+
+A statement you send is added to the notice verbatim ([right of reply](#right-of-reply-and-corrections)). Each notice and each naming update is reviewed by a second person before it is published. See [lead times](../policies.md#lead-times).
+
+The naming update names your organisation as targeted or affected, never as the actor. It says your systems were compromised only when we have a basis beyond the requests themselves, such as your own confirmation. If every record we hold on your host comes from a public scan service, the update says that URLs targeting your hosts were submitted to public scan services, not that requests reached you. If an endpoint was marked compromised, the notice withholds the attack details and request URLs for it. What notices withhold is listed in [policies.md](../policies.md#reporting-and-publication).
 
 ## Check your own logs
 
@@ -127,4 +138,4 @@ The check must use the rules the bundle was made with. If the rules version in `
 
 ## Contact
 
-Reply to the address the report came from. Questions, logs, statements and corrections all go there. If you found your host in a notice but received no report, contact the project through this repository and we will send you the full report.
+Reply to the address the report came from. Questions, logs, statements, corrections, consent to earlier naming and requests for more time all go there. If you found your host in a notice but received no report, contact the project through this repository and we will send you the full report.

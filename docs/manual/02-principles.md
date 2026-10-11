@@ -20,7 +20,7 @@ Every attribution states the strongest class of evidence it rests on ([FM-7.2](0
 
 ## FM-2.4 Admin gate
 
-Tools and assistants collect, grade, link, draft reports, find contacts and prepare notices. Only a named person, the admin, decides that evidence is sufficient, classifies endpoints, merges clusters into fleets, sends reports and publishes notices. No step past drafting is automatic, and unreviewed leads never leave the collection host except to reach the admin privately.
+Tools and assistants collect, grade, link, draft reports, find contacts and prepare notices. Only a named person, the admin, decides that evidence is sufficient, classifies endpoints, merges clusters into fleets, sends reports and publishes notices. A second person reviews each notice and naming update before the admin publishes it ([FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review)). No step past drafting is automatic, and unreviewed leads never leave the collection host except to reach the admin privately.
 
 ## FM-2.5 Publish what informs, withhold what enables
 
