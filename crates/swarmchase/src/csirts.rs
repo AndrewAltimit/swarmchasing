@@ -9,7 +9,7 @@
 //! fetched: the directory is built in, and `swarmchase contacts verify
 //! --csirts` re-reads its sources for the admin.
 
-use crate::case::{Case, Contact, EndpointState};
+use crate::case::{Case, Contact, ContactRole, EndpointState};
 use crate::contacts::{DirContact, Directory, Provider, case_channel};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -205,7 +205,7 @@ pub(crate) fn seed_csirts(
         let have = c
             .contacts
             .iter()
-            .any(|x| x.role == "csirt" && x.address.eq_ignore_ascii_case(&t.address));
+            .any(|x| x.role == ContactRole::Csirt && x.address.eq_ignore_ascii_case(&t.address));
         writeln!(
             out,
             "{} (csirt, {cc}): {} {} for {} ({}, verified {}){}",
@@ -226,7 +226,7 @@ pub(crate) fn seed_csirts(
         }
         c.contacts.push(Contact {
             org: t.name.clone(),
-            role: "csirt".into(),
+            role: ContactRole::Csirt,
             endpoint: None,
             channel: case_channel(&t.channel)?.into(),
             address: t.address.clone(),
@@ -323,7 +323,7 @@ mod tests {
         assert!(text.contains("no national CSIRT listed for ZZ"), "{text}");
         assert_eq!(c.contacts.len(), 1);
         let x = &c.contacts[0];
-        assert_eq!((x.role.as_str(), x.org.as_str()), ("csirt", "CERT-FR"));
+        assert_eq!((x.role.id(), x.org.as_str()), ("csirt", "CERT-FR"));
         assert!(x.source.starts_with("https://www.first.org/"));
         assert!(
             c.decisions[0].text.contains("a.example.fr, b.example.fr"),

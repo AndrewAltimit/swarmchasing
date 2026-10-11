@@ -2,32 +2,32 @@
 //! UUIDv5 of the content, so the same case exports byte for byte the same.
 
 /// The namespace STIX 2.1 uses for deterministic cyber-observable ids.
-pub(super) const STIX_NS: [u8; 16] = [
+pub(crate) const STIX_NS: [u8; 16] = [
     0x00, 0xab, 0xed, 0xb4, 0xaa, 0x42, 0x46, 0x6c, 0x9c, 0x01, 0xfe, 0xd2, 0x33, 0x15, 0xa9, 0xb7,
 ];
 
 /// A predefined STIX 2.1 TLP marking definition: id, name, level.
-pub(super) type Tlp = (&'static str, &'static str, &'static str);
+pub(crate) type Tlp = (&'static str, &'static str, &'static str);
 
-pub(super) const TLP_WHITE: Tlp = (
+pub(crate) const TLP_WHITE: Tlp = (
     "marking-definition--613f2e26-407d-48c7-9eca-b8e91df99dc9",
     "TLP:WHITE",
     "white",
 );
-pub(super) const TLP_AMBER: Tlp = (
+pub(crate) const TLP_AMBER: Tlp = (
     "marking-definition--f88d31f6-486f-44da-b317-01333bde0b82",
     "TLP:AMBER",
     "amber",
 );
 
-pub(super) fn stix_ts(ts: i64) -> String {
+pub(crate) fn stix_ts(ts: i64) -> String {
     chrono::DateTime::<chrono::Utc>::from_timestamp(ts.max(0), 0)
         .unwrap_or_default()
         .format("%Y-%m-%dT%H:%M:%S.000Z")
         .to_string()
 }
 
-pub(super) fn sdo_id(kind: &str, name: &str) -> String {
+pub(crate) fn sdo_id(kind: &str, name: &str) -> String {
     format!(
         "{kind}--{}",
         uuid5(STIX_NS, &format!("swarmchase:{kind}:{name}"))
@@ -35,7 +35,7 @@ pub(super) fn sdo_id(kind: &str, name: &str) -> String {
 }
 
 /// RFC 4122 name-based UUID, version 5 (SHA-1).
-pub(super) fn uuid5(ns: [u8; 16], name: &str) -> String {
+pub(crate) fn uuid5(ns: [u8; 16], name: &str) -> String {
     let mut data = ns.to_vec();
     data.extend_from_slice(name.as_bytes());
     let h = sha1(&data);

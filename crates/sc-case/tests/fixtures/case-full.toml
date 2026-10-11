@@ -1,0 +1,167 @@
+# A synthetic case.toml with every section a case can hold. Hosts and
+# addresses are reserved example names.
+id = "2026-10-portal-probe"
+title = "Agents probe a portal"
+status = "reported"
+notice = "active"
+opened = "2026-10-12"
+publish_pending = "2026-10-16"
+min_named = "shared_identifiers"
+rules_version = "2026-10-10"
+lead_hours = 8
+
+[agent_grade]
+level = "documented"
+date = "2026-10-14"
+note = "provider confirmed in writing (ticket link)"
+
+[drafted]
+sha256 = "0000000000000000000000000000000000000000000000000000000000000001"
+at = "2026-10-15T10:00:00Z"
+
+[reread]
+sha256 = "0000000000000000000000000000000000000000000000000000000000000001"
+at = "2026-10-15T11:30:00Z"
+
+[[endpoint]]
+host = "portal.example.gov"
+state = "compromised"
+note = "login form"
+basis = "operator statement of 2026-10-14 (link)"
+single_source = "the operator confirmed the requests by phone"
+
+[[endpoint]]
+host = "relay.example.net"
+state = "not_affected"
+
+[[endpoint]]
+host = "old.example.org"
+state = "historical"
+
+[[endpoint]]
+host = "new.example.org"
+state = "unreviewed"
+
+[[claim]]
+party = "Example AI"
+role = "developer"
+evidence = "shared_identifiers"
+details = ["uqtag zz9 also in a confirmed incident (link)"]
+tag = "inference"
+
+[[claim]]
+party = "Example Family"
+layer = "model_family"
+evidence = "self_id"
+details = ["dialect method (link)"]
+likelihood = 0.6
+accuracy = 0.8
+corpus_size = 120
+
+[[contact]]
+org = "Example AI"
+role = "provider"
+channel = "email"
+address = "security@ai.example"
+source = "https://ai.example/.well-known/security.txt"
+confidence = "medium"
+found_on = "2026-10-01"
+purpose = "security"
+
+[[contact]]
+org = "Portal"
+role = "affected"
+endpoint = "portal.example.gov"
+channel = "email"
+address = "security@portal.example.gov"
+source = "https://portal.example.gov/.well-known/security.txt"
+confidence = "high"
+found_on = "2026-10-13"
+
+[[contact]]
+org = "Example Registrar"
+role = "registrar"
+endpoint = "old.example.org"
+channel = "email"
+address = "abuse@registrar.example"
+source = "https://rdap.example/domain/example.org"
+confidence = "low"
+found_on = "2026-10-13"
+
+[[contact]]
+org = "CERT-XX"
+role = "csirt"
+channel = "web_form"
+address = "https://cert.example/report"
+source = "https://first.example/teams/cert-xx"
+confidence = "medium"
+found_on = "2026-09-01"
+
+[[contact]]
+org = "Lab"
+role = "declared_owner"
+channel = "email"
+address = "security@lab.example"
+source = "https://lab.example/security"
+confidence = "medium"
+found_on = "2026-10-13"
+
+[[decision]]
+date = "2026-10-12"
+text = "opened with 4 records (4 flagged), rules 2026-10-10"
+
+[[sent]]
+date = "2026-10-13"
+recipient = "security@portal.example.gov"
+channel = "email"
+report = "outbox/2026-10-13-affected-security-portal-example-gov.eml"
+at = "2026-10-13T09:00:00Z"
+
+[[sent]]
+date = "2026-10-13"
+recipient = "security@ai.example"
+channel = "email"
+
+[[evidence]]
+id = "e1"
+org = "Portal"
+host = "portal.example.gov"
+received = "2026-10-14"
+sha256 = "00"
+lines = 120
+kept = 9
+public = "2026-10-15: reply to our report"
+note = "nginx access log"
+
+[[fleet]]
+id = "fleet-1"
+clusters = ["k-00000001", "k-00000002"]
+since = "2026-10-14"
+
+[[fleet.swarm_evidence]]
+kind = "handoff"
+runs = ["k-00000001#1", "k-00000002#1"]
+note = "C2 fetched the paste C1 wrote"
+date = "2026-10-14"
+
+[[no_contact]]
+party = "old.example.org"
+searched = "security.txt, RDAP"
+at = "2026-10-13T09:30:00Z"
+
+[[alternative]]
+kind = "authorised-test"
+verdict = "rejected"
+why = "no owner claims it (link)"
+date = "2026-10-14"
+
+[[alternative]]
+kind = "planted-records"
+verdict = "rejected"
+why = "operator logs match"
+date = "2026-10-14"
+
+[[plant_review]]
+cluster = "k-00000001"
+note = "tag copied from a report, but the payload dialect matches"
+date = "2026-10-14"

@@ -9,9 +9,9 @@
 //! were, its tier, attribution per layer, and the `observed-data` holding
 //! its records.
 
-use super::Options;
-use super::ids::{sdo_id, stix_ts};
-use super::objects::Head;
+use crate::Options;
+use crate::ids::{sdo_id, stix_ts};
+use crate::objects::Head;
 use sc_core::attribution::{Claim, Role, merge, summaries};
 use sc_core::{Analysis, Cluster, attribute};
 use serde_json::{Value, json};
@@ -23,7 +23,7 @@ pub const TYPE: &str = "x-sc-agent-run";
 pub const SCHEMA_URL: &str =
     "https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/stix/x-sc-agent-run.json";
 /// The extension's version; bump it with the schema.
-pub const VERSION: &str = "1.0.0";
+pub const VERSION: &str = "1.1.0";
 
 /// The extension definition's id: fixed, so every export refers to the same
 /// definition.
@@ -32,7 +32,7 @@ pub fn extension_id() -> String {
 }
 
 /// The `extension-definition` object, created by the reporter.
-pub(super) fn extension_definition(h: &Head) -> Value {
+pub(crate) fn extension_definition(h: &Head) -> Value {
     json!({
         "type": "extension-definition",
         "spec_version": "2.1",
@@ -138,7 +138,7 @@ fn attribution(a: &Analysis, c: &Cluster, o: &Options) -> Vec<Value> {
 }
 
 /// The run object for cluster `c`, referring to its `observed-data`.
-pub(super) fn agent_run(h: &Head, a: &Analysis, c: &Cluster, o: &Options, observed: &str) -> Value {
+pub(crate) fn agent_run(h: &Head, a: &Analysis, c: &Cluster, o: &Options, observed: &str) -> Value {
     let first = if c.start > 0 {
         stix_ts(c.start)
     } else {
@@ -149,7 +149,8 @@ pub(super) fn agent_run(h: &Head, a: &Analysis, c: &Cluster, o: &Options, observ
     } else {
         first.clone()
     };
-    json!({
+    let tactics = tactics(a, c);
+    let mut v = json!({
         "type": TYPE,
         "spec_version": "2.1",
         "id": sdo_id(TYPE, &format!("{}:{}:{}", h.marking.1, o.case_id, c.key)),
@@ -161,7 +162,7 @@ pub(super) fn agent_run(h: &Head, a: &Analysis, c: &Cluster, o: &Options, observ
         "first_seen": first,
         "last_seen": last,
         "timestamp_kind": timestamp_kind(a, c),
-        "tactics": tactics(a, c),
+        "tactics": tactics,
         "artifact_families": artifact_families(c),
         "concurrency": {
             "batches": c.fanout.batches,
@@ -175,5 +176,10 @@ pub(super) fn agent_run(h: &Head, a: &Analysis, c: &Cluster, o: &Options, observ
         "observed_data_refs": [observed],
         "object_marking_refs": [h.marking.0],
         "extensions": { extension_id(): { "extension_type": "new-sdo" } },
-    })
+    });
+    let refs = crate::mapping::external_references(&tactics);
+    if !refs.is_empty() {
+        v["external_references"] = json!(refs);
+    }
+    v
 }

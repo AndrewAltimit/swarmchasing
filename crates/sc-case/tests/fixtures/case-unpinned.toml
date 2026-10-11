@@ -1,0 +1,26 @@
+# A synthetic case.toml as the earliest case files were written: no pinned
+# rules, no naming threshold, sends with a date only.
+id = "2026-09-relay"
+title = "Relay probe"
+status = "open"
+notice = "active"
+opened = "2026-09-20"
+
+[[endpoint]]
+host = "portal.example.gov"
+state = "targeted"
+
+[[contact]]
+org = "portal.example.gov"
+role = "affected"
+endpoint = "portal.example.gov"
+channel = "email"
+address = "security@portal.example.gov"
+source = "https://portal.example.gov/.well-known/security.txt"
+confidence = "medium"
+found_on = "2026-09-21"
+
+[[sent]]
+date = "2026-09-22"
+recipient = "security@portal.example.gov"
+channel = "email"

@@ -2,12 +2,13 @@
 //! `<data>/rules/<name>.toml` and named in case.toml, so a case's reports,
 //! notice and bundles do not change when the bundled rules do.
 //! `case rules <id> --update` re-pins a case to the current rules and logs
-//! which records change tier.
+//! which records change tier. Pin names and tier changes are
+//! [`sc_case::pinning`]; this module keeps the files.
 
-use crate::case::{Case, case_records, load, save};
-use crate::evidence::Scope;
+use crate::case::{Case, Scope, case_records, load, save};
 use crate::input::load_rules;
 use anyhow::{Context, Result, bail};
+use sc_case::pinning::{check_pin, describe_changes, pin_names};
 use sc_core::{Tier, analyze};
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -42,41 +43,14 @@ fn rules_dir(root: &Path) -> PathBuf {
     root.parent().unwrap_or(root).join("rules")
 }
 
-/// A pin name is a file stem in the rules directory, never a path.
-fn check_pin(name: &str) -> Result<()> {
-    let ok = !name.is_empty()
-        && !name.starts_with('.')
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
-    if !ok {
-        bail!("rules pin `{name}` is not a valid name");
-    }
-    Ok(())
-}
-
 /// Keep a copy of `r` in `<data>/rules/` and return its name there: the rules
 /// version, or the version plus a hash prefix when a different rule set
 /// already holds that name (an edited file that kept its version).
 pub(crate) fn pin_rules(root: &Path, r: &RulesText) -> Result<String> {
     let dir = rules_dir(root);
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    let mut v: String = r
-        .version()
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    if v.is_empty() || v.starts_with('.') {
-        v = format!("v{v}");
-    }
-    let sha = crate::bundle::sha256_hex(r.text.as_bytes());
-    for name in [v.clone(), format!("{v}-{}", &sha[..12])] {
+    let names = pin_names(r.version(), &r.text);
+    for name in names.clone() {
         let p = dir.join(format!("{name}.toml"));
         match std::fs::read_to_string(&p) {
             Ok(t) if t == r.text => return Ok(name),
@@ -89,9 +63,10 @@ pub(crate) fn pin_rules(root: &Path, r: &RulesText) -> Result<String> {
         }
     }
     bail!(
-        "{}: other rule sets already hold `{v}` and `{v}-{}`",
+        "{}: other rule sets already hold `{}` and `{}`",
         dir.display(),
-        &sha[..12]
+        names[0],
+        names[1]
     )
 }
 
@@ -154,31 +129,7 @@ pub(crate) fn tier_changes(
     let records = case_records(root, c, &Scope::All)?;
     let before = analyze(records.clone(), &case_rules(root, c)?);
     let after = analyze(records, current);
-    let was: BTreeMap<&str, Tier> = before
-        .results
-        .iter()
-        .map(|r| (r.obs.id.as_str(), r.tier))
-        .collect();
-    Ok(after
-        .results
-        .iter()
-        .filter_map(|r| {
-            let w = *was.get(r.obs.id.as_str())?;
-            (w != r.tier).then(|| (r.obs.id.clone(), (w, r.tier)))
-        })
-        .collect())
-}
-
-fn describe_changes(changes: &BTreeMap<String, (Tier, Tier)>, max: usize) -> String {
-    let mut s: Vec<String> = changes
-        .iter()
-        .take(max)
-        .map(|(id, (a, b))| format!("{id} {} → {}", a.label(), b.label()))
-        .collect();
-    if changes.len() > max {
-        s.push(format!("{} more", changes.len() - max));
-    }
-    s.join(", ")
+    Ok(sc_case::pinning::tier_changes(&before, &after))
 }
 
 /// `case rules`: pinned against current, and with `update` re-pin to
