@@ -37,7 +37,19 @@ pub const NAV: &[(&str, &[NavItem])] = &[
                 "operators",
                 "For operators",
                 "operators/",
-                "Your site was named: what to do",
+                "You received a report: what to do",
+            ),
+            (
+                "providers",
+                "For providers",
+                "providers/",
+                "Reports to an AI provider: verify, reply",
+            ),
+            (
+                "researchers",
+                "For researchers",
+                "docs/guides/for-researchers/",
+                "Run the engine, read the rules, cite the method",
             ),
         ],
     ),
@@ -209,8 +221,8 @@ pub fn render(p: &Page, ctx: &Ctx, root: &str) -> String {
     let _ = write!(
         s,
         "<footer class=\"site-foot\"><div class=\"wrap foot-row\">\n\
-<p>Passive detection of misaligned AI agent swarms in public records. Analysis on this site runs in your browser; nothing you paste is uploaded.</p>\n\
-<p><a href=\"{root}notices/feed.xml\">Atom feed</a> · <a href=\"{}\">Source</a> · <a href=\"{root}docs/\">Docs</a> · toolkit {} · rules {}</p>\n\
+<p>Passive detection of AI agent activity in public records. Analysis on this site runs in your browser; nothing you paste is uploaded.</p>\n\
+<p><a href=\"{root}operators/#contact\">Contact</a> · <a href=\"{root}notices/feed.xml\">Atom feed</a> · <a href=\"{}\">Source</a> · <a href=\"{root}docs/\">Docs</a> · toolkit {} · rules {}</p>\n\
 </div></footer>\n<div id=\"tip\" class=\"tip\" role=\"tooltip\" hidden></div>\n</body>\n</html>\n",
         esc(&ctx.repo),
         esc(&ctx.version),

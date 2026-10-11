@@ -15,15 +15,17 @@
 //!   request after an error, a route escalation, a probe chain at model
 //!   pace), read only from request or submit times;
 //! - **L4** agent likely: L3 plus machine pace while adapting, or a pace or
-//!   scale beyond one person (fixed fan-out, round the clock), with no
-//!   working-hours rhythm against it;
+//!   scale beyond one person (fixed fan-out, one target sent to several scan
+//!   services within seconds, round the clock), with no working-hours rhythm
+//!   against it;
 //! - **L5** documented: never computed; only the admin's case decision sets
 //!   it (operator logs matching a harness, a provider's confirmation).
 //!
 //! Caps hold a grade down where the records cannot show more: capture times
 //! only (L2), a working-hours rhythm at slow pace (L2, possibly a person
 //! with model help), any working-hours rhythm (L3). Counter-signals
-//! (declared testing, benchmark targets, scanner pace) are listed beside the
+//! (declared testing, benchmark targets, scanner pace, an auto-submitter
+//! sending ordinary links to the same services) are listed beside the
 //! signals and never move the grade. Nothing here changes a score, a tier or
 //! a link.
 
@@ -131,11 +133,13 @@ pub enum SignalKind {
     // L4
     MachinePace,
     FanOut,
+    CrossService,
     RoundTheClock,
     // Counter-signals
     DeclaredTesting,
     Benchmark,
     ScannerPace,
+    AutoSubmitter,
     WorkingHours,
 }
 
@@ -149,8 +153,10 @@ impl SignalKind {
                 AgentLevel::ModelWritten
             }
             RetryAfterError | Escalation | ModelPaceChain => AgentLevel::Adaptive,
-            MachinePace | FanOut | RoundTheClock => AgentLevel::AgentLikely,
-            DeclaredTesting | Benchmark | ScannerPace | WorkingHours => return None,
+            MachinePace | FanOut | CrossService | RoundTheClock => AgentLevel::AgentLikely,
+            DeclaredTesting | Benchmark | ScannerPace | AutoSubmitter | WorkingHours => {
+                return None;
+            }
         })
     }
 
@@ -171,11 +177,15 @@ impl SignalKind {
             ModelPaceChain => "a probe chain at model pace",
             MachinePace => "retries after errors at tool pace, faster than a person reads",
             FanOut => "parallel fan-out of one fixed width",
+            CrossService => "one target sent to several scan services within seconds",
             RoundTheClock => "activity round the clock",
             DeclaredTesting => "declares authorised testing or research",
             Benchmark => "public benchmark or practice targets",
             ScannerPace => {
                 "a probe chain at tool pace with no change after errors, as a scanner runs a list"
+            }
+            AutoSubmitter => {
+                "ordinary links around it sent to the same services alike, as a mail gateway or security product submits every link it sees (whoever sent it the link made the records)"
             }
             WorkingHours => "activity in one time zone's working hours",
         }
@@ -367,6 +377,30 @@ pub fn assess(
     push(SignalKind::MachinePace, machine, String::new());
     if c.fanout.modal_width.is_some() {
         push(SignalKind::FanOut, c.fanout.batches, String::new());
+    }
+    // One target on several scan services within seconds is beyond a person
+    // checking a link; the same on ordinary links around it is a gateway
+    // or security product submitting everything, so it counts against.
+    let xs = &c.cross_service;
+    if !xs.is_empty() {
+        let detail = format!(
+            "{} target(s) on {} within {}s",
+            xs.targets,
+            xs.service_list(),
+            xs.max_spread_secs
+        );
+        if xs.auto_submitter {
+            push(
+                SignalKind::AutoSubmitter,
+                xs.records,
+                format!(
+                    "{detail}; {} ordinary target(s) alike around it",
+                    xs.ambient
+                ),
+            );
+        } else {
+            push(SignalKind::CrossService, xs.records, detail);
+        }
     }
     let rhythm = c.timing.rhythm.verdict;
     let days = c.timing.rhythm.days;

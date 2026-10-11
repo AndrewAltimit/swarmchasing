@@ -7,10 +7,14 @@
 //! - no likelihood word is stronger than its label allows (SC-FM 8);
 //! - a title names no provider the notice does not name as a developer;
 //! - "compromised" only for endpoints classified so with a basis;
-//! - an affected organisation is described as a target, never as the actor.
+//! - an affected organisation is described as a target, never as the actor;
+//! - "misaligned" only with a scope-exceeded finding and an admin grade of
+//!   L3 or higher (SC-FM 15.1).
 
 use crate::providers::Directory;
 use crate::text::short;
+use sc_core::AgentLevel;
+use sc_core::scope::ScopeFinding;
 
 /// ICD 203 likelihood terms and their strength (SC-FM 8.1), with the
 /// off-table words of certainty, which no attribution statement uses.
@@ -233,6 +237,47 @@ pub fn compromised_problems(text: &str, compromised: &[String], other: &[String]
     out
 }
 
+/// The lowest admin agent grade under which a text may say "misaligned".
+pub const MISALIGNED_GRADE: AgentLevel = AgentLevel::Adaptive;
+
+/// "Misaligned", in any form, without what it needs (SC-FM 15.1): an
+/// admin scope finding of scope exceeded for the clusters the text covers,
+/// and an admin agent grade of L3 or higher.
+pub fn misaligned_problems(
+    text: &str,
+    scope: Option<ScopeFinding>,
+    grade: Option<AgentLevel>,
+) -> Vec<String> {
+    let Some(l) = text.lines().find(|l| {
+        let l = l.to_lowercase();
+        l.contains("misalign") || l.contains("mis-align")
+    }) else {
+        return Vec::new();
+    };
+    let mut missing = Vec::new();
+    if scope != Some(ScopeFinding::ScopeExceeded) {
+        missing.push(format!(
+            "an admin scope finding of scope exceeded (recorded: {})",
+            scope.map_or("none", |s| s.label())
+        ));
+    }
+    if grade.is_none_or(|g| g < MISALIGNED_GRADE) {
+        missing.push(format!(
+            "an admin agent grade of {} or higher (recorded: {})",
+            MISALIGNED_GRADE.code(),
+            grade.map_or("none", |g| g.code())
+        ));
+    }
+    if missing.is_empty() {
+        return Vec::new();
+    }
+    vec![format!(
+        "says `misaligned` without {}: `{}`",
+        missing.join(" and "),
+        short(l)
+    )]
+}
+
 /// Words that cast a target as the actor.
 const ACCUSING: &[&str] = &[
     "attacker",
@@ -309,6 +354,31 @@ mod tests {
         assert_eq!(p.len(), 2, "{p:?}");
         assert!(p[0].contains("without a tag"), "{p:?}");
         assert!(p[1].contains("layer, label, tag"), "{p:?}");
+    }
+
+    #[test]
+    fn misaligned_needs_the_finding_and_the_grade() {
+        let text = "## Summary\n\nThe agents' activity was Misaligned with their task.\n";
+        let ok = misaligned_problems(
+            text,
+            Some(ScopeFinding::ScopeExceeded),
+            Some(AgentLevel::Adaptive),
+        );
+        assert!(ok.is_empty(), "{ok:?}");
+        let p = misaligned_problems(text, Some(ScopeFinding::ScopeExceeded), None);
+        assert_eq!(p.len(), 1);
+        assert!(p[0].contains("grade of L3"), "{p:?}");
+        let p = misaligned_problems(
+            "misalignment",
+            Some(ScopeFinding::NotAssessable),
+            Some(AgentLevel::ModelWritten),
+        );
+        assert!(
+            p[0].contains("scope exceeded") && p[0].contains("L2"),
+            "{p:?}"
+        );
+        // Without the word, nothing is needed.
+        assert!(misaligned_problems("AI agent activity", None, None).is_empty());
     }
 
     #[test]

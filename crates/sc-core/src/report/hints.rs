@@ -1,8 +1,9 @@
 //! One-line descriptions of a cluster's hints (payload dialect, fan-out,
-//! cut lengths, date tags, daily rhythm), or nothing when there is too
+//! cross-service fan-out, cut lengths, date tags, daily rhythm), or nothing when there is too
 //! little to say. Every line says it is a hint, not evidence.
 
 use super::dur;
+use crate::crossservice::CrossService;
 use crate::dialect::{CutGroup, CutLengths, Dialect};
 use crate::fanout::FanOut;
 use crate::timing::{Rhythm, RhythmVerdict, STALE_AGREE_SHARE, STALE_MIN_DAYS, StaleDates};
@@ -44,6 +45,37 @@ pub(super) fn fanout_line(f: &FanOut) -> Option<String> {
         f.widths.get(&w).copied().unwrap_or(0),
         f.batches,
         widths.join(", ")
+    ))
+}
+
+/// The members' targets sent to several scan services moments apart: the
+/// services, the widest spread and the ordinary fan-outs around it.
+pub(super) fn cross_service_line(x: &CrossService) -> Option<String> {
+    if x.is_empty() {
+        return None;
+    }
+    let services: Vec<String> = x
+        .services
+        .iter()
+        .map(|(s, n)| format!("{s} ×{n}"))
+        .collect();
+    let around = if x.auto_submitter {
+        format!(
+            "{} ordinary link(s) on other hosts were fanned out alike around it, which marks an auto-submitter (a mail gateway or security product submitting every link it sees): whoever sent the links made these records",
+            x.ambient
+        )
+    } else {
+        format!(
+            "{} ordinary link(s) on other hosts were fanned out alike around it; an agent's tool loop or a script sending each URL to every service does this, and so does a mail gateway",
+            x.ambient
+        )
+    };
+    Some(format!(
+        "cross-service fan-out: {} target(s) on {} records went to several scan services ({}), each within {} of its first submission; {around} (a hint, not evidence)",
+        x.targets,
+        x.records,
+        services.join(", "),
+        dur(x.max_spread_secs)
     ))
 }
 

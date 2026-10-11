@@ -57,6 +57,11 @@ pub enum PlantSignalKind {
     /// An identifier shared with an earlier cluster that worked differently
     /// (relay stacks, URL encodings or payload dialect with nothing in common).
     HabitMismatch,
+    /// Its targets were fanned out to several scan services alike with
+    /// ordinary links on other hosts around it: a mail gateway or security
+    /// product that submits every link it sees made the records, on behalf
+    /// of whoever sent the links ([`crate::crossservice`]).
+    AutoSubmitted,
 }
 
 impl PlantSignalKind {
@@ -66,8 +71,18 @@ impl PlantSignalKind {
             Self::BurnedIdentifier => "burned identifier",
             Self::TooPerfect => "too perfect",
             Self::HabitMismatch => "habit mismatch",
+            Self::AutoSubmitted => "auto-submitted",
         }
     }
+
+    /// Every kind, in report order.
+    pub const ALL: [Self; 5] = [
+        Self::ProvenanceMonoculture,
+        Self::BurnedIdentifier,
+        Self::TooPerfect,
+        Self::HabitMismatch,
+        Self::AutoSubmitted,
+    ];
 }
 
 /// A sign that a cluster may have been planted. A prompt for review, never
@@ -156,6 +171,7 @@ pub(crate) fn plant_signals(
             v.extend(monoculture(results, c));
             burned_in(results, c, cfg, &mut v);
             v.extend(too_perfect(results, c, escalations, cfg.window_secs));
+            v.extend(auto_submitted(c));
             v
         })
         .collect();
@@ -242,6 +258,27 @@ fn burned_in(results: &[ObsResult], c: &Cluster, cfg: &Linking, out: &mut Vec<Pl
             base_rate: None,
         });
     }
+}
+
+/// A cluster the cross-service fan-out marks as an auto-submitter
+/// ([`crate::crossservice::CrossService::auto_submitter`]).
+fn auto_submitted(c: &Cluster) -> Option<PlantSignal> {
+    let x = &c.cross_service;
+    if !x.auto_submitter {
+        return None;
+    }
+    Some(PlantSignal {
+        kind: PlantSignalKind::AutoSubmitted,
+        records: c.members.clone(),
+        detail: format!(
+            "{} of its targets went to {} within {}s, and {} ordinary link(s) on other hosts were fanned out alike around it: something submits every link it sees, as a mail gateway or security product does, so whoever sent the links made these records",
+            x.targets,
+            x.service_list(),
+            x.max_spread_secs,
+            x.ambient
+        ),
+        base_rate: None,
+    })
 }
 
 fn too_perfect(

@@ -18,8 +18,9 @@ Each record is an ordinary record plus label fields:
 | `synthetic` | written records | `true`: written by hand to exercise the rules. `eval` reports every number again without these ([synthetic and non-synthetic](../../docs/reference/evaluation.md#synthetic-and-non-synthetic-records)). |
 | `reconstructed` | rebuilt records | `true`: rebuilt from a published incident. |
 | `labeller` | optional | Who labelled the record, for [SC-Bench](../../docs/reference/evaluation.md#sc-bench) exports. |
+| `tuned` | reviewed records | `true`: looked at while changing a rule, so left out of the [benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline). |
 
-Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), and `scanner` (security scanners). False positives are reported per benign class.
+Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), `mail_gateway` (links a mail gateway or security product submits on its own), and `scanner` (security scanners). False positives are reported per benign class.
 
 Records get a `run` only where the grouping is clear: the published reconstructions of one incident share one, and each other incident has its own. The `llm-residue.ndjson` records are independent synthetic examples and carry none.
 
@@ -48,6 +49,10 @@ The rules were tuned on this set, so it is a **regression floor, not a precision
 
 Synthetic records that give every rule at least one labelled positive, and the significant and link rules hard negatives: benign records that look alike and must not fire. Each is marked `"synthetic": true`, uses reserved `.example` hosts (or the public service the rule names), and was written by hand. Payloads are the canonical textbook test strings. Benign records name the rule they guard in `hard_negative_for`, and records from one synthetic run share a `run` id.
 
+## `carrier-negatives.ndjson`
+
+Synthetic benign records, class `dev_tool`, each marked `"synthetic": true` and written by hand: pages with an inline or linked script and no request of their own, served from the echo service's base64 endpoint (`httpbin.org/base64/`, and the `httpbun.com` mirror), as developers use it to serve a test page. Script references use reserved `.example` hosts. They guard `carrier.httpbin` and `carrier.html_program`: the echo rule and the script rule read one artifact, so these stay noise. No archive capture was copied.
+
 ## `actor-controls.ndjson`
 
 Synthetic runs sent by people and conventional tools, for the agent grade. Each carries `actor` (`human` or `tool`) and no `label`, so detection does not score it: the rules flag their payloads by design. Each is marked `"synthetic": true`, uses reserved `.example` hosts, and was written by hand from tools' documented defaults and textbook payloads.
@@ -73,6 +78,14 @@ Synthetic agent records for the interaction edges ([SC-FM 5.12](../../docs/manua
 
 Every record is flagged significant on its own, so the file raises recall at both tiers and leaves precision unchanged.
 
+## `cross-service.ndjson`
+
+Synthetic records for cross-service fan-out ([methodology](../../docs/methodology.md#descriptive-hints)): one target submitted to several scan services within seconds. Each is marked `"synthetic": true`, uses reserved `.example` hosts, carries `"ts_kind": "submit"`, and was written by hand.
+
+- **Agent run** (`xsvc-agent-1`): a tool loop probing one search with an unfilled placeholder, sending each variant to urlquery and then to urlscan 6 to 11 seconds later. It grades L4.
+- **Human** (`actor`, no `label`): an analyst checking one suspicious link on two services four minutes apart, outside the window.
+- **Mail gateway**: a gateway submitting every link in scanned mail to urlscan and then urlquery 3 seconds later. The ordinary links (newsletter, invoice, calendar, shared document, a click tracker with a timestamp parameter) are benign hard negatives, class `mail_gateway`, actor `tool`. Three links a person crafted in an agent's style and mailed through it are graded as `human`, with no `label`: the ordinary fan-outs around them mark an auto-submitter, so they stop at L3, the grade's known limit for a person pasting model output, instead of reaching L4.
+
 ## Coverage allow-list
 
 [`coverage-allow.txt`](coverage-allow.txt) lists rules that may go without a positive: one rule id per line, then the reason. The gate fails on a rule with no agent-labelled record it fires on unless it is listed, and on an entry whose rule now has a positive. Remove the entry in the commit that adds the record.
@@ -80,6 +93,13 @@ Every record is flagged significant on its own, so the file raises recall at bot
 ## Synthetic and reconstructed records
 
 Every record here is marked `synthetic` or `reconstructed`. The synthetic files exist to give each rule a positive and a hard negative, and the rules catch their agent records almost by construction; the reconstructions in `published-patterns.ndjson` are the closest the set comes to real traffic. `eval` prints the non-synthetic numbers beside the all-records ones, and the gate holds floors on both ([the eval gate](../../docs/reference/evaluation.md#the-eval-gate)).
+
+## Real-data measurement
+
+This set was used to tune the rules, so it is a regression floor, not a precision estimate. Two measurements on real data need no records committed here, and only their aggregate numbers are ever quoted:
+
+- the [pre-era control](../../docs/reference/evaluation.md#the-pre-era-control-on-archive-data) (`swarmchase eval pre-era`): relay and carrier captures from before agents existed, where every flag is a false alarm;
+- the [reviewed benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline) (`swarmchase review sample`, then `swarmchase eval <data>/labels/reviewed.ndjson`): a stratified sample of the watch store, labelled by hand, with the false-positive bound per tier.
 
 ## SC-Bench example
 

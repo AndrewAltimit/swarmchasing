@@ -5,8 +5,11 @@
 //! admin reads the draft and submits it by hand, after the notice is
 //! public. Nothing here talks to any database or authority.
 //!
-//! A draft carries only what the notice carries: it is built from the
-//! public scope (operator logs only with agreement, compromised endpoints'
+//! A draft carries only what the notice carries. It follows the naming
+//! stage: an affected organisation appears by host only once a published
+//! naming update has named it, and by its description until then, so a
+//! draft made before any naming update names no affected party. It is
+//! built from the public scope (operator logs only with agreement, compromised endpoints'
 //! attack details withheld, [`sc_core::notice::PublicView`]), names a
 //! developer only through the case's naming gate with its label and
 //! likelihood word, leaves harness and model-family candidates out, and is
@@ -14,7 +17,10 @@
 //! over the finished text.
 
 use crate::model::{Case, EndpointState};
-use crate::report::{affected_hosts, all_claims, report_options, reported};
+use crate::naming;
+use crate::report::{
+    affected_hosts, all_claims, description, report_options, reported, target_descriptions,
+};
 use crate::{Result, bail};
 use sc_core::notice::PublicView;
 use sc_core::{Analysis, Audience, Role, Tier, fmt_ts};
@@ -37,7 +43,12 @@ pub struct Public {
     pub last: String,
     pub developers: Vec<String>,
     pub hosts: Vec<String>,
+    /// Affected hosts a published naming update has named.
     pub affected: Vec<String>,
+    /// Descriptions of the affected endpoints not named yet.
+    pub unnamed: Vec<String>,
+    /// The affected endpoints' sector descriptions, named or not.
+    pub sectors: Vec<String>,
     pub compromised: bool,
     pub sources: Vec<String>,
     pub notice_url: Option<String>,
@@ -64,7 +75,9 @@ pub fn gather(
             unreviewed.join(", ")
         );
     }
-    let opts = report_options(c, Audience::Public, None, today);
+    let mut opts = report_options(c, Audience::Public, None, today);
+    // A fresh render is the indicator notice: it names no affected party.
+    opts.target_descriptions = Some(target_descriptions(c));
     let clusters: Vec<&sc_core::Cluster> =
         a.clusters.iter().filter(|x| x.tier > Tier::Noise).collect();
     if clusters.is_empty() {
@@ -97,13 +110,34 @@ pub fn gather(
             )
         })
         .collect();
-    let affected = affected_hosts(c);
+    let all_affected = affected_hosts(c);
+    let named: Vec<String> = naming::operators(c)
+        .into_iter()
+        .filter(|o| o.named.is_some())
+        .map(|o| o.host)
+        .collect();
+    let is_named = |h: &str| named.iter().any(|n| n.eq_ignore_ascii_case(h));
+    let affected: Vec<String> = all_affected
+        .iter()
+        .filter(|h| is_named(h))
+        .cloned()
+        .collect();
+    let affected_endpoints = || c.endpoints.iter().filter(|e| e.state.affected());
+    let unnamed: Vec<String> = affected_endpoints()
+        .filter(|e| !is_named(&e.host))
+        .map(description)
+        .collect();
+    let mut sectors: Vec<String> = affected_endpoints()
+        .filter_map(|e| e.sector.clone())
+        .collect();
+    sectors.dedup();
     let compromised = c
         .endpoints
         .iter()
         .any(|e| e.state == EndpointState::Compromised);
 
-    // Public record links, for records a notice may show.
+    // Public record links, for records a notice may show, and none that
+    // identifies an operator not named yet.
     let mut view = PublicView::new(a, &opts.exposed_hosts).with_affected(Some(&affected));
     let mut sources = Vec::new();
     for cl in &clusters {
@@ -112,20 +146,22 @@ pub fn gather(
             if let Some(link) = r.obs.reference.as_deref()
                 && view.record_url(r).is_some()
                 && !sources.iter().any(|s| s == link)
+                && naming::identifies(c, link, &affected).is_empty()
                 && sources.len() < 20
             {
                 sources.push(link.to_string());
             }
         }
     }
-    let notice_url = site_url.map(|u| format!("{}/#notice={}", u.trim_end_matches('/'), c.id));
+    // The notice page: `<site>/notices/<id>/`, the address it keeps once published.
+    let notice_url = site_url.map(|u| format!("{}/notices/{}/", u.trim_end_matches('/'), c.id));
     let description = format!(
         "Automated AI agent activity: {} linked run(s) of {} public record(s) between {} and {}, against {} affected endpoint(s){}.{}",
         clusters.len(),
         clusters.iter().map(|x| x.members.len()).sum::<usize>(),
         first.map(date).unwrap_or_else(|| "an unknown date".into()),
         last.map(date).unwrap_or_else(|| "an unknown date".into()),
-        affected.len(),
+        all_affected.len(),
         if compromised {
             ", at least one with evidence the attack succeeded"
         } else {
@@ -133,11 +169,17 @@ pub fn gather(
         },
         reported(c)
             .parties()
-            .map(|p| format!(
-                " Reported to {p} before the public notice, each with a fixed lead time."
-            ))
+            .map(|p| format!(" Reported to {p}."))
             .unwrap_or_default()
-    );
+    ) + &if unnamed.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " {} of the {} affected organisation(s) are not named here: the public notice names an affected organisation only in a naming update, after a fixed lead from its report or with its consent.",
+            unnamed.len(),
+            all_affected.len()
+        )
+    };
     Ok(Public {
         title: c.title.clone(),
         description,
@@ -147,6 +189,8 @@ pub fn gather(
         developers,
         hosts,
         affected,
+        unnamed,
+        sectors,
         compromised,
         sources,
         notice_url,
@@ -171,6 +215,19 @@ fn or_missing(v: Value, name: &str, missing: &mut Vec<String>) -> Value {
     }
     v
 }
+
+/// The affected parties as the notice states them now: named hosts, then
+/// each operator not named yet by its description.
+fn harmed(p: &Public) -> Vec<String> {
+    p.affected
+        .iter()
+        .cloned()
+        .chain(p.unnamed.iter().map(|d| format!("{d} (not named)")))
+        .collect()
+}
+
+/// The note every draft carries on naming.
+const NAMING_NOTE: &str = "Affected organisations appear by host only once a published naming update has named them; draft again after each naming update.";
 
 /// The label every draft carries.
 pub const ADMIN: &str = "DRAFT for the admin to review and submit by hand after the notice is public. Nothing was submitted.";
@@ -198,7 +255,7 @@ pub fn aiid(p: &Public, reporter: &str, today: &str) -> Value {
             "description": p.description,
             "alleged_developer_of_ai_system": developer,
             "alleged_deployer_of_ai_system": p.developers,
-            "alleged_harmed_or_nearly_harmed_parties": p.affected,
+            "alleged_harmed_or_nearly_harmed_parties": harmed(p),
             "hosting_networks": p.hosts,
         },
         "report": {
@@ -213,6 +270,7 @@ pub fn aiid(p: &Public, reporter: &str, today: &str) -> Value {
         "notes": [
             "Developer and deployer are the developer-or-operator layer at or above the case's naming gate, each with its attribution label and likelihood word.",
             "Harness and model-family candidates are never named in public and are left out.",
+            NAMING_NOTE,
         ],
         "missing": missing,
     })
@@ -291,9 +349,9 @@ pub fn oecd(p: &Public, reporter: &str, today: &str) -> Value {
         ),
         crit(
             "Affected stakeholders",
-            json!(p.affected),
+            json!(harmed(p)),
             false,
-            "Operators of the affected endpoints.",
+            "Operators of the affected endpoints, by host once named, else by description.",
         ),
         crit(
             "AI system developer",
@@ -321,9 +379,9 @@ pub fn oecd(p: &Public, reporter: &str, today: &str) -> Value {
         ),
         crit(
             "Industry or sector",
-            Value::Null,
+            json!(p.sectors),
             false,
-            "Of the affected operators; not recorded in the case.",
+            "The admin's descriptions of the affected endpoints (`case endpoint --sector`).",
         ),
         crit(
             "Sources",
@@ -343,6 +401,7 @@ pub fn oecd(p: &Public, reporter: &str, today: &str) -> Value {
         "notes": [
             "The criteria marked mandatory are those the OECD names as mandatory; check the full mandatory set against the published framework before submitting.",
             "Harness and model-family candidates are never named in public and are left out.",
+            NAMING_NOTE,
         ],
     })
 }
@@ -403,9 +462,9 @@ pub fn article_73(p: &Public, today: &str) -> Value {
         ),
         f(
             "Affected parties",
-            json!(p.affected),
+            json!(harmed(p)),
             false,
-            "Operators of the affected endpoints, as the notice names them.",
+            "Operators of the affected endpoints, as the notice states them now.",
         ),
         f(
             "Causal link between the AI system and the incident",
@@ -467,13 +526,29 @@ mod tests {
         c.endpoints[0].state = EndpointState::Targeted;
         let p = gather(&c, &a, None, Some("https://s.example/n/"), "2026-10-20").unwrap();
         let v = draft(&p, Database::Aiid, "Reporter", "2026-10-20");
-        assert_eq!(v["report"]["url"], "https://s.example/n/#notice=t-1");
+        assert_eq!(v["report"]["url"], "https://s.example/n/notices/t-1/");
         assert_eq!(v["incident"]["alleged_developer_of_ai_system"], json!([]));
         assert!(
             v["missing"][0]
                 .as_str()
                 .unwrap()
                 .contains("alleged_developer")
+        );
+        // Before a naming update: the operator by description only, and no
+        // record link, since a record shows the host.
+        assert_eq!(
+            v["incident"]["alleged_harmed_or_nearly_harmed_parties"],
+            json!(["an affected organisation (not named)"])
+        );
+        assert_eq!(v["report"]["source_urls"], json!([]));
+        assert!(!v.to_string().contains("portal.example"));
+
+        crate::naming::mark_named(&mut c, &["portal.example.gov".into()], "2026-10-16");
+        let p = gather(&c, &a, None, Some("https://s.example/n/"), "2026-10-20").unwrap();
+        let v = draft(&p, Database::Aiid, "Reporter", "2026-10-20");
+        assert_eq!(
+            v["incident"]["alleged_harmed_or_nearly_harmed_parties"],
+            json!(["portal.example.gov"])
         );
         assert!(
             v["report"]["source_urls"]

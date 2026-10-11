@@ -9,7 +9,9 @@ use sc_case::notice::NoticeFile;
 use sc_case::providers::Directory;
 use std::path::Path;
 
-pub use sc_case::checklist::{Item, failing, print, single_source_hosts, single_source_line};
+pub use sc_case::checklist::{
+    Item, failing, print, print_titled, single_source_hosts, single_source_line,
+};
 
 /// The SHA-256 of the case's notice draft as it is on disk.
 pub fn draft_sha(root: &Path, id: &str) -> Result<String> {
@@ -131,8 +133,9 @@ mod tests {
             review.flags
         );
         let i = items(&root, t0);
-        // Every record is submit-anywhere: naming needs a logged reason.
-        assert!(!named(&i, "single-source").ok, "{i:?}");
+        // The indicator notice names no one, so nothing to name yet.
+        assert!(named(&i, "the indicator notice names").ok, "{i:?}");
+        assert!(!i.iter().any(|x| x.name.starts_with("single-source")));
         // The vendor is self-identified only: it stays out of the title.
         let title = named(&i, "no provider in the title");
         assert!(
@@ -163,10 +166,18 @@ mod tests {
         })
         .unwrap();
         let (p, _) = crate::notice::notice_draft(&root, "s-1", true, "2026-10-15", t0).unwrap();
-        let md = std::fs::read_to_string(p).unwrap();
+        let md = std::fs::read_to_string(&p).unwrap();
         assert!(
-            md.contains("URLs targeting portal[.]example[.]gov's hosts were submitted to public scan services."),
+            !md.contains("portal[.]example") && !md.contains("example.gov"),
             "{md}"
+        );
+        // The naming update carries the fixed submit-anywhere wording.
+        let c = load(&root, "s-1").unwrap();
+        let d = sc_case::naming::draft(&c, &host, &host);
+        assert!(
+            d.text.contains("URLs targeting portal[.]example[.]gov's hosts were submitted to public scan services."),
+            "{}",
+            d.text
         );
         assert!(
             md.contains("identify themselves as using `hunyuan` from Tencent"),
@@ -174,7 +185,8 @@ mod tests {
         );
         let i = items(&root, t0);
         for n in [
-            "single-source",
+            "the indicator notice names",
+            "\"misaligned\"",
             "no provider in the title",
             "plant signals",
             "no likelihood",
@@ -182,6 +194,47 @@ mod tests {
         ] {
             assert!(named(&i, n).ok, "{n}: {i:?}");
         }
+
+        // A host or "misaligned" written into the draft by hand fails.
+        let draft = std::fs::read_to_string(&p).unwrap();
+        std::fs::write(
+            &p,
+            draft.replace(
+                "## Indicators",
+                "The misaligned agents hit hxxps://portal[.]example[.]gov/login.\n\n## Indicators",
+            ),
+        )
+        .unwrap();
+        let i = items(&root, t0);
+        let no_party = named(&i, "the indicator notice names");
+        assert!(
+            !no_party.ok && no_party.detail[0].contains("portal[.]example[.]gov"),
+            "{no_party:?}"
+        );
+        assert!(!named(&i, "\"misaligned\"").ok, "{i:?}");
+        // With the admin's scope finding and an L3 grade, the word may stay.
+        update(&root, "s-1", |c| {
+            let a = super::super::analysis(&root, c, &Scope::All)?;
+            for cl in a
+                .clusters
+                .iter()
+                .filter(|cl| cl.tier > sc_core::Tier::Noise)
+            {
+                sc_case::actions::scope(
+                    c,
+                    &cl.key,
+                    sc_core::scope::ScopeFinding::ScopeExceeded,
+                    &["S4".into()],
+                    "SQL injection on a portal",
+                    "d",
+                )?;
+            }
+            sc_case::actions::grade(c, sc_core::AgentLevel::Adaptive, Some("retries"), "d")?;
+            Ok(())
+        })
+        .unwrap();
+        assert!(named(&items(&root, t0), "\"misaligned\"").ok);
+        std::fs::write(&p, draft).unwrap();
 
         // "compromised" needs a basis beyond the inbound requests.
         let mut c = load(&root, "s-1").unwrap();

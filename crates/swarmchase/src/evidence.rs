@@ -421,7 +421,18 @@ mod tests {
         })
         .unwrap();
         let (p, review) = notice_draft(&root, "t-2", true, "2026-10-22", 1_791_000_000).unwrap();
-        assert!(std::fs::read_to_string(&p).unwrap().contains(marker));
+        // With the agreement the notice may use the logs, but the indicator
+        // notice still lists no record on the operator's host: that would
+        // locate it before its naming clock runs.
+        assert!(!std::fs::read_to_string(&p).unwrap().contains(marker));
+        assert!(
+            !review
+                .withheld
+                .iter()
+                .any(|w| w.contains("operator logs e1")),
+            "{:?}",
+            review.withheld
+        );
         assert!(review.lint.is_empty(), "{:?}", review.lint);
         cleanup(&root);
     }

@@ -112,6 +112,14 @@ pub struct Cluster {
     /// Descriptive: never scored, never linked on.
     #[serde(default, skip_serializing_if = "FanOut::is_empty")]
     pub fanout: FanOut,
+    /// Members' targets each sent to several scan services within seconds
+    /// ([`crate::crossservice`]), and whether ordinary links around the
+    /// cluster were sent alike. Descriptive: never scored, never linked on.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::crossservice::CrossService::is_empty"
+    )]
+    pub cross_service: crate::crossservice::CrossService,
     /// Lengths at which members' truncated URLs were cut
     /// ([`crate::dialect::cut_lengths`]). Descriptive.
     #[serde(default, skip_serializing_if = "CutLengths::is_empty")]

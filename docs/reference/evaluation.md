@@ -10,6 +10,7 @@ How the rules are measured, and how CI stops a rules change that costs precision
 - the same numbers over the records not marked synthetic ([synthetic and non-synthetic](#synthetic-and-non-synthetic-records)), and per provenance, per source and per label file;
 - recall per agent class, and per tactic of the rules that fired;
 - the false-positive rate per benign class;
+- the reviewed benign baseline: progress toward its target and the false-positive bound per tier ([benign baseline](#a-reviewed-benign-baseline));
 - a calibration table: the share of labelled records that are agents, per tier and per agent grade ([calibration](#calibration));
 - precision per rule, with its hard negatives;
 - linking against labelled runs ([cluster-level evaluation](#cluster-level-evaluation));
@@ -41,6 +42,7 @@ swarmchase eval <data>/labels/reviewed.ndjson       # everything reviewed so far
 | `eval repro <result.json>` | Measure a saved result again and diff its numbers ([reproducing a result](#reproducing-a-result)). |
 | `eval check-results [<dir>]` | Check the saved results CI can check without their inputs ([checking saved results](#checking-saved-results)). |
 | `eval export-bench <input>… --out <file>` | Write an [SC-Bench](#sc-bench) file. |
+| `eval pre-era` | Collect and measure the [pre-era control](#the-pre-era-control-on-archive-data). |
 
 ## Statistics
 
@@ -106,9 +108,12 @@ No agent of the kind this toolkit looks for sent a request before late 2022. `--
 
 - records flagged suggestive or above, and significant, of all records;
 - records per agent-grade column, of all records, and clusters graded L2 or above, of all clusters;
-- clusters carrying each plant signal, of all clusters.
+- records and clusters graded above L0;
+- per rule that fired, the records it fired on and those of them flagged suggestive or above, of all records;
+- clusters carrying each plant signal, of all clusters;
+- interaction edges, by kind.
 
-Each rate has its Wilson interval. With none of `n` records flagged, the 95% upper bound is close to the rule of three, `3/n`, and `eval` prints it. Inputs may be record files or a watch store directory, so a store of archive captures can be measured whole:
+Each rate has its Wilson interval. `eval` also prints the 95% upper bound on the false-alarm rate at each tier: the rule of three, `3/n`, when none of `n` records was flagged, and the Wilson upper bound otherwise. Inputs may be record files or a watch store directory, so a store of archive captures can be measured whole:
 
 ```sh
 swarmchase eval <data>/store --before 2022-11-30
@@ -116,6 +121,27 @@ swarmchase eval <data>/store --before 2022-11-30 --summary-json <data>/eval/cont
 ```
 
 Old records are mostly archive captures, which stop at L2, so the control measures how often the model-written rung fires on pre-agent traffic. Run it on local data only: the records and the table stay in the data directory and are never committed.
+
+A relay or carrier rule firing on a pre-era record of its own host is not by itself a false alarm: the record went through the relay or the echo service. The per-rule table separates the records a rule fired on from those it helped flag, and the flagged column is the one that counts.
+
+### The pre-era control on archive data
+
+`eval pre-era` builds the control from real captures and measures it in one step:
+
+```sh
+swarmchase eval pre-era --per-source 600
+swarmchase eval pre-era --offline            # measure what is collected, fetch nothing
+swarmchase eval pre-era --offline --years even   # one half of the capture years
+```
+
+1. It reads the `wayback` sources of [`watchlist.toml`](../../watchlist.toml), the relay and carrier hosts, with their patterns and filters (`--source <name>` picks some).
+2. For each source it reads the Wayback index one calendar year at a time, from `--from-year` (default 2012) to the day before `--before` (default 2022-11-30), up to `--per-source` captures spread evenly over the years. Index rows only, one request per year and source, at the watchlist's request interval.
+3. Each year's rows go to `<data>/controls/pre-era/<source>/<year>-n<bound>.ndjson`. A year collected once is reused, so a second run with the same arguments measures the same records without fetching, and a failed year is fetched on the next run.
+4. It analyses every collected record before the date and prints the per-source counts, the [negative control](#negative-control) tables and the grade table. The same numbers, and no record content, go to `<data>/controls/pre-era/summary.json`.
+
+`--years even` or `--years odd` measures only the captures of even or odd calendar years. The per-year bound is still set over every year, so both halves read the files a full run collected. Tune a change on one half and quote the other ([FM-9.13](../manual/09-evaluation.md#fm-913-negative-control-and-benign-baseline)).
+
+The index is sorted by URL within a year, so a year's share is the first captures by URL in it, not a random draw. Several relays did not exist before the cut, so their sources return little or nothing; the per-source table shows how much each contributed. The records stay in the data directory; only the aggregate numbers may be quoted.
 
 ## Interaction edges
 
@@ -193,10 +219,13 @@ A proportion is `{"k", "n", "value", "lo", "hi"}`: `k` of `n`, the point estimat
 | `agent_classes[]`, `tactics[]` | `name`, `n`, and recall as `suggestive` and `significant` proportions. |
 | `benign_classes[]` | `name`, `n`, and the false-positive rate as `suggestive` and `significant` proportions. |
 | `clusters` | The [cluster-level evaluation](#cluster-level-evaluation), described below. |
+| `baseline` | The [benign baseline](#a-reviewed-benign-baseline), described below; absent with no review-sample label. |
 
 A slice is `name`, `labelled`, `agents`, `benign`, `tiers[]` (record unit) and `cluster_tiers[]` (cluster unit).
 
 `clusters` holds `run_labelled`, `runs`, `bcubed_precision`, `bcubed_recall`, `bcubed_f1` and `false_merge_rate` (numbers or `null`). It also holds `clusters_checked`, `false_splits` (run ids) and `false_merges[]`, each with `cluster` (key), `members`, `runs` and `mixes_labels`.
+
+`baseline` holds `target`, `reviewed`, `benign`, `agents`, `excluded` (tuned or synthetic) and `tiers[]`, each with `tier`, `fp_rate` (a proportion), `upper` (the 95% upper bound) and `method` (`rule_of_three` or `wilson`).
 
 ## SC-Bench
 
@@ -246,7 +275,7 @@ A false-positive rate needs benign records nobody chose for looking like agents.
     swarmchase review sample --stratify source,relay,month --n 1200 --seed 1 <data>/store
     ```
 
-    Strata are combinations of `source`, `relay` (the first relay or carrier rule that fired, else `direct`), `month` and `ts_kind`. The sample is split over them in proportion to their size, so it is self-weighting. By default it draws from the records below suggestive (`--below suggestive`), the watch's noise tier; `--below all` draws from every tier.
+    Strata are combinations of `source`, `relay` (the first relay or carrier rule that fired, else `direct`), `month` and `ts_kind`. The sample is split over them in proportion to their size, so it is self-weighting. By default it draws from every tier; `--below suggestive` draws from the watch's noise tier only. Records already in a review file are left out (`--include-reviewed` keeps them), so a sample with a new seed tops the baseline up.
 
 2. **Label twice.** Each labeller runs `swarmchase review <data>/labels/baseline-queue-1.ndjson --all --labeller <name>`. `--all` queues every record in the file, in its order, as `review:baseline-sample`.
 
@@ -254,6 +283,10 @@ A false-positive rate needs benign records nobody chose for looking like agents.
 
 4. **Bound.** `review --stats` prints the baseline line: the baseline-sample reviews, how many were labelled benign and agent (agents found there are misses), and the benign records flagged at review with the false-positive rate and its interval. With none of `n` benign records flagged, the 95% upper bound is `3/n` (the rule of three): 0.5% needs more than 600 benign records with none flagged, and 1,200 bounds it at 0.25%.
 
-5. **Measure.** `swarmchase eval <data>/labels/reviewed.ndjson` scores the current rules on everything reviewed. Run it before and after a rules change: a benign baseline record a change flags is a false positive the change introduces.
+5. **Measure.** `swarmchase eval <data>/labels/reviewed.ndjson` scores the current rules on everything reviewed and prints the baseline line: the benign baseline records against the target of 1,000, the agents found among them, and per tier the false-positive rate with its 95% upper bound, by the rule of three when none was flagged and the Wilson bound otherwise. Run it before and after a rules change: a benign baseline record a change flags is a false positive the change introduces.
 
-A sample from the noise tier is unflagged by the rules it was drawn under, so on those rules its false-positive rate is zero by construction. Its value is what a rules change does to it, and the misses it finds. For a rate over all the watch's benign traffic, draw with `--below all`.
+6. **Spend.** A baseline record looked at while changing a rule (a false positive from `--show-fp` that a change was made to fix) no longer tests the rules fairly. `review tuned <id>…` (ids, or files of ids) marks it `"tuned": true` in every review file, and `eval` leaves it out of the baseline and counts it as excluded.
+
+The baseline counts only labels of class `review:baseline-sample` that are not `synthetic` and not `tuned`. Records reviewed because they were flagged, or from `review --unflagged`, are chosen by the rules and are not in it.
+
+A sample drawn with `--below suggestive` is unflagged by the rules it was drawn under, so on those rules its false-positive rate is zero by construction. Its value is what a rules change does to it, and the misses it finds. The default every-tier sample estimates the rate over all the watch's traffic.

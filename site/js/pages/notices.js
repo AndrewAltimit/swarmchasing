@@ -64,4 +64,11 @@ if (form) {
   });
   readHash();
   apply(false);
+  // The form sits in a fold: shown with this script, closed on a phone
+  // unless the address already carries filters.
+  const fold = form.closest("details.filters-fold");
+  if (fold) {
+    fold.hidden = false;
+    if (window.matchMedia?.("(max-width: 600px)").matches && location.hash.length < 2) fold.open = false;
+  }
 }

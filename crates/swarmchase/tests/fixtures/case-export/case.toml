@@ -12,7 +12,7 @@ host = "portal.example.gov"
 state = "targeted"
 
 [[contact]]
-org = "Portal"
+org = "Example Records Agency"
 role = "affected"
 endpoint = "portal.example.gov"
 channel = "email"

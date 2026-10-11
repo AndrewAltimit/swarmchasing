@@ -3,23 +3,25 @@
 //! and the self-review checklist all call these functions.
 //!
 //! - [`front_matter`]: no DRAFT banner, a first update, updates in date
-//!   order, `updated` matching the last update, a known sector.
+//!   order, `updated` matching the last update, a known sector, and no
+//!   affected host before a naming update.
 //! - [`leaks`]: nothing a notice withholds anywhere it publishes text (body,
 //!   updates, title): callback channels, addresses, credentials
 //!   ([`sc_core::notice::lint_public`]).
 //! - [`wording`]: what the wording rules check from the notice alone:
 //!   attribution statements with a layer, label and tag, likelihood words
-//!   within their labels, and no provider in the title that the notice does
-//!   not name as a developer.
+//!   within their labels, no provider in the title that the notice does
+//!   not name as a developer, and "misaligned" only with the scope finding
+//!   and agent grade the front matter records.
 //!
 //! [`withholding`] is the first two, the scan the checklist reports as its
 //! own item; [`lint_notice`] is all three.
 
-use super::file::{NoticeFile, SECTORS};
+use super::file::{NoticeFile, SECTORS, UpdateKind};
 use super::wording as w;
 use crate::providers::Directory;
-use sc_core::Rules;
 use sc_core::notice::lint_public;
+use sc_core::{AgentLevel, Rules};
 use std::fmt::Write;
 use std::sync::OnceLock;
 
@@ -47,12 +49,51 @@ pub fn front_matter(n: &NoticeFile) -> Vec<String> {
             n.meta.updated, last.date
         ));
     }
+    // The indicator notice names and locates no affected party: hosts
+    // reach `affected` only with the naming update that names them.
+    if !n.meta.affected.is_empty() && !n.meta.updates.iter().any(|u| u.kind == UpdateKind::Naming) {
+        out.push(
+            "`affected` lists hosts but no naming update names them (the indicator notice names no affected party)"
+                .into(),
+        );
+    }
     if let Some(s) = &n.meta.sector
         && !SECTORS.contains(&s.as_str())
     {
         out.push(format!("unknown sector `{s}` ({})", SECTORS.join("|")));
     }
+    if let Some(g) = &n.meta.agent_grade
+        && g.parse::<AgentLevel>().is_err()
+    {
+        out.push(format!("unknown agent_grade `{g}` (L0..L5)"));
+    }
     out
+}
+
+/// The text a notice states as its own: the title, the body and every
+/// update except quoted statements, corrections and retractions, which
+/// are never blocked.
+pub fn own_text(n: &NoticeFile) -> String {
+    let mut text = format!("{}\n{}", n.meta.title, n.body);
+    for u in n.meta.updates.iter().filter(|u| {
+        !matches!(
+            u.kind,
+            UpdateKind::Reply | UpdateKind::Correction | UpdateKind::Retraction
+        )
+    }) {
+        let _ = writeln!(text, "\n{}", u.text);
+    }
+    text
+}
+
+/// "Misaligned" in the notice's own text without the front matter's scope
+/// finding and agent grade allowing it.
+pub fn misaligned(n: &NoticeFile) -> Vec<String> {
+    w::misaligned_problems(
+        &own_text(n),
+        n.meta.scope,
+        n.meta.agent_grade.as_deref().and_then(|g| g.parse().ok()),
+    )
 }
 
 /// Everything the notice publishes as text: the body, every update (a
@@ -84,6 +125,7 @@ pub fn wording(n: &NoticeFile, dir: &Directory) -> Vec<String> {
     let mut out = w::claim_problems(&n.body);
     out.extend(w::likelihood_problems(&text));
     out.extend(w::title_problems(&n.meta.title, &n.meta.providers, dir));
+    out.extend(misaligned(n));
     out
 }
 
@@ -121,6 +163,8 @@ mod tests {
                 providers: vec![],
                 affected: vec!["portal.example.gov".into()],
                 sector: None,
+                scope: None,
+                agent_grade: None,
                 rules_version: "2026-10-12".into(),
                 toolkit: "0.1.0".into(),
                 updates: vec![
@@ -128,7 +172,13 @@ mod tests {
                         date: "2026-10-20".into(),
                         kind: UpdateKind::Published,
                         from: None,
-                        text: "Initial notice.".into(),
+                        text: "Indicator notice.".into(),
+                    },
+                    NoticeUpdate {
+                        date: "2026-10-21".into(),
+                        kind: UpdateKind::Naming,
+                        from: None,
+                        text: "The portal's operator is named.".into(),
                     },
                     NoticeUpdate {
                         date: "2026-10-22".into(),
@@ -150,8 +200,18 @@ mod tests {
         let mut bad = n.clone();
         bad.body.push_str("\n> **DRAFT**: x\n");
         bad.meta.updated = "2026-10-21".into();
-        bad.meta.updates[1].text = "inbox is ntfy.sh/agent-run-77".into();
+        bad.meta.updates[2].text = "inbox is ntfy.sh/agent-run-77".into();
         assert_eq!(lint_notice(&bad, &rules).len(), 3);
+        // Hosts in `affected` need the naming update that names them.
+        let mut early = n.clone();
+        early.meta.updates.remove(1);
+        assert!(
+            front_matter(&early)
+                .iter()
+                .any(|x| x.contains("no naming update"))
+        );
+        early.meta.affected.clear();
+        assert!(front_matter(&early).is_empty());
         let mut odd = n.clone();
         odd.meta.sector = Some("Government".into());
         assert!(
@@ -180,5 +240,30 @@ mod tests {
             "{p:?}"
         );
         assert_eq!(lint_notice(&n, &Rules::default_rules()), p);
+    }
+
+    #[test]
+    fn misaligned_reads_the_front_matter() {
+        let rules = Rules::default_rules();
+        let mut n = notice();
+        n.body
+            .push_str("\nThe agents were misaligned with their task.\n");
+        let p = lint_notice(&n, &rules);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert!(p[0].contains("says `misaligned`"), "{p:?}");
+        n.meta.scope = Some(sc_core::scope::ScopeFinding::ScopeExceeded);
+        n.meta.agent_grade = Some("L2".into());
+        assert_eq!(lint_notice(&n, &rules).len(), 1);
+        n.meta.agent_grade = Some("L3".into());
+        assert!(lint_notice(&n, &rules).is_empty());
+        n.meta.agent_grade = Some("L9".into());
+        assert!(front_matter(&n).iter().any(|x| x.contains("agent_grade")));
+        // A quoted statement or a correction may use the word; an update
+        // in the notice's own voice may not.
+        let mut n = notice();
+        n.meta.updates[2].text = "We wrongly called it misaligned.".into();
+        assert!(lint_notice(&n, &rules).is_empty());
+        n.meta.updates[2].kind = UpdateKind::Update;
+        assert_eq!(lint_notice(&n, &rules).len(), 1);
     }
 }

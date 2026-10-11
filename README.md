@@ -1,6 +1,8 @@
 # swarmchasing
 
-Rust tools for finding misaligned AI agent swarms and fleets in public records, linking their activity into runs and fleets, and reporting each incident to the AI provider responsible and to the operators of affected systems, then publishing a notice after a short fixed lead time. The methods follow published incident work: [swarmcha.se: agent fleet report](https://swarmcha.se/posts/chinese-agent-fleet), [Transluce: agent activity](https://transluce.org/agent-activity) and [Transluce: US/Canada government](https://transluce.org/us-canada-gov). Agents leave traces in public scan services and web archives: they wrap targets in relays, run fetch programs in remote browsers, call back to throwaway inboxes and tag their requests. Those traces can be extracted, linked, timed and attributed.
+Rust tools for finding AI agent activity in public records, linking it into runs and fleets, and reporting each incident that harms or endangers others to the AI provider responsible and to the operators of affected systems, then publishing a notice: indicators after a short fixed lead time, the names of affected organisations a few working days later.
+
+The methods follow published incident work: [swarmcha.se: agent fleet report](https://swarmcha.se/posts/chinese-agent-fleet), [Transluce: agent activity](https://transluce.org/agent-activity) and [Transluce: US/Canada government](https://transluce.org/us-canada-gov). Agents leave traces in public scan services and web archives: they wrap targets in relays, run fetch programs in remote browsers, call back to throwaway inboxes and tag their requests. Those traces can be extracted, linked, timed and attributed.
 
 ## What it does
 
@@ -65,7 +67,7 @@ The [CLI README](crates/swarmchase/README.md) covers input formats and every com
 
 - **Passive only.** Read indexes and public records. Never open the URLs agents submitted, since they may carry live payloads or alert the operator. Never read from or post to their inboxes or notification topics.
 - **Attribution is evidence-weighted.** Model names inside requests are weak, because agents misreport who built them. An ASN names a host, not a developer. A developer is named outside case notes only at or above the case's naming threshold.
-- **Report, then publish on a fixed clock.** Swarms are active incidents. Reports go to the provider and affected operators first; the public notice follows after a fixed lead time (none for the provider, 4 to 12 hours for a targeted operator, 24 for a compromised one) that nothing a recipient says extends. Tools only draft and check. The admin sends and publishes, after a written self-review.
+- **Report, then publish on a fixed clock.** Swarms are active incidents. Reports go to the provider and affected operators first. An indicator notice that names no affected party follows once all are sent (24 hours later for a compromised operator), and nothing a recipient says delays it. Operators are named 3 working days after their report, 10 if compromised, or earlier with their consent. Tools only draft and check. The admin sends and publishes, after a written self-review and a second person's review.
 - **Raw data stays out of git.** The data directory (watch data and case files) is gitignored. Only notices and curated, redacted samples are committed.
 
 The full set is in [docs/policies.md](docs/policies.md).

@@ -47,26 +47,28 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (126, 0, 7, 82),
+        (134, 0, 7, 96),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (52, 0, 81, 82), "significant");
+    assert_eq!(counts(Tier::Significant), (60, 0, 81, 96), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 252);
+    assert_eq!(a.total, 282);
     assert_eq!(
         tiers,
-        [92, 76, 84],
+        [106, 76, 100],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 33, "clusters");
+    assert_eq!(a.clusters.len(), 36, "clusters");
 
     // Agent grades by actor: no scanner run and no hand-typed pentest grades
     // above L0; a person pasting chatbot payloads reaches L3, the grade's
-    // documented limit.
+    // documented limit, and so do agent-style links a person mails through a
+    // gateway that submits every link to several scan services. An agent's
+    // own cross-service fan-out reaches L4.
     let g = &report.grades.rows;
     let above = |actor: &str, from: usize| -> usize {
         sc_core::eval::grades::COLUMNS[from..]
@@ -75,7 +77,8 @@ fn evaluation_set_numbers_hold() {
             .sum()
     };
     assert_eq!(above("tool", 3), 0, "tool runs above L0: {g:?}");
-    assert_eq!(g["human"].get("L3"), Some(&4), "{g:?}");
+    assert_eq!(g["human"].get("L3"), Some(&10), "{g:?}");
+    assert_eq!(g["agent"].get("L4"), Some(&8), "{g:?}");
     assert_eq!(above("human", 6), 0, "human runs at L4: {g:?}");
 
     // Every benign record says what kind of traffic it is.

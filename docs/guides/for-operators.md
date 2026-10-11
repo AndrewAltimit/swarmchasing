@@ -1,6 +1,8 @@
 # For operators
 
-This page is for you if you run a website or service and either received a report from swarmchasing or found your host named in a published notice. It explains what the report means, how to check your own logs, how to send logs back, how to reply or ask for a correction, and how to check the evidence we sent.
+This page is for you if you run a website or service and either received a report from swarmchasing or found your host named in a published notice. It explains what the report means, how to tell it is genuine, what becomes public and when, how to check your own logs, how to send logs back, how to reply or ask for a correction, how to check the evidence we sent, and how to [reach us privately](#contact).
+
+If you work at an AI provider, [for-providers.md](for-providers.md) is the page for you.
 
 How the analysis works is in [methodology.md](../methodology.md). The policies behind reports and notices are in [policies.md](../policies.md).
 
@@ -20,9 +22,30 @@ A report to an affected operator says that public records, from scan services an
 - **It does not prove an AI agent sent every request.** The rules detect agent-like activity. A penetration tester or conventional scanner using the same payloads and services produces the same records. See [known limits](../methodology.md#known-limits-and-false-positive-traps).
 - **It is not an accusation.** You are the target, not the subject.
 
-**When the notice goes public.** The report comes first, and states the time the public notice is scheduled for. You get a fixed lead time: 4 to 12 hours if your endpoint was targeted (6 unless we set the case otherwise), 24 hours if it was marked compromised. Use it to check your logs, block the clients and check the weakness. The time is fixed: nothing you say or ask moves it, and it is not an embargo, because a swarm is an active incident and others it targets need the notice. A statement you send is added to the notice verbatim ([right of reply](#right-of-reply-and-corrections)). See [lead times](../policies.md#lead-times).
+## Check that a report is genuine
 
-The notice names your organisation as targeted or affected, never as the actor. It says your systems were compromised only when we have a basis beyond the requests themselves, such as your own confirmation. If every record we hold on your host comes from a public scan service, the notice says that URLs targeting your hosts were submitted to public scan services, not that requests reached you. If an endpoint was marked compromised, the notice withholds the attack details and request URLs for it. What notices withhold is listed in [policies.md](../policies.md#reporting-and-publication).
+Anyone can write an email that claims to come from us, so check before you act on one. A genuine report:
+
+- **carries a case id** in square brackets at the end of its subject. The public notice for the incident is published on this site under the same id, at `notices/<case id>/`, so once the notice is out you can match the two. Before then, ask us through the [private channel](#contact) and give the id.
+- **comes with an evidence bundle** that you can check yourself on the site's [Tools page](../reference/browser-toolkit.md#evidence-bundles), in your browser, without installing anything or uploading the files ([verify an evidence bundle](#verify-an-evidence-bundle)).
+- **links only to public records and this site.** Each record links to the archive capture or scan report it was taken from. A report never asks you to sign in, pay, install software or visit a host named in it.
+
+If a message fails any of these, or you are unsure, do not act on it; ask us privately with the id it gave.
+
+## What happens after the report
+
+You hear first, privately. What becomes public, and when, comes in two stages, and your report states both times:
+
+1. **An indicator notice that does not name you.** Once every party has been sent its report, a public notice describes the activity and how to recognise it: relays, payload shapes, the kinds of callback service, the time window. It does not name or locate you: no organisation name, host, domain or address. Your endpoint appears only by class, such as "a national government data portal". If your endpoint was targeted, this can follow your report at once; if it was marked compromised, it waits at least 24 hours after your report.
+2. **Your name, after a lead.** A dated update to the notice then names your organisation and its hosts, defanged: 3 working days after your report if your endpoint was targeted, 10 working days if it was marked compromised. Working days are Monday to Friday, counted in UTC. Use the time to check your logs, block the clients, fix the weakness and prepare your own statement.
+
+**If you agree to be named earlier**, say so in writing in a reply; we record it, and your name can go in the next update with no wait. Consent is the only thing that shortens the lead.
+
+**If you want more time**, ask; we record the request. We may lengthen the naming lead for the case, up to 20 working days, but are not bound to. Nothing you say or ask moves the indicator notice. It is not an embargo: a swarm is an active incident and others it targets need the indicators now; only names wait.
+
+A statement you send is added to the notice verbatim ([right of reply](#right-of-reply-and-corrections)). Each notice and each naming update is reviewed by a second person before it is published. See [lead times](../policies.md#lead-times).
+
+The naming update names your organisation as targeted or affected, never as the actor. It says your systems were compromised only when we have a basis beyond the requests themselves, such as your own confirmation. If every record we hold on your host comes from a public scan service, the update says that URLs targeting your hosts were submitted to public scan services, not that requests reached you. If an endpoint was marked compromised, the notice withholds the attack details and request URLs for it. What notices withhold is listed in [policies.md](../policies.md#reporting-and-publication).
 
 ## Check your own logs
 
@@ -121,10 +144,12 @@ It checks each file against the manifest, re-runs the analysis on `records.ndjso
 
 The check must use the rules the bundle was made with. If the rules version in `stamp.json` differs from your checkout's, the check says so. Check out the commit named in `stamp.json` (`toolkit_commit`, when present), or pass that commit's rules file with `--rules path/to/default.toml`.
 
-**In the browser.** The toolkit's **Tools** page loads a bundle and re-runs the check locally.
+**In the browser.** The site's [Tools page](../reference/browser-toolkit.md#evidence-bundles) loads a bundle and re-runs the check locally.
 
 **What verifying shows, and what it does not.** A bundle that verifies shows that the tiers and clusters in the report follow from the records under the stated rules, and that the files are the ones the manifest lists. It does not show that the records are genuine. For that, follow each record's `reference` link to the public record it was taken from: an archive capture or a scan report. The manifest is not signed, so it proves the files agree with each other, not who produced them.
 
 ## Contact
 
-Reply to the address the report came from. Questions, logs, statements and corrections all go there. If you found your host in a notice but received no report, contact the project through this repository and we will send you the full report.
+- **If you received a report,** reply to the address it came from and keep the case id in the subject. Questions, logs, statements, corrections, consent to earlier naming and requests for more time all go there.
+- **If you received no report,** found your organisation in a notice, or want to reach us privately for any other reason, use [private vulnerability reporting](https://github.com/AndrewAltimit/swarmchasing/security/advisories/new) on this repository. Only the maintainers can read what you send. Give the case or notice id if you have one, and say how to reach you. If a notice concerns you and you received no report, we will send you the full report.
+- **Do not open a public issue or discussion about an affected host or organisation.** Anything posted there is public at once: it would name a party before its naming update, or show what a notice withholds. Public issues are for the toolkit itself.

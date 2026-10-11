@@ -57,6 +57,10 @@ pub struct Summary {
     /// Observed precision per tier and per agent grade.
     #[serde(default)]
     pub calibration: Calibration,
+    /// The reviewed benign baseline's false-positive bound and progress;
+    /// absent when no label is from a review sample.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<super::baseline::Baseline>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,6 +285,7 @@ fn build(
         }),
         by_file: units::breakdown(a, &items, |_, l| l.origin.clone()),
         calibration: units::calibration(a, &items),
+        baseline: super::baseline::baseline(a, labels),
     }
 }
 

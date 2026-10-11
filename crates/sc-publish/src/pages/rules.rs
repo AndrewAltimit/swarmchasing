@@ -35,6 +35,38 @@ pub fn tactic_label(id: &str) -> String {
         .map_or_else(|| id.to_string(), |t| format!("{} {}", t.id(), t.label()))
 }
 
+/// Fewer labelled hits than this and a rule's precision is not printed:
+/// one benign hit would read as "precision 0%".
+pub const MIN_HITS_FOR_PRECISION: usize = 5;
+
+fn plural(n: usize, one: &str, many: &str) -> String {
+    match n {
+        0 => format!("no {many}"),
+        1 => format!("1 {one}"),
+        n => format!("{n} {many}"),
+    }
+}
+
+/// A rule's hits on the labelled set: the counts, then its precision only
+/// when there are enough hits to estimate it.
+pub fn hit_counts(agent: usize, benign: usize, precision: Option<f64>) -> String {
+    let total = agent + benign;
+    if total == 0 {
+        return "no hits".into();
+    }
+    let counts = format!(
+        "{}, {}",
+        plural(agent, "agent hit", "agent hits"),
+        plural(benign, "benign hit", "benign hits")
+    );
+    match precision {
+        Some(p) if total >= MIN_HITS_FOR_PRECISION => {
+            format!("{counts} · precision {:.0}%", p * 100.0)
+        }
+        _ => format!("{counts}; too few to estimate precision"),
+    }
+}
+
 /// The rules of a rules file, in file order.
 pub fn parse_rules(toml_text: &str) -> Result<(String, i64, i64, Vec<RuleCard>), String> {
     let v: toml::Value = toml::from_str(toml_text).map_err(|e| format!("rules: {e}"))?;
@@ -257,20 +289,13 @@ pub fn body(
 <button type=\"button\" data-test-run data-needs-engine disabled>Test</button></div><div class=\"rt-out\" aria-live=\"polite\"></div></details>",
             esc(&c.id)
         );
-        match st {
-            Some(r) => {
-                let _ = write!(
-                    s,
-                    "<p class=\"hint\">Labelled set: {} agent, {} benign record(s){}</p>",
-                    r.on_agent,
-                    r.on_benign,
-                    r.precision
-                        .map(|p| format!(" · precision {:.0}%", p * 100.0))
-                        .unwrap_or_default()
-                );
-            }
-            None => s.push_str("<p class=\"hint\">Labelled set: no hits</p>"),
-        }
+        let (agent, benign, precision) =
+            st.map_or((0, 0, None), |r| (r.on_agent, r.on_benign, r.precision));
+        let _ = write!(
+            s,
+            "<p class=\"hint\">Labelled set: {} (<a href=\"../eval/#per-rule\">hits per rule</a>)</p>",
+            hit_counts(agent, benign, precision)
+        );
         s.push_str("</article>");
     }
     s.push_str(
@@ -344,6 +369,19 @@ group = "oast"
         assert_eq!(cards[1].group.as_deref(), Some("oast"));
         assert!(b.contains("<dt>Group</dt><dd><code>oast</code>"));
         assert!(!b.contains("the sum of the weights"));
+    }
+
+    #[test]
+    fn a_rule_with_few_hits_shows_counts_not_a_precision() {
+        assert_eq!(
+            hit_counts(0, 1, Some(0.0)),
+            "no agent hits, 1 benign hit; too few to estimate precision"
+        );
+        assert_eq!(
+            hit_counts(4, 2, Some(4.0 / 6.0)),
+            "4 agent hits, 2 benign hits · precision 67%"
+        );
+        assert_eq!(hit_counts(0, 0, None), "no hits");
     }
 
     #[test]

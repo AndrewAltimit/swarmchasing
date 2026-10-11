@@ -33,7 +33,9 @@ pub fn draft(
     let p = incident::gather(&c, &a, notice_text, site_url, today)?;
     let v = incident::draft(&p, db, reporter, today);
     let text = format!("{}\n", serde_json::to_string_pretty(&v)?);
-    let problems = leak_check(root, &c, |r| lint_public(&text, r))?;
+    let mut problems = leak_check(root, &c, |r| lint_public(&text, r))?;
+    // Nothing may identify an operator no naming update has named.
+    problems.extend(sc_case::naming::identifies(&c, &text, &p.affected));
     if !problems.is_empty() {
         bail!(
             "the draft would carry what a notice must not:\n  {}",
@@ -82,13 +84,28 @@ mod tests {
         })
         .unwrap();
 
+        // Before a naming update, the draft names no affected party.
         let aiid: Value = serde_json::from_str(&run(Database::Aiid).unwrap()).unwrap();
         assert_eq!(aiid["incident"]["title"], "Portal probe");
         assert_eq!(
             aiid["incident"]["alleged_harmed_or_nearly_harmed_parties"],
+            json!(["an affected organisation (not named)"])
+        );
+        assert!(!aiid.to_string().contains("portal.example"));
+        assert!(!aiid.to_string().contains("portal[.]example"));
+        assert!(!aiid.to_string().contains("python-httpx"));
+
+        // Once a naming update names it, the draft does too.
+        update(&root, "t-1", |c| {
+            sc_case::naming::mark_named(c, &["portal.example.gov".into()], "2026-10-16");
+            Ok(())
+        })
+        .unwrap();
+        let aiid: Value = serde_json::from_str(&run(Database::Aiid).unwrap()).unwrap();
+        assert_eq!(
+            aiid["incident"]["alleged_harmed_or_nearly_harmed_parties"],
             json!(["portal.example.gov"])
         );
-        assert!(!aiid.to_string().contains("python-httpx"));
 
         update(&root, "t-1", |c| {
             c.claims.push(sc_core::Claim {

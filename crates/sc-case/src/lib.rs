@@ -12,9 +12,13 @@
 //! - [`report`]: report options from a case, the affected hosts, who was reported.
 //! - [`fleet`]: the admin's fleet merges and splits, and the interaction
 //!   evidence that makes a fleet a swarm.
-//! - [`lead`]: the lead-time clock each party's report starts.
+//! - [`lead`]: the indicator notice's clock each party's report starts.
+//! - [`naming`]: the naming clock in working days, consent, the naming
+//!   draft, and the check that a text names no party it may not.
+//! - [`review`]: the second review of each stage's exact draft.
 //! - [`pinning`]: names for pinned rule sets and the tier changes between two.
-//! - [`checklist`]: the self-review checklist `notice add` runs.
+//! - [`checklist`]: the self-review checklists `notice add` and `notice
+//!   update --naming` run.
 //! - [`bundle`]: evidence bundle contents, the manifest and the stamp check.
 //! - [`incident`]: drafts for AI incident databases and reporting frameworks.
 //! - [`notice`]: the notice file format and the one notice linter.
@@ -32,10 +36,12 @@ pub mod fleet;
 pub mod incident;
 pub mod lead;
 pub mod model;
+pub mod naming;
 pub mod notice;
 pub mod pinning;
 pub mod providers;
 pub mod report;
+pub mod review;
 pub mod text;
 
 pub use evidence::{OperatorEvidence, Scope};

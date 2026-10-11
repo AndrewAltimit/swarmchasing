@@ -20,6 +20,7 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | Variable | Read by | Used for |
 |---|---|---|
 | `SWARMCHASE_DATA` | `swarmchase` | The data directory ([watch](watch.md#the-data-directory)). Unset, it is `data/` relative to the working directory. |
+| `SWARMCHASE_ADMIN` | `swarmchase case new` | The admin name a new case records. Unset, `git config user.name` ([second review](cases.md#second-review)). |
 | `URLQUERY_APIKEY` | `swarmchase` | urlquery.net collectors and watch sources. |
 | `URLSCAN_APIKEY` | `swarmchase` | Optional: raises urlscan.io's search quota ([urlscan.io](#urlscanio)). |
 | `SWARMCHASE_SITE_URL` | `swarmchase notice build`, `site build` | `--base-url`. |

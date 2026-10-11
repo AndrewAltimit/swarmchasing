@@ -1,21 +1,30 @@
 //! `swarmchase notice`: public notices in `notices/<id>.md`.
 //!
-//! `swarmchase case notice` drafts a notice inside the case. Once the admin
-//! has reviewed it, `notice add` checks it and copies it into `notices/`;
-//! committing and pushing that file is what publishes it. `notice update`
-//! appends dated updates (status changes, corrections, statements), `notice
-//! lint` is the CI check that no committed notice carries what notices
-//! withhold, and `notice build` writes the site's notice pages and feed.
+//! A notice is published in two stages. `swarmchase case notice` drafts the
+//! indicator notice inside the case: what the activity was and how to
+//! recognise it, naming and locating no affected party. Once the admin has
+//! re-read it and a second reviewer approved it, `notice add` checks it and
+//! copies it into `notices/`; committing and pushing that file is what
+//! publishes it. `case notice --naming` drafts a naming update for the
+//! operators whose naming clock has run or who consented, and `notice
+//! update --naming` appends it once it passes its own checklist and review.
+//! `notice update` also appends other dated updates (status changes,
+//! corrections, statements), which need no review; `notice lint` is the CI
+//! check that no committed notice carries what notices withhold; `notice
+//! build` writes the site's notice pages and feed.
 
-use crate::case::{self, NOTICE_DRAFT, Pinned, Scope, case_dir, load, report_options, update};
+use crate::case::{
+    self, NAMING_DRAFT, NOTICE_DRAFT, Pinned, Scope, case_dir, load, report_options, update,
+};
 use crate::pinning::leak_check;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_case::lead;
+use sc_case::naming::{self, NamingDraft};
 use sc_case::notice::lint::{lint_notice, withholding};
 use sc_case::notice::{
-    NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind, parse_notice, published_text,
-    strip_draft_banner, unreached, write_notice,
+    NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind, naming_text, parse_notice,
+    published_text, strip_draft_banner, unreached, write_notice,
 };
 use sc_core::Rules;
 use sc_core::notice::lint_public;
@@ -52,12 +61,19 @@ enum NoticeCmd {
         #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
         data: PathBuf,
     },
-    /// Append a dated update to a notice.
+    /// Append a dated update to a notice: a status change, correction,
+    /// statement, retraction or other update, or with --naming the case's
+    /// reviewed naming update.
     Update {
         id: String,
         /// update | status | correction | reply | retraction
-        #[arg(long)]
-        kind: UpdateKind,
+        #[arg(long, required_unless_present = "naming")]
+        kind: Option<UpdateKind>,
+        /// Append the case's reviewed naming draft (`case notice <id>
+        /// --naming`), naming the operators whose naming clock has run or
+        /// who consented. Runs the naming checklist, with its second review.
+        #[arg(long, conflicts_with_all = ["kind", "text", "text_file", "from", "status"])]
+        naming: bool,
         #[arg(long, conflicts_with = "text_file")]
         text: Option<String>,
         /// Read the text from a file (a statement, verbatim).
@@ -118,6 +134,7 @@ pub fn run(args: NoticeArgs) -> Result<()> {
         NoticeCmd::Update {
             id,
             kind,
+            naming,
             text,
             text_file,
             from,
@@ -125,6 +142,19 @@ pub fn run(args: NoticeArgs) -> Result<()> {
             date,
             data,
         } => {
+            if naming {
+                crate::store::hint_if_empty(&data);
+                let now = chrono::Utc::now().timestamp();
+                let p = add_naming(&data.join("cases"), &id, &args.dir, &rules, &today, now)?;
+                println!(
+                    "updated {}; it is not public until you commit and push it",
+                    p.display()
+                );
+                return Ok(());
+            }
+            let Some(kind) = kind else {
+                bail!("give --kind, or --naming");
+            };
             let text = match (text, text_file) {
                 (Some(t), _) => t,
                 (None, Some(p)) => std::fs::read_to_string(&p)
@@ -136,6 +166,23 @@ pub fn run(args: NoticeArgs) -> Result<()> {
             };
             let path = notice_path(&args.dir, &id)?;
             let mut n = read(&path)?;
+            let cases = data.join("cases");
+            // Another update names no affected party the notice has not named:
+            // names go out only through a reviewed naming update.
+            if kind == UpdateKind::Update
+                && case::case_dir(&cases, &id)?.join("case.toml").is_file()
+            {
+                let c = case::load(&cases, &id)?;
+                let p = naming::identifies(&c, &text, &n.meta.affected);
+                if !p.is_empty() {
+                    for x in &p {
+                        eprintln!("{}: the update {x}", path.display());
+                    }
+                    bail!(
+                        "not written: affected organisations are named only in a reviewed naming update (`swarmchase notice update {id} --naming`)"
+                    );
+                }
+            }
             append(
                 &mut n,
                 NoticeUpdate {
@@ -159,7 +206,6 @@ pub fn run(args: NoticeArgs) -> Result<()> {
                 path.display(),
                 n.meta.status.label()
             );
-            let cases = data.join("cases");
             if let Some(s) = status
                 && case::case_dir(&cases, &id)?.join("case.toml").is_file()
             {
@@ -281,6 +327,12 @@ fn prepare(
         from: None,
         text: published_text(&case::reported(&c), &unreached(&c)),
     }];
+    // What the notice may say about scope and agency comes from the case,
+    // whatever the draft's front matter says.
+    let public = case::analysis(cases, &c, &Scope::Public)?;
+    let (scope, grade) = sc_case::checklist::framing(&c, &sc_case::checklist::covered(&public));
+    n.meta.scope = scope;
+    n.meta.agent_grade = grade.map(|g| g.code().to_string());
     let mut problems = leak_check(cases, &c, |r| withholding(&n, r))?;
     for p in withholding(&n, rules) {
         if !problems.contains(&p) {
@@ -343,6 +395,12 @@ fn add(
     std::fs::create_dir_all(dir)?;
     std::fs::write(&target, write_notice(&n))?;
     let not_before = lead::clock(&c).not_before.unwrap_or(now);
+    let review = sc_case::review::state(
+        &c,
+        case::Stage::Indicators,
+        case::checklist::draft_sha(cases, id).ok().as_deref(),
+    )
+    .describe();
     case::update(cases, id, |c| {
         // Added is not published: the notice is public once it is pushed.
         if c.status == case::CaseStatus::Open {
@@ -353,9 +411,10 @@ fn add(
         c.log(
             today,
             format!(
-                "self-review checklist passed; lead time ({}) ran out {}",
-                lead::summary(c),
-                case::show_time(not_before)
+                "self-review checklist passed; lead time ({}) ran out {}; {}",
+                lead::summary(),
+                case::show_time(not_before),
+                review
             ),
         );
         c.log(
@@ -477,34 +536,28 @@ pub(crate) fn notice_draft(
     }
     let pinned = Pinned::new(root, &c)?;
     let a = pinned.analysis(&Scope::Public)?;
-    let opts = report_options(&c, Audience::Public, None, today);
+    let mut opts = report_options(&c, Audience::Public, None, today);
+    // The indicator notice names and locates no affected party: each
+    // affected endpoint appears by the admin's description, or as an
+    // affected organisation.
+    opts.target_descriptions = Some(sc_case::report::target_descriptions(&c));
     let mut notice = render_notice(&a, &opts);
     // An endpoint seen only in records anyone could have submitted is named
-    // only with the admin's logged reason, and in words that do not say a
-    // request reached it.
+    // later only with the admin's logged reason.
     let all = pinned.analysis(&Scope::All)?;
-    let mut single = Vec::new();
     for h in case::checklist::single_source_hosts(&c, &all) {
-        let reason = c.endpoint(&h).and_then(|e| e.single_source.as_deref());
-        match reason {
-            Some(_) => single.push(case::checklist::single_source_line(&c, &h)),
-            None => notice.flags.push(format!(
-                "every record on {} is submit-anywhere: name its operator only with `swarmchase case endpoint {id} {h} <state> --single-source-reason \"…\"`, or mark it not-affected",
+        if c.endpoint(&h)
+            .and_then(|e| e.single_source.as_deref())
+            .is_none()
+        {
+            notice.flags.push(format!(
+                "every record on {} is submit-anywhere: a naming update may name its operator only with `swarmchase case endpoint {id} {h} <state> --single-source-reason \"…\"`, or mark it not-affected",
                 sc_core::defang_host(&h)
-            )),
+            ));
         }
     }
-    if !single.is_empty() {
-        let para = format!(
-            "**Submitted, not observed.** {} No server log or owner-published record shows a request reaching them.\n\n",
-            single.join(" ")
-        );
-        notice.markdown = match notice.markdown.find("## Indicators") {
-            Some(i) => format!("{}{para}{}", &notice.markdown[..i], &notice.markdown[i..]),
-            None => format!("{}\n{para}", notice.markdown),
-        };
-    }
     let providers = sc_case::report::nameable_developers(&c, &sc_case::report::all_claims(&c, &a));
+    let (scope, grade) = sc_case::checklist::framing(&c, &sc_case::checklist::covered(&a));
     let n = NoticeFile {
         meta: NoticeMeta {
             id: id.to_string(),
@@ -513,8 +566,10 @@ pub(crate) fn notice_draft(
             published: today.to_string(),
             updated: today.to_string(),
             providers,
-            affected: case::affected_hosts(&c),
+            affected: Vec::new(),
             sector: None,
+            scope,
+            agent_grade: grade.map(|g| g.code().to_string()),
             rules_version: a.rules_version.clone(),
             toolkit: env!("CARGO_PKG_VERSION").to_string(),
             updates: Vec::new(),
@@ -547,6 +602,11 @@ pub(crate) fn notice_draft(
         lint_public(&format!("{}\n{}", n.meta.title, n.body), r)
     })?;
     lint.extend(notice.leaks);
+    lint.extend(naming::identifies(
+        &c,
+        &format!("{}\n{}", n.meta.title, n.body),
+        &[],
+    ));
     let review = NoticeReview {
         lint,
         withheld,
@@ -567,6 +627,215 @@ pub(crate) fn notice_draft(
         Ok(())
     })?;
     Ok((path, review))
+}
+
+/// The notice a naming update is appended to: the committed notice in
+/// `dir` when there is one, else the case's indicator draft as `notice add`
+/// would write it (for `case checklist` and `case review` before it is
+/// pushed anywhere the CLI can see).
+fn base_notice(cases: &Path, id: &str, dir: &Path, today: &str) -> Result<NoticeFile> {
+    let p = notice_path(dir, id)?;
+    if p.is_file() {
+        return read(&p);
+    }
+    let (_, n, _, _) = prepare(cases, id, &Rules::default_rules(), today)?;
+    Ok(n)
+}
+
+/// The SHA-256 of the case's naming draft as it is on disk.
+pub(crate) fn naming_sha(cases: &Path, id: &str) -> Result<String> {
+    let p = case_dir(cases, id)?.join(NAMING_DRAFT);
+    let bytes = std::fs::read(&p).map_err(|e| {
+        anyhow::anyhow!(
+            "reading {}: {e}; run `swarmchase case notice {id} --naming`",
+            p.display()
+        )
+    })?;
+    Ok(sc_case::bundle::sha256_hex(&bytes))
+}
+
+/// The notice with the case's naming draft appended, the draft, and the
+/// naming checklist for it at `now`.
+fn naming_prepare(
+    cases: &Path,
+    id: &str,
+    dir: &Path,
+    rules: &Rules,
+    today: &str,
+    now: i64,
+) -> Result<(NoticeFile, NamingDraft, Vec<case::checklist::Item>)> {
+    let c = case::load(cases, id)?;
+    let path = case_dir(cases, id)?.join(NAMING_DRAFT);
+    let text = std::fs::read_to_string(&path).with_context(|| {
+        format!(
+            "reading {}; run `swarmchase case notice {id} --naming`",
+            path.display()
+        )
+    })?;
+    let draft =
+        NamingDraft::parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+    let mut n = base_notice(cases, id, dir, today)?;
+    append(
+        &mut n,
+        NoticeUpdate {
+            date: today.to_string(),
+            kind: UpdateKind::Naming,
+            from: None,
+            text: naming_text(&draft.text),
+        },
+        None,
+    )?;
+    for h in &draft.hosts {
+        if !n.meta.affected.iter().any(|x| x.eq_ignore_ascii_case(h)) {
+            n.meta.affected.push(h.to_ascii_lowercase());
+        }
+    }
+    let mut problems = leak_check(cases, &c, |r| withholding(&n, r))?;
+    for p in lint_notice(&n, rules) {
+        if !problems.contains(&p) {
+            problems.push(p);
+        }
+    }
+    let pinned = Pinned::new(cases, &c)?;
+    let all = pinned.analysis(&Scope::All)?;
+    let public = pinned.analysis(&Scope::Public)?;
+    let sha = naming_sha(cases, id).ok();
+    let items = sc_case::checklist::naming_checklist(sc_case::checklist::NamingInputs {
+        case: &c,
+        notice: &n,
+        draft: &draft,
+        all: &all,
+        public: &public,
+        draft_sha: sha.as_deref(),
+        withholding: problems,
+        now,
+    });
+    Ok((n, draft, items))
+}
+
+/// The naming checklist for case `id`'s naming draft at `now`; `dir` is the
+/// committed notices directory.
+pub(crate) fn naming_checklist_for(
+    cases: &Path,
+    id: &str,
+    dir: &Path,
+    now: i64,
+) -> Result<Vec<case::checklist::Item>> {
+    let today = case::rfc3339(now)[..10].to_string();
+    Ok(naming_prepare(cases, id, dir, &Rules::default_rules(), &today, now)?.2)
+}
+
+/// Append the case's reviewed naming draft to its notice in `dir`, once
+/// every item of the naming checklist passes.
+fn add_naming(
+    cases: &Path,
+    id: &str,
+    dir: &Path,
+    rules: &Rules,
+    today: &str,
+    now: i64,
+) -> Result<PathBuf> {
+    let target = notice_path(dir, id)?;
+    if !target.is_file() {
+        bail!(
+            "no notice {id} in {}; `swarmchase notice add {id}` first",
+            dir.display()
+        );
+    }
+    let (n, draft, items) = naming_prepare(cases, id, dir, rules, today, now)?;
+    case::checklist::print_titled("Naming checklist", &items, &mut std::io::stdout())?;
+    let failing = case::checklist::failing(&items);
+    if !failing.is_empty() {
+        bail!(
+            "not added: {} naming checklist item(s) fail ({})",
+            failing.len(),
+            failing.join("; ")
+        );
+    }
+    std::fs::write(&target, write_notice(&n))?;
+    let review = sc_case::review::state(
+        &case::load(cases, id)?,
+        case::Stage::Naming,
+        naming_sha(cases, id).ok().as_deref(),
+    )
+    .describe();
+    case::update(cases, id, |c| {
+        naming::mark_named(c, &draft.hosts, today);
+        c.log(today, format!("naming checklist passed; {review}"));
+        Ok(())
+    })?;
+    Ok(target)
+}
+
+/// Draft the next naming update into `<case>/naming.md`, for the operators
+/// that may be named at `now`. Returns the path and the hosts it names.
+pub(crate) fn naming_draft(
+    root: &Path,
+    id: &str,
+    force: bool,
+    today: &str,
+    now: i64,
+) -> Result<(PathBuf, Vec<String>)> {
+    let c = load(root, id)?;
+    let path = case_dir(root, id)?.join(NAMING_DRAFT);
+    if path.exists() && !force {
+        bail!(
+            "{} exists and may hold your edits; pass --force to replace it",
+            path.display()
+        );
+    }
+    if !c.notice_added() {
+        bail!("add the indicator notice first (`swarmchase notice add {id}`); names follow it");
+    }
+    let hosts = naming::ready(&c, now);
+    if hosts.is_empty() {
+        let mut msg = format!("no operator of case {id} may be named now:");
+        for o in naming::operators(&c) {
+            msg += &format!(
+                "\n  operator of {}: {}",
+                sc_core::defang_host(&o.host),
+                o.status(now)
+            );
+        }
+        bail!("{msg}");
+    }
+    let all = Pinned::new(root, &c)?.analysis(&Scope::All)?;
+    let single = case::checklist::single_source_hosts(&c, &all);
+    let d = naming::draft(&c, &hosts, &single);
+    std::fs::write(&path, d.write())?;
+    update(root, id, |c| {
+        c.log(
+            today,
+            format!(
+                "naming update drafted for {} (sha256 {})",
+                hosts
+                    .iter()
+                    .map(|h| sc_core::defang_host(h))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                &crate::bundle::sha256_hex(d.write().as_bytes())[..12]
+            ),
+        );
+        Ok(())
+    })?;
+    Ok((path, hosts))
+}
+
+#[cfg(test)]
+pub fn add_naming_for_test(
+    cases: &Path,
+    id: &str,
+    dir: &Path,
+    rules: &Rules,
+    today: &str,
+    now: i64,
+) -> Result<PathBuf> {
+    add_naming(cases, id, dir, rules, today, now)
+}
+
+#[cfg(test)]
+pub fn lint_file_for_test(p: &Path, rules: &Rules) -> Vec<String> {
+    lint_file(p, rules)
 }
 
 #[cfg(test)]

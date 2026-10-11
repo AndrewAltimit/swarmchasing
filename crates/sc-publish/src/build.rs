@@ -249,7 +249,8 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         String::new()
     };
     let showcase = r.read("samples/showcase/showcase.ndjson")?;
-    let size = |p: &str| fs::metadata(r.root.join(p)).ok().map(|m| m.len());
+    // A module's download size: the host serves it gzip-compressed.
+    let size = |p: &str| fs::read(r.root.join(p)).ok().map(|b| gzip_len(&b));
     let engine_bytes = size("site/pkg/sc_wasm_bg.wasm");
     let tools_bytes = size("site/pkg/tools/sc_tools_bg.wasm");
     let mut inputs = SiteInputs {
@@ -328,6 +329,14 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         out,
         warnings,
     })
+}
+
+/// The length of `bytes` gzip-compressed at the default level.
+fn gzip_len(bytes: &[u8]) -> u64 {
+    use std::io::Write;
+    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    let _ = e.write_all(bytes);
+    e.finish().map_or(bytes.len(), |v| v.len()) as u64
 }
 
 #[cfg(test)]

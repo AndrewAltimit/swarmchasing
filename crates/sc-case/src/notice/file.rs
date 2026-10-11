@@ -1,6 +1,7 @@
 //! The notice file (`notices/<id>.md`): TOML front matter with the status
 //! and the dated updates, then the notice body in Markdown.
 
+use sc_core::scope::ScopeFinding;
 use serde::{Deserialize, Serialize};
 
 /// The status a public notice shows.
@@ -47,6 +48,9 @@ pub enum UpdateKind {
     Status,
     /// Something published was wrong.
     Correction,
+    /// Names of affected organisations, added once each may be named
+    /// (`notice update --naming`).
+    Naming,
     /// A provider's or operator's statement, verbatim.
     Reply,
     /// The notice is withdrawn.
@@ -60,6 +64,7 @@ impl UpdateKind {
             Self::Update => "Update",
             Self::Status => "Status change",
             Self::Correction => "Correction",
+            Self::Naming => "Affected organisations named",
             Self::Reply => "Statement",
             Self::Retraction => "Retraction",
         }
@@ -76,6 +81,9 @@ impl std::str::FromStr for UpdateKind {
             "reply" | "statement" => Ok(Self::Reply),
             "retraction" => Ok(Self::Retraction),
             "published" => Ok(Self::Published),
+            "naming" => {
+                Err("a naming update is appended with `notice update <id> --naming`".into())
+            }
             _ => Err(format!(
                 "unknown update kind `{s}` (update|status|correction|reply|retraction)"
             )),
@@ -109,6 +117,15 @@ pub struct NoticeMeta {
     /// The affected operators' sector, one of [`SECTORS`]. Optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sector: Option<String>,
+    /// The admin's scope finding for the clusters the notice covers
+    /// (`scope_exceeded` only when every one of them exceeded scope). The
+    /// linter reads it for the word "misaligned".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ScopeFinding>,
+    /// The admin's agent grade for the case (`L0`..`L5`), which the linter
+    /// reads for the word "misaligned". The body prints no grade.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_grade: Option<String>,
     pub rules_version: String,
     pub toolkit: String,
     #[serde(default, rename = "update")]

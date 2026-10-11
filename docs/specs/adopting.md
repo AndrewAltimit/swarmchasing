@@ -21,7 +21,7 @@ This page is for a group that wants to apply swarmchasing with its own data, too
 2. **Use a rules file that validates** against [`schemas/sc-rules-v1.json`](../../schemas/sc-rules-v1.json), with a version. If you run your own engine, pass the [conformance vectors](rules-v1.md#conformance) with the rules version they name.
 3. **Grade, link and assess separately.** A tier, an agent grade, a scope finding and a coordination finding are four results ([FM-15.1](../manual/15-misalignment.md#fm-151-four-questions)). Report each you made, and say which you did not.
 4. **Attribute by layer and ladder**, with labels, tags and the likelihood table ([chapter 7](../manual/07-attribution.md), [chapter 8](../manual/08-confidence.md)). Keep the competing-hypotheses worksheet with the case ([FM-7.12](../manual/07-attribution.md#fm-712-competing-hypotheses)).
-5. **Disclose before publishing**, on lead times fixed in advance ([FM-10.2](../manual/10-disclosure.md#fm-102-lead-times)), and publish notices that withhold what enables harm ([FM-11.4](../manual/11-notices.md#fm-114-what-a-notice-withholds)).
+5. **Disclose before publishing**, on lead times fixed in advance (indicators first, the names of affected parties later) ([FM-10.2](../manual/10-disclosure.md#fm-102-lead-times)), and publish notices that withhold what enables harm ([FM-11.4](../manual/11-notices.md#fm-114-what-a-notice-withholds)).
 6. **Measure before you claim.** Quote precision only from held-out or prospective evaluation, with its interval and context, and choose public words by the calibration rule ([FM-9.12](../manual/09-evaluation.md#fm-912-calibrated-public-language)).
 
 ## Stating conformance

@@ -42,6 +42,23 @@ pub struct ClaimArgs {
 }
 
 #[derive(Args)]
+pub struct ScopeArgs {
+    id: String,
+    /// The cluster, by C-number or stable key.
+    #[arg(long)]
+    cluster: String,
+    /// in-scope | exceeded | not-assessable
+    #[arg(long, value_parser = sc_case::model::parse_finding)]
+    finding: sc_core::scope::ScopeFinding,
+    /// The failed scope tests, e.g. S2,S4. Required for exceeded.
+    #[arg(long, value_delimiter = ',')]
+    tests: Vec<String>,
+    /// What the finding rests on, with the records.
+    #[arg(long)]
+    note: String,
+}
+
+#[derive(Args)]
 pub struct GradeArgs {
     id: String,
     /// L0..L5, or a name such as `model_written` or `documented`. Omit to
@@ -68,6 +85,25 @@ pub(super) fn claim(ctx: &Ctx, a: ClaimArgs) -> Result<()> {
             details: a.details,
         };
         Ok(actions::claim(c, x, &ctx.today)?)
+    })
+}
+
+pub(super) fn scope(ctx: &Ctx, a: ScopeArgs) -> Result<()> {
+    let c = load(&ctx.root, &a.id)?;
+    let an = analysis(&ctx.root, &c, &Scope::All)?;
+    let key = sc_case::fleet::resolve(&an, &a.cluster)?;
+    if let Some(cl) = sc_case::fleet::by_key(&an, &key)
+        && !cl.scope.is_default()
+    {
+        println!(
+            "the scope pass suggests: {} (the finding recorded is yours)",
+            cl.scope.finding.label()
+        );
+    }
+    update(&ctx.root, &a.id, |c| {
+        Ok(actions::scope(
+            c, &key, a.finding, &a.tests, &a.note, &ctx.today,
+        )?)
     })
 }
 

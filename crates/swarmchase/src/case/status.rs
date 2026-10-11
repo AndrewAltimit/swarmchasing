@@ -38,11 +38,12 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
     writeln!(out, "# {}: {}", c.id, c.title)?;
     writeln!(
         out,
-        "status {:?} · notice {:?} · opened {} · developers named at: {}",
+        "status {:?} · notice {:?} · opened {} · developers named at: {} · admin: {}",
         c.status,
         c.notice,
         c.opened,
-        c.min_named.max(Evidence::FLOOR).describe()
+        c.min_named.max(Evidence::FLOOR).describe(),
+        c.admin.as_deref().unwrap_or("not recorded")
     )?;
     let current = &sc_core::Rules::default_rules().set.meta.version;
     match &c.rules_version {
@@ -82,6 +83,27 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
                 .map(|f| format!(" · {}", f.id))
                 .unwrap_or_default()
         )?;
+        match c.scope_finding(&cl.key) {
+            Some(d) => writeln!(
+                out,
+                "      scope finding: {}{} ({})",
+                d.finding.label(),
+                if d.tests.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", d.tests.join(", "))
+                },
+                d.date
+            )?,
+            None if !cl.scope.is_default() => writeln!(
+                out,
+                "      scope: {} suggested, no finding recorded (`swarmchase case scope {} --cluster {} --finding …`)",
+                cl.scope.finding.label(),
+                c.id,
+                cl.key
+            )?,
+            None => {}
+        }
         if !cl.origin.plant_signals.is_empty() {
             let kinds: std::collections::BTreeSet<&str> = cl
                 .origin
@@ -113,7 +135,7 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
         let v = views.iter().find(|v| v.host == e.host);
         writeln!(
             out,
-            "  {:<12} {:<40} {}{}",
+            "  {:<12} {:<40} {}{}{}",
             e.state.label(),
             sc_core::defang_host(&e.host),
             v.map(|v| format!(
@@ -127,6 +149,10 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
             e.note
                 .as_deref()
                 .map(|n| format!(": {n}"))
+                .unwrap_or_default(),
+            e.sector
+                .as_deref()
+                .map(|s| format!(" · notice describes it as \"{s}\""))
                 .unwrap_or_default()
         )?;
     }
@@ -178,8 +204,8 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
         c.decisions.len(),
         c.sent.len()
     )?;
-    if !matches!(c.status, CaseStatus::Published | CaseStatus::Closed) {
-        sc_case::lead::show(&c, chrono::Utc::now().timestamp(), out)?;
+    if c.status != CaseStatus::Closed {
+        clocks(root, &c, chrono::Utc::now().timestamp(), out)?;
     }
 
     let has_draft = case_dir(root, id)?.join(NOTICE_DRAFT).is_file();
@@ -188,6 +214,47 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
         writeln!(out, "\nNeeds")?;
         for t in todo {
             writeln!(out, "  - {t}")?;
+        }
+    }
+    Ok(())
+}
+
+/// Both stages' clocks and the review state of each stage's draft.
+pub(crate) fn clocks(root: &Path, c: &Case, now: i64, out: &mut impl Write) -> Result<()> {
+    if c.notice_added() {
+        writeln!(
+            out,
+            "\nStage 1, indicator notice: added{}",
+            c.publish_pending
+                .as_deref()
+                .map(|d| format!(" {d}, publish pending"))
+                .unwrap_or_default()
+        )?;
+    } else {
+        sc_case::lead::show(c, now, out)?;
+    }
+    let sha = |stage: Stage| {
+        std::fs::read(case_dir(root, &c.id).ok()?.join(stage.draft()))
+            .ok()
+            .map(|b| sc_case::bundle::sha256_hex(&b))
+    };
+    if !c.notice_added() {
+        writeln!(
+            out,
+            "  second review: {}",
+            sc_case::review::state(c, Stage::Indicators, sha(Stage::Indicators).as_deref())
+                .describe()
+        )?;
+    }
+    sc_case::naming::show(c, now, out)?;
+    if c.notice_added() {
+        match sha(Stage::Naming) {
+            Some(s) => writeln!(
+                out,
+                "  naming draft second review: {}",
+                sc_case::review::state(c, Stage::Naming, Some(&s)).describe()
+            )?,
+            None => writeln!(out, "  no naming draft")?,
         }
     }
     Ok(())
@@ -261,6 +328,29 @@ fn todo(c: &Case, claims: &[Claim], has_draft: bool) -> Vec<String> {
             t.push(format!(
                 "re-read the notice draft an hour or more after writing it: `swarmchase case reread {}`; `swarmchase case checklist {}` shows what `notice add` checks",
                 c.id, c.id
+            ));
+        }
+        if !c.reviews.iter().any(|r| r.stage == Stage::Indicators) {
+            t.push(format!(
+                "have a second reviewer review the draft: `swarmchase case review-packet {}`, then `swarmchase case review {} --reviewer \"…\" --verdict approve|object`",
+                c.id, c.id
+            ));
+        }
+    }
+    if c.admin.is_none() {
+        t.push(format!(
+            "no admin recorded; a second review needs one: `swarmchase case set {} --admin \"<name>\"`",
+            c.id
+        ));
+    }
+    if c.notice_added() && c.status != CaseStatus::Closed {
+        let now = chrono::Utc::now().timestamp();
+        let ready = sc_case::naming::ready(c, now);
+        if !ready.is_empty() {
+            t.push(format!(
+                "{} operator(s) may be named now: `swarmchase case notice {} --naming`",
+                ready.len(),
+                c.id
             ));
         }
     }

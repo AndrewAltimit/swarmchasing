@@ -6,14 +6,19 @@
 //
 // It covers: every page in the sitemap (and 404.html); the hostile notice's
 // page and the index row; the index filters and their URL hash, on the
-// synthetic notices in crates/sc-publish/tests/fixtures/notices/; the
+// synthetic notices in crates/sc-publish/tests/fixtures/notices/, and the
+// two stages on them (an indicator notice shows no affected host, a naming
+// update shows its hosts defanged); the
 // bundle viewer with a hostile stamp, manifest and case claims; the workbench with XSS probes, HTML programs, a
 // probe chain, an unusual path set and a cluster with every per-cluster hint
 // in the records, every view, cluster, record and report audience, and
 // hostile claims, and that declared testing reaches no view and no draft but
 // an internal one; the rules editor and the
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
-// defang on the tools page.
+// defang on the tools page. It also checks layout: no page scrolls sideways
+// at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
+// one column, and each press of the theme toggle flips the look, storing it
+// only while it differs from the system's.
 //
 // Usage (after scripts/ci/build-site.sh, which builds site/pkg):
 //     node scripts/site-xss-check.mjs [path/to/chrome]
@@ -30,8 +35,9 @@ import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const PORT = 8790;
-const DEBUG_PORT = 9334;
+// Override with XSS_PORT and XSS_DEBUG_PORT when another check holds these.
+const PORT = Number(process.env.XSS_PORT) || 8790;
+const DEBUG_PORT = Number(process.env.XSS_DEBUG_PORT) || 9334;
 const BASE = `http://127.0.0.1:${PORT}/`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -87,6 +93,11 @@ text = ${lit(program)}
 date = "2026-10-17"
 kind = "reply"
 from = ${lit(program)}
+text = ${lit(program)}
+
+[[update]]
+date = "2026-10-17"
+kind = "naming"
 text = ${lit(program)}
 
 [[update]]
@@ -297,6 +308,66 @@ try {
   }
   stats.pages = pages.length + 2;
 
+  // Layout: at 390 px no page scrolls sideways and every nav menu opens
+  // inside the viewport; at 1440 px a menu is one column of full-width
+  // items. Then the theme toggle flips the look on each press.
+  const menuBoxes = `(async () => {
+    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const out = [];
+    for (const d of document.querySelectorAll("[data-nav-menu]")) {
+      d.open = true;
+      await frame();
+      const r = d.querySelector(".nav-menu").getBoundingClientRect();
+      const items = [...d.querySelectorAll(".nav-menu > li")].map((li) => li.getBoundingClientRect());
+      out.push({ name: d.querySelector("summary").textContent, left: r.left, right: r.right, top: r.top, narrowest: Math.min(...items.map((i) => i.width)), columns: new Set(items.map((i) => Math.round(i.left))).size });
+      d.open = false;
+    }
+    return { vw: document.documentElement.clientWidth, vh: innerHeight, out };
+  })()`;
+  const viewport = (width, height) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+  await viewport(390, 844);
+  let wide = 0;
+  for (const p of [...pages, "404.html", "analyze/#try=example"]) {
+    await open(p, p.startsWith("analyze") ? `document.querySelectorAll("table.records tbody tr").length > 1` : undefined);
+    const over = await run(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);
+    if (over > 0) failures.push(`${p || "/"}: scrolls sideways by ${over}px at 390 px`);
+    wide++;
+  }
+  stats.narrowPages = wide;
+  for (const [w, h] of [[390, 844], [1440, 900]]) {
+    await viewport(w, h);
+    for (const p of ["", "docs/"]) {
+      await open(p);
+      const m = await run(menuBoxes);
+      if (!m.out.length) failures.push(`${p || "/"}: no nav menus found at ${w} px`);
+      for (const b of m.out) {
+        const at = `${p || "/"} at ${w} px: the ${b.name} menu`;
+        if (b.left < 0 || b.right > m.vw + 0.5) failures.push(`${at} spills sideways (${Math.round(b.left)} to ${Math.round(b.right)} of ${m.vw})`);
+        if (b.top < 0 || b.top > m.vh - 120) failures.push(`${at} opens off screen (top ${Math.round(b.top)} of ${m.vh})`);
+        if (b.columns !== 1 || b.narrowest < 200) failures.push(`${at} is not one column of full-width items (${b.columns} columns, narrowest ${Math.round(b.narrowest)}px)`);
+      }
+    }
+  }
+  await send("Emulation.clearDeviceMetricsOverride");
+  await open("");
+  const themes = await run(`(() => {
+    const b = document.querySelector("[data-theme-toggle]");
+    const sys = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const seen = [];
+    for (let i = 0; i < 3; i++) {
+      seen.push({ look: b.dataset.look, auto: b.dataset.auto, stored: localStorage.getItem("swarmchase.theme"), sys });
+      b.click();
+    }
+    return seen;
+  })()`);
+  // Each press flips the look; a look is stored only while it differs from
+  // the system's, and the toggle says whether it follows the system.
+  const flips = themes.every((t, i) => i === 0 || t.look !== themes[i - 1].look);
+  const stored = themes.every((t) => (t.look === t.sys ? t.stored === null && t.auto === "true" : t.stored === t.look && t.auto === "false"));
+  if (themes[0].look !== themes[0].sys || !flips || !stored)
+    failures.push(`the theme toggle did not flip the look: ${JSON.stringify(themes)}`);
+  await audit("layout and theme");
+
   // The hostile notice: its page, and its row on the index.
   await open(`notices/${nid}/`);
   const notice = await run(`({ title: document.querySelector("main h1")?.textContent ?? "", statement: document.querySelector(".statement blockquote")?.textContent ?? "", flagged: document.querySelectorAll(".timeline li.flagged").length })`);
@@ -325,6 +396,21 @@ try {
     if (!ok) failures.push(`notices/#${hash}: showed ${JSON.stringify(got)}`);
   }
   await audit("notice index");
+
+  // Two stages: an indicator notice shows no affected host anywhere and says
+  // so; a naming update shows its hosts, defanged.
+  await open("notices/synthetic-indicator-only/");
+  const stage1 = await run(`({ stage: document.querySelector(".notice-stage")?.textContent ?? "", hosts: (document.querySelector("main")?.textContent ?? "").match(/[a-z0-9-]+\\[\\.\\][a-z]/gi) ?? [], chips: document.querySelectorAll("main .chip").length })`);
+  if (!/not named yet/.test(stage1.stage)) failures.push(`stage 1: stage line "${stage1.stage}"`);
+  if (stage1.hosts.length || stage1.chips) failures.push(`stage 1: a host on the indicator notice: ${JSON.stringify(stage1.hosts)}`);
+  await open("notices/synthetic-named-later/");
+  const stage2 = await run(`({ stage: document.querySelector(".notice-stage")?.textContent ?? "", chips: [...document.querySelectorAll("main .chip")].map((c) => c.textContent) })`);
+  if (!/named on 2026-09-25/.test(stage2.stage)) failures.push(`stage 2: stage line "${stage2.stage}"`);
+  if (!stage2.chips.includes("lab[.]university[.]example")) failures.push(`stage 2: hosts ${JSON.stringify(stage2.chips)}`);
+  await open("notices/");
+  const row1 = await run(`(() => { const r = [...document.querySelectorAll(".notice-table tbody tr")].find((r) => r.querySelector(".hint")?.textContent === "synthetic-indicator-only"); return r ? { hosts: r.dataset.hosts, affected: r.querySelector("[data-label=Affected]")?.textContent ?? "" } : null; })()`);
+  if (!row1 || row1.hosts.trim() || row1.affected !== "not named yet") failures.push(`stage 1 index row: ${JSON.stringify(row1)}`);
+  await audit("notice stages");
 
   // The workbench: the synthetic example, then the probes through every view.
   await open("analyze/#try=example", `document.querySelectorAll("table.records tbody tr").length > 1`);
@@ -430,7 +516,10 @@ try {
     const d = document.getElementById("defang-in");
     d.value = ${JSON.stringify(program + " https://evil.example/" + tag)};
     d.dispatchEvent(new Event("input"));
-    await new Promise((r) => setTimeout(r, 50));
+    // Each card loads its module on first use: wait for both outputs.
+    const filled = (id) => document.getElementById(id).childNodes.length > 0;
+    for (let i = 0; i < 300 && !(filled("sectxt-out") && filled("defang-out")); i++)
+      await new Promise((r) => setTimeout(r, 50));
     return { sectxt: document.getElementById("sectxt-out").textContent.includes("<script>"), defang: document.getElementById("defang-out").textContent.includes("hxxps://evil[.]example") };
   })()`);
   if (!tools.sectxt) failures.push("the hostile security.txt did not render as text");

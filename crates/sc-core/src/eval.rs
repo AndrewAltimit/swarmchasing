@@ -38,9 +38,11 @@
 //! [`coverage`], [`grades`], [`split`] (frozen held-out splits), [`units`]
 //! (record- and cluster-unit counts over a slice of the set, and the
 //! calibration table), [`control`] (the label-free negative control),
+//! [`baseline`] (the false-positive bound from the reviewed benign sample),
 //! [`bench`] (the shareable SC-Bench file and its scorer) and [`summary`]
 //! (the whole evaluation as one JSON-ready value, for the CLI and the site).
 
+pub mod baseline;
 pub mod bench;
 pub mod clusters;
 pub mod control;
@@ -93,6 +95,10 @@ pub struct Labelled {
     /// Rebuilt from a published write-up (`"reconstructed": true`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reconstructed: bool,
+    /// Looked at while changing a rule (`"tuned": true`), so no longer a fair
+    /// test of the rules: left out of the [`baseline`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tuned: bool,
     /// Who labelled it (`labeller` or `labellers`), when the row says.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labellers: Vec<String>,
@@ -485,6 +491,7 @@ fn parse_ndjson_labels(text: &str) -> LabelSet {
                 hard_negative_for: strings("hard_negative_for"),
                 synthetic: b("synthetic"),
                 reconstructed: b("reconstructed"),
+                tuned: b("tuned"),
                 labellers: match s("labeller") {
                     Some(one) => vec![one],
                     None => strings("labellers"),
@@ -557,6 +564,7 @@ fn parse_csv_labels(text: &str) -> LabelSet {
                 swarm: None,
                 synthetic: false,
                 reconstructed: false,
+                tuned: false,
                 labellers: get(labeller_col)
                     .filter(|s| !s.is_empty())
                     .map(|s| vec![s.to_string()])

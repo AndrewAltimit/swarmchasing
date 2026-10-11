@@ -106,7 +106,8 @@ The corpus covers each layer type, each tier, the hard negatives the default rul
 | `two-relays` | `relay.jina`, `relay.translate_goog` | 2 | noise | context cap |
 | `relay-selfid` | `relay.jina`, `selfid.vendor_name` | 2 | noise | context cap |
 | `context-cap` | `relay.jina`, `marker.uq_tags`, `cache.buster` | 5 | suggestive | run tag, context capped |
-| `httpbin-program` | echo, script, fetch, title write | 5 | suggestive | program group plus the echo |
+| `httpbin-program` | echo, script, fetch, title write | 3 | suggestive | program group, the echo in it |
+| `echo-script-page` | echo, script | 2 | noise | program group, no request |
 | `data-url-program` | echo script, script, fetch | 3 | suggestive | program group |
 | `run-tag` | `marker.uq_tags`, `marker.test_tag` | 3 | suggestive | run-tag group |
 | `oai-prefix-tag` | `marker.oai_prefix` | 3 | suggestive | run-tag group |

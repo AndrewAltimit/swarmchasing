@@ -379,6 +379,52 @@ fn public_notice_names_only_affected_hosts() {
 }
 
 #[test]
+fn the_indicator_notice_names_no_host() {
+    let obs = ["d", "e", "f"]
+        .iter()
+        .enumerate()
+        .map(|(k, h)| Observation {
+            ts: 1_791_000_000 + 300 * k as i64,
+            url: format!("https://r.jina.ai/https://{h}.example/item?uqtag=zz9&id=1'%20OR%201=1--"),
+            ..Default::default()
+        })
+        .collect();
+    let a = analyze(obs, &Rules::default_rules());
+    let described = [
+        ("d.example", "a national government data portal"),
+        ("e.example", "a university research site"),
+    ]
+    .into_iter()
+    .map(|(h, d)| (h.to_string(), d.to_string()))
+    .collect();
+    let n = render_notice(
+        &a,
+        &ReportOptions {
+            affected_hosts: Some(vec!["d.example".into(), "e.example".into()]),
+            exposed_hosts: vec!["e.example".into()],
+            target_descriptions: Some(described),
+            ..Default::default()
+        },
+    );
+    let md = &n.markdown;
+    assert!(md.starts_with("# Public notice: suspected AI agent activity"));
+    for host in ["d[.]example", "e[.]example", "f[.]example", ".example"] {
+        assert!(!md.contains(host), "{host}: {md}");
+    }
+    assert!(md.contains("| a national government data portal |"), "{md}");
+    assert!(md.contains("a university research site ("), "{md}");
+    assert!(md.contains("1 other host not named here"), "{md}");
+    assert!(
+        n.withheld
+            .iter()
+            .any(|w| w.contains("names and hosts of 2 affected endpoint(s)")),
+        "{:?}",
+        n.withheld
+    );
+    assert!(n.leaks.is_empty(), "{:?}", n.leaks);
+}
+
+#[test]
 fn single_cluster_reports_name_no_other_cluster() {
     let mut obs = Vec::new();
     for (tag, base) in [("zz9", 1_791_000_000), ("yy8", 1_791_600_000)] {

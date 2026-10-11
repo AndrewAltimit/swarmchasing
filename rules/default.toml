@@ -45,7 +45,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-11"
+version = "2026-10-11.1"
 
 [thresholds]
 suggestive = 3
@@ -102,11 +102,19 @@ model_pace_max_secs = 120
 # Parallel fan-out: one-second batches of alike requests. A width is reported
 # when at least `min_batches` batches exist and one width, at least
 # `min_width`, covers at least `min_share` of them.
+# Cross-service fan-out: one target (after unwrapping) sent to at least
+# `cross_service_min` scan services within `cross_service_secs`, read from
+# request or submit times only. `cross_service_ambient` ordinary targets on
+# other hosts fanned out alike around a cluster mark an auto-submitter (a
+# mail gateway or security product) instead of an agent.
 [fanout]
 batch_secs = 1
 min_batches = 4
 min_width = 2
 min_share = 0.6
+cross_service_secs = 60
+cross_service_min = 2
+cross_service_ambient = 3
 
 # Escalation sequences: requests for one host and path, each at most
 # `window_secs` after the last, whose route climbs: direct, then `relay`, then
@@ -250,6 +258,9 @@ description = "Public CORS proxies"
 # ── Carriers: echo / sandbox / code-hosting services ───────────────────────
 [[rule]]
 id = "carrier.httpbin"
+# In the program group: the echo service and the page it serves are one route,
+# so a script page on httpbin's own endpoints counts once and stays noise.
+group = "program"
 kind = "carrier"
 tactic = "T2"
 target = "url"

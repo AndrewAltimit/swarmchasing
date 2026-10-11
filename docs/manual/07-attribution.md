@@ -119,7 +119,7 @@ Before any layer is attributed, a report states how likely it is that an agent s
 | L1 | Self-described | A model or vendor name, or an agent test tag. Costs nothing to write ([FM-7.9](#fm-79-false-flag-reasoning)); worded like L0. |
 | L2 | Model-written | Model-output residue, prose, invented identifiers, a repeated output cut length, stale knowledge or stale dates ([FM-4.5](04-indicators.md#fm-45-artifact-families)). |
 | L3 | Adaptive | L2, and behaviour that answers responses: a changed request after an error, a route escalation, variants at model pace. Read from request or submit times only. |
-| L4 | Agent likely | L3, and a pace or scale beyond one person: adapting at machine speed, fixed parallel fan-out, activity round the clock. No working-hours rhythm against it. |
+| L4 | Agent likely | L3, and a pace or scale beyond one person: adapting at machine speed, fixed parallel fan-out, cross-service fan-out with no auto-submitter around it ([FM-6.3](06-timing.md#fm-63-concurrency-and-fan-out)), activity round the clock. No working-hours rhythm against it. |
 | L5 | Documented | Casework only: operator logs matching an agent harness, or the provider's confirmation. |
 
 Caps:
@@ -178,7 +178,7 @@ Reading the worksheet:
 
 - The surviving hypothesis sets the claim; the label and likelihood word still come from the evidence level, and the worksheet never raises them ([FM-8.3](08-confidence.md#fm-83-usage-rules)).
 - Where two hypotheses survive with no evidence against either, the Conclusion names both and uses no likelihood word stronger than "roughly even chance" between them.
-- Each rejected hypothesis is recorded with the evidence against it. These are the alternatives the self-review checks ([FM-10.9](10-disclosure.md#fm-109-self-review)).
+- Each rejected hypothesis is recorded with the evidence against it. These are the alternatives the self-review checks ([FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review)).
 - The report says which evidence would change the result ([FM-8.3](08-confidence.md#fm-83-usage-rules)).
 
 Toolkit: the case records each rejected alternative (authorised test, honeypot, research scanner, spoofed self-identification, planted records) with its reason, and the self-review refuses a notice until each is recorded ([cases](../reference/cases.md#self-review-checklist)). The worksheet itself is kept in case notes by hand; recording it in the case is (planned).

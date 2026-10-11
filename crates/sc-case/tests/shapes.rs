@@ -23,7 +23,8 @@ fn a_full_case_file_reads_and_round_trips() {
     assert_eq!(c.status, CaseStatus::Reported);
     assert_eq!(c.min_named, Evidence::SharedIdentifiers);
     assert_eq!(c.rules_version.as_deref(), Some("2026-10-10"));
-    assert_eq!(c.lead_hours, Some(8));
+    // `lead_hours` is from before the naming clock: read and ignored.
+    assert_eq!(c.naming_days, None);
     assert_eq!(
         c.agent_grade.as_ref().map(|g| g.level),
         Some(AgentLevel::Documented)
@@ -56,8 +57,42 @@ fn a_full_case_file_reads_and_round_trips() {
     assert_eq!(c.plant_reviews.len(), 1);
     assert_eq!(c.sent[1].time(), parse_time("2026-10-13T23:59:59Z"));
 
-    // Written back, it reads the same.
+    // Written back, it reads the same, without the retired field.
+    let mut c = c;
+    c.admin = Some("A. Admin".into());
+    c.naming_days = Some(5);
+    c.endpoints[0].sector = Some("a national government data portal".into());
+    c.reviews.push(Review {
+        stage: Stage::Indicators,
+        reviewer: "R. Reviewer".into(),
+        verdict: Verdict::Approve,
+        note: None,
+        sha256: "00".into(),
+        at: "2026-10-15T12:00:00Z".into(),
+    });
+    c.consents.push(Consent {
+        party: "portal.example.gov".into(),
+        note: "e-mail".into(),
+        at: "2026-10-15T12:00:00Z".into(),
+    });
+    c.naming_withheld.push(NamingWithheld {
+        party: "old.example.org".into(),
+        reason: "r".into(),
+        date: "2026-10-15".into(),
+    });
+    c.named.push(Named {
+        party: "portal.example.gov".into(),
+        date: "2026-10-20".into(),
+    });
+    c.scope_findings.push(ScopeDecision {
+        cluster: "k-00000001".into(),
+        finding: sc_core::scope::ScopeFinding::ScopeExceeded,
+        tests: vec!["S4".into()],
+        note: "n".into(),
+        date: "2026-10-15".into(),
+    });
     let text = c.to_toml().unwrap();
+    assert!(!text.contains("lead_hours"), "{text}");
     let back = Case::parse(&text).unwrap();
     assert_eq!(back.to_toml().unwrap(), text);
     for section in [
@@ -70,6 +105,12 @@ fn a_full_case_file_reads_and_round_trips() {
         "[[no_contact]]",
         "[[alternative]]",
         "[[plant_review]]",
+        "[[review]]",
+        "[[consent]]",
+        "[[naming_withheld]]",
+        "[[named]]",
+        "[[scope]]",
+        "finding = \"scope_exceeded\"",
         "role = \"declared_owner\"",
         "state = \"not_affected\"",
     ] {
@@ -91,7 +132,7 @@ fn an_unpinned_case_file_reads_with_defaults() {
     let c = Case::parse(&read("case-unpinned.toml")).unwrap();
     assert_eq!(c.rules_version, None);
     assert_eq!(c.min_named, Evidence::default());
-    assert_eq!(c.lead_hours, None);
+    assert_eq!((c.admin.as_deref(), c.naming_days), (None, None));
     assert!(c.fleets.is_empty() && c.claims.is_empty());
     assert_eq!(c.contacts[0].role, ContactRole::Affected);
     let text = c.to_toml().unwrap();

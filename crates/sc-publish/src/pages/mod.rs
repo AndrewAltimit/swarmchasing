@@ -31,6 +31,15 @@ use std::fmt::Write;
 /// marked synthetic.
 pub const EXAMPLE_FILE: &str = "showcase.ndjson";
 
+/// Where the synthetic showcase bundle is published: the files of
+/// [`sc_case::bundle::FILES`] and the manifest, for the tools page's bundle
+/// check.
+pub const SHOWCASE_BUNDLE_DIR: &str = "assets/showcase-bundle";
+
+/// The case id the showcase bundle's stamp names. It says the bundle is
+/// synthetic wherever the stamp is shown.
+pub const SHOWCASE_CASE: &str = "synthetic-showcase";
+
 /// Fields of a labelled record that carry the answer, stripped from the
 /// example the workbench loads.
 const LABEL_FIELDS: [&str; 5] = ["label", "class", "cite", "hard_negative_for", "run"];
@@ -54,9 +63,10 @@ pub struct SiteInputs {
     /// `https://github.com/<owner>/<repo>`.
     pub repo: String,
     pub version: String,
-    /// Size of the engine module in bytes, when it was built first.
+    /// Download size of the engine module in bytes (gzip-compressed, as the
+    /// host serves it), when it was built first.
     pub engine_bytes: Option<u64>,
-    /// Size of the tools module (reports, bundle check, eval) in bytes.
+    /// The same for the tools module (reports, bundle check, eval).
     pub tools_bytes: Option<u64>,
 }
 
@@ -65,7 +75,8 @@ pub struct Ctx {
     pub version: String,
     pub rules_version: String,
     pub repo: String,
-    /// "1.3 MB", for the engine's loading message.
+    /// "0.5 MB", the engine's download size for its loading message; empty
+    /// when the module was not built first.
     pub engine_size: String,
     /// The same for the tools module.
     pub tools_size: String,
@@ -96,6 +107,34 @@ pub fn example_records(ndjson: &str) -> Result<String, String> {
         out.push(v.to_string());
     }
     Ok(out.join("\n") + "\n")
+}
+
+/// The synthetic showcase bundle: what `swarmchase case bundle` writes,
+/// made from the showcase records under the bundled rules, with the rules'
+/// figures on the labelled set. (published path, text) per file. The stamp
+/// is dated by the newest record, so the build is reproducible.
+pub fn showcase_bundle(
+    example: &str,
+    rules: &Rules,
+    version: &str,
+    eval: sc_core::EvalSnapshot,
+) -> Result<Vec<(String, String)>, String> {
+    let records = sc_core::parse_input(example, Format::Ndjson, &FieldMap::default()).observations;
+    let newest = records.iter().map(|o| o.ts).max().unwrap_or(0);
+    let generated = sc_core::fmt_ts(newest);
+    let c = sc_case::bundle::contents(
+        SHOWCASE_CASE,
+        &generated,
+        version,
+        None,
+        &records,
+        rules,
+        Some(eval),
+    )?;
+    Ok(c.files
+        .into_iter()
+        .map(|(name, text)| (format!("{SHOWCASE_BUNDLE_DIR}/{name}"), text))
+        .collect())
 }
 
 fn page(path: &str, nav: &'static str, title: &str, description: &str, body: String) -> Page {
@@ -184,10 +223,12 @@ fn doc_body(d: &docs::Doc, all: &[docs::Doc], repo: &str, before: &str, after: &
     )
 }
 
+/// A module's download size for its loading message ("0.5 MB"), or empty
+/// when it is not known (the pages were built before the modules).
 fn module_size(bytes: Option<u64>) -> String {
     match bytes {
-        Some(b) => format!("{:.1} MB", b as f64 / 1_048_576.0),
-        None => "1.5 MB".into(),
+        Some(b) => format!("{:.1} MB", (b as f64 / 1_048_576.0).max(0.1)),
+        None => String::new(),
     }
 }
 
@@ -224,6 +265,10 @@ fn manual_terms(first: &[docs::Doc], sources: &[(String, String)]) -> docs::Term
         }
         t.fm.insert(f.id, format!("{}#{}", f.url, f.anchor));
     }
+    t.titles = first
+        .iter()
+        .map(|d| (d.src.clone(), d.title.clone()))
+        .collect();
     if let Some((src, text)) = sources.iter().find(|(p, _)| p == "docs/manual/glossary.md") {
         let url = docs::doc_url(src);
         t.gloss = docs::glossary_terms(text)
@@ -279,6 +324,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         sc_core::parse_input(&example, Format::Ndjson, &FieldMap::default()).observations,
         &rules,
     );
+    let example_bundle_records = example.clone();
     out.push(("assets/example.ndjson".into(), example));
     let files: Vec<String> = inp.eval_set.iter().map(|(n, _)| n.clone()).collect();
     let mut set = String::new();
@@ -318,6 +364,12 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "assets/eval-set.json".into(),
         serde_json::json!({ "files": files, "ndjson": set }).to_string(),
     ));
+    out.extend(showcase_bundle(
+        &example_bundle_records,
+        &rules,
+        &inp.version,
+        sc_core::EvalSnapshot::of(&report),
+    )?);
 
     // Notices.
     let mut idx = page(
@@ -393,13 +445,15 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         let nav = match d.url.as_str() {
             "methodology/" => "methodology",
             "operators/" => "operators",
+            "providers/" => "providers",
+            "docs/guides/for-researchers/" => "researchers",
             u if u.starts_with("docs/manual/") => "manual",
             _ => "docs",
         };
-        let before = if nav == "operators" {
-            shells::OPERATORS_PANEL
-        } else {
-            ""
+        let before = match nav {
+            "operators" => shells::OPERATORS_PANEL,
+            "providers" => shells::PROVIDERS_PANEL,
+            _ => "",
         };
         let after = if nav == "manual" {
             manual::pager(d, &manual_order)
@@ -444,7 +498,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "index.html",
         "home",
         "",
-        "Passive detection of misaligned AI agent swarms in public records: the method walked through a synthetic incident, notices, and browser tools.",
+        "Passive detection of AI agent activity in public records: the method walked through a synthetic incident, notices, and browser tools.",
         home::body(&example_analysis, &rules, &inp.notices, &fm_links),
     );
     home.title = String::new();
@@ -466,7 +520,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "eval",
         "Evaluation",
         "Precision and recall of the bundled rules on the committed labelled set.",
-        evalpage::body(&summary, &files),
+        evalpage::body(&summary, &format!("{}/tree/main/samples/eval", inp.repo)),
     );
     p.scripts.push("js/pages/eval.js");
     pages.push(p);
@@ -498,8 +552,8 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "Check an evidence bundle, read a security.txt, defang URLs.",
         shells::TOOLS.to_string(),
     );
+    // No preload: each tool loads its module on first use.
     p.scripts.push("js/pages/tools.js");
-    p.engine = true;
     pages.push(p);
 
     let mut sitemap = String::from(
@@ -535,7 +589,10 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "Page not found",
         "Nothing is published at this address.",
         format!(
-            "{}<p><a class=\"button primary\" href=\"{root}\">Home</a> <a class=\"button\" href=\"{root}notices/\">Notices</a> <a class=\"button\" href=\"{root}docs/\">Docs</a></p>",
+            "{}<p><a class=\"button primary\" href=\"{root}notices/\">Notices</a> <a class=\"button\" href=\"{root}\">Home</a></p>\
+<ul><li>Received a report about your site? <a href=\"{root}operators/\">For operators</a> says what becomes public and when.</li>\
+<li>Received a report at an AI provider? <a href=\"{root}providers/\">For providers</a> covers checking it and replying.</li>\
+<li>To ask about a notice that is not here yet, reply to the report, or use the <a href=\"{root}operators/#contact\">private contact</a>.</li></ul>",
             shells::NOT_FOUND,
             root = html::esc(&root_path)
         ),
@@ -562,12 +619,20 @@ mod tests {
                 providers: vec![P.into()],
                 affected: vec![format!("a.example\"{P}")],
                 sector: None,
+                scope: None,
+                agent_grade: None,
                 rules_version: P.into(),
                 toolkit: P.into(),
                 updates: vec![
                     NoticeUpdate {
                         date: "2026-10-16".into(),
                         kind: UpdateKind::Published,
+                        from: None,
+                        text: P.into(),
+                    },
+                    NoticeUpdate {
+                        date: "2026-10-17".into(),
+                        kind: UpdateKind::Naming,
                         from: None,
                         text: P.into(),
                     },
@@ -660,9 +725,12 @@ mod tests {
     }
 
     /// The synthetic notices in `tests/fixtures/notices/` (never under
-    /// `notices/`): one per status, three sectors, two providers.
+    /// `notices/`): every status, several sectors, two providers, and both
+    /// stages (an indicator notice with no naming update yet).
     fn synthetic_notices() -> Vec<NoticeFile> {
         [
+            include_str!("../../tests/fixtures/notices/synthetic-indicator-only.md"),
+            include_str!("../../tests/fixtures/notices/synthetic-named-later.md"),
             include_str!("../../tests/fixtures/notices/synthetic-portal-probe.md"),
             include_str!("../../tests/fixtures/notices/synthetic-clinic-scan.md"),
             include_str!("../../tests/fixtures/notices/synthetic-course-relay.md"),
@@ -727,6 +795,47 @@ mod tests {
         assert!(p.iter().any(|x| x.starts_with("unknown sector")), "{p:?}");
         let text = crate::write_notice(&synthetic_notices()[0]);
         assert!(text.contains("sector = \"government\""), "{text}");
+    }
+
+    #[test]
+    fn the_showcase_bundle_verifies_and_says_it_is_synthetic() {
+        let files = build_pages(&mut inputs()).unwrap();
+        let get = |name: &str| {
+            &files
+                .iter()
+                .find(|(p, _)| *p == format!("{SHOWCASE_BUNDLE_DIR}/{name}"))
+                .unwrap_or_else(|| panic!("{name} missing"))
+                .1
+        };
+        let rules = Rules::default_rules();
+        let checked = sc_case::bundle::check(
+            get("records.ndjson"),
+            get("analysis.json"),
+            get("stamp.json"),
+            &rules,
+            "0.1.0",
+            "",
+        )
+        .unwrap();
+        assert!(checked.differences.is_empty(), "{:?}", checked.differences);
+        assert_eq!(checked.stamp.case, SHOWCASE_CASE);
+        assert!(checked.stamp.eval.is_some());
+        assert!(!checked.stamp.flagged.is_empty());
+        let diffs = sc_case::bundle::manifest_differences(get("MANIFEST.sha256"), |n| {
+            Ok(get(n).as_bytes().to_vec())
+        })
+        .unwrap();
+        assert!(diffs.is_empty(), "{diffs:?}");
+        for l in get("records.ndjson").lines() {
+            assert!(l.contains("showcase:"), "{l}");
+        }
+        // The tools page no longer preloads the engine.
+        let tools = &files
+            .iter()
+            .find(|(p, _)| p == "tools/index.html")
+            .unwrap()
+            .1;
+        assert!(!tools.contains("rel=\"preload\""));
     }
 
     #[test]

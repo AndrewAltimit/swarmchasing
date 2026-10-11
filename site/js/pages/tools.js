@@ -1,11 +1,14 @@
 // Tools: check an evidence bundle (`swarmchase case bundle`), read a
-// security.txt, defang. Files are read in this page: the manifest hashes
-// are checked with Web Crypto and the analysis is re-run by the tools module.
-// Record contents, stamps and claims are untrusted: inserted as text, URLs
-// defanged.
-import { $, el, showError } from "../lib/dom.js";
+// security.txt, defang. Each card loads its module on first use, and says
+// in its own status line while it loads or if it fails, so one module that
+// does not load leaves the other cards working: the bundle check and
+// security.txt run in the tools module, defang in the engine. Files are read in
+// this page: the manifest hashes are checked with Web Crypto and the
+// analysis is re-run by the tools module. Record contents, stamps and claims
+// are untrusted: inserted as text, URLs defanged.
+import { $, el, showError, fetchRoot } from "../lib/dom.js";
 import { arr, obj, num, pct, dur, fmtTs, topEntries, trunc } from "../lib/fmt.js";
-import { tools, host, pageRules } from "../lib/wasm.js";
+import { tools, engine, host, pageRules } from "../lib/wasm.js";
 import { figure, swimlanes, tierLegend } from "../lib/charts.js";
 import { fleetItems, route } from "../lib/hints.js";
 import { layersTable } from "../lib/layers.js";
@@ -14,11 +17,13 @@ const FILES = ["records.ndjson", "analysis.json", "stamp.json"];
 const MANIFEST = "MANIFEST.sha256";
 // Optional: the claims from case work, as `report --claims` reads them.
 const CLAIMS = "claims.json";
+// The synthetic bundle the site build makes from the showcase records.
+const SHOWCASE = "assets/showcase-bundle/";
 const MAX_ROWS = 500;
-const pill = (t) => el("span", { class: `pill ${t}` }, t);
+const pill = (t) => el("span", { class: `pill ${String(t).replace(/[^a-z]/g, "")}` }, String(t));
 
-const sc = await tools();
-const rules = await pageRules(sc, null);
+// The tools module, once the first bundle is picked; render() reads it.
+let sc = null;
 
 async function sha256(buf) {
   const d = await crypto.subtle.digest("SHA-256", buf);
@@ -50,14 +55,22 @@ async function checkManifest(byName) {
   return diffs;
 }
 
-async function load(files) {
+/** Check the picked files. `synthetic` marks the showcase bundle as such. */
+async function load(files, synthetic = false) {
   const out = $("case-out");
   const byName = new Map([...files].map((f) => [f.name, f]));
   $("case-picked").textContent = [...byName.keys()].filter((n) => FILES.includes(n) || n === MANIFEST || n === CLAIMS).join(", ");
   const missing = ["records.ndjson", "stamp.json"].filter((f) => !byName.has(f));
   if (missing.length) return showError(out, `Pick ${missing.join(" and ")} (and the rest of the bundle).`);
+  try {
+    sc = await tools();
+  } catch {
+    // The card's status line says the module did not load.
+    return out.replaceChildren();
+  }
   let res;
   try {
+    const rules = await pageRules(sc, null);
     const text = (f) => (byName.has(f) ? byName.get(f).text() : "");
     const [records, analysis, stamp] = await Promise.all(FILES.map(text));
     const claims = byName.has(CLAIMS) ? await byName.get(CLAIMS).text() : "";
@@ -68,10 +81,25 @@ async function load(files) {
   } catch (e) {
     return showError(out, e);
   }
-  render(res);
+  render(res, synthetic);
 }
 
-function render(res) {
+/** The showcase bundle, fetched from this site as files a visitor would pick. */
+async function loadShowcase() {
+  const btn = $("case-example");
+  btn.disabled = true;
+  try {
+    const files = await Promise.all([...FILES, MANIFEST].map(async (n) => new File([await fetchRoot(SHOWCASE + n, "text")], n)));
+    for (const id of ["case-files", "case-dir"]) $(id).value = "";
+    await load(files, true);
+  } catch (e) {
+    showError($("case-out"), e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function render(res, synthetic) {
   const st = res.stamp;
   const a = res.analysis;
   const ok = res.differences.length === 0;
@@ -87,9 +115,10 @@ function render(res) {
   const lanes = a.clusters
     .filter((c) => c.runs.some((r) => r.start > 0))
     .map((c) => ({ key: c.key || c.id, label: c.id, tier: c.tier, runs: c.runs.filter((r) => r.start > 0) }));
-  const chart = swimlanes({ lanes, pauses: a.timing?.pauses ?? [], width: $("case-out").clientWidth - 8, label: "Runs per cluster over time, UTC" });
+  const chart = swimlanes({ lanes, pauses: a.timing?.pauses ?? [], width: Math.max(320, $("case-out").clientWidth - 8), label: "Runs per cluster over time, UTC" });
   const runRows = lanes.flatMap((l) => l.runs.map((r) => [l.label, pill(l.tier), fmtTs(r.start), fmtTs(r.end), String(r.count)]));
   $("case-out").replaceChildren(...[
+    synthetic ? el("p", { class: "hint note" }, "Synthetic example: the showcase bundle, built with this site from the showcase records. None of it was collected; target hosts are placeholders and networks documentation ASNs.") : null,
     el("p", { class: `verdict ${ok ? "ok" : "bad"}`, role: "status" }, ok ? "Verified: manifest, tiers and clusters match the stamp." : `Does not verify: ${res.differences.length} difference(s).`),
     ok ? null : el("ul", { class: "diffs" }, res.differences.map((d) => el("li", {}, d))),
     res.notes.length ? el("ul", { class: "hint" }, res.notes.map((n) => el("li", {}, n))) : null,
@@ -99,12 +128,7 @@ function render(res) {
     el("h3", {}, "Runs per cluster (UTC)"),
     figure({ chart, legend: tierLegend(), caption: "Each bar is one run: a stretch of a cluster's activity without a long pause.", head: ["Cluster", "Tier", "Start", "End", "Records"], rows: runRows }),
     el("h3", {}, "Clusters"),
-    el("div", { class: "scroll" }, el("table", {},
-      el("thead", {}, el("tr", {}, ["Cluster", "Tier", "Records", "Runs", "First seen", "Last seen", "Targets"].map((h) => el("th", { scope: "col" }, h)))),
-      el("tbody", {}, a.clusters.length ? a.clusters.map((c) => el("tr", {},
-        el("td", {}, c.id), el("td", {}, pill(c.tier)), el("td", { class: "num" }, c.members.length), el("td", { class: "num" }, c.runs.length),
-        el("td", {}, fmtTs(c.start)), el("td", {}, fmtTs(c.end)),
-        el("td", {}, topEntries(c.target_hosts, 3).map(([h, n]) => el("span", { class: "chip" }, `${host(sc, h)} ×${n}`))))) : el("tr", {}, el("td", { colspan: 7, class: "hint" }, "No clusters."))))),
+    clusterTable(a),
     ...hints(a),
     el("h3", {}, "Records"),
     recordTable(a),
@@ -115,9 +139,10 @@ function render(res) {
 function evalText(ev) {
   ev = obj(ev);
   if (!num(ev.labelled)) return el("span", { class: "hint" }, "not recorded (the maker had no labelled set, or an older toolkit)");
-  const at = (t) => `${t}: precision ${pct(ev[`${t}_precision`])}, recall ${pct(ev[`${t}_recall`])}`;
-  return [`rules ${trunc(String(ev.rules_version ?? "?"), 40)} on ${ev.labelled} labelled records; ${at("suggestive")}; ${at("significant")}`,
-    el("div", { class: "hint" }, "a regression floor on the committed set, not an estimate for this case")];
+  const at = (t) => el("li", {}, `${t[0].toUpperCase()}${t.slice(1)}: precision ${pct(ev[`${t}_precision`])}, recall ${pct(ev[`${t}_recall`])}`);
+  return [`Rules ${trunc(String(ev.rules_version ?? "?"), 40)} on ${ev.labelled} labelled records:`,
+    el("ul", {}, at("suggestive"), at("significant")),
+    el("div", { class: "hint" }, "A regression floor on the committed set, not an estimate for this case. The stamp keeps the rates only, without the counts an interval needs.")];
 }
 
 /** The attribution layers the re-run supports, with claims from case work. */
@@ -149,32 +174,94 @@ function hints(a) {
   return out;
 }
 
+const CLUSTER_HEAD = ["Cluster", "Tier", "Records", "Runs", "First seen", "Last seen", "Targets"];
+
+/** The clusters; each cell carries its column name, so on phones the rows stack as cards. */
+function clusterTable(a) {
+  const td = (col, attrs, ...kids) => el("td", { ...attrs, "data-label": CLUSTER_HEAD[col] }, ...kids);
+  return el("div", { class: "scroll" }, el("table", { class: "cards" },
+    el("thead", {}, el("tr", {}, CLUSTER_HEAD.map((h) => el("th", { scope: "col" }, h)))),
+    el("tbody", {}, a.clusters.length ? a.clusters.map((c) => el("tr", {},
+      td(0, { class: "rc-head" }, el("strong", {}, c.id)), td(1, { class: "rc-head" }, pill(c.tier)),
+      td(2, { class: "num rc-head rc-lab" }, c.members.length), td(3, { class: "num rc-head rc-lab" }, c.runs.length),
+      td(4, {}, fmtTs(c.start)), td(5, {}, fmtTs(c.end)),
+      td(6, {}, topEntries(c.target_hosts, 3).map(([h, n]) => el("span", { class: "chip" }, `${host(sc, h)} ×${n}`))))) : el("tr", {}, el("td", { colspan: 7, class: "hint" }, "No clusters.")))));
+}
+
+const RECORD_HEAD = ["Tier", "Time", "Cluster", "ID", "URL (defanged)", "Rules"];
+// Phones show the first few records, with a button for the rest.
+const PHONE_ROWS = 10;
+
 function recordTable(a) {
   const idx = a.results.map((_, i) => i).sort((x, y) => a.results[x].obs.ts - a.results[y].obs.ts);
-  const shown = idx.slice(0, MAX_ROWS);
-  return el("div", { class: "scroll" }, el("table", {},
-    el("thead", {}, el("tr", {}, ["Tier", "Time", "Cluster", "ID", "URL (defanged)", "Rules"].map((h) => el("th", { scope: "col" }, h)))),
-    el("tbody", {}, shown.map((i) => {
-      const r = a.results[i];
-      return el("tr", {},
-        el("td", {}, pill(r.tier)), el("td", { class: "nowrap" }, fmtTs(r.obs.ts)),
-        el("td", {}, r.cluster != null ? a.clusters[r.cluster].id : "–"),
-        el("td", {}, trunc(String(r.obs.id), 40)),
-        el("td", { class: "url" }, sc.defang(trunc(String(r.obs.url), 300))),
-        el("td", {}, r.hits.map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched)) }, h.rule_id))));
-    }), idx.length > shown.length ? el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - shown.length} more not shown.`)) : null)));
+  const all = idx.slice(0, MAX_ROWS);
+  const few = matchMedia("(max-width: 700px)").matches && all.length > PHONE_ROWS + 2;
+  // Each cell carries its column name: on phones the rows stack as cards,
+  // opening on one line with the tier, time and cluster.
+  const td = (col, attrs, ...kids) => el("td", { ...attrs, "data-label": RECORD_HEAD[col] }, ...kids);
+  const row = (i) => {
+    const r = a.results[i];
+    return el("tr", {},
+      td(0, { class: "rc-head" }, pill(r.tier)), td(1, { class: "nowrap rc-head" }, fmtTs(r.obs.ts)),
+      td(2, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster].id : "–"),
+      td(3, {}, trunc(String(r.obs.id), 40)),
+      td(4, { class: "url" }, sc.defang(trunc(String(r.obs.url), 300))),
+      td(5, {}, r.hits.map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched)) }, h.rule_id))));
+  };
+  const body = el("tbody", {}, (few ? all.slice(0, PHONE_ROWS) : all).map(row),
+    idx.length > all.length ? el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - all.length} more not shown.`)) : null);
+  const box = el("div", {}, el("div", { class: "scroll" }, el("table", { class: "records" },
+    el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)));
+  if (few) {
+    const more = el("button", { type: "button", class: "more-rows" }, `Show all ${all.length} records`);
+    more.addEventListener("click", () => {
+      const rows = all.slice(PHONE_ROWS).map(row);
+      body.replaceChildren(...[...body.children].slice(0, PHONE_ROWS), ...rows, ...[...body.children].slice(PHONE_ROWS));
+      more.remove();
+      rows[0]?.querySelector("td")?.setAttribute("tabindex", "-1");
+      rows[0]?.querySelector("td")?.focus();
+    });
+    box.append(more);
+  }
+  return box;
 }
 
 for (const id of ["case-files", "case-dir"]) $(id).addEventListener("change", (e) => e.target.files.length && load(e.target.files));
+$("case-example").addEventListener("click", loadShowcase);
 
-$("sectxt-run").addEventListener("click", () => {
-  const s = JSON.parse(sc.parse_security_txt($("sectxt").value));
+// security.txt runs in the tools module and defang in the engine, each
+// loaded when its card is first used. A failed load is said in the card's
+// status line and retried on next use. A button waiting on its module is
+// marked busy.
+async function using(load, fn, busy = null) {
+  busy?.setAttribute("aria-busy", "true");
+  let m;
+  try {
+    m = await load();
+  } catch {
+    return;
+  } finally {
+    busy?.removeAttribute("aria-busy");
+  }
+  fn(m);
+}
+$("sectxt").addEventListener("focus", () => tools().catch(() => {}), { once: true });
+$("defang-in").addEventListener("focus", () => engine().catch(() => {}), { once: true });
+
+$("sectxt-run").addEventListener("click", () => using(tools, (m) => {
+  let s;
+  try {
+    s = JSON.parse(m.parse_security_txt($("sectxt").value));
+  } catch (err) {
+    return showError($("sectxt-out"), err);
+  }
   const rows = [
     ["Contact", s.contact], ["Policy", s.policy], ["Encryption", s.encryption],
     ["Expires", s.expires ? [s.expires] : []], ["Languages", s.preferred_languages ? [s.preferred_languages] : []],
     ["Signed", [s.signed ? "yes (PGP)" : "no"]],
   ];
   // Values are shown defanged: a security.txt is text from elsewhere, not a link.
-  $("sectxt-out").replaceChildren(el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, (v ?? []).length ? (v ?? []).map((x) => sc.defang(String(x))).join("\n") : "–")])));
-});
-$("defang-in").addEventListener("input", () => ($("defang-out").textContent = sc.defang($("defang-in").value)));
+  $("sectxt-out").replaceChildren(el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, (v ?? []).length ? (v ?? []).map((x) => m.defang(String(x))).join("\n") : "–")])));
+}, $("sectxt-run")));
+// Each change is defanged once the engine is there; the latest text wins.
+$("defang-in").addEventListener("input", () => using(engine, (m) => ($("defang-out").textContent = m.defang($("defang-in").value))));
