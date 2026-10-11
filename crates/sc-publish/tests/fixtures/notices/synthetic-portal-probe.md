@@ -13,7 +13,12 @@ toolkit = "0.1.0"
 [[update]]
 date = "2026-09-02"
 kind = "published"
-text = "Initial notice. Synthetic: written for the site's tests, never collected."
+text = "Indicator notice. Synthetic: written for the site's tests, never collected."
+
+[[update]]
+date = "2026-09-07"
+kind = "naming"
+text = "The records portal's operator is named: portal[.]example[.]gov and records[.]example[.]gov. Its naming clock has run."
 
 [[update]]
 date = "2026-09-09"
@@ -27,9 +32,9 @@ text = "We have suspended the deployment while we investigate."
 This notice is a fixture for the site's tests and the XSS check. It describes no real incident; every host is a placeholder.
 
 - **Window:** 2026-08-30 → 2026-09-01
-- **Requests:** 42 across 2 hosts
+- **Requests:** 42 across 2 hosts of one organisation
 
-| Host | Requests |
+| Target | Requests |
 |---|---|
-| `portal[.]example[.]gov` | 30 |
-| `records[.]example[.]gov` | 12 |
+| A government records portal | 30 |
+| Its records search service | 12 |

@@ -13,7 +13,12 @@ toolkit = "0.1.0"
 [[update]]
 date = "2026-07-03"
 kind = "published"
-text = "Initial notice. Synthetic: written for the site's tests, never collected."
+text = "Indicator notice. Synthetic: written for the site's tests, never collected."
+
+[[update]]
+date = "2026-07-08"
+kind = "naming"
+text = "The course platform is named: courses[.]university[.]example. Its naming clock has run."
 
 [[update]]
 date = "2026-07-15"

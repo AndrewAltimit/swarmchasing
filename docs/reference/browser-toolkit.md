@@ -43,17 +43,17 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 
 The navigation groups the pages under Learn, Investigate and Reference. Each group is a `<details>` menu, so it works without scripts.
 
-The index is a plain table without scripts; with them, a filter form appears and keeps its state in the URL hash (`#sector=health&from=2026-08-01`), so a filtered view can be linked. On phones each notice is a card.
+The index is a plain table without scripts; with them, a filter form appears and keeps its state in the URL hash (`#sector=health&from=2026-08-01`), so a filtered view can be linked. On phones each notice is a card and the form starts folded.
 
-Each notice page shows its status, its dated updates as a timeline (corrections and retractions marked, statements quoted verbatim with who they are from), the rules and toolkit version, and the body. `notices/index.json`, `notices/<id>.json` and `notices/feed.xml` are written as `notice build` writes them.
+Each notice page shows its status and stage (indicators only, or the date of its latest naming update), the rules and toolkit version, the body, then its dated updates as a timeline (corrections and retractions marked, statements quoted verbatim with who they are from). Affected hosts appear only once a naming update names them. `notices/index.json`, `notices/<id>.json` and `notices/feed.xml` are written as `notice build` writes them.
 
 ## The landing page
 
-The landing page walks one synthetic incident through the method: unwrap, match, link, time, grade agent likelihood, assess scope, attribute, report. Every step has prose, a figure drawn by the generator, its table and the Field Manual sections it rests on, so the page reads without scripts.
+The landing page walks one synthetic incident through the method: unwrap, match, link, time, grade agent likelihood, assess scope, attribute, report. Every step has prose, a figure drawn by the generator, its table and the Field Manual sections it rests on, so the page reads without scripts. On phones every figure after the first starts folded, so the walk reads as text first.
 
 The match step draws one record's score as its contributions: each independence group once, context hits under their cap, and weight that fired but does not count as dashed outlines. The scope step draws each cluster's four questions and S1 to S7 tests, with payload present and out of scope in different shapes. *Run it live* loads the engine, re-runs the showcase in the page, and adds an unwrap box for any URL, the runs with zoom, the interaction graph, each cluster's agent-likelihood ladder and each cluster's scope tests.
 
-Until there is a real notice, the notices section shows the public notice the engine drafts from the showcase, marked as a synthetic example. Plant signals and declared testing never appear on the landing page.
+Until there is a real notice, the notices section shows the indicator notice the engine drafts from the showcase, marked as a synthetic example: each affected host appears by class, as stage one publishes it. Plant signals and declared testing never appear on the landing page.
 
 ## The workbench
 

@@ -68,7 +68,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 <h2 id="h-report">Report</h2>
 <p class="hint">A disclosure draft from this analysis, scoped to the selected cluster if there is one. Drafting loads the report tools, a second module, the first time. It follows the CLI's naming gate: outside case notes, a developer is named only on evidence at or above the level you pick. Model names in requests never name one on their own; an ASN names the host.</p>
 <div class="row">
-<label>Audience <select id="audience"><option value="internal">Internal case notes</option><option value="provider">AI provider</option><option value="affected">Affected operator</option><option value="public">Public notice</option></select></label>
+<label>Audience <select id="audience"><option value="internal">Internal case notes</option><option value="provider">AI provider</option><option value="affected">Affected operator</option><option value="indicator">Indicator notice (names no host)</option><option value="public">Naming update (names hosts)</option></select></label>
 <label class="grow">Reporter <input id="reporter" placeholder="Name and contact"></label>
 <label class="grow">Name a developer only on <select id="min-named"></select></label>
 </div>
@@ -121,8 +121,8 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 </section>"#;
 
 /// Shown above the operators' guide: the access-log check, then how to tell
-/// a report is ours and how to reach the project without naming a host in
-/// public.
+/// a report is ours, when a name becomes public, and how to reach the
+/// project without naming a host in public.
 pub const OPERATORS_PANEL: &str = r##"<aside class="card callout-card" aria-labelledby="check-h">
 <h2 id="check-h">Check your access log in the browser</h2>
 <p>The workbench has an access-log preset: paste your web server's log (Common or Combined Log Format), name your host in the field map, and it runs the same rules over your requests. The log is analysed in the page and never uploaded.</p>
@@ -131,8 +131,22 @@ pub const OPERATORS_PANEL: &str = r##"<aside class="card callout-card" aria-labe
 <aside class="card callout-card" aria-labelledby="contact-h">
 <h2 id="contact-h">Received a report? Check it, and reach us privately</h2>
 <p>A report cites a case id and carries an evidence bundle whose <code>stamp.json</code> names the same case. Check the bundle on the <a href="../tools/">tools page</a>: it re-runs the analysis in your browser and says whether the report follows from the records (<a href="#verify-an-evidence-bundle">what that shows</a>).</p>
-<p>To ask a question in private, or if you found your host in a notice and received no report, use <a href="https://github.com/AndrewAltimit/swarmchasing/security/advisories/new">GitHub private vulnerability reporting</a> on this repository. Please do not open a public issue about a named host: it would publish the name before the notice does.</p>
+<p>The indicator notice names and locates no affected organisation. Yours is named in a later update, 3 working days after your report (10 if your systems were compromised), or sooner only with your consent.</p>
+<p>Reply to the report's address with the case id in the subject. No report? Use <a href="https://github.com/AndrewAltimit/swarmchasing/security/advisories/new">GitHub private vulnerability reporting</a> on this repository. Please do not open a public issue about an affected host: it would publish the name before its naming update.</p>
 </aside>"##;
 
+/// Shown above the providers' guide: the bundle check, the indicator clock,
+/// and the reply channel.
+pub const PROVIDERS_PANEL: &str = r##"<aside class="card callout-card" aria-labelledby="provider-check-h">
+<h2 id="provider-check-h">Received a report? Check its bundle, then reply</h2>
+<p>The report carries an evidence bundle. The tools page re-runs the analysis in your browser and says whether the report follows from the records; nothing is uploaded (<a href="#check-the-evidence">what that shows</a>).</p>
+<p><a class="button primary" href="../tools/">Check a bundle</a></p>
+<p>Indicator notice: 0 h for you. It may follow as soon as every party has its report and every operator's indicator clock has run. It is not an embargo: nothing a recipient says moves it (<a href="#when-the-notice-is-published">when the notice is published</a>).</p>
+<p>Reply to the report's address with the case id in the subject. No report? Use <a href="https://github.com/AndrewAltimit/swarmchasing/security/advisories/new">GitHub private vulnerability reporting</a> on this repository.</p>
+</aside>"##;
+
+/// The 404 page: a notice link may arrive before its notice is published,
+/// since reports go first. Links are added by the build (they need the
+/// site's root path).
 pub const NOT_FOUND: &str = r#"<header class="page-head"><h1>Page not found</h1>
-<p class="lede">Nothing is published at this address. Notices keep their address once published; a retracted notice stays at its address with the retraction shown.</p></header>"#;
+<p class="lede">Nothing is published at this address. If a report pointed you to a notice here, it may not be published yet: reports go first, the indicator notice follows on a fixed clock, and affected organisations are named later. Notices keep their address once published; a retracted notice stays at its address with the retraction shown.</p></header>"#;

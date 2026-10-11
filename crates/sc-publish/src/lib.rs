@@ -46,7 +46,7 @@ mod tests {
                 published: "2026-10-20".into(),
                 updated: "2026-10-22".into(),
                 providers: vec![],
-                affected: vec!["portal.example.gov".into()],
+                affected: vec![],
                 sector: None,
                 scope: None,
                 agent_grade: None,

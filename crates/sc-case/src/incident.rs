@@ -118,7 +118,8 @@ pub fn gather(
             }
         }
     }
-    let notice_url = site_url.map(|u| format!("{}/#notice={}", u.trim_end_matches('/'), c.id));
+    // The notice page: `<site>/notices/<id>/`, the address it keeps once published.
+    let notice_url = site_url.map(|u| format!("{}/notices/{}/", u.trim_end_matches('/'), c.id));
     let description = format!(
         "Automated AI agent activity: {} linked run(s) of {} public record(s) between {} and {}, against {} affected endpoint(s){}.{}",
         clusters.len(),
@@ -467,7 +468,7 @@ mod tests {
         c.endpoints[0].state = EndpointState::Targeted;
         let p = gather(&c, &a, None, Some("https://s.example/n/"), "2026-10-20").unwrap();
         let v = draft(&p, Database::Aiid, "Reporter", "2026-10-20");
-        assert_eq!(v["report"]["url"], "https://s.example/n/#notice=t-1");
+        assert_eq!(v["report"]["url"], "https://s.example/n/notices/t-1/");
         assert_eq!(v["incident"]["alleged_developer_of_ai_system"], json!([]));
         assert!(
             v["missing"][0]

@@ -446,13 +446,14 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
             "methodology/" => "methodology",
             "operators/" => "operators",
             "providers/" => "providers",
+            "docs/guides/for-researchers/" => "researchers",
             u if u.starts_with("docs/manual/") => "manual",
             _ => "docs",
         };
-        let before = if nav == "operators" {
-            shells::OPERATORS_PANEL
-        } else {
-            ""
+        let before = match nav {
+            "operators" => shells::OPERATORS_PANEL,
+            "providers" => shells::PROVIDERS_PANEL,
+            _ => "",
         };
         let after = if nav == "manual" {
             manual::pager(d, &manual_order)
@@ -519,7 +520,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "eval",
         "Evaluation",
         "Precision and recall of the bundled rules on the committed labelled set.",
-        evalpage::body(&summary, &files),
+        evalpage::body(&summary, &format!("{}/tree/main/samples/eval", inp.repo)),
     );
     p.scripts.push("js/pages/eval.js");
     pages.push(p);
@@ -588,7 +589,10 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "Page not found",
         "Nothing is published at this address.",
         format!(
-            "{}<p><a class=\"button primary\" href=\"{root}\">Home</a> <a class=\"button\" href=\"{root}notices/\">Notices</a> <a class=\"button\" href=\"{root}docs/\">Docs</a></p>",
+            "{}<p><a class=\"button primary\" href=\"{root}notices/\">Notices</a> <a class=\"button\" href=\"{root}\">Home</a></p>\
+<ul><li>Received a report about your site? <a href=\"{root}operators/\">For operators</a> says what becomes public and when.</li>\
+<li>Received a report at an AI provider? <a href=\"{root}providers/\">For providers</a> covers checking it and replying.</li>\
+<li>To ask about a notice that is not here yet, reply to the report, or use the <a href=\"{root}operators/#contact\">private contact</a>.</li></ul>",
             shells::NOT_FOUND,
             root = html::esc(&root_path)
         ),
@@ -623,6 +627,12 @@ mod tests {
                     NoticeUpdate {
                         date: "2026-10-16".into(),
                         kind: UpdateKind::Published,
+                        from: None,
+                        text: P.into(),
+                    },
+                    NoticeUpdate {
+                        date: "2026-10-17".into(),
+                        kind: UpdateKind::Naming,
                         from: None,
                         text: P.into(),
                     },
@@ -715,9 +725,12 @@ mod tests {
     }
 
     /// The synthetic notices in `tests/fixtures/notices/` (never under
-    /// `notices/`): one per status, three sectors, two providers.
+    /// `notices/`): every status, several sectors, two providers, and both
+    /// stages (an indicator notice with no naming update yet).
     fn synthetic_notices() -> Vec<NoticeFile> {
         [
+            include_str!("../../tests/fixtures/notices/synthetic-indicator-only.md"),
+            include_str!("../../tests/fixtures/notices/synthetic-named-later.md"),
             include_str!("../../tests/fixtures/notices/synthetic-portal-probe.md"),
             include_str!("../../tests/fixtures/notices/synthetic-clinic-scan.md"),
             include_str!("../../tests/fixtures/notices/synthetic-course-relay.md"),

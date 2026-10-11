@@ -13,7 +13,12 @@ toolkit = "0.1.0"
 [[update]]
 date = "2026-08-11"
 kind = "published"
-text = "Initial notice. Synthetic: written for the site's tests, never collected."
+text = "Indicator notice. Synthetic: written for the site's tests, never collected."
+
+[[update]]
+date = "2026-08-14"
+kind = "naming"
+text = "The clinic's booking site is named: booking[.]clinic[.]example. Its operator consented to being named."
 
 [[update]]
 date = "2026-08-20"
