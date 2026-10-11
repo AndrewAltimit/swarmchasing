@@ -6,3 +6,4 @@
 //! `cargo test -p sc-core --test integration <name>::`.
 
 mod golden;
+mod snapshot;
