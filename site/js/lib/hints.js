@@ -129,5 +129,6 @@ export const PLANT_KINDS = {
   burned_identifier: "burned identifier: a value quoted in a public report, which anyone can copy",
   too_perfect: "too perfect: significant on many kinds of evidence with nothing ordinary around it",
   habit_mismatch: "habit mismatch: an identifier shared with an earlier cluster that worked differently",
+  auto_submitted: "auto-submitted: ordinary links nearby fanned out to the same services, as a mail gateway or security product does",
 };
 export const plantLabel = (k) => PLANT_KINDS[k] ?? trunc(String(k ?? "?").replace(/_/g, " "), 60);
