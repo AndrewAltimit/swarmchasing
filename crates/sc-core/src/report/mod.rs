@@ -458,8 +458,9 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 "  - relay stack `{st}` on {n} records: one client's habit, not evidence on its own"
             );
         }
-        if !c.benchmarks.is_empty() {
+        if !c.knowledge.benchmarks.is_empty() {
             let shown: Vec<String> = c
+                .knowledge
                 .benchmarks
                 .iter()
                 .map(|(id, n)| format!("`{id}` ×{n}"))
@@ -470,7 +471,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 shown.join(", ")
             );
         }
-        for u in &c.stale_knowledge {
+        for u in &c.knowledge.stale_knowledge {
             let _ = writeln!(
                 s,
                 "  - stale knowledge `{}` on {} records, {} hosts ({}): consistent with a model writing from old training data; old scripts do the same (a hint)",

@@ -14,6 +14,9 @@ use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 const MAX_LAYERS: usize = 16;
+
+/// [`Layer::via`] of the outermost layer: the URL as submitted.
+pub const VIA_SUBMITTED: &str = "submitted";
 const MAX_DEPTH: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -28,6 +31,13 @@ pub struct Layer {
     pub text: String,
     #[serde(skip)]
     pub params: Vec<(String, String)>,
+}
+
+impl Layer {
+    /// The outermost layer: the URL as submitted, not one found inside it.
+    pub fn is_submitted(&self) -> bool {
+        self.via == VIA_SUBMITTED
+    }
 }
 
 fn embedded_url_re() -> &'static Regex {
@@ -123,7 +133,7 @@ pub fn unwrap_layers(url: &str) -> Vec<Layer> {
     let mut layers: Vec<Layer> = Vec::new();
     let mut queue: std::collections::VecDeque<(String, String, usize)> = Default::default();
     let mut seen = BTreeSet::new();
-    queue.push_back((url.trim().to_string(), "submitted".into(), 0));
+    queue.push_back((url.trim().to_string(), VIA_SUBMITTED.into(), 0));
 
     while let Some((raw, via, depth)) = queue.pop_front() {
         let raw = if raw.starts_with("data:") {

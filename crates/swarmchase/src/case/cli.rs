@@ -822,7 +822,7 @@ pub fn run(args: CaseArgs) -> Result<()> {
             let c = load(&root, &id)?;
             let a = case_analysis(&root, &c)?;
             let key = super::fleet::resolve(&a, &cluster)?;
-            let n = super::fleet::by_key(&a, &key).map_or(0, |cl| cl.plant_signals.len());
+            let n = super::fleet::by_key(&a, &key).map_or(0, |cl| cl.origin.plant_signals.len());
             update(&root, &id, |c| {
                 if note.trim().is_empty() {
                     bail!("--note: what you checked and why the cluster stands");
