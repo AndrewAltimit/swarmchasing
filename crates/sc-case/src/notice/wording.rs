@@ -1,6 +1,6 @@
-//! Wording checks on a notice's text: what `notice lint` can check from a
-//! committed notice alone, and what the self-review checklist of `notice
-//! add` checks against its case.
+//! Wording checks on a notice's text: what the linter checks from a notice
+//! alone ([`super::lint`]), and what the self-review checklist checks
+//! against its case ([`crate::checklist`]).
 //!
 //! - every attribution statement carries a layer, a label and a tag
 //!   (SC-FM 7.6, 7.7);
@@ -8,6 +8,9 @@
 //! - a title names no provider the notice does not name as a developer;
 //! - "compromised" only for endpoints classified so with a basis;
 //! - an affected organisation is described as a target, never as the actor.
+
+use crate::providers::Directory;
+use crate::text::short;
 
 /// ICD 203 likelihood terms and their strength (SC-FM 8.1), with the
 /// off-table words of certainty, which no attribution statement uses.
@@ -189,19 +192,13 @@ pub fn names(text: &str, name: &str) -> bool {
 /// every model provider in the directory whose name or alias the title
 /// holds, unless the front matter's `providers` lists it. Hosts and clouds
 /// may be named as hosts.
-pub fn title_problems(
-    title: &str,
-    named: &[String],
-    dir: &crate::contacts::Directory,
-) -> Vec<String> {
+pub fn title_problems(title: &str, named: &[String], dir: &Directory) -> Vec<String> {
     let mut out = Vec::new();
-    for p in dir.providers.iter().filter(|p| p.kind == "model") {
-        let listed = named.iter().any(|n| {
-            n.eq_ignore_ascii_case(&p.name) || p.aliases.iter().any(|a| n.eq_ignore_ascii_case(a))
-        });
-        let hit = std::iter::once(&p.name)
-            .chain(&p.aliases)
-            .find(|a| names(title, a));
+    for p in dir.models() {
+        let listed = named
+            .iter()
+            .any(|n| p.names().any(|a| n.eq_ignore_ascii_case(a)));
+        let hit = p.names().find(|a| names(title, a));
         if let (false, Some(a)) = (listed, hit) {
             out.push(format!(
                 "the title names `{a}` ({}), which the notice does not name as a developer; below shared identifiers a provider stays out of the title",
@@ -269,14 +266,6 @@ pub fn accusation_problems(body: &str, affected: &[String]) -> Vec<String> {
     out
 }
 
-fn short(l: &str) -> String {
-    let t = l.trim();
-    match t.char_indices().nth(90) {
-        Some((i, _)) => format!("{}…", &t[..i]),
-        None => t.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,7 +313,7 @@ mod tests {
 
     #[test]
     fn titles_compromise_and_accusations() {
-        let dir = crate::contacts::Directory::builtin();
+        let dir = Directory::builtin();
         assert_eq!(
             title_problems("Claude agents probe a portal", &[], &dir).len(),
             1

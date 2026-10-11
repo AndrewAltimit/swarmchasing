@@ -1,7 +1,7 @@
 //! Small helpers the commands share: output, text, and the urlquery key.
 
 use anyhow::{Context, Result};
-use sc_core::{Analysis, Audience, Tier, fmt_ts};
+use sc_core::{Analysis, Tier, fmt_ts};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -21,15 +21,7 @@ pub fn require_urlquery_key() -> Result<String> {
     urlquery_key().with_context(|| format!("set {URLQUERY_KEY_ENV} to a urlquery.net API key"))
 }
 
-/// The audience as it appears in file names and ids.
-pub fn audience_id(a: Audience) -> &'static str {
-    match a {
-        Audience::Provider => "provider",
-        Audience::Affected => "affected",
-        Audience::Internal => "internal",
-        Audience::Public => "public",
-    }
-}
+pub use sc_case::text::{audience_id, one_line, truncate};
 
 /// Today's date (UTC), `yyyy-mm-dd`.
 pub fn today() -> String {
@@ -87,19 +79,6 @@ pub fn top_keys<K: ToString>(m: &BTreeMap<K, usize>, n: usize) -> Vec<String> {
         .into_iter()
         .map(|(k, _)| k)
         .collect()
-}
-
-pub fn truncate(s: &str, n: usize) -> String {
-    if s.chars().count() <= n {
-        s.into()
-    } else {
-        format!("{}…", s.chars().take(n).collect::<String>())
-    }
-}
-
-/// `s` on one line, safe in a Markdown table cell, cut to `n` characters.
-pub fn one_line(s: &str, n: usize) -> String {
-    truncate(&s.replace(['\n', '|'], " "), n)
 }
 
 /// Write `text` to `path` (creating its directory), or print it.

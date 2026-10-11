@@ -1,0 +1,15 @@
+[package]
+name = "sc-case"
+description = "Case files, the disclosure clock, the self-review checklist, bundle checks and the notice linter, without I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+sc-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+sha2.workspace = true
+chrono.workspace = true

@@ -9,8 +9,8 @@
 //! tool has no override. A party no contact was found for (`case
 //! no-contact`) has no clock, and the notice says contact was attempted.
 
-use super::model::{Case, EndpointState, show_time};
-use anyhow::{Result, bail};
+use crate::model::{Case, Contact, ContactRole, EndpointState, parse_time, show_time};
+use crate::{Result, bail};
 
 /// The AI provider's lead time, in hours.
 pub const PROVIDER: u32 = 0;
@@ -101,10 +101,7 @@ fn same(a: &str, b: &str) -> bool {
 
 /// The latest send whose recipient is one of `contacts` (by address or
 /// organisation).
-fn latest_send<'a>(
-    c: &Case,
-    contacts: impl Iterator<Item = &'a super::Contact> + Clone,
-) -> Option<i64> {
+fn latest_send<'a>(c: &Case, contacts: impl Iterator<Item = &'a Contact> + Clone) -> Option<i64> {
     c.sent
         .iter()
         .filter(|s| {
@@ -120,7 +117,7 @@ fn no_contact(c: &Case, party: &str) -> Option<i64> {
     c.no_contact
         .iter()
         .filter(|n| same(&n.party, party))
-        .filter_map(|n| super::model::parse_time(&n.at))
+        .filter_map(|n| parse_time(&n.at))
         .max()
 }
 
@@ -132,7 +129,7 @@ pub fn parties(c: &Case) -> Vec<Party> {
     let mut orgs: Vec<&str> = c
         .contacts
         .iter()
-        .filter(|x| x.role == "provider")
+        .filter(|x| x.role == ContactRole::Provider)
         .map(|x| x.org.as_str())
         .collect();
     orgs.sort_by_key(|o| o.to_ascii_lowercase());
@@ -141,7 +138,7 @@ pub fn parties(c: &Case) -> Vec<Party> {
         let contacts = c
             .contacts
             .iter()
-            .filter(|x| x.role == "provider" && same(&x.org, org));
+            .filter(|x| x.role == ContactRole::Provider && same(&x.org, org));
         out.push(Party {
             name: format!("provider {org}"),
             provider: true,
@@ -163,12 +160,10 @@ pub fn parties(c: &Case) -> Vec<Party> {
         let Some(lead) = endpoint_lead(c, e.state) else {
             continue;
         };
-        let contacts = c.contacts.iter().filter(|x| {
-            x.role != "provider"
-                && x.endpoint
-                    .as_deref()
-                    .is_some_and(|h| h.eq_ignore_ascii_case(&e.host))
-        });
+        let contacts = c
+            .contacts
+            .iter()
+            .filter(|x| x.role != ContactRole::Provider && x.is_for(&e.host));
         out.push(Party {
             name: format!(
                 "operator of {} ({})",
@@ -265,8 +260,8 @@ pub fn show(c: &Case, now: i64, out: &mut impl std::io::Write) -> std::io::Resul
 
 #[cfg(test)]
 mod tests {
-    use super::super::model::*;
     use super::*;
+    use crate::model::*;
 
     const T0: i64 = 1_791_000_000;
 
@@ -287,19 +282,34 @@ mod tests {
             });
         }
         for (org, role, endpoint, address) in [
-            ("Example AI", "provider", None, "security@ai.example"),
-            ("Example AI", "provider", None, "abuse@ai.example"),
+            (
+                "Example AI",
+                ContactRole::Provider,
+                None,
+                "security@ai.example",
+            ),
+            (
+                "Example AI",
+                ContactRole::Provider,
+                None,
+                "abuse@ai.example",
+            ),
             (
                 "A",
-                "affected",
+                ContactRole::Affected,
                 Some("a.example.org"),
                 "security@a.example.org",
             ),
-            ("B", "registrar", Some("b.example.org"), "abuse@reg.example"),
+            (
+                "B",
+                ContactRole::Registrar,
+                Some("b.example.org"),
+                "abuse@reg.example",
+            ),
         ] {
             c.contacts.push(Contact {
                 org: org.into(),
-                role: role.into(),
+                role,
                 endpoint: endpoint.map(str::to_string),
                 channel: "email".into(),
                 address: address.into(),
@@ -363,7 +373,7 @@ mod tests {
     #[test]
     fn a_party_with_no_contact_has_no_clock() {
         let mut c = case();
-        c.contacts.retain(|x| x.role != "provider");
+        c.contacts.retain(|x| x.role != ContactRole::Provider);
         send(&mut c, "security@a.example.org", T0);
         c.endpoints[1].state = EndpointState::Targeted;
         c.no_contact.push(NoContact {
