@@ -56,6 +56,17 @@ fn rows_table(head: &[&str], rows: &[Vec<String>]) -> String {
     )
 }
 
+/// How a step's figure fits a phone screen.
+#[derive(Clone, Copy, PartialEq)]
+enum Fit {
+    /// Text-heavy: kept at a readable minimum width and scrolled sideways
+    /// rather than shrunk (`.walk-fig.wide-min`).
+    WideMin,
+    /// Wide by nature (graphs, grids, timelines): scrolled sideways, and
+    /// its table opens by default on a phone (`data-phone-table`).
+    Scroll,
+}
+
 /// One step: number, title, prose, the figure and its caption, the table.
 struct Step<'a> {
     id: &'a str,
@@ -66,19 +77,33 @@ struct Step<'a> {
     caption: String,
     table: String,
     refs: String,
+    fit: Fit,
 }
+
+/// Shown on narrow screens only (the stylesheet hides it otherwise).
+const SCROLL_HINT: &str = "<p class=\"scroll-hint\">Scroll the figure sideways, or open <em>View as table</em> below it.</p>";
 
 fn step(s: &Step) -> String {
     format!(
         "<li class=\"walk-step\" id=\"step-{id}\" aria-labelledby=\"step-{id}-h\">\
 <div class=\"step-text\"><p class=\"step-n\">Step {n}</p><h3 id=\"step-{id}-h\">{title}</h3>{prose}{refs}</div>\
-<figure class=\"chart-box walk-fig\" data-static=\"{id}\">{fig}<figcaption>{cap}</figcaption>{table}</figure>\
+<figure class=\"chart-box walk-fig{class}\" data-static=\"{id}\"{phone}>{SCROLL_HINT}{fig}<figcaption>{cap}</figcaption>{table}</figure>\
 <div class=\"live-slot\" data-live-slot=\"{id}\" hidden></div></li>",
         id = s.id,
         n = s.n,
         title = esc(s.title),
         prose = s.prose,
         refs = s.refs,
+        class = if s.fit == Fit::WideMin {
+            " wide-min"
+        } else {
+            ""
+        },
+        phone = if s.fit == Fit::Scroll {
+            " data-phone-table"
+        } else {
+            ""
+        },
         fig = s.figure,
         cap = s.caption,
         table = s.table,
@@ -138,6 +163,7 @@ fn unwrap_step(a: &Analysis, links: &FmLinks) -> String {
         ),
         table: rows_table(&["Layer", "Found via", "Text (defanged)"], &rows),
         refs: fm(links, &["FM-4.1", "FM-14.14"]),
+        fit: Fit::WideMin,
     })
 }
 
@@ -283,6 +309,7 @@ fn match_step(a: &Analysis, rules: &Rules, links: &FmLinks) -> String {
             &rows,
         ),
         refs: fm(links, &["FM-4.2", "FM-4.11", "FM-4.3"]),
+        fit: Fit::WideMin,
     })
 }
 
@@ -371,6 +398,7 @@ fn link_step(a: &Analysis, links: &FmLinks) -> String {
         ),
         table: rows_table(&["Link", "From", "To", "Strength"], &rows),
         refs: fm(links, &["FM-5.1", "FM-5.7", "FM-5.8"]),
+        fit: Fit::Scroll,
     })
 }
 
@@ -514,6 +542,7 @@ fn time_step(a: &Analysis, links: &FmLinks) -> String {
             rows_table(&["Hint", "Strength", "From", "To", "Chance"], &rows)
         ),
         refs: fm(links, &["FM-5.5", "FM-6.2", "FM-5.12"]),
+        fit: Fit::Scroll,
     })
 }
 
@@ -575,6 +604,7 @@ fn grade_step(a: &Analysis, links: &FmLinks) -> String {
         caption: "A dot per cluster at its grade, coloured by tier. Descriptive: the grade is never scored, never linked on, and is not yet measured against held-out labels.".into(),
         table: rows_table(&["Cluster", "Grade", "Signals", "Caps"], &rows),
         refs: fm(links, &["FM-7.10", "FM-14.7"]),
+        fit: Fit::WideMin,
     })
 }
 
@@ -671,6 +701,7 @@ fn scope_step(a: &Analysis, links: &FmLinks) -> String {
             &rows,
         ),
         refs: fm(links, &["FM-15.1", "FM-15.3", "FM-15.4"]),
+        fit: Fit::Scroll,
     })
 }
 
@@ -742,6 +773,7 @@ fn attribute_step(a: &Analysis, links: &FmLinks) -> String {
             &rows,
         ),
         refs: fm(links, &["FM-7.1", "FM-7.7", "FM-7.8"]),
+        fit: Fit::WideMin,
     })
 }
 
@@ -758,7 +790,7 @@ fn report_step(links: &FmLinks) -> String {
         title: "Report, then publish",
         prose: "<p>The tools draft; a person sends, and a second person reviews every notice before it is published. Reports go to the AI provider responsible and to the affected operators first. An indicator notice follows on a short fixed clock that nothing a recipient says extends: it describes the activity and names no affected party. Operators are named in a later update, 3 working days after their report (10 if compromised), or earlier with their consent. A notice informs without enabling: it withholds working payloads, inbox and tag values, and anything that would help repeat the attack. The example notice below is drafted from these synthetic records.</p>".into(),
         figure: disclosure_flow(&steps, "Who hears first, and when the notice may follow"),
-        caption: "Lead times from the publication policy.".into(),
+        caption: "The two clocks of the <a href=\"docs/policies/#lead-times\">publication policy</a>, each counted from a party's latest report. Working days are Monday to Friday, UTC. Nothing a recipient says moves the indicator clock; only consent names an operator sooner.".into(),
         table: rows_table(
             &["Stage", "When"],
             &steps
@@ -767,6 +799,7 @@ fn report_step(links: &FmLinks) -> String {
                 .collect::<Vec<_>>(),
         ),
         refs: fm(links, &["FM-10.2", "FM-11.4"]),
+        fit: Fit::Scroll,
     })
 }
 
@@ -800,9 +833,17 @@ fn example_notice(a: &Analysis) -> String {
     )
 }
 
+/// The latest notices, or the empty state with the example notice. Once
+/// any notice exists it sits right under the hero (`.latest-notices`);
+/// until then the empty state closes the page.
 fn notices_section(notices: &[NoticeFile], a: &Analysis) -> String {
-    let mut s = String::from(
-        "<section class=\"latest\" aria-labelledby=\"latest\"><h2 id=\"latest\">Latest notices</h2>",
+    let mut s = format!(
+        "<section class=\"latest{}\" aria-labelledby=\"latest\"><h2 id=\"latest\">Latest notices</h2>",
+        if notices.is_empty() {
+            ""
+        } else {
+            " latest-notices"
+        }
     );
     if notices.is_empty() {
         s.push_str("<p class=\"hint\">No notices yet. A notice is published only after a lead has been reviewed, linked into a case and reported to the AI provider and the affected operators. Unreviewed leads never appear here. <a href=\"notices/feed.xml\">Subscribe to the Atom feed</a> to hear about the first one.</p>");
@@ -837,14 +878,82 @@ const STEPS: [(&str, &str); 8] = [
     ("report", "Report"),
 ];
 
+/// One audience card: (heading, what is there, links as (href, label);
+/// the first link is the main one).
+type Audience = (
+    &'static str,
+    &'static str,
+    &'static [(&'static str, &'static str)],
+);
+
+/// Who the site is for, each with where to start.
+const AUDIENCES: [Audience; 3] = [
+    (
+        "Your site was named in a report or notice",
+        "What the report means, what becomes public and when, how to check your own logs, and how to reach us privately.",
+        &[
+            ("operators/", "For operators"),
+            ("analyze/#preset=access-log", "Check a log in your browser"),
+        ],
+    ),
+    (
+        "You handle reports at an AI provider",
+        "What a provider report holds, how to check its evidence bundle, what the STIX and MISP exports carry, and how you are named.",
+        &[
+            ("providers/", "For providers"),
+            ("tools/", "Check a bundle"),
+        ],
+    ),
+    (
+        "You research agent detection",
+        "Run the engine on your own exports, read every rule and its evaluation, and cite the method by section.",
+        &[
+            ("docs/guides/for-researchers/", "For researchers"),
+            ("analyze/", "Workbench"),
+            ("eval/", "Evaluation"),
+        ],
+    ),
+];
+
+fn audiences() -> String {
+    let mut s = String::from("<ul class=\"audiences\" aria-label=\"Start here\">");
+    for (i, (head, what, links)) in AUDIENCES.iter().enumerate() {
+        let _ = write!(
+            s,
+            "<li class=\"audience card\"><h2 id=\"aud-{i}\">{}</h2><p>{}</p><p class=\"ctas\">",
+            esc(head),
+            esc(what)
+        );
+        for (k, (href, label)) in links.iter().enumerate() {
+            let _ = write!(
+                s,
+                "{}<a class=\"button{}\" href=\"{href}\">{}</a>",
+                if k > 0 { " " } else { "" },
+                if k == 0 { " primary" } else { "" },
+                esc(label)
+            );
+        }
+        s.push_str("</p></li>");
+    }
+    s.push_str("</ul>");
+    s
+}
+
 pub fn body(a: &Analysis, rules: &Rules, notices: &[NoticeFile], links: &FmLinks) -> String {
     let mut s = String::new();
     s.push_str(
         "<section class=\"hero\" aria-labelledby=\"mission\"><p class=\"eyebrow\">Passive detection · coordinated disclosure · an open method</p><h1 id=\"mission\">Swarmchasing</h1>\
-<p class=\"mission\">Swarmchasing finds AI agent activity in public records (URL scanners, web archives, certificate logs), links its requests into runs and fleets, and reports each confirmed incident that harms or endangers others to the AI provider responsible and to the affected operators. A public notice follows: indicators on a short fixed clock, the names of affected organisations after a few working days.</p>\
-<p class=\"ctas\"><a class=\"button primary\" href=\"#walk\">See the method</a> <a class=\"button\" href=\"operators/\">Check your own logs</a> <a class=\"button\" href=\"analyze/\">Open the workbench</a> <a class=\"button ghost\" href=\"docs/manual/\">Read the Field Manual</a></p>",
+<p class=\"mission\">Swarmchasing finds AI agent activity in public records (URL scanners, web archives, certificate logs), links its requests into runs and fleets, and reports each confirmed incident that harms or endangers others to the AI provider responsible and to the affected operators. A public notice follows in two stages: indicators on a short fixed clock, naming no affected party, then the names of affected organisations after 3 working days (10 if compromised), each stage checked by a second reviewer.</p>",
     );
-    s.push_str("<nav aria-label=\"The method\"><ol class=\"method-strip\">");
+    s.push_str(&audiences());
+    s.push_str("<p class=\"hero-more\"><a href=\"#walk\">See the method</a>, walked through one synthetic incident below, or read the <a href=\"docs/manual/\">Field Manual</a>.</p></section>\n");
+    if !notices.is_empty() {
+        s.push_str(&notices_section(notices, a));
+    }
+    s.push_str(
+        "<section class=\"walk\" id=\"walk\" aria-labelledby=\"walk-h\"><div class=\"walk-head\"><h2 id=\"walk-h\">The method, on one synthetic incident</h2>",
+    );
+    s.push_str("<nav aria-label=\"The method's steps\"><ol class=\"method-strip\">");
     for (i, (id, label)) in STEPS.iter().enumerate() {
         let _ = write!(
             s,
@@ -852,11 +961,10 @@ pub fn body(a: &Analysis, rules: &Rules, notices: &[NoticeFile], links: &FmLinks
             i + 1
         );
     }
-    s.push_str("</ol></nav></section>\n");
+    s.push_str("</ol></nav>");
     let _ = write!(
         s,
-        "<section class=\"walk\" id=\"walk\" aria-labelledby=\"walk-h\"><div class=\"walk-head\"><h2 id=\"walk-h\">The method, on one synthetic incident</h2>\
-<p class=\"synthetic-banner\"><strong>Synthetic example.</strong> Every record on this page was written to show the method; none was collected. Target hosts are reserved placeholders (<code>*.example</code>) and networks are documentation ASNs. {} records, {} flagged, {} clusters.</p>\
+        "<p class=\"synthetic-banner\"><strong>Synthetic example.</strong> Every record on this page was written to show the method; none was collected. Target hosts are reserved placeholders (<code>*.example</code>) and networks are documentation ASNs. {} records, {} flagged, {} clusters.</p>\
 <div class=\"live-box\" data-live-box hidden><button type=\"button\" class=\"primary\" data-live>Run it live in this page</button> <a class=\"button\" href=\"analyze/#try=example\">Open it in the workbench</a>\
 <p class=\"hint\" data-engine-status aria-live=\"polite\"></p><p class=\"hint\" data-live-out aria-live=\"polite\"></p></div></div><ol class=\"walk-steps\">",
         a.total,
@@ -872,7 +980,9 @@ pub fn body(a: &Analysis, rules: &Rules, notices: &[NoticeFile], links: &FmLinks
     s.push_str(&attribute_step(a, links));
     s.push_str(&report_step(links));
     s.push_str("</ol><p class=\"walk-foot\">Ground rules: collection is passive (no URL an agent submitted is ever opened), model names in requests are weak evidence, and a developer is named only when the evidence reaches the naming gate. Details: <a href=\"methodology/\">methodology</a>, <a href=\"docs/policies/\">policies</a>, the <a href=\"docs/manual/\">Field Manual</a>.</p></section>\n");
-    s.push_str(&notices_section(notices, a));
+    if notices.is_empty() {
+        s.push_str(&notices_section(notices, a));
+    }
     s
 }
 
@@ -888,6 +998,37 @@ mod tests {
                 .observations,
             &rules,
         )
+    }
+
+    #[test]
+    fn the_hero_routes_each_audience_and_notices_follow_it_once_any_exist() {
+        let a = showcase();
+        let rules = Rules::default_rules();
+        let empty = body(&a, &rules, &[], &FmLinks::new());
+        for href in ["operators/", "providers/", "docs/guides/for-researchers/"] {
+            assert!(
+                empty.contains(&format!("class=\"button primary\" href=\"{href}\"")),
+                "{href}"
+            );
+        }
+        assert_eq!(empty.matches("<li class=\"audience card\">").count(), 3);
+        // No notices: the empty state and the example close the page.
+        assert!(empty.find("id=\"walk\"") < empty.find("id=\"latest\""));
+        assert!(!empty.contains("latest-notices"));
+        let n = crate::parse_notice(include_str!(
+            "../../tests/fixtures/notices/synthetic-portal-probe.md"
+        ))
+        .unwrap();
+        let some = body(&a, &rules, &[n], &FmLinks::new());
+        let latest = some.find("class=\"latest latest-notices\"").unwrap();
+        assert!(latest < some.find("id=\"walk\"").unwrap());
+        assert_eq!(some.matches("id=\"latest\"").count(), 1);
+        assert!(!some.contains("Example notice, synthetic."));
+        // The text-heavy figures keep a readable width; the wide ones open
+        // their tables on a phone.
+        assert!(empty.contains("class=\"chart-box walk-fig wide-min\" data-static=\"match\""));
+        assert!(empty.contains("data-static=\"link\" data-phone-table"));
+        assert!(!empty.contains("Lead times from the publication policy"));
     }
 
     #[test]

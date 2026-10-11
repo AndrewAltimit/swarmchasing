@@ -53,6 +53,9 @@ pub struct Terms {
     pub tactics: BTreeMap<String, String>,
     /// (term, short definition, href), longest term first.
     pub gloss: Vec<(String, String, String)>,
+    /// Each doc's title by repository path, for links whose text is the
+    /// target's file name. Without one, the name is made from the path.
+    pub titles: BTreeMap<String, String>,
 }
 
 /// One Field Manual section, for the index and the search.
@@ -143,14 +146,15 @@ pub fn term_anchor(term: &str) -> String {
 }
 
 /// Where a doc is published: `docs/README.md` is the docs index, the
-/// methodology and the operators' guide have their own sections, and every
-/// other doc sits under `docs/` at its own path.
+/// methodology and the operators' and providers' guides have their own
+/// sections, and every other doc sits under `docs/` at its own path.
 pub fn doc_url(src: &str) -> String {
     let rel = src.strip_prefix("docs/").unwrap_or(src);
     match rel {
         "README.md" => "docs/".into(),
         "methodology.md" => "methodology/".into(),
         "guides/for-operators.md" => "operators/".into(),
+        "guides/for-providers.md" => "providers/".into(),
         _ => {
             let stem = rel.strip_suffix(".md").unwrap_or(rel);
             let stem = stem
@@ -273,7 +277,24 @@ pub fn render_doc(src: &str, text: &str, links: &Links) -> Doc {
         .copied()
         .collect::<Vec<_>>()
         .join(" ");
-    let html = blocks(&body_lines, &mut ctx);
+    let mut html = blocks(&body_lines, &mut ctx);
+    // On a narrow screen the contents column is hidden; this collapsed
+    // list at the top stands in for it (the stylesheet shows one or the
+    // other).
+    if ctx.toc.len() > 2 {
+        let mut toc =
+            String::from("<details class=\"on-this-page\"><summary>On this page</summary><ol>");
+        for (level, id, text) in &ctx.toc {
+            let _ = write!(
+                toc,
+                "<li class=\"l{level}\"><a href=\"#{}\">{}</a></li>",
+                esc(id),
+                esc(text)
+            );
+        }
+        toc.push_str("</ol></details>\n");
+        html.insert_str(0, &toc);
+    }
     Doc {
         src: src.to_string(),
         url,
@@ -689,6 +710,49 @@ fn resolve(href: &str, ctx: &Ctx) -> Option<String> {
     Some(format!("{}/{kind}/main/{target}{frag}", ctx.links.repo))
 }
 
+/// When a link's text is its own target's file name or path (`policies.md`,
+/// `` `guides/for-operators.md` ``) and the target is a doc, the doc's title:
+/// a site page reads better by name than by file.
+fn file_named_doc(text: &str, href: &str, ctx: &Ctx) -> Option<String> {
+    let path = href.split('#').next().unwrap_or("");
+    if !path.ends_with(".md") || path.contains(':') {
+        return None;
+    }
+    let plain = strip_inline(text);
+    let plain = plain.trim();
+    if plain.is_empty() || (plain != path && !path.ends_with(&format!("/{plain}"))) {
+        return None;
+    }
+    let target = join(ctx.src, path)?;
+    if !ctx.links.docs.contains(&target) {
+        return None;
+    }
+    let known = ctx
+        .links
+        .terms
+        .and_then(|t| t.titles.get(&target))
+        .filter(|t| !t.is_empty());
+    Some(known.cloned().unwrap_or_else(|| title_from_path(&target)))
+}
+
+/// A name made from a doc's path: `docs/guides/for-operators.md` reads
+/// "For operators", a directory's README its directory's name.
+fn title_from_path(path: &str) -> String {
+    let mut parts: Vec<&str> = path.trim_end_matches(".md").split('/').collect();
+    if parts.last() == Some(&"README") && parts.len() > 1 {
+        parts.pop();
+    }
+    let stem = parts
+        .last()
+        .copied()
+        .unwrap_or(path)
+        .replace(['-', '_'], " ");
+    let mut c = stem.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
 /// A repository path from a doc's path and a relative link. `None` when it
 /// leaves the repository.
 fn join(src: &str, rel: &str) -> Option<String> {
@@ -762,7 +826,10 @@ fn inline(s: &str, ctx: &Ctx) -> String {
             b'[' => {
                 if let Some((text, href, end)) = parse_link(s, i) {
                     let was = ctx.quiet.replace(true);
-                    let label = inline(text, ctx);
+                    let label = match file_named_doc(text, href, ctx) {
+                        Some(title) => esc(&title),
+                        None => inline(text, ctx),
+                    };
                     ctx.quiet.set(was);
                     match resolve(href, ctx) {
                         Some(url) => {
@@ -977,6 +1044,50 @@ mod tests {
         assert!(h.contains("<blockquote><p>quoted &lt;i&gt;</p>"));
         assert_eq!(d.toc.len(), 2);
         assert_eq!(d.toc[1].1, "a-scriptalert1script-1");
+    }
+
+    #[test]
+    fn a_link_named_after_its_file_shows_the_doc_title() {
+        let text = "# T\n\nSee [methodology.md](../methodology.md#known-limits), [`guides/for-operators.md`](../guides/for-operators.md), [the guide](../guides/for-operators.md) and [x.md](../../x.md).\n";
+        let d = render("docs/reference/cases.md", text);
+        let h = &d.html;
+        assert!(h.contains("#known-limits\">Methodology</a>"), "{h}");
+        assert!(h.contains("operators/\">For operators</a>"), "{h}");
+        assert!(h.contains(">the guide</a>"), "{h}");
+        // Not a doc: left as written.
+        assert!(h.contains(">x.md</a>"), "{h}");
+        // A known title wins over the one made from the path.
+        let docs: BTreeSet<String> = ["docs/reference/cases.md".to_string()].into();
+        let mut terms = Terms::default();
+        terms
+            .titles
+            .insert("docs/reference/cases.md".into(), "Case <files>".into());
+        let d = render_doc(
+            "docs/reference/cases.md",
+            "# T\n\n[cases.md](cases.md)\n",
+            &Links {
+                docs: &docs,
+                repo: "https://github.com/o/r",
+                terms: Some(&terms),
+            },
+        );
+        assert!(d.html.contains(">Case &lt;files&gt;</a>"), "{}", d.html);
+        assert_eq!(title_from_path("docs/manual/README.md"), "Manual");
+    }
+
+    #[test]
+    fn a_long_doc_opens_with_a_collapsed_contents_list() {
+        let d = render(
+            "docs/methodology.md",
+            "# T\n\nIntro.\n\n## A\n\n## B\n\n### C\n",
+        );
+        assert!(
+            d.html.starts_with("<details class=\"on-this-page\"><summary>On this page</summary><ol><li class=\"l2\"><a href=\"#a\">A</a></li>"),
+            "{}",
+            d.html
+        );
+        let d = render("docs/methodology.md", "# T\n\n## A\n\n## B\n");
+        assert!(!d.html.contains("on-this-page"));
     }
 
     #[test]
