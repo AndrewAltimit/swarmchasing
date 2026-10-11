@@ -369,6 +369,12 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 .collect();
             let _ = writeln!(s, "  - linked by: {}", shown.join(", "));
         }
+        // Provenance and corroboration (crate::plant): case notes and providers.
+        if matches!(opts.audience, Audience::Internal | Audience::Provider)
+            && let Some(line) = crate::plant::provenance_line(c)
+        {
+            let _ = writeln!(s, "  - {line}");
+        }
         if let [(style, &n)] = c.encodings.iter().collect::<Vec<_>>()[..]
             && n == c.members.len()
             && n > 1
@@ -599,6 +605,10 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             a.date_tags.min_hours.unwrap_or(0.0),
             a.date_tags.max_hours.unwrap_or(0.0)
         );
+    }
+    // Plant review (crate::plant): case notes only.
+    if opts.audience == Audience::Internal {
+        crate::plant::plant_review(&mut s, a, &clusters);
     }
     let _ = writeln!(s);
 

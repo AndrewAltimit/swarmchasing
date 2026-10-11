@@ -66,7 +66,7 @@ swarmchase case fleet split <id> k-77d0e2aa [--why "…"]
 
 Clusters are named by stable key (or C-number in the case's analysis) and stored as keys under `[[fleet]]` in `case.toml`. A merge takes in any fleet already holding one of the clusters. The decision log records the clusters, the soft links between them with their strength and detail, the candidate fleet that proposed it, the reason, and the command that reverses it. A merge with no soft link between the clusters needs `--why`. A split takes one cluster out; a fleet left with one cluster is dissolved.
 
-Reports then carry a *Fleets* section, with soft-link details in case notes only, and STIX exports a `grouping` per fleet ([STIX export](#stix-export)). `case status` shows each cluster's key and fleet.
+Reports then carry a *Fleets* section, with soft-link details in case notes only, and STIX exports a `grouping` per fleet ([STIX export](#stix-export)). `case status` shows each cluster's key, corroboration, fleet and any plant signals ([provenance and plant review](../methodology.md#provenance-and-plant-review)).
 
 ## Contacts
 

@@ -28,6 +28,8 @@ Toolkit: shared features link only within `feature_link_window_secs` of each oth
 
 Consecutive flagged records to the same target host, at most a set window apart, that share at least one rule are hard-linked. The shared rule keeps two unrelated clients who happened to hit the same host in the same minutes apart, unless they also share an indicator.
 
+The shared rule **must not** be a context indicator: a relay, a cache buster, self-identification, a header or an outcome, the kinds ordinary clients produce too ([FM-14.9](14-limits.md#fm-149-stacking-across-a-cluster)). Every reader of a page through a popular relay shares the relay rule, and a record submitted beside a real cluster needs nothing more to join it ([FM-5.11](#fm-511-provenance-and-planted-records)). Toolkit: only non-context rules count for this link.
+
 Close timing is only as good as the timestamps. It **should** use request or submission times; capture times say when an archive saved a URL, not when an agent sent it ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Toolkit: only request and submit times link this way, with times of unknown kind read as requests; two archive captures minutes apart are never joined by timing ([FM-6.1](06-timing.md#fm-61-timestamp-kinds)). Popular targets read through popular relays are the usual false merge here ([FM-14.6](14-limits.md#fm-146-common-features-cause-giant-clusters)).
 
 ## FM-5.4 Probe chains
@@ -47,6 +49,7 @@ Before a cluster is used in a report, the reviewer checks:
 - **What joined it.** Every link feature and every timing link. A cluster held together by one weak timing link between two otherwise separate groups is two clusters with a soft link.
 - **Size against spread.** A cluster that grows across many unrelated targets, sources and days usually rests on a common feature. Find it and treat it as soft.
 - **Targets.** Malformed URLs (a doubled scheme, a missing colon) can yield a bogus target host, and a bogus host shared by unrelated records produces timing links. Check that each target is a real host.
+- **Provenance.** Which kinds of source stand behind it, and whether any record could not have been submitted by anyone ([FM-5.11](#fm-511-provenance-and-planted-records)).
 
 ## FM-5.7 Soft links
 
@@ -69,7 +72,7 @@ Soft links are leads for a reviewer, listed with the evidence for each:
 
 Clusters joined by soft links form a **candidate fleet**. A candidate fleet is never merged automatically. The admin decides, and the decision is a dated entry in the case with:
 
-- the clusters merged or split, by stable key;
+- the clusters merged or split, by stable key (a name that survives renumbering, taken from the cluster's earliest record, so a record added later cannot change it);
 - the evidence for the decision, by link and record;
 - what would reverse it.
 
@@ -86,3 +89,24 @@ A report states the sequence with the first record of each step. It is an Infere
 ## FM-5.10 Reruns
 
 A rerun is a later run that repeats an earlier run's target hosts in nearly the same order, on another day, in a different cluster. Hosts that many runs share count for little. A rerun is a soft link between the two clusters, and is evidence that a task is scheduled or repeated, which bears on whether an incident is still active ([FM-11.3](11-notices.md#fm-113-status-lifecycle)). The toolkit's thresholds are in [methodology](../methodology.md#descriptive-hints).
+
+## FM-5.11 Provenance and planted records
+
+A public record shows that someone put a URL into a source, not that an agent sent it. Classify each record by who can do that:
+
+| Provenance | Who can create the record | Examples |
+|---|---|---|
+| Observed | Only the server that received the request. | Access logs, logs an affected operator sends. |
+| Submit-anywhere | Anyone, for any URL. | Scan services; web archives, whose on-demand saves an index row cannot tell from crawls. |
+| Publish-anywhere | Anyone, under a name they choose. | Package registries, public code events, certificate logs, crawls of what pages link to. |
+
+A cluster **should** state its provenance and its corroboration: one kind of source, several kinds, or confirmed in an operator's logs. Several scan services are one kind: whoever submits to one can submit to all. Provenance **must not** raise or lower a tier ([FM-4.1](04-indicators.md#fm-41-grading-records)), because nearly every public cluster is single-source; it tells the reader what the records can show.
+
+Someone who wants a false incident found, or a real cluster attributed elsewhere, can plant records. Linking **must** resist the cheap plants: a record joins a cluster only through a shared identifier, a shared non-context rule within the window ([FM-5.3](#fm-53-close-timing-on-the-same-target)), or a probe chain, and a cluster's stable key comes from its earliest record, so a later record cannot rename it. Before a report, the reviewer checks the plant signals:
+
+- **Provenance monoculture.** Every record is submit-anywhere and nothing was observed.
+- **Burned identifier.** An identifier quoted in a published report ([FM-14.5](14-limits.md#fm-145-tags-get-copied-after-publication)).
+- **Too perfect.** Every record significant on several kinds of evidence, with no ordinary requests around it, no escalation and no task retrieval.
+- **Habit mismatch.** An identifier shared with an earlier cluster whose relay routes, URL encodings or payloads share nothing with this one's.
+
+Each is a prompt, never a finding, and stays out of reports to providers and operators and out of notices. Toolkit: `provenance`, `corroboration` and `plant_signals` on each cluster; provider and internal reports carry the provenance line, and case notes a *Plant review* section ([methodology](../methodology.md#provenance-and-plant-review)).

@@ -26,7 +26,7 @@ A run tag or marker quoted in a published report can be reused by anyone who rea
 
 ## FM-14.6 Common features cause giant clusters
 
-A feature many unrelated clients share (a popular relay, a common tag value, a library's encoding style, a popular target) joins unrelated records when allowed to link, and links are transitive, so one such feature can merge hundreds of clusters. Only values one operator would hold may hard-link; everything else is a soft link at most ([FM-5.1](05-linking.md#fm-51-hard-and-soft-links)). Two people reading the same popular page through the same relay within minutes look like one client.
+A feature many unrelated clients share (a popular relay, a common tag value, a library's encoding style, a popular target) joins unrelated records when allowed to link, and links are transitive, so one such feature can merge hundreds of clusters. Only values one operator would hold may hard-link; everything else is a soft link at most ([FM-5.1](05-linking.md#fm-51-hard-and-soft-links)). Two people reading the same popular page through the same relay within minutes look like one client; that is why a shared relay alone never links by timing ([FM-5.3](05-linking.md#fm-53-close-timing-on-the-same-target)).
 
 ## FM-14.7 Humans look the same
 
@@ -79,3 +79,7 @@ A redacted secret's short hash is unsalted. A short or guessable secret can be r
 ## FM-14.19 Rules change
 
 A new rules version can move a record between tiers. A case pins its version, and an evidence bundle records it, so anyone can re-run the analysis and get the same tiers ([FM-4.8](04-indicators.md#fm-48-rule-versions-and-pinning)).
+
+## FM-14.20 Public records can be planted
+
+Scan services and archives take any URL from anyone, and registries, code events and certificate logs publish whatever their users name. A cluster made only of such records shows that someone submitted them. It may be an agent's activity, a researcher's test, or records placed to start a false incident or to point attribution at someone else. State the cluster's provenance and corroboration, check its plant signals, and look for a record no outsider could have made, such as an affected operator's own logs, before resting a claim on it ([FM-5.11](05-linking.md#fm-511-provenance-and-planted-records)).

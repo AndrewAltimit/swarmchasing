@@ -45,22 +45,22 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (69, 0, 6, 75),
+        (73, 0, 6, 77),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (29, 0, 46, 75), "significant");
+    assert_eq!(counts(Tier::Significant), (33, 0, 46, 77), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 150);
+    assert_eq!(a.total, 156);
     assert_eq!(
         tiers,
-        [81, 40, 29],
+        [83, 40, 33],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 15, "clusters");
+    assert_eq!(a.clusters.len(), 18, "clusters");
 
     // Every benign record says what kind of traffic it is.
     assert!(
@@ -75,6 +75,14 @@ fn evaluation_set_numbers_hold() {
         !c.false_merges
             .iter()
             .any(|m| m.runs == ["benign-tag-reader-1", "benign-tag-reader-2"]),
+        "{c:?}"
+    );
+    // A record planted beside a run, minutes later on the same host and
+    // sharing only a context rule (a relay, a cache buster), stays out of it.
+    assert!(
+        !c.false_merges
+            .iter()
+            .any(|m| m.runs.iter().any(|r| r.starts_with("plant-"))),
         "{c:?}"
     );
     assert!(c.run_labelled > 0 && c.bcubed_precision.is_some());

@@ -135,10 +135,12 @@ Only records with a score above zero are linked. Ordinary traffic to the same ho
    A feature can also be too common to say anything about one operator: a tag copied from a published report, or a generic parameter value. A group whose feature appears on more than `linking.feature_max_hosts` target hosts does not link, and neither does one carrying more than `linking.feature_max_share` of all records in its time span (when that span holds at least `linking.feature_share_min_records` records; the share is off by default, because in a case file one fleet can be most of the records). Such a group is listed under `common_features` in the analysis and in internal reports, with the limit it passed.
 
    A tag quoted in a public report is common by definition, however few hosts carry it: anyone who read the report can copy it. `linking.published_tags` lists those tags, each with its source in a comment. A feature whose value is one of them (ignoring case) never links, and its group is listed as a common feature with the reason "quoted in a public report".
-2. **Close timing against the same target.** Consecutive flagged records to the same target host, at most `linking.window_secs` apart, that share at least one rule. Only request and submit times link this way (and times of unknown kind, read as requests). Archive capture times say when a crawler saved a URL, not when a client sent it, so two captures minutes apart are not joined by timing.
+2. **Close timing against the same target.** Consecutive flagged records to the same target host, at most `linking.window_secs` apart, that share at least one rule of a kind other than the context kinds (`relay`, `cache_buster`, `self_id`, `header`, `outcome`). Every reader of a page through Jina Reader shares the relay rule, so a shared relay or cache buster alone never joins two records: a record placed beside a cluster would otherwise need nothing else to join it. Only request and submit times link this way (and times of unknown kind, read as requests). Archive capture times say when a crawler saved a URL, not when a client sent it, so two captures minutes apart are not joined by timing.
 3. **Probe chains.** A run of requests to one host and path, each at most 5 minutes after the last (`chains.max_gap_secs`), with at least 3 distinct parameter sets (`chains.min_variants`) and at least one parameter whose value changes. This is one client trying variants of a request. The flagged requests in a chain are linked even when different rules fired on each. Code: [`chains.rs`](../crates/sc-core/src/chains.rs).
 
 Links are transitive: if A links to B and B to C, all three form one cluster. A cluster needs at least two records. Each cluster lists the linking features its members share, so a reader can see what joined them.
+
+Each cluster has a number (`C1`, strongest first, which changes as records arrive) and a stable key (`k-` and 8 hex digits). The key is a hash of the id of its earliest member, by timestamp and then id, with untimed members last. Anyone can submit a record to a public scanner and retry until its id sorts first, but its timestamp is when it was sent, so a record placed beside an existing cluster cannot take over its key. Code: `key_seed` in [`link.rs`](../crates/sc-core/src/analyze/link.rs).
 
 Within a cluster, a gap longer than `linking.run_gap_secs` starts a new **run**.
 
@@ -204,6 +206,32 @@ For each pair of clusters the strengths combine as `1 - Π(1 - strength)`, so se
 
 **Why they never score or link.** Each of these is shared by many unrelated clients. Encoding styles are mostly library defaults. Polite crawlers and security scanners share recon openings. Popular targets attract the same paths. Cron jobs share pause times. Letting any of them raise a score would flag ordinary clients. Letting any of them link records would merge unrelated clusters, and every later step would inherit that error. They are also not measured by the evaluation set. So they appear in reports as hints, labelled as hints, for the admin to weigh.
 
+## Provenance and plant review
+
+Most sources take records from anyone. A record shows that someone submitted or published a URL, not that an agent sent it, and a person who wants a cluster found, or wants one attributed to someone else, can place records to be found. [`plant.rs`](../crates/sc-core/src/plant.rs) describes this for the admin. None of it changes a score, a tier or a link.
+
+**Provenance.** Each record's provenance follows from its source (`Provenance::of_source` in [`model.rs`](../crates/sc-core/src/model.rs)); it is derived, never stored:
+
+| Provenance | Sources |
+|---|---|
+| `observed` | Access logs; logs an affected operator sent |
+| `submit-anywhere` | urlquery, urlscan, Wayback, Arquivo.pt, Memento timemaps |
+| `publish-anywhere` | GH Archive, npm, PyPI, CT logs, Common Crawl |
+| `unknown` | Anything else: manual imports, fixtures |
+
+Archive rows count as submitted. A CDX row does not say whether a capture came from an on-demand save (Save Page Now, which anyone can trigger for any URL) or from a crawl, and telling them apart would mean opening the capture, which collection never does. Common Crawl counts as published: it crawls what pages link to, and anyone can publish a link.
+
+**Corroboration.** Each cluster counts its members by provenance (`provenance`) and says how many kinds of source stand behind it (`corroboration`): `single_source` (one kind at most, unknown not counted), `multi_source` (two or more), or `operator_confirmed` (an operator's logs hold a member). Two scan services count as one kind: whoever submits to one can submit to the other. Internal and provider reports carry both on each cluster's timeline. The tier does not read them, so a single-source cluster is graded like any other; the line says that such records show someone submitted them, not who.
+
+**Plant signals.** Each cluster lists signs that it was planted (`plant_signals`), with the records each rests on. They appear under *Plant review* in case notes and as one line per cluster in `case status`, never in a report to a provider or an operator, and never in a notice:
+
+- **Provenance monoculture**: a cluster above noise whose every record comes from a submit-anywhere source.
+- **Burned identifier**: a member's linking feature is one of `linking.published_tags`. Such a value never links, and is not a soft link either.
+- **Too perfect**: every member significant on three or more kinds of evidence other than context kinds, with no unflagged request on its hosts within `linking.window_secs` of its span, no route escalation and no task retrieval. Real agents read pages no rule flags on their way to a probe; a cluster built from textbook payloads need not.
+- **Habit mismatch**: a linking feature the cluster shares with an earlier cluster (outside the link window, not common and not burned), where the two clusters' relay stacks, URL encodings or payload dialects both exist and share nothing. The identifier may have been copied.
+
+Each is something ordinary agent activity also produces, which is why they are prompts and never evidence.
+
 ## Endpoints
 
 Flagged requests are also grouped per target host: hits, first and last seen, attack payloads, the clusters involved, and whether the hits are ongoing or historical. `swarmchase endpoints` prints this table, and a report to an affected operator carries it for that operator's hosts. In a case, the admin classifies each endpoint ([case files](reference/cases.md#what-casetoml-holds)).
@@ -254,9 +282,11 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 
 **The ASN on a urlquery record describes the target, not the sender.** urlquery records the IP and ASN where its scanner reached the submitted URL's host. For a URL submitted through a relay, that is often the relay's hosting network. The attribution step reads a record's ASN as the network the requests came from. Treat a hosting-network claim that rests on urlquery records with care, and check which records it comes from before relying on it.
 
-**Popular targets read through relays.** Two unrelated people reading the same popular page through the same relay within `linking.window_secs`, each with one more indicator, share a rule and a target host and will be linked. Check a cluster's link features and runs before treating it as one operator.
+**Popular targets read through relays.** A shared relay or cache buster alone never links by timing, but two unrelated people reading the same popular page within `linking.window_secs`, each with the same non-context indicator (a run tag parameter, a residue rule), share a rule and a target host and will be linked. Check a cluster's link features and runs before treating it as one operator.
 
-**Copied tags.** A tag quoted in a published report (such as `CHATGPTTEST1`) can be reused by anyone who read it. Tags listed in `linking.published_tags` never link. A quoted tag missing from that list, reused by unrelated operators within the feature window on no more than `linking.feature_max_hosts` hosts, still merges their clusters; add it to the list when a report quotes it. Generic parameter names in `strong_params` (`tag`, `run`, `session`) can carry the same value by coincidence.
+**Planted records.** Scan services and archives take any URL from anyone, and registries, GitHub and certificate logs publish what their users name. A person can submit records to be found: to start a false incident, to attach their records to a real cluster, or to point attribution at someone else. A planted record joins a cluster only through a shared identifier, a shared non-context rule within the window, or a probe chain, and cannot re-key it. A cluster's provenance, corroboration and plant signals ([above](#provenance-and-plant-review)) are prompts to check this; a single-source cluster of submitted records is the usual case, not proof of a plant.
+
+**Copied tags.** A tag quoted in a published report (such as `CHATGPTTEST1`) can be reused by anyone who read it. Tags listed in `linking.published_tags` never link. A quoted tag missing from that list, reused by unrelated operators within the feature window on no more than `linking.feature_max_hosts` hosts, still merges their clusters; add it to the list when a report quotes it. A listed tag on a cluster's member is shown as a burned identifier under plant review. Generic parameter names in `strong_params` (`tag`, `run`, `session`) can carry the same value by coincidence.
 
 **Corroboration across a cluster.** A cluster can be one tier above its strongest member when two members bring different kinds of evidence. That rests on the link between them being right. The cluster's member tiers and rules are listed so a reader can see how it got there.
 

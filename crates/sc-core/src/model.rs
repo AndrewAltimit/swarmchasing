@@ -79,6 +79,48 @@ impl TsKind {
     }
 }
 
+/// Who can put a record into its source, which says how hard it is to plant.
+/// Derived from [`Observation::source`] (never stored), beside
+/// [`TsKind::of_source`]. Written as its [`Provenance::label`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    /// A server recorded the request itself: an access log, logs an affected
+    /// operator sent.
+    Observed,
+    /// Anyone can submit any URL: scan services (urlquery, urlscan) and web
+    /// archives, whose index cannot tell an on-demand save (Save Page Now)
+    /// from a crawl without opening the capture, so every archive row counts
+    /// as submitted.
+    SubmitAnywhere,
+    /// Anyone can publish the record under a name of their choosing: GH
+    /// Archive events, npm and PyPI packages, Certificate Transparency
+    /// entries, and Common Crawl, which crawls what any page links to.
+    PublishAnywhere,
+    /// A source this list does not know (`manual`, an import, a fixture).
+    Unknown,
+}
+
+impl Provenance {
+    /// The provenance of a record from `source`.
+    pub fn of_source(source: &str) -> Self {
+        match source.split(':').next().unwrap_or_default() {
+            "access_log" | OPERATOR_SOURCE => Self::Observed,
+            "urlquery" | "urlscan" | "wayback" | "arquivo" | "memento" => Self::SubmitAnywhere,
+            "gharchive" | "npm" | "pypi" | "ctlog" | "commoncrawl" => Self::PublishAnywhere,
+            _ => Self::Unknown,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Observed => "observed",
+            Self::SubmitAnywhere => "submit-anywhere",
+            Self::PublishAnywhere => "publish-anywhere",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 /// An observation as stored, which may predate `ts_kind` and `target_asn`.
 #[derive(Deserialize)]
 struct StoredObservation {
@@ -146,6 +188,11 @@ impl Observation {
         if self.source == crate::urlquery::SOURCE && self.target_asn.is_none() {
             self.target_asn = self.asn.take();
         }
+    }
+
+    /// Who can put this record into its source ([`Provenance::of_source`]).
+    pub fn provenance(&self) -> Provenance {
+        Provenance::of_source(&self.source)
     }
 
     pub fn operator_supplied(&self) -> bool {
