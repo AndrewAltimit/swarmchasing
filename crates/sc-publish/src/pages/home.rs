@@ -62,9 +62,11 @@ enum Fit {
     /// Text-heavy: kept at a readable minimum width and scrolled sideways
     /// rather than shrunk (`.walk-fig.wide-min`).
     WideMin,
-    /// Wide by nature (graphs, grids, timelines): scrolled sideways, and
-    /// its table opens by default on a phone (`data-phone-table`).
+    /// Wide by nature (graphs, grids): scrolled sideways, and its short
+    /// table opens by default on a phone (`data-phone-table`).
     Scroll,
+    /// Wide, with tables too long to open by default (the runs).
+    ScrollOnly,
 }
 
 /// One step: number, title, prose, the figure and its caption, the table.
@@ -542,7 +544,7 @@ fn time_step(a: &Analysis, links: &FmLinks) -> String {
             rows_table(&["Hint", "Strength", "From", "To", "Chance"], &rows)
         ),
         refs: fm(links, &["FM-5.5", "FM-6.2", "FM-5.12"]),
-        fit: Fit::Scroll,
+        fit: Fit::ScrollOnly,
     })
 }
 
@@ -943,7 +945,7 @@ pub fn body(a: &Analysis, rules: &Rules, notices: &[NoticeFile], links: &FmLinks
     let mut s = String::new();
     s.push_str(
         "<section class=\"hero\" aria-labelledby=\"mission\"><p class=\"eyebrow\">Passive detection · coordinated disclosure · an open method</p><h1 id=\"mission\">Swarmchasing</h1>\
-<p class=\"mission\">Swarmchasing finds AI agent activity in public records (URL scanners, web archives, certificate logs), links its requests into runs and fleets, and reports each confirmed incident that harms or endangers others to the AI provider responsible and to the affected operators. A public notice follows in two stages: indicators on a short fixed clock, naming no affected party, then the names of affected organisations after 3 working days (10 if compromised), each stage checked by a second reviewer.</p>",
+<p class=\"mission\">Swarmchasing finds AI agent activity in public records (URL scanners, web archives, certificate logs), links its requests into runs and fleets, and reports each confirmed incident that harms or endangers others to the AI provider responsible and to the affected operators. A public notice follows in two stages: first the indicators, naming no affected party, then the names of affected organisations after 3 working days (10 if compromised).</p>",
     );
     s.push_str(&audiences());
     s.push_str("<p class=\"hero-more\"><a href=\"#walk\">See the method</a>, walked through one synthetic incident below, or read the <a href=\"docs/manual/\">Field Manual</a>.</p></section>\n");
