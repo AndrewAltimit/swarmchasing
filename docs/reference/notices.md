@@ -6,7 +6,7 @@ A notice is the public page for one incident. It is drafted inside its case and 
 
 1. `case notice <id>` renders the public notice into `<data>/cases/<id>/notice.md`. It prints each thing it withheld, each thing it could not classify (withheld until the admin decides), and anything that got through the withholding anyway.
 2. The admin reviews and edits the draft.
-3. `notice add <id>` checks the draft and copies it to `notices/<id>.md`, with front matter that holds the status and the dated updates. The check uses the case's pinned rules, and the current rules too when they differ. It refuses while any endpoint is unreviewed, and it never overwrites a notice that exists. The case moves to `reported` and is marked *publish pending*.
+3. `notice add <id>` checks the draft and copies it to `notices/<id>.md`, with front matter that holds the status and the dated updates. Its first update, and the draft's summary, name only the parties the case's recorded sends reached (`case sent`): the AI provider, the affected operators, other responders. The check uses the case's pinned rules, and the current rules too when they differ. It refuses while any endpoint is unreviewed, and it never overwrites a notice that exists. The case moves to `reported` and is marked *publish pending*.
 4. The admin commits and pushes the file, which publishes it.
 5. `notice published <id>` finds the file on the remote (`origin/HEAD` or `origin/main`, from local refs only: it never fetches or pushes) and moves the case to `published`. `--force` marks it without the check.
 
@@ -42,6 +42,7 @@ Each update appends a dated entry and never rewrites an earlier one.
 | Linking parameters that could be credentials | `tok`, `sid`, `session`, `nonce`. Run tags such as `uqtag` stay. |
 | E-mail addresses | The local part of every address. |
 | Compromised endpoints | Their attack details and request URLs. |
+| Hosts not classified as affected | Not named: the summary and endpoint table give a count, and their records, chains and escalations are left out. |
 | Operator-supplied logs | Everything from them, until the operator agrees to publication ([operator evidence](cases.md#operator-evidence)). |
 
 A report to one operator never carries another operator's logs. Records used with agreement are marked as provided by the operator.
@@ -56,6 +57,10 @@ A report to one operator never carries another operator's logs. Records used wit
 - valid front matter and update order.
 
 CI runs it on every pull request and push, and so does the pre-commit hook when `notices/` is staged ([scripts](../../scripts/README.md)).
+
+## Burned tags
+
+A run tag or marker a notice prints is public: anyone can copy it, so it no longer identifies one operator. [`check-published-tags.py`](../../scripts/ci/check-published-tags.py) fails when a committed notice shows a linking tag (`uqtag`, `run` and the other tag parameters notices keep) or a linking marker value that `[linking] published_tags` in [`rules/default.toml`](../../rules/default.toml) does not list. A listed value never links; its records appear as a common feature instead. Add each value with the notice as its source when the notice is added. The rules change passes the eval gate like any other.
 
 ## Build
 

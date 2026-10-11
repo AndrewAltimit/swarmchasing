@@ -41,7 +41,7 @@ mod status;
 pub use cli::{CaseArgs, run};
 pub(crate) use indicators::{CaseIndicators, indicators};
 pub use model::*;
-pub(crate) use report::report_options;
+pub(crate) use report::{affected_hosts, report_options, reported};
 #[cfg(test)]
 pub(crate) use report::{draft, report};
 #[cfg(test)]

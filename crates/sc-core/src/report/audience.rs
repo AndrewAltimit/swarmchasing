@@ -33,6 +33,39 @@ impl std::str::FromStr for Audience {
     }
 }
 
+/// Which parties a case's recorded sends reached. The public notice states
+/// only these.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reported {
+    #[serde(default)]
+    pub provider: bool,
+    #[serde(default)]
+    pub operators: bool,
+    /// CSIRTs, registrars, hosting networks or contacts not in the case.
+    #[serde(default)]
+    pub others: bool,
+}
+
+impl Reported {
+    /// The parties as a phrase ("the AI provider and the affected
+    /// operators"), or `None` when no send is recorded.
+    pub fn parties(&self) -> Option<String> {
+        let list: Vec<&str> = [
+            (self.provider, "the AI provider"),
+            (self.operators, "the affected operators"),
+            (self.others, "other responders"),
+        ]
+        .into_iter()
+        .filter_map(|(on, p)| on.then_some(p))
+        .collect();
+        match list[..] {
+            [] => None,
+            [one] => Some(one.into()),
+            [ref init @ .., last] => Some(format!("{} and {last}", init.join(", "))),
+        }
+    }
+}
+
 /// The report's title.
 pub(super) fn title(audience: Audience) -> &'static str {
     match audience {
@@ -43,8 +76,13 @@ pub(super) fn title(audience: Audience) -> &'static str {
     }
 }
 
-/// The summary paragraph. `host_list` is the top target hosts, defanged.
-pub(super) fn summary(audience: Audience, host_list: &[String]) -> String {
+/// The summary paragraph. `host_list` is the top target hosts, defanged;
+/// `reported` is who the case's recorded sends reached, if a case said.
+pub(super) fn summary(
+    audience: Audience,
+    host_list: &[String],
+    reported: Option<&Reported>,
+) -> String {
     match audience {
         Audience::Provider => format!(
             "We observed automated activity consistent with AI agents operating with little or no human oversight. \
@@ -68,12 +106,16 @@ pub(super) fn summary(audience: Audience, host_list: &[String]) -> String {
         Audience::Internal => format!("Targets: {}.", host_list.join(", ")),
         Audience::Public => format!(
             "Public scan and archive records show automated activity consistent with AI agents operating with little or no human oversight, aimed at {}. \
-             Reports went to the AI provider and the affected operators when this notice was published. We have not confirmed whether any request succeeded.",
+             {}We have not confirmed whether any request succeeded.",
             if host_list.is_empty() {
                 "unidentified hosts".into()
             } else {
                 host_list.join(", ")
-            }
+            },
+            reported
+                .and_then(Reported::parties)
+                .map(|p| format!("Reports went to {p} when this notice was published. "))
+                .unwrap_or_default()
         ),
     }
 }

@@ -8,7 +8,7 @@ mod audience;
 mod hints;
 mod sections;
 
-pub use audience::Audience;
+pub use audience::{Audience, Reported};
 
 use hints::{cut_line, dialect_line, fanout_line, rhythm_line, stale_dates_line};
 use sections::{attribution_section, endpoint_table};
@@ -48,6 +48,15 @@ pub struct ReportOptions {
     /// compromised: the weakness may still be open).
     #[serde(default)]
     pub exposed_hosts: Vec<String>,
+    /// Endpoints the admin classified as affected (compromised, targeted or
+    /// historical). When given, the public notice names only these hosts and
+    /// counts the rest; `None` names every host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affected_hosts: Option<Vec<String>>,
+    /// Who the case's recorded sends reached. The public notice says reports
+    /// went out only to these parties, and says nothing about sends without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reported: Option<Reported>,
 }
 
 /// A public notice draft and what the admin must look at before publishing.
@@ -79,6 +88,8 @@ impl Default for ReportOptions {
             min_named: Evidence::default(),
             claims: Vec::new(),
             exposed_hosts: Vec::new(),
+            affected_hosts: None,
+            reported: None,
         }
     }
 }
@@ -109,9 +120,12 @@ fn dur(secs: i64) -> String {
 }
 
 pub fn render_markdown(a: &Analysis, opts: &ReportOptions) -> String {
-    let mut view =
-        (opts.audience == Audience::Public).then(|| PublicView::new(a, &opts.exposed_hosts));
+    let mut view = (opts.audience == Audience::Public).then(|| public_view(a, opts));
     render(a, opts, view.as_mut())
+}
+
+fn public_view(a: &Analysis, opts: &ReportOptions) -> PublicView {
+    PublicView::new(a, &opts.exposed_hosts).with_affected(opts.affected_hosts.as_deref())
 }
 
 /// The public notice for these clusters, with what it withheld.
@@ -120,7 +134,7 @@ pub fn render_notice(a: &Analysis, opts: &ReportOptions) -> Notice {
         audience: Audience::Public,
         ..opts.clone()
     };
-    let mut view = PublicView::new(a, &opts.exposed_hosts);
+    let mut view = public_view(a, &opts);
     let markdown = render(a, &opts, Some(&mut view));
     Notice {
         leaks: view.leaks(&markdown),
@@ -184,7 +198,20 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             *kinds.entry(*k).or_default() += n;
         }
     }
-    let host_list: Vec<String> = top_counts(&hosts, 5)
+    // A public notice names the hosts the admin classified as affected and
+    // counts the rest.
+    let unnamed = match view.as_deref() {
+        Some(v) => {
+            let before = hosts.len();
+            hosts.retain(|h, _| v.named(h));
+            before - hosts.len()
+        }
+        None => 0,
+    };
+    if let Some(v) = view.as_deref_mut() {
+        v.note_unnamed(unnamed);
+    }
+    let mut host_list: Vec<String> = top_counts(&hosts, 5)
         .into_iter()
         .map(|(h, n)| {
             format!(
@@ -193,7 +220,14 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             )
         })
         .collect();
-    let _ = writeln!(s, "{}", audience::summary(opts.audience, &host_list));
+    if unnamed > 0 {
+        host_list.push(hosts_not_named(unnamed));
+    }
+    let _ = writeln!(
+        s,
+        "{}",
+        audience::summary(opts.audience, &host_list, opts.reported.as_ref())
+    );
     if kinds.contains_key(&IndicatorKind::Exploit) {
         let _ = writeln!(
             s,
@@ -223,7 +257,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     attribution_section(&mut s, &merge(claims, &opts.claims), opts);
 
     if opts.audience != Audience::Provider {
-        endpoint_table(&mut s, a, &hosts, view.as_deref_mut());
+        endpoint_table(&mut s, a, &hosts, unnamed, view.as_deref_mut());
     }
 
     let _ = writeln!(s, "## Timeline\n");
@@ -252,12 +286,23 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
                 dur(p.end - p.start)
             );
         }
+        if c.artifacts > 0 && matches!(opts.audience, Audience::Internal | Audience::Provider) {
+            let _ = writeln!(
+                s,
+                "  - artifacts: {} of {} records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)",
+                c.artifacts,
+                c.members.len()
+            );
+        }
         for ch in a
             .chains
             .iter()
             .filter(|ch| ch.members.iter().any(|m| c.members.contains(m)))
         {
-            if view.as_deref().is_some_and(|v| v.exposed(&ch.host)) {
+            if view
+                .as_deref()
+                .is_some_and(|v| v.exposed(&ch.host) || !v.named(&ch.host))
+            {
                 continue;
             }
             let varied: Vec<String> = ch.varied.iter().map(|p| format!("`{p}`")).collect();
@@ -285,7 +330,10 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             );
         }
         for e in a.escalations.iter().filter(|e| e.clusters.contains(&c.id)) {
-            if view.as_deref().is_some_and(|v| v.exposed(&e.host)) {
+            if view
+                .as_deref()
+                .is_some_and(|v| v.exposed(&e.host) || !v.named(&e.host))
+            {
                 continue;
             }
             let basis = e
@@ -569,6 +617,14 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
             .cmp(&a.results[x].score)
             .then(a.results[x].obs.ts.cmp(&a.results[y].obs.ts))
     });
+    if let Some(v) = view.as_deref() {
+        ev.retain(|&i| {
+            a.results[i]
+                .target_host
+                .as_deref()
+                .is_none_or(|h| v.named(h))
+        });
+    }
     ev.truncate(opts.max_evidence);
     for i in ev {
         let r = &a.results[i];
@@ -628,6 +684,14 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     let _ = writeln!(s, "## Requested action\n");
     let _ = writeln!(s, "{}", audience::requested_action(opts.audience));
     s
+}
+
+/// The count that stands in for hosts a public notice does not name.
+fn hosts_not_named(n: usize) -> String {
+    match n {
+        1 => "1 other host not named here".into(),
+        n => format!("{n} other hosts not named here"),
+    }
 }
 
 /// What a timing hint's times were, when not plain request times.
@@ -893,6 +957,103 @@ mod tests {
         );
         assert_eq!(md.matches("payload dialect `").count(), 1, "{md}");
         assert!(md.contains("favour the same canonical test payloads: 4 shared variants, Jaccard"));
+    }
+
+    #[test]
+    fn artifacts_count_is_in_private_reports_only() {
+        let obs = (0..3)
+            .map(|i| Observation {
+                ts: 1_791_000_000 + i * 60,
+                url: format!(
+                    "https://r.jina.ai/https://p.example/%60https://p.example/x{i}%60?uqtag=zz9&id=1'%20OR%201=1--"
+                ),
+                ..Default::default()
+            })
+            .collect();
+        let a = analyze(obs, &Rules::default_rules());
+        let n = a.clusters[0].artifacts;
+        assert!(n > 0, "{:?}", a.clusters[0]);
+        let line = format!("artifacts: {n} of 3 records carry a trace");
+        for (audience, shown) in [
+            (Audience::Internal, true),
+            (Audience::Provider, true),
+            (Audience::Affected, false),
+            (Audience::Public, false),
+        ] {
+            let md = render_markdown(
+                &a,
+                &ReportOptions {
+                    audience,
+                    ..Default::default()
+                },
+            );
+            assert_eq!(md.contains(&line), shown, "{audience:?}: {md}");
+        }
+    }
+
+    #[test]
+    fn public_notice_names_only_affected_hosts() {
+        let obs = ["d", "e", "f"]
+            .iter()
+            .enumerate()
+            .map(|(k, h)| Observation {
+                ts: 1_791_000_000 + 300 * k as i64,
+                url: format!(
+                    "https://r.jina.ai/https://{h}.example/item?uqtag=zz9&id=1'%20OR%201=1--"
+                ),
+                ..Default::default()
+            })
+            .collect();
+        let a = analyze(obs, &Rules::default_rules());
+        let all = render_notice(&a, &ReportOptions::default());
+        assert!(all.markdown.contains("`e[.]example`"), "{}", all.markdown);
+        // Without recorded sends the notice claims none.
+        assert!(!all.markdown.contains("Reports went"), "{}", all.markdown);
+        let sent = render_notice(
+            &a,
+            &ReportOptions {
+                reported: Some(Reported {
+                    operators: true,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        assert!(
+            sent.markdown
+                .contains("Reports went to the affected operators when this notice was published."),
+            "{}",
+            sent.markdown
+        );
+
+        let n = render_notice(
+            &a,
+            &ReportOptions {
+                affected_hosts: Some(vec!["D.example".into()]),
+                ..Default::default()
+            },
+        );
+        let md = &n.markdown;
+        assert!(md.contains("| `d[.]example` |"), "{md}");
+        for other in ["e[.]example", "f[.]example", "e.example", "f.example"] {
+            assert!(!md.contains(other), "{other}: {md}");
+        }
+        assert!(md.contains("2 other hosts not named here"), "{md}");
+        assert!(
+            n.withheld.iter().any(|w| w.contains("names of 2 host(s)")),
+            "{:?}",
+            n.withheld
+        );
+        // Private reports name every host.
+        let affected = render_markdown(
+            &a,
+            &ReportOptions {
+                audience: Audience::Affected,
+                affected_hosts: Some(vec!["d.example".into()]),
+                ..Default::default()
+            },
+        );
+        assert!(affected.contains("`e[.]example`"), "{affected}");
     }
 
     #[test]

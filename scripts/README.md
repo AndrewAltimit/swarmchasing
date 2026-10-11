@@ -14,6 +14,7 @@ A gate fails the commit or the run. CI is the authority; the hook is a fast loca
 | [`ci/check-md-links.py`](ci/check-md-links.py) | Relative links and heading anchors in every tracked Markdown file. | `gates` | staged `*.md` (`--staged`) |
 | [`ci/check-doc-density.py`](ci/check-doc-density.py) | Over-long lines and paragraphs in table cells, in docs, crate READMEs, top-level pages and this page; `--self-test`. | `gates` | staged `*.md` (`--staged`) |
 | [`ci/check-site.py`](ci/check-site.py) | The site's Content-Security-Policy and no HTML sinks in its code; `--selftest`. | `gates` | staged `site/` |
+| [`ci/check-published-tags.py`](ci/check-published-tags.py) | Every linking tag or marker a committed notice shows is in `[linking] published_tags`; `--self-test`. | `gates` | staged `notices/` or `rules/` |
 | [`ci/deny.sh`](ci/deny.sh) | cargo-deny: advisories, licenses, sources, bans. Installs the pinned cargo-deny. | `gates` | staged `Cargo.lock` or `deny.toml`, when cargo-deny is installed |
 | `cargo fmt --check` | Formatting. The hook auto-fixes and re-stages. | `ci` | staged Rust, `Cargo.*`, `rules/`, `samples/eval/` |
 | `cargo clippy -D warnings` | Lints, warnings as errors. | `ci` | as above |

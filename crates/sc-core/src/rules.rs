@@ -47,8 +47,8 @@ pub struct RuleDef {
     pub significant: bool,
     #[serde(default)]
     pub link: bool,
-    /// What a match shows the agent doing. An id outside `T1`..`T9` fails
-    /// to load.
+    /// What a match shows the agent doing, `T1`..`T7`. Any other id fails to
+    /// load: `T8` and `T9` are cluster-level judgments, never one match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tactic: Option<Tactic>,
     /// A match is a trace of how the agent was built (model-output residue,
@@ -240,6 +240,15 @@ impl Rules {
         for def in &set.rules {
             if !seen.insert(def.id.clone()) {
                 return Err(format!("duplicate rule id `{}`", def.id));
+            }
+            if let Some(t @ (Tactic::OffTaskTargets | Tactic::InterAgentCoordination)) = def.tactic
+            {
+                return Err(format!(
+                    "rule `{}`: tactic {} ({}) is a cluster-level judgment, never a rule's tactic",
+                    def.id,
+                    t.id(),
+                    t.label()
+                ));
             }
             if def.check.is_some() && def.target != Target::ParamValue {
                 return Err(format!(
@@ -521,11 +530,19 @@ mod tests {
                 "[[rule]]\nid = \"x.y\"\nkind = \"relay\"\ntarget = \"host\"\npattern = \"a.example\"\ntactic = \"{t}\"\n"
             )
         };
-        let ok = Rules::from_toml(&rule("T9")).unwrap();
-        assert_eq!(ok.set.rules[0].tactic, Some(Tactic::InterAgentCoordination));
+        let ok = Rules::from_toml(&rule("T7")).unwrap();
+        assert_eq!(ok.set.rules[0].tactic, Some(Tactic::CallbackChannels));
         for bad in ["T0", "T10", "t1", "exfil"] {
             let e = Rules::from_toml(&rule(bad)).err().unwrap();
             assert!(e.contains("unknown variant"), "{bad}: {e}");
+        }
+        // Off-task targets and inter-agent coordination are never one match.
+        for cluster_level in ["T8", "T9"] {
+            let e = Rules::from_toml(&rule(cluster_level)).err().unwrap();
+            assert!(
+                e.contains(cluster_level) && e.contains("cluster-level"),
+                "{cluster_level}: {e}"
+            );
         }
     }
 

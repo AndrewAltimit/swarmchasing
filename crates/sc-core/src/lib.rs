@@ -55,7 +55,7 @@ pub use model::{
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use recurrence::{ClusterRun, RecurrenceOptions, Rerun, TargetRun, cluster_reruns, reruns};
 pub use redact::{redact_observation, redact_url};
-pub use report::{Audience, Notice, ReportOptions, render_markdown, render_notice};
+pub use report::{Audience, Notice, ReportOptions, Reported, render_markdown, render_notice};
 pub use rules::{DEFAULT_RULES, RuleSet, Rules};
 pub use securitytxt::{SecurityTxt, parse_security_txt};
 pub use stamp::{EvalSnapshot, Stamp, StampCluster};

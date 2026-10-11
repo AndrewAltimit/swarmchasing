@@ -458,6 +458,10 @@ mod tests {
 
         update(&root, "t-2", |c| {
             find_evidence(c, "e1")?.public = Some("2026-10-22: reply".into());
+            // A notice names only endpoints classified as affected.
+            for e in &mut c.endpoints {
+                e.state = crate::case::EndpointState::Targeted;
+            }
             Ok(())
         })
         .unwrap();

@@ -39,11 +39,11 @@ description = "Reader relay: fetches a page server-side and returns text (synthe
 | `weight` | What a match adds to the record's score. Defaults to 1. |
 | `significant` | `true`: one match puts the record in the top tier. |
 | `link` | `true`: the matched text joins records into one cluster. |
-| `tactic` | What the match shows the agent doing, `T1` to `T9` ([FM-4.3](../manual/04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)). |
+| `tactic` | What the match shows the agent doing, `T1` to `T7` ([FM-4.3](../manual/04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)). |
 | `artifact` | `true`: the match only shows that a model wrote the request. |
 | `description` | One line a reader of a report can understand. |
 
-A rule names a `tactic` or sets `artifact = true`; a test fails on a bundled rule with neither, and a tactic outside `T1` to `T9` stops the file loading. Each kind has a default tactic ([FM-4.4](../manual/04-indicators.md#fm-44-default-tactics-by-rule-kind)); a bundled rule on another tactic needs an entry with its reason in `TACTIC_EXCEPTIONS` ([`rules.rs`](../../crates/sc-core/src/rules.rs)). Tactics and artifacts describe; they never change a score.
+A rule names a `tactic` or sets `artifact = true`; a test fails on a bundled rule with neither, and a tactic outside `T1` to `T7` stops the file loading (`T8` and `T9` are cluster-level judgments). Each kind has a default tactic ([FM-4.4](../manual/04-indicators.md#fm-44-default-tactics-by-rule-kind)); a bundled rule on another tactic needs an entry with its reason in `TACTIC_EXCEPTIONS` ([`rules.rs`](../../crates/sc-core/src/rules.rs)). Tactics and artifacts describe; they never change a score.
 
 ### Targets
 

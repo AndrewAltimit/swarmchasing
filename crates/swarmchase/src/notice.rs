@@ -16,7 +16,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_core::Rules;
 use sc_core::notice::lint_public;
-use sc_core::{Audience, Role, analyze, render_notice};
+use sc_core::{Audience, Reported, Role, analyze, render_notice};
 use sc_publish::{
     NoticeFile, NoticeMeta, NoticeStatus, NoticeUpdate, UpdateKind, build_site, check_notice,
     parse_notice, strip_draft_banner, write_notice,
@@ -256,6 +256,14 @@ fn append(n: &mut NoticeFile, u: NoticeUpdate, status: Option<NoticeStatus>) -> 
     n.append(u, status).map_err(anyhow::Error::msg)
 }
 
+/// The first update's text: published, and who the recorded sends reached.
+fn published_text(r: &Reported) -> String {
+    match r.parties() {
+        Some(p) => format!("Notice published. Reports went to {p} at the same time."),
+        None => "Notice published.".into(),
+    }
+}
+
 /// Turn the case's reviewed draft into a notice file in `dir`.
 fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result<PathBuf> {
     let target = notice_path(dir, id)?;
@@ -289,11 +297,7 @@ fn add(cases: &Path, id: &str, dir: &Path, rules: &Rules, today: &str) -> Result
         date: today.to_string(),
         kind: UpdateKind::Published,
         from: None,
-        text: if c.sent.is_empty() {
-            "Notice published.".into()
-        } else {
-            "Notice published. Reports went to the AI provider and the affected operators at the same time.".into()
-        },
+        text: published_text(&case::reported(&c)),
     }];
     let mut problems = leak_check(cases, &c, |r| check_notice(&n, r))?;
     for p in check_notice(&n, rules) {
@@ -460,19 +464,7 @@ pub(crate) fn notice_draft(
             published: today.to_string(),
             updated: today.to_string(),
             providers,
-            affected: c
-                .endpoints
-                .iter()
-                .filter(|e| {
-                    matches!(
-                        e.state,
-                        EndpointState::Compromised
-                            | EndpointState::Targeted
-                            | EndpointState::Historical
-                    )
-                })
-                .map(|e| e.host.clone())
-                .collect(),
+            affected: case::affected_hosts(&c),
             sector: None,
             rules_version: a.rules_version.clone(),
             toolkit: env!("CARGO_PKG_VERSION").to_string(),
@@ -546,6 +538,28 @@ pub fn published_for_test(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn published_text_names_only_the_parties_sent() {
+        let r = |provider, operators, others| Reported {
+            provider,
+            operators,
+            others,
+        };
+        assert_eq!(published_text(&r(false, false, false)), "Notice published.");
+        assert_eq!(
+            published_text(&r(false, true, false)),
+            "Notice published. Reports went to the affected operators at the same time."
+        );
+        assert_eq!(
+            published_text(&r(true, false, false)),
+            "Notice published. Reports went to the AI provider at the same time."
+        );
+        assert_eq!(
+            published_text(&r(true, true, true)),
+            "Notice published. Reports went to the AI provider, the affected operators and other responders at the same time."
+        );
+    }
 
     #[test]
     fn updates_append_in_order_and_build_writes_site_files() {
