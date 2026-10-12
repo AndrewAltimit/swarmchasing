@@ -169,6 +169,11 @@ fn records_path(root: &Path, id: &str) -> Result<PathBuf> {
     Ok(case_dir(root, id)?.join("raw").join("records.ndjson"))
 }
 
+/// The ids of the records case `id` holds.
+pub(crate) fn record_ids(root: &Path, id: &str) -> Result<BTreeSet<String>> {
+    Ok(load_records(root, id)?.into_iter().map(|o| o.id).collect())
+}
+
 fn load_records(root: &Path, id: &str) -> Result<Vec<Observation>> {
     let p = records_path(root, id)?;
     let text = std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;

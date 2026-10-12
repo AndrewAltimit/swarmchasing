@@ -1,8 +1,10 @@
 //! `swarmchase dashboard`: the state of monitoring at a glance, as a local
 //! page ([`crate::localui`]) or, with `--json`, as one JSON document.
 //!
-//! It answers, in order: what is new since the admin last looked (new and
-//! escalated clusters, lone significant records), whether monitoring is
+//! It answers: which leads need the admin first (the attention queue), what
+//! is new since the admin last looked (new and escalated clusters, lone
+//! significant records), how leads move and what ties them (the activity
+//! timeline and the link graph, [`graph`]), whether monitoring is
 //! healthy (each source's standing, the digest's health alerts, rule
 //! drift), what waits on the admin (the review queue, open cases and their
 //! clocks), and the command for each next step. Everything is read from the
@@ -10,9 +12,11 @@
 //! nothing. Which run the admin last looked at is the page's own memory
 //! (browser storage) or `--since`.
 
+pub mod graph;
 pub mod overview;
 
 use crate::localui::{App, Response, Server};
+use crate::watch::autonomy;
 use anyhow::{Result, bail};
 use sc_core::Analysis;
 use serde_json::json;
@@ -44,27 +48,45 @@ pub struct DashboardArgs {
     since: Option<String>,
 }
 
-/// Source name to kind, and the analysis window, from a watchlist.
-fn read_watchlist(p: &Path) -> (BTreeMap<String, String>, i64) {
+/// What the dashboard reads from a watchlist.
+pub struct WatchlistView {
+    /// Source name to kind.
+    pub kinds: BTreeMap<String, String>,
+    pub window_days: i64,
+    pub autonomy: autonomy::Config,
+}
+
+impl Default for WatchlistView {
+    fn default() -> Self {
+        Self {
+            kinds: BTreeMap::new(),
+            window_days: 30,
+            autonomy: autonomy::Config::default(),
+        }
+    }
+}
+
+/// Source kinds, the analysis window and `[autonomy]` from a watchlist.
+fn read_watchlist(p: &Path) -> WatchlistView {
     let Ok(text) = std::fs::read_to_string(p) else {
-        return (BTreeMap::new(), 30);
+        return WatchlistView::default();
     };
     match toml::from_str::<crate::watch::Watchlist>(&text) {
-        Ok(wl) => (
-            wl.sources.into_iter().map(|s| (s.name, s.kind)).collect(),
-            wl.analysis_window_days,
-        ),
+        Ok(wl) => WatchlistView {
+            kinds: wl.sources.into_iter().map(|s| (s.name, s.kind)).collect(),
+            window_days: wl.analysis_window_days,
+            autonomy: wl.autonomy,
+        },
         Err(e) => {
             eprintln!("warning: {} not read: {e}", p.display());
-            (BTreeMap::new(), 30)
+            WatchlistView::default()
         }
     }
 }
 
 pub fn run(args: DashboardArgs) -> Result<()> {
     crate::store::hint_if_empty(&args.data);
-    let (kinds, window_days) = read_watchlist(&args.watchlist);
-    let mut app = DashboardApp::new(args.data, kinds, window_days);
+    let mut app = DashboardApp::new(args.data, read_watchlist(&args.watchlist));
     if args.json {
         if let Some(s) = &args.since
             && !overview::is_stamp(s)
@@ -80,18 +102,16 @@ pub fn run(args: DashboardArgs) -> Result<()> {
 
 pub struct DashboardApp {
     data: PathBuf,
-    kinds: BTreeMap<String, String>,
-    window_days: i64,
+    watchlist: WatchlistView,
     /// The latest run's stamp and analysis, reloaded when `LATEST` moves.
     cache: Option<(String, Option<Analysis>)>,
 }
 
 impl DashboardApp {
-    pub fn new(data: PathBuf, kinds: BTreeMap<String, String>, window_days: i64) -> Self {
+    pub fn new(data: PathBuf, watchlist: WatchlistView) -> Self {
         Self {
             data,
-            kinds,
-            window_days,
+            watchlist,
             cache: None,
         }
     }
@@ -115,19 +135,19 @@ impl DashboardApp {
 
     pub fn overview(&mut self, since: Option<&str>, now: i64) -> Result<serde_json::Value> {
         let data = self.data.clone();
-        let kinds = std::mem::take(&mut self.kinds);
-        let window_days = self.window_days;
+        let wl = std::mem::take(&mut self.watchlist);
         let res = self.analysis().and_then(|a| {
             overview::overview(&overview::Inputs {
                 data: &data,
-                kinds: &kinds,
-                window_days,
+                kinds: &wl.kinds,
+                window_days: wl.window_days,
                 since,
                 analysis: a,
+                autonomy: &wl.autonomy,
                 now,
             })
         });
-        self.kinds = kinds;
+        self.watchlist = wl;
         res
     }
 

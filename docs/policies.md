@@ -42,7 +42,7 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
 |---|---|
 | **Publication** | Every confirmed incident gets a public notice on the site, in two stages: indicators first, names later. Updates are appended as dated entries, and the page shows its status. See [Two stages](#two-stages). |
 | **Timing** | Reports go first. Indicators follow on a short fixed clock; an operator is named 3 working days after its report, 10 if compromised, unless it consents earlier. Not an embargo. See [Lead times](#lead-times). |
-| **Admin gate** | Tools and agents draft reports, find contacts and prepare notices. Only the admin decides when evidence is sufficient, which endpoints are compromised or targeted, and sends reports and publishes notices. |
+| **Admin gate** | Tools and agents draft reports, find contacts and prepare notices. Only the admin decides when evidence is sufficient, which endpoints are compromised or targeted, and sends reports and publishes notices. The watch's [autonomy levels](reference/watch.md#autonomy) act only inward, on the digest's priority, and run in shadow until their record earns more. |
 | **Review** | Every indicator notice and naming update passes the admin's written checklist and an approved review of the exact draft by a second person. See [Self-review and second review](#self-review-and-second-review). |
 | **Channels** | Email is preferred. When an organisation has no email contact, the admin uses its web form or CERT portal. |
 | **Naming** | Affected organisations are named as targets, in a naming update after their clock. A provider below shared identifiers is named only as the party that was notified. See [Naming](#naming). |

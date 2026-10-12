@@ -81,6 +81,7 @@ The watch's health block and digest stay on the runner and reach the admin by em
 - **Cases and claims.** Opening a case, classifying endpoints, recording attribution and the scope finding.
 - **Sending and publishing.** Reports, notices, naming updates, and the second review of every notice.
 - **Rules and floors.** Merging a rule change, and the eval floors, which only go up.
+- **Autonomy.** Which [autonomy level](../reference/watch.md#autonomy) runs in shadow or on. The levels are deterministic, never a model, and none sends, publishes or opens a case.
 - **Policy.** Which sources a hosted model may see, and anything in [options not built](#options-not-built).
 
 ## Options not built

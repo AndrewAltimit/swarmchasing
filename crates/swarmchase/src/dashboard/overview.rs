@@ -12,7 +12,10 @@ use crate::review::{CLASS_FLAGGED, ReviewStore, queue, reviewed_ids, serve::grou
 use crate::store::read_json;
 use crate::util::one_line;
 use crate::watch::State;
+use crate::watch::attention::{self, Queue};
+use crate::watch::autonomy;
 use crate::watch::digest::{Summary, capability, clean_host, short_reason, summarise};
+use crate::watch::ledger::{self, Ledger};
 use anyhow::Result;
 use sc_collect::Kind;
 use sc_core::{Analysis, ObsResult, Tier, defang_host, fmt_ts};
@@ -25,6 +28,10 @@ pub const SCHEMA: &str = "swarmchase.dashboard/1";
 
 /// How many lone records and newly hit endpoints the overview lists.
 const LIST_MAX: usize = 50;
+/// Rows in the activity timeline.
+const TIMELINE_ROWS: usize = 40;
+/// Recent autonomy lines listed.
+const AUTONOMY_RECENT: usize = 25;
 /// A latest run older than this many hours is called stale (the scheduled
 /// watch runs every six hours).
 const STALE_HOURS: i64 = 12;
@@ -41,6 +48,8 @@ pub struct Inputs<'a> {
     pub since: Option<&'a str>,
     /// The latest run's analysis, when there is one.
     pub analysis: Option<&'a Analysis>,
+    /// The watchlist's `[autonomy]`, or the default.
+    pub autonomy: &'a autonomy::Config,
     pub now: i64,
 }
 
@@ -350,6 +359,34 @@ pub fn overview(i: &Inputs) -> Result<Value> {
     }
 
     let new = i.analysis.map(|a| new_section(a, &base, &new_ids, &d));
+    let ledger: Option<Ledger> = read_json(&data.join(ledger::FILE)).ok().flatten();
+    let queue: Option<Queue> = read_json(&data.join("runs").join(&latest).join(attention::FILE))
+        .ok()
+        .flatten();
+    let covered = ledger.as_ref().map_or_else(BTreeMap::new, |l| {
+        attention::case_threads(&data.join("cases"), l)
+    });
+    let attention = queue.as_ref().map(|q| attention_section(q, &d));
+    let timeline = ledger
+        .as_ref()
+        .map(|l| timeline(l, queue.as_ref(), &latest, latest_t, i.window_days));
+    let autonomy = autonomy_section(i, ledger.as_ref(), &covered);
+    let graph = i.analysis.map(|a| super::graph::graph(a, queue.as_ref()));
+    if let Some(q) = &queue {
+        let open: Vec<&attention::Item> = q
+            .items
+            .iter()
+            .filter(|x| x.band == attention::Band::Urgent && x.cases.is_empty())
+            .collect();
+        if let Some(top) = open.first() {
+            actions.push(json!({
+                "kind": "attention",
+                "title": format!("{} urgent lead(s) no case covers", open.len()),
+                "detail": format!("First: {} {} at {}: {}.", top.id, top.key, top.grade.code(), top.why.join("; ")),
+                "command": open_case(&d, &top.key),
+            }));
+        }
+    }
     let health = health(
         i,
         &state,
@@ -453,10 +490,151 @@ pub fn overview(i: &Inputs) -> Result<Value> {
         "run": run,
         "since": { "stamp": base.stamp, "basis": base.basis, "requested": i.since },
         "new": new,
+        "attention": attention,
+        "timeline": timeline,
+        "graph": graph,
+        "autonomy": autonomy,
         "health": health,
         "waiting": waiting,
         "actions": actions,
     }))
+}
+
+/// The command that opens a case from cluster `key`.
+fn open_case(d: &str, key: &str) -> String {
+    format!("swarmchase case -d {d} new <case-id> --title \"…\" --cluster {key}")
+}
+
+/// The latest run's attention queue, with labels and commands.
+fn attention_section(q: &Queue, d: &str) -> Value {
+    let items: Vec<Value> = q
+        .items
+        .iter()
+        .take(LIST_MAX)
+        .map(|it| {
+            let mut v = serde_json::to_value(it).unwrap_or(Value::Null);
+            v["grade_label"] = json!(it.grade.label());
+            v["harm_label"] = json!(it.harm.label());
+            v["trajectory_label"] = json!(it.trajectory.label());
+            v["open_case"] = json!(open_case(d, &it.key));
+            v
+        })
+        .collect();
+    json!({
+        "stamp": q.stamp,
+        "by_band": q.by_band,
+        "total": q.items.len(),
+        "items": items,
+    })
+}
+
+/// Each thread's points over the window: the queue's threads in rank
+/// order, then others seen in the window, latest activity first.
+fn timeline(l: &Ledger, q: Option<&Queue>, latest: &str, latest_t: i64, window_days: i64) -> Value {
+    let from = latest_t - window_days * 86_400;
+    let mut rows: Vec<(&ledger::Thread, Option<usize>)> = Vec::new();
+    let mut seen = BTreeSet::new();
+    for it in q.map_or(&[][..], |q| &q.items[..]) {
+        if let Some(th) = l.threads.get(&it.thread)
+            && seen.insert(th.id.as_str())
+        {
+            rows.push((th, Some(it.rank)));
+        }
+    }
+    let mut rest: Vec<&ledger::Thread> = l
+        .threads
+        .values()
+        .filter(|th| !seen.contains(th.id.as_str()))
+        .filter(|th| th.points.iter().any(|p| p.t >= from))
+        .collect();
+    rest.sort_by(|x, y| y.last_ts.cmp(&x.last_ts).then(x.id.cmp(&y.id)));
+    rows.extend(rest.into_iter().map(|th| (th, None)));
+    let total = rows.len();
+    rows.truncate(TIMELINE_ROWS);
+    // The axis starts half a day before the earliest point drawn, within
+    // the window.
+    let earliest = rows
+        .iter()
+        .flat_map(|(th, _)| th.points.iter().map(|p| p.t))
+        .filter(|&t| t >= from)
+        .min()
+        .unwrap_or(from);
+    let from = from.max(earliest - 43_200);
+    let rows: Vec<Value> = rows
+        .into_iter()
+        .map(|(th, rank)| {
+            let last = th.latest();
+            json!({
+                "thread": th.id,
+                "key": th.key,
+                "id": last.map(|p| p.id.clone()),
+                "rank": rank,
+                "band": last.map(|p| p.band.clone()).filter(|b| !b.is_empty()),
+                "trajectory": th.trajectory(latest).label(),
+                "peak_grade": th.peak_grade.code(),
+                "merged_into": th.merged_into,
+                "first_run": th.first_run,
+                "points": th.points.iter().filter(|p| p.t >= from).map(|p| json!({
+                    "t": p.t,
+                    "run": p.run,
+                    "records": p.records,
+                    "added": p.added,
+                    "tier": p.tier.label(),
+                    "grade": p.grade.code(),
+                    "band": p.band,
+                })).collect::<Vec<_>>(),
+                "events": th.events.iter().map(|e| json!({
+                    "run": e.run,
+                    "kind": e.kind,
+                    "detail": e.detail,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    json!({ "from": from, "to": latest_t, "total": total, "rows": rows })
+}
+
+/// Each autonomy level's mode and record, and the latest lines with how
+/// each turned out.
+fn autonomy_section(
+    i: &Inputs,
+    ledger: Option<&Ledger>,
+    covered: &BTreeMap<String, Vec<String>>,
+) -> Value {
+    let log = autonomy::load(i.data);
+    let modes: BTreeMap<&str, &str> = autonomy::Level::ALL
+        .iter()
+        .map(|&l| (l.label(), i.autonomy.mode(l).label()))
+        .collect();
+    let empty = Ledger::default();
+    let labels = crate::review::labels(&i.data.join("labels")).unwrap_or_default();
+    let ev = autonomy::Evidence {
+        ledger: ledger.unwrap_or(&empty),
+        labels: &labels,
+        cases: covered,
+        now: i.now,
+    };
+    let recent: Vec<Value> = log
+        .iter()
+        .rev()
+        .take(AUTONOMY_RECENT)
+        .map(|d| {
+            let mut v = serde_json::to_value(d).unwrap_or(Value::Null);
+            v["time"] = json!(fmt_ts(d.t));
+            v["outcome"] = if d.acted() {
+                serde_json::to_value(ev.outcome(d)).unwrap_or(Value::Null)
+            } else {
+                json!("held_back")
+            };
+            v
+        })
+        .collect();
+    json!({
+        "modes": modes,
+        "levels": autonomy::agreement(&log, i.autonomy, &ev),
+        "lines": log.len(),
+        "recent": recent,
+    })
 }
 
 /// New and escalated clusters above noise, and lone significant records

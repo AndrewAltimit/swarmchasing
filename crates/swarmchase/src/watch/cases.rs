@@ -509,6 +509,8 @@ mod tests {
             leads: &[],
             triage: &crate::watch::triage::TriageReport::default(),
             priority: &crate::watch::priority::assess(&[], &[], &r.due),
+            attention: &Default::default(),
+            autonomy: &[],
         });
         assert!(
             d.changed && d.text.contains("## Case status (1)"),

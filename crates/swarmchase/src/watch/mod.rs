@@ -6,6 +6,8 @@
 //! <out>/state.json              per-source cursors and pending resume keys
 //! <out>/store/<source>.ndjson   every record collected within retention, redacted, deduplicated
 //! <out>/summary.json            clusters and endpoints as of the last run (digest baseline)
+//! <out>/ledger.json             each cluster's history across runs (ledger)
+//! <out>/autonomy.ndjson         what autonomy levels did or would have done (autonomy)
 //! <out>/runs/<stamp>/           new records per source, analysis, case notes, digest, run.json
 //! <out>/LATEST                  stamp of the most recent run
 //! ```
@@ -17,6 +19,12 @@
 //! Claude Code login (hosted-source leads only), suggests a label for each
 //! new lead ([`triage`]); the suggestions are shown in the digest and saved
 //! for review, never as labels.
+//!
+//! Each run follows its clusters across runs in the ledger ([`ledger`]),
+//! ranks them into an attention queue (`runs/<stamp>/attention.json`,
+//! [`attention`]), and logs what each autonomy level would have done about
+//! the queue ([`autonomy`]); a level runs in shadow unless the watchlist's
+//! `[autonomy]` turns it on.
 //!
 //! Every run also checks source health and rule drift against the trailing
 //! history in `state.json` (see `health.rs`) and reports both in the digest.
@@ -43,8 +51,11 @@
 //! Archives index captures late, so each pull overlaps the previous one by
 //! `overlap_days` and drops records it has already seen ([`pull`]).
 
+pub(crate) mod attention;
+pub(crate) mod autonomy;
 pub(crate) mod cases;
 pub(crate) mod digest;
+pub(crate) mod ledger;
 pub(crate) mod priority;
 mod pull;
 pub(crate) mod run_summary;
@@ -88,6 +99,10 @@ pub struct Watchlist {
     /// (`<data>/cache/http/`). 0 turns the cache off.
     #[serde(default = "default_cache_ttl")]
     pub http_cache_ttl_secs: u64,
+    /// What each autonomy level does ([`autonomy`]); every level is in
+    /// shadow by default.
+    #[serde(default)]
+    pub autonomy: autonomy::Config,
     #[serde(default, rename = "source")]
     pub sources: Vec<WatchSource>,
 }
@@ -200,6 +215,7 @@ fn watch(
     if wl.sources.is_empty() {
         bail!("{}: no [[source]] entries", watchlist.display());
     }
+    wl.autonomy.check()?;
     let mut client = Client::new(Duration::from_secs(wl.min_interval_secs))?;
     if wl.http_cache_ttl_secs > 0 {
         client = client.with_cache(
@@ -412,7 +428,28 @@ fn watch(
         Some((backend, limits)) => triage::run(Some(backend), out, &a, &mut leads, &stamp, limits),
         None => triage::TriageReport::default(),
     };
-    let priority = priority::assess(&leads, &health.alerts, &cases.due);
+    let ledger_path = out.join(ledger::FILE);
+    let mut ledger: ledger::Ledger = read_json(&ledger_path)?.unwrap_or_else(ledger::Ledger::new);
+    let observed = ledger.observe(&a, &stamp, now.timestamp(), &new_ids);
+    let covered = attention::case_threads(&cases_root, &ledger);
+    let queue = attention::rank(&attention::Input {
+        analysis: &a,
+        ledger: &ledger,
+        observed: &observed,
+        stamp: &stamp,
+        now: now.timestamp(),
+        cases: &covered,
+    });
+    ledger.set_bands(&stamp, &queue.bands());
+    let decisions = autonomy::decide(
+        &queue,
+        &ledger,
+        &wl.autonomy,
+        now.timestamp(),
+        &autonomy::load(out),
+    );
+    let mut priority = priority::assess(&leads, &health.alerts, &cases.due);
+    priority.add(autonomy::priority_reasons(&decisions));
     let digest = digest(&DigestInput {
         stamp: &stamp,
         analysis: &a,
@@ -426,8 +463,13 @@ fn watch(
         leads: &leads,
         triage: &triaged,
         priority: &priority,
+        attention: &queue,
+        autonomy: &decisions,
     });
     std::fs::write(run_dir.join("digest.md"), &digest.text)?;
+    write_json(&run_dir.join(attention::FILE), &queue)?;
+    write_json(&ledger_path, &ledger)?;
+    autonomy::append(out, &decisions)?;
     write_json(
         &run_dir.join(run_summary::FILE),
         &run_summary::build(&run_summary::Input {
@@ -441,6 +483,8 @@ fn watch(
             triage: &triaged,
             health: &health,
             cases: &cases,
+            attention: &queue,
+            autonomy: (&wl.autonomy, &decisions),
         }),
     )?;
     write_json(&run_dir.join("summary.json"), &next)?;
@@ -453,6 +497,10 @@ fn watch(
             cw.hits.retain(|h| h.ts <= 0 || h.ts >= cutoff);
         }
         write_json(&state_path, &state)?;
+        if ledger.prune(cutoff) > 0 {
+            write_json(&ledger_path, &ledger)?;
+        }
+        autonomy::prune(out, cutoff)?;
         if runs + records > 0 {
             eprintln!(
                 "retention: deleted {runs} run dir(s) and {records} stored record(s) older than {} days",

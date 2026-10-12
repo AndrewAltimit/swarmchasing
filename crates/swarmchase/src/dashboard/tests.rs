@@ -5,8 +5,11 @@ use super::*;
 use crate::health::RuleRun;
 use crate::localui::Request;
 use crate::review::{CLASS_FLAGGED, Review, ReviewStore};
+use crate::watch::attention;
+use crate::watch::autonomy;
 use crate::watch::cases::CaseReport;
 use crate::watch::digest::{DigestInput, Health, SourceReport, Summary, digest, summarise};
+use crate::watch::ledger::{self, Ledger};
 use sc_core::{Observation, Rules, analyze};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -109,6 +112,22 @@ fn write_run(
     all.extend(fresh);
     let a = analyze(all.clone(), &rules);
     let next = summarise(&a, prev, run.into());
+    // The ledger and the attention queue, as the watch keeps them.
+    let mut led: Ledger = crate::store::read_json(&data.join(ledger::FILE))
+        .unwrap()
+        .unwrap_or_else(Ledger::new);
+    let observed = led.observe(&a, run, ts(run), &new_ids);
+    let queue = attention::rank(&attention::Input {
+        analysis: &a,
+        ledger: &led,
+        observed: &observed,
+        stamp: run,
+        now: ts(run),
+        cases: &BTreeMap::new(),
+    });
+    led.set_bands(run, &queue.bands());
+    crate::store::write_json(&dir.join(attention::FILE), &queue).unwrap();
+    crate::store::write_json(&data.join(ledger::FILE), &led).unwrap();
     let mut fail = SourceReport::new("urlquery-scan", "urlquery");
     fail.error = Some("HTTP 503 after 3 attempts".into());
     let health = Health {
@@ -133,6 +152,8 @@ fn write_run(
         leads: &[],
         triage: &crate::watch::triage::TriageReport::default(),
         priority: &crate::watch::priority::assess(&[], &health.alerts, &[]),
+        attention: &Default::default(),
+        autonomy: &[],
     });
     std::fs::write(dir.join("digest.md"), d.text).unwrap();
     std::fs::write(
@@ -264,7 +285,13 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn app(data: &Path) -> DashboardApp {
-    DashboardApp::new(data.to_path_buf(), kinds(), 30)
+    DashboardApp::new(
+        data.to_path_buf(),
+        WatchlistView {
+            kinds: kinds(),
+            ..Default::default()
+        },
+    )
 }
 
 fn find<'a>(list: &'a Value, key: &str, val: &str) -> &'a Value {
@@ -388,6 +415,113 @@ fn overview_answers_new_health_waiting_and_next() {
         "{actions:?}"
     );
     let _ = std::fs::remove_dir_all(data);
+}
+
+/// The thread holding record `id` in the fixture's ledger.
+fn thread_of(data: &Path, id: &str) -> String {
+    let l: Ledger = crate::store::read_json(&data.join(ledger::FILE))
+        .unwrap()
+        .unwrap();
+    l.threads
+        .values()
+        .find(|t| t.members.iter().any(|m| m == id))
+        .unwrap_or_else(|| panic!("no thread holds {id}"))
+        .id
+        .clone()
+}
+
+#[test]
+fn attention_timeline_and_autonomy_come_from_the_ledger_and_log() {
+    let data = scratch("attention");
+    // Shadow lines: a draft case on the first run's cluster, which the
+    // admin's case now covers, and an interrupt on the second run's.
+    let a = thread_of(&data, "a0");
+    let b = thread_of(&data, "b0");
+    let line = |level, thread: &str, t: i64| autonomy::Decision {
+        run: RUN2.into(),
+        t,
+        level,
+        mode: autonomy::Mode::Shadow,
+        thread: thread.into(),
+        cluster: "C1".into(),
+        key: thread.into(),
+        band: attention::Band::Urgent,
+        grade: "L3".into(),
+        trigger: "entered urgent".into(),
+        proposal: "p".into(),
+        suppressed: None,
+    };
+    autonomy::append(
+        &data,
+        &[
+            line(autonomy::Level::DraftCase, &a, ts(RUN1)),
+            line(autonomy::Level::Interrupt, &b, ts(RUN2)),
+        ],
+    )
+    .unwrap();
+
+    let v = app(&data).overview(None, NOW).unwrap();
+    let text = v.to_string();
+    assert!(!text.contains("://"), "{text}");
+
+    // The queue: every cluster above noise, ranked, with its reasons.
+    let at = &v["attention"];
+    assert_eq!(at["stamp"], RUN2);
+    let items = at["items"].as_array().unwrap();
+    assert!(items.len() >= 2, "{at}");
+    assert_eq!(items[0]["rank"], 1);
+    for it in items {
+        for k in [
+            "band",
+            "grade",
+            "harm_label",
+            "trajectory_label",
+            "why",
+            "factors",
+            "spark",
+            "open_case",
+        ] {
+            assert!(it.get(k).is_some(), "{k} missing in {it}");
+        }
+        let parts: u64 = it["factors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["points"].as_u64().unwrap())
+            .sum();
+        assert_eq!(parts, it["momentum"].as_u64().unwrap(), "{it}");
+    }
+    // The first run's cluster has a point on each run; the second's is new.
+    let first = items.iter().find(|i| i["thread"] == a.as_str()).unwrap();
+    assert_eq!(first["spark"].as_array().unwrap().len(), 2, "{first}");
+    let second = items.iter().find(|i| i["thread"] == b.as_str()).unwrap();
+    assert_eq!(second["trajectory"], "new");
+
+    // The timeline: one row per thread, points within the window.
+    let tl = &v["timeline"];
+    let rows = tl["rows"].as_array().unwrap();
+    let row = rows.iter().find(|r| r["thread"] == a.as_str()).unwrap();
+    assert_eq!(row["points"].as_array().unwrap().len(), 2, "{row}");
+    assert!(row["rank"].is_number());
+
+    // The link graph: drawn from the latest analysis, never a merge.
+    let g = &v["graph"];
+    assert!(g["nodes"].is_array() && g["links"].is_array(), "{g}");
+    assert!(g["clusters"].as_u64().unwrap() >= 2, "{g}");
+
+    // Autonomy: every level in shadow by default; the draft case agreed
+    // with the case the admin opened, the interrupt waits on a label.
+    let au = &v["autonomy"];
+    assert_eq!(au["modes"]["interrupt"], "shadow");
+    assert_eq!(au["lines"], 2);
+    let lvl = |l: &str| find(&au["levels"], "level", l).clone();
+    assert_eq!(lvl("draft_case")["agreed"], 1, "{au}");
+    assert_eq!(lvl("draft_case")["agreement"], 1.0);
+    assert_eq!(lvl("draft_case")["missed"], 0);
+    assert_eq!(lvl("interrupt")["pending"], 1, "{au}");
+    assert_eq!(au["recent"][0]["level"], "interrupt");
+    assert_eq!(au["recent"][1]["outcome"], "agreed");
+    let _ = std::fs::remove_dir_all(&data);
 }
 
 #[test]

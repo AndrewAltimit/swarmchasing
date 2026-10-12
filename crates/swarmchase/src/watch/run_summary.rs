@@ -7,12 +7,18 @@
 //! and it carries no record URL, IP address or model prompt. It stays in
 //! the data directory like the digest.
 
+use super::attention::{Item, Queue};
+use super::autonomy::{self, Decision, Mode};
 use super::cases::{CaseReport, DueClock};
 use super::digest::{Alert, Health, lost_lines};
 use super::priority::{Level, Priority, Reason};
 use super::triage::{Lead, TriageReport};
 use sc_core::{Analysis, Tier};
 use serde::Serialize;
+use std::collections::BTreeMap;
+
+/// Queue items the summary lists.
+const ATTENTION_TOP: usize = 10;
 
 /// The format's name and version.
 pub const SCHEMA: &str = "swarmchase-watch-run/1";
@@ -37,8 +43,27 @@ pub struct RunSummary<'a> {
     pub triage: &'a TriageReport,
     pub health: HealthSummary<'a>,
     pub cases: CaseSummary<'a>,
+    pub attention: AttentionSummary<'a>,
+    pub autonomy: AutonomySummary<'a>,
     /// The digest's file name in the same directory.
     pub digest: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AttentionSummary<'a> {
+    /// Clusters per band.
+    pub by_band: &'a BTreeMap<String, usize>,
+    /// The first of the queue; `attention.json` holds it all.
+    pub top: &'a [Item],
+    pub file: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AutonomySummary<'a> {
+    /// Each level's mode.
+    pub modes: BTreeMap<&'static str, Mode>,
+    /// What the levels did or would have done this run.
+    pub decisions: &'a [Decision],
 }
 
 #[derive(Debug, Serialize)]
@@ -89,6 +114,8 @@ pub struct Input<'a> {
     pub triage: &'a TriageReport,
     pub health: &'a Health,
     pub cases: &'a CaseReport,
+    pub attention: &'a Queue,
+    pub autonomy: (&'a autonomy::Config, &'a [Decision]),
 }
 
 pub fn build<'a>(i: &Input<'a>) -> RunSummary<'a> {
@@ -135,6 +162,18 @@ pub fn build<'a>(i: &Input<'a>) -> RunSummary<'a> {
             due: &i.cases.due,
             lines: i.cases.lines.len(),
         },
+        attention: AttentionSummary {
+            by_band: &i.attention.by_band,
+            top: &i.attention.items[..i.attention.items.len().min(ATTENTION_TOP)],
+            file: super::attention::FILE,
+        },
+        autonomy: AutonomySummary {
+            modes: autonomy::Level::ALL
+                .iter()
+                .map(|&l| (l.label(), i.autonomy.0.mode(l)))
+                .collect(),
+            decisions: i.autonomy.1,
+        },
         digest: "digest.md",
     }
 }
@@ -171,6 +210,8 @@ mod tests {
         };
         let cases = CaseReport::default();
         let priority = super::super::priority::assess(&l, &health.alerts, &cases.due);
+        let queue = super::super::attention::tests::queue_of(&a, &ids);
+        let cfg = autonomy::Config::default();
         let triage = TriageReport {
             enabled: true,
             backend: "claude".into(),
@@ -191,6 +232,8 @@ mod tests {
             triage: &triage,
             health: &health,
             cases: &cases,
+            attention: &queue,
+            autonomy: (&cfg, &[]),
         });
         let v: Value = serde_json::to_value(&s).unwrap();
         for k in [
@@ -206,6 +249,8 @@ mod tests {
             "triage",
             "health",
             "cases",
+            "attention",
+            "autonomy",
             "digest",
         ] {
             assert!(v.get(k).is_some(), "{k} missing in {v}");
@@ -228,6 +273,9 @@ mod tests {
         assert_eq!(v["triage"]["backend"], "claude");
         assert_eq!(v["triage"]["withheld"], 1);
         assert_eq!(v["counts"]["new_records"], ids.len());
+        assert_eq!(v["attention"]["file"], "attention.json");
+        assert!(v["attention"]["top"][0]["band"].is_string(), "{v}");
+        assert_eq!(v["autonomy"]["modes"]["interrupt"], "shadow");
         // Hosts defanged, no URL or IP.
         let text = v.to_string();
         assert!(
