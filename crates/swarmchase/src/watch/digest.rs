@@ -1,6 +1,8 @@
 //! The run digest: what changed since the previous run, how the sources
 //! fared, and the leads (reruns, archive bursts, case status) for the admin.
 
+use super::attention::{Band, Queue};
+use super::autonomy::{Decision, Mode};
 use super::cases::CaseReport;
 use super::priority::{Level, Priority};
 use super::triage::{Lead, LeadKind, TriageReport};
@@ -334,6 +336,10 @@ pub struct DigestInput<'a> {
     pub leads: &'a [Lead],
     pub triage: &'a TriageReport,
     pub priority: &'a Priority,
+    /// The run's attention queue ([`super::attention`]).
+    pub attention: &'a Queue,
+    /// What the autonomy levels did or would have done this run.
+    pub autonomy: &'a [Decision],
 }
 
 pub struct Digest {
@@ -413,6 +419,7 @@ pub fn digest(d: &DigestInput) -> Digest {
         "Unverified leads from passive collection. Review before acting on anything here.\n"
     );
     needs_attention(&mut t, d.priority);
+    attention_queue(&mut t, d.attention, d.autonomy);
 
     // Health first: a source that did not run hides whatever it would have
     // found, so what was lost is the first thing to read.
@@ -651,8 +658,112 @@ pub fn digest(d: &DigestInput) -> Digest {
         || !matches.is_empty()
         || !d.bursts.is_empty()
         || errors
-        || !health.alerts.is_empty();
+        || !health.alerts.is_empty()
+        || d.autonomy.iter().any(|x| x.mode == Mode::On && x.acted());
     Digest { text: t, changed }
+}
+
+/// Queue lines the digest lists.
+const QUEUE_LINES: usize = 8;
+
+/// The head of the attention queue, and what the autonomy levels did or
+/// would have done.
+fn attention_queue(t: &mut String, q: &Queue, ds: &[Decision]) {
+    let n = |b: Band| q.by_band.get(b.label()).copied().unwrap_or(0);
+    let _ = writeln!(
+        t,
+        "## Attention queue: {} urgent, {} look, {} watch
+",
+        n(Band::Urgent),
+        n(Band::Look),
+        n(Band::Watch)
+    );
+    let top: Vec<_> = q.items.iter().filter(|i| i.band >= Band::Look).collect();
+    if top.is_empty() {
+        let _ = writeln!(
+            t,
+            "Nothing above watch: no cluster in the window combines grade L2 or higher with harmful targets, a scope finding or interaction.
+"
+        );
+    }
+    for i in top.iter().take(QUEUE_LINES) {
+        let traj = match i.growth {
+            Some(g) if g >= 1.5 => format!("{}, {g:.1}x in a day", i.trajectory.label()),
+            _ => i.trajectory.label().to_string(),
+        };
+        let targets = i
+            .targets
+            .iter()
+            .map(|h| format!("`{h}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = writeln!(
+            t,
+            "- {}: {} {} at {}, {} record(s), {traj}; {}{}; targets {}; momentum {}{}",
+            if i.band == Band::Urgent {
+                "**urgent**"
+            } else {
+                "look"
+            },
+            i.id,
+            i.key,
+            i.grade.code(),
+            i.records,
+            i.why.join("; "),
+            if i.caps.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", i.caps.join("; "))
+            },
+            if targets.is_empty() {
+                "none".into()
+            } else {
+                targets
+            },
+            i.momentum,
+            if i.cases.is_empty() {
+                String::new()
+            } else {
+                format!("; in case {}", i.cases.join(", "))
+            }
+        );
+    }
+    if top.len() > QUEUE_LINES {
+        let _ = writeln!(
+            t,
+            "- … {} more at urgent or look on the dashboard",
+            top.len() - QUEUE_LINES
+        );
+    }
+    if !top.is_empty() {
+        let _ = writeln!(t);
+    }
+    let acted: Vec<&Decision> = ds.iter().collect();
+    if !acted.is_empty() {
+        let _ = writeln!(t, "Autonomy this run (a shadow line is what a level would have done; a level that is on acts only on this digest's priority):
+");
+        for d in acted {
+            let _ = writeln!(
+                t,
+                "- {} {}: {} {}: {}; {} {}{}",
+                d.mode.label(),
+                d.level.label(),
+                d.cluster,
+                d.key,
+                d.trigger,
+                if d.mode == Mode::On && d.acted() {
+                    "did:"
+                } else {
+                    "would:"
+                },
+                d.proposal,
+                d.suppressed
+                    .as_ref()
+                    .map_or(String::new(), |s| format!(" (held back, {s})"))
+            );
+        }
+        let _ = writeln!(t);
+    }
 }
 
 /// The priority and the facts behind it, first in the digest.
@@ -1045,6 +1156,8 @@ mod tests {
             leads: &[],
             triage: &TriageReport::default(),
             priority: &super::super::priority::assess(&[], &health.alerts, &[]),
+            attention: &Default::default(),
+            autonomy: &[],
         })
     }
 
@@ -1123,6 +1236,8 @@ mod tests {
             leads: &leads,
             triage: &triage,
             priority: &priority,
+            attention: &Default::default(),
+            autonomy: &[],
         });
         let first = d.text.find("## ").unwrap();
         assert!(
@@ -1170,6 +1285,8 @@ mod tests {
             leads: &leads,
             triage: &claude,
             priority: &priority,
+            attention: &Default::default(),
+            autonomy: &[],
         });
         assert!(d.text.contains("Claude Code login"), "{}", d.text);
         assert!(d.text.contains("labels/suggestions-claude-watch.ndjson"));

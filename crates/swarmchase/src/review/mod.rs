@@ -1320,6 +1320,20 @@ pub fn reviewed_ids(dir: &Path) -> Result<BTreeSet<String>> {
     Ok(out)
 }
 
+/// Each reviewed record's label across the review files in `dir`; the
+/// default file's label wins over another labeller's.
+pub fn labels(dir: &Path) -> Result<BTreeMap<String, String>> {
+    let mut out = BTreeMap::new();
+    let mut files = labeller_files(dir)?;
+    files.sort_by_key(|(who, _)| who == "default");
+    for (_, p) in files {
+        for (id, r) in ReviewStore::open(p)?.entries {
+            out.insert(id, r.label);
+        }
+    }
+    Ok(out)
+}
+
 /// Every review file in `dir` with its labeller: `default` for
 /// `reviewed.ndjson`, else the name in `reviewed-<name>.ndjson`.
 fn labeller_files(dir: &Path) -> Result<Vec<(String, PathBuf)>> {

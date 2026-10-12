@@ -42,4 +42,31 @@ fn a_run_without_the_urlquery_key_skips_the_source_and_writes_a_digest() {
         "{digest}"
     );
     assert!(s.path().join("data/state.json").is_file());
+    // The ledger and the attention queue are written even with nothing to
+    // rank, and the digest says the queue is empty.
+    assert!(s.path().join("data/ledger.json").is_file());
+    assert!(runs[0].join("attention.json").is_file());
+    assert!(
+        digest.contains("## Attention queue: 0 urgent, 0 look, 0 watch"),
+        "{digest}"
+    );
+}
+
+#[test]
+fn an_autonomy_level_that_is_not_built_cannot_be_on() {
+    let s = Scratch::new("watch-autonomy");
+    std::fs::write(
+        s.path().join("watchlist.toml"),
+        "[autonomy]\ndraft_case = \"on\"\n\n[[source]]\nname = \"uq\"\nkind = \"urlquery\"\npattern = \"r.jina.ai\"\n",
+    )
+    .unwrap();
+    let r = run(s.path(), &["watch", "watchlist.toml", "--out", "data"]);
+    assert!(!r.ok);
+    assert!(
+        r.stderr.contains("only `interrupt` can be on"),
+        "{}",
+        r.stderr
+    );
+    // Rejected before anything was collected or written.
+    assert!(!s.path().join("data/runs").exists());
 }

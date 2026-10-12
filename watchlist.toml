@@ -10,6 +10,17 @@ analysis_window_days = 30
 retain_days = 180           # delete runs and stored records older than this (docs/policies.md)
 contained_after_days = 14   # digest proposes "contained" for an active notice after this long with no matching record
 http_cache_ttl_secs = 3600  # reuse cached responses (<data>/cache/http) this long, then revalidate; 0 = off
+
+# What the watch may do on its own about the attention queue
+# (docs/reference/watch.md#autonomy). Shadow only logs what a level would have
+# done, to <data>/autonomy.ndjson; the dashboard reads that log against the
+# admin's later labels and cases. Only `interrupt` can be on, and on it only
+# raises the digest's priority. Nothing here sends, publishes or opens a case.
+[autonomy]
+interrupt = "shadow"        # off | shadow | on
+watch_harder = "shadow"     # off | shadow
+draft_case = "shadow"       # off | shadow
+interrupts_per_day = 3
 #
 # Kinds: wayback | arquivo | urlquery | commoncrawl | urlscan | memento |
 # gharchive | npm | pypi | ctlog | wellknown | mcp (docs/reference/watch.md#source-kinds).

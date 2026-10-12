@@ -9,6 +9,10 @@
 //!   or higher;
 //! - **low**: none of these.
 //!
+//! An autonomy level that is on ([`super::autonomy`], `interrupt = "on"`)
+//! adds a high reason of kind `attention` for a lead it fired on; its
+//! triggers are deterministic facts too.
+//!
 //! A model's suggestion is never an input: the same facts give the same
 //! priority whatever a model said.
 
@@ -52,6 +56,15 @@ pub struct Priority {
     pub level: Level,
     /// Highest first.
     pub reasons: Vec<Reason>,
+}
+
+impl Priority {
+    /// Add reasons, keeping the highest first and leads' order within a level.
+    pub fn add(&mut self, more: Vec<Reason>) {
+        self.reasons.extend(more);
+        self.reasons.sort_by_key(|r| std::cmp::Reverse(r.level));
+        self.level = self.reasons.first().map_or(Level::Low, |r| r.level);
+    }
 }
 
 /// The priority of a run with these leads, health alerts and due clocks.

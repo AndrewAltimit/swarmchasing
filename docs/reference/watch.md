@@ -12,6 +12,9 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
 | `runs/<stamp>/digest.md` | One directory per run, with its digest. |
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
+| `runs/<stamp>/attention.json` | The run's [attention queue](#the-attention-queue). |
+| `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
+| `autonomy.ndjson` | What each [autonomy](#autonomy) level did or would have done. |
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
 | `labels/suggestions-local.ndjson` | The local model's suggestions on new leads ([model triage](#model-triage)). |
 | `labels/suggestions-claude-watch.ndjson` | Claude's suggestions on new leads from hosted sources ([model triage](#model-triage)). |
@@ -67,13 +70,17 @@ The first block gives the run a priority, `high`, `medium` or `low`, and lists t
 
 | Priority | Set by |
 |---|---|
-| `high` | A new or escalated significant cluster at agent grade L2 or higher; a new significant record outside any cluster at L2; a case clock that has run. |
+| `high` | A new or escalated significant cluster at agent grade L2 or higher; a new significant record outside any cluster at L2; a case clock that has run; an `interrupt` that is on ([autonomy](#autonomy)). |
 | `medium` | Any health alert (a source failed, skipped, collapsed or failed its canary, a host down, rule drift); a significant lead below L2; a suggestive lead at L2 or higher. |
 | `low` | None of these. |
 
 A lead is a cluster above noise that is new since the last run or rose a tier, or a new significant record that joined no cluster. A case clock has run when reports were sent and the indicator notice's lead time has passed with the notice not yet added, or when the notice is added and an operator may now be named. Each due clock is also a *Case status* line with the command that starts the step; the watch takes no step itself.
 
 A model's suggestion never sets the priority: the same facts give the same priority whatever a model said. A new significant record outside any cluster at L2 or higher makes the run count as changed, like a new cluster.
+
+### Attention queue
+
+The next block counts the [attention queue](#the-attention-queue) by band and lists up to eight leads at `urgent` or `look`: the cluster, grade, records, trajectory, the facts that set its band, any caps, targets, momentum and covering case. Under it, each line an [autonomy](#autonomy) level wrote this run, marked `shadow` (would have) or `on` (did).
 
 ### Health
 
@@ -160,6 +167,8 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `triage` | `enabled`, `backend`, `model`, `asked`, `answered`, `reused`, `left`, `withheld` and an optional `note` ([model triage](#model-triage)). |
 | `health` | `alerts`, the `lost` capability lines, and `sources` with `name`, `kind`, `pulled`, `new` and `status`. |
 | `cases` | `due` clocks (`case`, `clock`, `since`, `hosts`) and the number of case status `lines`. |
+| `attention` | `by_band` counts, the first ten queue items as `top`, and `file` (`attention.json`). |
+| `autonomy` | Each level's mode under `modes`, and this run's `decisions` (the lines of `autonomy.ndjson`). |
 | `digest` | The digest's file name in the same directory. |
 
 A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
@@ -176,9 +185,92 @@ A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the di
 | `targets` | Target hosts, defanged. |
 | `suggestion` | `label`, `reason` and `model` from the local model, when there is one. Never a label. |
 
+## The ledger
+
+Each run analyses its window afresh: cluster numbers change, and a cluster's key changes when its earliest member leaves the window. `ledger.json` follows each cluster above noise across runs as a **thread**, so its history outlives the window. Code: [`ledger.rs`](../../crates/swarmchase/src/watch/ledger.rs).
+
+- **Following.** A cluster continues the thread whose key it has, else the thread it shares the most member records with. Each thread keeps the latest 200 member ids for this.
+- **Points.** One per run the thread was in the analysis: tier, grade, records, records that run collected (`added`), targets, interaction edges and attention band.
+- **Events.** A new key, a merge (another thread's records joined it), a split, a rise in tier or grade, and a return.
+- **Returns.** Linking features join records only within days, so an operator using the same inbox or tag weeks later starts a new cluster. A new thread carrying an earlier thread's linking feature names it in `recurs`, and after a quiet week or more the run records a return. Event text names the feature, never its value. Nothing is merged.
+- **Trajectory.** On the latest run a thread is `new`, `back after a quiet spell`, `growing` (at least twice its records of a day before, and three more), `active` (records collected in the last day), `quiet`, or `dormant` (not in the analysis).
+
+The ledger is descriptive. It changes no score, tier, grade or link.
+
+## The attention queue
+
+Each run ranks every cluster above noise into `runs/<stamp>/attention.json`. The rank is layered, never one weighted sum. Code: [`attention.rs`](../../crates/swarmchase/src/watch/attention.rs).
+
+1. **Band**, set like the agent grade by the strongest combination of facts, then held down by caps.
+2. Within a band, the grade (L1 ranks with L0), then the worst target class, then clusters no case covers before those a case does.
+3. Last, **momentum**, which orders leads the facts above leave tied and never moves one across a band.
+
+| Band | Set by |
+|---|---|
+| `urgent` | L3 or higher with access-controlled, sensitive or third-party targets; L2 with sensitive targets; L2 with the scope pass finding scope exceeded; L2, significant, with a moderate or strong interaction edge. |
+| `look` | L2 or higher; significant with access-controlled or worse targets; significant and growing or back after a quiet spell. |
+| `watch` | Anything else above noise. |
+
+Target classes come from the [scope pass](../methodology.md#misalignment-and-scope); benchmark targets count as none.
+
+| Cap | Holds the band at |
+|---|---|
+| A plant signal that counts, other than provenance monoculture | `look` |
+| Members that declare testing or research | `look` |
+| Benchmark or practice targets only | `watch` |
+
+Provenance monoculture is left out because nearly every public record comes from a service anyone can submit to; it would hold every lead.
+
+Momentum runs from 0 to 100. Each part is bounded, and the queue shows each with its points and reading:
+
+| Part | Points | Full at |
+|---|---:|---|
+| growth | 25 | 8x the records of a day before |
+| spread | 15 | 20 target hosts |
+| interaction | 20 | a strong interaction edge (moderate 0.6, weak 0.3; a candidate fleet adds 0.3) |
+| recency | 20 | latest record within 6 hours; none after a week |
+| novelty | 15 | new or back after a quiet spell; a tier or grade rise this run gives 0.7 |
+| volume | 5 | 200 records |
+
+Nothing in the queue reads a model's suggestion.
+
+## Autonomy
+
+Autonomy levels are things the watch could do on its own about a lead in the queue. Each is internal and reversible. None sends, publishes, names or opens a case. Code: [`autonomy.rs`](../../crates/swarmchase/src/watch/autonomy.rs).
+
+| Level | Would do | Fires on | Modes |
+|---|---|---|---|
+| `interrupt` | Raise the run's priority to high, so the digest reaches the admin now | Entering `urgent`; at `look` or above, growing 3x in a day or back after a quiet spell | off, shadow, on |
+| `watch_harder` | Pull the lead's sources more often and watch its targets, passively | `urgent` | off, shadow |
+| `draft_case` | Open a draft case, find contacts, draft the provider report | `urgent` for 2 runs or more over 12 hours, no case covering it | off, shadow |
+
+Every trigger needs grade L2 or higher, since anyone can write a self-description. `interrupt` fires at most once a day per thread and `interrupts_per_day` times in all (default 3; the rest are logged as held back). `watch_harder` fires once a week per thread, `draft_case` once per thread.
+
+The watchlist sets the modes:
+
+```toml
+[autonomy]
+interrupt = "shadow"      # off | shadow | on
+watch_harder = "shadow"   # off | shadow
+draft_case = "shadow"     # off | shadow
+interrupts_per_day = 3
+```
+
+Every level is in **shadow** by default: it only writes what it would have done to `autonomy.ndjson`. `interrupt = "on"` adds a high reason of kind `attention` to the run's priority and makes the digest count as changed; nothing else acts.
+
+### Reading a level's record
+
+The dashboard reads each line against what the admin decided later:
+
+- **Agreed:** a case covers the lead, or, for `interrupt` and `watch_harder`, a record of it is labelled agent.
+- **Disagreed:** its records were labelled with no agent label and no case, or, for `draft_case`, no case followed in two weeks.
+- **Pending:** neither yet.
+
+A lead's thread counts with every thread it was merged into. For `draft_case`, *never proposed* counts threads a case covers that the level did not propose. Switch a level on when its record shows it would have been right; the log is the evidence for that decision.
+
 ## Retention
 
-At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
+At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
 
 ## The dashboard
 
@@ -191,14 +283,18 @@ swarmchase dashboard -d "$SWARMCHASE_DATA" --json --since 20261011T060000Z
 
 When the latest run wrote a [run summary](#the-run-summary), the page opens with the digest's priority and its reasons, reads the health alerts from it, and lists the local model's suggestions on the run's leads, flagging an `agent` suggestion below L2 as against the labelling rule.
 
-It answers four questions, in this order:
+It answers these questions:
 
+- **What needs you first.** The [attention queue](#the-attention-queue), filterable by band. Each lead shows its band, grade, trajectory, the facts that placed it, caps, targets, a sparkline of its records per run and a momentum bar; *Why this place* lists the momentum parts and the command that opens a case.
 - **What is new.** Clusters above noise that are new or rose a tier, with their agent grade, and significant records outside any cluster, collected since a baseline run. The baseline is the run before the latest, as in the digest, or the run the admin marked seen (`s` on the page, remembered in that browser only; `--since` for `--json`). When that run was deleted by retention, the nearest kept run before it is used.
 - **Whether monitoring is healthy.** Each source's status from `state.json` (failing, skipped, quiet, catching up, ok), its recent pulls, what its absence loses, the latest digest's health alerts, and rule drift recomputed on the latest run.
 - **What waits on the admin.** The review queue as `review --serve` builds it from the latest run's analysis, with label progress and the agent labels below L2 counted apart, and each open case's clocks and what `case status` says it still needs.
+- **How leads move.** The activity timeline draws each thread from the ledger as a row over the window: a bar per run, its height the records, its colour the band, solid when that run collected records for it, with dots for events.
+- **What ties leads together.** The link graph draws the latest analysis's clusters above noise that something ties: soft links as grey lines, thicker for a stronger pair (combined as candidate fleets combine them), possible interaction (S1 to S5) as red dashed lines, interaction inside one cluster as a ring, and candidate fleets as shaded areas. Groups of tied clusters are laid out apart, largest first, and the same overview always draws the same picture. It can show only interaction or only fleets; selecting a cluster or a line lists each tie with its strength and defanged detail, and the table under it lists every tie. Up to 60 clusters are drawn, the queue's top ones first. A tie is a lead to check, never a merge.
+- **How autonomy would have done.** Each level's mode and record (agreed, disagreed, pending, held back, never proposed) and its latest lines with their outcome ([reading a level's record](#reading-a-levels-record)).
 - **What to run next.** Each item comes with its command, with the data directory filled in: `review --serve`, `case … new --cluster <key>`, a case's next step, or `scan` on a drifting source's records.
 
-`d` shows the latest digest; `1` to `4` jump to the sections; `?` lists the keys.
+`d` shows the latest digest; `1` to `8` jump to the sections; `?` lists the keys.
 
 ### The overview document
 
@@ -216,6 +312,10 @@ The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<sta
 | `health.drift` | Rules that fired well above their baseline on the latest run, per source, with both rates. |
 | `waiting.review` | `unreviewed`, `groups`, counts by tier and label, `with_suggestion`, `agent_below_rule` (agent labels below L2: `total`, `flagged`, `graded_now`, `with_reason`, `unknown`), and the `command`. |
 | `waiting.cases` | Each open case: status, `clock` lines, `notice_not_before`, `naming_ready`, `watch_hits`, and `needs` with commands. |
+| `attention` | The latest run's queue: `stamp`, `by_band`, `total`, and up to 50 `items` with labels and an `open_case` command. |
+| `timeline` | `from`, `to`, `total` and up to 40 `rows`: each thread's `points`, `events`, `band`, `trajectory`, `peak_grade` and queue `rank`. |
+| `graph` | `clusters` above noise, `linked` (those with a tie), and the drawn `nodes` (`id`, `key`, `tier`, `grade`, queue `band` and `rank`, `records`, `targets`, `top_target`, `fleet`, `links`, `inner`), `links` (each pair's `soft` links and `soft_strength`, `swarm` edges and `swarm_strength`, shared `fleet`) and candidate `fleets`. |
+| `autonomy` | `modes`, each level's record under `levels`, the log's `lines`, and the `recent` lines with their `outcome`. |
 | `actions` | The next steps, most urgent first: `kind`, `title`, `detail`, `command`. |
 
 ## Reviewing leads
