@@ -6,7 +6,7 @@
 - **Window:** 2026-05-11 14:02:10 UTC → 2026-05-16 09:30:04 UTC
 - **Records:** 34 linked public records in 6 cluster(s) (of 37 records reviewed, 34 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.3
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-13.1
 
 ## Summary
 

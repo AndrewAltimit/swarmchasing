@@ -9,6 +9,27 @@
 //! collects them as weighted pairs, and [`candidate_fleets`] groups the
 //! clusters whose combined links are strong: proposals for the admin to
 //! check, never findings.
+//!
+//! **Evidence.** Each kind has a likelihood ratio in `[soft_links]`: how
+//! much likelier the link is between two clusters of one operator than
+//! between unrelated ones. A pair that passed a chance test (shared pauses,
+//! scaffolds, co-activity, co-targets) carries its kind's ratio in full.
+//! Any other link's ratio is the kind's raised to its similarity (where it
+//! has one) times its rarity: a shared value held by
+//! `n` of the `N` clusters above noise counts `ln(N / n) / ln(N / 2)` of
+//! its kind, so a value two clusters hold counts in full and one every
+//! cluster holds counts nothing. Kinds that read one underlying habit are
+//! not independent, so they fall into four **families** ([`Family`]):
+//! within a family a pair takes its strongest link only, and across
+//! families the ratios multiply (their logs add). A link's `strength` is
+//! `1 - 1 / ratio`, 0 to 1.
+//!
+//! **Fleets.** Pairs whose combined ratio reaches `fleet_min_lr` are the
+//! edges of a graph of clusters, weighted by the log of the ratio. The
+//! graph is reduced to its backbone and split into communities under the
+//! constant Potts model ([`crate::community`]): a community keeps only
+//! clusters tied to it more strongly than `fleet_density` of the threshold
+//! per pair, so one cluster tied to two fleets cannot chain them together.
 
 use crate::analyze::{Cluster, CommonFeature, ObsResult};
 use crate::dialect::DialectPair;
@@ -57,9 +78,65 @@ pub enum SoftLinkKind {
     /// Active in the same minutes, or one trailing the other, beyond chance
     /// ([`crate::coactivity`]).
     CoActivity,
+    /// The same rare targets worked in the same hours, beyond chance
+    /// ([`crate::cotarget`]).
+    CoTarget,
+}
+
+/// Kinds that read one underlying habit: a pair counts only its strongest
+/// link within a family.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Family {
+    /// How requests are built: encoding, header set, relay stack,
+    /// scaffold, payload dialect, cut length, fan-out width.
+    Harness,
+    /// When clusters are active: shared pauses, co-activity.
+    Timeline,
+    /// What they go after: reruns, path sets, recon preambles, co-targets,
+    /// route escalations.
+    Targets,
+    /// What they hold: captured secrets, common features, callback
+    /// services.
+    Identifiers,
+}
+
+impl Family {
+    pub fn label(self) -> &'static str {
+        match self {
+            Family::Harness => "harness",
+            Family::Timeline => "timeline",
+            Family::Targets => "targets",
+            Family::Identifiers => "identifiers",
+        }
+    }
 }
 
 impl SoftLinkKind {
+    /// Every kind.
+    pub const ALL: [SoftLinkKind; 17] = {
+        use SoftLinkKind::*;
+        [
+            SharedPause,
+            Dialect,
+            Rerun,
+            Preamble,
+            PathSet,
+            Encoding,
+            FanOut,
+            CutLength,
+            HeaderSet,
+            Escalation,
+            CommonFeature,
+            SharedSecret,
+            RelayStack,
+            CallbackService,
+            Scaffold,
+            CoActivity,
+            CoTarget,
+        ]
+    };
+
     pub fn label(self) -> &'static str {
         match self {
             SoftLinkKind::SharedPause => "shared pauses",
@@ -78,19 +155,43 @@ impl SoftLinkKind {
             SoftLinkKind::CallbackService => "callback service",
             SoftLinkKind::Scaffold => "shared scaffold",
             SoftLinkKind::CoActivity => "co-activity",
+            SoftLinkKind::CoTarget => "co-target",
+        }
+    }
+
+    /// The family whose links it does not add to.
+    pub fn family(self) -> Family {
+        use SoftLinkKind::*;
+        match self {
+            Encoding | HeaderSet | RelayStack | Scaffold | Dialect | CutLength | FanOut => {
+                Family::Harness
+            }
+            SharedPause | CoActivity => Family::Timeline,
+            Rerun | PathSet | Preamble | CoTarget | Escalation => Family::Targets,
+            SharedSecret | CommonFeature | CallbackService => Family::Identifiers,
         }
     }
 }
 
-/// Soft link settings (`[soft_links]` in the rules file): the weight of each
-/// kind (a link's strength is its weight, times its own similarity where it
-/// has one), when a shared value is too common to mean anything, and how
-/// strong a pair must be to join a candidate fleet.
+/// Soft link settings (`[soft_links]` in the rules file): each kind's
+/// likelihood ratio, when a link or a shared value is too weak or too
+/// common to list, and how candidate fleets are drawn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SoftLinkOptions {
-    /// Pairs whose combined strength reaches this join a candidate fleet.
-    pub fleet_min_strength: f64,
+    /// Pairs whose combined likelihood ratio reaches this are edges of the
+    /// fleet graph.
+    pub fleet_min_lr: f64,
+    /// The share of a threshold edge's weight (the log of `fleet_min_lr`)
+    /// each pair in a fleet must hold on average: the CPM resolution.
+    pub fleet_density: f64,
+    /// Disparity-filter level for the fleet graph's backbone.
+    pub backbone_alpha: f64,
+    /// Jaccard overlap of two clusters' other neighbours that keeps their
+    /// edge in the backbone however even its weight.
+    pub backbone_overlap: f64,
+    /// A link whose own ratio, after rarity, is below this is not listed.
+    pub min_link_lr: f64,
     /// A value (preamble, encoding style, width, header set, common feature)
     /// shared by more clusters than this links none of them.
     pub max_shared: usize,
@@ -108,36 +209,94 @@ pub struct SoftLinkOptions {
     pub shared_secret: f64,
     pub relay_stack: f64,
     pub callback_service: f64,
-    /// Times the pair's template similarity ([`crate::scaffold`]).
+    /// A pair kept by the scaffold chance model ([`crate::scaffold`]).
     pub scaffold: f64,
-    /// Times the share of the quieter cluster's active bins that coincide
-    /// ([`crate::coactivity`]). A pair already tied by shared pauses gets
-    /// no co-activity link: both read one timeline.
+    /// A pair kept by the co-activity chance model ([`crate::coactivity`]).
+    /// A pair already tied by shared pauses gets no co-activity link: both
+    /// read one timeline.
     pub co_activity: f64,
+    /// A pair kept by the co-target chance model ([`crate::cotarget`]).
+    pub co_target: f64,
 }
 
 impl Default for SoftLinkOptions {
     fn default() -> Self {
         Self {
-            fleet_min_strength: 0.5,
+            fleet_min_lr: 20.0,
+            fleet_density: 0.5,
+            backbone_alpha: 0.05,
+            backbone_overlap: 0.5,
+            min_link_lr: 2.0,
             max_shared: 10,
-            shared_pause: 0.6,
-            dialect: 0.4,
-            rerun: 0.6,
-            preamble: 0.4,
-            path_set: 0.4,
-            encoding: 0.2,
-            fanout: 0.2,
-            cut_length: 0.3,
-            header_set: 0.3,
-            escalation: 0.6,
-            common_feature: 0.3,
-            shared_secret: 0.8,
-            relay_stack: 0.3,
-            callback_service: 0.3,
-            scaffold: 0.6,
-            co_activity: 0.6,
+            shared_pause: 4.0,
+            dialect: 2.0,
+            rerun: 10.0,
+            preamble: 3.0,
+            path_set: 3.0,
+            encoding: 1.0,
+            fanout: 1.0,
+            cut_length: 2.0,
+            header_set: 2.0,
+            escalation: 30.0,
+            common_feature: 2.0,
+            shared_secret: 50.0,
+            relay_stack: 1.0,
+            callback_service: 1.0,
+            scaffold: 20.0,
+            co_activity: 25.0,
+            co_target: 40.0,
         }
+    }
+}
+
+impl SoftLinkOptions {
+    /// The likelihood ratio of `kind` at full similarity and rarity.
+    pub fn lr(&self, kind: SoftLinkKind) -> f64 {
+        use SoftLinkKind::*;
+        match kind {
+            SharedPause => self.shared_pause,
+            Dialect => self.dialect,
+            Rerun => self.rerun,
+            Preamble => self.preamble,
+            PathSet => self.path_set,
+            Encoding => self.encoding,
+            FanOut => self.fanout,
+            CutLength => self.cut_length,
+            HeaderSet => self.header_set,
+            Escalation => self.escalation,
+            CommonFeature => self.common_feature,
+            SharedSecret => self.shared_secret,
+            RelayStack => self.relay_stack,
+            CallbackService => self.callback_service,
+            Scaffold => self.scaffold,
+            CoActivity => self.co_activity,
+            CoTarget => self.co_target,
+        }
+    }
+
+    /// Set the likelihood ratio of `kind`.
+    pub fn set_lr(&mut self, kind: SoftLinkKind, lr: f64) {
+        use SoftLinkKind::*;
+        let f = match kind {
+            SharedPause => &mut self.shared_pause,
+            Dialect => &mut self.dialect,
+            Rerun => &mut self.rerun,
+            Preamble => &mut self.preamble,
+            PathSet => &mut self.path_set,
+            Encoding => &mut self.encoding,
+            FanOut => &mut self.fanout,
+            CutLength => &mut self.cut_length,
+            HeaderSet => &mut self.header_set,
+            Escalation => &mut self.escalation,
+            CommonFeature => &mut self.common_feature,
+            SharedSecret => &mut self.shared_secret,
+            RelayStack => &mut self.relay_stack,
+            CallbackService => &mut self.callback_service,
+            Scaffold => &mut self.scaffold,
+            CoActivity => &mut self.co_activity,
+            CoTarget => &mut self.co_target,
+        };
+        *f = lr;
     }
 }
 
@@ -148,14 +307,27 @@ pub struct SoftLink {
     pub a: String,
     pub b: String,
     pub kind: SoftLinkKind,
-    /// 0 to 1.
+    /// `1 - 1 / lr`, 0 to 1.
     pub strength: f64,
+    /// Its likelihood ratio: the kind's, raised to its similarity and
+    /// rarity.
+    #[serde(default = "one")]
+    pub lr: f64,
     pub detail: String,
 }
 
-/// Clusters whose soft links, combined, reach `fleet_min_strength`: a
-/// proposal that one operator may run them all.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+fn one() -> f64 {
+    1.0
+}
+
+/// The strength of likelihood ratio `lr`: `1 - 1 / lr`, 0 at or below 1.
+pub fn strength_of(lr: f64) -> f64 {
+    if lr > 1.0 { 1.0 - 1.0 / lr } else { 0.0 }
+}
+
+/// Clusters a community of the fleet graph holds: a proposal that one
+/// operator may run them all.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CandidateFleet {
     /// `F1`, `F2`, ... in this analysis.
     pub id: String,
@@ -165,8 +337,53 @@ pub struct CandidateFleet {
     pub kinds: Vec<SoftLinkKind>,
     /// Soft links between its clusters.
     pub links: usize,
-    /// The weakest combined pair strength that joined it.
+    /// The weakest combined pair strength among its edges.
     pub strength: f64,
+    /// The weakest combined likelihood ratio among its edges.
+    #[serde(default)]
+    pub min_lr: f64,
+    /// Share of its pairs that are edges of the fleet graph.
+    #[serde(default)]
+    pub density: f64,
+    /// Its weakest cut: the combined likelihood ratio of the edges that,
+    /// removed, would split it, and the clusters on the smaller side.
+    #[serde(default)]
+    pub cut_lr: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cut: Vec<String>,
+}
+
+/// One pair's soft links combined: the strongest link of each family, and
+/// the product of their ratios.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PairEvidence {
+    pub a: String,
+    pub b: String,
+    /// Each family's strongest link: kind and ratio.
+    pub families: Vec<(Family, SoftLinkKind, f64)>,
+    /// Product of the families' ratios.
+    pub lr: f64,
+}
+
+/// Every linked pair's combined evidence, by `(a, b)` as the links name
+/// them.
+pub fn pair_evidence(links: &[SoftLink]) -> BTreeMap<(String, String), PairEvidence> {
+    let mut best: BTreeMap<(String, String), BTreeMap<Family, (SoftLinkKind, f64)>> =
+        BTreeMap::new();
+    for l in links {
+        let fam = best.entry((l.a.clone(), l.b.clone())).or_default();
+        let e = fam.entry(l.kind.family()).or_insert((l.kind, l.lr));
+        if l.lr > e.1 {
+            *e = (l.kind, l.lr);
+        }
+    }
+    best.into_iter()
+        .map(|((a, b), fam)| {
+            let lr = fam.values().map(|x| x.1.max(1.0).ln()).sum::<f64>().exp();
+            let families = fam.into_iter().map(|(f, (k, r))| (f, k, r)).collect();
+            ((a.clone(), b.clone()), PairEvidence { a, b, families, lr })
+        })
+        .collect()
 }
 
 /// What the soft links are read from.
@@ -179,6 +396,17 @@ pub(crate) struct Signals<'a> {
     pub common_features: &'a [CommonFeature],
     pub scaffold_pairs: &'a [crate::scaffold::ScaffoldPair],
     pub coactive_pairs: &'a [crate::coactivity::CoActivePair],
+    pub cotarget_pairs: &'a [crate::cotarget::CoTargetPair],
+}
+
+/// How much of its kind a value held by `n` of `total` clusters counts:
+/// `ln(total / n) / ln(total / 2)`, 1 for a value two clusters hold, 0 for
+/// one every cluster holds.
+pub fn rarity(n: usize, total: usize) -> f64 {
+    if total <= 2 || n <= 2 {
+        return 1.0;
+    }
+    ((total as f64 / n as f64).ln() / (total as f64 / 2.0).ln()).clamp(0.0, 1.0)
 }
 
 /// Soft links between clusters above noise, strongest first.
@@ -192,10 +420,21 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
         .collect();
     let shown_ids: HashSet<&str> = shown.iter().map(|c| c.id.as_str()).collect();
     let is_shown = |id: &str| shown_ids.contains(id);
+    let total = shown.len();
     // Each link with its clusters' positions, to sort by.
     let mut out: Vec<(usize, usize, SoftLink)> = Vec::new();
-    let mut push = |x: &str, y: &str, kind, strength: f64, detail: String| {
-        if x == y || strength <= 0.0 || !is_shown(x) || !is_shown(y) {
+    // `weight` is the share of the kind's ratio the link carries (its
+    // similarity times its rarity), as an exponent.
+    let mut push = |x: &str, y: &str, kind: SoftLinkKind, weight: f64, detail: String| {
+        if x == y || !is_shown(x) || !is_shown(y) {
+            return;
+        }
+        let base = opts.lr(kind);
+        if base <= 1.0 || weight <= 0.0 {
+            return;
+        }
+        let lr = base.powf(weight.min(1.0));
+        if lr < opts.min_link_lr.max(1.0) || lr <= 1.0 {
             return;
         }
         let (ox, oy) = (order[x], order[y]);
@@ -208,27 +447,22 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             a: a.into(),
             b: b.into(),
             kind,
-            strength: strength.min(1.0),
+            strength: strength_of(lr),
+            lr,
             detail,
         };
         out.push((oa, ob, link));
     };
 
     for p in s.shared_pauses {
-        push(
-            &p.a,
-            &p.b,
-            SoftLinkKind::SharedPause,
-            opts.shared_pause,
-            p.reason.clone(),
-        );
+        push(&p.a, &p.b, SoftLinkKind::SharedPause, 1.0, p.reason.clone());
     }
     for p in s.dialect_pairs {
         push(
             &p.a,
             &p.b,
             SoftLinkKind::Dialect,
-            opts.dialect * p.jaccard,
+            p.jaccard,
             format!(
                 "{} shared payload variants, Jaccard {:.2}",
                 p.shared.len(),
@@ -243,7 +477,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             &x.cluster,
             &y.cluster,
             SoftLinkKind::Rerun,
-            opts.rerun * m.weighted_jaccard,
+            m.weighted_jaccard,
             format!(
                 "{} shared target hosts in the same order ({:.0}%), weighted Jaccard {:.2}",
                 m.shared.len(),
@@ -252,14 +486,10 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             ),
         );
     }
+    // Pairs that passed a chance test carry their kind's ratio in full: the
+    // test, not the similarity, is the evidence.
     for p in s.scaffold_pairs {
-        push(
-            &p.a,
-            &p.b,
-            SoftLinkKind::Scaffold,
-            opts.scaffold * p.similarity,
-            p.detail(),
-        );
+        push(&p.a, &p.b, SoftLinkKind::Scaffold, 1.0, p.detail());
     }
     let paused: HashSet<(&str, &str)> = s
         .shared_pauses
@@ -268,15 +498,11 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
         .collect();
     for p in s.coactive_pairs {
         if !paused.contains(&(p.a.as_str(), p.b.as_str())) {
-            let quieter = p.active_a.min(p.active_b).max(1) as f64;
-            push(
-                &p.a,
-                &p.b,
-                SoftLinkKind::CoActivity,
-                opts.co_activity * (p.coincidences / quieter).min(1.0),
-                p.detail(),
-            );
+            push(&p.a, &p.b, SoftLinkKind::CoActivity, 1.0, p.detail());
         }
+    }
+    for p in s.cotarget_pairs {
+        push(&p.a, &p.b, SoftLinkKind::CoTarget, 1.0, p.detail());
     }
     for e in s.escalations {
         for (i, x) in e.clusters.iter().enumerate() {
@@ -285,7 +511,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
                     x,
                     y,
                     SoftLinkKind::Escalation,
-                    opts.escalation,
+                    rarity(e.clusters.len(), total),
                     format!("{} on {}{}", e.route_line(), e.host, e.path),
                 );
             }
@@ -293,7 +519,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
     }
 
     // Values the clusters share: pair the clusters holding each, unless too
-    // many do.
+    // many do, each counting by its rarity.
     let mut shared: BTreeMap<(SoftLinkKind, String), Vec<&str>> = BTreeMap::new();
     let mut add = |kind, value: String, id: &'a str| {
         shared.entry((kind, value)).or_default().push(id);
@@ -373,26 +599,23 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
         if ids.len() < 2 || ids.len() > opts.max_shared {
             continue;
         }
-        let weight = match kind {
-            SoftLinkKind::Preamble => opts.preamble,
-            SoftLinkKind::Encoding => opts.encoding,
-            SoftLinkKind::FanOut => opts.fanout,
-            SoftLinkKind::HeaderSet => opts.header_set,
-            SoftLinkKind::SharedSecret => opts.shared_secret,
-            SoftLinkKind::RelayStack => opts.relay_stack,
-            SoftLinkKind::CallbackService => opts.callback_service,
-            _ => opts.common_feature,
-        };
+        let weight = rarity(ids.len(), total);
         for (i, x) in ids.iter().enumerate() {
             for y in &ids[i + 1..] {
-                push(x, y, *kind, weight, format!("{}: {value}", kind.label()));
+                push(
+                    x,
+                    y,
+                    *kind,
+                    weight,
+                    format!("{}: {value} ({} clusters)", kind.label(), ids.len()),
+                );
             }
         }
     }
 
     // Similar rather than equal: unusual path sets and cut lengths. A path
     // set close to more than `max_shared` others is common, like an equal
-    // value shared that widely.
+    // value shared that widely; one close to fewer counts by its rarity.
     let sets: Vec<BTreeSet<&str>> = shown.iter().map(|c| path_set(c)).collect();
     let mut similar: Vec<(usize, usize, f64)> = Vec::new();
     // Jaccard 0.6 needs a shared path, so only sets sharing one are compared.
@@ -409,11 +632,12 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
     }
     for (i, k, j) in similar {
         if partners[i] <= opts.max_shared && partners[k] <= opts.max_shared {
+            let holders = 1 + partners[i].max(partners[k]);
             push(
                 &shown[i].id,
                 &shown[k].id,
                 SoftLinkKind::PathSet,
-                opts.path_set * j,
+                j * rarity(holders, total),
                 format!("unusual path sets overlap, Jaccard {j:.2}"),
             );
         }
@@ -422,14 +646,23 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
         .iter()
         .map(|c| c.cut_lengths.url.map(|g| (g.min, g.max)))
         .collect();
-    for (i, k) in near_ranges(&groups, 2) {
+    let near = near_ranges(&groups, 2);
+    let mut partners = vec![0usize; shown.len()];
+    for &(i, k) in &near {
+        partners[i] += 1;
+        partners[k] += 1;
+    }
+    for (i, k) in near {
+        if partners[i] > opts.max_shared || partners[k] > opts.max_shared {
+            continue;
+        }
         let (x, y) = (shown[i], shown[k]);
         let (gx, gy) = (groups[i].unwrap_or_default(), groups[k].unwrap_or_default());
         push(
             &x.id,
             &y.id,
             SoftLinkKind::CutLength,
-            opts.cut_length,
+            rarity(1 + partners[i].max(partners[k]), total),
             format!(
                 "URLs cut at {}–{} and {}–{} characters",
                 gx.0, gx.1, gy.0, gy.1
@@ -437,8 +670,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
         );
     }
     crate::sort::by(&mut out, |(pa, pb, p), (qa, qb, q)| {
-        q.strength
-            .total_cmp(&p.strength)
+        q.lr.total_cmp(&p.lr)
             .then(pa.cmp(qa))
             .then(pb.cmp(qb))
             .then(p.kind.cmp(&q.kind))
@@ -533,9 +765,12 @@ fn jaccard(a: &BTreeSet<&str>, b: &BTreeSet<&str>) -> f64 {
     inter as f64 / (a.len() + b.len() - inter).max(1) as f64
 }
 
-/// Groups of clusters whose pairs, each pair's links combined (`1 - Π(1 -
-/// strength)`), reach `fleet_min_strength`: connected components over those
-/// pairs. `order` is every cluster id, strongest first.
+/// Candidate fleets: pairs whose combined ratio ([`pair_evidence`]) reaches
+/// `fleet_min_lr` are edges weighted by the log of the ratio; the graph is
+/// reduced to its backbone and split into CPM communities at resolution
+/// `fleet_density` times the log of `fleet_min_lr` ([`crate::community`]).
+/// Each community of two or more clusters is a fleet. `order` is every
+/// cluster id, strongest first.
 pub(crate) fn candidate_fleets(
     links: &[SoftLink],
     order: &[String],
@@ -546,72 +781,76 @@ pub(crate) fn candidate_fleets(
         .enumerate()
         .map(|(i, id)| (id.as_str(), i))
         .collect();
-    let mut pairs: BTreeMap<(usize, usize), f64> = BTreeMap::new();
-    for l in links {
-        let miss = pairs
-            .entry((pos[l.a.as_str()], pos[l.b.as_str()]))
-            .or_insert(1.0);
-        *miss *= 1.0 - l.strength;
-    }
-    let mut parent: Vec<usize> = (0..order.len()).collect();
-    fn find(p: &mut [usize], x: usize) -> usize {
-        let mut r = x;
-        while p[r] != r {
-            r = p[r];
-        }
-        p[x] = r;
-        r
-    }
-    let mut strong: Vec<((usize, usize), f64)> = Vec::new();
-    for (&(a, b), &miss) in &pairs {
-        let s = 1.0 - miss;
-        if s >= opts.fleet_min_strength {
-            strong.push(((a, b), s));
-            let (ra, rb) = (find(&mut parent, a), find(&mut parent, b));
-            parent[ra.max(rb)] = ra.min(rb);
+    let min = opts.fleet_min_lr.max(1.0 + 1e-9);
+    let mut edges: Vec<crate::community::Edge> = Vec::new();
+    let mut edge_lr: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+    for ((a, b), e) in pair_evidence(links) {
+        let (Some(&x), Some(&y)) = (pos.get(a.as_str()), pos.get(b.as_str())) else {
+            continue;
+        };
+        // The product passes through logs: a ratio at the threshold may
+        // come back a rounding below it.
+        if e.lr >= min * (1.0 - 1e-9) {
+            let (x, y) = (x.min(y), x.max(y));
+            edges.push((x, y, e.lr.ln()));
+            edge_lr.insert((x, y), e.lr);
         }
     }
-    struct Group {
-        members: BTreeSet<usize>,
-        kinds: BTreeSet<SoftLinkKind>,
-        links: usize,
-        strength: f64,
+    crate::sort::by(&mut edges, |p, q| (p.0, p.1).cmp(&(q.0, q.1)));
+    let kept = crate::community::backbone(
+        order.len(),
+        &edges,
+        opts.backbone_alpha,
+        opts.backbone_overlap,
+    );
+    let gamma = opts.fleet_density.max(0.0) * min.ln();
+    let labels = crate::community::leiden_cpm(order.len(), &kept, gamma);
+    let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for (v, &l) in labels.iter().enumerate() {
+        groups.entry(l).or_default().push(v);
     }
-    let mut groups: BTreeMap<usize, Group> = BTreeMap::new();
-    // Each cluster in a group, by the group's root.
-    let mut group_of: HashMap<usize, usize> = HashMap::new();
-    for &((a, b), s) in &strong {
-        let r = find(&mut parent, a);
-        let g = groups.entry(r).or_insert_with(|| Group {
-            members: BTreeSet::new(),
-            kinds: BTreeSet::new(),
-            links: 0,
-            strength: 1.0,
-        });
-        g.members.extend([a, b]);
-        g.strength = g.strength.min(s);
-        group_of.insert(a, r);
-        group_of.insert(b, r);
-    }
-    for l in links {
-        let (a, b) = (pos[l.a.as_str()], pos[l.b.as_str()]);
-        if let (Some(ga), Some(gb)) = (group_of.get(&a), group_of.get(&b))
-            && ga == gb
-            && let Some(g) = groups.get_mut(ga)
-        {
-            g.kinds.insert(l.kind);
-            g.links += 1;
-        }
-    }
-    groups
-        .into_values()
+    let mut fleets: Vec<Vec<usize>> = groups.into_values().filter(|g| g.len() >= 2).collect();
+    // Strongest member first.
+    crate::sort::by_key(&mut fleets, |g| g[0]);
+    fleets
+        .into_iter()
         .enumerate()
-        .map(|(n, g)| CandidateFleet {
-            id: format!("F{}", n + 1),
-            clusters: g.members.iter().map(|&i| order[i].clone()).collect(),
-            kinds: g.kinds.into_iter().collect(),
-            links: g.links,
-            strength: g.strength,
+        .map(|(n, members)| {
+            let set: BTreeSet<usize> = members.iter().copied().collect();
+            let inside: Vec<crate::community::Edge> = kept
+                .iter()
+                .copied()
+                .filter(|e| set.contains(&e.0) && set.contains(&e.1))
+                .collect();
+            let min_lr = inside
+                .iter()
+                .map(|e| edge_lr[&(e.0, e.1)])
+                .fold(f64::INFINITY, f64::min);
+            let min_lr = if min_lr.is_finite() { min_lr } else { 1.0 };
+            let pairs = members.len() * (members.len() - 1) / 2;
+            let (cut, side) = crate::community::min_cut(&members, &inside).unwrap_or_default();
+            let mut kinds = BTreeSet::new();
+            let mut count = 0;
+            for l in links {
+                if let (Some(a), Some(b)) = (pos.get(l.a.as_str()), pos.get(l.b.as_str()))
+                    && set.contains(a)
+                    && set.contains(b)
+                {
+                    kinds.insert(l.kind);
+                    count += 1;
+                }
+            }
+            CandidateFleet {
+                id: format!("F{}", n + 1),
+                clusters: members.iter().map(|&i| order[i].clone()).collect(),
+                kinds: kinds.into_iter().collect(),
+                links: count,
+                strength: strength_of(min_lr),
+                min_lr,
+                density: inside.len() as f64 / pairs.max(1) as f64,
+                cut_lr: cut.exp(),
+                cut: side.into_iter().map(|i| order[i].clone()).collect(),
+            }
         })
         .collect()
 }
@@ -623,41 +862,114 @@ mod tests {
     use crate::model::Observation;
     use crate::rules::Rules;
 
-    fn link(a: &str, b: &str, kind: SoftLinkKind, strength: f64) -> SoftLink {
+    fn link(a: &str, b: &str, kind: SoftLinkKind, lr: f64) -> SoftLink {
         SoftLink {
             a: a.into(),
             b: b.into(),
             kind,
-            strength,
+            strength: strength_of(lr),
+            lr,
             detail: String::new(),
         }
     }
 
     #[test]
-    fn weak_links_combine_and_strong_pairs_group() {
+    fn families_take_their_strongest_link_and_multiply() {
+        let links = vec![
+            // Two harness links: only the stronger counts.
+            link("C2", "C3", SoftLinkKind::Encoding, 6.0),
+            link("C2", "C3", SoftLinkKind::HeaderSet, 4.0),
+            // A targets link multiplies in.
+            link("C2", "C3", SoftLinkKind::Preamble, 5.0),
+        ];
+        let e = &pair_evidence(&links)[&("C2".to_string(), "C3".to_string())];
+        assert!((e.lr - 30.0).abs() < 1e-9, "{e:?}");
+        assert_eq!(
+            e.families,
+            [
+                (Family::Harness, SoftLinkKind::Encoding, 6.0),
+                (Family::Targets, SoftLinkKind::Preamble, 5.0)
+            ]
+        );
+        // Every kind has a family, and the kinds list is complete.
+        assert_eq!(SoftLinkKind::ALL.len(), 17);
+        assert_eq!(SoftLinkKind::CoTarget.family(), Family::Targets);
+        assert_eq!(SoftLinkKind::CallbackService.family(), Family::Identifiers);
+    }
+
+    #[test]
+    fn strong_pairs_group_and_weak_ones_stay_out() {
         let order: Vec<String> = ["C1", "C2", "C3", "C4", "C5"].map(String::from).to_vec();
         let links = vec![
-            link("C1", "C2", SoftLinkKind::SharedPause, 0.6),
-            // Two weak links that combine past the threshold (1 - 0.7 * 0.7).
-            link("C2", "C3", SoftLinkKind::Encoding, 0.3),
-            link("C2", "C3", SoftLinkKind::HeaderSet, 0.3),
+            link("C1", "C2", SoftLinkKind::SharedPause, 30.0),
+            // Two harness links count once; with a preamble they pass.
+            link("C2", "C3", SoftLinkKind::Encoding, 6.0),
+            link("C2", "C3", SoftLinkKind::HeaderSet, 6.0),
+            link("C2", "C3", SoftLinkKind::Preamble, 5.0),
             // One weak link alone stays out.
-            link("C4", "C5", SoftLinkKind::FanOut, 0.2),
+            link("C4", "C5", SoftLinkKind::FanOut, 6.0),
         ];
         let f = candidate_fleets(&links, &order, &SoftLinkOptions::default());
         assert_eq!(f.len(), 1, "{f:?}");
         assert_eq!(f[0].id, "F1");
         assert_eq!(f[0].clusters, ["C1", "C2", "C3"]);
-        assert_eq!(f[0].links, 3);
-        assert!((f[0].strength - 0.51).abs() < 1e-9, "{}", f[0].strength);
+        assert_eq!(f[0].links, 4);
+        assert!((f[0].min_lr - 30.0).abs() < 1e-9, "{f:?}");
+        assert!((f[0].strength - (1.0 - 1.0 / 30.0)).abs() < 1e-9);
+        assert!((f[0].density - 2.0 / 3.0).abs() < 1e-9);
+        // It falls apart at one edge: either end of the chain.
+        assert!((f[0].cut_lr - 30.0).abs() < 1e-6, "{}", f[0].cut_lr);
+        assert_eq!(f[0].cut.len(), 1);
         assert_eq!(
             f[0].kinds,
             [
                 SoftLinkKind::SharedPause,
+                SoftLinkKind::Preamble,
                 SoftLinkKind::Encoding,
                 SoftLinkKind::HeaderSet
             ]
         );
+    }
+
+    #[test]
+    fn a_hub_tied_to_two_fleets_chains_neither() {
+        let order: Vec<String> = (1..=7).map(|i| format!("C{i}")).collect();
+        let mut links = Vec::new();
+        for g in [[1, 2, 3], [4, 5, 6]] {
+            for (i, x) in g.iter().enumerate() {
+                for y in &g[i + 1..] {
+                    links.push(link(
+                        &format!("C{x}"),
+                        &format!("C{y}"),
+                        SoftLinkKind::SharedSecret,
+                        50.0,
+                    ));
+                }
+            }
+        }
+        // C7 shares a scaffold with every member of both.
+        for x in 1..=6 {
+            links.push(link(&format!("C{x}"), "C7", SoftLinkKind::Scaffold, 25.0));
+        }
+        let f = candidate_fleets(&links, &order, &SoftLinkOptions::default());
+        let groups: Vec<&[String]> = f.iter().map(|f| f.clusters.as_slice()).collect();
+        assert_eq!(
+            groups,
+            [["C1", "C2", "C3"].as_slice(), ["C4", "C5", "C6"].as_slice()],
+            "{f:?}"
+        );
+        for x in &f {
+            assert_eq!(x.density, 1.0);
+        }
+    }
+
+    #[test]
+    fn rarity_counts_a_widely_held_value_for_less() {
+        assert_eq!(rarity(2, 20), 1.0);
+        assert_eq!(rarity(5, 2), 1.0);
+        assert_eq!(rarity(20, 20), 0.0);
+        let r = rarity(5, 20);
+        assert!((r - (4f64).ln() / (10f64).ln()).abs() < 1e-12, "{r}");
     }
 
     fn o(id: &str, ts: i64, url: &str) -> Observation {
@@ -706,7 +1018,7 @@ mod tests {
             .collect();
         assert_eq!(l.len(), 1, "{:?}", a.soft_links);
         assert!(l[0].detail.contains("REDACTED-"), "{}", l[0].detail);
-        assert!((l[0].strength - 0.8).abs() < 1e-9);
+        assert!((l[0].lr - 50.0).abs() < 1e-9, "{:?}", l[0]);
         assert_eq!(a.candidate_fleets.len(), 1);
         // A stock password is sent by everyone.
         let b = pair("password=admin");
@@ -738,7 +1050,9 @@ mod tests {
                 })
             })
             .collect();
-            analyze(obs, &Rules::default_rules())
+            let mut rules = Rules::default_rules();
+            rules.set.soft_links.relay_stack = 3.0;
+            analyze(obs, &rules)
         };
         let stack = "relay.jina → relay.translate_goog → target";
         let a = fleets("https://r.jina.ai/https://www-a-example.translate.goog");
@@ -799,8 +1113,14 @@ mod tests {
             }
         }
         // Both use webhook.site; set that tie aside to test the preamble.
-        let mut base = Rules::default_rules();
-        base.set.soft_links.callback_service = 0.0;
+        let rules = |callback: f64| {
+            let mut r = Rules::default_rules();
+            r.set.soft_links.preamble = 5.0;
+            r.set.soft_links.callback_service = callback;
+            r
+        };
+        let both_on = rules(5.0);
+        let base = rules(0.0);
         let a = analyze(obs.clone(), &base);
         assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters);
         assert!(
@@ -812,8 +1132,9 @@ mod tests {
         // A preamble alone is not enough for a fleet.
         assert!(a.candidate_fleets.is_empty(), "{:?}", a.candidate_fleets);
 
-        // With the callback service too, the pair reaches a fleet.
-        let both = analyze(obs.clone(), &Rules::default_rules());
+        // With the callback service too (another family), the pair reaches
+        // a fleet.
+        let both = analyze(obs.clone(), &both_on);
         assert_eq!(both.candidate_fleets.len(), 1, "{:?}", both.soft_links);
         assert!(
             both.candidate_fleets[0]
@@ -822,7 +1143,7 @@ mod tests {
         );
 
         let mut rules = base;
-        rules.set.soft_links.fleet_min_strength = 0.3;
+        rules.set.soft_links.fleet_min_lr = 4.0;
         let b = analyze(obs, &rules);
         assert_eq!(b.candidate_fleets.len(), 1);
         assert_eq!(b.candidate_fleets[0].clusters, ["C1", "C2"]);

@@ -56,7 +56,8 @@ pub fn defang_text(s: &str) -> String {
 #[derive(Default)]
 struct Pair {
     soft: Vec<Value>,
-    miss: f64,
+    /// The soft links combined: the strongest per family, multiplied.
+    lr: f64,
     swarm: Vec<Value>,
     swarm_max: Option<sc_core::swarm::EdgeStrength>,
 }
@@ -80,19 +81,23 @@ pub fn graph(a: &Analysis, q: Option<&Queue>) -> Value {
             (y.to_string(), x.to_string())
         }
     };
+    let evidence = sc_core::fleets::pair_evidence(&a.soft_links);
     for l in &a.soft_links {
         if !ids.contains(l.a.as_str()) || !ids.contains(l.b.as_str()) {
             continue;
         }
-        let p = pairs.entry(key(&l.a, &l.b)).or_insert_with(|| Pair {
-            miss: 1.0,
-            ..Default::default()
-        });
-        p.miss *= 1.0 - l.strength;
+        let k = key(&l.a, &l.b);
+        let lr = evidence
+            .get(&(l.a.clone(), l.b.clone()))
+            .map_or(1.0, |e| e.lr);
+        let p = pairs.entry(k).or_default();
+        p.lr = lr;
         p.soft.push(json!({
             "kind": l.kind,
             "label": l.kind.label(),
+            "family": l.kind.family().label(),
             "strength": round2(l.strength),
+            "lr": round2(l.lr),
             "detail": defang_text(&l.detail),
         }));
     }
@@ -108,10 +113,7 @@ pub fn graph(a: &Analysis, q: Option<&Queue>) -> Value {
             *inner.entry(x).or_default() += 1;
             continue;
         }
-        let p = pairs.entry(key(x, y)).or_insert_with(|| Pair {
-            miss: 1.0,
-            ..Default::default()
-        });
+        let p = pairs.entry(key(x, y)).or_default();
         p.swarm_max = p.swarm_max.max(Some(e.strength));
         p.swarm.push(json!({
             "kind": e.kind.id(),
@@ -187,7 +189,8 @@ pub fn graph(a: &Analysis, q: Option<&Queue>) -> Value {
             json!({
                 "a": x,
                 "b": y,
-                "soft_strength": if p.soft.is_empty() { Value::Null } else { json!(round2(1.0 - p.miss)) },
+                "soft_strength": if p.soft.is_empty() { Value::Null } else { json!(round2(sc_core::fleets::strength_of(p.lr))) },
+                "soft_lr": if p.soft.is_empty() { Value::Null } else { json!(round2(p.lr)) },
                 "soft": p.soft,
                 "swarm_strength": p.swarm_max.map(|s| s.label()),
                 "swarm": p.swarm,
@@ -205,6 +208,9 @@ pub fn graph(a: &Analysis, q: Option<&Queue>) -> Value {
                 "kinds": f.kinds.iter().map(|k| k.label()).collect::<Vec<_>>(),
                 "links": f.links,
                 "strength": round2(f.strength),
+                "min_lr": round2(f.min_lr),
+                "density": round2(f.density),
+                "cut_lr": round2(f.cut_lr),
             })
         })
         .collect();
@@ -243,7 +249,7 @@ mod tests {
     #[test]
     fn soft_links_join_nodes_and_combine_per_pair() {
         let mut rules = Rules::default_rules();
-        rules.set.soft_links.fleet_min_strength = 0.3;
+        rules.set.soft_links.fleet_min_lr = 1.5;
         let a = analyze(crate::case::fleet::tests::two_runs(), &rules);
         assert!(!a.soft_links.is_empty());
         let g = graph(&a, None);
@@ -252,8 +258,10 @@ mod tests {
         let links = g["links"].as_array().unwrap();
         assert_eq!(links.len(), 1, "{g}");
         let l = &links[0];
-        let miss: f64 = a.soft_links.iter().map(|s| 1.0 - s.strength).product();
-        assert_eq!(l["soft_strength"], round2(1.0 - miss));
+        let e = sc_core::fleets::pair_evidence(&a.soft_links);
+        let lr = e.values().next().unwrap().lr;
+        assert_eq!(l["soft_strength"], round2(sc_core::fleets::strength_of(lr)));
+        assert_eq!(l["soft_lr"], round2(lr));
         assert_eq!(l["soft"].as_array().unwrap().len(), a.soft_links.len());
         assert_eq!(l["fleet"], "F1");
         assert_eq!(nodes[0]["fleet"], "F1");

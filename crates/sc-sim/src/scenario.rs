@@ -166,6 +166,17 @@ pub enum Kind {
     /// Records copying another actor's identifiers from a different client,
     /// as someone planting records would.
     Planter,
+    /// Several agents of one operator working one target list in the same
+    /// hours, each 15 to 20 minutes after the last, in its own order, with
+    /// its own client, inbox, tags and habits: one operator, no
+    /// interaction.
+    TargetList,
+    /// Unrelated agents sent to one family of hosts within a few hours, as
+    /// a news story or a disclosed flaw sends them: each its own operator.
+    NewsSpike,
+    /// One unrelated agent working the target lists of the actors it
+    /// `bridges` (by index) in their hours: a cluster tied to two fleets.
+    Hub,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,6 +219,9 @@ pub struct Actor {
     /// For a planter: the actor (by index) whose identifiers it copies.
     #[serde(default)]
     pub copies: Option<usize>,
+    /// For a hub: the target-list actors (by index) whose hosts it works.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bridges: Vec<usize>,
 }
 
 fn default_records() -> usize {

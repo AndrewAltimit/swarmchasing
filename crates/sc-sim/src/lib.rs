@@ -9,6 +9,7 @@
 //! interaction edges, soft links, candidate fleets and agent grades against
 //! it; [`render`] prints the result. No I/O.
 
+pub mod calibrate;
 pub mod generate;
 pub mod measure;
 pub mod palette;
@@ -17,6 +18,7 @@ pub mod rng;
 pub mod scenario;
 pub mod truth;
 
+pub use calibrate::{Calibration, calibrate, render_calibration};
 pub use generate::{generate, to_ndjson};
 pub use measure::{KindStat, Measurement, PairCounts, measure};
 pub use palette::{Palette, Template, Use};

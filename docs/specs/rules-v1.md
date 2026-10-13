@@ -25,7 +25,7 @@ A rules file is TOML. Its JSON value (the TOML read as JSON) **must** validate a
 | `[meta]` | `version`: the rules version. | **should** |
 | `[thresholds]` | `suggestive` and `significant` scores. | **should**; defaults 3 and 6 |
 | `[linking]` | Link features, time windows, run gaps, published tags ([FM-5.2](../manual/05-linking.md#fm-52-shared-link-features)). | no |
-| `[chains]`, `[fanout]`, `[escalation]`, `[soft_links]`, `[scaffold]`, `[co_activity]`, `[swarm]`, `[cut_lengths]`, `[paths]` | Settings for linking, descriptive hints and interaction edges. | no |
+| `[chains]`, `[fanout]`, `[escalation]`, `[soft_links]`, `[scaffold]`, `[co_activity]`, `[co_target]`, `[swarm]`, `[cut_lengths]`, `[paths]` | Settings for linking, descriptive hints and interaction edges. | no |
 | `[[rule]]` | The indicator rules. | no |
 | `[[asn]]` | Network number to organisation, for hosting context. | no |
 | `[[benchmark]]`, `[[stale]]` | Benchmark targets and stale knowledge ([FM-4.9](../manual/04-indicators.md#fm-49-benchmark-targets-and-declared-testing), [FM-4.5](../manual/04-indicators.md#fm-45-artifact-families)). | no |

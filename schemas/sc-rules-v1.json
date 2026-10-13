@@ -79,24 +79,29 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "fleet_min_strength": { "$ref": "#/$defs/share" },
+        "fleet_min_lr": { "$ref": "#/$defs/ratio" },
+        "fleet_density": { "type": "number", "minimum": 0 },
+        "backbone_alpha": { "$ref": "#/$defs/share" },
+        "backbone_overlap": { "$ref": "#/$defs/share" },
+        "min_link_lr": { "$ref": "#/$defs/ratio" },
         "max_shared": { "$ref": "#/$defs/count" },
-        "shared_pause": { "$ref": "#/$defs/share" },
-        "dialect": { "$ref": "#/$defs/share" },
-        "rerun": { "$ref": "#/$defs/share" },
-        "preamble": { "$ref": "#/$defs/share" },
-        "path_set": { "$ref": "#/$defs/share" },
-        "encoding": { "$ref": "#/$defs/share" },
-        "fanout": { "$ref": "#/$defs/share" },
-        "cut_length": { "$ref": "#/$defs/share" },
-        "header_set": { "$ref": "#/$defs/share" },
-        "escalation": { "$ref": "#/$defs/share" },
-        "common_feature": { "$ref": "#/$defs/share" },
-        "shared_secret": { "$ref": "#/$defs/share" },
-        "relay_stack": { "$ref": "#/$defs/share" },
-        "callback_service": { "$ref": "#/$defs/share" },
-        "scaffold": { "$ref": "#/$defs/share" },
-        "co_activity": { "$ref": "#/$defs/share" }
+        "shared_pause": { "$ref": "#/$defs/ratio" },
+        "dialect": { "$ref": "#/$defs/ratio" },
+        "rerun": { "$ref": "#/$defs/ratio" },
+        "preamble": { "$ref": "#/$defs/ratio" },
+        "path_set": { "$ref": "#/$defs/ratio" },
+        "encoding": { "$ref": "#/$defs/ratio" },
+        "fanout": { "$ref": "#/$defs/ratio" },
+        "cut_length": { "$ref": "#/$defs/ratio" },
+        "header_set": { "$ref": "#/$defs/ratio" },
+        "escalation": { "$ref": "#/$defs/ratio" },
+        "common_feature": { "$ref": "#/$defs/ratio" },
+        "shared_secret": { "$ref": "#/$defs/ratio" },
+        "relay_stack": { "$ref": "#/$defs/ratio" },
+        "callback_service": { "$ref": "#/$defs/ratio" },
+        "scaffold": { "$ref": "#/$defs/ratio" },
+        "co_activity": { "$ref": "#/$defs/ratio" },
+        "co_target": { "$ref": "#/$defs/ratio" }
       }
     },
     "scaffold": {
@@ -123,6 +128,18 @@
         "fdr": { "$ref": "#/$defs/share" },
         "clock_tolerance_secs": { "$ref": "#/$defs/secs" },
         "clock_weight": { "$ref": "#/$defs/share" }
+      }
+    },
+    "co_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bin_secs": { "type": "integer", "minimum": 1 },
+        "max_lag_bins": { "$ref": "#/$defs/count" },
+        "min_hosts": { "$ref": "#/$defs/count" },
+        "max_holders": { "$ref": "#/$defs/count" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" }
       }
     },
     "swarm": {
@@ -182,6 +199,7 @@
     "secs": { "type": "integer", "minimum": 0 },
     "count": { "type": "integer", "minimum": 0 },
     "share": { "type": "number", "minimum": 0, "maximum": 1 },
+    "ratio": { "type": "number", "minimum": 0, "description": "A likelihood ratio; 1 or less turns a soft-link kind off." },
     "paths": { "type": "array", "items": { "type": "string", "pattern": "^/" } },
     "rule_id": {
       "type": "string",
