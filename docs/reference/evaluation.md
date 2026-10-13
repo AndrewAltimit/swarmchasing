@@ -148,6 +148,18 @@ The index is sorted by URL within a year, so a year's share is the first capture
 
 Records labelled with `swarm` measure the interaction edges ([SC-FM 5.12](../manual/05-linking.md#fm-512-interaction-edges)). The value names the interacting group a record's run belongs to, or `none` for runs known not to interact. `eval` prints the edges found by kind, how many labelled groups have an edge inside them, and how many edges touch a `none` run, by kind. Each side of an edge is placed by its first labelled record. The numbers are reported, never gated, and the committed groups are synthetic ([evaluation set](../../samples/eval/README.md#swarm-interactionndjson)). A disjoint partition on a `none` run is expected: a sharded scheduler draws one.
 
+### Swarm and fleet measurement
+
+`swarmchase sim score <files>` measures the interaction edges, soft links, candidate fleets and agent grades against records labelled with `run`, `swarm` and `fleet` ([`sc-sim`](../../crates/sc-sim/README.md)). `fleet` names the operator group a run belongs to (one scheduler, one scaffold deployment); a swarm's runs share one. A run with neither is its own operator. Each file is analysed on its own and the counts are summed; `--json` writes them.
+
+The unit is a pair of true runs. An edge side is placed on the run most of its records belong to, and a cluster on the run most of its members belong to.
+
+- **Edges**, per kind: precision is the share of drawn run pairs that are two distinct runs in one swarm. The table also counts pairs on one run (one client changing route) and pairs with one operator that do not interact (a fleet signal). Recall is over swarm pairs both of whose runs reach a cluster above noise.
+- **Soft links and candidate fleets**, per kind: precision is the share of linked cluster pairs with one operator. Recall is over operator pairs in different clusters above noise; pairs already in one cluster are counted apart.
+- **Agent grades**: records by actor and class against the grade columns, as in [agent grades by actor](#agent-grades-by-actor).
+
+Every proportion has its Wilson interval. Kinds are read from the analysis, so a new edge or soft-link kind appears without a change to the command. The numbers are reported, never gated. The committed labelled groups are hand-written and few, so the intervals are wide and the numbers say whether a detector fires on its designed case, not how often it would on real traffic.
+
 ## Frozen splits
 
 `--split` writes the ids of a held-out side to `--split-out` and exits. Write it to the data directory, never to the repository.
