@@ -1624,7 +1624,7 @@ mod tests {
     #[test]
     fn digest_lists_candidate_fleets_by_key() {
         let mut rules = Rules::default_rules();
-        rules.set.soft_links.fleet_min_strength = 0.3;
+        rules.set.soft_links.fleet_min_lr = 1.5;
         let a = analyze(crate::case::fleet::tests::two_runs(), &rules);
         assert_eq!(a.candidate_fleets.len(), 1);
         let s = summarise(&a, &Summary::default(), "t1".into());

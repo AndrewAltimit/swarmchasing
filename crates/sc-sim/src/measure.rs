@@ -116,7 +116,10 @@ fn kind_name<T: Serialize>(k: &T) -> String {
 }
 
 /// The run most of `ids` belong to (ties to the smallest name).
-fn majority<'a>(truth: &'a Truth, ids: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+pub(crate) fn majority<'a>(
+    truth: &'a Truth,
+    ids: impl Iterator<Item = &'a str>,
+) -> Option<&'a str> {
     let mut n: BTreeMap<&str, usize> = BTreeMap::new();
     for id in ids {
         if let Some(t) = truth.get(id) {
@@ -311,13 +314,13 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
 
 /// Every soft-link kind. The match fails to compile when a kind is added
 /// to [`SoftLinkKind`] and not here, so none goes unmeasured.
-const SOFT_LINK_KINDS: [SoftLinkKind; 16] = {
+const SOFT_LINK_KINDS: [SoftLinkKind; 17] = {
     use SoftLinkKind::*;
     const fn listed(k: SoftLinkKind) {
         match k {
             SharedPause | Dialect | Rerun | Preamble | PathSet | Encoding | FanOut | CutLength
             | HeaderSet | Escalation | CommonFeature | SharedSecret | RelayStack
-            | CallbackService | Scaffold | CoActivity => {}
+            | CallbackService | Scaffold | CoActivity | CoTarget => {}
         }
     }
     listed(SharedPause);
@@ -338,5 +341,6 @@ const SOFT_LINK_KINDS: [SoftLinkKind; 16] = {
         CallbackService,
         Scaffold,
         CoActivity,
+        CoTarget,
     ]
 };

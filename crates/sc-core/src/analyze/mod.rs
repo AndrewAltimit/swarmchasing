@@ -259,10 +259,14 @@ pub struct Analysis {
     /// merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub coactive_pairs: Vec<crate::coactivity::CoActivePair>,
+    /// Pairs of clusters working the same rare targets in the same hours
+    /// beyond a hypergeometric chance model: a link to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cotarget_pairs: Vec<crate::cotarget::CoTargetPair>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
     /// lengths, header sets, escalations, common features, captured
-    /// secrets, scaffolds, co-activity), strongest
+    /// secrets, scaffolds, co-activity, co-targets), strongest
     /// first. They never merge clusters or change a score.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub soft_links: Vec<crate::fleets::SoftLink>,

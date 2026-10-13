@@ -591,6 +591,7 @@ mod tests {
             targets: vec![],
             distinct_targets: 3,
             p_chance: 1e-6,
+            tested: 1,
             strength: sc_core::platform::HintStrength::Weak,
             caveats: vec![],
             links: vec![],

@@ -47,7 +47,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-13.1"
+version = "2026-10-13.2"
 
 [thresholds]
 suggestive = 3
@@ -138,44 +138,69 @@ relay = ["relay.*"]
 program = ["carrier.httpbin", "carrier.data_url_script", "carrier.inline_fetch_program", "carrier.form_post_program", "carrier.html_program"]
 remote_browser = ["carrier.livecodes", "carrier.codesandbox", "carrier.browserless", "carrier.remote_browser_cdp"]
 
-# Soft links: descriptive ties between clusters, never merges. Each kind's
-# weight is its strength (times its own similarity where it has one). A value
-# shared by more than `max_shared` clusters links none of them. Pairs whose
-# links combine (1 - product of (1 - strength)) to `fleet_min_strength` or
-# more are grouped into candidate fleets for the admin to check.
+# Soft links: descriptive ties between clusters, never merges. Each kind is a
+# likelihood ratio: how much likelier the link is between two clusters of one
+# operator than between unrelated ones (1 or less: the kind is off). A pair
+# kept by a chance test (shared pauses, scaffolds, co-activity, co-targets)
+# carries its kind's ratio in full; any other link's ratio is its kind's
+# raised to its similarity, where it has one, and to its rarity: a value held
+# by n of the N clusters above noise counts ln(N/n) / ln(N/2) of its kind. A
+# value shared by more than `max_shared` clusters links none of them, and a
+# link whose ratio comes out below `min_link_lr` is not listed. Kinds fall
+# into four families (harness, timeline, targets, identifiers); a pair counts
+# its strongest link per family and the families' ratios multiply. Pairs at
+# `fleet_min_lr` or more are the edges of the fleet graph, which is reduced to
+# its backbone (disparity filter at `backbone_alpha`, or neighbourhood overlap
+# of at least `backbone_overlap`) and split into communities whose pairs hold
+# on average `fleet_density` of a threshold edge's log ratio (the constant
+# Potts model). Each community of two or more is a candidate fleet.
+#
+# Where `swarmchase sim calibrate samples/sim/scenarios.toml` measures a kind,
+# its ratio here is the calibration's conservative ("low") value rounded down,
+# and a kind the simulation finds no evidence for is off. A kind the
+# simulation cannot produce (it copies request content, so no captured
+# secrets, header sets or reruns) keeps a ratio set by judgment.
 [soft_links]
-fleet_min_strength = 0.5
+fleet_min_lr = 20.0
+fleet_density = 0.5
+backbone_alpha = 0.05
+backbone_overlap = 0.5
+min_link_lr = 2.0
 max_shared = 10
-shared_pause = 0.6
-dialect = 0.4
-rerun = 0.6
-preamble = 0.4
-path_set = 0.4
-encoding = 0.2
-fanout = 0.2
-cut_length = 0.3
-header_set = 0.3
-escalation = 0.6
-common_feature = 0.3
-# The same redacted secret (REDACTED-<hash>) in records of both clusters: a
-# captured token reused by another cluster. Stock passwords do not count.
-shared_secret = 0.8
-# The same chain of two or more relays and carriers (jina, then a translate
-# proxy, then the target). A single relay is every relay user's habit.
-relay_stack = 0.3
-# Inboxes on the same callback service (webhook.site, a request catcher, an
-# ntfy server) in both clusters. The same inbox links outright; a fresh inbox
-# per run on one service is a habit worth a look, shared by many clients.
-callback_service = 0.3
-# Clusters whose requests share a structure with values set aside (relay
-# route, parameter slots in order, encoding, payloads), beyond chance: one
-# harness behind clusters that share no identifier. Times the similarity.
-scaffold = 0.6
-# Clusters active in the same minutes, or one trailing the other, beyond a
-# circular-shift chance model: one dispatcher behind both. Times the share of
-# the quieter cluster's activity that coincides. A pair tied by shared pauses
-# gets no co-activity link.
-co_activity = 0.6
+# Judgment: tested against a chance model, never produced by the simulation.
+shared_pause = 4.0
+# Simulation: weak (point ratio above 3, low bound near 1); listed when rare.
+dialect = 2.0
+# Judgment for the next six: the simulation does not produce them. A rerun of
+# a whole host list in order on another day is a fleet edge on its own.
+rerun = 25.0
+preamble = 3.0
+path_set = 3.0
+cut_length = 2.0
+header_set = 2.0
+common_feature = 2.0
+# Simulation: no evidence (unrelated clusters share a style as often).
+encoding = 1.0
+fanout = 1.0
+# Simulation.
+escalation = 30.0
+# Judgment: the same redacted secret (REDACTED-<hash>) in records of both
+# clusters, a captured token reused. Stock passwords do not count.
+shared_secret = 50.0
+# Simulation: no evidence. A stack of two or more relays and carriers is
+# shared by unrelated clusters as often as by one operator's.
+relay_stack = 1.0
+# Simulation: no evidence. Inboxes on one callback service (webhook.site, a
+# request catcher); the same inbox links outright.
+callback_service = 1.0
+# Judgment: a shared structure beyond the scaffold chance model.
+scaffold = 20.0
+# Simulation: active in the same minutes beyond the co-activity chance model.
+# A pair tied by shared pauses gets no co-activity link.
+co_activity = 25.0
+# Simulation: the same rare targets in the same hours beyond the co-target
+# chance model.
+co_target = 40.0
 
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least
@@ -216,6 +241,22 @@ max_chance = 0.01
 fdr = 0.05
 clock_tolerance_secs = 120
 clock_weight = 0.25
+
+# Co-target: each cluster's request and submit times (never capture times) on
+# each target host and action (probe, callback, fetch, visit) in `bin_secs`
+# bins; two clusters share an item when active on it within `max_lag_bins`
+# bins of each other. A host touched by more than `max_holders` senders
+# (clusters, and records outside them) ties none. A pair needs shared items on
+# `min_hosts` hosts and a hypergeometric chance of at most `max_chance` over
+# the rare items any cluster was active on while both were, then a false
+# discovery rate cut at `fdr` over the pairs tested.
+[co_target]
+bin_secs = 3600
+max_lag_bins = 1
+min_hosts = 3
+max_holders = 4
+max_chance = 0.01
+fdr = 0.05
 
 # Interaction edges (SC-T9). S3 synchronized start: two runs of different
 # clients whose requests, unflagged ones of the same client included, line up

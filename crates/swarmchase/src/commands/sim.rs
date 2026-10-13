@@ -5,8 +5,8 @@ use crate::input::{InputArgs, load_rules, read_records};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_sim::{
-    Gate, Measurement, Palette, ScenarioFile, Truth, bench, generate, measure, null_counts, render,
-    to_ndjson,
+    Gate, Measurement, Palette, ScenarioFile, Truth, bench, calibrate, generate, measure,
+    null_counts, render, render_calibration, to_ndjson,
 };
 use std::path::PathBuf;
 
@@ -46,6 +46,14 @@ enum SimCmd {
         json: Option<PathBuf>,
         #[command(flatten)]
         gate: GateArgs,
+    },
+    /// Each soft-link kind's likelihood ratio from simulated truth: every
+    /// kind switched on, every pair of clusters above noise counted as one
+    /// operator's or not. Prints the ratios beside the ones the rules set.
+    Calibrate {
+        scenarios: PathBuf,
+        #[arg(long)]
+        rules: Option<PathBuf>,
     },
     /// Score interaction edges, soft links, candidate fleets and agent
     /// grades against records labelled with `run`, `swarm` and `fleet`.
@@ -176,6 +184,13 @@ pub fn run(a: SimArgs) -> Result<()> {
             if failed > 0 {
                 bail!("{failed} simulator bound(s) not met");
             }
+            Ok(())
+        }
+        SimCmd::Calibrate { scenarios, rules } => {
+            let rules = load_rules(rules.as_deref())?;
+            let file = read_scenarios(&scenarios)?;
+            let c = calibrate(&file, &Palette::default_palette(&rules), &rules);
+            print!("{}", render_calibration(&c, &rules));
             Ok(())
         }
         SimCmd::Score { input, rules, json } => {

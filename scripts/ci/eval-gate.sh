@@ -69,9 +69,9 @@ cargo run --quiet "$@" -p swarmchase -- eval check-results samples/eval/results
 cargo run --quiet "$@" -p swarmchase -- sim bench samples/sim/scenarios.toml \
     --total \
     --min-edge-precision 0.88 \
-    --min-link-precision 0.06 \
-    --min-fleet-precision 0.35 \
+    --min-link-precision 0.29 \
+    --min-fleet-precision 0.90 \
     --max-null-edges 0 \
-    --max-null-links 280 \
-    --max-null-fleet-pairs 38 \
+    --max-null-links 10 \
+    --max-null-fleet-pairs 3 \
     | sed -n '/^Null scenarios/,$p'

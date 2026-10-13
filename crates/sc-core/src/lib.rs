@@ -13,6 +13,8 @@ pub mod capture;
 pub mod chains;
 pub mod chance;
 pub mod coactivity;
+pub mod community;
+pub mod cotarget;
 pub mod crossservice;
 pub mod crosswalk;
 pub mod declared;
@@ -23,6 +25,7 @@ pub mod eval;
 pub mod extract;
 pub mod fanout;
 pub mod fingerprint;
+pub mod fleet_track;
 pub mod fleets;
 pub mod identity;
 pub mod ingest;
@@ -66,7 +69,7 @@ pub use extract::{
 };
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
-pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
+pub use fleets::{CandidateFleet, Family, PairEvidence, SoftLink, SoftLinkKind};
 pub use identity::{Catalog, ClusterIdentity, IdentityClass, IdentityData, RecordIdentity};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{

@@ -206,6 +206,8 @@ pub struct RuleSet {
     #[serde(default)]
     pub co_activity: crate::coactivity::CoActivityOptions,
     #[serde(default)]
+    pub co_target: crate::cotarget::CoTargetOptions,
+    #[serde(default)]
     pub swarm: crate::swarm::SwarmOptions,
     #[serde(default, rename = "rule")]
     pub rules: Vec<RuleDef>,
@@ -479,6 +481,7 @@ mod tests {
             crate::escalation::EscalationOptions::default()
         );
         assert_eq!(s.soft_links, crate::fleets::SoftLinkOptions::default());
+        assert_eq!(s.co_target, crate::cotarget::CoTargetOptions::default());
         assert_eq!(s.scaffold, crate::scaffold::ScaffoldOptions::default());
         assert_eq!(
             s.co_activity,

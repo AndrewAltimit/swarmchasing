@@ -10,6 +10,7 @@
 //! it; [`render`] prints the result; [`gate`] holds floors on precision and
 //! ceilings on what the null scenarios draw. No I/O.
 
+pub mod calibrate;
 pub mod gate;
 pub mod generate;
 pub mod measure;
@@ -19,6 +20,7 @@ pub mod rng;
 pub mod scenario;
 pub mod truth;
 
+pub use calibrate::{Calibration, calibrate, render_calibration};
 pub use gate::{Check, Gate, NullCounts, null_counts};
 pub use generate::{generate, to_ndjson};
 pub use measure::{KindStat, Measurement, PairCounts, measure};

@@ -154,6 +154,7 @@ mod tests {
             b: b.into(),
             kind,
             strength: 0.5,
+            lr: 2.0,
             detail: String::new(),
         }
     }
@@ -193,6 +194,7 @@ mod tests {
             kinds: vec![SoftLinkKind::Scaffold],
             links: 1,
             strength: 0.5,
+            ..Default::default()
         }];
         let labels = parse_labels(
             "{\"id\":\"r0\",\"label\":\"agent\",\"fleet\":\"f1\"}\n\

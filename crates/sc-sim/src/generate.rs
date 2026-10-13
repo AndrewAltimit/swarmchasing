@@ -429,6 +429,9 @@ impl Gen<'_> {
                     self.run(spec, &mut rng);
                 }
             }
+            Kind::TargetList | Kind::NewsSpike | Kind::Hub => {
+                self.target_list(i, a, start, window, &mut rng)
+            }
             _ => self.background(i, a, start, window, &mut rng),
         }
     }
@@ -510,6 +513,74 @@ impl Gen<'_> {
                 }
                 t += gap(rng, base.pace);
             }
+        }
+    }
+
+    /// Agents on one shared host list: one operator's target list worked
+    /// loosely in time, unrelated agents on a news story's hosts, or a hub
+    /// working the lists of the actors it bridges.
+    fn target_list(&mut self, i: usize, a: &Actor, start: i64, span: i64, rng: &mut Rng) {
+        let name = &self.scenario.name;
+        let shared: Vec<String> = match a.kind {
+            Kind::Hub => a
+                .bridges
+                .iter()
+                .filter_map(|&j| self.scenario.actor.get(j).map(|b| (j, b.hosts)))
+                .flat_map(|(j, n)| self.hosts(&format!("a{j}"), n))
+                .collect(),
+            _ => self.hosts(&format!("a{i}"), a.hosts),
+        };
+        let fleet = (a.kind == Kind::TargetList).then(|| format!("{name}-f{i}"));
+        let class = match a.kind {
+            Kind::TargetList => "target_list",
+            Kind::NewsSpike => "news_spike",
+            _ => "hub",
+        };
+        let mut t = start;
+        for k in 0..a.agents.max(1) {
+            let begin = match a.kind {
+                // Far enough apart that no two agents meet on one host
+                // within the timing window, close enough to share hours.
+                Kind::TargetList => {
+                    if k > 0 {
+                        t += rng.range(15 * 60, 20 * 60);
+                    }
+                    t
+                }
+                Kind::NewsSpike => start + rng.range(0, span.min(6 * 3600)),
+                _ => start,
+            };
+            let mut hosts = shared.clone();
+            shuffle(&mut hosts, rng);
+            let records = a.records.max(hosts.len());
+            let spec = RunSpec {
+                truth: Truth {
+                    label: Some("agent"),
+                    actor: "agent",
+                    class: class.into(),
+                    run: format!("{name}-a{i}-{k}"),
+                    swarm: Some("none".into()),
+                    fleet: fleet.clone(),
+                },
+                client: agent_client(rng),
+                start: begin,
+                pace: a.pace.unwrap_or(Pace::Model),
+                gaps: None,
+                hosts: spread(&hosts, records),
+                uses: read_then_attack(records, hosts.len()),
+                fixed: None,
+                harness: Vec::new(),
+                shapes: Vec::new(),
+                scope: format!("{i}:{k}"),
+                sink_scope: None,
+                tag: a.tag,
+                retry: a.retry,
+                writes: None,
+                fetches: None,
+                adapt: true,
+                habits: habits(a, format!("{i}:{k}")),
+            };
+            self.run(spec, rng);
         }
     }
 
@@ -1183,6 +1254,14 @@ fn harness_names(rng: &mut Rng, n: usize) -> Vec<String> {
         out.push(left.remove(rng.below(left.len())).to_string());
     }
     out
+}
+
+/// `v` in a seeded order.
+fn shuffle<T>(v: &mut [T], rng: &mut Rng) {
+    for k in (1..v.len()).rev() {
+        let j = rng.below(k + 1);
+        v.swap(k, j);
+    }
 }
 
 /// `n` hosts drawn round-robin from `hosts`, so each host gets a share.

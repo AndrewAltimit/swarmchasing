@@ -453,7 +453,7 @@ try {
       hostile ||= document.getElementById("context").textContent.includes("<svg");
     }
     for (const b of document.querySelectorAll("#viz-panel .chart-tools button")) b.click();
-    // Drafting loads the tools module and re-runs the analysis there.
+    // Drafting reads the analysis already held in the tools module.
     document.getElementById("draft-report").click();
     const drafted = () => /^# /.test(document.getElementById("report").textContent);
     for (let i = 0; i < 100 && !drafted(); i++) await wait(100);

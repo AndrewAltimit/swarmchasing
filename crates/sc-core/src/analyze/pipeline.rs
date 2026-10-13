@@ -168,6 +168,15 @@ pub(super) const PASSES: &[Pass] = &[
         cx.a.coactive_pairs = pairs;
         cx.a.multiplicity.push(family);
     }),
+    pass("co_target", &["number"], |cx| {
+        let s = &cx.rules.set;
+        cx.a.cotarget_pairs = crate::cotarget::cotarget_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.co_target,
+        );
+    }),
     pass(
         "fleets",
         &[
@@ -177,6 +186,7 @@ pub(super) const PASSES: &[Pass] = &[
             "trim_layers",
             "scaffolds",
             "co_activity",
+            "co_target",
         ],
         fleets,
     ),
@@ -411,6 +421,7 @@ fn fleets(cx: &mut AnalysisCtx) {
             common_features: &a.common_features,
             scaffold_pairs: &a.scaffold_pairs,
             coactive_pairs: &a.coactive_pairs,
+            cotarget_pairs: &a.cotarget_pairs,
         },
         opts,
     );

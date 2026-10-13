@@ -1,5 +1,5 @@
 {
-  "rules_version": "2026-10-13.1",
+  "rules_version": "2026-10-13.2",
   "total": 393,
   "flagged": 310,
   "tier_counts": {
@@ -64868,373 +64868,86 @@
   ],
   "soft_links": [
     {
+      "a": "C1",
+      "b": "C2",
+      "kind": "co_activity",
+      "strength": 0.96,
+      "lr": 25.0,
+      "detail": "8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 5.0e-3: 2.1e-9 analytic, a share of 0.005 of 199 circular shifts; 0.01 such pairs expected among 2 tested), 1 on a clock hour: one dispatcher or scheduler may drive both"
+    },
+    {
       "a": "C17",
       "b": "C18",
       "kind": "scaffold",
-      "strength": 0.6,
+      "strength": 0.95,
+      "lr": 20.0,
       "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C17",
       "b": "C19",
       "kind": "scaffold",
-      "strength": 0.6,
+      "strength": 0.95,
+      "lr": 20.0,
       "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C18",
       "b": "C19",
       "kind": "scaffold",
-      "strength": 0.6,
+      "strength": 0.95,
+      "lr": 20.0,
       "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C42",
       "b": "C43",
       "kind": "scaffold",
-      "strength": 0.6,
+      "strength": 0.95,
+      "lr": 20.0,
       "detail": "similarity 1.00, 1 shared template(s), the rarest in 2 of 46 comparable clusters and 0 record(s) outside them, a base rate of 2.2e-2 (chance 4.9e-4 for the rarest of that many; 0.00 such pairs expected among 6 compared): relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
-    },
-    {
-      "a": "C1",
-      "b": "C2",
-      "kind": "co_activity",
-      "strength": 0.49499999999999994,
-      "detail": "8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 5.0e-3: 2.1e-9 analytic, a share of 0.005 of 199 circular shifts; 0.01 such pairs expected among 2 tested), 1 on a clock hour: one dispatcher or scheduler may drive both"
-    },
-    {
-      "a": "C7",
-      "b": "C50",
-      "kind": "callback_service",
-      "strength": 0.3,
-      "detail": "callback service: exfil.webhook_site"
-    },
-    {
-      "a": "C1",
-      "b": "C24",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C1",
-      "b": "C25",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C1",
-      "b": "C26",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C1",
-      "b": "C27",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C1",
-      "b": "C28",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C1",
-      "b": "C29",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C1",
-      "b": "C30",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C1",
-      "b": "C31",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C2",
-      "b": "C40",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: hexU.unsorted.noslash"
-    },
-    {
-      "a": "C4",
-      "b": "C41",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.noslash"
-    },
-    {
-      "a": "C9",
-      "b": "C10",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.sorted.noslash"
-    },
-    {
-      "a": "C9",
-      "b": "C39",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.sorted.noslash"
-    },
-    {
-      "a": "C10",
-      "b": "C39",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.sorted.noslash"
-    },
-    {
-      "a": "C17",
-      "b": "C18",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.unsorted.noslash"
-    },
-    {
-      "a": "C17",
-      "b": "C19",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.unsorted.noslash"
-    },
-    {
-      "a": "C18",
-      "b": "C19",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.unsorted.noslash"
-    },
-    {
-      "a": "C24",
-      "b": "C25",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C24",
-      "b": "C26",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C24",
-      "b": "C27",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C24",
-      "b": "C28",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C24",
-      "b": "C29",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C24",
-      "b": "C30",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C24",
-      "b": "C31",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C25",
-      "b": "C26",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C25",
-      "b": "C27",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C25",
-      "b": "C28",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C25",
-      "b": "C29",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C25",
-      "b": "C30",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C25",
-      "b": "C31",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C26",
-      "b": "C27",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C26",
-      "b": "C28",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C26",
-      "b": "C29",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C26",
-      "b": "C30",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C26",
-      "b": "C31",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C27",
-      "b": "C28",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C27",
-      "b": "C29",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C27",
-      "b": "C30",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C27",
-      "b": "C31",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C28",
-      "b": "C29",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C28",
-      "b": "C30",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C28",
-      "b": "C31",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C29",
-      "b": "C30",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C29",
-      "b": "C31",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
-    },
-    {
-      "a": "C30",
-      "b": "C31",
-      "kind": "encoding",
-      "strength": 0.2,
-      "detail": "encoding style: sp20.hexU.sorted.noslash"
     }
   ],
   "candidate_fleets": [
     {
       "id": "F1",
       "clusters": [
+        "C1",
+        "C2"
+      ],
+      "kinds": [
+        "co_activity"
+      ],
+      "links": 1,
+      "strength": 0.96,
+      "min_lr": 24.999999999999996,
+      "density": 1.0,
+      "cut_lr": 24.999999999999996,
+      "cut": [
+        "C2"
+      ]
+    },
+    {
+      "id": "F2",
+      "clusters": [
         "C17",
         "C18",
         "C19"
       ],
       "kinds": [
-        "encoding",
         "scaffold"
       ],
-      "links": 6,
-      "strength": 0.6799999999999999
+      "links": 3,
+      "strength": 0.95,
+      "min_lr": 19.999999999999996,
+      "density": 1.0,
+      "cut_lr": 399.9999999999999,
+      "cut": [
+        "C19"
+      ]
     },
     {
-      "id": "F2",
+      "id": "F3",
       "clusters": [
         "C42",
         "C43"
@@ -65243,7 +64956,13 @@
         "scaffold"
       ],
       "links": 1,
-      "strength": 0.6
+      "strength": 0.95,
+      "min_lr": 19.999999999999996,
+      "density": 1.0,
+      "cut_lr": 19.999999999999996,
+      "cut": [
+        "C43"
+      ]
     }
   ],
   "swarm_edges": [

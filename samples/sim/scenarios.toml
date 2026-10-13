@@ -503,3 +503,74 @@ palette_share = 0.3
 kind = "relay_readers"
 agents = 8
 records = 3
+
+# One operator handing one target list to three agents, each 15 to 20
+# minutes after the last in its own order: no lockstep, no shared inbox.
+[[scenario]]
+name = "target-list"
+seed = 131
+seeds = 4
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 5
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+# The hard negative: unrelated agents sent to one story's hosts within a few
+# hours, beside one operator's target list.
+[[scenario]]
+name = "news-spike-list"
+seed = 141
+seeds = 4
+[[scenario.actor]]
+kind = "news_spike"
+agents = 8
+records = 6
+hosts = 3
+palette_share = 0.3
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 5
+offset_hours = 8
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+# Two operators' target lists in the same hours and one unrelated agent
+# working both lists after them: a cluster tied to two fleets.
+[[scenario]]
+name = "hub"
+seed = 151
+seeds = 4
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 5
+palette_share = 0.3
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 5
+palette_share = 0.3
+[[scenario.actor]]
+kind = "hub"
+bridges = [0, 1]
+records = 20
+offset_hours = 1.17
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3

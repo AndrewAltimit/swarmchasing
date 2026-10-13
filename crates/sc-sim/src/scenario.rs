@@ -190,6 +190,17 @@ pub enum Kind {
     /// window), each route a separate tool with its own run tag, so the
     /// steps fall in separate clusters of one run.
     Escalator,
+    /// Several agents of one operator working one target list in the same
+    /// hours, each 15 to 20 minutes after the last, in its own order, with
+    /// its own client, inbox, tags and habits: one operator, no
+    /// interaction.
+    TargetList,
+    /// Unrelated agents sent to one family of hosts within a few hours, as
+    /// a news story or a disclosed flaw sends them: each its own operator.
+    NewsSpike,
+    /// One unrelated agent working the target lists of the actors it
+    /// `bridges` (by index) in their hours: a cluster tied to two fleets.
+    Hub,
 }
 
 impl Kind {
@@ -198,7 +209,12 @@ impl Kind {
     pub fn relates(self) -> bool {
         matches!(
             self,
-            Self::Swarm | Self::Fleet | Self::Scheduler | Self::Planter | Self::Mimic
+            Self::Swarm
+                | Self::Fleet
+                | Self::Scheduler
+                | Self::Planter
+                | Self::Mimic
+                | Self::TargetList
         )
     }
 }
@@ -248,6 +264,7 @@ pub struct Actor {
     #[serde(default)]
     pub copy_timing: bool,
     /// For a mimic: the fleets (by actor index) whose scaffolds it sends.
+    /// For a hub: the target-list actors (by index) whose hosts it works.
     #[serde(default)]
     pub bridges: Vec<usize>,
     /// For a fleet: hours between one agent's start and the next (26 by
