@@ -386,7 +386,7 @@ fn todo(c: &Case, claims: &[Claim], has_draft: bool) -> Vec<String> {
     }
     if c.status == CaseStatus::Open && c.sent.is_empty() {
         t.push(format!(
-            "draft reports: `swarmchase case report {} --audience provider|affected`",
+            "draft reports for every provider and affected contact: `swarmchase case draft {} --all`",
             c.id
         ));
     }

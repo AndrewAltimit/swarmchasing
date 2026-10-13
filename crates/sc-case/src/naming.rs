@@ -208,7 +208,11 @@ fn affected_endpoint<'a>(c: &'a Case, party: &str) -> Result<&'a CaseEndpoint> {
             party,
             e.state.label()
         ),
-        None => bail!("no endpoint `{party}` in case {}", c.id),
+        None => bail!(
+            "no endpoint `{party}` in case {}{}",
+            c.id,
+            crate::text::did_you_mean(party, c.endpoints.iter().map(|e| e.host.as_str()))
+        ),
     }
 }
 

@@ -66,6 +66,13 @@ pub fn case_dir(root: &Path, id: &str) -> Result<PathBuf> {
 
 pub fn load(root: &Path, id: &str) -> Result<Case> {
     let p = case_dir(root, id)?.join("case.toml");
+    if !p.is_file() {
+        bail!(
+            "no case at {}{}",
+            p.display(),
+            sc_case::text::did_you_mean(id, ids(root).iter().map(String::as_str))
+        );
+    }
     let text =
         std::fs::read_to_string(&p).with_context(|| format!("no case at {}", p.display()))?;
     Case::parse(&text).with_context(|| format!("parsing {}", p.display()))
@@ -136,6 +143,20 @@ impl<'a> Pinned<'a> {
 /// The case's analysis of the records `scope` allows, under its pinned rules.
 pub fn analysis(root: &Path, c: &Case, scope: &Scope) -> Result<Analysis> {
     Pinned::new(root, c)?.analysis(scope)
+}
+
+/// The IDs of the case directories under `root`, loadable or not.
+pub(crate) fn ids(root: &Path) -> Vec<String> {
+    let mut ids: Vec<String> = std::fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.join("case.toml").is_file())
+        .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .collect();
+    ids.sort();
+    ids
 }
 
 /// Cases that did not load: each one's ID and why.

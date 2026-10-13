@@ -78,6 +78,109 @@ fn case_from_a_cluster_key_to_a_verified_bundle() {
         r.stderr
     );
     assert_eq!(std::fs::read_to_string(&toml_path).unwrap(), toml);
+    // A near miss names the host it probably meant.
+    let typo = format!("{}x", hs[0]);
+    let r = run(
+        s.path(),
+        &[
+            "case",
+            "--data",
+            data,
+            "endpoint",
+            "it-1",
+            &typo,
+            "historical",
+        ],
+    );
+    assert!(
+        !r.ok && r.stderr.contains(&format!("did you mean `{}`?", hs[0])),
+        "{}",
+        r.stderr
+    );
+
+    // Drafts for every contact whose role implies an audience; the send is
+    // recorded from the draft itself.
+    let operator = format!("security@{}", hs[0]);
+    for (party, address) in [
+        ("operator", operator.as_str()),
+        ("registrar", "abuse@registrar.example"),
+    ] {
+        ok(
+            s.path(),
+            &[
+                "case",
+                "--data",
+                data,
+                "contact",
+                "add",
+                "it-1",
+                "--party",
+                party,
+                "--org",
+                "Example",
+                "--channel",
+                "email",
+                "--address",
+                address,
+                "--source",
+                "https://example.org/contact",
+                "--endpoint",
+                &hs[0],
+            ],
+        );
+    }
+    let r = ok(
+        s.path(),
+        &["case", "--data", data, "draft", "it-1", "--all"],
+    );
+    assert!(
+        r.stdout
+            .contains("skipped abuse@registrar.example (registrar): draft by hand"),
+        "{}",
+        r.stdout
+    );
+    let eml = r
+        .stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("wrote "))
+        .and_then(|l| l.split(" (not sent").next())
+        .unwrap_or_else(|| panic!("no draft in\n{}", r.stdout))
+        .to_string();
+    assert!(eml.ends_with(".eml") && eml.contains("affected"), "{eml}");
+    assert_eq!(r.stdout.matches("wrote ").count(), 1, "{}", r.stdout);
+    ok(
+        s.path(),
+        &["case", "--data", data, "sent", "it-1", "--draft", &eml],
+    );
+    let toml = std::fs::read_to_string(&toml_path).unwrap();
+    assert!(
+        toml.contains(&format!("recipient = \"{operator}\"")),
+        "{toml}"
+    );
+    assert!(toml.contains("channel = \"email\""), "{toml}");
+    // Nothing left to draft for: the operator was sent to.
+    let r = run(
+        s.path(),
+        &["case", "--data", data, "draft", "it-1", "--all"],
+    );
+    assert!(!r.ok, "{}", r.stdout);
+    assert!(r.stdout.contains("already sent"), "{}", r.stdout);
+    // A draft for someone else is refused.
+    let r = run(
+        s.path(),
+        &[
+            "case",
+            "--data",
+            data,
+            "sent",
+            "it-1",
+            "--draft",
+            &eml,
+            "--to",
+            "other@example.org",
+        ],
+    );
+    assert!(!r.ok && r.stderr.contains("the draft"), "{}", r.stderr);
 
     let r = ok(s.path(), &["case", "--data", data, "bundle", "it-1"]);
     let bundle = r
@@ -95,7 +198,9 @@ fn case_from_a_cluster_key_to_a_verified_bundle() {
         &["case", "--data", data, "rename", "it-1", "it-2"],
     );
     ok(s.path(), &["case", "--data", data, "status", "it-2"]);
-    assert!(!run(s.path(), &["case", "--data", data, "status", "it-1"]).ok);
+    let r = run(s.path(), &["case", "--data", data, "status", "it-1"]);
+    assert!(!r.ok);
+    assert!(r.stderr.contains("did you mean `it-2`?"), "{}", r.stderr);
 }
 
 #[test]

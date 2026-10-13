@@ -53,7 +53,8 @@ pub(crate) fn draft(
     else {
         let known: Vec<&str> = c.contacts.iter().map(|x| x.address.as_str()).collect();
         bail!(
-            "`{to}` is not a contact in case {id} (known: {}); add it to case.toml or run `case contacts`",
+            "`{to}` is not a contact in case {id}{} (known: {}); add it to case.toml or run `case contacts`",
+            sc_case::text::did_you_mean(to, known.iter().copied()),
             if known.is_empty() {
                 "none".into()
             } else {

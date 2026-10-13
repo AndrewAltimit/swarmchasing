@@ -64,7 +64,10 @@ pub enum CaseCmd {
     /// Add records to a case (new activity, a linked cluster).
     Add(open::AddArgs),
     /// List cases, or show one with what it still needs.
-    Status { id: Option<String> },
+    Status {
+        /// A case ID; without one, every case is listed.
+        id: Option<String>,
+    },
     /// Classify affected endpoints, one or more hosts at a time.
     Endpoint(endpoints::EndpointArgs),
     /// Record that no contact could be found for a party: an endpoint's
@@ -78,11 +81,15 @@ pub enum CaseCmd {
     /// Record that you re-read the current notice draft, by its hash. `notice
     /// add` needs a re-read of the exact draft, an hour or more after it was
     /// written.
-    Reread { id: String },
+    Reread {
+        /// The case ID: its directory under <data>/cases/ (`case status` lists them).
+        id: String,
+    },
     /// Print the checklist `notice add` runs, or once the indicator notice
     /// is added the one `notice update --naming` runs, with both stages'
     /// clocks and review state.
     Checklist {
+        /// The case ID: its directory under <data>/cases/ (`case status` lists them).
         id: String,
         /// The committed notices directory (for the naming checklist).
         #[arg(long, default_value = "notices")]
@@ -103,7 +110,12 @@ pub enum CaseCmd {
     /// Show each operator's naming clock, or decide never to name one.
     Naming(review::NamingArgs),
     /// Give a case a new ID. A case with a published notice keeps its ID.
-    Rename { id: String, new_id: String },
+    Rename {
+        /// The case ID: its directory under <data>/cases/ (`case status` lists them).
+        id: String,
+        /// The new ID: lowercase letters, digits and hyphens.
+        new_id: String,
+    },
     /// Record an attribution claim established by case work.
     Claim(attribution::ClaimArgs),
     /// Show each cluster's agent grade (L0..L4) with its signals,
@@ -127,6 +139,7 @@ pub enum CaseCmd {
     /// Write an evidence bundle: records, analysis, reproducibility stamp and
     /// a SHA-256 manifest, signed when SWARMCHASE_SIGNING_KEY is set.
     Bundle {
+        /// The case ID: its directory under <data>/cases/ (`case status` lists them).
         id: String,
         #[arg(long)]
         rules: Option<PathBuf>,
@@ -156,7 +169,12 @@ pub enum CaseCmd {
         cmd: EvidenceCmd,
     },
     /// Append a dated entry to the decision log.
-    Note { id: String, text: String },
+    Note {
+        /// The case ID: its directory under <data>/cases/ (`case status` lists them).
+        id: String,
+        /// The entry, as one argument (quote it).
+        text: String,
+    },
     /// Treat soft-linked clusters as one fleet, or split one off again: the
     /// admin's decision, logged with the soft links it rests on. Reports and
     /// exports then group the clusters. Never automatic.
@@ -167,6 +185,7 @@ pub enum CaseCmd {
     /// Show the rules the case is pinned to, the current rules, and which
     /// records would change tier; with --update, re-pin to the current rules.
     Rules {
+        /// The case ID: its directory under <data>/cases/ (`case status` lists them).
         id: String,
         #[arg(long)]
         update: bool,
@@ -179,6 +198,7 @@ pub enum CaseCmd {
     /// naming update into <case>/naming.md. Review and edit it, then
     /// `swarmchase notice add <id>` (or `notice update <id> --naming`).
     Notice {
+        /// The case ID: its directory under <data>/cases/ (`case status` lists them).
         id: String,
         /// Replace an existing draft (and any edits made to it).
         #[arg(long)]

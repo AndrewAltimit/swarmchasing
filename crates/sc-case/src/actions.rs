@@ -32,7 +32,10 @@ pub fn classify(
             .position(|e| e.host.eq_ignore_ascii_case(host))
         {
             Some(i) => found.push(i),
-            None => bail!("no endpoint `{host}` in case {id}"),
+            None => bail!(
+                "no endpoint `{host}` in case {id}{}",
+                crate::text::did_you_mean(host, c.endpoints.iter().map(|e| e.host.as_str()))
+            ),
         }
     }
     if basis.is_some() && state != EndpointState::Compromised {
@@ -92,7 +95,11 @@ pub fn describe(c: &mut Case, hosts: &[String], sector: &str, today: &str) -> Re
     }
     for host in hosts {
         if c.endpoint(host).is_none() {
-            bail!("no endpoint `{host}` in case {}", c.id);
+            bail!(
+                "no endpoint `{host}` in case {}{}",
+                c.id,
+                crate::text::did_you_mean(host, c.endpoints.iter().map(|e| e.host.as_str()))
+            );
         }
     }
     for host in hosts {
@@ -445,7 +452,11 @@ pub fn add_contact(c: &mut Case, x: ContactInput, today: &str) -> Result<()> {
     if let Some(h) = &x.endpoint
         && c.endpoint(h).is_none()
     {
-        bail!("no endpoint `{h}` in case {}", c.id);
+        bail!(
+            "no endpoint `{h}` in case {}{}",
+            c.id,
+            crate::text::did_you_mean(h, c.endpoints.iter().map(|e| e.host.as_str()))
+        );
     }
     if c.contacts
         .iter()
@@ -480,7 +491,11 @@ pub fn remove_contact(c: &mut Case, address: &str, today: &str) -> Result<()> {
     c.contacts
         .retain(|x| !x.address.eq_ignore_ascii_case(address));
     if before == c.contacts.len() {
-        bail!("`{address}` is not a contact in case {}", c.id);
+        bail!(
+            "`{address}` is not a contact in case {}{}",
+            c.id,
+            crate::text::did_you_mean(address, c.contacts.iter().map(|x| x.address.as_str()))
+        );
     }
     c.log(today, format!("contact removed: {address}"));
     Ok(())
