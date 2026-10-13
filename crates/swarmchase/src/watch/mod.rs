@@ -61,6 +61,7 @@ pub(crate) mod attention;
 pub(crate) mod autonomy;
 pub(crate) mod cases;
 pub(crate) mod digest;
+pub(crate) mod fleet_threads;
 pub(crate) mod ledger;
 pub(crate) mod platform;
 pub(crate) mod priority;
@@ -466,6 +467,7 @@ fn watch(
     let ledger_path = out.join(ledger::FILE);
     let mut ledger: ledger::Ledger = read_json(&ledger_path)?.unwrap_or_else(ledger::Ledger::new);
     let observed = ledger.observe(&a, &stamp, now.timestamp(), &new_ids);
+    let fleets = ledger.observe_fleets(&a, &observed, &stamp, now.timestamp());
     // New or escalated is decided against each cluster's own thread, so a
     // cluster whose key changed is not reported as new.
     let base = digest::baseline(&prev, &next, &ledger, &observed, &stamp);
@@ -519,6 +521,9 @@ fn watch(
         attention: &queue,
         autonomy: &decisions,
     });
+    digest
+        .text
+        .push_str(&fleet_threads::section(&a, &ledger, &fleets));
     digest
         .text
         .push_str(&crate::canary::digest_section(&canaries));

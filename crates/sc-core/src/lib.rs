@@ -25,6 +25,7 @@ pub mod eval;
 pub mod extract;
 pub mod fanout;
 pub mod fingerprint;
+pub mod fleet_track;
 pub mod fleets;
 pub mod identity;
 pub mod ingest;
