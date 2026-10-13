@@ -11,8 +11,9 @@ use crate::rules::{Linking, Rules};
 use crate::timing::{Span, TimeBasis, request_like, rhythm_of, stale_dates, timing};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-/// Unflagged requests by target host: the context path hints read around a
-/// cluster (a recon opening is rarely flagged itself).
+/// Unflagged requests by target host, each host's in time order: the
+/// context path hints read around a cluster (a recon opening is rarely
+/// flagged itself).
 pub(super) fn unflagged_by_host(results: &[ObsResult]) -> HashMap<&str, Vec<usize>> {
     let mut unflagged_by_host: HashMap<&str, Vec<usize>> = HashMap::new();
     for (i, r) in results.iter().enumerate() {
@@ -22,6 +23,9 @@ pub(super) fn unflagged_by_host(results: &[ObsResult]) -> HashMap<&str, Vec<usiz
         {
             unflagged_by_host.entry(h).or_default().push(i);
         }
+    }
+    for v in unflagged_by_host.values_mut() {
+        crate::sort::by_key(v, |&i| (results[i].obs.ts, i));
     }
     unflagged_by_host
 }
@@ -363,6 +367,14 @@ pub(super) fn paths(
     );
 }
 
+/// The indexes of `by_time` (in order of `ts`) timed from `from` to `to`
+/// inclusive.
+fn within(by_time: &[usize], ts: impl Fn(usize) -> i64, from: i64, to: i64) -> &[usize] {
+    let lo = by_time.partition_point(|&i| ts(i) < from);
+    let hi = by_time.partition_point(|&i| ts(i) <= to);
+    &by_time[lo..hi.max(lo)]
+}
+
 fn path_stats(
     results: &[ObsResult],
     members: &[usize],
@@ -379,12 +391,8 @@ fn path_stats(
             .filter_map(|&i| results[i].target_host.as_deref())
             .collect();
         for h in hosts {
-            for &i in unflagged_by_host.get(h).into_iter().flatten() {
-                let ts = results[i].obs.ts;
-                if ts >= start - window && ts <= end {
-                    idxs.insert(i);
-                }
-            }
+            let on_host = unflagged_by_host.get(h).map_or(&[][..], Vec::as_slice);
+            idxs.extend(within(on_host, |i| results[i].obs.ts, start - window, end));
         }
     }
     let reqs: Vec<PathRequest> = idxs
@@ -424,4 +432,24 @@ fn path_stats(
         }
     }
     stats
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn within_slices_a_time_ordered_list_by_time() {
+        let times = [50, 10, 30, 30, 0, 70];
+        let ts = |i: usize| times[i];
+        let mut by_time: Vec<usize> = (0..times.len()).collect();
+        crate::sort::by_key(&mut by_time, |&i| (times[i], i));
+        assert_eq!(by_time, [4, 1, 2, 3, 0, 5]);
+        assert_eq!(within(&by_time, ts, 10, 50), [1, 2, 3, 0]);
+        assert_eq!(within(&by_time, ts, 11, 49), [2, 3]);
+        assert_eq!(within(&by_time, ts, 30, 30), [2, 3]);
+        assert!(within(&by_time, ts, 31, 49).is_empty());
+        assert!(within(&by_time, ts, 60, 20).is_empty());
+        assert_eq!(within(&by_time, ts, -5, 100), by_time.as_slice());
+    }
 }
