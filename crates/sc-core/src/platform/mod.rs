@@ -1,6 +1,6 @@
 //! Coordinated-account swarms on public platforms (GitHub, npm, PyPI,
 //! Hugging Face, Go modules, Wikimedia wikis, Hacker News, NuGet,
-//! Packagist, RubyGems, crates.io, CVE records): many accounts acting
+//! Packagist, RubyGems, crates.io, CVE records, Bluesky): many accounts acting
 //! alike, found in public event archives, event streams and registry
 //! metadata.
 //!
@@ -69,6 +69,8 @@ pub enum Platform {
     Crates,
     /// CVE records and security advisories.
     Cve,
+    /// Bluesky posts, from Jetstream.
+    Bluesky,
 }
 
 impl Platform {
@@ -86,6 +88,7 @@ impl Platform {
             Self::Rubygems => "rubygems",
             Self::Crates => "crates",
             Self::Cve => "cve",
+            Self::Bluesky => "bluesky",
         }
     }
 }
@@ -175,7 +178,8 @@ pub struct PlatformEvent {
     /// `pypi:<name>@<version>`, `hf:<kind>:<id>`, `wm:<wiki>:<revision>`,
     /// `go:<module>@<version>`, `hn:<item>`, `nuget:<id>@<version>`,
     /// `packagist:<name>@<time>`, `gem:<name>@<version>`,
-    /// `crate:<name>@<version>`, `ghsa:<id>`, `cve:<id>`.
+    /// `crate:<name>@<version>`, `ghsa:<id>`, `cve:<id>`,
+    /// `bsky:<account hash>/<rkey>`.
     pub id: String,
     pub platform: Platform,
     pub action: Action,

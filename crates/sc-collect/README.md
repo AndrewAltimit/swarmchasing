@@ -5,7 +5,7 @@ Passive collectors for public records. They return [`sc-core`](../sc-core/README
 - web archive indexes: the Wayback Machine, Arquivo.pt and Common Crawl CDX, and Memento timemaps;
 - agent protocol footprints: Wayback captures of agent cards and signature key directories;
 - scan services: urlquery.net and urlscan.io search;
-- event streams and registries: GH Archive, Wikimedia EventStreams, Hacker News, npm search, PyPI feeds and the MCP Registry;
+- event streams and registries: GH Archive, Wikimedia EventStreams, Hacker News, Bluesky's Jetstream, npm search, PyPI feeds and the MCP Registry;
 - certificates: crt.sh, and CT logs read directly;
 - contacts: security.txt and RDAP.
 
@@ -95,7 +95,7 @@ Hacker News walks its search index back from the pull's start to the checkpoint,
 
 ### Platform events
 
-[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (a kind in `PLATFORM_KINDS`: `gharchive`, `npm`, `pypi`, `huggingface`, `golang`, `wikimedia`, `hackernews`, `nuget`, `packagist`, `rubygems`, `crates`, `cve`, `osv`, `wikimedia-ai-cleanup`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped.
+[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (a kind in `PLATFORM_KINDS`: `gharchive`, `npm`, `pypi`, `huggingface`, `golang`, `wikimedia`, `hackernews`, `nuget`, `packagist`, `rubygems`, `crates`, `cve`, `osv`, `wikimedia-ai-cleanup`, `bluesky`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped.
 
 A reference source (`osv`, `wikimedia-ai-cleanup`) returns `PlatformPull::labels` instead of events: a `TargetLabel` names a target on a platform (`label_key` normalises it as events name it), what it says (`osv-malicious`, `wiki-ai-cleanup`) and the record or category that says so.
 
@@ -152,6 +152,7 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`wikimedia.rs`](src/wikimedia.rs) | Wikimedia EventStreams: an SSE reader, added external links as records, edits as platform events; pages tagged as suspected AI-generated text as labels. |
 | [`registries.rs`](src/registries.rs) | NuGet's catalog, Packagist's change feed, RubyGems' newest gems and crates.io's newest crates as platform events. |
 | [`cve.rs`](src/cve.rs) | CVE records and GitHub advisories as platform events, grouped by the repository their references name. |
+| [`bluesky.rs`](src/bluesky.rs) | Bluesky posts from Jetstream over one WebSocket connection, a sampled stretch a run, with account age from the PLC directory. |
 | [`osv.rs`](src/osv.rs) | OSV malicious-package records as labels on package targets (`TargetLabel`), joined to candidates by the watch. |
 | [`hackernews.rs`](src/hackernews.rs) | Hacker News search index: links as records, stories and comments as platform events, account age from profiles. |
 | [`wellknown.rs`](src/wellknown.rs) | Agent protocol footprints in the Wayback index. |

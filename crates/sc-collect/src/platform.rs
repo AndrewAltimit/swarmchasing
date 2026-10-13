@@ -67,6 +67,7 @@ pub const PLATFORM_KINDS: &[&str] = &[
     "cve",
     "osv",
     "wikimedia-ai-cleanup",
+    "bluesky",
 ];
 
 /// A platform source in the watchlist (`[[platform.source]]`).
@@ -78,7 +79,7 @@ pub struct PlatformSource {
     /// Events one pull keeps at most.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_events: Option<usize>,
-    /// Account-age lookups one pull makes at most (`hackernews`).
+    /// Account-age lookups one pull makes at most (`hackernews`, `bluesky`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_lookups: Option<usize>,
     #[serde(flatten)]
@@ -201,6 +202,14 @@ pub fn pull_platform(
         "golang" => pull_golang(client, &src.query, mark, max),
         "cve" => crate::cve::pull_platform(client, &src.query, mark, rules, max),
         "osv" => crate::osv::pull_labels(client, &src.query, mark),
+        "bluesky" => crate::bluesky::pull_platform(
+            client,
+            &src.query,
+            mark,
+            rules,
+            max,
+            src.max_lookups.unwrap_or(crate::bluesky::DEFAULT_LOOKUPS),
+        ),
         "wikimedia-ai-cleanup" => crate::wikimedia::pull_ai_cleanup(client, &src.query, mark),
         "hackernews" => crate::hackernews::pull_platform(
             client,

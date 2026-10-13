@@ -596,6 +596,35 @@ endpoint = "unreviewed"
 pattern = "*"
 scan = 6                  # requests of 100 advisories per run
 
+# Rationale: agent swarms told to promote, argue or "prove reach" post
+# near-identical replies and posts from fresh accounts, many at once, often
+# into one thread. Bluesky's Jetstream relays every public post as it is
+# made; the DID becomes a keyed hash, the text a slotted sketch, and a
+# reply's target is its thread's root post (whose author is the target's
+# owner). The stream carries tens of posts a second, so a run reads a
+# sample: the newest half hour of stream time, read in at most `scan`
+# wall-clock minutes; the digest shows minutes read against minutes since
+# the last run. Account age comes from the PLC directory's audit log, only
+# for accounts whose text a group could form around, at most `max_lookups`
+# a run. Posts deleted during the read are dropped; no text, handle or DID
+# is kept. Noise: memes and trending replies many people type alike, and
+# reply guys on one celebrity's thread (one owner, established accounts).
+# Terms: Jetstream (https://github.com/bluesky-social/jetstream) is a
+# public service with no authentication or published rate limit; one
+# connection a run. Bluesky's developer guidelines
+# (https://docs.bsky.app/docs/support/developer-guidelines) ask for respect
+# of deletions and privacy. The PLC directory (https://web.plc.directory/)
+# is the public registry of did:plc identities.
+[[platform.source]]
+name = "bluesky-posts"
+kind = "bluesky"
+endpoint = "jetstream2.us-east.bsky.network"
+pattern = "*"
+scan = 3                  # wall-clock minutes per run
+max_mb = 256              # stream bytes per run
+max_events = 150000
+max_lookups = 40          # account-age lookups per run
+
 # Rationale: reference data, not events. A package flood is worth more
 # once its packages are known to be malicious: OSV's malicious-package
 # records (`MAL-` ids, from OpenSSF's malicious-packages project) name the

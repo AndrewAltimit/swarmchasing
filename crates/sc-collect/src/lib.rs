@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 
 mod arquivo;
 pub mod asn;
+pub mod bluesky;
 mod cache;
 mod client;
 mod commoncrawl;

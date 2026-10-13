@@ -53,6 +53,9 @@ ed25519-dalek = { version = "2", default-features = false }
 # IODEF intake (sc-inbox): a pull reader, no DTD processing, no entity
 # expansion beyond the predefined ones.
 quick-xml = { version = "0.41", default-features = false }
+# Bluesky Jetstream (sc-collect): a blocking WebSocket client over the same
+# rustls and webpki roots reqwest uses.
+tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
 
 [profile.release]
 lto = true
