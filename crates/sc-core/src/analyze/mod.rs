@@ -165,6 +165,15 @@ pub struct Cluster {
     /// scored, never linked on.
     #[serde(default, skip_serializing_if = "crate::scope::Scope::is_default")]
     pub scope: crate::scope::Scope,
+    /// Declared agent identities of the members, checked against the
+    /// providers' published ranges and keys ([`crate::identity`]). Filled by
+    /// [`crate::identity::annotate`], not by the pipeline: it needs data the
+    /// caller holds. Descriptive: never scored, never linked on.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::identity::ClusterIdentity::is_empty"
+    )]
+    pub identity: crate::identity::ClusterIdentity,
 }
 
 /// What the members' targets say about the agent's knowledge

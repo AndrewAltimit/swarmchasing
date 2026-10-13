@@ -279,6 +279,22 @@ In a public notice, a developer below shared identifiers is named only as the pa
 
 Reports list each claim with its layer, label and tag, and add a Conclusion line for each developer named through the gate, with the strongest likelihood word its label allows. Harness and model-family candidates appear ranked in private reports and never in public. A model-family claim needs the method's held-out accuracy and corpus size, or it is refused.
 
+## Declared agent identity
+
+Agent products declare themselves in the user agent, and some sign their requests (Web Bot Auth). [`identity/`](../crates/sc-core/src/identity/mod.rs) reads each record's declaration against the address-range files and signing keys the provider publishes, held from the addresses in [`declared-agents.toml`](../declared-agents.toml) ([FM-7.11](manual/07-attribution.md#fm-711-declared-agent-identity), [FM-7.13](manual/07-attribution.md#fm-713-published-address-ranges)). Each record gets one class, the strongest that holds:
+
+| Class | What holds |
+|---|---|
+| `signature_verified` | An Ed25519 Web Bot Auth signature verifies, in time, with a key from a held directory. |
+| `ip_verified` | A declared product, from an address in its provider's range file. |
+| `in_range` | No declaration and no signature, from an address in a held range file. |
+| `spoofed` | A declared product from outside a range file the provider presents as complete, with no signature or a failed one. |
+| `signature_failed` | A signature that is malformed, out of time at the record's timestamp, or does not verify. |
+| `signature_present` | A signature that cannot be checked: no directory held for its signer, a rotated key, an unsupported algorithm. |
+| `claimed` | A declared product and nothing to check it against. |
+
+The analysis commands give each cluster an identity line (`identity` in the analysis JSON). It is descriptive: it changes no score, tier or link. The three verified classes reach `provider_infrastructure` evidence; case notes print the developer claim they support as a `case claim` command, and nothing is claimed until the admin runs it. On the agent grade, a verified identity is a signal for L1 (`verified_platform`): it shows the provider's platform sent the request, which a user directing a fetch tool also produces, so it lifts L0 to L1 and nothing higher. A spoofed identity is a counter-signal (`spoofed_identity`). Reports to affected operators and public notices carry none of it. Without range files held, a user agent stays a claim and nothing is called spoofed.
+
 ## Agent likelihood
 
 A tier says attack payloads were present. It does not say an AI agent sent them: a penetration tester or a conventional scanner sending the same payloads through the same relays leaves the same records. [`agentness.rs`](../crates/sc-core/src/agentness.rs) grades each cluster on a separate ladder ([FM-7.10](manual/07-attribution.md#fm-710-agent-likelihood)). The grade is set by the strongest **combination** of signals the cluster shows, never by a sum: many weak signals of one rung do not reach the next.
@@ -302,7 +318,7 @@ Prose counts when a cluster has at least two prose values, or one in a language 
 - a working-hours rhythm with slow pace (no probe chain faster than slow pace, and a median gap above `chains.model_pace_max_secs`) stops at L2: possibly a person working with a model's help;
 - any other working-hours rhythm stops at L3, since an unattended fleet need not keep office hours.
 
-**Counter-signals** are listed beside the signals and never move the grade: declared testing, benchmark or practice targets, and a probe chain at tool pace with no change after errors, which is how a scanner runs its list. An auto-submitter (cross-service fan-out on ordinary links around the cluster too) is listed as a counter-signal in place of the cross-service signal, which then does not count. A working-hours rhythm is listed as a counter-signal too, besides capping.
+**Counter-signals** are listed beside the signals and never move the grade: declared testing, benchmark or practice targets, a declared agent product from outside its provider's published ranges ([declared agent identity](#declared-agent-identity)), and a probe chain at tool pace with no change after errors, which is how a scanner runs its list. An auto-submitter (cross-service fan-out on ordinary links around the cluster too) is listed as a counter-signal in place of the cross-service signal, which then does not count. A working-hours rhythm is listed as a counter-signal too, besides capping.
 
 The grade is descriptive. It changes no score, tier or link, and it has no held-out measurement. Internal and provider reports carry a section, *Why we think this is an agent*, listing each cluster's grade, signals, counter-signals and caps, and the case decision when there is one. A provider report leaves out the decision's basis and the declared-testing counter-signal, which stay in case notes like the declaration itself. Reports to affected operators carry none of it. A public notice never prints a grade: when the strongest grade (or the case decision) is L1 or below, its summary adds that the payloads alone do not show what sent them.
 

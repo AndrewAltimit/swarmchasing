@@ -25,6 +25,7 @@ What each part does and how it is configured.
 | [`reference/watch.md`](reference/watch.md) | The data directory, incremental collection, the digest, retention, reviewing leads. |
 | [`reference/cases.md`](reference/cases.md) | Case files: `case.toml`, every `case` subcommand, contacts, drafts, bundles, pinned rules, STIX and MISP exports, incident drafts, operator evidence. |
 | [`reference/notices.md`](reference/notices.md) | Drafting, adding and updating notices; what they withhold; lint and build. |
+| [`reference/identity.md`](reference/identity.md) | Declared agent identity: the catalog, `identity refresh` and `check`, the classes, report lines and suggested claims. |
 | [`reference/evaluation.md`](reference/evaluation.md) | `swarmchase eval`, the CI eval gate and its floors, the held-out measurement. |
 | [`reference/browser-toolkit.md`](reference/browser-toolkit.md) | The Pages site: how it is built, each page, the workbench, and how it keeps payloads inert. |
 | [`reference/configuration.md`](reference/configuration.md) | `env.list`, environment variables, the urlquery.net key and terms. |

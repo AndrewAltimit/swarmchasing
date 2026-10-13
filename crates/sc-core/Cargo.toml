@@ -12,7 +12,15 @@ autotests = false
 name = "integration"
 path = "tests/integration.rs"
 
+# `signatures`: verify Web Bot Auth (RFC 9421 Ed25519) signatures in
+# `identity`. Off by default so the browser engine module stays small; the CLI
+# and the browser tools module turn it on. Without it a signature is reported
+# as present and unverified.
+[features]
+signatures = ["dep:ed25519-dalek"]
+
 [dependencies]
+ed25519-dalek = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true

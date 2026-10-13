@@ -46,6 +46,8 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 | `verify_bundle(records_ndjson, analysis_json, stamp_json, rules_json, claims_json)` | Tools. Re-runs an evidence bundle's analysis and compares it, and the bundle's own `analysis.json`, with its stamp, through [`sc-case`](../sc-case/README.md) as `swarmchase case verify` does, and adds the attribution layers. The page checks the manifest hashes itself with Web Crypto. |
 | `defang(text)` | The text with URLs defanged. |
 | `parse_security_txt(text)` | Tools. The parsed `security.txt` fields. |
+| `identity_catalog()` | Tools. The declared-agent catalog, with each range file's and directory's URL. |
+| `identity_check(input, format, map, files_json)` | Tools. Each record's declared identity; `files_json` holds downloaded range files and directories by catalog id ([identity](../../docs/reference/identity.md#in-the-browser)). |
 
 Clusters in an analysis carry a number (`id`, `C1`) and a stable `key` (`k-3f9a2c1b`); its records may carry `ts_kind` and `target_asn` (see [`sc-core`](../sc-core/README.md#concepts)).
 

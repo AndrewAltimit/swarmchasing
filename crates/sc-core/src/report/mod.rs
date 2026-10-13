@@ -3,7 +3,8 @@
 //! `audience` holds the wording that differs per reader, `hints` the
 //! one-line cluster hints. Each section is written by its own module:
 //! `overview` (header, summary, indicators), `sections` (attribution and
-//! the endpoint table), `agentness` (agent grades), `timeline` (each
+//! the endpoint table), `identity` (declared agent identity), `agentness`
+//! (agent grades), `timeline` (each
 //! cluster and its hints), `pairs` (hints tying clusters together) and
 //! `records` (representative records, method). This module selects the
 //! clusters and lays the sections out in order.
@@ -11,6 +12,7 @@
 mod agentness;
 mod audience;
 mod hints;
+mod identity;
 mod overview;
 mod pairs;
 mod records;
@@ -209,6 +211,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
         opts,
         r.clusters.len() == 1,
     );
+    identity::section(&mut s, &r.clusters, opts);
     agentness::section(&mut s, &r.clusters, opts);
 
     if opts.audience != Audience::Provider {

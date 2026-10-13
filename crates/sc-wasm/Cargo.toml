@@ -15,7 +15,8 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["engine"]
 engine = []
-tools = []
+# The tools module verifies Web Bot Auth signatures (identity checks).
+tools = ["sc-core/signatures"]
 
 [dependencies]
 sc-case.workspace = true

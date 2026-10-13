@@ -139,3 +139,4 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`ctlog.rs`](src/ctlog.rs) | The CT log source and its SAN parser. |
 | [`crtsh.rs`](src/crtsh.rs), [`securitytxt.rs`](src/securitytxt.rs), [`rdap.rs`](src/rdap.rs) | Lookups: certificates, security.txt, RDAP. |
 | [`psl.rs`](src/psl.rs), [`asn.rs`](src/asn.rs) | Registrable domains; the IP-to-ASN table download. |
+| [`identity.rs`](src/identity.rs) | Providers' published range files and key directories, from the catalog's URLs only ([identity](../../docs/reference/identity.md)). |

@@ -78,6 +78,7 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |
 | `collect mcp <substrings>` | Official MCP Registry servers whose name or declared URLs match (`*` for all), updated since `--from`. Metadata only; no server is contacted. |
 | `asn fetch`, `asn lookup <ip>…` | The offline IP-to-ASN table in `<data>/asn/`. |
+| `identity refresh`, `identity status`, `identity check <input>` | Providers' published agent ranges and keys in `<data>/identity/`, and each record's declared identity: verified, spoofed or claimed ([identity](../../docs/reference/identity.md)). |
 | `collect urlquery-reports <ids> -o <out>` | Fetches urlquery reports by ID, or every ID in a labels file such as Transluce's `reports.csv`. Appends to `--out` and skips IDs already there; `--sample N` caps the agent-labelled reports. |
 | `certs <query>` | Certificate Transparency lookup via crt.sh, e.g. `'%.example.com'`. |
 | `contact <domain>` | The domain's RFC 9116 security.txt contact. |

@@ -108,6 +108,9 @@ pub enum Cmd {
     Site(commands::site::SiteArgs),
     /// The offline IP-to-ASN table: fetch it into the data directory, look up addresses.
     Asn(commands::asn::AsnArgs),
+    /// Declared agent identity: fetch providers' published ranges and keys,
+    /// and check which records' agent claims they bear out or contradict.
+    Identity(commands::identity::IdentityArgs),
     /// Validate a rules file, or print the bundled rules.
     Rules {
         file: Option<PathBuf>,
@@ -142,6 +145,7 @@ pub fn run() -> Result<()> {
         Cmd::Backup(a) => backup::run(a),
         Cmd::Site(a) => commands::site::run(a),
         Cmd::Asn(a) => commands::asn::run(a),
+        Cmd::Identity(a) => commands::identity::run(a),
         Cmd::Rules { file, dump } => commands::rules::run(file.as_deref(), dump),
     }
 }
