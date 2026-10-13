@@ -14,11 +14,11 @@ The public site carries the same analysis, compiled to WebAssembly: the notices,
 
 ### In the browser
 
-The workbench (**Analyze**) analyses records you paste or load. Parsing and analysis run in the page; nothing is uploaded.
+The workbench (**Investigate**, then **Workbench**) analyses records you paste or load. Parsing and analysis run in the page; nothing is uploaded.
 
 1. Paste records or use **Load file**. Accepted formats: NDJSON or JSON records, a CDX JSON export from a web archive, one URL per line, or a web server access log. Auto-detect usually picks the format.
 2. If your JSON names fields differently, give a field map, for example `ts=submitted_at,url=page.url`.
-3. Press **Analyze**. The views show runs, the fleet graph of hints between clusters, rules against clusters, rhythm and endpoints, each with a table view ([the workbench](../reference/browser-toolkit.md#the-workbench)).
+3. Press **Analyse**. The views show runs, the fleet graph of hints between clusters, rules against clusters, rhythm and endpoints, each with a table view ([the workbench](../reference/browser-toolkit.md#the-workbench)).
 
 *Try an example* loads synthetic records written to exercise the rules. To run the site locally, build it with `scripts/ci/build-site.sh` and serve `_site/`.
 
