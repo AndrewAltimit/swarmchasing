@@ -24,8 +24,10 @@
 # Repository variables read here (Settings > Secrets and variables > Actions >
 # Variables):
 #   SWARMCHASE_REQUIRE_BROWSER  'true' makes the site XSS check fatal when no
-#                               Chrome is installed on the runner. Unset, a
-#                               missing browser skips the check with a warning.
+#                               Chrome could be found or installed on the
+#                               runner. Unset, a missing browser skips the
+#                               check with a warning. Set it once the
+#                               "Locate Chromium" step finds one.
 
 name: Main CI
 
@@ -152,6 +154,12 @@ jobs:
       - name: Notices (nothing withheld leaks)
         run: cargo run -q --profile release-test -p swarmchase -- notice lint
 
+      # The watchlist read strictly: a key no type knows (a misspelt
+      # `limit` would leave the default in force), a bad value, a duplicate
+      # name, a source that does not build. Offline; reuses the build above.
+      - name: Watchlist (strict, offline)
+        run: cargo run -q --profile release-test -p swarmchase -- watch --check watchlist.toml
+
       # The browser half of the toolkit: cfg(wasm32) code and wasm-only
       # dependency features that no host build compiles.
       - name: wasm32 type-check
@@ -228,6 +236,40 @@ jobs:
             echo "$f: $size bytes"
             echo "$(basename "$f"): $(( size / 1024 )) KiB" >> "$GITHUB_STEP_SUMMARY"
           done
+
+      # A browser for the XSS check below, found or installed without sudo,
+      # and handed on as $CHROME. In order: $CHROME, a system Chrome or
+      # Chromium, a Playwright Chromium already in the runner user's cache,
+      # then a Playwright Chromium downloaded into that cache (outside the
+      # checkout, so later runs reuse it). A candidate counts only when it
+      # starts (`--version`), since a download can lack system libraries
+      # that only sudo could install. Finding none never fails this step;
+      # the check decides, by SWARMCHASE_REQUIRE_BROWSER.
+      - name: Locate Chromium
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="${XDG_CACHE_HOME:-$HOME/.cache}/ms-playwright"
+          works() { [ -n "$1" ] && [ -x "$1" ] && "$1" --version >/dev/null 2>&1; }
+          find_one() {
+            local c
+            for c in "${CHROME:-}" "$(command -v google-chrome || true)" "$(command -v chromium || true)" \
+                     "$(command -v chromium-browser || true)" \
+                     "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/chrome-linux*/chrome; do
+              if works "$c"; then echo "$c"; return 0; fi
+            done
+            return 1
+          }
+          chrome="$(find_one || true)"
+          if [ -z "$chrome" ] && command -v npx >/dev/null 2>&1; then
+            echo "no browser found; installing Playwright's Chromium into $PLAYWRIGHT_BROWSERS_PATH"
+            npx --yes playwright@1.48.2 install chromium || echo "::warning::Playwright Chromium install failed"
+            chrome="$(find_one || true)"
+          fi
+          if [ -n "$chrome" ]; then
+            echo "using $chrome ($("$chrome" --version 2>/dev/null || true))"
+            echo "CHROME=$chrome" >> "$GITHUB_ENV"
+          else
+            echo "::warning::no working Chrome or Chromium on the runner; see docs/reference/runner.md#runner-requirements"
+          fi
 
       # No generated page may run anything a notice, record, claim or edited
       # rule carries: the check builds the site again with a hostile notice

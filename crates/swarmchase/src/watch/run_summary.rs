@@ -12,6 +12,7 @@ use super::autonomy::{self, Decision, Mode};
 use super::cases::{CaseReport, DueClock};
 use super::digest::{Alert, Health, lost_lines};
 use super::priority::{Level, Priority, Reason};
+use super::timing::Durations;
 use super::triage::{Lead, TriageReport};
 use sc_core::{Analysis, Tier};
 use serde::Serialize;
@@ -45,6 +46,8 @@ pub struct RunSummary<'a> {
     pub cases: CaseSummary<'a>,
     pub attention: AttentionSummary<'a>,
     pub autonomy: AutonomySummary<'a>,
+    /// Milliseconds each phase took, and the run's `total` up to this file.
+    pub durations_ms: &'a Durations,
     /// The digest's file name in the same directory.
     pub digest: &'static str,
 }
@@ -93,6 +96,8 @@ pub struct SourceLine {
     pub new: usize,
     /// `complete`, `partial`, `stopped`, `error` or `skipped`.
     pub status: &'static str,
+    /// Milliseconds its pull took.
+    pub duration_ms: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -116,6 +121,7 @@ pub struct Input<'a> {
     pub cases: &'a CaseReport,
     pub attention: &'a Queue,
     pub autonomy: (&'a autonomy::Config, &'a [Decision]),
+    pub durations: &'a Durations,
 }
 
 pub fn build<'a>(i: &Input<'a>) -> RunSummary<'a> {
@@ -155,6 +161,7 @@ pub fn build<'a>(i: &Input<'a>) -> RunSummary<'a> {
                     pulled: s.pulled,
                     new: s.new,
                     status: s.status(),
+                    duration_ms: s.duration_ms,
                 })
                 .collect(),
         },
@@ -174,6 +181,7 @@ pub fn build<'a>(i: &Input<'a>) -> RunSummary<'a> {
                 .collect(),
             decisions: i.autonomy.1,
         },
+        durations_ms: i.durations,
         digest: "digest.md",
     }
 }
@@ -221,6 +229,7 @@ mod tests {
             withheld: 1,
             ..Default::default()
         };
+        let durations = super::super::timing::Phases::new().summary();
         let s = build(&Input {
             stamp: "20261011T000000Z",
             generated: "2026-10-11T00:00:00Z",
@@ -234,6 +243,7 @@ mod tests {
             cases: &cases,
             attention: &queue,
             autonomy: (&cfg, &[]),
+            durations: &durations,
         });
         let v: Value = serde_json::to_value(&s).unwrap();
         for k in [
@@ -251,6 +261,7 @@ mod tests {
             "cases",
             "attention",
             "autonomy",
+            "durations_ms",
             "digest",
         ] {
             assert!(v.get(k).is_some(), "{k} missing in {v}");
@@ -269,6 +280,8 @@ mod tests {
         assert!(lead.get("idx").is_none());
         assert_eq!(v["health"]["alerts"][0]["kind"], "source_failed");
         assert_eq!(v["health"]["sources"][0]["status"], "error");
+        assert!(v["health"]["sources"][0]["duration_ms"].is_u64(), "{v}");
+        assert!(v["durations_ms"]["total"].is_u64(), "{v}");
         assert_eq!(v["triage"]["enabled"], true);
         assert_eq!(v["triage"]["backend"], "claude");
         assert_eq!(v["triage"]["withheld"], 1);

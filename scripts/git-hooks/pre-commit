@@ -13,6 +13,9 @@
 #   site/             check-site.py (CSP, no HTML sinks)
 #   notices/          swarmchase notice lint (nothing a notice withholds)
 #   notices/, rules/  check-published-tags.py (shown tags are published tags)
+#   watchlist.toml,   swarmchase watch --check (strict, offline)
+#   sc-collect,
+#   swarmchase watch
 #   Cargo.lock,       cargo-deny (scripts/ci/deny.sh); skipped with a warning
 #   deny.toml         when cargo-deny is not installed
 #   Rust / Cargo      cargo fmt --check (auto-fixed), cargo clippy -D warnings
@@ -97,6 +100,16 @@ if grep -q '^notices/' <<<"$STAGED"; then
     printf '[pre-commit] notice lint\n'
     if ! cargo run -q --profile release-test -p swarmchase -- notice lint; then
         printf '[pre-commit] a notice carries something notices withhold (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+fi
+
+# The watchlist read strictly: a misspelt key a run would silently ignore,
+# or a source that no longer builds after a collector change.
+if grep -qE '^(watchlist\.toml$|crates/sc-collect/|crates/swarmchase/src/watch/)' <<<"$STAGED"; then
+    printf '[pre-commit] watchlist check\n'
+    if ! cargo run -q --profile release-test -p swarmchase -- watch --check watchlist.toml >/dev/null; then
+        printf '[pre-commit] fix the watchlist key or source (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
         exit 1
     fi
 fi

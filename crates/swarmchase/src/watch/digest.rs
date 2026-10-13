@@ -72,6 +72,8 @@ pub struct SourceReport {
     /// Successful runs in a row that pulled nothing, once that reaches
     /// [`crate::health::QUIET_RUNS`], and whether it ever pulled a record.
     pub quiet: Option<(u32, bool)>,
+    /// Wall-clock milliseconds the source's pull took.
+    pub duration_ms: u64,
 }
 
 impl SourceReport {

@@ -4,7 +4,7 @@ How `swarmchase watch` collects and reports, and how `swarmchase review` labels 
 
 ## The data directory
 
-Every watch, review and case command works in one data directory: `--out` (or `--data`), else `SWARMCHASE_DATA`, else `data/` relative to where the command runs. On the runner it is `$SWARMCHASE_DATA` outside the checkout ([runner](runner.md)). It is gitignored and never committed. A command that reads existing data (`review`, `case`, `notice add`) prints a hint naming the directory it resolved when that directory holds no watch data, labels or cases; a watch run says when it starts a new one.
+Every watch, review and case command works in one data directory: `--out` (or `--data`), else `SWARMCHASE_DATA`, else `data/` relative to where the command runs. On the runner it is `$SWARMCHASE_DATA` outside the checkout ([runner](runner.md)). It is gitignored and never committed. A command that reads existing data (`review`, `case`, `notice add`) prints a hint naming the directory it resolved when that directory holds no watch data, labels or cases. A watch run refuses such a directory unless given `--init`, so an unset or mistyped `SWARMCHASE_DATA` never starts a fresh store beside the real one. Start a data directory once with `swarmchase watch --init`; on the runner, run the watch workflow by hand with its `init` input ([runner](runner.md#watchyml)).
 
 | Path | Holds |
 |---|---|
@@ -13,6 +13,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `.lock`, `.lock.owner` | The data directory's writer lock and the command holding it ([one writer at a time](#one-writer-at-a-time)). |
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
 | `runs/<stamp>/digest.md` | One directory per run, with its digest. |
+| `runs/<stamp>/analysis.json`, `case-notes.md` | The run's full analysis and its Markdown report; only the newest runs keep them ([retention](#retention)). |
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
 | `runs/<stamp>/attention.json` | The run's [attention queue](#the-attention-queue). |
 | `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
@@ -29,6 +30,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `cache/http/` | Cached collector responses; safe to delete. |
 | `asn/ip2asn-v4.tsv.gz` | The IP-to-ASN table, once fetched. |
 | `identity/` | Providers' published agent ranges and key directories, once fetched ([identity](identity.md)). |
+| `.stale-alerted` | The run stamp the staleness check last mailed about ([runner](runner.md#watch-staleyml)). |
 
 ## Collection
 
@@ -44,6 +46,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 - **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss.
 - **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is skipped and counted in a `store_damaged` health alert; the other lines are read. Before an append, a last line without its newline is ended, so it never swallows the next record.
 - **ASN.** Once `swarmchase asn fetch` has put the IP-to-ASN table in `asn/`, records that carry an IP but no network get one ([configuration](configuration.md#ip-to-asn-table)).
+- **Redaction.** Collectors redact what they return, and the watch redacts every pulled record again before it reaches the run directory or the store, so a collector that misses a field cannot put a secret in the store. Redaction is idempotent: a record redacted once passes through unchanged.
 
 ### Source kinds
 
@@ -78,6 +81,10 @@ A `wikimedia` source reads the `mediawiki.page-links-change` stream from the mil
 ### One writer at a time
 
 A watch run holds an exclusive lock on the data directory (`.lock`) from start to finish; `case rename` and `backup restore` take it too. A second command that needs it fails at once, naming the holder from `.lock.owner`, instead of writing beside the first. The lock is advisory and released when the command exits, however it exits. `state.json` and every other rewritten file are written to a temporary file of their own and renamed into place; the previous `state.json` is kept as `state.json.bak`, read with a warning when the current one does not parse.
+
+### Checking a watchlist
+
+`swarmchase watch --check [watchlist.toml]` reads a watchlist strictly and exits: a key no setting knows (a misspelt `limit` that a run would ignore, leaving the default), a value of the wrong type, a duplicate source name, an `[autonomy]` level that cannot be on, and every source built as a run builds it (its kind, endpoint and other settings). It reads no data directory and sends no request. CI and the pre-commit hook run it on the committed watchlist ([scripts](../../scripts/README.md#gates)).
 
 ## The digest
 
@@ -120,6 +127,8 @@ Any alert gets the digest emailed; lost capability and quiet sources alone do no
 ### Sources and coverage
 
 The sources table shows each source's records, requests, coverage and status. Coverage is what a stream or feed source read against what there was to read since its checkpoint, such as `6 of 6 hours, canary ok` or `1024 of 400000 entries, 398976 skipped` for a CT log that grows faster than a polite reader.
+
+The digest ends with a *Run time* line: the run's time up to the digest, each phase (`collect`, `platform`, `analysis`, `triage`) and the three slowest sources. `run.json` has the same in milliseconds.
 
 ### Headline counts
 
@@ -214,10 +223,11 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `counts` | `records`, `new_records`, `significant`, `suggestive` and `clusters_above_noise` over the window. |
 | `leads` | The run's new leads, strongest first ([leads](#lead-fields)). |
 | `triage` | `enabled`, `backend`, `model`, `asked`, `answered`, `reused`, `left`, `withheld` and an optional `note` ([model triage](#model-triage)). |
-| `health` | `alerts`, the `lost` capability lines, and `sources` with `name`, `kind`, `pulled`, `new` and `status`. |
+| `health` | `alerts`, the `lost` capability lines, and `sources` with `name`, `kind`, `pulled`, `new`, `status` and `duration_ms`. |
 | `cases` | `due` clocks (`case`, `clock`, `since`, `hosts`) and the number of case status `lines`. |
 | `attention` | `by_band` counts, the first ten queue items as `top`, and `file` (`attention.json`). |
 | `autonomy` | Each level's mode under `modes`, and this run's `decisions` (the lines of `autonomy.ndjson`). |
+| `durations_ms` | Milliseconds per phase (`collect`, `platform`, `analysis`, `triage`, `report`) and `total` up to this file. |
 | `digest` | The digest's file name in the same directory. |
 
 A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
@@ -233,6 +243,10 @@ A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the di
 | `grade` | The agent grade, `L0` to `L4`. |
 | `targets` | Target hosts, defanged. |
 | `suggestion` | `label`, `reason` and `model` from the local model, when there is one. Never a label. |
+
+## The public log
+
+`watch --public-log <path>` also writes a summary safe to show in a public CI log, and the scheduled workflow prints only that. It is built from an allowlist, not filtered from the run's output: one line per source with its name and kind (both from the watchlist), status word, `pulled`, `new` and `requests` counts and `duration_ms`, then a `total` line with the same counts, sources per status and the run's duration. Nothing in it is read from a record, an analysis, a lead, an error message or the priority. A name is printed with anything but letters, digits, `-`, `_` and `.` replaced, so it cannot carry a line break or a workflow command.
 
 ## The ledger
 
@@ -319,7 +333,7 @@ A lead's thread counts with every thread it was merged into. For `draft_case`, *
 
 ## Retention
 
-At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. The platform pass keeps its carried events for `carry_hours` only. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
+At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones. The platform pass keeps its carried events for `carry_hours` only. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
 
 ## The dashboard
 

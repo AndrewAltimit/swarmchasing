@@ -60,12 +60,15 @@
 pub(crate) mod attention;
 pub(crate) mod autonomy;
 pub(crate) mod cases;
+pub(crate) mod check;
 pub(crate) mod digest;
 pub(crate) mod ledger;
 pub(crate) mod platform;
 pub(crate) mod priority;
+pub(crate) mod public_log;
 mod pull;
 pub(crate) mod run_summary;
+pub(crate) mod timing;
 pub(crate) mod triage;
 
 use crate::health::{RuleHistory, RuleRun};
@@ -109,6 +112,11 @@ pub struct Watchlist {
     /// (`<data>/cache/http/`). 0 turns the cache off.
     #[serde(default = "default_cache_ttl")]
     pub http_cache_ttl_secs: u64,
+    /// Runs that keep their full `analysis.json` and `case-notes.md`; older
+    /// runs keep their digest, `run.json`, `summary.json` and attention
+    /// queue. 0 keeps every run's analysis.
+    #[serde(default = "default_keep_analysis")]
+    pub keep_analysis_runs: usize,
     /// What each autonomy level does ([`autonomy`]); every level is in
     /// shadow by default.
     #[serde(default)]
@@ -122,6 +130,10 @@ pub struct Watchlist {
 
 fn default_cache_ttl() -> u64 {
     3600
+}
+
+fn default_keep_analysis() -> usize {
+    8
 }
 
 fn default_interval() -> u64 {
@@ -172,6 +184,21 @@ pub struct WatchArgs {
     /// Data directory: state, record store, and per-run output.
     #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
     out: PathBuf,
+    /// Start a new data directory. Without it, a run refuses a directory
+    /// that holds no watch data, so a wrong path or an unset
+    /// SWARMCHASE_DATA never starts a fresh store beside the real one.
+    #[arg(long)]
+    init: bool,
+    /// Check the watchlist and exit: unknown keys, bad values, duplicate
+    /// names, and every source built as a run builds it. Reads no data
+    /// directory and sends no request.
+    #[arg(long, conflicts_with_all = ["init", "public_log", "triage"])]
+    check: bool,
+    /// Also write a summary safe for a public CI log to this file: each
+    /// source's name, kind, status, counts and duration, and the totals.
+    /// Nothing about records or leads.
+    #[arg(long, value_name = "PATH")]
+    public_log: Option<PathBuf>,
     #[arg(long)]
     rules: Option<PathBuf>,
     /// Committed notices, for the case status proposals in the digest.
@@ -200,6 +227,9 @@ pub struct WatchArgs {
 }
 
 pub fn run(args: WatchArgs) -> Result<()> {
+    if args.check {
+        return check::run(&args.watchlist);
+    }
     let rules = crate::input::load_rules(args.rules.as_deref())?;
     let triage = triage::backend(args.triage).map(|b| {
         (
@@ -210,16 +240,35 @@ pub fn run(args: WatchArgs) -> Result<()> {
             },
         )
     });
-    watch(&args.watchlist, &args.out, &args.notices, &rules, triage)
+    watch(
+        &Paths {
+            watchlist: &args.watchlist,
+            out: &args.out,
+            notices: &args.notices,
+            public_log: args.public_log.as_deref(),
+        },
+        args.init,
+        &rules,
+        triage,
+    )
+}
+
+/// Where a run reads and writes.
+struct Paths<'a> {
+    watchlist: &'a Path,
+    out: &'a Path,
+    notices: &'a Path,
+    public_log: Option<&'a Path>,
 }
 
 fn watch(
-    watchlist: &Path,
-    out: &Path,
-    notices: &Path,
+    paths: &Paths,
+    init: bool,
     rules: &Rules,
     triage_with: Option<(triage::Backend, triage::Limits)>,
 ) -> Result<()> {
+    let (watchlist, out, notices) = (paths.watchlist, paths.out, paths.notices);
+    let mut phases = timing::Phases::new();
     let wl: Watchlist = toml::from_str(
         &std::fs::read_to_string(watchlist)
             .with_context(|| format!("reading {}", watchlist.display()))?,
@@ -246,6 +295,12 @@ fn watch(
     let stamp = now.format("%Y%m%dT%H%M%SZ").to_string();
     let run_dir = out.join("runs").join(&stamp);
     if !crate::store::has_data(out) {
+        if !init {
+            bail!(
+                "no watch data in {}; pass --init to start a new data directory there, or point --out or SWARMCHASE_DATA at the existing one",
+                crate::store::describe_data(out)
+            );
+        }
         eprintln!(
             "note: starting a new data directory at {}",
             crate::store::describe_data(out)
@@ -287,11 +342,13 @@ fn watch(
         }
         let st = state.sources.entry(s.name.clone()).or_default();
         let before = client.requests();
+        let began = std::time::Instant::now();
         let first_or_resumed = st.cursor == 0 || st.pending.is_some();
         let res = pull(&client, s, st, wl.overlap_days * DAY, asn.as_ref());
         st.last_run = Some(stamp.clone());
         let mut rep = SourceReport {
             requests: client.requests() - before,
+            duration_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
             ..SourceReport::new(&s.name, &s.kind)
         };
         let short = res.as_ref().err().map(digest::short_reason);
@@ -380,6 +437,7 @@ fn watch(
         ));
     }
 
+    phases.end("collect");
     let canaries = crate::canary::watch_sightings(out, &fresh, &run_dir)?;
 
     // Coordinated accounts on public platforms: its own pull and store, so a
@@ -393,6 +451,7 @@ fn watch(
             }
         };
 
+    phases.end("platform");
     // Rolling analysis over everything recent, not just this run's records,
     // so clusters can span runs.
     let since = now.timestamp() - wl.analysis_window_days * DAY;
@@ -458,6 +517,7 @@ fn watch(
         },
     );
     std::fs::write(run_dir.join("case-notes.md"), md)?;
+    phases.end("analysis");
 
     let summary_path = out.join("summary.json");
     let prev: Summary = read_json(&summary_path)?.unwrap_or_default();
@@ -474,6 +534,7 @@ fn watch(
         Some((backend, limits)) => triage::run(Some(backend), out, &a, &mut leads, &stamp, limits),
         None => triage::TriageReport::default(),
     };
+    phases.end("triage");
     let covered = attention::case_threads(&cases_root, &ledger);
     let queue = attention::rank(&attention::Input {
         analysis: &a,
@@ -528,10 +589,14 @@ fn watch(
         digest.text.push_str(&platform::section(o));
         digest.changed |= o.changed();
     }
+    digest
+        .text
+        .push_str(&phases.digest_section(&health.sources));
     std::fs::write(run_dir.join("digest.md"), &digest.text)?;
     write_json(&run_dir.join(attention::FILE), &queue)?;
     write_json(&ledger_path, &ledger)?;
     autonomy::append(out, &decisions)?;
+    phases.end("report");
     write_json(
         &run_dir.join(run_summary::FILE),
         &run_summary::build(&run_summary::Input {
@@ -547,11 +612,19 @@ fn watch(
             cases: &cases,
             attention: &queue,
             autonomy: (&wl.autonomy, &decisions),
+            durations: &phases.summary(),
         }),
     )?;
     write_json(&run_dir.join("summary.json"), &next)?;
     write_json(&summary_path, &next)?;
     std::fs::write(out.join("LATEST"), &stamp)?;
+    let trimmed = crate::store::trim_analyses(out, wl.keep_analysis_runs)?;
+    if trimmed > 0 {
+        eprintln!(
+            "retention: dropped the full analysis of {trimmed} run(s) beyond the newest {}",
+            wl.keep_analysis_runs
+        );
+    }
     if wl.retain_days > 0 {
         let cutoff = now.timestamp() - wl.retain_days.max(wl.analysis_window_days) * DAY;
         let (runs, records) = prune(out, cutoff)?;
@@ -580,6 +653,11 @@ fn watch(
         },
         priority.level.label()
     );
+
+    if let Some(p) = paths.public_log {
+        let log = public_log::PublicLog::new(&health.sources, phases.total_ms());
+        std::fs::write(p, log.render()).with_context(|| format!("writing {}", p.display()))?;
+    }
 
     // Hand the result to the workflow (digest email, artifact upload).
     if let Ok(p) = std::env::var("GITHUB_OUTPUT") {

@@ -158,6 +158,44 @@ pub fn prune(out: &Path, cutoff: i64) -> Result<(usize, usize)> {
     Ok((runs, records))
 }
 
+/// The files of a run's full analysis, which only the newest runs keep.
+pub const ANALYSIS_FILES: [&str; 2] = ["analysis.json", "case-notes.md"];
+
+/// Delete [`ANALYSIS_FILES`] from every run directory but the newest
+/// `keep` (by stamp); 0 keeps them all. The rest of each run (its digest,
+/// `run.json`, `summary.json`, attention queue and new records) stays.
+/// Returns how many runs lost their analysis.
+pub fn trim_analyses(out: &Path, keep: usize) -> Result<usize> {
+    if keep == 0 {
+        return Ok(0);
+    }
+    let Ok(entries) = std::fs::read_dir(out.join("runs")) else {
+        return Ok(0);
+    };
+    let mut runs: Vec<(String, std::path::PathBuf)> = Vec::new();
+    for entry in entries {
+        let p = entry?.path();
+        let stamp = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        if p.is_dir() && chrono::NaiveDateTime::parse_from_str(stamp, "%Y%m%dT%H%M%SZ").is_ok() {
+            runs.push((stamp.to_string(), p));
+        }
+    }
+    runs.sort();
+    let mut trimmed = 0;
+    for (_, dir) in runs.iter().rev().skip(keep) {
+        let mut any = false;
+        for f in ANALYSIS_FILES {
+            let p = dir.join(f);
+            if p.exists() {
+                std::fs::remove_file(&p).with_context(|| format!("deleting {}", p.display()))?;
+                any = true;
+            }
+        }
+        trimmed += usize::from(any);
+    }
+    Ok(trimmed)
+}
+
 pub fn to_ndjson(obs: &[Observation]) -> Result<String> {
     let mut s = String::new();
     for o in obs {
@@ -361,6 +399,39 @@ mod tests {
         prune(&dir, 50).unwrap();
         assert_eq!(std::fs::read(&p).unwrap(), before);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn only_the_newest_runs_keep_their_full_analysis() {
+        let d = std::env::temp_dir().join(format!("swarmchase-trim-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let stamps = [
+            "20261001T000000Z",
+            "20261002T000000Z",
+            "20261003T000000Z",
+            "20261004T000000Z",
+        ];
+        for s in stamps {
+            let r = d.join("runs").join(s);
+            std::fs::create_dir_all(&r).unwrap();
+            for f in ["analysis.json", "case-notes.md", "digest.md", "run.json"] {
+                std::fs::write(r.join(f), "x").unwrap();
+            }
+        }
+        std::fs::create_dir_all(d.join("runs").join("not-a-run")).unwrap();
+        std::fs::write(d.join("runs/not-a-run/analysis.json"), "x").unwrap();
+        assert_eq!(trim_analyses(&d, 0).unwrap(), 0);
+        assert_eq!(trim_analyses(&d, 2).unwrap(), 2);
+        // Again: nothing left to trim.
+        assert_eq!(trim_analyses(&d, 2).unwrap(), 0);
+        for (i, s) in stamps.iter().enumerate() {
+            let r = d.join("runs").join(s);
+            assert_eq!(r.join("analysis.json").exists(), i >= 2, "{s}");
+            assert_eq!(r.join("case-notes.md").exists(), i >= 2, "{s}");
+            assert!(r.join("digest.md").exists() && r.join("run.json").exists());
+        }
+        assert!(d.join("runs/not-a-run/analysis.json").exists());
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

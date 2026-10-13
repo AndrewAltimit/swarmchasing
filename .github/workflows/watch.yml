@@ -10,6 +10,14 @@ on:
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
+    inputs:
+      init:
+        # The first run on a runner: the watch refuses a data directory
+        # that holds no watch data unless told to start one, so a wrong
+        # SWARMCHASE_DATA never starts a fresh store beside the real one.
+        description: "Start a new data directory (first run on this runner only)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -69,29 +77,39 @@ jobs:
       - name: Select per-toolchain target dir
         run: scripts/ci/select-ci-target-dir.sh
 
-      # `cargo run --release` builds the release binary here when the code
-      # changed and reuses the cached one otherwise; main-ci.yml does not
-      # prebuild it. The step writes `changed`, `priority` and `run_dir` to
-      # $GITHUB_OUTPUT for the email steps below. A failed source, an
-      # unavailable host or a failed canary sets `changed`, so the digest
-      # carrying the alert is mailed the same run.
+      # `--profile release-test` is the profile main-ci.yml's tests build,
+      # in the same cache, so after a push to main the watch reuses that
+      # build instead of linking a fat-LTO release binary of its own. The
+      # step writes `changed`, `priority` and `run_dir` to $GITHUB_OUTPUT
+      # for the email steps below. A failed source, an unavailable host or a
+      # failed canary sets `changed`, so the digest carrying the alert is
+      # mailed the same run.
       #
       # The Actions log of a public repository is public, and the watch's
       # output describes unreviewed leads (counts by network, operator
-      # clocks). The full output goes to $RUNNER_TEMP/watch.log on the runner
-      # (the failure alert mails its tail); the public log gets only the
-      # per-source counts and the run's totals.
+      # clocks). The full output goes to $RUNNER_TEMP/watch.log on the
+      # runner and never to stdout (the failure alert mails its tail). The
+      # public log gets only `--public-log`, which the watch builds from an
+      # allowlist: each source's name, kind, status, counts and duration,
+      # and the totals. Nothing in it comes from a record or a lead.
       - name: Collect and analyse
         id: watch
+        env:
+          INIT: ${{ inputs.init && '--init' || '' }}
         run: |
           export SWARMCHASE_DATA="${SWARMCHASE_DATA:-$HOME/swarmchase-data}"
-          mkdir -p "$SWARMCHASE_DATA"
+          public="$RUNNER_TEMP/watch-public.txt"
+          rm -f "$public"
           set +e
-          cargo run --release -p swarmchase -- watch watchlist.toml > "$RUNNER_TEMP/watch.log" 2>&1
+          cargo run --profile release-test -p swarmchase -- watch watchlist.toml $INIT \
+            --public-log "$public" > "$RUNNER_TEMP/watch.log" 2>&1
           rc=$?
           set -e
-          grep -E ' (pulled|skipped|error|events)|^[0-9]+ records ·|^wrote |^retention:|^error' \
-            "$RUNNER_TEMP/watch.log" | tail -n 80 || true
+          if [ -s "$public" ]; then
+            cat "$public"
+          else
+            echo "no public summary: the run stopped before writing it (exit $rc); the failure alert mails the log's tail"
+          fi
           exit "$rc"
 
       # The subject leads with the run's priority (high, medium or low).

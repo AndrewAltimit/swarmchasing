@@ -94,7 +94,7 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 
 | Command | What it does |
 |---|---|
-| `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`, with a machine-readable `run.json` beside it; `--triage` asks a local model about new leads. Details: [Watch runs](../../docs/reference/watch.md). |
+| `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`, with a machine-readable `run.json` beside it; `--triage` asks a local model about new leads. `--init` starts a new data directory, `--check` checks the watchlist offline, `--public-log` writes a summary safe for a public log. Details: [Watch runs](../../docs/reference/watch.md). |
 | `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest`, `--serve` and `--export-hosted` add suggestions and a local page. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
 | `review agreement`, `misfires`, `check-suggestions`, `suggest-claude` | Compare model suggestions with the admin's labels, list rules that fire on benign records, validate a suggestions file, and ask Claude Code for suggestions on an export. Details: [AI assistance](../../docs/guides/ai-assistance.md). |
 | `dashboard` | A read-only local page of the attention queue, what is new since you last looked, an activity timeline, a link graph of soft links, interaction and candidate fleets, source health and rule drift, the review queue, open cases and the autonomy record, with the command for each next step. `--json` prints the same overview. Details: [The dashboard](../../docs/reference/watch.md#the-dashboard). |
@@ -108,6 +108,7 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 
 ```sh
 swarmchase watch                              # uses watchlist.toml and $SWARMCHASE_DATA (or data/)
+swarmchase watch --check                      # the watchlist, strictly and offline
 swarmchase review --unflagged 20
 swarmchase eval samples/eval/*.ndjson
 swarmchase eval data/labels/reviewed.ndjson   # everything reviewed so far
@@ -204,7 +205,7 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`input.rs`](src/input.rs) | Reading records and rules for the analysis commands. |
 | [`store.rs`](src/store.rs) | The watch record store, retention, JSON and NDJSON files. |
 | [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
-| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)), the digest priority ([`priority.rs`](src/watch/priority.rs)), the ledger ([`ledger.rs`](src/watch/ledger.rs)), the attention queue ([`attention.rs`](src/watch/attention.rs)), shadow autonomy ([`autonomy.rs`](src/watch/autonomy.rs)), local model triage ([`triage.rs`](src/watch/triage.rs)) and the run summary ([`run_summary.rs`](src/watch/run_summary.rs)). |
+| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)), the digest priority ([`priority.rs`](src/watch/priority.rs)), the ledger ([`ledger.rs`](src/watch/ledger.rs)), the attention queue ([`attention.rs`](src/watch/attention.rs)), shadow autonomy ([`autonomy.rs`](src/watch/autonomy.rs)), local model triage ([`triage.rs`](src/watch/triage.rs)), the run summary ([`run_summary.rs`](src/watch/run_summary.rs)), phase timing ([`timing.rs`](src/watch/timing.rs)), the public log ([`public_log.rs`](src/watch/public_log.rs)) and the strict watchlist check ([`check.rs`](src/watch/check.rs)). |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review/`](src/review/mod.rs) | Interactive labelling; the local review page ([`serve.rs`](src/review/serve.rs)); hosted suggestions ([`hosted.rs`](src/review/hosted.rs)); suggestion agreement and rule misfires ([`agreement.rs`](src/review/agreement.rs), [`misfires.rs`](src/review/misfires.rs)); the benign-baseline sampler ([`sample.rs`](src/review/sample.rs)). |
 | [`localui/`](src/localui/mod.rs) | The admin's local pages: server, security checks, shared style and helpers. |
