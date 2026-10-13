@@ -55,11 +55,11 @@ Your access logs see requests the public records cannot. You can run the same ru
 
 The browser toolkit runs the analysis entirely on your machine. Records are parsed and analysed in WebAssembly in the page; nothing is uploaded.
 
-1. Open the toolkit's workbench (**Analyze**); its access-log preset sets the format for you.
+1. Open the workbench (**Investigate**, then **Workbench**); its access-log preset sets the format for you.
 2. Paste the log, or use **Load file**.
 3. Pick **Access log** as the format (auto-detect usually finds it).
 4. In the field map, name your host: `host=www.example.org`. Lines that do not name a virtual host are otherwise shown under `log.invalid`.
-5. Press **Analyze**. The page shows flagged records, clusters, an hourly chart and the **Endpoints** table.
+5. Press **Analyse**. The page shows flagged records, clusters, an hourly chart and the **Endpoints** table.
 
 To run the toolkit locally instead of from the published site, build it with `scripts/ci/build-site.sh` and serve it with `python -m http.server -d _site 8080`.
 
@@ -126,7 +126,7 @@ A report to another affected operator never carries your logs.
 
 A swarm that reaches many sites is invisible to any one of them. If you found one in your logs, you can share what it left without sharing your logs or your visitors, so that we can tell whether other operators, or the public records, saw the same swarm. This is optional, and separate from [sending logs back](#send-logs-back).
 
-**Make the file.** In the workbench, after **Analyze**, go to **Share sightings** and press **Prepare sightings**. The page shows the whole file before you save it; **Download** saves exactly that text. Or, with the CLI:
+**Make the file.** In the workbench, after **Analyse**, go to **Share sightings** and press **Prepare sightings**. The page shows the whole file before you save it; **Download** saves exactly that text. Or, with the CLI:
 
 ```sh
 swarmchase sightings export access.log --map host=www.example.org -o sightings.json

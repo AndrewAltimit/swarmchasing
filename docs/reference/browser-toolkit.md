@@ -31,14 +31,14 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 
 | Path | What it shows |
 |---|---|
-| `/` | The mission and the method walked through the synthetic showcase, then the latest notices. |
-| `/notices/` | Every notice, filterable by status, provider, sector, affected host, text and update date; one page per notice. |
+| `/` | The mission, the notices at a glance, and the method walked through the synthetic showcase ([landing page](#the-landing-page)). |
+| `/notices/` | Every notice, filterable; how notices work in plain words; one page per notice ([notices](#notices)). |
 | `/methodology/`, `/docs/` | The methodology and every other doc. |
 | `/docs/manual/` | The Field Manual, with section and glossary links and a pager. |
 | `/docs/manual/sections/` | Every Field Manual section by id, with search. |
 | `/operators/` | The operators' guide, with a link to the workbench's access-log preset. |
-| `/rules/` | One card per rule, filterable by every SC-T tactic, each with a URL tester; an editor and an in-browser evaluation. |
-| `/eval/` | The [summary](evaluation.md#summary-json) of the bundled rules on the labelled set, every slice as a forest plot; tiers recomputed in the page for edited rules. |
+| `/rules/` | The rules grouped by kind, filterable by every SC-T tactic, each with a URL tester; an editor and an in-browser evaluation ([rules explorer](#rules-explorer)). |
+| `/eval/` | The [summary](evaluation.md#summary-json) of the bundled rules on the labelled set: each tier in sentences, then intervals, every slice as a forest plot; tiers recomputed in the page for edited rules ([evaluation page](#evaluation-page)). |
 | `/analyze/` | The workbench. |
 | `/unwrap/` | The layers inside one URL, the rules each triggers, and the URL's score and tier. |
 | `/identity/` | The agents an operator's log declares, checked against the providers' published ranges and keys ([agent identity](#agent-identity)). |
@@ -48,11 +48,15 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 | `/contact/` | The private channel, and where each audience's replies go. Every page's footer links it. |
 | `/schemas/` | The JSON Schemas of the specs, as committed. |
 
-The navigation has Notices, then the Learn, Investigate and Reference groups, then *Report a swarm* on its own. Each group is a `<details>` menu, so it works without scripts. The docs sidebar groups the docs by directory, with the guides for the people who run the project (admin workflow, AI assistance, evaluating leads) last under Maintainers.
+The navigation has Notices, then the Learn, Investigate and Reference groups, then *Report a swarm* on its own. Each group is a `<details>` menu, so it works without scripts. On phones the header is two rows: the brand, *Report a swarm* and the theme switch, then the navigation. The docs sidebar groups the docs by directory, with the guides for the people who run the project (admin workflow, AI assistance, evaluating leads) last under Maintainers.
 
-The index is a plain table without scripts; with them, a filter form appears and keeps its state in the URL hash (`#sector=health&from=2026-08-01`), so a filtered view can be linked. On phones each notice is a card and the form starts folded.
+The layout has three widths, named at the top of the stylesheet: phone (up to 720 px), tablet (up to 960 px) and laptop (up to 1260 px). Every width query in the stylesheet and the page scripts uses one of them.
 
-Each notice page shows its status and stage (indicators only, or the date of its latest naming update), the rules and toolkit version, the body, then its dated updates as a timeline (corrections and retractions marked, statements quoted verbatim with who they are from). Affected hosts appear only once a naming update names them. `notices/index.json`, `notices/<id>.json` and `notices/feed.xml` are written as `notice build` writes them.
+## Notices
+
+The index is a plain table without scripts; with them, a filter form appears and keeps its state in the URL hash (`#sector=health&from=2026-08-01`), so a filtered view can be linked. On phones each notice is a card and the form starts folded. Beside the Atom feed the page links `index.json`, and it ends with how notices work in plain words (`#how-notices-work`): what a notice is, why names come later, what a notice never shows, who decides, and how to follow them.
+
+Each notice page shows its status and stage (indicators only, or the date of its latest naming update), the rules and toolkit version, the body, then its dated updates as a timeline (corrections and retractions marked, statements quoted verbatim with who they are from). Affected hosts appear only once a naming update names them. `notices/index.json`, `notices/<id>.json` and `notices/feed.xml` are written as `notice build` writes them. The feed has a subtitle saying what it carries; with no notice yet, its `updated` date is the build's commit date (`notice build` uses the day it runs).
 
 ## Report a swarm
 
@@ -62,7 +66,9 @@ The first and last seen times are read in the browser's time zone, or as UTC whe
 
 ## The landing page
 
-Four cards under the mission route each audience: operators, providers, researchers, and AI agents with the people who run them (the submission page, `llms.txt` and the SC-Submission spec). The landing page then walks one synthetic incident through the method: unwrap, match, link, time, grade agent likelihood, assess scope, attribute, report. Every step has prose, a figure drawn by the generator, its table and the Field Manual sections it rests on, so the page reads without scripts. On phones every figure after the first starts folded, so the walk reads as text first.
+Cards under the mission route each audience: operators, providers, researchers, and AI agents with the people who run them (the submission page, `llms.txt` and the SC-Submission spec). A last card, across the row, is for the public and the press: how notices work, and the feed to subscribe to. Under the cards a strip gives the notices at a glance, from the committed notices only: how many there are and the latest update (or that there is none yet), with links to the index, the Atom feed, the JSON index and how notices work.
+
+The landing page then walks one synthetic incident through the method: unwrap, match, link, time, grade agent likelihood, assess scope, attribute, report. Every step has prose, a figure drawn by the generator, its table and the Field Manual sections it rests on, so the page reads without scripts. On phones every figure after the first starts folded, so the walk reads as text first.
 
 The match step draws one record's score as its contributions: each independence group once, context hits under their cap, and weight that fired but does not count as dashed outlines. The scope step draws each cluster's four questions and S1 to S7 tests, with payload present and out of scope in different shapes. Its agent column reads yes only from L4 on the grade ladder, and the step says so; the showcase runs are short and small, so no synthetic cluster reaches L4. *Run it live* loads the engine, re-runs the showcase in the page, and adds an unwrap box for any URL, the runs with zoom, the interaction graph, each cluster's agent-likelihood ladder and each cluster's scope tests.
 
@@ -72,7 +78,7 @@ Until there is a real notice, the notices section shows the indicator notice the
 
 The workbench analyses pasted or loaded records, including an operator's own access log (`/analyze/#preset=access-log`; see [for operators](../guides/for-operators.md#check-your-own-logs)). *Try an example* loads the synthetic showcase.
 
-An empty workbench is one dashed area: paste records, drop a file on it, *Load file* or *Try an example*. A dropped file is read in the page, as a picked one is. *Analyze* is offered once there is input; drafting the report, preparing sightings and the CSV downloads wait for an analysis. An input from which no record is read shows no dashboard: an alert says nothing was read, quotes the first problem the parser met, and lists the formats the workbench reads. After a run the records box folds to a line with the record count and *Edit*, so the clusters sit under the summary.
+An empty workbench is one dashed area: paste records, drop a file on it, *Load file* or *Try an example*; the empty views pane says what will show there and offers the example too. A dropped file is read in the page, as a picked one is. *Analyse* is offered once there is input; drafting the report, preparing sightings and the CSV downloads wait for an analysis. An input from which no record is read shows no dashboard: an alert says nothing was read, quotes the first problem the parser met, and lists the formats the workbench reads. After a run the records box folds to a line with the record count and *Edit*, so the clusters sit under the summary.
 
 On a wide screen it has three panes: the records and clusters, the views, and the context of what is selected. Phones step through them. The views are:
 
@@ -90,13 +96,13 @@ The scope section ([SC-FM 15](../manual/15-misalignment.md)) answers the four qu
 
 *Show attribution layers* lists the developer, host, harness and model-family candidates, gated at the naming level chosen for the report. Plant signals sit in a collapsed *Internal review* section: they concern the visitor's own file and never appear on a generated page. A signal most clusters in the input carry shows its base rate and is marked as context that does not count toward review. Declared testing is left out: the page drops it on receipt, and it reaches only an *Internal case notes* draft, as in the CLI.
 
-The links panel lists shared pauses, dialects, probe chains, common features, escalations, candidate fleets, soft links and interaction hints. Chains and escalations timed by archive captures show no pace.
+The links panel lists shared pauses, dialects, probe chains, common features, escalations, candidate fleets, soft links and interaction hints. The kinds with nothing found share one *None found* line, each with what finding none means as its tooltip. Chains and escalations timed by archive captures show no pace.
 
 Every view has a table view and a *Download SVG* button, which saves the chart as drawn, with its colours, as a standalone file.
 
 The flagged records and the endpoints each download as CSV: hosts and URLs defanged, times in UTC, and a cell a spreadsheet would read as a formula prefixed with a quote mark. The endpoints table gives times to the minute with UTC in its header, and its *Hits / all* column counts the suggestive or significant records to a host out of every record that targets it. Every mark that selects something is a keyboard button (Enter or Space), focus stays on it after the views redraw, and Escape clears the selection. Edges, shared pauses and rhythms are hints to check, not evidence ([methodology](../methodology.md#descriptive-hints)). The selection is kept in the URL hash as ids only (a cluster key, a record number, a rule id), never hosts or URLs.
 
-The last step drafts a disclosure, loading the tools module on *Draft the report* or when the section scrolls into view. It follows the CLI's naming gate: pick the weakest evidence that may name a developer, and paste claims from case work (the JSON `swarmchase report --claims` reads). Outside case notes, a developer below that level is not named ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
+The last step drafts a disclosure, on *Draft the report* or when the section scrolls into view, from the analysis the page shows ([loading](#loading-and-size)). It follows the CLI's naming gate: pick the weakest evidence that may name a developer, and paste claims from case work (the JSON `swarmchase report --claims` reads). Outside case notes, a developer below that level is not named ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
 
 ## Agent identity
 
@@ -118,7 +124,13 @@ The manual's pages link `FM-n.m` section ids and `SC-Tn` tactic ids in running t
 
 ## Rules explorer
 
-Each rule card links its tactic and its Field Manual section, and names its independence group if it has one. *Test a URL* unwraps a URL with the engine, says whether that rule fires and on which layer, and lists the other rules that fire; the URL is decoded, never opened, and shown defanged. The tactic filter lists SC-T1 to SC-T9; SC-T8 and SC-T9 are cluster- and fleet-level judgments that no rule makes, and the page says so.
+The rules are grouped by kind. Each is a row (its id, weight and flags such as *significant alone*) that opens on the rest: the description, what it matches, its independence group if it has one, its tactic and Field Manual section, the pattern, the URL tester and its hits on the labelled set. Rows start open on a wide screen; on phones they start closed, as do the filters, and the rule a link names (`#rule-<id>`) opens. A kind whose rules the filters all hide is hidden with its heading. The lede gives the tier thresholds; how a score adds up is folded under it.
+
+*Test a URL* unwraps a URL with the engine, says whether that rule fires and on which layer, and lists the other rules that fire; the URL is decoded, never opened, and shown defanged. The tactic filter lists SC-T1 to SC-T9; SC-T8 and SC-T9 are cluster- and fleet-level judgments that no rule makes, and the page says so.
+
+## Evaluation page
+
+The page opens with the tiers in plain words: for each, how many agent records the rules flag and miss, how many of the records they flag are benign, and the range the share of right flags could take by chance. The sentences are made from the summary at build, on the records collected rather than written for the set when there are any, else on all of them. The cards with each rate's 95% interval, the confusion matrices and the forest plots follow.
 
 ## Edited rules
 
@@ -146,15 +158,15 @@ The browser runs three modules, each built with its own size budget:
 
 | Module | Loads |
 |---|---|
-| Engine (`sc-wasm`) | On arrival on the workbench and unwrap pages; on the landing, rules and tools pages when asked. |
-| Tools (`sc-wasm --features tools`) | For report drafts, attribution layers, the bundle check, the `security.txt` reader, the identity check and the labelled eval. |
+| Engine (`sc-wasm`) | On arrival on the unwrap page; on the landing, rules and tools pages when asked. |
+| Tools (`sc-wasm --features tools`) | On the workbench, alone, at the first sign of input; elsewhere for the bundle check, the `security.txt` reader, the identity check and the labelled eval. |
 | Rules converter (`sc-rules-wasm`) | Only when there are edited rules. |
 
-The tools module carries a copy of the analysis: a report draft re-runs the analysis there on the same input, which is deterministic, so cluster ids and keys match the engine's. Keeping drafts, bundle checks and evaluation out of the engine keeps the module every analysis page downloads small. Other pages load no WASM.
+The tools module carries the engine's bindings as well as its own, and one analysis slot that both read: the report draft, the sightings file and the attribution layers come from the analysis its own `analyze` made. So the workbench loads that one module for its analysis and its report, never both. It loads nothing on arrival: focus on the records box, a picked or dropped file, or a pointer on *Try an example* starts the download, and *Analyse* waits for it. Keeping drafts, bundle checks and evaluation out of the engine keeps the module the unwrap page and the landing page's live run download small. Other pages load no WASM.
 
-The tools page preloads nothing. The bundle check and the `security.txt` reader load the tools module on first use, and defang loads the engine. Each card has its own status line, so a module that fails to load leaves the other cards working, and the next use retries it. A loading message gives the module's download size, gzip-compressed as the host serves it; the build measures it. The only render-blocking script is the few lines of `theme.js`, which apply a stored theme before the first paint.
+Only the unwrap page preloads a module, the engine. The tools page preloads nothing. The bundle check and the `security.txt` reader load the tools module on first use, and defang loads the engine. Each card has its own status line, so a module that fails to load leaves the other cards working, and the next use retries it. A loading message gives the module's download size, gzip-compressed as the host serves it; the build measures it. The only render-blocking script is the few lines of `theme.js`, which apply a stored theme before the first paint.
 
-Each page lists every module its scripts import, directly or not, as a `modulepreload` link, so the browser fetches them together instead of one import level at a time. Scripts, the stylesheet and the WASM modules are published under content-hashed names (`js/site.<hash>.js`): GitHub Pages sets its own cache headers, so a changed file gets a new name and a cached one is never stale. The generator rewrites the references in pages and between modules, and `check-site.py` fails a page that loads an unhashed asset. Until a module is ready the page says so and its controls stay disabled. The release build fails when any module is over its budget (the engine's is 1.5 MiB) and prints each module's size and headroom.
+Each page lists every module its scripts import, directly or not, as a `modulepreload` link, so the browser fetches them together instead of one import level at a time. Scripts, the stylesheet and the WASM modules are published under content-hashed names (`js/site.<hash>.js`): GitHub Pages sets its own cache headers, so a changed file gets a new name and a cached one is never stale. The generator rewrites the references in pages and between modules, and `check-site.py` fails a page that loads an unhashed asset. Until a module is ready the page says so and the controls that need it stay disabled, or, on the workbench, wait for it. The release build fails when any module is over its budget (the engine's is 1.5 MiB) and prints each module's size and headroom.
 
 ## Agent-facing files
 
@@ -198,7 +210,7 @@ A print stylesheet drops the header, footer, navigation, tables of contents and 
 
 ## Accessibility
 
-Every page has a banner, navigation, main and footer landmark, one `h1` and headings in order, a skip link and a visible focus ring. Charts are labelled groups with a table view. Status and tier colours reach 4.5:1 against every surface in both themes, and motion stops under `prefers-reduced-motion`.
+Every page has a banner, navigation, main and footer landmark, one `h1` and headings in order, a skip link and a visible focus ring. Charts are labelled groups with a table view. Status and tier colours reach 4.5:1 against every surface in both themes. The two tiers differ in lightness as well as hue (about 2:1 between them in each theme) and in shape: a significant mark is filled, a suggestive one is a ring around a light tint, in charts, legends and tier pills. Disclosure rows and their links on the rules page are at least 24 px tall. Motion stops under `prefers-reduced-motion`.
 
 ## Safety
 

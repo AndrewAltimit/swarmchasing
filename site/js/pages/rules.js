@@ -1,4 +1,5 @@
-// Rules page: filter the pre-rendered cards; test a URL against one rule
+// Rules page: filter the pre-rendered cards (grouped by kind; on a phone
+// each starts as a closed row); test a URL against one rule
 // (the engine loads when a card's tester is first opened; the URL is
 // decoded, never opened, and shown defanged); the editor loads the tools
 // module (check and eval) when it is opened.
@@ -7,9 +8,27 @@ import { arr, trunc } from "../lib/fmt.js";
 import { engine, tools, host, rulesJson, pageRules, RULES_KEY } from "../lib/wasm.js";
 import { renderComparison, scoreBoth } from "../lib/evalview.js";
 
+const phone = window.matchMedia?.("(max-width: 720px)").matches;
+
+// On a phone every rule starts as its one-line row, and the filters folded:
+// the page is a list to scan, and a row opens on a tap. A rule the address
+// names stays open.
+const target = () => (location.hash.startsWith("#rule-") ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null);
+if (phone) {
+  const t = target();
+  for (const d of document.querySelectorAll(".rule-card > details.rule-fold")) if (d.parentElement !== t) d.open = false;
+  const fold = document.querySelector("details.filters-fold");
+  if (fold) fold.open = false;
+}
+window.addEventListener("hashchange", () => {
+  const d = target()?.querySelector("details.rule-fold");
+  if (d) d.open = true;
+});
+
 const form = document.querySelector("[data-rule-filters]");
 if (form) {
   const cards = [...document.querySelectorAll(".rule-card")];
+  const kinds = [...document.querySelectorAll("[data-rule-kind]")];
   const count = document.querySelector("[data-rule-count]");
   const none = document.querySelector("[data-rule-none]");
   const apply = () => {
@@ -29,6 +48,8 @@ if (form) {
       c.hidden = !ok;
       if (ok) shown++;
     }
+    // A kind with no rule left shown goes too, heading and all.
+    for (const k of kinds) k.hidden = !k.querySelector(".rule-card:not([hidden])");
     count.textContent = `${shown} of ${cards.length} rules`;
     none.hidden = shown > 0;
     const note = document.querySelector("[data-tactic-note]");

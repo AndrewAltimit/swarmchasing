@@ -15,7 +15,7 @@ import { scopePanel } from "../lib/scope.js";
 // On a phone every figure after the first starts folded (`details.fig-fold`)
 // so the walk reads as text; inside a fold, the wide figures' short tables
 // open with it, so an opened figure reads without scrolling sideways.
-if (window.matchMedia?.("(max-width: 600px)").matches) {
+if (window.matchMedia?.("(max-width: 720px)").matches) {
   for (const d of document.querySelectorAll("details.fig-fold")) d.open = false;
   for (const d of document.querySelectorAll(".walk-fig[data-phone-table] > details.as-table")) d.open = true;
 }

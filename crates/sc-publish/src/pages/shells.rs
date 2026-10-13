@@ -16,7 +16,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 <div id="input-box">
 <div id="drop" class="dropzone">
 <p class="drop-lead">Paste records below, drop a file here, or start from an example.</p>
-<div class="row drop-actions"><button type="button" id="example" class="primary" data-needs-engine disabled aria-busy="true">Try an example</button><label class="file button">Load file<input type="file" id="file" accept=".ndjson,.jsonl,.json,.txt,.csv,.log"></label></div>
+<div class="row drop-actions"><button type="button" id="example" class="primary">Try an example</button><label class="file button">Load file<input type="file" id="file" accept=".ndjson,.jsonl,.json,.txt,.csv,.log"></label></div>
 <label for="input" class="sr-only">Records</label>
 <textarea id="input" class="mono" rows="8" spellcheck="false" placeholder='{"ts":"2026-10-04T08:10:00Z","url":"https://..."}' aria-describedby="input-hint"></textarea>
 <p id="drop-status" class="hint" role="status" hidden></p>
@@ -27,7 +27,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 <select id="format"><option value="auto">auto-detect</option><option value="ndjson">NDJSON</option><option value="json">JSON</option><option value="lines">URL lines</option><option value="access_log">Access log</option></select>
 <label class="sr-only" for="map">Field map</label><input id="map" class="grow mono" spellcheck="false" placeholder="field map, e.g. ts=submitted_at,url=page.url">
 </div>
-<div class="row"><button type="button" id="run" class="primary" data-needs-engine disabled aria-busy="true">Analyze</button></div>
+<div class="row"><button type="button" id="run" class="primary" disabled>Analyse</button></div>
 </div>
 <div id="input-collapsed" class="input-collapsed" hidden><span id="input-count"></span><button type="button" id="input-edit" aria-controls="input-box" aria-expanded="false">Edit</button></div>
 <p class="hint" data-engine-status aria-live="polite"></p>
@@ -51,7 +51,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 <button type="button" role="tab" id="tab-strip" aria-controls="viz-panel" aria-selected="false" tabindex="-1" data-view="strip">Endpoints × time</button>
 <button type="button" role="tab" id="tab-hourly" aria-controls="viz-panel" aria-selected="false" tabindex="-1" data-view="hourly">Hourly</button>
 </div>
-<div id="viz-panel" class="viz-panel" role="tabpanel" aria-labelledby="tab-runs" tabindex="0"><p class="hint empty-state">Views appear here after an analysis.</p></div>
+<div id="viz-panel" class="viz-panel" role="tabpanel" aria-labelledby="tab-runs" tabindex="0"><div class="empty-state"><p>Runs over time, the fleet and swarm graphs, rules against clusters and the hourly rhythm appear here once records are analysed.</p></div></div>
 <div id="filter-bar" class="filter-bar" aria-live="polite"></div>
 <div class="sub-head"><h3 class="pane-sub" id="records-h">Flagged records</h3><button type="button" id="csv-records" class="small" disabled>Download CSV</button></div>
 <div id="records"><p class="hint">No records yet.</p></div>
@@ -70,7 +70,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 </div>
 <section class="card pane-report" data-pane="report" aria-labelledby="h-report">
 <h2 id="h-report">Report</h2>
-<p class="hint">A disclosure draft from this analysis, scoped to the selected cluster if there is one. Drafting loads the report tools, a second module, the first time. It follows the CLI's naming gate: outside case notes, a developer is named only on evidence at or above the level you pick. Model names in requests never name one on their own; an ASN names the host.</p>
+<p class="hint">A disclosure draft from this analysis, scoped to the selected cluster if there is one. It follows the CLI's naming gate: outside case notes, a developer is named only on evidence at or above the level you pick. Model names in requests never name one on their own; an ASN names the host.</p>
 <div class="row">
 <label>Audience <select id="audience"><option value="internal">Internal case notes</option><option value="provider">AI provider</option><option value="affected">Affected operator</option><option value="indicator">Indicator notice (names no host)</option><option value="public">Naming update (names hosts)</option></select></label>
 <label class="grow">Reporter <input id="reporter" placeholder="Name and contact"></label>
@@ -182,8 +182,8 @@ pub const SUBMIT: &str = r##"<header class="page-head compact"><h1>Report a swar
 <label>Role <select id="sub-role"><option value="">(not given)</option><option value="operator">Operator of an affected system</option><option value="researcher">Researcher</option><option value="provider">AI provider</option><option value="bystander">Bystander</option><option value="other">Other</option></select></label>
 </div>
 <div class="row">
-<label class="grow">Name <input id="sub-name" spellcheck="false"></label>
-<label class="grow">Contact <input id="sub-contact" spellcheck="false" placeholder="optional"></label>
+<label class="grow">Name (optional) <input id="sub-name" spellcheck="false"></label>
+<label class="grow">Contact (optional) <input id="sub-contact" spellcheck="false" placeholder="an email address or handle"></label>
 </div>
 <div class="row" id="sub-agent-row" hidden>
 <label class="grow">Deployed by <input id="sub-operator" spellcheck="false"></label>
@@ -199,7 +199,7 @@ pub const SUBMIT: &str = r##"<header class="page-head compact"><h1>Report a swar
 <label>First seen <input id="sub-first" type="datetime-local" aria-describedby="sub-time-note"></label>
 <label>Last seen <input id="sub-last" type="datetime-local" aria-describedby="sub-time-note"></label>
 <label>Times are in <select id="sub-tz" aria-describedby="sub-time-note"><option value="local">my local time</option><option value="utc">UTC</option></select></label>
-<label>Agents <input id="sub-agents" type="number" min="1" step="1"></label>
+<label>Number of agents (estimate) <input id="sub-agents" type="number" min="1" step="1"></label>
 </div>
 <p class="hint" id="sub-time-note">The report stores times in UTC. Local times are converted with this browser's time zone.</p>
 <div class="row"><label class="grow">Target hosts <input id="sub-targets" spellcheck="false" placeholder="www.example.org, api.example.org"></label></div>
@@ -246,7 +246,7 @@ pub const PROVIDERS_PANEL: &str = r##"<aside class="card callout-card" aria-labe
 <h2 id="provider-check-h">Received a report? Check its bundle, then reply</h2>
 <p>The report carries an evidence bundle. The tools page re-runs the analysis in your browser and says whether the report follows from the records; nothing is uploaded (<a href="#check-the-evidence">what that shows</a>).</p>
 <p><a class="button primary" href="../tools/">Check a bundle</a></p>
-<p>Indicator notice: 0 h for you. It may follow as soon as every party has its report and every operator's indicator clock has run. It is not an embargo: nothing a recipient says moves it (<a href="#when-the-notice-is-published">when the notice is published</a>).</p>
+<p>The indicator notice gives a provider no lead time of its own: it may be published as soon as every party has its report and every operator's indicator clock has run (no wait for most, 24 hours for a compromised operator). It is not an embargo: nothing a recipient says moves it (<a href="#when-the-notice-is-published">when the notice is published</a>).</p>
 <p>Reply to the report's address with the case id in the subject. No report? Use <a href="https://github.com/AndrewAltimit/swarmchasing/security/advisories/new">GitHub private vulnerability reporting</a> on this repository.</p>
 </aside>"##;
 

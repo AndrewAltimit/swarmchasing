@@ -15,7 +15,8 @@ use sc_publish::{build_site, check_notice, parse_notice};
 let rules = Rules::default_rules();
 let mut notice = parse_notice(&text)?; // notices/<id>.md
 let problems = check_notice(&notice, &rules); // empty when it may be published
-let files = build_site(&mut [notice], "https://example.github.io/swarmchasing/", &rules)?;
+// The last argument dates the feed while it has no entry (YYYY-MM-DD).
+let files = build_site(&mut [notice], "https://example.github.io/swarmchasing/", &rules, "2026-10-01")?;
 for (path, contents) in files {
     // index.json, <id>.json, feed.xml: the caller writes them
 }

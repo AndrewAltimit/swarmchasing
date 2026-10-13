@@ -75,6 +75,9 @@ pub struct SiteInputs {
     /// repository path, for the sitemap. Empty when git cannot say (a
     /// shallow clone, no checkout): pages then carry no date.
     pub lastmod: std::collections::BTreeMap<String, String>,
+    /// The build's commit date (`YYYY-MM-DD`): what the feed carries as its
+    /// date while it has no entry.
+    pub dated: String,
 }
 
 /// Values every page's shell shows.
@@ -405,7 +408,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     };
     let mut out: Vec<(String, String)> = Vec::new();
     // Notice data (newest first) as the CLI's `notice build` writes it.
-    for (name, text) in build_site(&mut inp.notices, &base, &rules)? {
+    for (name, text) in build_site(&mut inp.notices, &base, &rules, &inp.dated)? {
         out.push((format!("notices/{name}"), text));
     }
     let mut pages: Vec<Page> = Vec::new();
@@ -646,8 +649,8 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "Grade, link and time records in the browser with the same rules as the CLI.",
         shells::ANALYZE.to_string(),
     );
+    // No preload: the module loads on the first sign of input.
     p.scripts.push("js/pages/analyze.js");
-    p.engine = true;
     p.wide = true;
     pages.push(p);
     let mut p = page(
@@ -829,6 +832,7 @@ mod tests {
             lastmod: [("docs/methodology.md".to_string(), "2026-10-01".to_string())]
                 .into_iter()
                 .collect(),
+            dated: "2026-10-02".into(),
         }
     }
 
@@ -937,6 +941,34 @@ mod tests {
         let g = docs.find("<p class=\"nav-h\">Guides</p>").unwrap();
         assert!(g < m && docs[m..].contains("Admin workflow"));
         assert!(!docs[g..m].contains("Admin workflow") && docs[g..m].contains("For operators"));
+    }
+
+    #[test]
+    fn the_eval_page_opens_in_plain_words_and_notices_say_how_they_work() {
+        let files = build_pages(&mut inputs()).unwrap();
+        let get = |p: &str| &files.iter().find(|(f, _)| f == p).unwrap().1;
+        let ev = get("eval/index.html");
+        let plain = ev.find("id=\"plain-h\">In plain words</h2>").unwrap();
+        assert!(plain < ev.find("id=\"tiers\"").unwrap());
+        assert!(ev.contains("<li><strong>Suggestive or above.</strong> Of "));
+        assert!(ev.contains("<li><strong>Significant or above.</strong> Of "));
+        let idx = get("notices/index.html");
+        assert!(idx.contains("id=\"how-notices-work\""));
+        assert!(idx.contains("<a class=\"button\" href=\"index.json\">JSON index</a>"));
+        // The feed carries a subtitle, and a date even with no entry.
+        let mut inp = inputs();
+        inp.notices.clear();
+        let files = build_pages(&mut inp).unwrap();
+        let feed = &files
+            .iter()
+            .find(|(f, _)| f == "notices/feed.xml")
+            .unwrap()
+            .1;
+        assert!(
+            feed.contains("<updated>2026-10-02T00:00:00Z</updated>"),
+            "{feed}"
+        );
+        assert!(feed.contains("<subtitle>"));
     }
 
     /// The synthetic notices in `tests/fixtures/notices/` (never under
@@ -1051,6 +1083,13 @@ mod tests {
             .unwrap()
             .1;
         assert!(!tools.contains("rel=\"preload\""));
+        // Nor does the workbench: its module loads on the first input.
+        let wb = &files
+            .iter()
+            .find(|(p, _)| p == "analyze/index.html")
+            .unwrap()
+            .1;
+        assert!(!wb.contains("rel=\"preload\""));
     }
 
     #[test]
