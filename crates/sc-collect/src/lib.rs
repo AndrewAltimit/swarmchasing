@@ -3,7 +3,7 @@
 //! Ground rules, enforced by what this crate does and does not implement:
 //! - Read **indexes and public records only** (CDX listings, scan-service
 //!   search results, CT log entries, registry and event-stream metadata,
-//!   wiki edit streams, security.txt). Never download archived content, package code or WARC data.
+//!   wiki edit streams, Hacker News posts, security.txt). Never download archived content, package code or WARC data.
 //!   Never open captured pages or the URLs agents submitted: they may be live
 //!   exploit payloads or trigger callbacks to the operator.
 //! - Never read or write agent callback channels (inboxes, ntfy topics, pastes).
@@ -26,22 +26,27 @@ use serde::{Deserialize, Serialize};
 
 mod arquivo;
 pub mod asn;
+pub mod bluesky;
 mod cache;
 mod client;
 mod commoncrawl;
 mod crtsh;
 mod ctlog;
+pub mod cve;
 mod gharchive;
+pub mod hackernews;
 pub mod identity;
 pub mod lookup;
 mod mcp;
 mod memento;
 mod npm;
+pub mod osv;
 pub mod pager;
 pub mod platform;
 pub mod psl;
 mod pypi;
 mod rdap;
+pub mod registries;
 pub mod securitytxt;
 mod urlquery;
 mod urlscan;
@@ -55,6 +60,7 @@ pub use commoncrawl::{CommonCrawl, parse_cc_cdx, parse_collinfo};
 pub use crtsh::CertRecord;
 pub use ctlog::{CtLog, parse_entries, san_dns_names};
 pub use gharchive::{GhArchive, filter_events};
+pub use hackernews::HnLinks;
 pub use mcp::{McpRegistry, parse_mcp_servers};
 pub use memento::{Memento, parse_timemap};
 pub use npm::{Npm, parse_npm_search};
@@ -162,10 +168,11 @@ pub enum Kind {
     WellKnown,
     Mcp,
     Wikimedia,
+    HackerNews,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 13] = [
+    pub const ALL: [Kind; 14] = [
         Self::Wayback,
         Self::Arquivo,
         Self::Urlquery,
@@ -179,6 +186,7 @@ impl Kind {
         Self::WellKnown,
         Self::Mcp,
         Self::Wikimedia,
+        Self::HackerNews,
     ];
 
     pub fn name(self) -> &'static str {
@@ -196,6 +204,7 @@ impl Kind {
             Self::WellKnown => "wellknown",
             Self::Mcp => "mcp",
             Self::Wikimedia => "wikimedia",
+            Self::HackerNews => "hackernews",
         }
     }
 
@@ -326,6 +335,7 @@ pub fn source(kind: Kind, query: CdxQuery, api_key: Option<String>) -> Result<Bo
         Kind::WellKnown => Box::new(WellKnown::new(query)?),
         Kind::Mcp => Box::new(McpRegistry { query }),
         Kind::Wikimedia => Box::new(WikiLinks::new(query)?),
+        Kind::HackerNews => Box::new(HnLinks { query }),
     })
 }
 

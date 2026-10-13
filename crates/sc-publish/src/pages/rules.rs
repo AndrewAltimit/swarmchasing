@@ -1,6 +1,8 @@
-//! The rules explorer: one card per rule in `rules/default.toml`, read as
-//! plain TOML so a field the analysis does not use yet (a `tactic`, say)
-//! still shows. Each card links its Field Manual section and tactic, and
+//! The rules explorer: one card per rule in `rules/default.toml`, grouped
+//! by kind, read as plain TOML so a field the analysis does not use yet (a
+//! `tactic`, say) still shows. A card is a row (id, weight, flags) that
+//! opens; on a phone the page script starts them closed, so the list is a
+//! list. Each card links its Field Manual section and tactic, and
 //! can test a URL in the page (the engine's unwrap, output defanged). The
 //! editor and the in-browser evaluation sit behind "Edit & test".
 
@@ -150,14 +152,18 @@ pub fn body(
     let _ = writeln!(
         s,
         "<header class=\"page-head\"><h1>Rules</h1>\
-<p class=\"lede\">The indicator rules every analysis on this site and in the CLI runs: rules version <code>{}</code>. Each rule counts once per record. Rules that read the same artifact share an <em>independence group</em>, which counts once, at the largest weight among its rules that fired; other rules add their weight. Context hits (relays, cache-busters, self-identification, headers, outcomes) together count at most {ctx}, so context alone stays below suggestive: people use those services too ({}). A score of {sug} or more is <em>suggestive</em>, {sig} or more is <em>significant</em>, and a rule marked <em>significant alone</em> is enough for that tier by itself.</p>\
-<p class=\"lede\">Rules marked <em>links records</em> join the records they match into one cluster, because only one operator would share that value. How each kind is read is in the <a href=\"../methodology/\">methodology</a> and the Field Manual ({}, {}); how the rules score on the labelled set is on the <a href=\"../eval/\">evaluation</a> page. Every card can test a URL in this page: it is decoded, never opened.</p></header>",
+<p class=\"lede\">The indicator rules every analysis on this site and in the CLI runs, grouped by kind: rules version <code>{}</code>. A record scoring {sug} or more is <em>suggestive</em>, {sig} or more <em>significant</em>. Each rule can test a URL in this page: it is decoded, never opened.</p>\
+<details class=\"explain\"><summary>How a score adds up</summary>\
+<p>Each rule counts once per record. Rules that read the same artifact share an <em>independence group</em>, which counts once, at the largest weight among its rules that fired; other rules add their weight. Context hits (relays, cache-busters, self-identification, headers, outcomes) together count at most {ctx}, so context alone stays below suggestive: people use those services too ({}). A rule marked <em>significant alone</em> is enough for that tier by itself.</p>\
+<p>Rules marked <em>links records</em> join the records they match into one cluster, because only one operator would share that value. How each kind is read is in the <a href=\"../methodology/\">methodology</a> and the Field Manual ({}, {}); how the rules score on the labelled set is on the <a href=\"../eval/\">evaluation</a> page.</p></details></header>",
         esc(&version),
         fm_link(fm, "FM-4.11", "FM-4.11"),
         fm_link(fm, "FM-4.2", "rule anatomy"),
         fm_link(fm, "FM-4.3", "tactics")
     );
-    s.push_str("<form class=\"filters card\" data-rule-filters role=\"search\" aria-label=\"Filter rules\">");
+    // `details.filters-fold`: open, and closed by the page script on a
+    // phone, as the notice filters are.
+    s.push_str("<details class=\"filters-fold\" open><summary>Filter rules</summary><form class=\"filters card\" data-rule-filters role=\"search\" aria-label=\"Filter rules\">");
     s.push_str("<label class=\"grow\">Search<input name=\"q\" type=\"search\" spellcheck=\"false\" placeholder=\"id, pattern or description\"></label>");
     s.push_str("<label>Kind<select name=\"kind\"><option value=\"\">Any</option>");
     for k in &kinds {
@@ -202,105 +208,131 @@ pub fn body(
     s.push_str(
         "<label class=\"check\"><input type=\"checkbox\" name=\"link\"> links records</label><label class=\"check\"><input type=\"checkbox\" name=\"artifact\"> model artifact</label>",
     );
-    let _ = write!(
+    let _ = writeln!(
         s,
         "<p class=\"hint\" data-rule-count aria-live=\"polite\">{} rules</p>\
-<p class=\"hint note\" data-tactic-note hidden>SC-T8 (off-task targets) and SC-T9 (inter-agent coordination) are judgments about a cluster or a fleet, made with the task in view or from several runs together ({}), so no rule matches them. The workbench's Swarm view shows the interaction hints behind SC-T9.</p></form>\n<div class=\"rule-grid\">",
+<p class=\"hint note\" data-tactic-note hidden>SC-T8 (off-task targets) and SC-T9 (inter-agent coordination) are judgments about a cluster or a fleet, made with the task in view or from several runs together ({}), so no rule matches them. The workbench's Swarm view shows the interaction hints behind SC-T9.</p></form></details>",
         cards.len(),
         fm_link(fm, "FM-4.3", "FM-4.3")
     );
-    for c in &cards {
-        let st = stats.get(c.id.as_str());
+    for kind in &kinds {
+        let mine: Vec<&RuleCard> = cards.iter().filter(|c| c.kind == *kind).collect();
         let _ = write!(
             s,
-            "<article class=\"rule-card\" id=\"rule-{}\" data-kind=\"{}\" data-target=\"{}\" data-tactic=\"{}\" data-significant=\"{}\" data-link=\"{}\" data-artifact=\"{}\" data-text=\"{}\">\
-<header><h2><code>{}</code></h2><span class=\"badge kind-{}\">{}</span></header>",
-            esc(&c.id),
-            esc(&c.kind),
-            esc(&c.target),
-            esc(c.tactic.as_deref().unwrap_or("")),
-            c.significant,
-            c.link,
-            c.artifact,
-            esc(&format!(
-                "{} {} {} {}",
-                c.id,
-                c.pattern,
-                c.description,
-                c.group.as_deref().unwrap_or("")
-            )
-            .to_lowercase()),
-            esc(&c.id),
-            esc(&slug_class(&c.kind)),
-            esc(&kind_label(&c.kind)),
+            "<section class=\"rule-kind\" data-rule-kind=\"{0}\" aria-labelledby=\"kind-{0}\"><h2 id=\"kind-{0}\">{1} <span class=\"hint\">{2}</span></h2><div class=\"rule-grid\">",
+            esc(&slug_class(kind)),
+            esc(&kind_label(kind)),
+            plural(mine.len(), "rule", "rules"),
         );
-        if !c.description.is_empty() {
-            let _ = write!(s, "<p>{}</p>", esc(&c.description));
+        for c in mine {
+            s.push_str(&card(c, stats.get(c.id.as_str()).copied(), fm));
         }
+        s.push_str("</div></section>\n");
+    }
+    s.push_str("<p class=\"hint\" data-rule-none hidden>No rule matches these filters.</p>\n");
+    editor(&mut s, toml_text);
+    Ok(s)
+}
+
+/// One rule: a compact row (id, weight, flags) that opens on its
+/// description, facts, pattern, URL test and labelled-set hits. Open in the
+/// markup; the page script closes them on a phone.
+fn card(c: &RuleCard, st: Option<&RuleStat>, fm: &BTreeMap<String, String>) -> String {
+    let mut s = String::new();
+    let _ = write!(
+        s,
+        "<article class=\"rule-card\" id=\"rule-{}\" data-kind=\"{}\" data-target=\"{}\" data-tactic=\"{}\" data-significant=\"{}\" data-link=\"{}\" data-artifact=\"{}\" data-text=\"{}\">\
+<details class=\"rule-fold\" open><summary><h3><code>{}</code></h3><span class=\"rule-w\" title=\"Weight\">+{}</span>{}</summary><div class=\"rule-body\">",
+        esc(&c.id),
+        esc(&c.kind),
+        esc(&c.target),
+        esc(c.tactic.as_deref().unwrap_or("")),
+        c.significant,
+        c.link,
+        c.artifact,
+        esc(&format!(
+            "{} {} {} {}",
+            c.id,
+            c.pattern,
+            c.description,
+            c.group.as_deref().unwrap_or("")
+        )
+        .to_lowercase()),
+        esc(&c.id),
+        c.weight,
+        flags(c),
+    );
+    if !c.description.is_empty() {
+        let _ = write!(s, "<p>{}</p>", esc(&c.description));
+    }
+    let _ = write!(
+        s,
+        "<dl class=\"rule-meta\"><div><dt>Weight</dt><dd>+{}</dd></div><div><dt>Matches</dt><dd>{}</dd></div>",
+        c.weight,
+        esc(&c.target.replace('_', " "))
+    );
+    if let Some(g) = &c.group {
         let _ = write!(
             s,
-            "<dl class=\"rule-meta\"><div><dt>Weight</dt><dd>+{}</dd></div><div><dt>Matches</dt><dd>{}</dd></div>",
-            c.weight,
-            esc(&c.target.replace('_', " "))
+            "<div><dt>Group</dt><dd><code>{}</code> <span class=\"hint\">counts once per record ({})</span></dd></div>",
+            esc(g),
+            fm_link(fm, "FM-4.11", "FM-4.11")
         );
-        if let Some(g) = &c.group {
-            let _ = write!(
-                s,
-                "<div><dt>Group</dt><dd><code>{}</code> <span class=\"hint\">counts once per record ({})</span></dd></div>",
-                esc(g),
-                fm_link(fm, "FM-4.11", "FM-4.11")
-            );
-        }
-        if let Some(t) = &c.tactic {
-            let _ = write!(
-                s,
-                "<div><dt>Tactic</dt><dd>{}</dd></div>",
-                fm_link(fm, &format!("SC-{t}"), &tactic_label(t))
-            );
-        }
-        let section = if c.artifact { "FM-4.5" } else { "FM-4.4" };
+    }
+    if let Some(t) = &c.tactic {
         let _ = write!(
             s,
-            "<div><dt>Manual</dt><dd>{}</dd></div></dl>",
-            fm_link(fm, section, section)
+            "<div><dt>Tactic</dt><dd>{}</dd></div>",
+            fm_link(fm, &format!("SC-{t}"), &tactic_label(t))
         );
-        if c.significant || c.link || c.artifact {
-            s.push_str("<p class=\"flags\">");
-            if c.significant {
-                s.push_str("<span class=\"flag sig\">significant alone</span>");
-            }
-            if c.link {
-                s.push_str("<span class=\"flag link\">links records</span>");
-            }
-            if c.artifact {
-                s.push_str("<span class=\"flag artifact\" title=\"The match only shows that a model wrote the request\">model artifact</span>");
-            }
-            s.push_str("</p>");
-        }
-        let _ = write!(
-            s,
-            "<pre class=\"pattern\" aria-label=\"Pattern\"><code>{}</code></pre>",
-            esc(&c.pattern)
-        );
-        let _ = write!(
-            s,
-            "<details class=\"rule-test\" data-rule-test=\"{0}\"><summary>Test a URL</summary>\
+    }
+    let section = if c.artifact { "FM-4.5" } else { "FM-4.4" };
+    let _ = write!(
+        s,
+        "<div><dt>Manual</dt><dd>{}</dd></div></dl>",
+        fm_link(fm, section, section)
+    );
+    let _ = write!(
+        s,
+        "<pre class=\"pattern\" aria-label=\"Pattern\"><code>{}</code></pre>",
+        esc(&c.pattern)
+    );
+    let _ = write!(
+        s,
+        "<details class=\"rule-test\" data-rule-test=\"{0}\"><summary>Test a URL</summary>\
 <div class=\"row\"><label class=\"sr-only\" for=\"rt-{0}\">URL to test against {0}</label><input id=\"rt-{0}\" class=\"grow\" spellcheck=\"false\" autocomplete=\"off\" placeholder=\"https://r.jina.ai/https://...\">\
 <button type=\"button\" data-test-run data-needs-engine disabled>Test</button></div><div class=\"rt-out\" aria-live=\"polite\"></div></details>",
-            esc(&c.id)
-        );
-        let (agent, benign, precision) =
-            st.map_or((0, 0, None), |r| (r.on_agent, r.on_benign, r.precision));
-        let _ = write!(
-            s,
-            "<p class=\"hint\">Labelled set: {} (<a href=\"../eval/#per-rule\">hits per rule</a>)</p>",
-            hit_counts(agent, benign, precision)
-        );
-        s.push_str("</article>");
-    }
-    s.push_str(
-        "</div>\n<p class=\"hint\" data-rule-none hidden>No rule matches these filters.</p>\n",
+        esc(&c.id)
     );
+    let (agent, benign, precision) =
+        st.map_or((0, 0, None), |r| (r.on_agent, r.on_benign, r.precision));
+    let _ = write!(
+        s,
+        "<p class=\"hint\">Labelled set: {} (<a href=\"../eval/#per-rule\">hits per rule</a>)</p>",
+        hit_counts(agent, benign, precision)
+    );
+    s.push_str("</div></details></article>");
+    s
+}
+
+/// A rule's flags, in its row: significant alone, links records, model
+/// artifact.
+fn flags(c: &RuleCard) -> String {
+    let mut s = String::new();
+    if c.significant {
+        s.push_str("<span class=\"flag sig\">significant alone</span>");
+    }
+    if c.link {
+        s.push_str("<span class=\"flag link\">links records</span>");
+    }
+    if c.artifact {
+        s.push_str("<span class=\"flag artifact\" title=\"The match only shows that a model wrote the request\">model artifact</span>");
+    }
+    s
+}
+
+/// The rules editor, after the rules.
+fn editor(s: &mut String, toml_text: &str) {
     let _ = writeln!(
         s,
         "<section class=\"card editor\" id=\"edit\" aria-labelledby=\"edit-h\"><h2 id=\"edit-h\">Edit &amp; test</h2>\
@@ -316,7 +348,6 @@ pub fn body(
 <p class=\"hint\" id=\"rules-status\" aria-live=\"polite\"></p><div id=\"eval-out\" class=\"detail\"></div></details></section>",
         esc(toml_text)
     );
-    Ok(s)
 }
 
 #[cfg(test)]
@@ -369,6 +400,13 @@ group = "oast"
         assert_eq!(cards[1].group.as_deref(), Some("oast"));
         assert!(b.contains("<dt>Group</dt><dd><code>oast</code>"));
         assert!(!b.contains("the sum of the weights"));
+        // Grouped by kind, each rule a row that opens, the scoring folded.
+        assert!(b.contains("<section class=\"rule-kind\" data-rule-kind=\"exfil\""));
+        assert!(b.find("data-rule-kind=\"exfil\"") < b.find("data-rule-kind=\"relay\""));
+        assert!(b.contains(
+            "<details class=\"rule-fold\" open><summary><h3><code>b</code></h3><span class=\"rule-w\" title=\"Weight\">+4</span><span class=\"flag link\">"
+        ));
+        assert!(b.contains("<details class=\"explain\"><summary>How a score adds up</summary>"));
     }
 
     #[test]

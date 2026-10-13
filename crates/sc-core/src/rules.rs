@@ -55,8 +55,8 @@ pub struct RuleDef {
     /// run tags, client headers), not an action.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub artifact: bool,
-    /// A test a `param_value` match must also pass: the pattern finds
-    /// candidates, the check decides what regular expressions cannot.
+    /// A test a match must also pass: the pattern finds candidates, the
+    /// check decides what regular expressions cannot ([`Check::target`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check: Option<Check>,
     /// The independence group: rules that read the same artifact of one
@@ -75,12 +75,29 @@ pub enum Check {
     /// One word or short phrase repeated five or more times in a row
     /// ([`crate::prose::repeated_token`]).
     RepeatedToken,
+    /// A `sec-ch-ua-platform` header naming another desktop system than the
+    /// request's user agent ([`crate::ua_platform::mismatch`]).
+    UaPlatformMismatch,
 }
 
 impl Check {
-    pub(crate) fn passes(self, value: &str) -> bool {
+    /// The one target a rule with this check may read.
+    pub fn target(self) -> Target {
+        match self {
+            Check::RepeatedToken => Target::ParamValue,
+            Check::UaPlatformMismatch => Target::Header,
+        }
+    }
+
+    /// Whether the matched `value` (a parameter value, or a header line as
+    /// `name: value`) passes, given the record's user agent.
+    pub(crate) fn passes(self, value: &str, user_agent: Option<&str>) -> bool {
         match self {
             Check::RepeatedToken => crate::prose::repeated_token(value),
+            Check::UaPlatformMismatch => {
+                let hint = value.split_once(':').map_or(value, |(_, v)| v);
+                user_agent.is_some_and(|ua| crate::ua_platform::mismatch(ua, hint))
+            }
         }
     }
 }
@@ -189,6 +206,8 @@ pub struct RuleSet {
     #[serde(default)]
     pub co_activity: crate::coactivity::CoActivityOptions,
     #[serde(default)]
+    pub co_target: crate::cotarget::CoTargetOptions,
+    #[serde(default)]
     pub swarm: crate::swarm::SwarmOptions,
     #[serde(default, rename = "rule")]
     pub rules: Vec<RuleDef>,
@@ -261,9 +280,15 @@ impl Rules {
                     t.label()
                 ));
             }
-            if def.check.is_some() && def.target != Target::ParamValue {
+            if let Some(c) = def.check
+                && def.target != c.target()
+            {
+                let want = serde_json::to_value(c.target())
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default();
                 return Err(format!(
-                    "rule `{}`: a check needs target = \"param_value\"",
+                    "rule `{}`: this check needs target = \"{want}\"",
                     def.id
                 ));
             }
@@ -456,6 +481,7 @@ mod tests {
             crate::escalation::EscalationOptions::default()
         );
         assert_eq!(s.soft_links, crate::fleets::SoftLinkOptions::default());
+        assert_eq!(s.co_target, crate::cotarget::CoTargetOptions::default());
         assert_eq!(s.scaffold, crate::scaffold::ScaffoldOptions::default());
         assert_eq!(
             s.co_activity,
@@ -542,7 +568,7 @@ mod tests {
     }
 
     #[test]
-    fn checks_need_a_param_value_target_and_a_known_name() {
+    fn checks_need_their_target_and_a_known_name() {
         let rule = |target: &str, check: &str| {
             format!(
                 "[[rule]]\nid = \"x.y\"\nkind = \"agent_marker\"\ntarget = \"{target}\"\npattern = \"a\"\ncheck = \"{check}\"\n"
@@ -553,6 +579,11 @@ mod tests {
             .err()
             .unwrap();
         assert!(e.contains("param_value"), "{e}");
+        assert!(Rules::from_toml(&rule("header", "ua_platform_mismatch")).is_ok());
+        let e = Rules::from_toml(&rule("param_value", "ua_platform_mismatch"))
+            .err()
+            .unwrap();
+        assert!(e.contains("\"header\""), "{e}");
         let e = Rules::from_toml(&rule("param_value", "palindrome"))
             .err()
             .unwrap();

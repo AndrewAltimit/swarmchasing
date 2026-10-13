@@ -10,7 +10,9 @@ use super::{Analysis, AsnSummary, Cluster, ObsResult, hints, link};
 use crate::extract::extract;
 use crate::model::{Observation, Tier};
 use crate::rules::Rules;
-use crate::timing::{SharedPauseOptions, infer_offset, max_concurrency, shared_pauses, timing};
+use crate::timing::{
+    SharedPauseOptions, infer_offset, max_concurrency, shared_pauses_family, timing,
+};
 use std::collections::BTreeMap;
 
 /// What the passes share: the rules, the records not yet scored, the
@@ -124,10 +126,12 @@ pub(super) const PASSES: &[Pass] = &[
                     (c.id.clone(), ts.filter(|&t| t > 0).collect())
                 })
                 .collect();
-        cx.a.shared_pauses = shared_pauses(
+        let (pauses, family) = shared_pauses_family(
             &quiet,
             &SharedPauseOptions::from_linking(&cx.rules.set.linking),
         );
+        cx.a.shared_pauses = pauses;
+        cx.a.multiplicity.push(family);
     }),
     pass("dialect_pairs", &["number", "dialect"], |cx| {
         cx.a.dialect_pairs = crate::dialect::dialect_pairs(
@@ -144,20 +148,33 @@ pub(super) const PASSES: &[Pass] = &[
     // flagged records.
     pass("scaffolds", &["number", "trim_layers"], |cx| {
         let s = &cx.rules.set;
-        cx.a.scaffold_pairs = crate::scaffold::scaffold_pairs(
+        let (pairs, family) = crate::scaffold::scaffold_pairs(
             &cx.a.clusters,
             &cx.a.results,
             s.soft_links.max_shared,
             &s.scaffold,
         );
+        cx.a.scaffold_pairs = pairs;
+        cx.a.multiplicity.push(family);
     }),
     pass("co_activity", &["number"], |cx| {
         let s = &cx.rules.set;
-        cx.a.coactive_pairs = crate::coactivity::coactive_pairs(
+        let (pairs, family) = crate::coactivity::coactive_pairs(
             &cx.a.clusters,
             &cx.a.results,
             s.soft_links.max_shared,
             &s.co_activity,
+        );
+        cx.a.coactive_pairs = pairs;
+        cx.a.multiplicity.push(family);
+    }),
+    pass("co_target", &["number"], |cx| {
+        let s = &cx.rules.set;
+        cx.a.cotarget_pairs = crate::cotarget::cotarget_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.co_target,
         );
     }),
     pass(
@@ -169,11 +186,14 @@ pub(super) const PASSES: &[Pass] = &[
             "trim_layers",
             "scaffolds",
             "co_activity",
+            "co_target",
         ],
         fleets,
     ),
     pass("swarm", &["number", "trim_layers"], |cx| {
-        cx.a.swarm_edges = crate::swarm::swarm_edges(&cx.a.clusters, &cx.a.results, cx.rules);
+        let (edges, families) = crate::swarm::swarm_edges(&cx.a.clusters, &cx.a.results, cx.rules);
+        cx.a.swarm_edges = edges;
+        cx.a.multiplicity.extend(families);
     }),
     pass(
         "scope",
@@ -401,6 +421,7 @@ fn fleets(cx: &mut AnalysisCtx) {
             common_features: &a.common_features,
             scaffold_pairs: &a.scaffold_pairs,
             coactive_pairs: &a.coactive_pairs,
+            cotarget_pairs: &a.cotarget_pairs,
         },
         opts,
     );

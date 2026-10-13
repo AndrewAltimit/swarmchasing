@@ -458,6 +458,7 @@ mod tests {
         // The premise: chance alignments exist.
         let loose = SharedPauseOptions {
             max_chance: 1.0,
+            fdr: 1.0,
             ..opts.clone()
         };
         let raw = shared_pauses(

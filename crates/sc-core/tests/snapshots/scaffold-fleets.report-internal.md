@@ -6,7 +6,7 @@
 - **Window:** 2026-04-01 06:03:41 UTC → 2026-05-14 08:43:38 UTC
 - **Records:** 45 linked public records in 13 cluster(s) (of 45 records reviewed, 45 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.3
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-13.2
 
 ## Summary
 
@@ -209,6 +209,20 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C13**: 2026-04-22 13:03:41 UTC to 2026-04-22 13:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=lh3o6v`
 
+
+## Candidate fleets
+
+Clusters tied by soft links (shared pauses, reruns, recon openings, encoding, shared scaffolds, co-activity and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.
+
+- **F1**: C1, C2, 1 soft link(s): co-activity (weakest pair 0.96)
+  - C1 ↔ C2: co-activity (0.96): 8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 5.0e-3: 2.1e-9 analytic, a share of 0.005 of 199 circular shifts; …
+
+## Pairwise tests
+
+Every pair test over the whole analysis, by family: the pairs tested, those kept under the family's false-discovery cut, and how many that unlikely chance alone would give among them.
+
+- scaffold: 0 kept of 3 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
+- co_activity: 1 kept of 1 tested (1 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
 
 ## Representative records
 

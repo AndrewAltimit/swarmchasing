@@ -19,23 +19,26 @@ A gate fails the commit or the run. CI is the authority; the hook is a fast loca
 | `cargo fmt --check` | Formatting. The hook auto-fixes and re-stages. | `ci` | staged Rust, `Cargo.*`, `rules/`, `samples/eval/` |
 | `cargo clippy -D warnings` | Lints, warnings as errors. | `ci` | as above |
 | `cargo test --profile release-test` | The test suite. | `ci` | not run; run it before pushing |
-| [`ci/eval-gate.sh`](ci/eval-gate.sh) | Precision and recall floors on `samples/eval/`, all and non-synthetic, then `eval check-results` on the saved results ([evaluation](../docs/reference/evaluation.md#the-eval-gate)). | `ci` | staged `rules/`, `crates/sc-core/`, `samples/eval/` |
+| [`ci/eval-gate.sh`](ci/eval-gate.sh) | Precision and recall floors on `samples/eval/`, all and non-synthetic, `eval check-results` on the saved results, then the simulator's precision floors and null-scenario ceilings ([evaluation](../docs/reference/evaluation.md#the-eval-gate)). | `ci` | staged `rules/`, `crates/sc-core/`, `crates/sc-sim/`, `samples/eval/`, `samples/sim/` |
 | [`ci/check-rules-schema.py`](ci/check-rules-schema.py) | `rules/default.toml` validates against [`schemas/sc-rules-v1.json`](../schemas/sc-rules-v1.json) ([SC-Rules v1](../docs/specs/rules-v1.md)). Stdlib only. | `gates` | staged `rules/` or `schemas/` |
 | `swarmchase notice lint` | Committed notices carry nothing a notice withholds ([notices](../docs/reference/notices.md#lint)). | `ci` | staged `notices/` |
 | [`ci/check-wasm-target.sh`](ci/check-wasm-target.sh) | Type-checks `sc-wasm` (engine and `tools` feature), `sc-rules-wasm` and `sc-case` for `wasm32-unknown-unknown`. | `ci` | staged `crates/sc-core/`, `crates/sc-wasm/`, `crates/sc-case/` |
+| `swarmchase watch --check` | The watchlist read strictly: unknown keys, bad values, duplicate names, every source built offline ([watch](../docs/reference/watch.md#checking-a-watchlist)). | `ci` | staged `watchlist.toml`, `crates/sc-collect/`, `crates/swarmchase/src/watch/` |
 | [`site-xss-check.mjs`](site-xss-check.mjs) | Builds the site with a hostile notice and drives every page in headless Chrome with XSS probes, and checks phone layout, nav menus and the theme toggle; fails if a probe runs or a layout check fails. | `deploy-pages` | not run |
+| [`ci/site-xss-container.sh`](ci/site-xss-container.sh) | Runs the XSS check against a pinned headless Chrome in a container, for a machine with Docker and no Chrome. | `deploy-pages` | not run |
 
 Pull requests run `gates` then `ci`; pushes to `main` run both and then `deploy-pages`. Pull requests from forks run nothing. The jobs are in [`main-ci.yml`](../.github/workflows/main-ci.yml); the runner setup is in [runner](../docs/reference/runner.md).
 
-`site-xss-check.mjs` exits 2 when it cannot run (no Chrome, or `site/pkg` not built). CI treats that as a warning unless the repo variable `SWARMCHASE_REQUIRE_BROWSER` is `true`.
+`site-xss-check.mjs` exits 2 when it cannot run (no Chrome, or `site/pkg` not built). CI treats that as a warning unless the repo variable `SWARMCHASE_REQUIRE_BROWSER` is `true`. In `deploy-pages` a step before it finds a browser and passes it as `$CHROME`; with none, [`site-xss-container.sh`](ci/site-xss-container.sh) runs the check against a pinned headless Chrome in a container ([runner](../docs/reference/runner.md#runner-requirements)).
 
 ## CI helpers
 
 | Script | Does | Used by |
 |---|---|---|
 | [`ci/select-ci-target-dir.sh`](ci/select-ci-target-dir.sh) | Points `CARGO_TARGET_DIR` at a per-compiler cache outside the checkout and prunes the others. | every cargo job in both workflows |
-| [`ci/build-site.sh`](ci/build-site.sh) | Builds the WASM modules (wasm-opt cached by module hash, size budget enforced), then the site into `_site/`, then runs `check-site.py` on it. | `deploy-pages`; local site work |
-| [`ci/send-mail.sh`](ci/send-mail.sh) | Sends a plain-text email to the admin over SMTP with `curl`, with Date and Message-ID headers; refuses header injection. | `watch.yml` digest and failure alert |
+| [`ci/build-site.sh`](ci/build-site.sh) | Builds the WASM modules (wasm-opt run on all of them in parallel, cached by module hash, size budget enforced), then the site into `_site/`, then runs `check-site.py` on it. | `deploy-pages`; local site work |
+| [`ci/send-mail.sh`](ci/send-mail.sh) | Sends a plain-text email to the admin over SMTP with `curl`, with Date and Message-ID headers; refuses header injection. | `watch.yml` digest and failure alert, `watch-stale.yml` |
+| [`ci/check-watch-age.sh`](ci/check-watch-age.sh) | Prints the newest watch run's stamp and age from `<data>/LATEST`; exits 1 when it is older than the limit (default 12 hours) or missing. | `watch-stale.yml` |
 | [`ci/install-hooks.sh`](ci/install-hooks.sh) | Points `core.hooksPath` at `git-hooks/`. Run once per clone. | contributors |
 
 ## Hooks

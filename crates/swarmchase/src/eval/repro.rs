@@ -183,6 +183,17 @@ pub fn run(args: &ReproArgs) -> Result<()> {
     };
     restrict(&mut l, ids(&only)?.as_deref(), ids(&exclude)?.as_deref());
     let a = sc_core::analyze(read_records(&InputArgs::files(records))?, &rules.rules);
+    if let Some(want) = v["scored_ids"]["sha256"].as_str() {
+        let now = super::scored_ids(&a, &l);
+        if now.sha256 != want {
+            problems.push(format!(
+                "the labelled records scored changed: saved sha256:{want} over {} ids, now sha256:{} over {}",
+                v["scored_ids"]["count"].as_u64().unwrap_or(0),
+                now.sha256,
+                now.count
+            ));
+        }
+    }
     let (_, _, s) = sc_core::summarize(&a, &l, &rules.text, "").map_err(anyhow::Error::msg)?;
     let now = serde_json::to_value(&s)?;
     let d = diff(&v["summary"], &now);

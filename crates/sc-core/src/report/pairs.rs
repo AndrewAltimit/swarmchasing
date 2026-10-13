@@ -33,6 +33,7 @@ impl Report<'_> {
         if matches!(self.opts.audience, Audience::Internal | Audience::Provider) {
             crate::swarm::report_block(s, &self.a.swarm_edges, &|x, y| self.pair_shown(x, y));
         }
+        self.multiplicity(s);
         self.common_features(s);
         self.date_tags(s);
     }
@@ -121,6 +122,27 @@ impl Report<'_> {
                     defang(&truncate(&l.detail, 160))
                 );
             }
+        }
+    }
+
+    /// How many pairs each family of pairwise tests read and kept, and how
+    /// many that unlikely chance alone would give: case notes only.
+    fn multiplicity(&self, s: &mut String) {
+        let families: Vec<&crate::chance::TestFamily> = self
+            .a
+            .multiplicity
+            .iter()
+            .filter(|f| f.tested > 0)
+            .collect();
+        if self.opts.audience != Audience::Internal || families.is_empty() {
+            return;
+        }
+        let _ = writeln!(
+            s,
+            "\n## Pairwise tests\n\nEvery pair test over the whole analysis, by family: the pairs tested, those kept under the family's false-discovery cut, and how many that unlikely chance alone would give among them.\n"
+        );
+        for f in families {
+            let _ = writeln!(s, "- {}", f.line());
         }
     }
 

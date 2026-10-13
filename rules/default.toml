@@ -37,15 +37,17 @@
 #   artifact    true = the match is a trace of how the agent was built, not an
 #               action (model-output residue, run tags, self-identification,
 #               client headers, sandbox hosts)
-#   check       param_value rules only: a test the matched value must also pass,
-#               for what a regex cannot say (repeated_token: a word or phrase
-#               repeated five or more times in a row)
+#   check       a test the match must also pass, for what a regex cannot say:
+#               repeated_token (param_value rules: a word or phrase repeated
+#               five or more times in a row), ua_platform_mismatch (header
+#               rules: a Sec-CH-UA-Platform hint naming another desktop system
+#               than the user agent)
 #
 # A single relay hit is NOT evidence of an agent: people use these services too.
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-12.3"
+version = "2026-10-13.2"
 
 [thresholds]
 suggestive = 3
@@ -134,46 +136,71 @@ cross_service_ambient = 3
 window_secs = 1800
 relay = ["relay.*"]
 program = ["carrier.httpbin", "carrier.data_url_script", "carrier.inline_fetch_program", "carrier.form_post_program", "carrier.html_program"]
-remote_browser = ["carrier.livecodes", "carrier.codesandbox", "carrier.browserless"]
+remote_browser = ["carrier.livecodes", "carrier.codesandbox", "carrier.browserless", "carrier.remote_browser_cdp"]
 
-# Soft links: descriptive ties between clusters, never merges. Each kind's
-# weight is its strength (times its own similarity where it has one). A value
-# shared by more than `max_shared` clusters links none of them. Pairs whose
-# links combine (1 - product of (1 - strength)) to `fleet_min_strength` or
-# more are grouped into candidate fleets for the admin to check.
+# Soft links: descriptive ties between clusters, never merges. Each kind is a
+# likelihood ratio: how much likelier the link is between two clusters of one
+# operator than between unrelated ones (1 or less: the kind is off). A pair
+# kept by a chance test (shared pauses, scaffolds, co-activity, co-targets)
+# carries its kind's ratio in full; any other link's ratio is its kind's
+# raised to its similarity, where it has one, and to its rarity: a value held
+# by n of the N clusters above noise counts ln(N/n) / ln(N/2) of its kind. A
+# value shared by more than `max_shared` clusters links none of them, and a
+# link whose ratio comes out below `min_link_lr` is not listed. Kinds fall
+# into four families (harness, timeline, targets, identifiers); a pair counts
+# its strongest link per family and the families' ratios multiply. Pairs at
+# `fleet_min_lr` or more are the edges of the fleet graph, which is reduced to
+# its backbone (disparity filter at `backbone_alpha`, or neighbourhood overlap
+# of at least `backbone_overlap`) and split into communities whose pairs hold
+# on average `fleet_density` of a threshold edge's log ratio (the constant
+# Potts model). Each community of two or more is a candidate fleet.
+#
+# Where `swarmchase sim calibrate samples/sim/scenarios.toml` measures a kind,
+# its ratio here is the calibration's conservative ("low") value rounded down,
+# and a kind the simulation finds no evidence for is off. A kind the
+# simulation cannot produce (it copies request content, so no captured
+# secrets, header sets or reruns) keeps a ratio set by judgment.
 [soft_links]
-fleet_min_strength = 0.5
+fleet_min_lr = 20.0
+fleet_density = 0.5
+backbone_alpha = 0.05
+backbone_overlap = 0.5
+min_link_lr = 2.0
 max_shared = 10
-shared_pause = 0.6
-dialect = 0.4
-rerun = 0.6
-preamble = 0.4
-path_set = 0.4
-encoding = 0.2
-fanout = 0.2
-cut_length = 0.3
-header_set = 0.3
-escalation = 0.6
-common_feature = 0.3
-# The same redacted secret (REDACTED-<hash>) in records of both clusters: a
-# captured token reused by another cluster. Stock passwords do not count.
-shared_secret = 0.8
-# The same chain of two or more relays and carriers (jina, then a translate
-# proxy, then the target). A single relay is every relay user's habit.
-relay_stack = 0.3
-# Inboxes on the same callback service (webhook.site, a request catcher, an
-# ntfy server) in both clusters. The same inbox links outright; a fresh inbox
-# per run on one service is a habit worth a look, shared by many clients.
-callback_service = 0.3
-# Clusters whose requests share a structure with values set aside (relay
-# route, parameter slots in order, encoding, payloads), beyond chance: one
-# harness behind clusters that share no identifier. Times the similarity.
-scaffold = 0.6
-# Clusters active in the same minutes, or one trailing the other, beyond a
-# circular-shift chance model: one dispatcher behind both. Times the share of
-# the quieter cluster's activity that coincides. A pair tied by shared pauses
-# gets no co-activity link.
-co_activity = 0.6
+# Judgment: tested against a chance model, never produced by the simulation.
+shared_pause = 4.0
+# Simulation: weak (point ratio above 3, low bound near 1); listed when rare.
+dialect = 2.0
+# Judgment for the next six: the simulation does not produce them. A rerun of
+# a whole host list in order on another day is a fleet edge on its own.
+rerun = 25.0
+preamble = 3.0
+path_set = 3.0
+cut_length = 2.0
+header_set = 2.0
+common_feature = 2.0
+# Simulation: no evidence (unrelated clusters share a style as often).
+encoding = 1.0
+fanout = 1.0
+# Simulation.
+escalation = 30.0
+# Judgment: the same redacted secret (REDACTED-<hash>) in records of both
+# clusters, a captured token reused. Stock passwords do not count.
+shared_secret = 50.0
+# Simulation: no evidence. A stack of two or more relays and carriers is
+# shared by unrelated clusters as often as by one operator's.
+relay_stack = 1.0
+# Simulation: no evidence. Inboxes on one callback service (webhook.site, a
+# request catcher); the same inbox links outright.
+callback_service = 1.0
+# Judgment: a shared structure beyond the scaffold chance model.
+scaffold = 20.0
+# Simulation: active in the same minutes beyond the co-activity chance model.
+# A pair tied by shared pauses gets no co-activity link.
+co_activity = 25.0
+# Simulation: the same rare targets in the same hours beyond the co-target
+# chance model.
+co_target = 40.0
 
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least
@@ -215,6 +242,22 @@ fdr = 0.05
 clock_tolerance_secs = 120
 clock_weight = 0.25
 
+# Co-target: each cluster's request and submit times (never capture times) on
+# each target host and action (probe, callback, fetch, visit) in `bin_secs`
+# bins; two clusters share an item when active on it within `max_lag_bins`
+# bins of each other. A host touched by more than `max_holders` senders
+# (clusters, and records outside them) ties none. A pair needs shared items on
+# `min_hosts` hosts and a hypergeometric chance of at most `max_chance` over
+# the rare items any cluster was active on while both were, then a false
+# discovery rate cut at `fdr` over the pairs tested.
+[co_target]
+bin_secs = 3600
+max_lag_bins = 1
+min_hosts = 3
+max_holders = 4
+max_chance = 0.01
+fdr = 0.05
+
 # Interaction edges (SC-T9). S3 synchronized start: two runs of different
 # clients whose requests, unflagged ones of the same client included, line up
 # within `lockstep_tolerance_secs` at one offset up to
@@ -222,14 +265,19 @@ clock_weight = 0.25
 # requests and `lockstep_min_share` of the shorter run. Kept when the larger
 # of two chances is at most `lockstep_max_chance`: the shorter run placed at
 # random over the analysis span, and its own gaps permuted
-# `lockstep_permutations` times with its start kept. Capture times never count.
+# `lockstep_permutations` times with its start kept, continued to
+# `lockstep_max_permutations` when none lines up as well. Capture times never
+# count. S3, S4 and S5 edges are each cut at false discovery rate `fdr` over
+# the pairs their test read.
 [swarm]
 lockstep_tolerance_secs = 3
 lockstep_min_events = 4
 lockstep_min_share = 0.6
 lockstep_max_offset_secs = 120
 lockstep_permutations = 199
+lockstep_max_permutations = 1999
 lockstep_max_chance = 0.01
+fdr = 0.05
 
 # Repeated cut lengths: at least `min_records` truncated URLs within
 # `tolerance` characters of a common length. `rule` marks a URL as cut off.
@@ -369,6 +417,26 @@ pattern = "(arquivo\\.pt/wayback|web\\.archive\\.org/web)/\\d{8,14}id_/|arquivo\
 weight = 2
 description = "Raw-capture or on-demand-save web-archive URL wrapping a target (indirection)"
 
+[[rule]]
+id = "relay.scrape_api"
+group = "relay"
+kind = "relay"
+tactic = "T1"
+target = "url"
+# Scraping APIs that fetch a page server-side, through their own browsers and
+# proxies, and return it. The target rides in a `url` parameter
+# (https://www.scrapingbee.com/documentation/ ,
+# https://docs.scraperapi.com/making-requests/customizing-requests ,
+# https://docs.zenrows.com/universal-scraper-api/api-reference) or, for
+# Firecrawl, in a JSON body posted to api.firecrawl.dev
+# (https://docs.firecrawl.dev/api-reference/endpoint/scrape), so a program
+# naming it shows the route. Their `api_key`/`apikey` parameters are redacted
+# at ingest. Not a subdomain: docs.zenrows.com and www.scrapingbee.com are the
+# services' own pages.
+pattern = "(^|[^a-z0-9.-])(app\\.scrapingbee\\.com|api\\.scraperapi\\.com|api\\.zenrows\\.com|api\\.firecrawl\\.dev)\\b"
+weight = 2
+description = "Scraping API fetching a target server-side (ScrapingBee, ScraperAPI, ZenRows, Firecrawl)"
+
 # ── Carriers: echo / sandbox / code-hosting services ───────────────────────
 [[rule]]
 id = "carrier.httpbin"
@@ -414,6 +482,43 @@ target = "url"
 pattern = "production-(sfo|lon|ams)\\.browserless\\.io|chrome\\.browserless\\.io"
 weight = 2
 description = "Browserless hosted headless-browser endpoint (remote browser)"
+
+[[rule]]
+id = "carrier.remote_browser_cdp"
+kind = "carrier"
+tactic = "T2"
+target = "url"
+# The DevTools connect hosts of hosted-browser services, which agents drive
+# over CDP (`puppeteer.connect`, `connectOverCDP`): wss://connect.steel.dev
+# (https://docs.steel.dev/overview/sessions-api/quickstart),
+# wss://connect.browser-use.com
+# (https://docs.browser-use.com/cloud/guides/browser-api),
+# wss://connect.browserbase.com
+# (https://docs.browserbase.com/reference/api/connect) and
+# wss://connect.hyperbrowser.ai (https://github.com/hyperbrowserai/examples).
+# The `apiKey`, `sessionId` and `token` parameters are redacted at ingest.
+# Not a subdomain, so docs and status hosts do not match.
+pattern = "(^|[^a-z0-9.-])connect\\.(steel\\.dev|browser-use\\.com|browserbase\\.com|hyperbrowser\\.ai)\\b"
+weight = 2
+description = "Hosted-browser DevTools connect endpoint (Steel, Browser Use, Browserbase, Hyperbrowser)"
+
+[[rule]]
+id = "carrier.agent_sandbox"
+kind = "carrier"
+tactic = "T2"
+target = "url"
+# Public preview hosts of code sandboxes agents run in: E2B
+# `<port>-<sandbox id>.e2b.app` (https://e2b.dev/docs/network/public-url),
+# Daytona `<port>-<sandbox id>.proxy.daytona.work`
+# (https://www.daytona.io/docs/en/preview) and Modal web endpoints
+# `<workspace>--<label>.modal.run` (https://modal.com/docs/guide/webhook-urls).
+# The host names one sandbox or one workspace's function, so it links
+# records: an agent fetching from, or calling back to, its own sandbox. A
+# public demo many people use stays apart by the feature host cap.
+pattern = "(^|[^a-z0-9.-])(\\d{2,5}-[a-z0-9]{12,40}\\.e2b\\.app|\\d{2,5}-[a-z0-9-]{6,64}\\.proxy\\.daytona\\.work|[a-z0-9-]+--[a-z0-9-]+\\.modal\\.run)\\b"
+weight = 2
+link = true
+description = "Code-sandbox preview or function host (E2B, Daytona, Modal)"
 
 [[rule]]
 id = "carrier.embed_playground"
@@ -832,6 +937,49 @@ weight = 2
 description = "JSON or string quoting left around a URL or a URL parameter"
 
 [[rule]]
+id = "marker.mcp_call"
+group = "tool_call"
+kind = "agent_marker"
+artifact = true
+target = "url"
+# A Model Context Protocol JSON-RPC request (`"jsonrpc": "2.0"` with a
+# `tools/call`, `tools/list`, `resources/read` or `prompts/get` method) inside
+# a request: a tool call written into a URL
+# (https://modelcontextprotocol.io/specification/2025-06-18/server/tools).
+# Other JSON-RPC methods (`eth_call` on a blockchain node) are not matched.
+pattern = "\"jsonrpc\"\\s*:\\s*\"2\\.0\"[^#]{0,300}?\"method\"\\s*:\\s*\"(tools/(call|list)|resources/read|prompts/get)\"|\"method\"\\s*:\\s*\"(tools/(call|list)|resources/read|prompts/get)\"[^#]{0,300}?\"jsonrpc\"\\s*:\\s*\"2\\.0\""
+weight = 3
+description = "MCP JSON-RPC tool request ({\"jsonrpc\": \"2.0\", \"method\": \"tools/call\"}) inside a request"
+
+[[rule]]
+id = "marker.mcp_tool_name"
+group = "tool_call"
+kind = "agent_marker"
+artifact = true
+target = "url"
+# An MCP tool named as an agent host names it, `mcp__<server>__<tool>`
+# (https://code.claude.com/docs/en/mcp). Developers search for these names,
+# so this stays below suggestive alone.
+pattern = "\\bmcp__[a-z0-9_-]+?__[a-z0-9_-]+"
+weight = 2
+description = "MCP tool name in agent-host form (mcp__server__tool) inside a request"
+
+[[rule]]
+id = "marker.agent_discovery"
+kind = "agent_marker"
+artifact = true
+target = "url"
+# Paths an agent client reads to find another agent or a tool server: the
+# A2A agent card (`/.well-known/agent-card.json`, earlier `agent.json`,
+# https://a2a-protocol.org/latest/specification/) and a bare `/mcp` or `/sse`
+# endpoint, where MCP servers conventionally listen
+# (https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
+# Other clients read them too, so weight 1.
+pattern = "/\\.well-known/agent(-card)?\\.json\\b|^https?://[^/?#]+/(mcp|sse)/?([?#]|$)"
+weight = 1
+description = "Agent-discovery path (A2A agent card, bare /mcp or /sse endpoint)"
+
+[[rule]]
 id = "marker.escaped_newline"
 kind = "agent_marker"
 artifact = true
@@ -1038,6 +1186,27 @@ link = true
 description = "ntfy topic used as a beacon channel (do not read or post to topics)"
 
 [[rule]]
+id = "exfil.tunnel"
+kind = "exfil"
+tactic = "T7"
+target = "url"
+# A public tunnel to a machine behind NAT, used as a callback or drop: a
+# Cloudflare quick tunnel (*.trycloudflare.com,
+# https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/),
+# ngrok (*.ngrok-free.app, *.ngrok-free.dev, *.ngrok.io, *.ngrok.app,
+# https://ngrok.com/docs/domains), Serveo (*.serveo.net, https://serveo.net/),
+# localhost.run (*.lhr.life, https://localhost.run/) and localtunnel
+# (*.loca.lt, *.localtunnel.me, https://github.com/localtunnel/localtunnel).
+# The label is per tunnel (an ngrok free domain is per account), so it links
+# records, as an inbox does. It must hold a digit or a hyphen, so a service's
+# own `www` or `docs` host is not taken for a tunnel. Developers expose their
+# own work this way, so weight 2.
+pattern = "(^|[^a-z0-9.-])[a-z0-9-]*[0-9-][a-z0-9-]*\\.(trycloudflare\\.com|ngrok-free\\.(app|dev)|ngrok\\.(io|app)|serveo\\.net|lhr\\.life|loca\\.lt|localtunnel\\.me)\\b"
+weight = 2
+link = true
+description = "Public tunnel host (trycloudflare, ngrok, serveo, localhost.run, localtunnel)"
+
+[[rule]]
 id = "exfil.paste"
 kind = "exfil"
 tactic = "T7"
@@ -1099,6 +1268,25 @@ target = "url"
 pattern = "ocr\\.space.*captcha|captcha.*ocr\\.space"
 weight = 3
 description = "General-purpose OCR API pointed at a CAPTCHA image"
+
+[[rule]]
+id = "antibot.unblocker_params"
+# In the relay group: the option rides on the scrape API call it modifies, so
+# it names the tactic without adding to the call's score.
+group = "relay"
+kind = "anti_bot"
+tactic = "T3"
+target = "url"
+# Scrape-API options that buy a way past bot defences: residential or
+# stealth proxies and the anti-bot tier (ScrapingBee `premium_proxy`,
+# `stealth_proxy`, https://www.scrapingbee.com/documentation/ ; ScraperAPI
+# `premium`, `ultra_premium`,
+# https://docs.scraperapi.com/control-and-optimization/premium-residential-mobile-proxy-pools ;
+# ZenRows
+# `premium_proxy`, https://docs.zenrows.com/universal-scraper-api/api-reference).
+pattern = "(app\\.scrapingbee\\.com|api\\.scraperapi\\.com|api\\.zenrows\\.com)/[^#]*[?&](premium_proxy|stealth_proxy|premium|ultra_premium)=(true|1)\\b"
+weight = 1
+description = "Scrape-API unblocking option (premium or stealth proxy, ultra_premium)"
 
 # ── Header fingerprints ────────────────────────────────────────────────────
 [[rule]]
@@ -1168,11 +1356,46 @@ kind = "header"
 artifact = true
 target = "header"
 # Request headers Cloudflare Browser Rendering adds automatically to its
-# browser traffic:
+# browser traffic (cf-brapi-request-id, cf-brapi-devtools, cf-biso-devtools):
 # https://developers.cloudflare.com/browser-rendering/reference/automatic-request-headers/
-pattern = "^cf-(biso-devtools|brapi-request-id):"
+pattern = "^cf-(biso-devtools|brapi-request-id|brapi-devtools):"
 weight = 1
 description = "Cloudflare Browser Rendering automatic request header"
+
+[[rule]]
+id = "header.ua_platform_mismatch"
+kind = "header"
+artifact = true
+target = "header"
+# A Sec-CH-UA-Platform client hint naming another desktop system than the
+# user agent: a browser presenting a borrowed user agent, as a hosted agent
+# browser does (ChatGPT agent sends a macOS user agent with a "Linux" hint,
+# https://simonwillison.net/2025/Aug/4/chatgpt-agents-user-agent/). Mobile
+# systems are never compared: Android's desktop mode sends a Linux user
+# agent with an "Android" hint. A signed declared agent shows it too, so it
+# stays weight 1; the declared identity says who it is.
+pattern = "^sec-ch-ua-platform:"
+check = "ua_platform_mismatch"
+weight = 1
+description = "User agent and Sec-CH-UA-Platform name different systems (borrowed user agent)"
+
+[[rule]]
+id = "header.pentest_ua"
+kind = "header"
+artifact = true
+target = "user_agent"
+# Default user agents of web testing tools: sqlmap (`sqlmap/<version>`,
+# https://github.com/sqlmapproject/sqlmap/blob/master/lib/core/settings.py),
+# nuclei (`Nuclei - Open-source project (github.com/projectdiscovery/nuclei)`,
+# https://github.com/projectdiscovery/nuclei), ffuf (`Fuzz Faster U Fool
+# v<version>`, https://github.com/ffuf/ffuf/blob/master/pkg/runner/simple.go)
+# and gobuster (`gobuster/<version>`,
+# https://github.com/OJ/gobuster/blob/master/libgobuster/helpers.go). People
+# run these tools too, and an agent calling one leaves the same string, so it
+# says a tool sent the request, not who drove it.
+pattern = "\\bsqlmap/\\d|Nuclei - Open-source project|Fuzz Faster U Fool|\\bgobuster/\\d"
+weight = 1
+description = "Web testing tool default user agent (sqlmap, nuclei, ffuf, gobuster)"
 
 # ── Outcomes ───────────────────────────────────────────────────────────────
 [[rule]]
@@ -1294,7 +1517,12 @@ target = "user_agent"
 # User agents that name a published agent product. A product that signs its
 # requests but appears here with no signature is a counter-signal the case
 # records; on its own this only says an agent may have sent the request.
-pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|meta-externalagent|meta-externalfetcher"
+# ExaSearchBot: https://crawler.exa.ai/ . FirecrawlAgent: the token Firecrawl
+# reads robots.txt as
+# (https://github.com/firecrawl/firecrawl/blob/main/apps/api/src/lib/robots-txt.ts).
+# CloudflareBrowserRenderingCrawler: the Browser Rendering crawl endpoint
+# (https://developers.cloudflare.com/browser-rendering/reference/automatic-request-headers/).
+pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|meta-externalagent|meta-externalfetcher|ExaSearchBot|FirecrawlAgent|CloudflareBrowserRenderingCrawler"
 weight = 1
 description = "Known agent product in the user agent (FM-7.11 declared identity)"
 

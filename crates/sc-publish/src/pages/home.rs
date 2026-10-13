@@ -956,7 +956,7 @@ type Audience = (
 );
 
 /// Who the site is for, each with where to start.
-const AUDIENCES: [Audience; 4] = [
+const AUDIENCES: [Audience; 5] = [
     (
         "You received a report about your site, or found it in a notice",
         "What the report means, what becomes public and when, how to check your own logs, and how to reach us privately.",
@@ -991,14 +991,48 @@ const AUDIENCES: [Audience; 4] = [
             ("docs/specs/submission-v1/", "SC-Submission spec"),
         ],
     ),
+    (
+        "You follow AI safety, or report on it",
+        "What a notice says, why the organisations affected are named only later, and how to hear about each new notice.",
+        &[
+            ("notices/#how-notices-work", "How notices work"),
+            ("notices/feed.xml", "Subscribe"),
+            ("notices/", "All notices"),
+        ],
+    ),
 ];
+
+/// The notices at a glance, right under the hero: how many, the latest
+/// update, where to subscribe and how notices work. From the committed
+/// notices only.
+fn notice_strip(notices: &[NoticeFile]) -> String {
+    let latest = notices.iter().map(|n| n.meta.updated.as_str()).max();
+    let state = match (notices.len(), latest) {
+        (0, _) | (_, None) => "No notices published yet.".to_string(),
+        (n, Some(d)) => format!(
+            "<strong>{n} notice{}</strong> · latest update <time datetime=\"{d}\">{d}</time>",
+            if n == 1 { "" } else { "s" },
+            d = esc(d)
+        ),
+    };
+    format!(
+        "<section class=\"notice-strip\" aria-label=\"Notices at a glance\"><p class=\"ns-state\">{state}</p>\
+<p class=\"ns-links\"><a href=\"notices/\">All notices</a> <a href=\"notices/feed.xml\">Atom feed</a> <a href=\"notices/index.json\">JSON index</a> <a href=\"notices/#how-notices-work\">How notices work</a></p></section>\n"
+    )
+}
 
 fn audiences() -> String {
     let mut s = String::from("<ul class=\"audiences\" aria-label=\"Start here\">");
     for (i, (head, what, links)) in AUDIENCES.iter().enumerate() {
+        // The last card, the public's, spans the row under the others.
+        let wide = if i + 1 == AUDIENCES.len() {
+            " audience-wide"
+        } else {
+            ""
+        };
         let _ = write!(
             s,
-            "<li class=\"audience card\"><h2 id=\"aud-{i}\">{}</h2><p>{}</p><p class=\"ctas\">",
+            "<li class=\"audience card{wide}\"><h2 id=\"aud-{i}\">{}</h2><p>{}</p><p class=\"ctas\">",
             esc(head),
             esc(what)
         );
@@ -1031,6 +1065,7 @@ pub fn body(a: &Analysis, rules: &Rules, notices: &[NoticeFile], links: &FmLinks
     );
     s.push_str(&audiences());
     s.push_str("<p class=\"hero-more\"><a href=\"#walk\">See the method</a>, walked through one synthetic incident below, or read the <a href=\"docs/manual/\">Field Manual</a>.</p></section>\n");
+    s.push_str(&notice_strip(notices));
     if !notices.is_empty() {
         s.push_str(&notices_section(notices, a));
     }
@@ -1096,6 +1131,20 @@ mod tests {
             );
         }
         assert_eq!(empty.matches("<li class=\"audience card\">").count(), 4);
+        assert_eq!(
+            empty
+                .matches("<li class=\"audience card audience-wide\">")
+                .count(),
+            1
+        );
+        // The public's path: how notices work, and the feed.
+        assert!(empty.contains("class=\"button primary\" href=\"notices/#how-notices-work\""));
+        // The strip under the hero says there is no notice yet, and links
+        // the feed and the JSON index.
+        let strip = empty.find("class=\"notice-strip\"").unwrap();
+        assert!(strip < empty.find("id=\"walk\"").unwrap());
+        assert!(empty.contains("No notices published yet."));
+        assert!(empty.contains("<a href=\"notices/index.json\">JSON index</a>"));
         assert!(empty.contains("class=\"button primary\" href=\"submit/\""));
         assert!(empty.contains(" <a href=\"docs/specs/submission-v1/\">SC-Submission spec</a>"));
         // No notices: the empty state and the example close the page.
@@ -1108,6 +1157,8 @@ mod tests {
         let some = body(&a, &rules, &[n], &FmLinks::new());
         let latest = some.find("class=\"latest latest-notices\"").unwrap();
         assert!(latest < some.find("id=\"walk\"").unwrap());
+        assert!(some.find("class=\"notice-strip\"").unwrap() < latest);
+        assert!(some.contains("<strong>1 notice</strong> · latest update <time"));
         assert_eq!(some.matches("id=\"latest\"").count(), 1);
         assert!(!some.contains("Example notice, synthetic."));
         // The text-heavy figures keep a readable width; the wide ones open

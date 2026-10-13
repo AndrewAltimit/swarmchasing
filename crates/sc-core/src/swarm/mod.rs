@@ -35,6 +35,7 @@ mod runs;
 pub use eval::{SwarmEval, swarm_eval};
 
 use crate::analyze::{Cluster, ObsResult};
+use crate::chance::TestFamily;
 use crate::extract::defang;
 use crate::model::truncate;
 use crate::rules::Rules;
@@ -160,7 +161,15 @@ pub struct SwarmEdge {
     /// has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chance: Option<f64>,
+    /// Tests its kind read in this analysis, where it has a chance model:
+    /// the edge survived a false-discovery cut over them.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tested: usize,
     pub detail: String,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// Interaction edge settings (`[swarm]` in the rules file).
@@ -178,8 +187,14 @@ pub struct SwarmOptions {
     /// S3: permutations of the shorter run's own gaps in the second chance
     /// model. Its smallest chance is `1 / (permutations + 1)`.
     pub lockstep_permutations: usize,
+    /// S3: when no permutation lines up as well, they continue to this many
+    /// in all, so the smallest chance is `1 / (max_permutations + 1)`.
+    pub lockstep_max_permutations: usize,
     /// S3: kept when the larger of the two chances is at most this.
     pub lockstep_max_chance: f64,
+    /// S3, S4, S5: Benjamini-Hochberg false discovery rate over the tests
+    /// each kind read.
+    pub fdr: f64,
 }
 
 impl Default for SwarmOptions {
@@ -190,7 +205,9 @@ impl Default for SwarmOptions {
             lockstep_min_share: 0.6,
             lockstep_max_offset_secs: 120,
             lockstep_permutations: 199,
+            lockstep_max_permutations: 1999,
             lockstep_max_chance: 0.01,
+            fdr: 0.05,
         }
     }
 }
@@ -199,16 +216,17 @@ impl Default for SwarmOptions {
 const MAX_EDGES: usize = 200;
 
 /// Possible interaction between the runs of clusters above noise, in kind
-/// order (`S1` first).
+/// order (`S1` first), and the multiplicity budget of each kind with a
+/// chance model (S3 to S5).
 pub(crate) fn swarm_edges(
     clusters: &[Cluster],
     results: &[ObsResult],
     rules: &Rules,
-) -> Vec<SwarmEdge> {
+) -> (Vec<SwarmEdge>, Vec<TestFamily>) {
     let runs = runs::runs(clusters, results);
-    let mut out = edges::detect(&runs, clusters, results, rules);
+    let (mut out, families) = edges::detect(&runs, clusters, results, rules);
     out.truncate(MAX_EDGES);
-    out
+    (out, families)
 }
 
 /// The "Possible interaction (SC-T9)" block of a report: the edges whose

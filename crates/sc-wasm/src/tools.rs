@@ -1,50 +1,25 @@
-//! The tools module: loaded only when a visitor asks for a report draft, an
-//! evidence bundle check or a labelled-set eval.
+//! The tools module: report drafts, the evidence bundle check, the
+//! labelled-set eval and the identity check, plus the engine's bindings
+//! ([`super::engine`]).
 //!
-//! A report draft needs the analysis the engine module made, which lives in
-//! that module's memory. Rather than carry a deserialiser for a whole
-//! analysis, `prepare` re-runs it here on the same input: the analysis is
-//! deterministic, so cluster ids and keys match the engine's.
+//! A report draft, a sightings file and the attribution layers read the
+//! analysis the module holds: the one its own `analyze` made. The workbench
+//! loads this module alone, so the analysis it shows is the one its report
+//! drafts from, with no second module and no re-run.
 
-use super::{json, rules_from};
+use super::{json, rules_from, with_held};
 use sc_core::eval::LabelSet;
-use sc_core::{Analysis, FieldMap, Format, Label, ReportOptions, Rules, Tier};
-use std::cell::RefCell;
+use sc_core::{FieldMap, Format, Label, ReportOptions, Rules, Tier};
 use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 
 /// Longest URL, in characters, an eval result carries.
 const SHORT_URL: usize = 120;
 
-thread_local! {
-    /// The analysis `prepare` made, for `report`.
-    static PREPARED: RefCell<Option<Analysis>> = const { RefCell::new(None) };
-}
+/// What a call that reads the held analysis says before there is one.
+const NOTHING: &str = "nothing analysed yet";
 
-/// Analyse the input for `report`, as the engine's `analyze` does (same
-/// arguments, same redaction). Returns `{"clusters": n, "total": n}` so the
-/// page can check it matches what it shows.
-#[wasm_bindgen]
-pub fn prepare(input: &str, format: &str, map: &str, rules_json: &str) -> Result<String, JsError> {
-    let rules = rules_from(rules_json)?;
-    let format: Format = format.parse().map_err(|e: String| JsError::new(&e))?;
-    let map = if map.trim().is_empty() {
-        FieldMap::default()
-    } else {
-        FieldMap::parse(map).map_err(|e| JsError::new(&e))?
-    };
-    let parsed = sc_core::parse_input(input, format, &map);
-    let a = sc_core::analyze(parsed.observations, &rules);
-    let out = format!(
-        "{{\"clusters\":{},\"total\":{}}}",
-        a.clusters.len(),
-        a.total
-    );
-    PREPARED.with(|p| *p.borrow_mut() = Some(a));
-    Ok(out)
-}
-
-/// A Markdown draft of the analysis `prepare` made. `opts` is ReportOptions
+/// A Markdown draft of the analysis the module holds. `opts` is ReportOptions
 /// JSON: `{"audience":"provider","cluster":"k-3f9a2c1b","reporter":"...",
 /// "generated":"2026-10-09","min_named":"shared_identifiers","claims":[...]}`.
 /// A developer is named outside case notes only on evidence at or above
@@ -56,13 +31,10 @@ pub fn report(opts_json: &str) -> Result<String, JsError> {
     } else {
         serde_json::from_str(opts_json).map_err(|e| JsError::new(&format!("options: {e}")))?
     };
-    PREPARED.with(|p| match p.borrow().as_ref() {
-        Some(a) => Ok(sc_core::render_markdown(a, &opts)),
-        None => Err(JsError::new("nothing prepared yet")),
-    })
+    with_held(NOTHING, |a| Ok(sc_core::render_markdown(a, &opts)))
 }
 
-/// The sightings document (SC-Sightings v1) of the analysis `prepare` made,
+/// The sightings document (SC-Sightings v1) of the analysis the module holds,
 /// pretty-printed, so the page shows exactly the bytes it would download.
 /// `opts` is ExportOptions JSON: `{"include_hosts":false,"operator":null,
 /// "cluster":null,"generated":"2026-10-12"}`. Nothing is sent anywhere.
@@ -73,12 +45,9 @@ pub fn sightings(opts_json: &str) -> Result<String, JsError> {
     } else {
         serde_json::from_str(opts_json).map_err(|e| JsError::new(&format!("options: {e}")))?
     };
-    PREPARED.with(|p| match p.borrow().as_ref() {
-        Some(a) => {
-            let doc = sc_core::sightings::export(a, &opts, &Default::default());
-            serde_json::to_string_pretty(&doc).map_err(|e| JsError::new(&e.to_string()))
-        }
-        None => Err(JsError::new("nothing prepared yet")),
+    with_held(NOTHING, |a| {
+        let doc = sc_core::sightings::export(a, &opts, &Default::default());
+        serde_json::to_string_pretty(&doc).map_err(|e| JsError::new(&e.to_string()))
     })
 }
 
@@ -100,7 +69,7 @@ struct Attributed {
     withheld: usize,
 }
 
-/// The attribution layers of one cluster of the analysis `prepare` made,
+/// The attribution layers of one cluster of the analysis the module holds,
 /// gated as a report at `min_named` is. `opts`: `{"cluster":"C1","claims":
 /// [...],"min_named":"shared_identifiers"}`. Returns `{"layers":
 /// [LayerSummary], "withheld": n}`.
@@ -108,11 +77,7 @@ struct Attributed {
 pub fn attribution(opts_json: &str) -> Result<String, JsError> {
     let o: AttributionOptions =
         serde_json::from_str(opts_json).map_err(|e| JsError::new(&format!("options: {e}")))?;
-    PREPARED.with(|p| {
-        let guard = p.borrow();
-        let a = guard
-            .as_ref()
-            .ok_or_else(|| JsError::new("nothing prepared yet"))?;
+    with_held(NOTHING, |a| {
         let c = a
             .cluster(&o.cluster)
             .ok_or_else(|| JsError::new("no such cluster"))?;
@@ -358,9 +323,7 @@ mod tests {
     );
 
     fn draft(min_named: &str, evidence: &str) -> String {
-        PREPARED.with(|p| {
-            *p.borrow_mut() = Some(sc_core::analyze(Vec::new(), &Rules::default_rules()))
-        });
+        crate::hold(sc_core::analyze(Vec::new(), &Rules::default_rules()));
         let opts = serde_json::json!({
             "audience": "provider",
             "min_named": min_named,
@@ -375,7 +338,7 @@ mod tests {
     #[test]
     fn sightings_of_the_showcase_hold_no_host_unless_asked() {
         let input = include_str!("../../../samples/showcase/showcase.ndjson");
-        assert!(prepare(input, "ndjson", "", "").is_ok());
+        assert!(crate::engine::analyze(input, "ndjson", "", "").is_ok());
         let Ok(doc) = sightings(r#"{"generated":"2026-10-12"}"#) else {
             panic!("sightings failed");
         };
@@ -438,21 +401,15 @@ mod tests {
         assert!(!md.contains("Example AI"), "{md}");
     }
 
-    // The engine's analysis and the one prepared here agree, so a cluster
-    // key the page holds selects the same cluster in a draft.
+    // A report and the attribution layers read the analysis `analyze` made,
+    // so a cluster key the page holds selects the same cluster in a draft.
     #[test]
-    fn prepare_matches_the_engine() {
+    fn reports_read_the_analysis_analyze_made() {
         let engine: serde_json::Value = serde_json::from_str(
             &crate::engine::analyze(SET, "ndjson", "", "").unwrap_or_default(),
         )
         .unwrap();
-        let Ok(p) = prepare(SET, "ndjson", "", "") else {
-            panic!("prepare failed")
-        };
-        let p: serde_json::Value = serde_json::from_str(&p).unwrap();
         let clusters = engine["analysis"]["clusters"].as_array().unwrap();
-        assert_eq!(p["clusters"].as_u64().unwrap() as usize, clusters.len());
-        assert_eq!(p["total"], engine["analysis"]["total"]);
         let key = clusters[0]["key"].as_str().unwrap();
         let Ok(md) = report(&serde_json::json!({ "cluster": key }).to_string()) else {
             panic!("report failed")

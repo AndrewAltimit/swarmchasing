@@ -367,6 +367,23 @@ fn runs_in_lockstep_beyond_both_chances() {
     assert!(e[0].detail.contains("(10 s"), "{}", e[0].detail);
     assert!(e[0].detail.contains("user agent"), "{}", e[0].detail);
     assert_eq!(e[0].strength, EdgeStrength::Moderate);
+    // No permutation lined up as well within the base count, so they ran on
+    // to the most: the chance reaches below the base floor of 1 / 200.
+    let most = Rules::default_rules().set.swarm.lockstep_max_permutations;
+    assert!(
+        e[0].detail.contains(&format!("under {most} permutations")),
+        "{}",
+        e[0].detail
+    );
+    // The edge states the tests its kind read, and the analysis the family.
+    assert!(e[0].tested >= 1, "{:?}", e[0]);
+    assert!(e[0].detail.contains("such pairs expected among"));
+    let f = a
+        .multiplicity
+        .iter()
+        .find(|f| f.family == "synchronized_start")
+        .expect("the S3 family");
+    assert_eq!((f.kept, f.tested), (1, e[0].tested), "{f:?}");
     // On the clock hour the same lockstep is no less unlikely: no pass for
     // the hour, no discount either.
     for x in obs

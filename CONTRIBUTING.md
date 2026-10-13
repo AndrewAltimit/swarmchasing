@@ -45,6 +45,7 @@ python3 scripts/ci/check-doc-density.py
 python3 scripts/ci/check-site.py
 python3 scripts/ci/check-published-tags.py
 cargo run -p swarmchase -- notice lint
+cargo run -p swarmchase -- watch --check watchlist.toml
 scripts/ci/deny.sh
 ```
 
@@ -75,6 +76,7 @@ The hook is scoped to what you staged ([the hook](scripts/git-hooks/pre-commit) 
 | anything in `site/` | `check-site.py` |
 | anything in `notices/` | `swarmchase notice lint` |
 | anything in `notices/` or `rules/` | `check-published-tags.py` |
+| `watchlist.toml`, `crates/sc-collect/`, `crates/swarmchase/src/watch/` | `swarmchase watch --check watchlist.toml` |
 | `crates/`, `Cargo.*`, `rules/`, `rust-toolchain*` | `cargo fmt --check` (auto-fixed and re-staged), `cargo clippy -D warnings` |
 | `rules/`, `crates/sc-core/`, `samples/eval/` | detection eval gate (`eval-gate.sh`) |
 | `crates/sc-core/`, `crates/sc-wasm/` | wasm32 type-check |

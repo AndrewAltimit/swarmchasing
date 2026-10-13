@@ -241,7 +241,7 @@ pub fn run(args: NoticeArgs) -> Result<()> {
             Ok(())
         }
         NoticeCmd::Build { out, base_url } => {
-            let n = build(&args.dir, &out, &base_url, &rules)?;
+            let n = build(&args.dir, &out, &base_url, &rules, &today)?;
             println!("wrote {n} notice(s) to {}", out.display());
             Ok(())
         }
@@ -492,8 +492,8 @@ fn published(cases: &Path, dir: &Path, id: &str, force: bool, today: &str) -> Re
 }
 
 /// Write `index.json`, `<id>.json` and `feed.xml` into `out`. Refuses when
-/// any notice fails its check.
-fn build(dir: &Path, out: &Path, base_url: &str, rules: &Rules) -> Result<usize> {
+/// any notice fails its check. `today` dates the feed while it has no entry.
+fn build(dir: &Path, out: &Path, base_url: &str, rules: &Rules, today: &str) -> Result<usize> {
     let mut notices = Vec::new();
     for p in list(dir)? {
         let problems = lint_file(&p, rules);
@@ -502,7 +502,7 @@ fn build(dir: &Path, out: &Path, base_url: &str, rules: &Rules) -> Result<usize>
         }
         notices.push(read(&p)?);
     }
-    let files = build_site(&mut notices, base_url, rules).map_err(anyhow::Error::msg)?;
+    let files = build_site(&mut notices, base_url, rules, today).map_err(anyhow::Error::msg)?;
     std::fs::create_dir_all(out)?;
     for (name, text) in files {
         std::fs::write(out.join(name), text)?;
@@ -897,7 +897,10 @@ mod tests {
         assert!(lint_file(&dir.join("n-1.md"), &rules).is_empty());
 
         let out = dir.join("site");
-        assert_eq!(build(&dir, &out, "https://x.example/s", &rules).unwrap(), 1);
+        assert_eq!(
+            build(&dir, &out, "https://x.example/s", &rules, "2026-10-01").unwrap(),
+            1
+        );
         let idx = std::fs::read_to_string(out.join("index.json")).unwrap();
         assert!(idx.contains("\"status\":\"contained\""), "{idx}");
         let page = std::fs::read_to_string(out.join("n-1.json")).unwrap();
@@ -913,7 +916,7 @@ mod tests {
                 .replace("Body.", "ntfy.sh/agent-run-77"),
         )
         .unwrap();
-        assert!(build(&dir, &out, "https://x.example/s", &rules).is_err());
+        assert!(build(&dir, &out, "https://x.example/s", &rules, "2026-10-01").is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

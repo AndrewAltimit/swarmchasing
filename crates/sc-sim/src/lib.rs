@@ -7,8 +7,11 @@
 //! in what order; [`Truth`] reads who sent each record, its true run, and the
 //! swarm and fleet that run belongs to; [`measure`] scores an analysis's
 //! interaction edges, soft links, candidate fleets and agent grades against
-//! it; [`render`] prints the result. No I/O.
+//! it; [`render`] prints the result; [`gate`] holds floors on precision and
+//! ceilings on what the null scenarios draw. No I/O.
 
+pub mod calibrate;
+pub mod gate;
 pub mod generate;
 pub mod measure;
 pub mod palette;
@@ -17,6 +20,8 @@ pub mod rng;
 pub mod scenario;
 pub mod truth;
 
+pub use calibrate::{Calibration, calibrate, render_calibration};
+pub use gate::{Check, Gate, NullCounts, null_counts};
 pub use generate::{generate, to_ndjson};
 pub use measure::{KindStat, Measurement, PairCounts, measure};
 pub use palette::{Palette, Template, Use};

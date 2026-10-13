@@ -304,3 +304,164 @@ fn grades_are_written_as_codes() {
     let back: Ledger = serde_json::from_str(&text).unwrap();
     assert_eq!(back.threads["k-1"].peak_grade, AgentLevel::Adaptive);
 }
+
+/// An analysis of clusters `(id, key, start, records)`, each record a
+/// minute apart, with `links` and `fleets` as given.
+fn fleet_analysis(
+    clusters: &[(&str, &str, i64, &[&str])],
+    links: Vec<sc_core::SoftLink>,
+    fleets: Vec<sc_core::CandidateFleet>,
+) -> Analysis {
+    let mut a = Analysis::default();
+    for (id, key, start, recs) in clusters {
+        let ci = a.clusters.len();
+        let mut members = Vec::new();
+        for (k, r) in recs.iter().enumerate() {
+            members.push(a.results.len());
+            a.results.push(sc_core::ObsResult {
+                obs: Observation {
+                    id: r.to_string(),
+                    ts: start + k as i64 * 60,
+                    ..Default::default()
+                },
+                score: 6,
+                tier: Tier::Significant,
+                hits: Vec::new(),
+                layers: Vec::new(),
+                target_host: None,
+                features: Vec::new(),
+                cluster: Some(ci),
+                agent: None,
+            });
+        }
+        a.clusters.push(sc_core::Cluster {
+            id: id.to_string(),
+            key: key.to_string(),
+            start: *start,
+            end: start + (recs.len() as i64 - 1) * 60,
+            members,
+            tier: Tier::Significant,
+            ..Default::default()
+        });
+    }
+    a.soft_links = links;
+    a.candidate_fleets = fleets;
+    a
+}
+
+fn soft(a: &str, b: &str, kind: sc_core::SoftLinkKind, lr: f64) -> sc_core::SoftLink {
+    sc_core::SoftLink {
+        a: a.into(),
+        b: b.into(),
+        kind,
+        strength: sc_core::fleets::strength_of(lr),
+        lr,
+        detail: String::new(),
+    }
+}
+
+fn fleet(id: &str, clusters: &[&str]) -> sc_core::CandidateFleet {
+    sc_core::CandidateFleet {
+        id: id.into(),
+        clusters: clusters.iter().map(|c| c.to_string()).collect(),
+        kinds: vec![sc_core::SoftLinkKind::CoTarget],
+        min_lr: 40.0,
+        density: 1.0,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_fleet_keeps_its_key_and_weak_pairs_add_up_across_windows() {
+    use sc_core::SoftLinkKind::{CoActivity, CoTarget};
+    const DAY: i64 = 86_400;
+    let mut l = Ledger::new();
+    let weak = 3f64.exp();
+    // Run 1: a fleet of k-a and k-b; k-a and k-c weakly linked.
+    let a1 = fleet_analysis(
+        &[
+            ("C1", "k-a", T0, &["a1", "a2"]),
+            ("C2", "k-b", T0 + HOUR, &["b1", "b2"]),
+            ("C3", "k-c", T0 + 2 * HOUR, &["c1", "c2"]),
+        ],
+        vec![
+            soft("C1", "C2", CoTarget, 40.0),
+            soft("C1", "C3", CoActivity, weak),
+        ],
+        vec![fleet("F1", &["C1", "C2"])],
+    );
+    let all =
+        |a: &Analysis| -> BTreeSet<String> { a.results.iter().map(|r| r.obs.id.clone()).collect() };
+    let o1 = l.observe(&a1, "R1", T0 + DAY, &all(&a1));
+    let f1 = l.observe_fleets(&a1, &o1, "R1", T0 + DAY);
+    let key = f1.keys["F1"].clone();
+    assert_eq!(key, sc_core::fleet_track::fleet_key("k-a"));
+    assert!(f1.new.contains(&key));
+    assert!(f1.persistent.is_empty());
+
+    // Run 2: the same records renumbered; the fleet keeps its key and the
+    // weak pair counts once.
+    let a2 = fleet_analysis(
+        &[
+            ("C1", "k-c", T0 + 2 * HOUR, &["c1", "c2"]),
+            ("C2", "k-a", T0, &["a1", "a2"]),
+            ("C3", "k-b", T0 + HOUR, &["b1", "b2"]),
+        ],
+        vec![
+            soft("C2", "C3", CoTarget, 40.0),
+            soft("C1", "C2", CoActivity, weak),
+        ],
+        vec![fleet("F1", &["C2", "C3"])],
+    );
+    let o2 = l.observe(&a2, "R2", T0 + DAY + 6 * HOUR, &BTreeSet::new());
+    let f2 = l.observe_fleets(&a2, &o2, "R2", T0 + DAY + 6 * HOUR);
+    assert_eq!(f2.keys["F1"], key);
+    assert!(f2.new.is_empty());
+    let f = &l.fleets[&key];
+    assert_eq!((f.runs, f.peak, f.fleet.as_str()), (2, 2, "F1"));
+    let p = l
+        .pairs
+        .iter()
+        .find(|p| (p.a.as_str(), p.b.as_str()) == ("k-a", "k-c"))
+        .unwrap();
+    assert_eq!((p.independent, p.seen), (1, 2));
+    assert!(f2.persistent.is_empty());
+
+    // Run 3, a week on: fresh records on both threads, weakly linked again.
+    // Two windows that share no record add up past the bound, the first
+    // decayed by a week.
+    let a3 = fleet_analysis(
+        &[
+            ("C1", "k-a", T0 + 7 * DAY, &["a3", "a4"]),
+            ("C2", "k-c", T0 + 7 * DAY + HOUR, &["c3", "c4"]),
+        ],
+        vec![soft("C1", "C2", CoActivity, 5f64.exp())],
+        Vec::new(),
+    );
+    let o3 = l.observe(&a3, "R3", T0 + 8 * DAY, &all(&a3));
+    let f3 = l.observe_fleets(&a3, &o3, "R3", T0 + 8 * DAY);
+    assert!(f3.keys.is_empty());
+    assert_eq!(f3.persistent.len(), 1, "{:?}", l.pairs);
+    let p = &f3.persistent[0];
+    assert_eq!(p.independent, 2);
+    assert!(p.total() > sc_core::fleet_track::bound(sc_core::fleet_track::ALPHA));
+    assert_eq!(p.kinds, ["co-activity"]);
+
+    // The digest names threads and kinds, never a host.
+    let text = super::super::fleet_threads::section(&a3, &l, &f3);
+    assert!(text.contains("## Fleet threads (0)"), "{text}");
+    assert!(text.contains("### Persistent pairs (1)"), "{text}");
+    assert!(text.contains("C1 k-a ↔ C2 k-c"), "{text}");
+    let text = super::super::fleet_threads::section(&a2, &l, &f2);
+    assert!(
+        text.contains(&format!("- {key} (F1, 2 runs since R1)")),
+        "{text}"
+    );
+
+    // The ledger round-trips, and pruning drops what aged out.
+    let back: Ledger = serde_json::from_str(&serde_json::to_string(&l).unwrap()).unwrap();
+    assert_eq!(back.fleets.len(), 1);
+    assert_eq!(back.pairs.len(), l.pairs.len());
+    l.prune(T0 + 7 * DAY);
+    assert!(l.fleets.is_empty());
+}

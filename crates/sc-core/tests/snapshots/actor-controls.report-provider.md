@@ -4,13 +4,13 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-05-11 14:02:10 UTC → 2026-05-16 09:30:04 UTC
-- **Records:** 34 linked public records in 6 cluster(s) (of 37 records reviewed, 34 flagged)
+- **Records:** 35 linked public records in 6 cluster(s) (of 37 records reviewed, 35 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.3
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-13.2
 
 ## Summary
 
-We observed automated activity consistent with AI agents operating with little or no human oversight. Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. Targets included `files[.]depot[.]example` (8), `api[.]parts[.]example` (7), `portal[.]clinic[.]example` (6), `intranet[.]lab[.]example` (5), `login[.]coop[.]example` (4).
+We observed automated activity consistent with AI agents operating with little or no human oversight. Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. Targets included `api[.]parts[.]example` (8), `files[.]depot[.]example` (8), `portal[.]clinic[.]example` (6), `intranet[.]lab[.]example` (5), `login[.]coop[.]example` (4).
 
 **Attack payloads were present** (see Indicators). We did not test whether they succeeded.
 
@@ -27,6 +27,7 @@ We observed automated activity consistent with AI agents operating with little o
 | Attack payloads | `exploit.traversal_single` | 2 |
 | Attack payloads | `exploit.xss` | 7 |
 | Agent tags and markers | `marker.placeholder` | 4 |
+| Header fingerprints | `header.pentest_ua` | 8 |
 
 ## Attribution
 
@@ -36,19 +37,19 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 **Harness and framework candidates** (ranked; never named as the source in public):
 
 1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`; 5 record(s) encode URLs in style `hexU.noslash`; 6 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0`; 5 record(s) encode URLs in style `sp20.noslash`; 5 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`; 2 record(s) encode URLs in style `sp20.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15`; 2 record(s) encode URLs in style `sp20.hexU.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0`; 3 record(s) encode URLs in style `sp20.unsorted.noslash`.
-2. sqlmap. Label: Possible; tag: Inference. Traces: 7 record(s) sent User-Agent `sqlmap/1.8.4#stable (https://sqlmap.org)`; 7 record(s) encode URLs in style `sp20.noslash`.
+2. sqlmap. Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `sqlmap/1.8.4#stable (https://sqlmap.org)`; 8 record(s) match header fingerprint rule header.pentest_ua; 8 record(s) encode URLs in style `sp20.noslash`.
 
 ## Why we think this is an agent
 
 A person or a conventional scanner sending the same payloads through the same services leaves the same records. Each cluster is graded by the strongest combination of agent signals it shows, from L0 (payloads only) to L4 (agent likely); only case work reaches L5 (documented). Every signal is a hint that people and tools can also produce, and the grade has no held-out measurement yet.
 
 - **C1**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
+  - counter-signal: a probe chain at tool pace with no change after errors, as a scanner runs a list: 8 record(s)
+- **C2**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
   - signal (L3): a changed request right after an error response: 7 record(s)
   - signal (L3): a route escalation to reach one page: 2 record(s) (direct → program carrier)
   - signal (L4): retries after errors at tool pace, faster than a person reads: 7 record(s)
   - signal (L4): parallel fan-out of one fixed width: 4 record(s)
-- **C2**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
-  - counter-signal: a probe chain at tool pace with no change after errors, as a scanner runs a list: 8 record(s)
 - **C3**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
   - signal (L3): a changed request right after an error response: 3 record(s)
   - signal (L3): a probe chain at model pace: 6 record(s)
@@ -64,19 +65,20 @@ A person or a conventional scanner sending the same payloads through the same se
 
 ## Timeline
 
-- **C1** (significant): 8 records, 1 run(s), 2026-05-15 22:05:07 UTC → 2026-05-15 22:05:16 UTC, median gap 0s
+- **C1** (significant): 8 records, 1 run(s), 2026-05-14 03:20:00 UTC → 2026-05-14 03:20:05 UTC, median gap 1s
+  - artifacts: 8 of 8 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
+  - iterative probing: 8 variants of `id` on `api[.]parts[.]example/v1/item` over 5s (median gap 1s, tool pace)
+  - provenance: unknown 8 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
+  - all 8 records share one URL encoding style (`sp20.noslash`): consistent with one client, not evidence on its own
+  - payload dialect `9361fd33` over 3 records: sqli (sleep ×1, union_select ×2); first seen sqli.sleep → sqli.union_select. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C2** (significant): 8 records, 1 run(s), 2026-05-15 22:05:07 UTC → 2026-05-15 22:05:16 UTC, median gap 0s
   - iterative probing: 8 variants of `page` on `files[.]depot[.]example/index.php` over 9s (median gap 0s, tool pace); 7 variants followed an error response
   - route escalation on `files[.]depot[.]example/index.php`: direct → program carrier over 6s. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - provenance: unknown 8 · single source
   - scope: scope exceeded · task class unclear; failed: S2 (the route climbed to reach one target, past a block); S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `66a801d8` over 8 records: sqli (quote_or_quoted ×1, sleep ×1); ssti (dollar_brace ×1, double_brace ×1); traversal (depth4 ×2, etc_passwd ×1, win_ini ×1); xss (attr_breakout ×1, script_alert ×1, svg_onload ×1); first seen traversal.depth4 → traversal.etc_passwd → traversal.win_ini → ssti.double_brace → ssti.dollar_brace → xss.script_alert → xss.attr_breakout → xss.svg_onload. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
   - parallel fan-out: 4 of 4 one-second batches were 2 alike requests wide (width×batches: 2×4), like an agent issuing tool calls in parallel; a scanner submitting a list in bulk looks the same (a hint, not evidence)
-- **C2** (significant): 7 records, 1 run(s), 2026-05-14 03:20:00 UTC → 2026-05-14 03:20:04 UTC, median gap 1s
-  - iterative probing: 8 variants of `id` on `api[.]parts[.]example/v1/item` over 5s (median gap 1s, tool pace); 1 of its requests matched no rule
-  - provenance: unknown 7 · single source
-  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
-  - all 7 records share one URL encoding style (`sp20.noslash`): consistent with one client, not evidence on its own
-  - payload dialect `9361fd33` over 3 records: sqli (sleep ×1, union_select ×2); first seen sqli.sleep → sqli.union_select. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C3** (significant): 6 records, 1 run(s), 2026-05-11 14:02:10 UTC → 2026-05-11 14:07:35 UTC, median gap 62s
   - iterative probing: 6 variants of `name` on `portal[.]clinic[.]example/patients/search` over 5m (median gap 62s, model pace); 3 variants followed an error response
   - provenance: unknown 6 · single source
@@ -103,8 +105,8 @@ A person or a conventional scanner sending the same payloads through the same se
 
 For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
 
-- **C1**: 2026-05-15 22:05:07 UTC to 2026-05-15 22:05:16 UTC, times of unknown kind
-- **C2**: 2026-05-14 03:20:00 UTC to 2026-05-14 03:20:04 UTC, times of unknown kind
+- **C1**: 2026-05-14 03:20:00 UTC to 2026-05-14 03:20:05 UTC, times of unknown kind
+- **C2**: 2026-05-15 22:05:07 UTC to 2026-05-15 22:05:16 UTC, times of unknown kind
 - **C3**: 2026-05-11 14:02:10 UTC to 2026-05-11 14:07:35 UTC, times of unknown kind
 - **C4**: 2026-05-16 09:30:00 UTC to 2026-05-16 09:30:04 UTC, times of unknown kind
 - **C5**: 2026-05-12 10:15:00 UTC to 2026-05-12 10:39:30 UTC, times of unknown kind
@@ -125,15 +127,15 @@ URLs are defanged. Records are listed by evidence strength.
    - rules: marker.placeholder, exploit.sqli_boolean
 1. 2026-05-13 16:44:00 UTC: `hxxps://login[.]coop[.]example/account/login?user=admin%27%20AND%201=1--&pass=YOUR_PASSWORD`
    - rules: marker.placeholder, exploit.sqli_boolean
+1. 2026-05-14 03:20:03 UTC: `hxxps://api[.]parts[.]example/v1/item?id=1%20UNION%20ALL%20SELECT%20NULL--%20-`
+   - rules: exploit.sqli_union, header.pentest_ua
+1. 2026-05-14 03:20:03 UTC: `hxxps://api[.]parts[.]example/v1/item?id=1%20UNION%20ALL%20SELECT%20NULL,NULL--%20-`
+   - rules: exploit.sqli_union, header.pentest_ua
 1. 2026-05-15 22:05:13 UTC: `hxxps://files[.]depot[.]example/index.php?page=%3Cscript%3Ealert(document.domain)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-16 09:30:03 UTC: `hxxps://intranet[.]lab[.]example/profile?name=alice%3Cscript%3Ealert(1)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-11 14:05:03 UTC: `hxxps://portal[.]clinic[.]example/patients/search?name=smith%27%20UNION%20SELECT%20NULL--`
-   - rules: exploit.sqli_union
-1. 2026-05-11 14:06:05 UTC: `hxxps://portal[.]clinic[.]example/patients/search?name=smith%27%20UNION%20SELECT%20NULL,NULL--`
-   - rules: exploit.sqli_union
-1. 2026-05-11 14:07:35 UTC: `hxxps://portal[.]clinic[.]example/patients/search?name=smith%27%20UNION%20SELECT%20name,dob%20FROM%20patients--`
    - rules: exploit.sqli_union
 
 ## Method and limitations

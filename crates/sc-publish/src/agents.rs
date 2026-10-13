@@ -122,7 +122,7 @@ What a useful submission holds: what was seen, when (UTC), and links to public r
 - [Policies]({b}docs/policies/): collection, attribution, reporting and publication.\n\
 - [Methodology]({b}methodology/): tiers, clusters, attribution levels and known limits.\n\
 - [Field Manual]({b}docs/manual/): the method as a citable standard.\n\
-- [Notices]({b}notices/): published incidents, with an [Atom feed]({b}notices/feed.xml).\n\
+- [Notices]({b}notices/): published incidents, with an [Atom feed]({b}notices/feed.xml) and a [JSON index]({b}notices/index.json) (one `<id>.json` per notice beside it).\n\
 - [For operators]({b}operators/): for a site named in a report or notice.\n\
 - [For providers]({b}providers/): for an AI provider's trust and safety team.\n\
 - [Structured descriptor]({b}.well-known/swarm-report.json): the reporting facts above as JSON.\n\n\
@@ -254,6 +254,7 @@ pub fn swarm_report_json(i: &AgentInputs) -> String {
             "methodology": format!("{b}methodology/"),
             "notices": format!("{b}notices/"),
             "feed": format!("{b}notices/feed.xml"),
+            "notices_json": format!("{b}notices/index.json"),
             "llms_txt": format!("{b}llms.txt"),
             "security_txt": format!("{b}.well-known/security.txt"),
             "source": i.repo,

@@ -19,6 +19,7 @@ export const SOFT_KINDS = {
   shared_secret: "shared captured secret",
   relay_stack: "relay stack",
   callback_service: "callback service",
+  co_target: "shared rare targets",
 };
 
 /** A safe class suffix and a label for a soft-link kind id. */

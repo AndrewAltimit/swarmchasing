@@ -66,9 +66,12 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`paths`](src/paths.rs) | Path sets per host and fabricated-looking identifiers. |
 | [`dialect`](src/dialect.rs) | Payload dialect, shared dialects between clusters, repeated cut lengths. |
 | [`fanout`](src/fanout.rs) | Parallel fan-out width. |
-| [`fleets`](src/fleets.rs) | Soft links between clusters and the candidate fleets they suggest; never merges. |
+| [`fleets`](src/fleets.rs) | Soft links as likelihood ratios by family, and the candidate fleets they suggest; never merges. |
 | [`scaffold`](src/scaffold.rs) | Request templates with values as slot types, and cluster pairs sharing them beyond chance. |
 | [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
+| [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model. |
+| [`community`](src/community.rs) | Backbone filter, deterministic Leiden (CPM) and minimum cut for candidate fleets. |
+| [`fleet_track`](src/fleet_track.rs) | Candidate fleets across analyses: `FK-` keys, matching, pair evidence accumulated over windows. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |
 | [`canary`](src/canary.rs) | Canary tokens for our own published pages: derivation from a seed, the registry, and copies found in records. |
 | [`bursts`](src/bursts.rs) | Bursts of archive captures of a host the archives rarely capture. |

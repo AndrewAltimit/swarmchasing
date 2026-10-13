@@ -365,7 +365,7 @@ fn walk_strings(v: &Value, f: &mut dyn FnMut(&str)) {
 }
 
 /// The `http(s)://` URLs in free text.
-fn urls_in(s: &str) -> impl Iterator<Item = &str> {
+pub(crate) fn urls_in(s: &str) -> impl Iterator<Item = &str> {
     s.split(|c: char| {
         c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | '(' | ')' | '[' | ']')
     })

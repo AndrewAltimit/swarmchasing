@@ -13,11 +13,14 @@
 #   site/             check-site.py (CSP, no HTML sinks)
 #   notices/          swarmchase notice lint (nothing a notice withholds)
 #   notices/, rules/  check-published-tags.py (shown tags are published tags)
+#   watchlist.toml,   swarmchase watch --check (strict, offline)
+#   sc-collect,
+#   swarmchase watch
 #   Cargo.lock,       cargo-deny (scripts/ci/deny.sh); skipped with a warning
 #   deny.toml         when cargo-deny is not installed
 #   Rust / Cargo      cargo fmt --check (auto-fixed), cargo clippy -D warnings
-#   rules, sc-core,   detection eval gate (scripts/ci/eval-gate.sh)
-#   samples/eval
+#   rules, sc-core,   detection eval gate and simulator bounds
+#   sc-sim, samples   (scripts/ci/eval-gate.sh)
 #   sc-core, sc-wasm, wasm32 type-check
 #   sc-case
 #
@@ -101,6 +104,16 @@ if grep -q '^notices/' <<<"$STAGED"; then
     fi
 fi
 
+# The watchlist read strictly: a misspelt key a run would silently ignore,
+# or a source that no longer builds after a collector change.
+if grep -qE '^(watchlist\.toml$|crates/sc-collect/|crates/swarmchase/src/watch/)' <<<"$STAGED"; then
+    printf '[pre-commit] watchlist check\n'
+    if ! cargo run -q --profile release-test -p swarmchase -- watch --check watchlist.toml >/dev/null; then
+        printf '[pre-commit] fix the watchlist key or source (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+fi
+
 # A new or bumped dependency is where an advisory or a copyleft license gets
 # in. Not installed means not checked here; CI installs it and checks.
 if grep -qE '^(Cargo\.lock|deny\.toml)$' <<<"$STAGED"; then
@@ -140,7 +153,7 @@ cargo clippy --all-targets --workspace --quiet -- -D warnings
 
 # Rules and the analysis they run in decide what gets flagged, so a change to
 # either re-measures precision and recall against samples/eval/.
-if grep -qE '^(rules/|crates/sc-core/|samples/eval/)' <<<"$STAGED"; then
+if grep -qE '^(rules/|crates/sc-core/|crates/sc-sim/|samples/eval/|samples/sim/)' <<<"$STAGED"; then
     printf '[pre-commit] detection eval gate\n'
     scripts/ci/eval-gate.sh >/dev/null
 fi

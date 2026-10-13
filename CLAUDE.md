@@ -39,7 +39,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`declared-agents.toml`](declared-agents.toml) | Agent products that declare themselves, with their providers' range files and key directories ([identity](docs/reference/identity.md)). |
 | [`contacts/providers.toml`](contacts/providers.toml) | Providers' security and abuse channels, each with its source and verified date; `swarmchase contacts verify` re-checks them. |
 | [`scripts/`](scripts/README.md) | CI gates, helpers and the pre-commit hook; the README says what runs where. |
-| [`.github/workflows/`](.github/workflows/main-ci.yml) | `main-ci.yml` (gates, then build/test, then Pages) and `watch.yml` (6-hourly watch, digest email). |
+| [`.github/workflows/`](.github/workflows/main-ci.yml) | `main-ci.yml` (gates, then build/test, then Pages), `watch.yml` (6-hourly watch, digest email), `watch-stale.yml` (no run in 12 h). |
 | [`.claude/skills/verify/`](.claude/skills/verify/SKILL.md) | How to verify a change: gates, eval, site build, headless browser checks. |
 
 ## Docs map
@@ -100,7 +100,7 @@ python3 scripts/ci/check-md-links.py && python3 scripts/ci/check-doc-density.py
 
 ## Cross-cutting facts that catch people out
 
-- **The data directory is relative by default.** `--out`/`--data`, else `SWARMCHASE_DATA`, else `data/` under the working directory. Run from the checkout root or set the variable, or a watch starts a fresh store. Details: [watch](docs/reference/watch.md#the-data-directory).
+- **The data directory is relative by default.** `--out`/`--data`, else `SWARMCHASE_DATA`, else `data/` under the working directory. A watch refuses a directory with no watch data unless given `--init`. Details: [watch](docs/reference/watch.md#the-data-directory).
 - **`eval` scores records and clusters,** over all labelled records and over the non-synthetic ones. The gate's floors read the record unit, with a second set for non-synthetic records. The committed set is a regression floor, not a precision estimate. Details: [evaluation](docs/reference/evaluation.md).
 - **Cases pin rules.** A case's reports, notice, exports and bundles use the rules version it was opened with; a rules change does not reach them until `case rules <id> --update`. Details: [cases](docs/reference/cases.md#pinned-rules).
 - **urlquery content is never committed or quoted.** Not in samples, fixtures, notices or eval overrides; link the report, quote only derived indicators. Details: [configuration](docs/reference/configuration.md#urlquerynet).

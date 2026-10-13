@@ -25,7 +25,7 @@ A rules file is TOML. Its JSON value (the TOML read as JSON) **must** validate a
 | `[meta]` | `version`: the rules version. | **should** |
 | `[thresholds]` | `suggestive` and `significant` scores. | **should**; defaults 3 and 6 |
 | `[linking]` | Link features, time windows, run gaps, published tags ([FM-5.2](../manual/05-linking.md#fm-52-shared-link-features)). | no |
-| `[chains]`, `[fanout]`, `[escalation]`, `[soft_links]`, `[scaffold]`, `[co_activity]`, `[swarm]`, `[cut_lengths]`, `[paths]` | Settings for linking, descriptive hints and interaction edges. | no |
+| `[chains]`, `[fanout]`, `[escalation]`, `[soft_links]`, `[scaffold]`, `[co_activity]`, `[co_target]`, `[swarm]`, `[cut_lengths]`, `[paths]` | Settings for linking, descriptive hints and interaction edges. | no |
 | `[[rule]]` | The indicator rules. | no |
 | `[[asn]]` | Network number to organisation, for hosting context. | no |
 | `[[benchmark]]`, `[[stale]]` | Benchmark targets and stale knowledge ([FM-4.9](../manual/04-indicators.md#fm-49-benchmark-targets-and-declared-testing), [FM-4.5](../manual/04-indicators.md#fm-45-artifact-families)). | no |
@@ -51,7 +51,7 @@ The version is an opaque string. This project uses a date. Two files with the sa
 | `group` | string | no | An independence group ([Independence groups](#independence-groups)). |
 | `description` | string | no | One line for people. |
 
-A rule **must** carry a `tactic`, or `artifact = true`, or both. `T8` and `T9` are cluster-level judgments and **must not** be a rule's tactic ([FM-4.3](../manual/04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)). A `check` **must** sit on a `param_value` rule. The only check in v1 is `repeated_token`: one word of three characters or more with a letter, or a phrase of two or three words, repeated five or more times in a row.
+A rule **must** carry a `tactic`, or `artifact = true`, or both. `T8` and `T9` are cluster-level judgments and **must not** be a rule's tactic ([FM-4.3](../manual/04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)). A `check` **must** sit on a rule whose `target` is the one the check reads. The checks in v1 are `repeated_token` (a `param_value` rule: one word of three characters or more with a letter, or a phrase of two or three words, repeated five or more times in a row) and `ua_platform_mismatch` (a `header` rule, matching `Sec-CH-UA-Platform`: the hint names a different desktop system than the request's user agent, with mobile systems never compared).
 
 A rule carries no framework ids of its own: its MITRE ATLAS techniques and OWASP Top 10 for Agentic Applications risks are derived from its `tactic` through the FM-12.4 crosswalk, so the verified ids live in one table rather than on every rule.
 

@@ -726,6 +726,53 @@ pub fn recorded_path(p: &Path) -> String {
     }
 }
 
+/// The membership of a split, whatever its records' content or order:
+/// SHA-256 over the distinct ids, sorted, each followed by a newline.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct IdsHash {
+    pub sha256: String,
+    pub count: usize,
+}
+
+pub fn ids_hash<'a>(ids: impl IntoIterator<Item = &'a str>) -> IdsHash {
+    let mut v: Vec<&str> = ids.into_iter().collect();
+    v.sort_unstable();
+    v.dedup();
+    let mut text = String::new();
+    for id in &v {
+        text.push_str(id);
+        text.push('\n');
+    }
+    IdsHash {
+        sha256: sha256_hex(text.as_bytes()),
+        count: v.len(),
+    }
+}
+
+/// The ids of the labelled records an analysis scores.
+pub fn scored_ids(a: &sc_core::Analysis, l: &LabelSet) -> IdsHash {
+    ids_hash(
+        a.results
+            .iter()
+            .map(|r| r.obs.id.as_str())
+            .filter(|id| l.labels.contains_key(*id)),
+    )
+}
+
+/// The ids in a file: an id list (`eval --split` writes one), or the `id`
+/// of each line of NDJSON records.
+pub fn ids_in(text: &str) -> Vec<String> {
+    let first = text.lines().map(str::trim).find(|l| !l.is_empty());
+    if first.is_some_and(|l| l.starts_with('{')) {
+        text.lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l.trim()).ok())
+            .filter_map(|v| v["id"].as_str().map(str::to_string))
+            .collect()
+    } else {
+        sc_core::eval::split::parse_id_list(text)
+    }
+}
+
 pub fn hash_file(p: &Path) -> Result<FileHash> {
     let b = std::fs::read(p).with_context(|| format!("reading {}", p.display()))?;
     Ok(FileHash {
@@ -765,6 +812,10 @@ pub struct SavedResult<'a> {
     pub only_ids: Option<FileHash>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude_ids: Option<FileHash>,
+    /// The labelled records scored, by id ([`ids_hash`]): the split's
+    /// membership, which `repro` checks again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scored_ids: Option<IdsHash>,
     pub counts: Counts,
     /// Saved with `--allow-no-benign`: a result with no benign record, whose
     /// precision cannot be wrong and so says nothing.
@@ -978,6 +1029,24 @@ pub fn print_below_rule(b: &BelowRule, with: &Summary, without: Option<&Summary>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_splits_hash_is_its_membership() {
+        let a = ids_hash(["b", "a", "b"]);
+        assert_eq!(a.count, 2);
+        // Order and repeats do not matter; one id more does.
+        assert_eq!(a, ids_hash(["a", "b"]));
+        assert_ne!(a.sha256, ids_hash(["a", "b", "c"]).sha256);
+        assert_eq!(a.sha256, sha256_hex(b"a\nb\n"));
+        // An id list and the records it names hash alike.
+        let list = "# held-out ids\nb\na\n# excluded:\n# c\n";
+        let records = "{\"id\":\"a\",\"url\":\"x\"}\n{\"id\":\"b\",\"url\":\"y\"}\n";
+        assert_eq!(ids_in(list), ["b", "a"]);
+        assert_eq!(
+            ids_hash(ids_in(records).iter().map(String::as_str)),
+            ids_hash(ids_in(list).iter().map(String::as_str))
+        );
+    }
 
     #[test]
     fn wilson_floor_fails_below_the_lower_bound() {

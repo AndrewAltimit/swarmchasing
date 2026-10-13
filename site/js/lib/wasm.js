@@ -1,14 +1,18 @@
 // The WASM modules, each loaded once per page and only when needed:
 //
 //   engine()  the analysis engine (pkg/sc_wasm.js): analyze, unwrap,
-//             endpoints. Pages that analyse load it on arrival; while it
+//             endpoints. The unwrap page loads it on arrival; while it
 //             loads, every [data-engine-status] says so and every
 //             [data-needs-engine] control stays disabled.
 //   tools()   the tools module (pkg/tools/sc_tools.js): report drafts, the
-//             evidence bundle check, the labelled-set eval. Loaded only when
-//             a visitor asks for one of those. Its status goes to
-//             [data-tools-status] and it enables [data-needs-tools]; a page
-//             without those uses the engine's.
+//             evidence bundle check, the labelled-set eval, and the
+//             engine's bindings too. Loaded only when a visitor asks for one
+//             of those. Its status goes to [data-tools-status] and it
+//             enables [data-needs-tools]; a page without those uses the
+//             engine's.
+//   workbench()  the tools module under the engine's status lines: the
+//             workbench analyses and drafts with it alone, loading it on
+//             the first sign of input.
 //   rules     the rules converter (pkg-rules), only for edited rules.
 //
 // Each module reports its own progress and failure, so one that fails to
@@ -76,6 +80,13 @@ export const engine = loader("../../pkg/sc_wasm.js", "analysis engine", "engineS
 
 /** Load the tools module (reports, bundle check, labelled eval). */
 export const tools = loader("../../pkg/tools/sc_tools.js", "report and evaluation tools", "toolsSize", "data-tools-status", "data-needs-tools", ENGINE);
+
+/**
+ * The workbench's module: the tools module, which carries the engine's
+ * analysis too, so a page that analyses and then drafts a report downloads
+ * one module instead of both. Reports to the engine's status lines.
+ */
+export const workbench = loader("../../pkg/tools/sc_tools.js", "analysis engine and report tools", "toolsSize", ENGINE.status, ENGINE.needs);
 
 /** The rules edited on the rules page (TOML, kept in this browser), or "". */
 export const editedRules = () => store.get(RULES_KEY) ?? "";

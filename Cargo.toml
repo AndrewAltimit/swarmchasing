@@ -26,6 +26,8 @@ sc-inbox = { path = "crates/sc-inbox" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
+# The keys a TOML file has that its type ignores (`watch --check`).
+serde_ignored = "0.1"
 # Trimmed for the browser module: case folding and \w \d \s \b (what rule
 # patterns use) and the lazy DFA, without the Unicode property tables and the
 # literal prefilters, which would put the module over its size budget. Native
@@ -53,6 +55,9 @@ ed25519-dalek = { version = "2", default-features = false }
 # IODEF intake (sc-inbox): a pull reader, no DTD processing, no entity
 # expansion beyond the predefined ones.
 quick-xml = { version = "0.41", default-features = false }
+# Bluesky Jetstream (sc-collect): a blocking WebSocket client over the same
+# rustls and webpki roots reqwest uses.
+tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
 
 [profile.release]
 lto = true

@@ -186,3 +186,107 @@ fn every_kind_carries_its_denominator_fired_or_not() {
     );
     assert!(total.links.values().all(|s| s.of == links));
 }
+
+/// `name` benched under its first seed only.
+fn bench_one(name: &str) -> Measurement {
+    let rules = Rules::default_rules();
+    let mut s = scenario(name);
+    s.seeds = 1;
+    let file = ScenarioFile { scenario: vec![s] };
+    bench(&file, &Palette::default_palette(&rules), &rules)
+        .remove(0)
+        .1
+}
+
+#[test]
+fn a_fleets_harness_adds_its_parameters_in_one_rotation() {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    let text = to_ndjson(&generate(&scenario("fleet"), 51, &p));
+    let truth = Truth::from_ndjson(&text);
+    let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
+    // Per run, the scaffold templates in order and the harness parameters.
+    let mut runs: std::collections::BTreeMap<String, Vec<(String, Vec<String>)>> =
+        Default::default();
+    for o in &obs {
+        let t = truth.get(&o.id).unwrap();
+        if t.class != "scaffold_fleet" {
+            continue;
+        }
+        let names: Vec<String> = o
+            .url
+            .split(['?', '&'])
+            .skip(1)
+            .filter_map(|kv| kv.split_once('=').map(|x| x.0.to_string()))
+            .filter(|n| super::generate::is_harness_param(n))
+            .collect();
+        let origin = o.id.clone();
+        runs.entry(t.run.clone()).or_default().push((origin, names));
+    }
+    assert_eq!(runs.len(), 3);
+    for recs in runs.values() {
+        assert_eq!(recs.len(), 8);
+        // Two harness parameters on every request, the same two everywhere.
+        assert!(recs.iter().all(|(_, n)| n.len() == 2), "{recs:?}");
+        assert!(recs.windows(2).all(|w| w[0].1 == w[1].1));
+    }
+    let first: Vec<&Vec<String>> = runs.values().map(|r| &r[0].1).collect();
+    assert!(first.windows(2).all(|w| w[0] == w[1]));
+}
+
+#[test]
+fn a_fleet_among_hundreds_of_agents_draws_scaffold_links() {
+    let m = bench_one("fleet-crowd");
+    let s = &m.links["scaffold"];
+    assert!(s.found > 0 && s.correct == s.pairs, "{}", render(&m));
+}
+
+#[test]
+fn an_agent_changing_route_draws_escalation_links() {
+    let m = bench_one("escalation");
+    let e = &m.links["escalation"];
+    // Each route a separate tool: two clusters of one run.
+    assert!(e.pairs > 0 && e.same_run == e.pairs, "{}", render(&m));
+}
+
+#[test]
+fn a_planter_copying_timing_replays_its_victims_times() {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    let s = scenario("planted-timing");
+    let text = to_ndjson(&generate(&s, s.seed, &p));
+    let truth = Truth::from_ndjson(&text);
+    let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
+    let times = |run: &str| -> Vec<i64> {
+        obs.iter()
+            .filter(|o| truth.get(&o.id).unwrap().run == run)
+            .map(|o| o.ts)
+            .collect()
+    };
+    let victim = times("planted-timing-a0-0");
+    let planter = times("planted-timing-a1-0");
+    assert_eq!(planter.len(), victim.len().min(8), "{planter:?} {victim:?}");
+    let offset = planter[0] - victim[0];
+    assert!((2..20).contains(&offset), "{offset}");
+    for (a, b) in victim.iter().zip(&planter) {
+        assert_eq!(b - a, offset);
+    }
+}
+
+#[test]
+fn null_scenarios_are_counted_apart() {
+    let rules = Rules::default_rules();
+    let f = ScenarioFile::parse(SCENARIOS).unwrap();
+    let nulls: Vec<&Scenario> = f.scenario.iter().filter(|s| s.null).collect();
+    assert!(nulls.len() >= 2);
+    let mut s = nulls[0].clone();
+    s.seeds = 1;
+    let file = ScenarioFile { scenario: vec![s] };
+    let r = bench(&file, &Palette::default_palette(&rules), &rules);
+    let n = null_counts(&r, &file);
+    assert_eq!((n.scenarios, n.seeds), (1, 1));
+    // No two runs are related, so nothing drawn between runs is right.
+    let m = &r[0].1;
+    assert_eq!((m.swarm_pairs.total, m.operator_pairs.total), (0, 0));
+    assert_eq!(n.edges, m.edges["any"].unrelated);
+}

@@ -23,9 +23,11 @@
 #
 # Repository variables read here (Settings > Secrets and variables > Actions >
 # Variables):
-#   SWARMCHASE_REQUIRE_BROWSER  'true' makes the site XSS check fatal when no
-#                               Chrome is installed on the runner. Unset, a
-#                               missing browser skips the check with a warning.
+#   SWARMCHASE_REQUIRE_BROWSER  'true' makes the site XSS check fatal when
+#                               neither a Chrome nor Docker (for the pinned
+#                               headless Chrome container) is on the runner.
+#                               Unset, a missing browser skips the check with
+#                               a warning.
 
 name: Main CI
 
@@ -152,6 +154,12 @@ jobs:
       - name: Notices (nothing withheld leaks)
         run: cargo run -q --profile release-test -p swarmchase -- notice lint
 
+      # The watchlist read strictly: a key no type knows (a misspelt
+      # `limit` would leave the default in force), a bad value, a duplicate
+      # name, a source that does not build. Offline; reuses the build above.
+      - name: Watchlist (strict, offline)
+        run: cargo run -q --profile release-test -p swarmchase -- watch --check watchlist.toml
+
       # The browser half of the toolkit: cfg(wasm32) code and wasm-only
       # dependency features that no host build compiles.
       - name: wasm32 type-check
@@ -229,24 +237,51 @@ jobs:
             echo "$(basename "$f"): $(( size / 1024 )) KiB" >> "$GITHUB_STEP_SUMMARY"
           done
 
+      # A browser for the XSS check below. A Chrome or Chromium on the runner
+      # ($CHROME, then PATH) is used when it starts (`--version`); otherwise
+      # the check runs against a pinned headless Chrome in a container
+      # (scripts/ci/site-xss-container.sh), which needs Docker and no sudo.
+      - name: Locate Chromium
+        run: |
+          works() { [ -n "$1" ] && [ -x "$1" ] && "$1" --version >/dev/null 2>&1; }
+          for c in "${CHROME:-}" "$(command -v google-chrome || true)" "$(command -v chromium || true)" \
+                   "$(command -v chromium-browser || true)"; do
+            if works "$c"; then
+              echo "using $c ($("$c" --version 2>/dev/null || true))"
+              echo "CHROME=$c" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "no local browser; the check runs headless Chrome in a container"
+            echo "XSS_CONTAINER=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning::no working Chrome and no Docker on the runner; see docs/reference/runner.md#runner-requirements"
+          fi
+
       # No generated page may run anything a notice, record, claim or edited
       # rule carries: the check builds the site again with a hostile notice
       # and drives every page in headless Chrome. Fatal when a browser is
-      # installed. With no Chrome (exit 2) it is skipped with a
-      # warning, unless the repo variable SWARMCHASE_REQUIRE_BROWSER is
-      # 'true': then a runner that lost its browser fails the deploy instead
-      # of publishing an unchecked page.
+      # available. With none (exit 2) it is skipped with a warning, unless
+      # the repo variable SWARMCHASE_REQUIRE_BROWSER is 'true': then a runner
+      # that lost its browser fails the deploy instead of publishing an
+      # unchecked page.
       - name: Site XSS check (headless Chrome)
         env:
           REQUIRE_BROWSER: ${{ vars.SWARMCHASE_REQUIRE_BROWSER }}
         run: |
-          rc=0; node scripts/site-xss-check.mjs || rc=$?
+          rc=0
+          if [ -n "${XSS_CONTAINER:-}" ]; then
+            scripts/ci/site-xss-container.sh || rc=$?
+          else
+            node scripts/site-xss-check.mjs || rc=$?
+          fi
           if [ "$rc" -eq 2 ]; then
             if [ "$REQUIRE_BROWSER" = "true" ]; then
-              echo "::error::site XSS check could not run (no Chrome or no site/pkg) and SWARMCHASE_REQUIRE_BROWSER is true"
+              echo "::error::site XSS check could not run (no browser or no site/pkg) and SWARMCHASE_REQUIRE_BROWSER is true"
               exit 1
             fi
-            echo "::warning::site XSS check skipped: no Chrome on the runner"
+            echo "::warning::site XSS check skipped: no browser on the runner"
             exit 0
           fi
           exit "$rc"

@@ -242,7 +242,7 @@ const PHONE_ROWS = 10;
 function recordTable(a) {
   const idx = a.results.map((_, i) => i).sort((x, y) => a.results[x].obs.ts - a.results[y].obs.ts);
   const all = idx.slice(0, MAX_ROWS);
-  const few = matchMedia("(max-width: 700px)").matches && all.length > PHONE_ROWS + 2;
+  const few = matchMedia("(max-width: 720px)").matches && all.length > PHONE_ROWS + 2;
   // Each cell carries its column name: on phones the rows stack as cards,
   // opening on one line with the tier, time and cluster.
   const td = (col, attrs, ...kids) => el("td", { ...attrs, "data-label": RECORD_HEAD[col] }, ...kids);

@@ -55,6 +55,7 @@ Give precision and recall at both tiers and the changed rule's own precision. Ne
 3. Run the XSS check. It starts its own server and Chrome, so the step above is not needed for it:
    ```bash
    node scripts/site-xss-check.mjs [path/to/chrome]
+   scripts/ci/site-xss-container.sh      # no local Chrome: Docker runs a pinned headless one
    ```
    It builds its own copy of the site with a hostile notice (cargo), so it needs `site/pkg` and `site/pkg-rules` built. Exit 0 is a pass, 1 a failure, 2 means it could not run (no Chrome, no cargo, or the modules missing). Run it after any change to `site/`, `sc-wasm`, or anything that renders records or notices.
 

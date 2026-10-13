@@ -267,6 +267,26 @@ fn git_dates(root: &Path, paths: &[&str]) -> BTreeMap<String, String> {
     out
 }
 
+/// The build's commit date (`YYYY-MM-DD`): `HEAD`'s, which a shallow clone
+/// knows too, else the day of `now` (the build's time) without git.
+fn commit_date(root: &Path, now: i64) -> String {
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["log", "-1", "--format=%cs"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|d| d.len() == 10)
+        .unwrap_or_else(|| {
+            chrono::DateTime::from_timestamp(now, 0)
+                .unwrap_or_default()
+                .format("%Y-%m-%d")
+                .to_string()
+        })
+}
+
 /// What [`copy_static`] wrote: the file count, the renames, and each
 /// script's static imports, for the pages' module preloads.
 struct Copied {
@@ -374,6 +394,8 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         schemas.push((rel, text));
     }
     let lastmod = git_dates(&r.root, &["docs", "rules/default.toml"]);
+    let now = build_time();
+    let dated = commit_date(&r.root, now);
     // A module's download size: the host serves it gzip-compressed.
     let size = |p: &str| fs::read(r.root.join(p)).ok().map(|b| gzip_len(&b));
     let engine_bytes = size("site/pkg/sc_wasm_bg.wasm");
@@ -406,11 +428,11 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         tools_bytes,
         identity,
         lastmod,
+        dated,
     };
     let mut files = build_pages(&mut inputs)?;
     let schema_paths: Vec<String> = schemas.iter().map(|(p, _)| p.clone()).collect();
     files.extend(schemas);
-    let now = build_time();
     files.extend(crate::agents::files(&crate::agents::AgentInputs {
         base: &base,
         repo: &inputs.repo,

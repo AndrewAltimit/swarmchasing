@@ -256,3 +256,321 @@ kind = "agent"
 agents = 10
 retry = 0.2
 palette_share = 0.3
+
+# Background only, many seeds: no swarm and no fleet, so every edge, soft
+# link and candidate fleet drawn is false. The gate holds a ceiling on them.
+[[scenario]]
+name = "null-background"
+seed = 201
+seeds = 12
+null = true
+[[scenario.actor]]
+kind = "agent"
+agents = 12
+retry = 0.2
+palette_share = 0.3
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 10
+records = 3
+[[scenario.actor]]
+kind = "cron"
+agents = 2
+records = 24
+[[scenario.actor]]
+kind = "pentester"
+agents = 2
+records = 12
+[[scenario.actor]]
+kind = "chatbot_paster"
+agents = 2
+records = 6
+retry = 0.3
+[[scenario.actor]]
+kind = "mail_gateway"
+agents = 2
+records = 6
+[[scenario.actor]]
+kind = "crawler"
+agents = 10
+records = 30
+
+# Background only and crowded: many single agents over one day, so many
+# pairs are tested in each analysis.
+[[scenario]]
+name = "null-crowd"
+seed = 221
+seeds = 6
+null = true
+span_hours = 24
+[[scenario.actor]]
+kind = "agent"
+agents = 40
+retry = 0.2
+palette_share = 0.3
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 10
+records = 3
+
+# A planter copying a swarm's run tag, inbox and request times, a few
+# seconds behind its first agent, from a person's browser.
+[[scenario]]
+name = "planted-timing"
+seed = 231
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 2
+modes = ["sink"]
+records = 8
+[[scenario.actor]]
+kind = "planter"
+copies = 0
+copy_timing = true
+agents = 1
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Many short-lived agents of one operator at once, all reporting to one
+# inbox (an XBOW-style swarm).
+[[scenario]]
+name = "xbow-swarm"
+seed = 241
+seeds = 3
+[[scenario.actor]]
+kind = "swarm"
+agents = 12
+modes = ["sink"]
+records = 4
+hosts = 2
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 8
+records = 3
+
+# Two scaffold fleets and one agent of another operator sending both
+# fleets' shapes: a hub that chains them if components are taken whole.
+# Among many other agents, so a shared shape can be rare (see fleet-crowd).
+[[scenario]]
+name = "hub-two-fleets"
+seed = 251
+seeds = 3
+span_hours = 240
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+offset_hours = 6
+[[scenario.actor]]
+kind = "mimic"
+bridges = [0, 1]
+agents = 1
+records = 8
+offset_hours = 12
+[[scenario.actor]]
+kind = "agent"
+agents = 250
+retry = 0.2
+palette_share = 0.1
+
+# A scaffold fleet among many other agents. Its third member makes each
+# shared shape's base rate at least 2 / (n - 1), so the pairs only pass the
+# false-discovery cut over the pairs compared with a few hundred comparable
+# clusters; among a few dozen (fleet, fleet-traffic) they do not.
+[[scenario]]
+name = "fleet-crowd"
+seed = 261
+seeds = 4
+span_hours = 240
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 250
+retry = 0.2
+palette_share = 0.1
+
+# A slow fleet: one agent every four days for three weeks.
+[[scenario]]
+name = "fleet-slow"
+seed = 271
+seeds = 4
+span_hours = 504
+[[scenario.actor]]
+kind = "fleet"
+agents = 5
+records = 8
+interval_hours = 96
+[[scenario.actor]]
+kind = "agent"
+agents = 30
+retry = 0.2
+palette_share = 0.3
+
+# A fleet whose harness is upgraded halfway: one parameter and one
+# template change for the later agents, so every request shape changes.
+[[scenario]]
+name = "fleet-upgrade"
+seed = 281
+seeds = 3
+span_hours = 240
+[[scenario.actor]]
+kind = "fleet"
+agents = 4
+records = 8
+upgrade_at = 2
+[[scenario.actor]]
+kind = "agent"
+agents = 250
+retry = 0.2
+palette_share = 0.1
+
+# A synchronised swarm whose workers leave up to 30 s after each dispatch,
+# beyond the lockstep tolerance.
+[[scenario]]
+name = "sync-loose"
+seed = 291
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["sync"]
+records = 8
+offset_hours = 5
+off_hour = true
+jitter_secs = 30
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# A hard negative: news sends a dozen unrelated agents to one target family
+# within a quarter of an hour.
+[[scenario]]
+name = "news-spike"
+seed = 301
+seeds = 4
+[[scenario.actor]]
+kind = "agent"
+agents = 12
+hosts = 4
+retry = 0.2
+offset_hours = 6
+off_hour = true
+window_hours = 0.25
+same_family = true
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Agents that try each target directly and then through a relay, each route
+# its own tool and run tag: route escalations across clusters of one run.
+[[scenario]]
+name = "escalation"
+seed = 311
+seeds = 4
+[[scenario.actor]]
+kind = "escalator"
+agents = 3
+records = 4
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 8
+records = 3
+
+# One operator handing one target list to three agents, each 15 to 20
+# minutes after the last in its own order: no lockstep, no shared inbox.
+[[scenario]]
+name = "target-list"
+seed = 131
+seeds = 4
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 5
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+# The hard negative: unrelated agents sent to one story's hosts within a few
+# hours, beside one operator's target list.
+[[scenario]]
+name = "news-spike-list"
+seed = 141
+seeds = 4
+[[scenario.actor]]
+kind = "news_spike"
+agents = 8
+records = 6
+hosts = 3
+palette_share = 0.3
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 5
+offset_hours = 8
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+# Two operators' target lists in the same hours and one unrelated agent
+# working both lists after them: a cluster tied to two fleets.
+[[scenario]]
+name = "hub"
+seed = 151
+seeds = 4
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 5
+palette_share = 0.3
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 5
+palette_share = 0.3
+[[scenario.actor]]
+kind = "hub"
+bridges = [0, 1]
+records = 20
+offset_hours = 1.17
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3

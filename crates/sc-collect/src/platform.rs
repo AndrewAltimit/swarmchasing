@@ -51,15 +51,37 @@ const DEFAULT_MAX_MB: u64 = 1024;
 /// A checkpoint further back than this is skipped to the newest hours.
 const MAX_BACKLOG_HOURS: i64 = 24;
 
+/// The `kind`s a platform source can name.
+pub const PLATFORM_KINDS: &[&str] = &[
+    "gharchive",
+    "npm",
+    "pypi",
+    "huggingface",
+    "wikimedia",
+    "golang",
+    "hackernews",
+    "nuget",
+    "packagist",
+    "rubygems",
+    "crates",
+    "cve",
+    "osv",
+    "wikimedia-ai-cleanup",
+    "bluesky",
+];
+
 /// A platform source in the watchlist (`[[platform.source]]`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlatformSource {
     pub name: String,
-    /// `gharchive`, `npm`, `pypi`, `huggingface`, `wikimedia` or `golang`.
+    /// One of [`PLATFORM_KINDS`].
     pub kind: String,
     /// Events one pull keeps at most.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_events: Option<usize>,
+    /// Account-age lookups one pull makes at most (`hackernews`, `bluesky`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_lookups: Option<usize>,
     #[serde(flatten)]
     pub query: CdxQuery,
 }
@@ -78,6 +100,46 @@ pub struct PlatformPull {
     /// Events from undeclared App logins that claim a declared product's
     /// name: login to (the product claimed, events). Spoofing leads.
     pub lookalikes: BTreeMap<String, (String, usize)>,
+    /// Labels a reference source puts on targets (`osv`): no events.
+    pub labels: Vec<TargetLabel>,
+}
+
+/// A label a reference source puts on a target other sources' events act
+/// on: a package an OSV malicious-package record names, a wiki page
+/// editors tagged as suspected AI-generated text. Reference data joined to
+/// candidates, never a finding about an account.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct TargetLabel {
+    pub platform: Platform,
+    /// The target as [`label_key`] normalises it.
+    pub target: String,
+    /// What the label says: `osv-malicious`, `wiki-ai-cleanup`.
+    pub kind: String,
+    /// The record or category that says so (`MAL-2026-1`).
+    pub source_id: String,
+    pub link: String,
+    /// When the label was published or applied (Unix seconds).
+    pub ts: i64,
+}
+
+/// A target as labels and events are matched: lower case, and on PyPI
+/// with each run of `-`, `_` and `.` as one `-`, as PyPI normalises names.
+pub fn label_key(platform: Platform, target: &str) -> String {
+    let t = target.trim().to_lowercase();
+    if platform != Platform::Pypi {
+        return t;
+    }
+    let mut out = String::with_capacity(t.len());
+    for c in t.chars() {
+        if matches!(c, '-' | '_' | '.') {
+            if !out.ends_with('-') {
+                out.push('-');
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 impl PlatformPull {
@@ -138,8 +200,30 @@ pub fn pull_platform(
         }
         "wikimedia" => crate::wikimedia::pull_platform(client, &src.query, mark, rules, max),
         "golang" => pull_golang(client, &src.query, mark, max),
+        "cve" => crate::cve::pull_platform(client, &src.query, mark, rules, max),
+        "osv" => crate::osv::pull_labels(client, &src.query, mark),
+        "bluesky" => crate::bluesky::pull_platform(
+            client,
+            &src.query,
+            mark,
+            rules,
+            max,
+            src.max_lookups.unwrap_or(crate::bluesky::DEFAULT_LOOKUPS),
+        ),
+        "wikimedia-ai-cleanup" => crate::wikimedia::pull_ai_cleanup(client, &src.query, mark),
+        "hackernews" => crate::hackernews::pull_platform(
+            client,
+            &src.query,
+            mark,
+            rules,
+            max,
+            src.max_lookups
+                .unwrap_or(crate::hackernews::DEFAULT_LOOKUPS),
+        ),
+        k if let Some(r) = crate::registries::pull(client, k, &src.query, mark, rules, max) => r,
         k => bail!(
-            "unknown platform source kind `{k}` (expected gharchive, npm, pypi, huggingface, wikimedia or golang)"
+            "unknown platform source kind `{k}` (expected one of {})",
+            PLATFORM_KINDS.join(", ")
         ),
     }
 }

@@ -14,6 +14,7 @@ The scheduled watch runs every 6 hours on the runner and emails the digest when 
 
 ```sh
 swarmchase watch                      # watchlist.toml, $SWARMCHASE_DATA (or data/)
+swarmchase watch --init               # once, to start a new data directory
 ```
 
 Read it top down:
@@ -98,11 +99,11 @@ swarmchase case plant-review 2026-10-portal C1 --note "tag also in a published r
 
 ```sh
 swarmchase case contacts 2026-10-portal
+swarmchase case draft 2026-10-portal --all            # every provider and affected contact
 swarmchase case draft 2026-10-portal --audience affected --to security@example.gov
-swarmchase case draft 2026-10-portal --audience provider --to <provider contact>
 ```
 
-`case contacts` adds the provider's channels from the [provider directory](../reference/cases.md#the-provider-directory) when a claim names it, then reads security.txt, then RDAP abuse addresses. Add anything else by hand with `case contact add` (a CSIRT, a declared owner). `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form. Each report states when the indicator notice is scheduled, that it will not name the recipient, and when the recipient may be named. Read every draft before sending it.
+`case contacts` adds the provider's channels from the [provider directory](../reference/cases.md#the-provider-directory) when a claim names it, then reads security.txt, then RDAP abuse addresses. Add anything else by hand with `case contact add` (a CSIRT, a declared owner). `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form; `--all` drafts for every provider and affected contact not yet sent to, and lists the contacts it leaves for you (registrars, hosts, CSIRTs). Each report states when the indicator notice is scheduled, that it will not name the recipient, and when the recipient may be named. Read every draft before sending it.
 
 Details: [contacts](../reference/cases.md#contacts), [drafts](../reference/cases.md#drafts).
 
@@ -113,7 +114,7 @@ The reports go first. The indicator notice follows once every party is sent or r
 Send each draft from your own mail client (or the organisation's form), then record it, with the time when you record it later:
 
 ```sh
-swarmchase case sent 2026-10-portal --to security@example.gov --channel email
+swarmchase case sent 2026-10-portal --draft <outbox draft>     # recipient and channel from the draft
 swarmchase case sent 2026-10-portal --to abuse@provider.example --at 2026-10-12T14:05:00Z
 swarmchase case no-contact 2026-10-portal old.example.org --searched "security.txt, RDAP: nothing"
 swarmchase case set 2026-10-portal --naming-days 5         # optional, 3 to 20 working days

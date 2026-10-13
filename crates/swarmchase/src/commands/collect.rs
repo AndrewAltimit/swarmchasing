@@ -51,6 +51,10 @@ pub enum CollectSource {
     /// `page-links-change`) matching PATTERN, from an hour back; --scan is
     /// the wall-clock minutes read. The links are never fetched.
     Wikimedia(CollectArgs),
+    /// Links in Hacker News stories and comments (its search index)
+    /// matching PATTERN, from six hours back; --scan is the index queries
+    /// made (1000 items each). The links are never fetched.
+    Hackernews(CollectArgs),
     /// Fetch urlquery.net reports by ID (needs URLQUERY_APIKEY), e.g. to turn a
     /// labelled report list such as Transluce's reports.csv into records for
     /// `swarmchase eval`. Appends to --out and skips IDs already in it, so an
@@ -139,6 +143,7 @@ pub fn run(source: CollectSource) -> Result<()> {
         CollectSource::Wellknown(a) => (a, Kind::WellKnown),
         CollectSource::Mcp(a) => (a, Kind::Mcp),
         CollectSource::Wikimedia(a) => (a, Kind::Wikimedia),
+        CollectSource::Hackernews(a) => (a, Kind::HackerNews),
     };
     let mut client = Client::new(Duration::from_secs(2))?;
     if args.cache {

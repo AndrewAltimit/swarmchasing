@@ -71,6 +71,9 @@ Soft links are leads for a reviewer, listed with the evidence for each:
 | Same callback service | A fresh inbox per run on one service: one operator's habit. | Many clients use the same service. The same inbox is a hard link ([FM-5.2](#fm-52-shared-link-features)). |
 | Shared scaffold | One harness behind clusters with separate inboxes and tags ([FM-5.14](#fm-514-scaffold-fingerprints)). | Popular libraries and frameworks give unrelated operators one request shape. |
 | Co-activity | One dispatcher starting both, or one starting the other ([FM-6.9](06-timing.md#fm-69-co-activity)). | One scheduler drives unrelated jobs; busy clusters overlap. |
+| Co-target | One target list worked by several agents in the same hours, each in its own order ([FM-5.16](#fm-516-co-targets)). | A story or a disclosed flaw sends unrelated agents to one site at once. |
+
+A soft link or edge with a chance model is one test of many: an analysis of `n` clusters compares up to `n(n-1)/2` pairs, and a 1% chance per pair gives one false pair in every hundred compared. Each such family of tests (shared pauses, scaffolds, co-activity, each interaction signal, platform candidates) **must** count the pairs it tested, keep only pairs that survive a false-discovery-rate cut over all of them, and state how many pairs that unlikely chance alone would give among them, so a reviewer reads a kept pair against its family's budget.
 
 ## FM-5.8 Candidate fleets, merge and split
 
@@ -82,7 +85,9 @@ Clusters joined by soft links form a **candidate fleet**. A candidate fleet is n
 
 Merges and splits are reversible and both are logged. A fleet grows, merges with another or breaks apart as evidence arrives. This mirrors how threat-intelligence teams handle uncategorised activity clusters, which "can grow, merge with, or break off from other clusters" before they are named ([Mandiant](references.md#attribution-practice)).
 
-Toolkit: the analysis lists soft links between clusters with a kind and a strength (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services, shared scaffolds, co-activity), and groups strongly soft-linked clusters into candidate fleets, shown in internal reports. Candidate fleets never merge clusters or change a tier. The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
+Soft links are weighed before they are grouped ([FM-5.17](#fm-517-weighing-soft-links)). A candidate fleet **should** be a group whose clusters are tied to each other, not a chain: when one cluster is tied to two groups that share no tie, the two groups are two proposals, and the cluster joins at most one of them. A proposal states how dense it is and its weakest cut, the ties whose loss would split it, so the reviewer sees where it is thin.
+
+Toolkit: the analysis lists soft links between clusters with a kind and a likelihood ratio (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services, shared scaffolds, co-activity, co-targets), and groups strongly soft-linked clusters into candidate fleets by community detection, each with its density and weakest cut, shown in internal reports ([methodology](../methodology.md#descriptive-hints)). Candidate fleets never merge clusters or change a tier. The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
 
 ## FM-5.9 Escalation sequences
 
@@ -128,6 +133,8 @@ Hard links can hide interaction. A shared inbox joins every record that writes t
 
 Where a signal has a chance model it is stated with the edge: synchronized starts weigh requests lined up step by step against the shorter run placed at random over the analysis span and against its own gaps reordered, and report the larger chance, so two jobs that start together at a steady rate do not qualify; role sequences and partitions draw hosts at random from the analysis's target hosts or target family, and a partition whose hosts split their sorted list in a stride or in blocks is weighed against every split of those hosts into parts of those sizes.
 
+Each such signal is tested on many pairs of runs, so it **must** be cut at a false discovery rate over every pair it read, and the edge states how many pairs that unlikely chance alone would give among them ([FM-5.7](#fm-57-soft-links)).
+
 A reviewer who accepts an edge records it in the case with what the records show; until then the grouping is a fleet ([FM-1.3](01-scope.md#fm-13-groupings)). Toolkit: thresholds are in [methodology](../methodology.md#interaction-between-runs); internal and provider reports list edges under *Possible interaction (SC-T9)*, and affected-operator reports and notices never do.
 
 ## FM-5.13 Cluster lifecycle and identifiers
@@ -137,7 +144,7 @@ Activity moves through stages, each with its own identifier and its own bar. The
 | Stage | Identifier | Who sets it | Bar to enter |
 |---|---|---|---|
 | **Cluster** (provisional) | Stable key `k-` plus 8 hex digits; a display number (`C1`) that changes between analyses. | The analysis. | Two flagged records joined by hard links ([FM-5.1](#fm-51-hard-and-soft-links)). |
-| **Candidate fleet** | None of its own; listed by its clusters' keys. | The analysis. | Soft links between clusters above a set strength ([FM-5.8](#fm-58-candidate-fleets-merge-and-split)). |
+| **Candidate fleet** | A display number (`F1`) per analysis; `FK-` plus 8 hex digits across watch runs ([FM-5.18](#fm-518-fleets-across-windows)). | The analysis. | Soft links between clusters above a set strength ([FM-5.8](#fm-58-candidate-fleets-merge-and-split)). |
 | **Case fleet** | `fleet-<n>`, unique within one case. | The admin. | A recorded merge decision with its evidence and what would reverse it. |
 | **Named fleet** | `SCF-<n>`, unique across all cases and never reused. | The admin. | Published in a notice, or seen in two cases, with the merge evidence reviewed again. |
 | **Swarm** | The fleet's identifier, unchanged. | The admin. | Reviewed interaction evidence ([FM-1.3](01-scope.md#fm-13-groupings)). |
@@ -150,7 +157,7 @@ Rules for identifiers:
 - **Never reused.** A withdrawn or merged identifier is retired, never given to new activity.
 - **Neutral names.** A fleet identifier carries no provider, model, country or organisation name. A name is not an attribution, and a neutral one cannot become a false one when the attribution changes.
 
-Moving back is allowed at every stage: a swarm whose interaction record is withdrawn is a fleet again, and a named fleet whose merge evidence fails review is split, with the reason logged. Toolkit: cluster keys, candidate fleets, case fleets (`case fleet merge`, `case fleet split`) and swarm records are built ([cases](../reference/cases.md#swarms)). Named fleets, aliases and cross-case identifiers are (planned); until then a notice refers to a fleet by its case and `fleet-<n>`.
+Moving back is allowed at every stage: a swarm whose interaction record is withdrawn is a fleet again, and a named fleet whose merge evidence fails review is split, with the reason logged. Toolkit: cluster keys, candidate fleets and their `FK-` keys, case fleets (`case fleet merge`, `case fleet split`) and swarm records are built ([cases](../reference/cases.md#swarms)). Named fleets, aliases and cross-case identifiers are (planned); until then a notice refers to a fleet by its case and `fleet-<n>`.
 
 ## FM-5.14 Scaffold fingerprints
 
@@ -165,7 +172,9 @@ A fleet built on one harness (one prompt, one tool wrapper, one request builder)
 Two clusters are compared by their mixes of templates, each template weighted down by how many clusters hold it. Two guards keep a popular library or framework, which gives unrelated operators one shape, from reading as one fleet:
 
 - **Specificity.** A template ties clusters only when it has several structural parts. A bare search through one relay has too few.
-- **Chance.** Each shared template has a base rate among the clusters that send structured requests at all: its other holders, and any records outside the clusters that carry it, over those clusters. A pair is kept only when two unrelated clusters would rarely both hold the rarest template they share at that rate and the pair survives a false-discovery-rate cut over the pairs compared; the expected number of such pairs is stated. Records outside the clusters only ever add holders, so concatenating unrelated traffic into an analysis cannot make a shape rare. A shape held by more than a few senders is a common default and ties none: a large fleet on one harness and many operators on one framework look the same in the records.
+- **Chance.** Each shared template has a base rate among the clusters that send structured requests at all: its other holders, and any records outside the clusters that carry it, over those clusters. A pair is kept only when two unrelated clusters would rarely both hold the rarest template they share at that rate, corrected for how many usable templates they share (the least of several is likelier than one), and the pair survives a false-discovery-rate cut over the pairs compared; the expected number of such pairs is stated.
+
+Records outside the clusters only ever add holders, so concatenating unrelated traffic into an analysis cannot make a shape rare. A shape held by more than a few senders is a common default and ties none: a large fleet on one harness and many operators on one framework look the same in the records.
 
 A shared scaffold is a soft link ([FM-5.7](#fm-57-soft-links)). It **must not** merge clusters or raise a tier: a published harness, a tutorial or a framework default makes it without any tie between operators, and the chance model only knows the records in the analysis. The templates hold no host, path word or value, so the evidence shows how requests were built without repeating what they said. Toolkit: `scaffold_pairs` in the analysis and the `scaffold` soft link, with the settings in `[scaffold]` ([methodology](../methodology.md#descriptive-hints)).
 
@@ -179,8 +188,37 @@ A candidate needs all of:
 
 - **A shared shape.** Near-duplicate text (estimated similarity of word shingles), one template once per-instance values are slots, or created items whose names follow one template with a counter or identifier. A plain name many people pick ("portfolio") is not a template.
 - **Several accounts.** At least three distinct accounts, or, where the source names no account, a flood of at least five items, reported as such.
-- **More than chance.** The densest burst of the accounts' first actions, weighed against the same number of actions placed at random over the window read (a scan statistic), and the share of new accounts, weighed against the window's base rate, together at most 1%. A burst starting on a clock hour counts a quarter, as a coincidence on the hour does for co-activity ([FM-6.9](06-timing.md#fm-69-co-activity)). Model-output residue ([FM-4.5](04-indicators.md#fm-45-artifact-families)) in at least half the members can stand in for the chance.
+- **More than chance.** The densest burst of the accounts' first actions, weighed against the same number of actions placed at random over the window read (a scan statistic), and the share of new accounts, weighed against the accounts first seen in the same hours, combined as one test at most 1% and surviving a false-discovery-rate cut over every group weighed. The two are not multiplied as if independent: a wave of new accounts arrives in bursts, so the age share is read in the group's own hours. A burst starting on a clock hour counts a quarter, as a coincidence on the hour does for co-activity ([FM-6.9](06-timing.md#fm-69-co-activity)). Model-output residue ([FM-4.5](04-indicators.md#fm-45-artifact-families)) in at least half the members can stand in for the chance.
 
 Benign coordination is common and **must** be ruled out before a candidate is read as a swarm: dependency and release bots, translation syncs, contribution drives and coursework, scheduled jobs, organisation-wide automation, an outage that brings many users to one project at once, and issue templates. Known automation accounts are dropped at collection and known benign templates are listed as suppressed with their kind. A burst on one owner's projects by established accounts is not reported. Each candidate lists what is left to rule out.
 
 Toolkit: `sc_core::platform` and `swarmchase platform-swarms`; the watch's platform pass lists new and grown candidates in the digest ([methodology](../methodology.md#coordinated-accounts-on-public-platforms), [watch](../reference/watch.md#platform-swarms)).
+
+## FM-5.16 Co-targets
+
+Several agents of one operator often get one target list. They work it in the same hours, each at its own pace and in its own order, with their own inboxes and tags: too loose for a synchronised start ([FM-5.12](#fm-512-interaction-edges)), too unordered for a rerun ([FM-5.10](#fm-510-reruns)). A **co-target** is two clusters active on the same rare targets, host and kind of action, within an hour or so of each other, more often than chance allows.
+
+- **Rare targets only.** A target many senders touch ties none: a news story, a disclosed flaw or a popular service sends unrelated agents to one site at once, and in an operator's own log every record names the operator's host. The holders counted include records outside the clusters.
+- **Several hosts.** One shared host is a coincidence of interest; the shared targets **must** span several hosts.
+- **Chance.** The chance of sharing that many targets is computed as if one cluster's targets were drawn at random from every rare target in the analysis, which leaves time aside and so overstates how often unrelated clusters meet. Pairs are kept under a false-discovery-rate cut over the pairs tested.
+
+A co-target is a soft link and **must not** merge clusters: two operators can be handed one list by a third party, and a list can be published. Toolkit: `cotarget_pairs` in the analysis and the `co_target` soft link, with the settings in `[co_target]` ([methodology](../methodology.md#timing)).
+
+## FM-5.17 Weighing soft links
+
+Each kind of soft link is weighed as a likelihood ratio: how much likelier it is between two clusters of one operator than between unrelated ones. Two rules keep weak ties from adding up to a false proposal:
+
+- **Rarity.** A value many clusters share says less than one two clusters share, and its weight falls with the share of clusters holding it.
+- **Dependence.** Kinds that read one habit are not independent evidence. Encoding, header set, relay stack, scaffold, payload dialect, cut length and fan-out all describe one harness; shared pauses and co-activity one timeline; reruns, path sets, recon openings, co-targets and escalations one target list; captured secrets, common features and callback services what an operator holds. A pair **should** count only its strongest tie within each such family, and combine across families.
+
+The ratios **should** come from measurement: labelled fleets where they exist, and a simulator with ground truth otherwise, with a conservative bound taken rather than the point value. A kind with no measured evidence is off or weighed by stated judgment. Toolkit: `swarmchase sim calibrate` prints each kind's ratio from the simulator; the rules file says which ratios come from it ([methodology](../methodology.md#descriptive-hints)).
+
+## FM-5.18 Fleets across windows
+
+An analysis covers a window of days. A slow fleet, one cluster a week, can be weak in every window and plain across several. A watch that follows clusters from run to run ([watch](../reference/watch.md#the-ledger)) follows candidate fleets too:
+
+- **Keys.** A candidate fleet is keyed `FK-` plus 8 hex digits from its earliest member's history, so renumbering does not rename it. A key is never given to another fleet. A fleet continues the earlier one whose members it overlaps most, one to one.
+- **Evidence over time.** Each pair of cluster histories keeps the weight of its soft links across runs. Overlapping windows read the same records and **must** count once: a run adds only when every record it read for the pair comes after the records counted last, and otherwise replaces that count when stronger. Old evidence decays.
+- **A conservative bound.** A pair is listed as persistent only when its accumulated weight passes the upper threshold of a sequential test at a small error rate.
+
+Persistent pairs are proposals in the admin's digest, like candidate fleets. They never merge clusters, change a tier or reach a provider, operator or public report. Toolkit: `FK-` keys and persistent pairs in the watch's ledger and digest.

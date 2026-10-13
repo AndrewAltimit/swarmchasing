@@ -1,0 +1,82 @@
+---
+# Staleness alert for the scheduled watch. watch.yml mails the admin when a
+# run fails or is cancelled, but not when no run happens at all: a schedule
+# GitHub disabled, a runner that was offline, a queue stuck behind another
+# workload. Every three hours this reads the stamp of the newest run on the
+# runner (<data>/LATEST, nothing else) and mails the admin once per stale
+# stamp when it is more than 12 hours old. The mail goes to the admin only,
+# through the same send-mail.sh as the digest; nothing goes to anyone else.
+
+name: watch staleness
+
+on:
+  schedule:
+    - cron: "41 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Its own group: in the watch's group a pending check would displace a
+# pending watch run.
+concurrency:
+  group: watch-stale
+  cancel-in-progress: false
+
+env:
+  SWARMCHASE_DATA: ${{ vars.SWARMCHASE_DATA }}
+  SMTP_URL: ${{ secrets.SMTP_URL }}
+  SMTP_USER: ${{ secrets.SMTP_USER }}
+  SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+  MAIL_FROM: ${{ secrets.MAIL_FROM }}
+  MAIL_TO: ${{ secrets.MAIL_TO }}
+
+jobs:
+  stale:
+    runs-on: [self-hosted]
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          clean: true
+
+      # The line it prints says only when the watch last finished. A stale
+      # stamp is mailed once: `.stale-alerted` in the data directory holds
+      # the stamp last alerted on, and a newer run clears the condition.
+      - name: Check the newest watch run's age
+        run: |
+          export SWARMCHASE_DATA="${SWARMCHASE_DATA:-$HOME/swarmchase-data}"
+          rc=0
+          line="$(scripts/ci/check-watch-age.sh 12)" || rc=$?
+          echo "$line"
+          if [ "$rc" -eq 0 ]; then
+            exit 0
+          fi
+          echo "::warning::$line"
+          stamp="$(tr -d '[:space:]' <"$SWARMCHASE_DATA/LATEST" 2>/dev/null || true)"
+          marker="$SWARMCHASE_DATA/.stale-alerted"
+          if [ -d "$SWARMCHASE_DATA" ] && [ "$(cat "$marker" 2>/dev/null || true)" = "${stamp:-none}" ]; then
+            echo "already alerted for ${stamp:-no run}"
+            exit 0
+          fi
+          if [ -z "$SMTP_URL" ]; then
+            echo "SMTP_URL not set; no alert mailed"
+            exit 0
+          fi
+          {
+            echo "No watch run has finished in the last 12 hours."
+            echo
+            echo "$line"
+            echo
+            echo "Check the watch workflow's recent runs, the runner, and whether the schedule is still enabled:"
+            echo "${{ github.server_url }}/${{ github.repository }}/actions/workflows/watch.yml"
+          } > "$RUNNER_TEMP/stale.txt"
+          bash scripts/ci/send-mail.sh "[swarmchase] watch STALE" "$RUNNER_TEMP/stale.txt"
+          if [ -d "$SWARMCHASE_DATA" ]; then
+            echo "${stamp:-none}" > "$marker"
+          fi

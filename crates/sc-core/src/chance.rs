@@ -1,6 +1,15 @@
-//! Chance helpers the soft-link models share: the tail of a sum of
-//! independent Bernoulli draws, and the Benjamini-Hochberg cut over many
-//! tested pairs.
+//! Chance helpers the pairwise tests share: the tail of a sum of
+//! independent Bernoulli draws, the Benjamini-Hochberg cut over many tested
+//! pairs, and the multiplicity budget each family of tests reports.
+//!
+//! Every pairwise test in the analysis (shared pauses, scaffolds,
+//! co-activity, the S3 to S5 interaction edges, platform candidates) belongs
+//! to one [`TestFamily`]. A family counts the pairs it tested, keeps those
+//! whose chance passes its own limit and a Benjamini-Hochberg cut over every
+//! pair tested, and states how many pairs that unlikely chance alone would
+//! give among them.
+
+use serde::{Deserialize, Serialize};
 
 /// `P(X >= k)` for `X` the number of successes among independent draws with
 /// probabilities `ps` (a Poisson-binomial tail).
@@ -42,9 +51,119 @@ pub(crate) fn bh_cut(chances: &[f64], tested: usize, q: f64) -> Option<f64> {
         .next_back()
 }
 
+/// One family of pairwise tests and what its multiplicity budget kept.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TestFamily {
+    /// `shared_pause`, `scaffold`, `co_activity`, `synchronized_start`,
+    /// `role_sequence`, `disjoint_partition`, or `platform:<name>`.
+    pub family: String,
+    /// Pairs (or groups) tested.
+    pub tested: usize,
+    /// Of those, at or under the family's own chance limit.
+    pub passed: usize,
+    /// Of those, under the Benjamini-Hochberg cut: the ones reported.
+    pub kept: usize,
+    /// The false discovery rate the cut is taken at.
+    pub fdr: f64,
+    /// The largest chance kept, when any is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut: Option<f64>,
+    /// Tests at least as unlikely as the weakest kept that chance alone
+    /// would give among those tested: `tested × cut`.
+    pub expected: f64,
+}
+
+impl TestFamily {
+    /// The family over `chances` (those at or under its own limit) of
+    /// `tested` tests, cut at false discovery rate `fdr`. A test is kept when
+    /// [`TestFamily::keeps`] its chance.
+    pub(crate) fn cut(family: &str, chances: &[f64], tested: usize, fdr: f64) -> Self {
+        let tested = tested.max(chances.len());
+        let cut = bh_cut(chances, tested, fdr);
+        let kept = cut.map_or(0, |c| chances.iter().filter(|&&p| p <= c).count());
+        Self {
+            family: family.to_string(),
+            tested,
+            passed: chances.len(),
+            kept,
+            fdr,
+            cut,
+            expected: cut.map_or(0.0, |c| c * tested as f64),
+        }
+    }
+
+    /// Whether a test of this chance is kept.
+    pub fn keeps(&self, chance: f64) -> bool {
+        self.cut.is_some_and(|c| chance <= c)
+    }
+
+    /// `shared_pause: 2 kept of 40 tested (3 under its own limit), ...`.
+    pub fn line(&self) -> String {
+        format!(
+            "{}: {} kept of {} tested ({} under its own limit), {:.2} that unlikely expected by chance (false discovery rate {:.0}%)",
+            self.family,
+            self.kept,
+            self.tested,
+            self.passed,
+            self.expected,
+            self.fdr * 100.0
+        )
+    }
+}
+
+/// The chance that the smallest of `t` independent chances is at most `p`
+/// (Sidak): `1 - (1 - p)^t`.
+pub(crate) fn sidak(p: f64, t: usize) -> f64 {
+    let p = p.clamp(0.0, 1.0);
+    if t <= 1 || p >= 1.0 {
+        return p;
+    }
+    // Without cancellation for small `p`.
+    (-(t as f64 * (-p).ln_1p()).exp_m1()).clamp(0.0, 1.0)
+}
+
+/// The chance of a product `p1 × p2` this small or smaller when the two are
+/// independent uniform chances: `x (1 - ln x)` for the product `x`.
+pub(crate) fn product_chance(p1: f64, p2: f64) -> f64 {
+    let x = (p1 * p2).clamp(0.0, 1.0);
+    if x <= 0.0 {
+        return 0.0;
+    }
+    (x * (1.0 - x.ln())).min(1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_family_keeps_what_its_cut_keeps_and_states_the_expected() {
+        // Lines 0.0125, 0.025, 0.0375, 0.05 over four tests.
+        let f = TestFamily::cut("x", &[0.001, 0.04, 0.02], 4, 0.05);
+        assert_eq!((f.tested, f.passed, f.kept), (4, 3, 2));
+        assert_eq!(f.cut, Some(0.02));
+        assert!((f.expected - 0.08).abs() < 1e-12);
+        assert!(f.keeps(0.02) && !f.keeps(0.04));
+        let none = TestFamily::cut("y", &[0.04], 10, 0.05);
+        assert_eq!((none.kept, none.cut, none.expected), (0, None, 0.0));
+        assert!(
+            none.line().contains("0 kept of 10 tested"),
+            "{}",
+            none.line()
+        );
+    }
+
+    #[test]
+    fn sidak_and_the_product_chance() {
+        assert!((sidak(0.01, 3) - (1.0 - 0.99f64.powi(3))).abs() < 1e-12);
+        assert_eq!(sidak(0.2, 1), 0.2);
+        assert!(sidak(1e-12, 5) > 4.9e-12);
+        // Two independent uniform chances: P(U1 U2 <= x) = x (1 - ln x).
+        let x: f64 = 0.01;
+        assert!((product_chance(0.1, 0.1) - x * (1.0 - x.ln())).abs() < 1e-12);
+        assert_eq!(product_chance(1.0, 1.0), 1.0);
+        assert_eq!(product_chance(0.0, 0.5), 0.0);
+    }
 
     #[test]
     fn the_tail_matches_the_binomial() {

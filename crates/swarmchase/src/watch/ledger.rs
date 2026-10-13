@@ -15,12 +15,21 @@
 //! thread names it in `recurs`, and after a quiet week or more it counts as
 //! a return. Neither merges the two.
 //!
+//! Candidate fleets are followed too ([`Ledger::observe_fleets`]): each
+//! keeps an `FK-` key from its earliest member thread and continues the
+//! earlier fleet whose threads it overlaps most, and each pair of threads
+//! accumulates its soft-link evidence over windows that share no record,
+//! decaying with time ([`sc_core::fleet_track`]). A pair that adds up past
+//! the bound while no fleet holds it is listed in the digest
+//! ([`super::fleet_threads`]).
+//!
 //! The ledger is descriptive. It never changes a score, tier, grade or
 //! link; the attention queue ([`super::attention`]) and the shadow autonomy
 //! log ([`super::autonomy`]) read it. It stays in the data directory, under
 //! the watch's retention.
 
 use sc_core::agentness::AgentLevel;
+use sc_core::fleet_track::{self, PairTrack};
 use sc_core::{Analysis, Tier};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -50,6 +59,50 @@ pub struct Ledger {
     /// By thread id.
     #[serde(default)]
     pub threads: BTreeMap<String, Thread>,
+    /// Candidate fleets followed across runs, by key (`FK-...`). A key is
+    /// never given to another fleet.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fleets: BTreeMap<String, FleetThread>,
+    /// Soft-link evidence per pair of threads, accumulated across runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pairs: Vec<PairTrack>,
+}
+
+/// One candidate fleet followed across runs ([`sc_core::fleet_track`]).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FleetThread {
+    /// `FK-` and a hash of its earliest member thread when it began.
+    pub id: String,
+    /// Member thread ids on the latest run it was seen, sorted.
+    pub members: Vec<String>,
+    pub first_run: String,
+    pub last_run: String,
+    /// The latest run's time it was seen.
+    pub last_t: i64,
+    /// Runs it was seen on.
+    pub runs: usize,
+    /// Most member threads it has had.
+    pub peak: usize,
+    /// Its number on the latest run it was seen (`F2`).
+    pub fleet: String,
+    /// Soft-link kinds inside it on that run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kinds: Vec<String>,
+    /// Its weakest edge's likelihood ratio and its density on that run.
+    pub min_lr: f64,
+    pub density: f64,
+}
+
+/// What one run's fleet observation found, for the digest.
+#[derive(Debug, Default)]
+pub struct FleetsObserved {
+    /// Candidate fleet (`F1`) to its key.
+    pub keys: BTreeMap<String, String>,
+    /// Keys first seen on this run.
+    pub new: BTreeSet<String>,
+    /// Pairs whose accumulated evidence reaches the persistence bound and
+    /// that no current candidate fleet holds together, strongest first.
+    pub persistent: Vec<PairTrack>,
 }
 
 /// One cluster followed across runs.
@@ -265,8 +318,151 @@ impl Ledger {
     pub fn new() -> Self {
         Self {
             schema: SCHEMA.into(),
-            threads: BTreeMap::new(),
+            ..Default::default()
         }
+    }
+
+    /// The live thread `id` was merged into, following merges.
+    fn resolve<'a>(&'a self, mut id: &'a str) -> &'a str {
+        for _ in 0..64 {
+            match self
+                .threads
+                .get(id)
+                .and_then(|th| th.merged_into.as_deref())
+            {
+                Some(next) if next != id => id = next,
+                _ => break,
+            }
+        }
+        id
+    }
+
+    /// Follow analysis `a`'s candidate fleets and accumulate its soft-link
+    /// evidence per pair of threads, after [`Ledger::observe`] on the same
+    /// run returned `observed`.
+    pub fn observe_fleets(
+        &mut self,
+        a: &Analysis,
+        observed: &Observed,
+        stamp: &str,
+        t: i64,
+    ) -> FleetsObserved {
+        let mut out = FleetsObserved::default();
+        let thread_of = |c: &str| observed.threads.get(c).cloned();
+        // This run's fleets by member threads.
+        let current: Vec<(&sc_core::CandidateFleet, BTreeSet<String>)> = a
+            .candidate_fleets
+            .iter()
+            .map(|f| (f, f.clusters.iter().filter_map(|c| thread_of(c)).collect()))
+            .filter(|(_, m): &(_, BTreeSet<String>)| m.len() >= 2)
+            .collect();
+        let earlier: Vec<(String, BTreeSet<String>)> = self
+            .fleets
+            .values()
+            .filter(|f| f.last_run != stamp)
+            .map(|f| {
+                let m = f
+                    .members
+                    .iter()
+                    .map(|x| self.resolve(x).to_string())
+                    .collect();
+                (f.id.clone(), m)
+            })
+            .collect();
+        let cur_sets: Vec<BTreeSet<String>> = current.iter().map(|x| x.1.clone()).collect();
+        let old_sets: Vec<BTreeSet<String>> = earlier.iter().map(|x| x.1.clone()).collect();
+        let matched = fleet_track::match_fleets(&cur_sets, &old_sets, fleet_track::MATCH_JACCARD);
+        for ((f, members), m) in current.iter().zip(matched) {
+            let key = match m {
+                Some(j) => earlier[j].0.clone(),
+                None => {
+                    let first = members
+                        .iter()
+                        .min_by_key(|th| {
+                            (
+                                self.threads.get(*th).map_or(i64::MAX, |x| x.first_ts),
+                                th.to_string(),
+                            )
+                        })
+                        .cloned()
+                        .unwrap_or_default();
+                    let base = fleet_track::fleet_key(&first);
+                    let key = (1..)
+                        .map(|n| {
+                            if n == 1 {
+                                base.clone()
+                            } else {
+                                format!("{base}-{n}")
+                            }
+                        })
+                        .find(|k| !self.fleets.contains_key(k))
+                        .expect("an unused suffix");
+                    out.new.insert(key.clone());
+                    key
+                }
+            };
+            let e = self
+                .fleets
+                .entry(key.clone())
+                .or_insert_with(|| FleetThread {
+                    id: key.clone(),
+                    first_run: stamp.to_string(),
+                    ..Default::default()
+                });
+            e.members = members.iter().cloned().collect();
+            e.last_run = stamp.to_string();
+            e.last_t = t;
+            e.runs += 1;
+            e.peak = e.peak.max(members.len());
+            e.fleet = f.id.clone();
+            e.kinds = f.kinds.iter().map(|k| k.label().to_string()).collect();
+            e.min_lr = f.min_lr;
+            e.density = f.density;
+            out.keys.insert(f.id.clone(), key);
+        }
+
+        // Evidence per pair of threads.
+        let mut at: BTreeMap<(String, String), usize> = BTreeMap::new();
+        for (i, p) in self.pairs.iter_mut().enumerate() {
+            p.decay_to(t);
+            at.insert((p.a.clone(), p.b.clone()), i);
+        }
+        for e in sc_core::fleets::pair_evidence(&a.soft_links).into_values() {
+            let (Some(ta), Some(tb)) = (thread_of(&e.a), thread_of(&e.b)) else {
+                continue;
+            };
+            if ta == tb || e.lr <= 1.0 {
+                continue;
+            }
+            let span = |id: &str| a.cluster(id).map(|c| (c.start, c.end));
+            let (Some(sa), Some(sb)) = (span(&e.a), span(&e.b)) else {
+                continue;
+            };
+            let fresh = PairTrack::new(&ta, &tb);
+            let i = *at
+                .entry((fresh.a.clone(), fresh.b.clone()))
+                .or_insert_with(|| {
+                    self.pairs.push(fresh);
+                    self.pairs.len() - 1
+                });
+            let p = &mut self.pairs[i];
+            p.observe(e.lr.ln(), sa.0.min(sb.0), sa.1.max(sb.1), t);
+            p.kinds = e.families.iter().map(|x| x.1.label().to_string()).collect();
+        }
+        self.pairs
+            .sort_by(|x, y| (x.a.as_str(), x.b.as_str()).cmp(&(y.a.as_str(), y.b.as_str())));
+        // Persistent pairs no current fleet holds together.
+        let together =
+            |a: &str, b: &str| current.iter().any(|(_, m)| m.contains(a) && m.contains(b));
+        out.persistent = self
+            .pairs
+            .iter()
+            .filter(|p| p.persistent(fleet_track::ALPHA) && !together(&p.a, &p.b))
+            .cloned()
+            .collect();
+        out.persistent
+            .sort_by(|x, y| y.total().total_cmp(&x.total()).then(x.a.cmp(&y.a)));
+        out
     }
 
     /// Record run `stamp` (at `t`) of analysis `a`; `new_ids` are the
@@ -566,6 +762,9 @@ impl Ledger {
         }
         self.threads.retain(|_, th| !th.points.is_empty());
         let kept: BTreeSet<String> = self.threads.keys().cloned().collect();
+        self.fleets.retain(|_, f| f.last_t >= cutoff);
+        self.pairs
+            .retain(|p| kept.contains(&p.a) && kept.contains(&p.b) && p.t >= cutoff);
         for th in self.threads.values_mut() {
             let first = th.points[0].run.clone();
             th.events.retain(|e| e.run >= first);

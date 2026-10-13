@@ -143,7 +143,11 @@ mod tests {
 
     #[test]
     fn feed_escapes_and_orders_updates() {
-        let f = atom_feed(&[notice()], "https://example.github.io/swarmchasing/");
+        let f = atom_feed(
+            &[notice()],
+            "https://example.github.io/swarmchasing/",
+            "2026-11-01",
+        );
         assert!(
             f.contains("<title>Correction: Portal &lt;probe&gt; &amp; co</title>"),
             "{f}"

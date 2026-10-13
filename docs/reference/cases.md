@@ -49,9 +49,11 @@ Each change is logged with its date.
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
 | `case report <id> --audience …` | Drafts a report into `reports/`, applying the case's claims and naming threshold. |
 | `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
+| `case draft <id> --all` | Writes a draft for every provider and affected contact not yet sent to ([drafts](#drafts)). |
 | `case bundle <id>` | Writes an evidence bundle without drafting a report, signed when there is a signing key ([signing](#signed-bundles)). |
 | `case verify <bundle> [--key <file>]` | Checks the signature, the manifest, re-runs the analysis and fails if the signature is invalid or any tier or cluster differs. |
 | `case sent <id> --to … --channel … [--at <time>]` | Records a send the admin made, with its time, and moves an open case to reported ([lead times](#lead-times)). |
+| `case sent <id> --draft <file> [--at <time>]` | The same, with the recipient and channel read from the draft that was sent ([drafts](#drafts)). |
 | `case no-contact <id> <host\|org\|provider> --searched …` | Records that no contact was found for a party ([lead times](#lead-times)). |
 | `case consent <id> --party <p> --note "…"` | Records an operator's written consent to be named before its naming lead runs ([lead times](#lead-times)). |
 | `case naming <id> --party <p> --withhold --reason "…"` | Records the decision never to name an operator ([lead times](#lead-times)). |
@@ -150,7 +152,11 @@ Each contact has a role: `provider`, `affected` (an operator), `registrar`, `hos
 
 ## Drafts
 
-`case draft` writes the report for one listed contact into `outbox/`. For an email contact it is an unsent `.eml` with a fresh evidence bundle attached; otherwise it is paste-ready text for a web form or CERT portal. Nothing is ever sent by the tool. After the admin sends a draft, `case sent` records it.
+`case draft` writes the report for one listed contact into `outbox/`. For an email contact it is an unsent `.eml` with a fresh evidence bundle attached; otherwise it is paste-ready text for a web form or CERT portal. Nothing is ever sent by the tool. After the admin sends a draft, `case sent --draft <file>` records it, reading the recipient from the draft's `To:` header (or the form draft's first line) and recording the file as the report sent.
+
+`case draft --all` drafts for every contact whose role implies the audience: provider contacts get the provider report, affected contacts the affected report scoped to their endpoint. Contacts already sent to are skipped, and so are registrar, host, CSIRT and other contacts, since what they may see is the admin's call; draft those one at a time with `--audience` and `--to`. Each skipped contact is listed. `--reporter` names who the report is from in its *Reporter* line.
+
+An unknown case ID, endpoint or contact address is refused with the closest match the case holds, when one is close enough to be a typo.
 
 Provider and affected reports end with a *Publication* section: the time the indicator notice is scheduled for, that it will not name or locate the recipient, the time from which the recipient may be named, that both are fixed and not an embargo, how to consent to earlier naming, and that a statement sent for the notice is appended verbatim. The times assume every party not yet sent its report is sent it now; send the drafts as soon as they are read.
 

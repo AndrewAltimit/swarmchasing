@@ -265,9 +265,24 @@ pub fn render(p: &Page, ctx: &Ctx, root: &str) -> String {
             "<li class=\"nav-report\"><a href=\"{root}{href}\"{cur}>{label}</a></li>"
         );
     }
+    s.push_str("</ul></nav>\n");
+    {
+        // The same link again, shown on phones only (the nav's is hidden
+        // there), so it shares the brand's row and the header is two rows.
+        let (key, label, href) = NAV_REPORT;
+        let cur = if key == p.nav {
+            " aria-current=\"page\""
+        } else {
+            ""
+        };
+        let _ = writeln!(
+            s,
+            "<a class=\"head-report\" href=\"{root}{href}\"{cur}>{label}</a>"
+        );
+    }
     let _ = write!(
         s,
-        "</ul></nav>\n<button type=\"button\" class=\"theme-toggle\" data-theme-toggle aria-label=\"Switch between light and dark theme\" title=\"Theme\"><span aria-hidden=\"true\"></span></button>\n\
+        "<button type=\"button\" class=\"theme-toggle\" data-theme-toggle aria-label=\"Switch between light and dark theme\" title=\"Theme\"><span aria-hidden=\"true\"></span></button>\n\
 </div></header>\n<main id=\"main\" class=\"{}\" tabindex=\"-1\">\n{}\n</main>\n",
         if p.wide { "wrap wide" } else { "wrap" },
         p.body

@@ -71,6 +71,7 @@ impl Default for EscalationOptions {
                 "carrier.livecodes",
                 "carrier.codesandbox",
                 "carrier.browserless",
+                "carrier.remote_browser_cdp",
             ]),
         }
     }

@@ -62,11 +62,12 @@ The analysis module in the browser has no Unicode property classes (`\p{…}`); 
 
 ### Checks
 
-Some shapes need counting, which a regular expression cannot do. A `param_value` rule can name a `check`: the pattern picks candidate values cheaply, and the rule fires only on a value the check also passes. The checks:
+Some shapes need counting or comparing, which a regular expression cannot do. A rule can name a `check`: the pattern picks candidate matches cheaply, and the rule fires only on a match the check also passes. Each check reads one target. The checks:
 
-| `check` | Passes when |
-|---|---|
-| `repeated_token` | One word of three characters or more, or a phrase of two or three words, repeats five or more times in a row. |
+| `check` | Target | Passes when |
+|---|---|---|
+| `repeated_token` | `param_value` | One word of three characters or more, or a phrase of two or three words, repeats five or more times in a row. |
+| `ua_platform_mismatch` | `header` (`Sec-CH-UA-Platform`) | The platform hint names another desktop system than the request's user agent (a borrowed user agent). Mobile systems are never compared. |
 
 ```toml
 [[rule]]
@@ -80,7 +81,7 @@ weight = 1
 description = "A word or phrase repeated in a loop (synthetic example)"
 ```
 
-A check on any other target, or a name not in the table, stops the file loading. Keep the pattern loose enough to reach every value the check should see: here, any value of five words or more. A new check is code in sc-core ([`prose.rs`](../../crates/sc-core/src/prose.rs) holds `repeated_token`) with its own tests, and hard negatives in the eval set like any rule.
+A check on a target other than the one it reads, or a name not in the table, stops the file loading. Keep the pattern loose enough to reach every match the check should see: for `repeated_token`, any value of five words or more. A new check is code in sc-core ([`prose.rs`](../../crates/sc-core/src/prose.rs) holds `repeated_token`, [`ua_platform.rs`](../../crates/sc-core/src/ua_platform.rs) holds `ua_platform_mismatch`) with its own tests, and hard negatives in the eval set like any rule.
 
 ## Choosing a weight
 

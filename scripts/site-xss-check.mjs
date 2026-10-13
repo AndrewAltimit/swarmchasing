@@ -25,6 +25,11 @@
 // Usage (after scripts/ci/build-site.sh, which builds site/pkg):
 //     node scripts/site-xss-check.mjs [path/to/chrome]
 // Chrome is found from the argument, $CHROME, or the usual install paths.
+// With XSS_CDP set to a running Chrome's debugging endpoint (as
+// scripts/ci/site-xss-container.sh starts one in a container), none is
+// started: XSS_PAGE_HOST is the address that browser reaches this script's
+// server at, XSS_SHARE_DIR a directory it can read, and XSS_SHARE_AS that
+// directory's path as the browser sees it (the same path when unset).
 // Exit 0 is a pass, 1 a failure, 2 means it could not run (no Chrome, no
 // site/pkg, or no cargo to build the fixture site). The probes only call
 // console.log and set window.__xss; nothing is fetched from outside the
@@ -40,7 +45,14 @@ const ROOT = resolve(import.meta.dirname, "..");
 // Override with XSS_PORT and XSS_DEBUG_PORT when another check holds these.
 const PORT = Number(process.env.XSS_PORT) || 8790;
 const DEBUG_PORT = Number(process.env.XSS_DEBUG_PORT) || 9334;
-const BASE = `http://127.0.0.1:${PORT}/`;
+const CDP = process.env.XSS_CDP?.replace(/\/+$/, "");
+const PAGE_HOST = process.env.XSS_PAGE_HOST || "127.0.0.1";
+const LOOPBACK = PAGE_HOST === "127.0.0.1" || PAGE_HOST === "localhost";
+const SHARE_DIR = process.env.XSS_SHARE_DIR ? resolve(process.env.XSS_SHARE_DIR) : tmpdir();
+const SHARE_AS = process.env.XSS_SHARE_AS;
+const BASE = `http://${PAGE_HOST}:${PORT}/`;
+// A path under SHARE_DIR as the browser sees it.
+const forBrowser = (p) => (SHARE_AS ? SHARE_AS + resolve(p).slice(SHARE_DIR.length).replace(/\\/g, "/") : p);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const chrome = [
@@ -52,7 +64,7 @@ const chrome = [
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 ].find((p) => p && existsSync(p));
-if (!chrome) {
+if (!chrome && !CDP) {
   console.error("site-xss-check: no Chrome found; pass its path or set $CHROME");
   process.exit(2);
 }
@@ -70,7 +82,8 @@ const tag = `"><img src=x onerror=${fire}>`;
 // A hostile notice: every field the generator renders carries a probe. It
 // must still pass the notice check (nothing withheld), as a real one would.
 const lit = (s) => `'''${s}'''`;
-const tmp = mkdtempSync(join(tmpdir(), "sc-xss-"));
+mkdirSync(SHARE_DIR, { recursive: true });
+const tmp = mkdtempSync(join(SHARE_DIR, "sc-xss-"));
 const noticesDir = join(tmp, "notices");
 const siteDir = join(tmp, "site");
 mkdirSync(noticesDir);
@@ -226,10 +239,11 @@ const server = createServer((req, res) => {
   }
   res.setHeader("content-type", TYPES[extname(file)] ?? "application/octet-stream");
   res.end(readFileSync(file));
-}).listen(PORT, "127.0.0.1");
+}).listen(PORT, LOOPBACK ? "127.0.0.1" : "0.0.0.0");
 
-const profile = mkdtempSync(join(tmpdir(), "sc-xss-prof-"));
-const proc = spawn(chrome, ["--headless=new", `--remote-debugging-port=${DEBUG_PORT}`, `--user-data-dir=${profile}`, "--no-first-run", "about:blank"], { stdio: "ignore" });
+const profile = CDP ? null : mkdtempSync(join(tmpdir(), "sc-xss-prof-"));
+const proc = CDP ? null : spawn(chrome, ["--headless=new", `--remote-debugging-port=${DEBUG_PORT}`, `--user-data-dir=${profile}`, "--no-first-run", "about:blank"], { stdio: "ignore" });
+const DEBUG = CDP ?? `http://127.0.0.1:${DEBUG_PORT}`;
 
 const failures = [];
 let logs = [];
@@ -238,13 +252,17 @@ try {
   let targets;
   for (let i = 0; i < 75 && !targets; i++) {
     try {
-      targets = await (await fetch(`http://127.0.0.1:${DEBUG_PORT}/json`)).json();
+      targets = await (await fetch(`${DEBUG}/json`)).json();
     } catch {
       await sleep(200);
     }
   }
-  if (!targets) throw new Error("Chrome did not start");
-  const ws = new WebSocket(targets.find((t) => t.type === "page").webSocketDebuggerUrl);
+  if (!targets) throw new Error(CDP ? `no Chrome answered at ${CDP}` : "Chrome did not start");
+  let page = targets.find((t) => t.type === "page");
+  if (!page) page = await (await fetch(`${DEBUG}/json/new?about:blank`, { method: "PUT" })).json();
+  // A browser in a container names its own address; reach it at ours.
+  const wsUrl = CDP ? page.webSocketDebuggerUrl.replace(/^ws:\/\/[^/]+/, CDP.replace(/^http/, "ws")) : page.webSocketDebuggerUrl;
+  const ws = new WebSocket(wsUrl);
   await new Promise((r) => ws.addEventListener("open", r));
   let seq = 0;
   const pending = new Map();
@@ -453,7 +471,7 @@ try {
       hostile ||= document.getElementById("context").textContent.includes("<svg");
     }
     for (const b of document.querySelectorAll("#viz-panel .chart-tools button")) b.click();
-    // Drafting loads the tools module and re-runs the analysis there.
+    // Drafting reads the analysis already held in the tools module.
     document.getElementById("draft-report").click();
     const drafted = () => /^# /.test(document.getElementById("report").textContent);
     for (let i = 0; i < 100 && !drafted(); i++) await wait(100);
@@ -570,7 +588,7 @@ try {
     await send("DOM.enable");
     const d = await send("DOM.getDocument");
     const pick = await send("DOM.querySelector", { nodeId: d.result.root.nodeId, selector: "#id-files" });
-    await send("DOM.setFileInputFiles", { nodeId: pick.result.nodeId, files: [hostileRange] });
+    await send("DOM.setFileInputFiles", { nodeId: pick.result.nodeId, files: [forBrowser(hostileRange)] });
     for (let i = 0; i < 40 && !(await run(`document.getElementById("id-file-table").textContent.includes("your copy")`)); i++) await sleep(100);
     if (!(await run(`document.getElementById("id-file-table").textContent.includes("your copy")`))) failures.push("a provider file picked on the identity page was not taken");
   }
@@ -583,7 +601,7 @@ try {
   await send("DOM.enable");
   const doc = await send("DOM.getDocument");
   const input = await send("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: "#case-files" });
-  await send("DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: bundleFiles });
+  await send("DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: bundleFiles.map(forBrowser) });
   for (let i = 0; i < 40 && !(await run(`document.querySelectorAll("#case-out table.layers tbody tr").length`)); i++) await sleep(150);
   const bundle = await run(`(() => {
     const out = document.getElementById("case-out");
@@ -634,10 +652,10 @@ try {
 } catch (e) {
   failures.push(String(e?.message ?? e));
 } finally {
-  proc.kill();
+  proc?.kill();
   server.close();
   await sleep(300);
-  for (const d of [profile, tmp]) {
+  for (const d of [profile, tmp].filter(Boolean)) {
     try {
       rmSync(d, { recursive: true, force: true });
     } catch {}

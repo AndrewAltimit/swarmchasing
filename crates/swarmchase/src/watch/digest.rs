@@ -72,6 +72,8 @@ pub struct SourceReport {
     /// Successful runs in a row that pulled nothing, once that reaches
     /// [`crate::health::QUIET_RUNS`], and whether it ever pulled a record.
     pub quiet: Option<(u32, bool)>,
+    /// Wall-clock milliseconds the source's pull took.
+    pub duration_ms: u64,
 }
 
 impl SourceReport {
@@ -115,6 +117,7 @@ pub fn capability(kind: &str) -> &'static str {
         "gharchive" => "GitHub event leads: run-named repositories and pasted relay URLs",
         "npm" | "pypi" => "registry leads: packages carrying run tags",
         "wikimedia" => "wiki edit leads: relay and run-tag links added to wiki pages",
+        "hackernews" => "Hacker News leads: relay and run-tag links in stories and comments",
         "ctlog" => "certificate leads: new relay look-alikes and mirrors",
         "wellknown" => "agent protocol footprints: agent cards and signature key directories",
         "mcp" => "MCP Registry metadata for linking hosts to tool servers",
@@ -1621,7 +1624,7 @@ mod tests {
     #[test]
     fn digest_lists_candidate_fleets_by_key() {
         let mut rules = Rules::default_rules();
-        rules.set.soft_links.fleet_min_strength = 0.3;
+        rules.set.soft_links.fleet_min_lr = 1.5;
         let a = analyze(crate::case::fleet::tests::two_runs(), &rules);
         assert_eq!(a.candidate_fleets.len(), 1);
         let s = summarise(&a, &Summary::default(), "t1".into());

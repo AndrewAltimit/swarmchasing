@@ -13,6 +13,21 @@
 //! Both drop the stream's `canary` events (the service's own health
 //! checks) and edits by bot-flagged accounts before anything is kept.
 //!
+//! A third reader gives labels, not events ([`pull_ai_cleanup`]): the
+//! pages editors tag as containing suspected AI-generated text. On the
+//! English Wikipedia the cleanup template files a page in a monthly
+//! category (`Articles containing suspected AI-generated texts from
+//! October 2026`). The categorize events for it are in the
+//! `mediawiki.recentchange` stream, which carries every change to every
+//! wiki; reading the category itself through the MediaWiki API
+//! (`list=categorymembers`, sorted by when each page was added, from the
+//! checkpoint) gives the same pages in one or two requests a run. Each page
+//! becomes a [`TargetLabel`] (`wiki-ai-cleanup`) on its `<wiki>/<title>`,
+//! the target a revision event names, so a wiki candidate whose members
+//! edited tagged pages says so. `endpoint` is the wiki (default
+//! `en.wikipedia.org`), `pattern` the category name before ` from <month>`
+//! (`*` for the default).
+//!
 //! Coverage: a pull resumes at the millisecond after the last event it read
 //! (`since=`), reads until it reaches the time the pull began, and stops
 //! early at `scan` minutes of wall time or `max_mb` megabytes; the next run
@@ -34,10 +49,13 @@
 //! which the shared client does, and the API etiquette asks for one
 //! connection at a time. Edits are published under the wikis' free
 //! licences; we keep the edit's public diff link, time and the added link,
-//! not the editor's name.
+//! not the editor's name. The MediaWiki Action API's etiquette
+//! (<https://www.mediawiki.org/wiki/API:Etiquette>) asks for serial
+//! requests and an identifying user agent; the category reader makes a few
+//! a run and keeps page titles and times only.
 
 use crate::pager::{Coverage, Cursor, Page};
-use crate::platform::PlatformPull;
+use crate::platform::{PlatformPull, TargetLabel, label_key};
 use crate::{CdxQuery, Client, Kind, Needles, Source, short_hash};
 use anyhow::Result;
 use sc_core::platform::{Action, Platform, PlatformEvent, actor_key, wiki_title_template};
@@ -541,6 +559,162 @@ impl Source for WikiLinks {
     }
 }
 
+/// The category the English Wikipedia's AI cleanup template files pages
+/// in, before its ` from <month> <year>` suffix.
+pub const AI_CLEANUP_CATEGORY: &str = "Articles containing suspected AI-generated texts";
+/// Category requests one label pull makes unless `scan` says otherwise.
+const DEFAULT_CATEGORY_REQUESTS: usize = 4;
+/// Without a checkpoint, a label pull reads this far back (seconds).
+const LABEL_FRESH_SECS: i64 = 24 * 3600;
+/// A label checkpoint further back than this is skipped (seconds).
+const LABEL_BACKLOG_SECS: i64 = 7 * 24 * 3600;
+
+/// The monthly categories (`<prefix> from October 2026`) covering `start`
+/// to `end` (Unix seconds), oldest first.
+pub fn monthly_categories(prefix: &str, start: i64, end: i64) -> Vec<String> {
+    use chrono::Datelike;
+    let (Some(a), Some(b)) = (
+        chrono::DateTime::from_timestamp(start, 0),
+        chrono::DateTime::from_timestamp(end, 0),
+    ) else {
+        return Vec::new();
+    };
+    let (mut y, mut m) = (a.year(), a.month());
+    let mut out = Vec::new();
+    while (y, m) <= (b.year(), b.month()) && out.len() < 13 {
+        let month = chrono::NaiveDate::from_ymd_opt(y, m, 1)
+            .map(|d| d.format("%B").to_string())
+            .unwrap_or_default();
+        out.push(format!("{prefix} from {month} {y}"));
+        (y, m) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
+    }
+    out
+}
+
+/// Labels from one `list=categorymembers` response, the members it held,
+/// and the `cmcontinue` key for more.
+pub fn category_labels(
+    body: &str,
+    domain: &str,
+    category: &str,
+) -> Result<(Vec<TargetLabel>, usize, Option<String>)> {
+    let v: Value =
+        serde_json::from_str(body).map_err(|_| anyhow::anyhow!("category members: not JSON"))?;
+    if let Some(e) = v.pointer("/error/info").and_then(Value::as_str) {
+        anyhow::bail!("category members: {e}");
+    }
+    let members = v
+        .pointer("/query/categorymembers")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("category members: no `query.categorymembers`"))?;
+    let mut out = Vec::new();
+    for m in members {
+        let (Some(title), Some(ts)) = (
+            m.get("title").and_then(Value::as_str),
+            m.get("timestamp")
+                .and_then(Value::as_str)
+                .and_then(crate::parse_date),
+        ) else {
+            continue;
+        };
+        let t = title.replace(' ', "_");
+        out.push(TargetLabel {
+            platform: Platform::Wikimedia,
+            target: label_key(Platform::Wikimedia, &format!("{domain}/{t}")),
+            kind: "wiki-ai-cleanup".into(),
+            source_id: format!("Category:{category}"),
+            link: format!("https://{domain}/wiki/{t}"),
+            ts,
+        });
+    }
+    let more = v
+        .pointer("/continue/cmcontinue")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    Ok((out, members.len(), more))
+}
+
+/// The label pass: pages added to the AI cleanup categories since the
+/// checkpoint `mark` (Unix seconds).
+pub fn pull_ai_cleanup(client: &Client, q: &CdxQuery, mark: Option<u64>) -> Result<PlatformPull> {
+    let domain = q.endpoint.as_deref().unwrap_or("en.wikipedia.org");
+    if domain.is_empty()
+        || !domain
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        || !(domain.ends_with(".wikipedia.org") || domain.ends_with(".wikimedia.org"))
+    {
+        anyhow::bail!("wikimedia-ai-cleanup endpoint `{domain}` is not a Wikimedia wiki");
+    }
+    let prefix = match q.pattern.trim() {
+        "" | "*" => AI_CLEANUP_CATEGORY,
+        p => p,
+    };
+    let now = crate::client::now_secs();
+    let fresh = now - LABEL_FRESH_SECS;
+    let (start, skipped) = match mark.map(|m| m as i64) {
+        Some(m) if m >= now - LABEL_BACKLOG_SECS => (m, 0),
+        Some(m) => (fresh, (fresh - m).max(0)),
+        None => (fresh, 0),
+    };
+    let mut budget = q.scan.unwrap_or(DEFAULT_CATEGORY_REQUESTS).clamp(1, 20);
+    let mut out = PlatformPull::default();
+    let (mut members, mut next, mut complete) = (0u64, start, true);
+    let from = chrono::DateTime::from_timestamp(start + 1, 0)
+        .unwrap_or_default()
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    for cat in monthly_categories(prefix, start, now) {
+        let mut cont: Option<String> = None;
+        loop {
+            if budget == 0 {
+                complete = false;
+                break;
+            }
+            budget -= 1;
+            let mut u = url::Url::parse(&format!("https://{domain}/w/api.php"))?;
+            u.query_pairs_mut()
+                .append_pair("action", "query")
+                .append_pair("list", "categorymembers")
+                .append_pair("cmtitle", &format!("Category:{cat}"))
+                .append_pair("cmsort", "timestamp")
+                .append_pair("cmdir", "asc")
+                .append_pair("cmstart", &from)
+                .append_pair("cmprop", "ids|title|timestamp")
+                .append_pair("cmtype", "page")
+                .append_pair("cmlimit", "500")
+                .append_pair("format", "json")
+                .append_pair("formatversion", "2");
+            if let Some(c) = &cont {
+                u.query_pairs_mut().append_pair("cmcontinue", c);
+            }
+            let body = client.get(u.as_str())?;
+            let (labels, n, more) = category_labels(&body, domain, &cat)?;
+            members += n as u64;
+            if let Some(t) = labels.iter().map(|l| l.ts).max() {
+                next = next.max(t);
+            }
+            out.labels.extend(labels);
+            match more {
+                Some(c) => cont = Some(c),
+                None => break,
+            }
+        }
+    }
+    if complete {
+        next = next.max(now - 60);
+    }
+    out.coverage = Coverage {
+        unit: "pages",
+        read: members,
+        available: members + u64::from(skipped > 0 || !complete),
+        skipped: u64::from(skipped > 0),
+        next: Some(next.max(0) as u64),
+        canary: Some(true),
+    };
+    Ok(out)
+}
+
 /// The platform pass: edits from `revision-create`, at most `max`, from the
 /// checkpoint `mark` (ms).
 pub fn pull_platform(
@@ -762,6 +936,44 @@ mod tests {
         assert_eq!(p.start_ms, now - 3_600_000);
         assert_eq!(p.skipped_minutes, 29 * 60);
         assert_eq!(p.max_bytes, DEFAULT_MAX_MB << 20);
+    }
+
+    #[test]
+    fn ai_cleanup_categories_become_labels_on_revision_targets() {
+        let t = |s: &str| crate::parse_date(s).unwrap();
+        assert_eq!(
+            monthly_categories(
+                AI_CLEANUP_CATEGORY,
+                t("2026-09-30T23:00:00Z"),
+                t("2026-10-13T00:00:00Z")
+            ),
+            [
+                "Articles containing suspected AI-generated texts from September 2026",
+                "Articles containing suspected AI-generated texts from October 2026"
+            ]
+        );
+        assert_eq!(
+            monthly_categories("x", t("2026-12-31T00:00:00Z"), t("2027-01-01T00:00:00Z")).len(),
+            2
+        );
+        // A synthetic API answer; the page is invented.
+        let body = r#"{"batchcomplete":true,"continue":{"cmcontinue":"page|abc|1","continue":"-||"},"query":{"categorymembers":[{"pageid":1,"ns":0,"title":"Probe Topic 42","timestamp":"2026-10-13T17:41:13Z"},{"pageid":2,"ns":0,"title":"No time"}]}}"#;
+        let (labels, n, more) = category_labels(body, "en.wikipedia.org", "C").unwrap();
+        assert_eq!((labels.len(), n), (1, 2));
+        assert_eq!(more.as_deref(), Some("page|abc|1"));
+        let l = &labels[0];
+        assert_eq!(l.target, "en.wikipedia.org/probe_topic_42");
+        assert_eq!(l.link, "https://en.wikipedia.org/wiki/Probe_Topic_42");
+        assert_eq!(l.kind, "wiki-ai-cleanup");
+        // The label's target is the one a revision event on that page names.
+        let rules = Rules::default_rules();
+        let text = format!(
+            r#"{{"meta":{{"domain":"en.wikipedia.org","dt":"{}"}},"database":"enwiki","page_title":"Probe_Topic_42","page_namespace":0,"rev_id":5,"performer":{{"user_text":"Someone","user_is_bot":false}},"comment":"Expanded the article with a long new section on the history of the topic"}}"#,
+            dt(T)
+        );
+        let e = revision_event(&serde_json::from_str(&text).unwrap(), &rules).unwrap();
+        assert_eq!(label_key(e.platform, &e.target), l.target);
+        assert!(category_labels(r#"{"error":{"info":"bad title"}}"#, "x", "C").is_err());
     }
 
     #[test]

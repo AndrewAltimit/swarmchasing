@@ -1,6 +1,18 @@
 /* Swarmchasing site styles. One sheet for every page; colours are tokens on
    :root with a selected dark set (not an automatic flip). The page CSP allows
-   this file only: no inline styles anywhere. */
+   this file only: no inline styles anywhere.
+
+   Breakpoints: three widths, and every width query uses one of them (CSS
+   cannot name them, so they are written out; the page scripts that ask
+   for a width use the same numbers):
+     phone    max-width: 720px   (min-width: 721px above it)  one column,
+              cards for tables, the header in two rows, folded figures
+     tablet   max-width: 960px   (min-width: 961px above it)  the workbench
+              steps through its panes, docs drop the side navigation
+     laptop   max-width: 1260px  (min-width: 1261px above it)  the workbench
+              puts context under its panes, docs drop the table of contents
+   Other queries are about the device, not the width: hover, reduced
+   motion, colour scheme, a short screen (max-height) and print. */
 
 :root {
   color-scheme: light;
@@ -26,6 +38,11 @@
   --band-line: #6250d6;
   --critical: #c0322f;
   --serious: #b0501e;
+  /* Tiers: apart in lightness as well as hue (about 2:1 between them in
+     both themes), each at least 4.5:1 on every surface. Marks add a shape
+     cue: significant is filled, suggestive a ring around a light tint. */
+  --tier-sig: #7a1a1a;
+  --tier-sug: #a64d0a;
   --warning: #fab219;
   --good: #0ca30c;
   --good-ink: #006300;
@@ -61,6 +78,8 @@
     --band-line: #9085e9;
     --critical: #ef6b6b;
     --serious: #ec835a;
+    --tier-sig: #ee6868;
+    --tier-sug: #f5c773;
     --good-ink: #34b934;
     --code-bg: #262624;
     --q1: #1b3150; --q2: #184f95; --q3: #256abf; --q4: #5598e7; --q5: #9ec5f4;
@@ -93,6 +112,8 @@
   --band-line: #9085e9;
   --critical: #ef6b6b;
   --serious: #ec835a;
+  --tier-sig: #ee6868;
+  --tier-sug: #f5c773;
   --good-ink: #34b934;
   --code-bg: #262624;
   --q1: #1b3150; --q2: #184f95; --q3: #256abf; --q4: #5598e7; --q5: #9ec5f4;
@@ -125,7 +146,7 @@ a:hover { text-decoration-thickness: 2px; }
    (`.mono`); prose fields and controls use the page's font. */
 code, pre, .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace; font-size: 13px; }
 code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: break-word; }
-@media (min-width: 701px) { td code { white-space: nowrap; } }
+@media (min-width: 721px) { td code { white-space: nowrap; } }
 pre { overflow-x: auto; }
 pre code { background: none; padding: 0; }
 hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
@@ -174,14 +195,23 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
 /* The header and footer keep one edge on every page, the wide pages'
    (workbench, docs), so the brand and nav never move between pages. */
 .site-head > .wrap, .site-foot > .wrap { max-width: 1640px; }
-@media (max-width: 760px) {
+/* Report a swarm's second link: on phones it joins the brand's row. */
+.head-report { display: none; }
+@media (max-width: 720px) {
   /* Not sticky on phones: it would cover the workbench's step bar and
-     take a quarter of the screen. */
+     take a quarter of the screen. Two rows: the brand, Report a swarm and
+     the theme; then the nav. */
   .site-head { position: static; }
   .head-row { flex-wrap: wrap; gap: 0 12px; }
   .brand { padding: 12px 0 4px; }
-  .theme-toggle { margin-left: auto; margin-top: 6px; }
+  .head-report {
+    display: inline-flex; align-items: center; min-height: 32px; margin: 6px 0 0 auto;
+    color: var(--accent-ink); font-weight: 600; font-size: 14px; text-decoration: none; white-space: nowrap;
+  }
+  .head-report[aria-current="page"] { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .theme-toggle { margin-top: 6px; }
   .site-nav { order: 3; flex-basis: 100%; margin: 0 -16px; padding: 0 8px; }
+  .site-nav .nav-report { display: none; }
   .site-nav a { padding: 8px 9px 10px; }
 }
 
@@ -229,8 +259,12 @@ button.small { font-size: 12px; padding: 3px 9px; }
 /* ── Pills, chips, badges, flags ─────────────────────────────────────── */
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; color: var(--text-primary); font-weight: 600; }
 .pill::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--dot, var(--text-muted)); flex: none; }
-.pill.significant, .pill.active { --dot: var(--critical); }
-.pill.suggestive, .pill.contained { --dot: var(--serious); }
+.pill.active { --dot: var(--critical); }
+.pill.contained { --dot: var(--serious); }
+/* Tiers: significant a filled dot, suggestive a ring. */
+.pill.significant { --dot: var(--tier-sig); }
+.pill.suggestive { --dot: var(--tier-sug); }
+.pill.suggestive::before { background: transparent; box-shadow: inset 0 0 0 2px var(--dot); }
 .pill.noise, .pill.historical { --dot: var(--text-muted); }
 /* Declared agent identity classes (the identity page). */
 .pill.id-signature_verified, .pill.id-ip_verified, .pill.id-in_range { --dot: var(--good); }
@@ -245,7 +279,7 @@ table.id-files td.url code { overflow-wrap: anywhere; white-space: normal; }
 .chip { display: inline-block; background: var(--code-bg); border-radius: 5px; padding: 0 6px; margin: 1px 3px 1px 0; font-size: 12px; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
 .badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); white-space: nowrap; }
 .flag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 5px; margin-right: 4px; border: 1px solid var(--border); }
-.flag.sig::before { content: "◆ "; content: "◆ " / ""; color: var(--critical); }
+.flag.sig::before { content: "◆ "; content: "◆ " / ""; color: var(--tier-sig); }
 .flag.link::before { content: "+ "; content: "+ " / ""; color: var(--accent-ink); }
 .flag.correction { border-color: var(--serious); }
 .flag.correction::before { content: "✎ "; content: "✎ " / ""; }
@@ -268,7 +302,7 @@ td.changed { font-weight: 650; background: var(--code-bg); }
 .kv dt { color: var(--text-secondary); font-weight: 600; }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 .kv ul { margin: 0; padding-left: 18px; }
-@media (max-width: 600px) {
+@media (max-width: 720px) {
   .kv { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .kv dd { margin-bottom: 8px; }
 }
@@ -303,11 +337,11 @@ h2:hover .anchor, h3:hover .anchor, h4:hover .anchor, .anchor:focus { opacity: 1
 .nav-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 6px 8px; }
 .doc { min-width: 0; }
 .doc-src { margin-top: 32px; }
-@media (max-width: 1180px) {
+@media (max-width: 1260px) {
   .doc-layout { grid-template-columns: 200px minmax(0, 1fr); }
   .toc { display: none; }
 }
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .doc-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .doc-nav { position: static; order: 2; max-height: none; border-top: 1px solid var(--border); padding-top: 16px; margin-left: 0; }
 }
@@ -322,13 +356,42 @@ h2:hover .anchor, h3:hover .anchor, h4:hover .anchor, .anchor:focus { opacity: 1
 .steps-list { padding-left: 22px; max-width: 76ch; }
 .steps-list li { margin-bottom: 6px; }
 .meta { color: var(--text-secondary); font-size: 13px; }
-@media (max-width: 600px) { .hero h1 { font-size: 32px; } .mission { font-size: 17px; } }
+@media (max-width: 720px) { .hero h1 { font-size: 32px; } .mission { font-size: 17px; } }
+/* The public's card spans the row under the others: heading and text, then
+   its links, side by side where there is room. */
+.audience-wide { grid-column: 1 / -1; }
+@media (min-width: 961px) {
+  ul.audiences > li.audience-wide { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 24px; align-items: center; }
+  ul.audiences > li.audience-wide > h2, ul.audiences > li.audience-wide > p:not(.ctas) { grid-column: 1; }
+  ul.audiences > li.audience-wide > .ctas { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+}
+/* The notices at a glance, under the hero. */
+.notice-strip {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 18px;
+  margin: 20px 0 0; padding: 10px 14px; background: var(--surface-1); border: 1px solid var(--border);
+  border-left: 4px solid var(--accent); border-radius: 8px; font-size: 14px; color: var(--text-secondary);
+}
+.notice-strip p { margin: 0; }
+.notice-strip strong { color: var(--text-primary); }
+.ns-links { display: flex; flex-wrap: wrap; gap: 2px 16px; }
+.ns-links a { display: inline-flex; align-items: center; min-height: 28px; }
+/* How notices work, in plain words (the notices page). */
+.plain { max-width: 84ch; margin-top: 28px; scroll-margin-top: 72px; }
+.plain-list { margin: 0; }
+.plain-list dt { font-weight: 650; margin-top: 12px; }
+.plain-list dt:first-child { margin-top: 0; }
+.plain-list dd { margin: 2px 0 0; color: var(--text-secondary); }
+/* The evaluation in sentences, ahead of its intervals. */
+.plain-tiers { margin: 0 0 10px; padding-left: 20px; font-size: 15px; }
+.plain-tiers li { margin-bottom: 8px; }
+.plain > .hint:last-child { margin-bottom: 0; }
+.page-head + .plain { margin-top: 0; }
 
 /* ── Filters ─────────────────────────────────────────────────────────── */
 .filters { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; }
 .filters label { display: flex; flex-direction: column; gap: 3px; flex: 1 1 150px; }
 .filters label.grow { flex: 1 1 260px; }
-.filters label.check { flex-direction: row; align-items: center; gap: 6px; font-weight: 500; padding-bottom: 8px; flex: none; }
+.filters label.check { flex-direction: row; align-items: center; gap: 6px; font-weight: 500; padding-bottom: 8px; flex: none; min-height: 32px; }
 .filters label.check input { width: auto; }
 .filters .hint { flex-basis: 100%; margin: 0; }
 .filters .filter-actions { margin: 0; flex: none; }
@@ -338,7 +401,7 @@ html:not(.js) [data-notice-filters] { display: none; }
 /* ── Notices ─────────────────────────────────────────────────────────── */
 .notice-table td:first-child { min-width: 220px; }
 /* Phones: one card per notice, each cell labelled. */
-@media (max-width: 700px) {
+@media (max-width: 720px) {
   .notice-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .notice-table, .notice-table tbody, .notice-table tr, .notice-table td { display: block; }
   .notice-table tr { border-bottom: 1px solid var(--border); padding: 10px 0; }
@@ -371,11 +434,35 @@ html:not(.js) [data-notice-filters] { display: none; }
 
 /* ── Rules ───────────────────────────────────────────────────────────── */
 .rule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
-.rule-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.rule-card header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.rule-card h2 { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
-.rule-card h2 code { background: none; padding: 0; font-weight: 700; }
+.rule-kind { margin-top: 22px; }
+.rule-kind[hidden] { display: none; }
+.rule-kind > h2 { font-size: 17px; margin: 0 0 8px; text-transform: capitalize; }
+.rule-kind > h2 .hint { text-transform: none; font-size: 13px; }
+.rule-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; }
+/* A rule is a row (id, weight, flags) that opens on the rest. */
+.rule-fold > summary {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 44px; padding: 8px 14px;
+  cursor: pointer; list-style: none;
+}
+.rule-fold > summary::-webkit-details-marker { display: none; }
+.rule-fold > summary::after {
+  content: ""; margin-left: auto; width: 7px; height: 7px; flex: none;
+  border-right: 1.5px solid var(--text-muted); border-bottom: 1.5px solid var(--text-muted); transform: rotate(45deg);
+}
+.rule-fold[open] > summary::after { transform: translateY(2px) rotate(225deg); }
+.rule-fold > summary:hover h3 code { text-decoration: underline; }
+.rule-fold > summary .flag { margin: 0; font-size: 11.5px; }
+.rule-w { font-size: 12px; font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.rule-body { display: flex; flex-direction: column; gap: 6px; padding: 0 14px 12px; }
+.rule-card h3 { margin: 0; font-size: 14px; overflow-wrap: anywhere; min-width: 0; }
+.rule-card h3 code { background: none; padding: 0; font-weight: 700; }
 .rule-card p { margin: 0; font-size: 13.5px; }
+/* Targets a finger can hit: links in a card, and the URL test's toggle. */
+.rule-body a { display: inline-block; min-height: 24px; line-height: 24px; }
+.rule-test > summary { min-height: 28px; display: flex; align-items: center; }
+details.explain { margin: 4px 0 0; max-width: 76ch; }
+details.explain > summary { cursor: pointer; color: var(--accent-ink); font-size: 14px; font-weight: 600; min-height: 28px; display: inline-flex; align-items: center; }
+details.explain > p { color: var(--text-secondary); font-size: 14.5px; margin: 8px 0 0; }
 .rule-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; font-size: 12px; }
 .rule-meta div { display: flex; gap: 4px; }
 .rule-meta dt { color: var(--text-muted); }
@@ -403,8 +490,8 @@ html:not(.js) [data-notice-filters] { display: none; }
 .legend .key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 .key.s-agent { background: var(--series-1); }
 .key.s-benign { background: var(--series-2); }
-.key.s-sig { background: var(--critical); }
-.key.s-sug { background: var(--serious); }
+.key.s-sig { background: var(--tier-sig); }
+.key.s-sug { background: transparent; box-shadow: inset 0 0 0 2px var(--tier-sug); }
 .key.s-miss { background: var(--grid); border: 1px solid var(--axis); }
 .as-table { margin: 6px 0 16px; }
 .as-table summary { cursor: pointer; color: var(--accent-ink); font-size: 13px; }
@@ -427,13 +514,8 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
 .chart .pause { fill: var(--pause); }
 .chart .band { fill: var(--band); stroke: var(--band-line); stroke-width: 1; stroke-dasharray: 3 2; }
 .chart .run, .chart .bar { fill: var(--series-1); }
-.chart .run.tier-significant { fill: var(--critical); }
-.chart .run.tier-suggestive { fill: var(--serious); }
-.chart .run.tier-noise { fill: var(--text-muted); }
 .chart .s-agent { fill: var(--series-1); }
 .chart .s-benign { fill: var(--series-2); }
-.chart .s-sig { fill: var(--critical); }
-.chart .s-sug { fill: var(--serious); }
 .chart .s-miss { fill: var(--grid); stroke: var(--axis); stroke-width: 0.5; }
 .chart .hit { fill: transparent; }
 .chart [tabindex] { cursor: pointer; outline: none; }
@@ -444,9 +526,6 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
 .chart .lane-label { fill: var(--text-secondary); font-size: 12px; cursor: pointer; }
 .chart .lane-label.sel { fill: var(--text-primary); font-weight: 700; stroke: none; }
 .chart .node { stroke: var(--surface-1); stroke-width: 2; }
-.chart .node.tier-significant { fill: var(--critical); }
-.chart .node.tier-suggestive { fill: var(--serious); }
-.chart .node.tier-noise { fill: var(--text-muted); }
 .chart .node.sel { stroke: var(--text-primary); stroke-width: 3; }
 .chart .node-label { fill: var(--text-primary); font-size: 11px; font-weight: 600; pointer-events: none; }
 .chart .edge { stroke-width: 2; fill: none; stroke: var(--axis); }
@@ -468,6 +547,13 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
 .chart .edge.soft.sk-shared-secret { stroke: var(--critical); stroke-dasharray: 8 3; }
 .chart .edge.soft.sk-relay-stack { stroke: var(--series-1); stroke-dasharray: 2 4; stroke-linecap: round; }
 .chart .edge.soft.sk-callback-service { stroke: var(--series-3); stroke-dasharray: 3 3; }
+/* Tier marks: significant filled; suggestive a ring around a light tint of
+   its colour, so the two differ in shape and lightness, not hue alone. */
+.chart :is(.run, .node, .dot).tier-significant, .chart .s-sig { fill: var(--tier-sig); }
+.chart :is(.run, .node, .dot).tier-suggestive, .chart .s-sug { fill: var(--tier-sug); fill-opacity: 0.3; stroke: var(--tier-sug); stroke-width: 1.75; }
+.chart :is(.run, .node, .dot).tier-noise { fill: var(--text-muted); }
+.chart :is(.run, .node, .dot).sel { stroke: var(--text-primary); stroke-width: 2.5; }
+.chart :is(.run, .node, .dot)[tabindex]:focus-visible { stroke: var(--text-primary); stroke-width: 2.5; }
 svg.chart.key-line { display: inline-block; width: 26px; height: 10px; margin-right: 5px; vertical-align: -1px; overflow: visible; }
 .chart .edge-hit { stroke: transparent; stroke-width: 12; fill: none; cursor: pointer; }
 .chart .cell { stroke: var(--surface-1); stroke-width: 2; }
@@ -477,16 +563,13 @@ svg.chart.key-line { display: inline-block; width: 26px; height: 10px; margin-ri
 .chart .cell-v { font-size: 10px; pointer-events: none; }
 .chart .cell-v.on-light { fill: var(--q-ink-light); }
 .chart .cell-v.on-dark { fill: var(--q-ink-dark); }
-.chart .dot.tier-significant { fill: var(--critical); }
-.chart .dot.tier-suggestive { fill: var(--serious); }
-.chart .dot.tier-noise { fill: var(--text-muted); }
 .chart .dot { stroke: var(--surface-1); stroke-width: 1; }
 .legend-ramp { display: inline-flex; gap: 2px; vertical-align: middle; }
 .legend-ramp i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
 .legend-ramp .q1 { background: var(--q1); } .legend-ramp .q2 { background: var(--q2); } .legend-ramp .q3 { background: var(--q3); }
 .legend-ramp .q4 { background: var(--q4); } .legend-ramp .q5 { background: var(--q5); }
-.key.k-sig { background: var(--critical); border-radius: 50%; }
-.key.k-sug { background: var(--serious); border-radius: 50%; }
+.key.k-sig { background: var(--tier-sig); border-radius: 50%; }
+.key.k-sug { background: transparent; box-shadow: inset 0 0 0 2px var(--tier-sug); border-radius: 50%; }
 .key.k-noise { background: var(--text-muted); border-radius: 50%; }
 .key.k-pause { background: var(--pause); border: 1px solid var(--axis); }
 .key.k-band { background: var(--band); border: 1px dashed var(--band-line); }
@@ -531,7 +614,22 @@ svg.chart.key-line { display: inline-block; width: 26px; height: 10px; margin-ri
 .viz-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); overflow-x: auto; margin-bottom: 10px; }
 .viz-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--text-secondary); padding: 8px 10px; white-space: nowrap; font-size: 13.5px; }
 .viz-tabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent); font-weight: 600; }
+/* Tabs wider than the pane fade out at the side with more to scroll to
+   (analyze.js sets data-fade from the scroll position). */
+.viz-tabs { scrollbar-width: thin; }
+.viz-tabs[data-fade="end"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); }
+.viz-tabs[data-fade="start"] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent); }
+.viz-tabs[data-fade="both"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+}
 .viz-panel { min-height: 160px; }
+/* The empty views pane: what will show, and the example to try. */
+.viz-panel .empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 18px 0; max-width: 60ch; }
+.viz-panel .empty-state p { margin: 0; color: var(--text-secondary); }
+.viz-panel .empty-state .hint { margin-bottom: 8px; }
+.none-found { margin-top: 12px; }
+.none-found span[title] { text-decoration: underline dotted var(--axis); text-underline-offset: 3px; cursor: help; }
 .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; min-height: 4px; }
 .filter-bar .chip-btn { font-size: 12px; padding: 3px 8px; border-radius: 999px; }
 .filter-bar .chip-btn::after { content: " ×"; color: var(--text-muted); }
@@ -565,7 +663,7 @@ svg.chart.key-line { display: inline-block; width: 26px; height: 10px; margin-ri
   .workbench { grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); }
   .pane-context { grid-column: 1 / -1; position: static; max-height: none; }
 }
-@media (max-width: 899px) {
+@media (max-width: 960px) {
   html.js .steps { display: flex; position: sticky; top: 0; z-index: 5; gap: 4px; background: var(--surface-0); padding: 8px 0; margin-bottom: 8px; overflow-x: auto; }
   .steps button { flex: 1 0 auto; font-size: 13px; padding: 7px 8px; }
   .steps button span { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--surface-2); font-size: 11px; font-weight: 700; }
@@ -574,6 +672,8 @@ svg.chart.key-line { display: inline-block; width: 26px; height: 10px; margin-ri
   .workbench { grid-template-columns: minmax(0, 1fr); }
   .pane-input, .pane-context { position: static; max-height: none; }
   html.js [data-pane]:not(.on) { display: none; }
+  /* A pane scrolled to sits below the sticky step bar. */
+  [data-pane] { scroll-margin-top: 58px; }
   .pane-report { margin-top: 0; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -621,7 +721,7 @@ table.layers th[scope="row"] { white-space: nowrap; color: var(--text-primary); 
 .nav-menu a span { color: var(--text-muted); font-size: 12.5px; }
 .nav-menu a:hover, .nav-menu a:focus-visible { background: var(--surface-2); }
 .nav-menu a[aria-current="page"] { box-shadow: inset 3px 0 0 var(--accent); background: var(--surface-2); }
-@media (max-width: 760px) {
+@media (max-width: 720px) {
   .site-nav > ul { flex-wrap: wrap; }
   .nav-group summary { padding: 8px 9px 10px; }
   /* The menu drops below the whole nav row, spanning the screen less a gutter. */
@@ -673,14 +773,14 @@ table.layers th[scope="row"] { white-space: nowrap; color: var(--text-primary); 
 .example-notice h3 { margin-top: 6px; }
 .example-notice .notice-body { border-top: 0; padding-top: 0; }
 .example-notice .more summary { cursor: pointer; color: var(--accent-ink); font-size: 14px; margin: 8px 0; }
-@media (max-width: 980px) {
+@media (max-width: 960px) {
   .walk-step { grid-template-columns: minmax(0, 1fr); padding: 14px; }
 }
 .scroll-x { overflow-x: auto; max-width: 100%; }
 .walk-fig .scroll-x svg.swim, .walk-fig .scroll-x svg.swarm { min-width: 560px; }
 .walk-fig .scroll-x svg.scope-fig { min-width: 620px; }
 .walk-fig svg.layers-fig, .walk-fig svg.score-fig, .walk-fig svg.ladder-fig { min-width: 0; }
-@media (max-width: 600px) {
+@media (max-width: 720px) {
   .walk-fig > svg.chart { min-width: 480px; }
   .walk-fig { overflow-x: auto; }
 }
@@ -710,8 +810,8 @@ table.layers th[scope="row"] { white-space: nowrap; color: var(--text-primary); 
 .chart .finding.scope-exceeded { fill: var(--serious); font-weight: 700; }
 .chart .finding.in-scope { fill: var(--good-ink); font-weight: 700; }
 .chart .threshold { stroke-width: 2; stroke-dasharray: 4 3; }
-.chart .threshold.th-sug { stroke: var(--serious); }
-.chart .threshold.th-sig { stroke: var(--critical); }
+.chart .threshold.th-sug { stroke: var(--tier-sug); }
+.chart .threshold.th-sig { stroke: var(--tier-sig); stroke-dasharray: none; }
 .chart .rung-band { fill: var(--surface-0); }
 .chart .rung-band.r1, .chart .rung-band.r3, .chart .rung-band.r5 { fill: var(--surface-2); }
 .chart .rung-code { fill: var(--text-primary); font-weight: 700; font-size: 12px; }
@@ -897,7 +997,7 @@ a.audience strong, a.audience h2, a.audience h3 { color: var(--accent-ink); }
 
 /* Docs on narrow screens: the page's sections, collapsed, above the text. */
 details.on-this-page { display: none; }
-@media (max-width: 1180px) {
+@media (max-width: 1260px) {
   details.on-this-page { display: block; margin: 0 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); font-size: 14px; }
   details.on-this-page > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--text-secondary); }
   details.on-this-page[open] > summary { border-bottom: 1px solid var(--border); }
@@ -949,7 +1049,7 @@ table.endpoints td.hits { white-space: nowrap; }
 }
 :is(.card, .pane, .walk-step, .rule-card, .notice-aside, .alert) :is(.scroll-x, .walk-fig, .scroll) { --scroll-bg: var(--surface-1); }
 .scroll-hint { display: none; }
-@media (max-width: 600px) {
+@media (max-width: 720px) {
   .scroll-hint { display: block; color: var(--text-muted); font-size: 12.5px; margin: 4px 0 6px; }
   .scroll-hint[hidden] { display: none; }
   .walk-fig.wide-min svg.chart:not(.key-line) { min-width: 480px; }
@@ -957,7 +1057,7 @@ table.endpoints td.hits { white-space: nowrap; }
 }
 
 /* Records and endpoints on phones: one card per row, each cell labelled. */
-@media (max-width: 700px) {
+@media (max-width: 720px) {
   :is(table.records, table.endpoints, table.layers, table.cards) { min-width: 0 !important; }
   :is(table.records, table.endpoints, table.layers, table.cards) thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   :is(table.records, table.endpoints, table.layers, table.cards), :is(table.records, table.endpoints, table.layers, table.cards) :is(tbody, tr, td, th[scope="row"]) { display: block; width: 100%; }
@@ -990,7 +1090,7 @@ table.endpoints td.hits { white-space: nowrap; }
 .conf-pair { white-space: nowrap; }
 
 /* Workbench records: the URL column keeps a readable share of a wide table. */
-@media (min-width: 701px) {
+@media (min-width: 721px) {
   table.records td.url { width: 40%; }
   table.records :is(th, td) { padding: 6px 7px; }
 }
@@ -999,19 +1099,15 @@ table.endpoints td.hits { white-space: nowrap; }
 }
 .more-rows { margin: 8px 0 0; }
 .lede-card { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; }
-/* Workbench steps on phones: a pane scrolled to sits below the sticky step bar. */
-@media (max-width: 899px) {
-  [data-pane] { scroll-margin-top: 58px; }
-}
 
 /* Text-heavy walk figures keep their drawn width on phones and scroll in
    their box, so their labels stay at the size they were drawn. */
-@media (max-width: 600px) {
+@media (max-width: 720px) {
   :is(.walk-fig, .walk-fig.wide-min) svg.chart:is(.layers-fig, .score-fig, .ladder-fig, .bands-fig, .flow-fig) { min-width: 720px; }
 }
 
 /* Folded figures on the landing: a compact "Show the figure" control on
-   phones (home.js closes them there); open above 600 px, where the
+   phones (home.js closes them there); open above 720 px, where the
    control is not shown. The notice filters fold the same way. */
 details.fig-fold { margin: 0; min-width: 0; }
 :is(details.fig-fold, details.filters-fold) > summary {
@@ -1027,7 +1123,7 @@ details.fig-fold { margin: 0; min-width: 0; }
 details.fig-fold[open] > summary { margin-bottom: 8px; }
 details.filters-fold { margin: 0 0 12px; }
 details.filters-fold[open] > summary { margin-bottom: 10px; }
-@media (min-width: 601px) {
+@media (min-width: 721px) {
   :is(details.fig-fold, details.filters-fold)[open] > summary { display: none; }
 }
 
