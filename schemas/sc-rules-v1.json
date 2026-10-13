@@ -105,6 +105,7 @@
       "properties": {
         "min_specificity": { "$ref": "#/$defs/count" },
         "min_similarity": { "$ref": "#/$defs/share" },
+        "max_holders": { "$ref": "#/$defs/count" },
         "max_chance": { "$ref": "#/$defs/share" },
         "fdr": { "$ref": "#/$defs/share" }
       }

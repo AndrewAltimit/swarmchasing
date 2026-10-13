@@ -62758,11 +62758,12 @@
         "relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
       ],
       "holders": 2,
-      "clusters": 51,
-      "base_rate": 0.0045045045045045045,
-      "chance": 0.00002029056083110137,
-      "tested": 1275,
-      "expected_pairs": 0.02587046505965425
+      "clusters": 45,
+      "outside": 0,
+      "base_rate": 0.022727272727272728,
+      "chance": 0.0005165289256198347,
+      "tested": 6,
+      "expected_pairs": 0.0030991735537190084
     },
     {
       "a": "C16",
@@ -62772,11 +62773,12 @@
         "relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
       ],
       "holders": 3,
-      "clusters": 51,
-      "base_rate": 0.009009009009009009,
-      "chance": 0.00008116224332440549,
-      "tested": 1275,
-      "expected_pairs": 0.103481860238617
+      "clusters": 45,
+      "outside": 0,
+      "base_rate": 0.045454545454545456,
+      "chance": 0.002066115702479339,
+      "tested": 6,
+      "expected_pairs": 0.012396694214876033
     },
     {
       "a": "C16",
@@ -62786,11 +62788,12 @@
         "relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
       ],
       "holders": 3,
-      "clusters": 51,
-      "base_rate": 0.009009009009009009,
-      "chance": 0.00008116224332440549,
-      "tested": 1275,
-      "expected_pairs": 0.103481860238617
+      "clusters": 45,
+      "outside": 0,
+      "base_rate": 0.045454545454545456,
+      "chance": 0.002066115702479339,
+      "tested": 6,
+      "expected_pairs": 0.012396694214876033
     },
     {
       "a": "C17",
@@ -62800,403 +62803,12 @@
         "relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
       ],
       "holders": 3,
-      "clusters": 51,
-      "base_rate": 0.009009009009009009,
-      "chance": 0.00008116224332440549,
-      "tested": 1275,
-      "expected_pairs": 0.103481860238617
-    },
-    {
-      "a": "C23",
-      "b": "C24",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C23",
-      "b": "C25",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C23",
-      "b": "C26",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C23",
-      "b": "C27",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C23",
-      "b": "C28",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C23",
-      "b": "C29",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C23",
-      "b": "C30",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C24",
-      "b": "C25",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C24",
-      "b": "C26",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C24",
-      "b": "C27",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C24",
-      "b": "C28",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C24",
-      "b": "C29",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C24",
-      "b": "C30",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C25",
-      "b": "C26",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C25",
-      "b": "C27",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C25",
-      "b": "C28",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C25",
-      "b": "C29",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C25",
-      "b": "C30",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C26",
-      "b": "C27",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C26",
-      "b": "C28",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C26",
-      "b": "C29",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C26",
-      "b": "C30",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C27",
-      "b": "C28",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C27",
-      "b": "C29",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C27",
-      "b": "C30",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C28",
-      "b": "C29",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C28",
-      "b": "C30",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
-    },
-    {
-      "a": "C29",
-      "b": "C30",
-      "similarity": 1.0,
-      "shared": [
-        "direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-      ],
-      "holders": 8,
-      "clusters": 51,
-      "base_rate": 0.03153153153153153,
-      "chance": 0.000994237480723967,
-      "tested": 1275,
-      "expected_pairs": 1.267652787923058
+      "clusters": 45,
+      "outside": 0,
+      "base_rate": 0.045454545454545456,
+      "chance": 0.002066115702479339,
+      "tested": 6,
+      "expected_pairs": 0.012396694214876033
     }
   ],
   "coactive_pairs": [
@@ -63224,224 +62836,28 @@
       "b": "C17",
       "kind": "scaffold",
       "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 51 clusters, a base rate of 9.0e-3 of senders (chance 8.1e-5; 0.10 such pairs expected among 1275 cluster pairs): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 45 comparable clusters and 0 record(s) outside them, a base rate of 4.5e-2 (chance 2.1e-3; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C16",
       "b": "C18",
       "kind": "scaffold",
       "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 51 clusters, a base rate of 9.0e-3 of senders (chance 8.1e-5; 0.10 such pairs expected among 1275 cluster pairs): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 45 comparable clusters and 0 record(s) outside them, a base rate of 4.5e-2 (chance 2.1e-3; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C17",
       "b": "C18",
       "kind": "scaffold",
       "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 51 clusters, a base rate of 9.0e-3 of senders (chance 8.1e-5; 0.10 such pairs expected among 1275 cluster pairs): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
-    },
-    {
-      "a": "C23",
-      "b": "C24",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C23",
-      "b": "C25",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C23",
-      "b": "C26",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C23",
-      "b": "C27",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C23",
-      "b": "C28",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C23",
-      "b": "C29",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C23",
-      "b": "C30",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C24",
-      "b": "C25",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C24",
-      "b": "C26",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C24",
-      "b": "C27",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C24",
-      "b": "C28",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C24",
-      "b": "C29",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C24",
-      "b": "C30",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C25",
-      "b": "C26",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C25",
-      "b": "C27",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C25",
-      "b": "C28",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C25",
-      "b": "C29",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C25",
-      "b": "C30",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C26",
-      "b": "C27",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C26",
-      "b": "C28",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C26",
-      "b": "C29",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C26",
-      "b": "C30",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C27",
-      "b": "C28",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C27",
-      "b": "C29",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C27",
-      "b": "C30",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C28",
-      "b": "C29",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C28",
-      "b": "C30",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
-    },
-    {
-      "a": "C29",
-      "b": "C30",
-      "kind": "scaffold",
-      "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 8 of 51 clusters, a base rate of 3.2e-2 of senders (chance 9.9e-4; 1.27 such pairs expected among 1275 cluster pairs): direct | /w?id=payload&lang=w1&src=w3&uqtag=w3 | enc sp20.hexU.sorted.noslash | pay -"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 45 comparable clusters and 0 record(s) outside them, a base rate of 4.5e-2 (chance 2.1e-3; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C40",
       "b": "C41",
       "kind": "scaffold",
       "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 2 of 51 clusters, a base rate of 4.5e-3 of senders (chance 2.0e-5; 0.03 such pairs expected among 1275 cluster pairs): relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 2 of 45 comparable clusters and 0 record(s) outside them, a base rate of 2.3e-2 (chance 5.2e-4; 0.00 such pairs expected among 6 compared): relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
     },
     {
       "a": "C1",
@@ -63783,25 +63199,6 @@
     },
     {
       "id": "F2",
-      "clusters": [
-        "C23",
-        "C24",
-        "C25",
-        "C26",
-        "C27",
-        "C28",
-        "C29",
-        "C30"
-      ],
-      "kinds": [
-        "encoding",
-        "scaffold"
-      ],
-      "links": 56,
-      "strength": 0.6799999999999999
-    },
-    {
-      "id": "F3",
       "clusters": [
         "C40",
         "C41"

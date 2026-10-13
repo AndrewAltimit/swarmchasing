@@ -178,18 +178,21 @@ co_activity = 0.6
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least
 # `min_specificity` structural parts (relay hops, parameters, an informative
-# encoding, payloads, a cut) and when held by at most `soft_links.max_shared`
-# clusters. A pair is kept when its IDF-weighted template similarity reaches
-# `min_similarity` and two unrelated clusters would both hold its rarest shared
-# template at most `max_chance` of the time, at the template's base rate: the
-# share of the other senders holding it, each cluster one sender and each
-# record outside the clusters (unflagged ones included) one more. The kept
-# pairs are then cut at false discovery rate `fdr` (Benjamini-Hochberg) over
-# every cluster pair.
+# encoding, payloads, a cut), held by at most `soft_links.max_shared` clusters,
+# and by at most `max_holders` senders (clusters, and records outside them): a
+# shape more hold is a common default. A pair is kept when its IDF-weighted
+# template similarity reaches `min_similarity` and two unrelated clusters would
+# both hold its rarest shared template at most `max_chance` of the time, at the
+# template's base rate: its other holders and outside records carrying it,
+# over the other clusters that send a specific template at all. Outside
+# records never enlarge the population, so unrelated traffic cannot make a
+# shape rare. The kept pairs are then cut at false discovery rate `fdr`
+# (Benjamini-Hochberg) over the pairs compared.
 [scaffold]
 min_specificity = 3
 min_similarity = 0.5
-max_chance = 0.001
+max_holders = 5
+max_chance = 0.01
 fdr = 0.05
 
 # Co-activity: request and submit times (never capture times) in `bin_secs`

@@ -216,8 +216,8 @@ kind = "agent"
 agents = 10
 retry = 0.2
 palette_share = 0.3
-# A scaffold fleet in a day's worth of benign traffic, the base rate a
-# shared request shape is rare against.
+# A scaffold fleet in a day's worth of benign traffic, which must not make a
+# shared request shape look rare.
 [[scenario]]
 name = "fleet-traffic"
 seed = 111
