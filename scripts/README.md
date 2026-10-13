@@ -25,10 +25,11 @@ A gate fails the commit or the run. CI is the authority; the hook is a fast loca
 | [`ci/check-wasm-target.sh`](ci/check-wasm-target.sh) | Type-checks `sc-wasm` (engine and `tools` feature), `sc-rules-wasm` and `sc-case` for `wasm32-unknown-unknown`. | `ci` | staged `crates/sc-core/`, `crates/sc-wasm/`, `crates/sc-case/` |
 | `swarmchase watch --check` | The watchlist read strictly: unknown keys, bad values, duplicate names, every source built offline ([watch](../docs/reference/watch.md#checking-a-watchlist)). | `ci` | staged `watchlist.toml`, `crates/sc-collect/`, `crates/swarmchase/src/watch/` |
 | [`site-xss-check.mjs`](site-xss-check.mjs) | Builds the site with a hostile notice and drives every page in headless Chrome with XSS probes, and checks phone layout, nav menus and the theme toggle; fails if a probe runs or a layout check fails. | `deploy-pages` | not run |
+| [`ci/site-xss-container.sh`](ci/site-xss-container.sh) | Runs the XSS check against a pinned headless Chrome in a container, for a machine with Docker and no Chrome. | `deploy-pages` | not run |
 
 Pull requests run `gates` then `ci`; pushes to `main` run both and then `deploy-pages`. Pull requests from forks run nothing. The jobs are in [`main-ci.yml`](../.github/workflows/main-ci.yml); the runner setup is in [runner](../docs/reference/runner.md).
 
-`site-xss-check.mjs` exits 2 when it cannot run (no Chrome, or `site/pkg` not built). CI treats that as a warning unless the repo variable `SWARMCHASE_REQUIRE_BROWSER` is `true`. In `deploy-pages` a step before it finds a browser, or downloads Playwright's Chromium without sudo, and passes it as `$CHROME` ([runner](../docs/reference/runner.md#runner-requirements)).
+`site-xss-check.mjs` exits 2 when it cannot run (no Chrome, or `site/pkg` not built). CI treats that as a warning unless the repo variable `SWARMCHASE_REQUIRE_BROWSER` is `true`. In `deploy-pages` a step before it finds a browser and passes it as `$CHROME`; with none, [`site-xss-container.sh`](ci/site-xss-container.sh) runs the check against a pinned headless Chrome in a container ([runner](../docs/reference/runner.md#runner-requirements)).
 
 ## CI helpers
 

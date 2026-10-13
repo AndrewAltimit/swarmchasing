@@ -30,10 +30,11 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1 && ! docker pull -q "$IMAGE" 
 fi
 
 share="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/sc-xss-share.XXXXXX")"
+share_orig="$share"
 name="sc-xss-chrome-$$"
 cleanup() {
   docker rm -f "$name" >/dev/null 2>&1 || true
-  rm -rf "$share"
+  rm -rf "$share_orig"
 }
 trap cleanup EXIT
 
@@ -46,6 +47,13 @@ if [ "$(uname -s)" = "Linux" ]; then
   export XSS_PAGE_HOST=127.0.0.1
   unset XSS_SHARE_AS
 else
+  # Git Bash on Windows: hand Docker and node the Windows path, and keep
+  # MSYS from rewriting the mount argument.
+  if command -v cygpath >/dev/null 2>&1; then
+    share="$(cygpath -m "$share")"
+    ROOT="$(cygpath -m "$ROOT")"
+    export MSYS_NO_PATHCONV=1
+  fi
   docker run -d --rm --name "$name" -p "127.0.0.1:$DEBUG_PORT:9222" \
     --add-host host.docker.internal:host-gateway \
     -v "$share:/share:ro" "$IMAGE" \

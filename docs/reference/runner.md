@@ -16,7 +16,7 @@ All workflows use `runs-on: self-hosted`. The runner is Ubuntu Linux arm64 (DGX 
 - **Pull requests** run the same jobs as `main`, except the deploy. A superseded push to a PR cancels its earlier run; runs on `main` never cancel.
 - **Pull requests from forks run nothing**, because a self-hosted runner would otherwise run untrusted code on the machine. Also enable *Settings → Actions → Require approval for all outside collaborators*.
 - **Deploy.** On `main`, after `gates` and `ci` pass, `deploy-pages` (one at a time, in its own concurrency group) builds the site with `scripts/ci/build-site.sh` (it fails on a WASM module over budget, a page that breaks the site policy, or an input that is not committed), locates a browser and runs the site XSS check, then deploys `_site/` to Pages. Set *Settings → Pages → Source* to **GitHub Actions**.
-- **Browser.** The *Locate Chromium* step hands the XSS check the first browser that starts: `$CHROME`, a system Chrome or Chromium, or Playwright's Chromium in the runner user's cache, which it downloads there without sudo when there is none. Once it finds one, set the variable `SWARMCHASE_REQUIRE_BROWSER` to `true`, so a runner that later loses its browser fails the deploy instead of publishing unchecked pages ([runner requirements](#runner-requirements)).
+- **Browser.** The *Locate Chromium* step hands the XSS check the first browser that starts, `$CHROME` or a system Chrome or Chromium. With none, the check runs against a pinned headless Chrome in a container ([`site-xss-container.sh`](../../scripts/ci/site-xss-container.sh)), which needs only Docker. Set the variable `SWARMCHASE_REQUIRE_BROWSER` to `true`, so a runner that later loses both fails the deploy instead of publishing unchecked pages ([runner requirements](#runner-requirements)).
 
 ### watch.yml
 
@@ -49,7 +49,7 @@ Model triage is opt-in through the variables below: a model server the runner re
 | `SWARMCHASE_LLM_URL`, `SWARMCHASE_LLM_MODEL` | variable | `watch.yml` | The model server local triage asks, on the runner or its private network, and the model name. |
 | `SWARMCHASE_CLAUDE_MODEL`, `CLAUDE_PATH` | variable | `watch.yml` | The model Claude triage asks (default `claude-opus-5-5`) and the `claude` binary, when not on `PATH`. |
 | `SWARMCHASE_CANARY_SEED` | secret | `main-ci.yml` | Seed of the site's [canary tokens](configuration.md#canary-tokens). Unset, the site carries none. |
-| `SWARMCHASE_REQUIRE_BROWSER` | variable | `main-ci.yml` | `true` makes the deploy fail when the site XSS check cannot find Chrome, instead of skipping it with a warning. Set it once the deploy's *Locate Chromium* step finds a browser. |
+| `SWARMCHASE_REQUIRE_BROWSER` | variable | `main-ci.yml` | `true` makes the deploy fail when the site XSS check has neither Chrome nor Docker, instead of skipping it with a warning. |
 
 Email goes out through [`send-mail.sh`](../../scripts/ci/send-mail.sh) (`curl` over SMTP), to the admin only.
 
@@ -74,12 +74,11 @@ Each call runs with no tools, no MCP servers, no settings files, no CLAUDE.md, n
 |---|---|---|
 | `~/.cache/swarmchase-ci-target/` | cargo's build cache, one directory per exact compiler, shared by both workflows | [`select-ci-target-dir.sh`](../../scripts/ci/select-ci-target-dir.sh) |
 | `${XDG_CACHE_HOME:-~/.cache}/swarmchase-wasm-opt/` | optimised WASM modules, keyed by the hash of the unoptimised module | [`build-site.sh`](../../scripts/ci/build-site.sh) |
-| `${XDG_CACHE_HOME:-~/.cache}/ms-playwright/` | Playwright's Chromium for the site XSS check, when the runner has no browser of its own | `main-ci.yml` *Locate Chromium* |
 | `$SWARMCHASE_DATA` (default `~/swarmchase-data`) | watch state, record store, runs, labels, cases | `swarmchase watch` |
 
 ## Runner requirements
 
 - **rustup.** [`rust-toolchain.toml`](../../rust-toolchain.toml) pulls stable plus the `wasm32-unknown-unknown` target.
 - **python3** for the repo gates, and **node** for the site XSS check.
-- **Chrome or Chromium** for the site XSS check (optional unless `SWARMCHASE_REQUIRE_BROWSER` is `true`). The deploy's *Locate Chromium* step uses an installed one or downloads Playwright's Chromium (Linux arm64 builds exist) into the runner user's cache with `npx`, so **node** with `npx` is enough. A downloaded Chromium can still lack system libraries (`libnss3`, `libatk-bridge2.0-0`, `libgbm1`, `libasound2` and similar); the step then warns, and the admin installs them once with `sudo npx playwright install-deps chromium` or `sudo apt-get install chromium`. [`site-xss-check.mjs`](../../scripts/site-xss-check.mjs) takes the browser from `$CHROME`, which the step sets, or the usual install paths.
+- **Chrome, Chromium or Docker** for the site XSS check (optional unless `SWARMCHASE_REQUIRE_BROWSER` is `true`). An installed browser is used first. Otherwise [`site-xss-container.sh`](../../scripts/ci/site-xss-container.sh) runs a pinned multi-arch `chromedp/headless-shell` image (arm64 included) as the runner user, on the host network with debugging on loopback only, with the check's files mounted read-only; the container holds no state and is removed when the check ends. The runner user needs Docker access; no sudo and no system libraries are needed. [`site-xss-check.mjs`](../../scripts/site-xss-check.mjs) takes a local browser from `$CHROME`, which the step sets, or the usual install paths, and a running one from `XSS_CDP`.
 - `wasm-pack` and `cargo-deny` are installed on first use by the scripts that need them; wasm-pack downloads `wasm-opt` on its first optimised build.

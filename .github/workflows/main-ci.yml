@@ -23,11 +23,11 @@
 #
 # Repository variables read here (Settings > Secrets and variables > Actions >
 # Variables):
-#   SWARMCHASE_REQUIRE_BROWSER  'true' makes the site XSS check fatal when no
-#                               Chrome could be found or installed on the
-#                               runner. Unset, a missing browser skips the
-#                               check with a warning. Set it once the
-#                               "Locate Chromium" step finds one.
+#   SWARMCHASE_REQUIRE_BROWSER  'true' makes the site XSS check fatal when
+#                               neither a Chrome nor Docker (for the pinned
+#                               headless Chrome container) is on the runner.
+#                               Unset, a missing browser skips the check with
+#                               a warning.
 
 name: Main CI
 
@@ -237,58 +237,51 @@ jobs:
             echo "$(basename "$f"): $(( size / 1024 )) KiB" >> "$GITHUB_STEP_SUMMARY"
           done
 
-      # A browser for the XSS check below, found or installed without sudo,
-      # and handed on as $CHROME. In order: $CHROME, a system Chrome or
-      # Chromium, a Playwright Chromium already in the runner user's cache,
-      # then a Playwright Chromium downloaded into that cache (outside the
-      # checkout, so later runs reuse it). A candidate counts only when it
-      # starts (`--version`), since a download can lack system libraries
-      # that only sudo could install. Finding none never fails this step;
-      # the check decides, by SWARMCHASE_REQUIRE_BROWSER.
+      # A browser for the XSS check below. A Chrome or Chromium on the runner
+      # ($CHROME, then PATH) is used when it starts (`--version`); otherwise
+      # the check runs against a pinned headless Chrome in a container
+      # (scripts/ci/site-xss-container.sh), which needs Docker and no sudo.
       - name: Locate Chromium
         run: |
-          export PLAYWRIGHT_BROWSERS_PATH="${XDG_CACHE_HOME:-$HOME/.cache}/ms-playwright"
           works() { [ -n "$1" ] && [ -x "$1" ] && "$1" --version >/dev/null 2>&1; }
-          find_one() {
-            local c
-            for c in "${CHROME:-}" "$(command -v google-chrome || true)" "$(command -v chromium || true)" \
-                     "$(command -v chromium-browser || true)" \
-                     "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/chrome-linux*/chrome; do
-              if works "$c"; then echo "$c"; return 0; fi
-            done
-            return 1
-          }
-          chrome="$(find_one || true)"
-          if [ -z "$chrome" ] && command -v npx >/dev/null 2>&1; then
-            echo "no browser found; installing Playwright's Chromium into $PLAYWRIGHT_BROWSERS_PATH"
-            npx --yes playwright@1.48.2 install chromium || echo "::warning::Playwright Chromium install failed"
-            chrome="$(find_one || true)"
-          fi
-          if [ -n "$chrome" ]; then
-            echo "using $chrome ($("$chrome" --version 2>/dev/null || true))"
-            echo "CHROME=$chrome" >> "$GITHUB_ENV"
+          for c in "${CHROME:-}" "$(command -v google-chrome || true)" "$(command -v chromium || true)" \
+                   "$(command -v chromium-browser || true)"; do
+            if works "$c"; then
+              echo "using $c ($("$c" --version 2>/dev/null || true))"
+              echo "CHROME=$c" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "no local browser; the check runs headless Chrome in a container"
+            echo "XSS_CONTAINER=1" >> "$GITHUB_ENV"
           else
-            echo "::warning::no working Chrome or Chromium on the runner; see docs/reference/runner.md#runner-requirements"
+            echo "::warning::no working Chrome and no Docker on the runner; see docs/reference/runner.md#runner-requirements"
           fi
 
       # No generated page may run anything a notice, record, claim or edited
       # rule carries: the check builds the site again with a hostile notice
       # and drives every page in headless Chrome. Fatal when a browser is
-      # installed. With no Chrome (exit 2) it is skipped with a
-      # warning, unless the repo variable SWARMCHASE_REQUIRE_BROWSER is
-      # 'true': then a runner that lost its browser fails the deploy instead
-      # of publishing an unchecked page.
+      # available. With none (exit 2) it is skipped with a warning, unless
+      # the repo variable SWARMCHASE_REQUIRE_BROWSER is 'true': then a runner
+      # that lost its browser fails the deploy instead of publishing an
+      # unchecked page.
       - name: Site XSS check (headless Chrome)
         env:
           REQUIRE_BROWSER: ${{ vars.SWARMCHASE_REQUIRE_BROWSER }}
         run: |
-          rc=0; node scripts/site-xss-check.mjs || rc=$?
+          rc=0
+          if [ -n "${XSS_CONTAINER:-}" ]; then
+            scripts/ci/site-xss-container.sh || rc=$?
+          else
+            node scripts/site-xss-check.mjs || rc=$?
+          fi
           if [ "$rc" -eq 2 ]; then
             if [ "$REQUIRE_BROWSER" = "true" ]; then
-              echo "::error::site XSS check could not run (no Chrome or no site/pkg) and SWARMCHASE_REQUIRE_BROWSER is true"
+              echo "::error::site XSS check could not run (no browser or no site/pkg) and SWARMCHASE_REQUIRE_BROWSER is true"
               exit 1
             fi
-            echo "::warning::site XSS check skipped: no Chrome on the runner"
+            echo "::warning::site XSS check skipped: no browser on the runner"
             exit 0
           fi
           exit "$rc"
