@@ -7,7 +7,10 @@
 //! them (module imports and `new URL("…", import.meta.url)` in scripts);
 //! [`rewrite_page`] rewrites a generated page's references. A file's hash
 //! covers its rewritten text, so a change in a module it imports renames it
-//! too. No I/O: the caller reads and writes the files.
+//! too. [`module_preloads`] adds a `modulepreload` link to a page for every
+//! module its scripts import, so the browser fetches them in parallel
+//! instead of one import level at a time. No I/O: the caller reads and
+//! writes the files.
 
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -170,6 +173,93 @@ fn visit(
     stack.pop();
 }
 
+/// Each script's static imports (`import … from "…"`, `import "…"`), as
+/// paths under the site root, for the scripts among `files`. Dynamic
+/// `import()` and `new URL(…)` references are left out: they load on
+/// demand.
+pub fn module_imports(files: &Files) -> BTreeMap<String, Vec<String>> {
+    let mut out = BTreeMap::new();
+    for (path, bytes) in files {
+        if !path.ends_with(".js") {
+            continue;
+        }
+        let Ok(text) = std::str::from_utf8(bytes) else {
+            continue;
+        };
+        let mut deps = Vec::new();
+        let mut rest = text;
+        while let Some(i) = rest.find("import") {
+            let at_line_start = rest[..i]
+                .rsplit('\n')
+                .next()
+                .is_some_and(|l| l.trim().is_empty());
+            let after = &rest[i + "import".len()..];
+            rest = after;
+            let next = after.chars().next();
+            if !at_line_start || !matches!(next, Some(' ' | '{' | '"' | '\'' | '*')) {
+                continue;
+            }
+            // The statement runs to its semicolon; its last string literal
+            // is the module.
+            let stmt = &after[..after.find(';').unwrap_or(after.len())];
+            let lit = stmt
+                .rsplit(['"', '\''])
+                .nth(1)
+                .filter(|l| l.ends_with(".js"));
+            if let Some(dep) = lit.and_then(|l| resolve(dir_of(path), l)) {
+                deps.push(dep);
+            }
+        }
+        out.insert(path.clone(), deps);
+    }
+    out
+}
+
+/// A generated page with a `modulepreload` link for every module its
+/// module scripts import, directly or through other modules, written with
+/// the same root prefix as the script that needs it. A module the page
+/// already loads by its own script tag is not preloaded again. Run before
+/// [`rewrite_page`], which hashes the new links' names too.
+pub fn module_preloads(html: &str, imports: &BTreeMap<String, Vec<String>>) -> String {
+    const TAG: &str = "<script type=\"module\" src=\"";
+    let mut scripts: Vec<(String, String)> = Vec::new();
+    let mut rest = html;
+    while let Some(i) = rest.find(TAG) {
+        let after = &rest[i + TAG.len()..];
+        let Some(end) = after.find('"') else { break };
+        let src = &after[..end];
+        if let Some(j) = src.find("js/") {
+            scripts.push((src[..j].to_string(), src[j..].to_string()));
+        }
+        rest = &after[end..];
+    }
+    let Some((prefix, _)) = scripts.first().cloned() else {
+        return html.to_string();
+    };
+    let own: std::collections::BTreeSet<&str> = scripts.iter().map(|(_, p)| p.as_str()).collect();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut stack: Vec<String> = scripts.iter().map(|(_, p)| p.clone()).collect();
+    while let Some(m) = stack.pop() {
+        for dep in imports.get(&m).into_iter().flatten() {
+            if seen.insert(dep.clone()) {
+                stack.push(dep.clone());
+            }
+        }
+    }
+    let links: String = seen
+        .iter()
+        .filter(|d| !own.contains(d.as_str()))
+        .map(|d| format!("<link rel=\"modulepreload\" href=\"{prefix}{d}\">\n"))
+        .collect();
+    if links.is_empty() {
+        return html.to_string();
+    }
+    match html.find(TAG) {
+        Some(i) => format!("{}{links}{}", &html[..i], &html[i..]),
+        None => html.to_string(),
+    }
+}
+
 /// A generated page with its asset references (`…/css/site.css"`, written
 /// from the page's root prefix) pointed at the hashed names.
 pub fn rewrite_page(html: &str, names: &BTreeMap<String, String>) -> String {
@@ -253,6 +343,60 @@ mod tests {
         assert!(
             html.contains(&format!("\"/base/{}\"", names["js/pages/a.js"])),
             "{html}"
+        );
+    }
+
+    #[test]
+    fn pages_preload_every_module_their_scripts_import() {
+        let files: Files = [
+            ("js/site.js", "import { store } from \"./lib/dom.js\";\n"),
+            ("js/lib/dom.js", "export const x = 1;\n"),
+            ("js/lib/fmt.js", "export const y = 1;\n"),
+            (
+                "js/lib/charts.js",
+                "import { el } from \"./dom.js\";\nimport {\n  fmt,\n} from './fmt.js';\n",
+            ),
+            (
+                "js/pages/a.js",
+                "// import nothing from \"x.js\" here\nimport { c } from \"../lib/charts.js\";\nconst m = await import(\"../../pkg/m.js\");\n",
+            ),
+        ]
+        .iter()
+        .map(|(p, t)| (p.to_string(), t.as_bytes().to_vec()))
+        .collect();
+        let imports = module_imports(&files);
+        assert_eq!(
+            imports["js/pages/a.js"],
+            vec!["js/lib/charts.js".to_string()]
+        );
+        assert_eq!(
+            imports["js/lib/charts.js"],
+            vec!["js/lib/dom.js".to_string(), "js/lib/fmt.js".to_string()]
+        );
+        let page = "<head>\n<script type=\"module\" src=\"../js/site.js\"></script>\n<script type=\"module\" src=\"../js/pages/a.js\"></script>\n</head>";
+        let html = module_preloads(page, &imports);
+        for m in ["js/lib/charts.js", "js/lib/dom.js", "js/lib/fmt.js"] {
+            assert_eq!(
+                html.matches(&format!("<link rel=\"modulepreload\" href=\"../{m}\">"))
+                    .count(),
+                1,
+                "{html}"
+            );
+        }
+        assert!(
+            !html.contains("pkg/m.js") && !html.contains("modulepreload\" href=\"../js/site.js")
+        );
+        assert!(html.find("modulepreload") < html.find("<script"));
+        // Hashing renames the preloads with the scripts.
+        let (_, names) = fingerprint(files);
+        let out = rewrite_page(&html, &names);
+        assert!(
+            out.contains(&format!("href=\"../{}\"", names["js/lib/fmt.js"])),
+            "{out}"
+        );
+        assert_eq!(
+            module_preloads("<p>no scripts</p>", &imports),
+            "<p>no scripts</p>"
         );
     }
 

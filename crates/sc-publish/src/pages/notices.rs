@@ -157,7 +157,7 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
         s.push_str(
             "<section class=\"card empty\" aria-labelledby=\"none-yet\"><h2 id=\"none-yet\">No notices yet</h2>\
 <p>Notices appear here only when reports go out: after a lead has been reviewed, linked into a case, and reported to the AI provider and the affected operators. Unreviewed leads are never published.</p>\
-<p>Subscribe to the <a href=\"feed.xml\">Atom feed</a> to hear about the first one. How a lead becomes a notice is in the <a href=\"../methodology/\">methodology</a> and the <a href=\"../docs/policies/\">policies</a>.</p></section>\n",
+<p>Subscribe to the <a href=\"feed.xml\">Atom feed</a> to hear about the first one. To see what one looks like, read the <a href=\"../#example-notice\">synthetic example notice</a> on the home page, drafted by the engine from the showcase records. How a lead becomes a notice is in the <a href=\"../methodology/\">methodology</a> and the <a href=\"../docs/policies/\">policies</a>.</p></section>\n",
         );
         return s;
     }

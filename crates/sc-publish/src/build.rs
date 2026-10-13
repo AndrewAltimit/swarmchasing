@@ -3,7 +3,8 @@
 //!
 //! Reads only `notices/*.md`, `docs/**/*.md`, `rules/default.toml`,
 //! `samples/eval/*.ndjson`, `samples/eval/coverage-allow.txt`,
-//! `samples/showcase/*.ndjson`, `keys/bundle-signing.pub` when it is
+//! `samples/showcase/*.ndjson`, `schemas/**/*.json` (published as they
+//! are, under `schemas/`), `keys/bundle-signing.pub` when it is
 //! committed, and the static files in `site/` (with the
 //! WASM modules `scripts/ci/build-site.sh` builds into `site/pkg`). It refuses any path under `data/` or
 //! `$SWARMCHASE_DATA`: watch data and case files never reach the site.
@@ -118,6 +119,7 @@ const INPUTS: &[(&str, &str)] = &[
     ("samples/eval/coverage-allow.txt", ".txt"),
     ("samples/showcase/", ".ndjson"),
     ("keys/bundle-signing.pub", ".pub"),
+    ("schemas/", ".json"),
     ("site/", ""),
 ];
 
@@ -230,9 +232,52 @@ fn git_tracked(root: &Path) -> Option<HashSet<String>> {
     )
 }
 
+/// The date (`YYYY-MM-DD`) of the last commit to each file under `paths`,
+/// by repository path. Empty in a shallow clone, where every file would
+/// carry the one commit's date, and without git: commit dates keep the
+/// build reproducible, where file times or the clock would not.
+fn git_dates(root: &Path, paths: &[&str]) -> BTreeMap<String, String> {
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+    };
+    let mut out = BTreeMap::new();
+    match git(&["rev-parse", "--is-shallow-repository"]) {
+        Some(s) if s.trim() == "false" => {}
+        _ => return out,
+    }
+    let mut args = vec!["log", "--format=%x00%cs", "--name-only", "--"];
+    args.extend_from_slice(paths);
+    let Some(log) = git(&args) else { return out };
+    let mut date = String::new();
+    for line in log.lines() {
+        if let Some(d) = line.strip_prefix('\0') {
+            date = d.trim().to_string();
+        } else if !line.trim().is_empty() && !date.is_empty() {
+            out.entry(line.trim().to_string())
+                .or_insert_with(|| date.clone());
+        }
+    }
+    out
+}
+
+/// What [`copy_static`] wrote: the file count, the renames, and each
+/// script's static imports, for the pages' module preloads.
+struct Copied {
+    count: usize,
+    names: BTreeMap<String, String>,
+    imports: BTreeMap<String, Vec<String>>,
+}
+
 /// Copy `site/` into the output with content-hashed script, style and WASM
-/// names ([`crate::assets`]); returns the file count and the renames.
-fn copy_static(r: &mut Reader, out: &Path) -> Result<(usize, BTreeMap<String, String>), String> {
+/// names ([`crate::assets`]).
+fn copy_static(r: &mut Reader, out: &Path) -> Result<Copied, String> {
     let mut files = Vec::new();
     for rel in r.list("site", "", true, false) {
         let sub = rel["site/".len()..].to_string();
@@ -245,6 +290,7 @@ fn copy_static(r: &mut Reader, out: &Path) -> Result<(usize, BTreeMap<String, St
         files.push((sub, fs::read(&abs).map_err(|e| format!("{rel}: {e}"))?));
         r.log.push(rel);
     }
+    let imports = crate::assets::module_imports(&files);
     let (files, names) = crate::assets::fingerprint(files);
     for (sub, bytes) in &files {
         let dest = out.join(sub);
@@ -253,7 +299,11 @@ fn copy_static(r: &mut Reader, out: &Path) -> Result<(usize, BTreeMap<String, St
         }
         fs::write(&dest, bytes).map_err(|e| format!("{}: {e}", dest.display()))?;
     }
-    Ok((files.len(), names))
+    Ok(Copied {
+        count: files.len(),
+        names,
+        imports,
+    })
 }
 
 /// Build the site from the committed inputs under `o.root` into `o.out`.
@@ -318,6 +368,12 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         String::new()
     };
     let showcase = r.read("samples/showcase/showcase.ndjson")?;
+    let mut schemas = Vec::new();
+    for rel in r.list("schemas", ".json", true, true) {
+        let text = r.read(&rel)?;
+        schemas.push((rel, text));
+    }
+    let lastmod = git_dates(&r.root, &["docs", "rules/default.toml"]);
     // A module's download size: the host serves it gzip-compressed.
     let size = |p: &str| fs::read(r.root.join(p)).ok().map(|b| gzip_len(&b));
     let engine_bytes = size("site/pkg/sc_wasm_bg.wasm");
@@ -349,8 +405,11 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         engine_bytes,
         tools_bytes,
         identity,
+        lastmod,
     };
     let mut files = build_pages(&mut inputs)?;
+    let schema_paths: Vec<String> = schemas.iter().map(|(p, _)| p.clone()).collect();
+    files.extend(schemas);
     let now = build_time();
     files.extend(crate::agents::files(&crate::agents::AgentInputs {
         base: &base,
@@ -358,6 +417,7 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         now,
         docs: &inputs.docs,
         signing_keys: &signing_keys,
+        schemas: &schema_paths,
     }));
     if !signing_keys.is_empty() {
         files.push((
@@ -405,14 +465,15 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         fs::remove_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     }
     fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let (copied, names) = copy_static(&mut r, &out)?;
+    let copied = copy_static(&mut r, &out)?;
     for (path, text) in &files {
         let dest = out.join(path);
         if let Some(p) = dest.parent() {
             fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
         }
         let text = if path.ends_with(".html") {
-            crate::assets::rewrite_page(text, &names)
+            let text = crate::assets::module_preloads(text, &copied.imports);
+            crate::assets::rewrite_page(&text, &copied.names)
         } else {
             text.clone()
         };
@@ -430,7 +491,7 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
     }
     Ok(Built {
         generated: files.len(),
-        copied,
+        copied: copied.count,
         notices: inputs.notices.len(),
         out,
         warnings,
@@ -556,6 +617,20 @@ mod tests {
             }),
             "providers page"
         );
+        // The schemas are published, and the agent files point at them.
+        assert!(out.join("schemas/sc-submission-v1.json").is_file());
+        let llms = fs::read_to_string(out.join("llms.txt")).unwrap();
+        assert!(
+            llms.contains("localhost:8080/schemas/sc-submission-v1.json"),
+            "{llms}"
+        );
+        // Each page preloads the modules its scripts import, by hashed name.
+        let wb = fs::read_to_string(out.join("analyze/index.html")).unwrap();
+        assert!(
+            wb.contains("<link rel=\"modulepreload\" href=\"../js/lib/charts."),
+            "{wb}"
+        );
+        assert!(!wb.contains("modulepreload\" href=\"../js/lib/charts.js\""));
         // A rebuild replaces its own earlier output.
         build_site_dir(&o).unwrap();
         // Never into the inputs, never over a directory it did not write.

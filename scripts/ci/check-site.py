@@ -55,7 +55,7 @@ ALLOWED = {"connect-src": {"'self'"}, "img-src": {"'self'"}, **REQUIRED}
 
 # Markup patterns for sources (templates in Rust strings), checked by line.
 HTML_BAD = [
-    (re.compile(r"<script(?![^>]*\bsrc=)[^>]*>", re.I), "inline <script>"),
+    (re.compile(r"<script(?![^>]*\bsrc=)(?![^>]*application/ld\+json)[^>]*>", re.I), "inline <script>"),
     (re.compile(r"<style\b", re.I), "inline <style> block"),
     (re.compile(r"""\sstyle\s*=\s*\\?["']""", re.I), "inline style attribute"),
     (re.compile(r"""\son[a-z]+\s*=\s*\\?["']""", re.I), "inline event handler"),
@@ -87,6 +87,7 @@ INPUT_PREFIXES = {
     "samples/eval/coverage-allow.txt",
     "samples/showcase/",
     "keys/bundle-signing.pub",
+    "schemas/",
     "site/",
 }
 # Inputs that are built, not committed: the WASM package.
@@ -121,12 +122,27 @@ def check_csp(html: str) -> list[str]:
     return errors
 
 
+# A script element of this type is a data block: browsers never run it, so
+# the CSP does not apply. Allowed inline only for structured data whose text
+# holds no "<" (the generator escapes it), so it cannot close the element.
+DATA_BLOCK = "application/ld+json"
+
+
 class PageCheck(HTMLParser):
     """The markup of one generated page, as a browser would parse it."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.errors: list[str] = []
+        self.in_data_block = False
+
+    def handle_data(self, data: str) -> None:
+        if self.in_data_block and "<" in data:
+            self.errors.append(f"{self.getpos()[0]}: '<' inside a {DATA_BLOCK} block")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self.in_data_block = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         a = {k.lower(): (v or "") for k, v in attrs}
@@ -134,7 +150,9 @@ class PageCheck(HTMLParser):
         err = lambda what: self.errors.append(f"{line}: {what}")  # noqa: E731
         if tag == "script":
             src = a.get("src", "")
-            if not src:
+            if not src and a.get("type", "").strip().lower() == DATA_BLOCK:
+                self.in_data_block = True
+            elif not src:
                 err("inline <script>")
             elif re.match(r"^[a-z][a-z0-9+.-]*:|^//", src, re.I):
                 err(f"script from another origin: {src}")
@@ -285,6 +303,8 @@ def selftest() -> list[str]:
         "d4.html": good_csp + '<a href="http://example.org/">x</a>',
         "d5.html": good_csp + '<iframe srcdoc="x"></iframe>',
         "d6.html": good_csp + '<script src="https://cdn.example/x.js"></script>',
+        "d7.html": good_csp + '<script type="application/ld+json">{"a":"</p><img src=x onerror=alert(1)>"}</script>',
+        "d8.html": good_csp + '<script type="text/javascript">alert(1)</script>',
         "e.js": "x.innerHTML = rec.url;",
         "f.js": "setTimeout('x()', 1);",
         "g.js": "a.href = rec.url;",
@@ -302,6 +322,7 @@ def selftest() -> list[str]:
         "ok.html": good_csp
         + '<script type="module" src="js/site.js"></script><p>payload text: onerror=alert(1) &lt;script&gt;</p>'
         + '<a href="../docs/">d</a><a href="https://github.com/x">g</a><a href="#main">m</a>',
+        "ok2.html": good_csp + '<script type="application/ld+json">{"name":"a \\u003c b"}</script>',
         "ok.js": "e.textContent = rec.url; if (a.href === b) retrieval(); x.evaluate(); "
         "el('div', { style: { marginLeft: '4px' } });",
         "ok.rs": 'format!("<p class=\\"hint\\">one={}</p>", esc(x)); // <script src=\\"x\\">',

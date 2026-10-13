@@ -476,3 +476,43 @@ fn single_cluster_reports_name_no_other_cluster() {
     );
     assert!(notes.contains("went quiet together"), "{notes}");
 }
+
+#[test]
+fn described_hosts_of_one_class_share_an_endpoint_row() {
+    let obs = ["d", "e", "f"]
+        .iter()
+        .enumerate()
+        .map(|(k, h)| Observation {
+            ts: 1_791_000_000 + 300 * k as i64,
+            url: format!("https://r.jina.ai/https://{h}.example/item?uqtag=zz9&id=1'%20OR%201=1--"),
+            ..Default::default()
+        })
+        .collect();
+    let a = analyze(obs, &Rules::default_rules());
+    let described = ["d.example", "e.example", "f.example"]
+        .into_iter()
+        .map(|h| (h.to_string(), "a county records office".to_string()))
+        .collect();
+    let md = render_notice(
+        &a,
+        &ReportOptions {
+            target_descriptions: Some(described),
+            ..Default::default()
+        },
+    )
+    .markdown;
+    let rows: Vec<&str> = md
+        .lines()
+        .filter(|l| l.starts_with("| a county records office"))
+        .collect();
+    assert_eq!(rows.len(), 1, "{md}");
+    assert!(
+        rows[0].starts_with("| a county records office (3 hosts) | 3 |"),
+        "{md}"
+    );
+    // Named hosts keep a row each.
+    let md = render_markdown(&a, &ReportOptions::default());
+    for h in ["d[.]example", "e[.]example", "f[.]example"] {
+        assert!(md.contains(&format!("| `{h}` |")), "{h}: {md}");
+    }
+}

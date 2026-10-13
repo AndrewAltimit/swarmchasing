@@ -96,10 +96,13 @@ function build() {
   const problems = [];
   const opt = (v) => (text(v) ? text(v) : undefined);
   const agent = $("sub-agent").value === "true";
+  // A datetime-local value has no zone: read it in this browser's zone, or
+  // as UTC when the visitor says so. The document always holds UTC.
+  const utc = $("sub-tz").value === "utc";
   const time = (id, name) => {
     const v = $(id).value;
     if (!v) return undefined;
-    const d = new Date(v);
+    const d = new Date(utc ? `${v}Z` : v);
     if (Number.isNaN(d.getTime())) { problems.push(`${name} is not a time`); return undefined; }
     return d.toISOString().replace(/\.\d{3}Z$/, "Z");
   };
@@ -149,6 +152,10 @@ function build() {
   const last = time("sub-last", "Last seen");
   if (first) claim.first_seen = first;
   if (last) claim.last_seen = last;
+  const zone = utc ? "UTC" : (Intl.DateTimeFormat().resolvedOptions().timeZone || "this browser's time zone");
+  $("sub-time-note").textContent = first || last
+    ? `Read as ${zone}; the report stores UTC: ${[first && `first seen ${first}`, last && `last seen ${last}`].filter(Boolean).join(", ")}.`
+    : `The report stores times in UTC. Times you enter are read as ${zone}.`;
   if (agents !== undefined) claim.agents = agents;
   if (targets.length) claim.targets = targets;
   const doc = { spec: SPEC, submitted: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), submitter, claim, evidence };
@@ -178,7 +185,7 @@ function restore() {
   }
 }
 
-for (const id of ["sub-agent", "sub-role", "sub-kind", "sub-first", "sub-last"]) $(id).addEventListener("change", update);
+for (const id of ["sub-agent", "sub-role", "sub-kind", "sub-first", "sub-last", "sub-tz"]) $(id).addEventListener("change", update);
 for (const id of ["sub-name", "sub-contact", "sub-operator", "sub-model", "sub-summary", "sub-agents", "sub-targets"]) $(id).addEventListener("input", update);
 $("ev-add").addEventListener("click", () => { items.push(blank($("ev-type").value)); render(); });
 $("sub-copy").addEventListener("click", async () => {

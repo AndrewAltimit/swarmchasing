@@ -624,6 +624,21 @@ fn grade_step(a: &Analysis, links: &FmLinks) -> String {
 /// The scope tests by code, under the scope table (FM-15.3).
 const SCOPE_TESTS: &str = "<p class=\"legend scope-tests\"><span>S1 off-task target</span> <span>S2 getting past a block</span> <span>S3 sensitive paths</span> <span>S4 unsanctioned probing</span> <span>S5 identities and credentials</span> <span>S6 data sent out</span> <span>S7 coordination that widens any of them</span></p>";
 
+/// What the agent question reads: a cluster counts as an agent present
+/// only from L4 on the grade ladder (step 5), and says so when no cluster
+/// here gets there.
+fn agent_note(assessed: &[&Cluster]) -> String {
+    let likely = assessed.iter().filter(|c| c.scope.agent_present).count();
+    let head = "<p><strong>Agent likely (L4+)</strong> reads yes only from L4 on the grade ladder: adaptive, model-written requests at a pace or scale beyond one person. The rungs below it (L1 a model or tag named, L2 model-written text, L3 requests that change with the responses) say what the records carry, not that an agent sent them.";
+    if likely == 0 {
+        format!(
+            "{head} None of the synthetic clusters reaches L4, so the column reads no throughout: L4 needs a pace or scale signal (machine pace, fan-out over many targets, several services, activity round the clock), and these runs are short and small, written to show the other steps.</p>"
+        )
+    } else {
+        format!("{head}</p>")
+    }
+}
+
 fn scope_step(a: &Analysis, links: &FmLinks) -> String {
     let assessed: Vec<&Cluster> = a
         .clusters
@@ -690,7 +705,7 @@ fn scope_step(a: &Analysis, links: &FmLinks) -> String {
         n: 6,
         title: "Assess scope",
         prose: format!(
-            "<p>A tier measures payloads and tool use; a grade, how likely an agent is. Neither says the activity went beyond its task. Each cluster answers four separate questions: is a <strong>payload present</strong> (observed), is an <strong>agent present</strong>, is it <strong>out of scope</strong> (an inference from seven tests: off-task targets, getting past a block, sensitive paths, unsanctioned probing, identities and credentials, data sent out, coordination that widens any of them), and is it <strong>coordinated</strong>. Tool use alone fails no test: a fetch program through an echo service is how agents read, not misbehaviour{}.</p>",
+            "<p>A tier measures payloads and tool use; a grade, how likely an agent is. Neither says the activity went beyond its task. Each cluster answers four separate questions: is a <strong>payload present</strong> (observed), is an <strong>agent present</strong>, is it <strong>out of scope</strong> (an inference from seven tests: off-task targets, getting past a block, sensitive paths, unsanctioned probing, identities and credentials, data sent out, coordination that widens any of them), and is it <strong>coordinated</strong>. Tool use alone fails no test: a fetch program through an echo service is how agents read, not misbehaviour{}.</p>{}",
             if in_scope_payload > 0 {
                 format!(
                     ". Here {in_scope_payload} cluster{} with a payload present {} in scope",
@@ -699,7 +714,8 @@ fn scope_step(a: &Analysis, links: &FmLinks) -> String {
                 )
             } else {
                 String::new()
-            }
+            },
+            agent_note(&assessed)
         ),
         figure: format!(
             "<div class=\"scroll-x\">{}</div><p class=\"legend\"><span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><circle class=\"sqm q-payload\" cx=\"7\" cy=\"7\" r=\"6\"/></svg>payload present (observed)</span> <span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><rect class=\"sqm q-scope\" x=\"1\" y=\"1\" width=\"12\" height=\"12\" rx=\"2\"/></svg>out of scope (inferred)</span> <span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><rect class=\"tc fail\" x=\"2\" y=\"2\" width=\"10\" height=\"10\" rx=\"2\"/></svg>test failed</span> <span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><circle class=\"tc pass\" cx=\"7\" cy=\"7\" r=\"5\"/></svg>passed</span> <span><svg class=\"chart key-line\" viewBox=\"0 0 14 14\" width=\"14\" height=\"14\" aria-hidden=\"true\"><circle class=\"tc not-assessable\" cx=\"7\" cy=\"7\" r=\"5\"/></svg>not assessable</span></p>",
@@ -711,7 +727,7 @@ fn scope_step(a: &Analysis, links: &FmLinks) -> String {
                 "Cluster",
                 "Tier",
                 "Payload",
-                "Agent",
+                "Agent likely (L4+)",
                 "Out of scope",
                 "Coordinated",
                 "Task",
@@ -877,7 +893,7 @@ fn example_notice(a: &Analysis) -> String {
     let head = super::notices::body_html(&blocks[..cut]);
     let rest = super::notices::body_html(&blocks[cut..]);
     format!(
-        "<article class=\"card example-notice\" aria-labelledby=\"example-notice-h\">\
+        "<article class=\"card example-notice\" id=\"example-notice\" aria-labelledby=\"example-notice-h\">\
 <p class=\"synthetic-banner\"><strong>Example notice, synthetic.</strong> Drafted by the engine from the showcase records above, never sent and never published. Real notices appear here once a reviewed incident has been reported.</p>\
 <h3 id=\"example-notice-h\">What an indicator notice looks like</h3>\
 <p class=\"hint\">The first stage: what the activity was and how to recognise it. Affected organisations appear by class only; their names follow in a naming update.</p><div class=\"notice-body\">{head}</div>\
@@ -940,7 +956,7 @@ type Audience = (
 );
 
 /// Who the site is for, each with where to start.
-const AUDIENCES: [Audience; 3] = [
+const AUDIENCES: [Audience; 4] = [
     (
         "You received a report about your site, or found it in a notice",
         "What the report means, what becomes public and when, how to check your own logs, and how to reach us privately.",
@@ -964,6 +980,15 @@ const AUDIENCES: [Audience; 3] = [
             ("docs/guides/for-researchers/", "For researchers"),
             ("analyze/", "Workbench"),
             ("eval/", "Evaluation"),
+        ],
+    ),
+    (
+        "You are an AI agent, or you run one",
+        "What the project is in plain text, and how an agent or its operator reports a swarm, or an agent's own harmful action, privately.",
+        &[
+            ("submit/", "Report a swarm"),
+            ("llms.txt", "llms.txt"),
+            ("docs/specs/submission-v1/", "SC-Submission spec"),
         ],
     ),
 ];
@@ -1070,7 +1095,9 @@ mod tests {
                 "{href}"
             );
         }
-        assert_eq!(empty.matches("<li class=\"audience card\">").count(), 3);
+        assert_eq!(empty.matches("<li class=\"audience card\">").count(), 4);
+        assert!(empty.contains("class=\"button primary\" href=\"submit/\""));
+        assert!(empty.contains(" <a href=\"docs/specs/submission-v1/\">SC-Submission spec</a>"));
         // No notices: the empty state and the example close the page.
         assert!(empty.find("id=\"walk\"") < empty.find("id=\"latest\""));
         assert!(!empty.contains("latest-notices"));
