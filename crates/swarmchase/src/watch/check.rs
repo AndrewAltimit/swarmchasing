@@ -73,7 +73,10 @@ pub fn check(text: &str) -> Findings {
         .extend(unknown.into_iter().map(|k| format!("unknown key `{k}`")));
     for (table, outer) in [
         ("source", &["name", "kind"][..]),
-        ("platform.source", &["name", "kind", "max_events", "max_lookups"][..]),
+        (
+            "platform.source",
+            &["name", "kind", "max_events", "max_lookups"][..],
+        ),
     ] {
         for (i, entry) in entries(&value, table).iter().enumerate() {
             f.problems.extend(query_keys(entry, outer, table, i));
