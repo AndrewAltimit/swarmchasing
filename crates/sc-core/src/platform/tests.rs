@@ -220,6 +220,69 @@ fn a_new_account_swarm_filing_templated_reports_is_found() {
     assert_eq!(rep.events, 406);
 }
 
+/// Four new accounts filing one template forty minutes apart in hour 2.
+fn slow_template(rules: &Rules) -> Vec<PlatformEvent> {
+    wave(
+        rules,
+        "tp",
+        4,
+        T0 + 2 * HOUR + 60,
+        600,
+        |i| Some(160_700 + i as u64),
+        |i| VICTIMS[i],
+        |i| {
+            format!(
+                "Security issue found in {} affecting the handler{i} module, please review the attached details and patch soon",
+                VICTIMS[i]
+            )
+        },
+    )
+}
+
+#[test]
+fn new_accounts_are_weighed_against_their_own_hours() {
+    let rules = Rules::default_rules();
+    // Alone among established accounts, four new accounts are unlikely
+    // whatever their timing.
+    let mut evs = background(&rules, 400);
+    evs.extend(slow_template(&rules));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    let a = rep.swarms[0].new_accounts.clone().unwrap();
+    assert!(a.hour_rate < 0.05 && a.p_chance < 1e-4, "{a:?}");
+    assert_eq!(rep.swarms[0].tested, 1);
+    let f = &rep.families[0];
+    assert_eq!(
+        (f.family.as_str(), f.kept, f.tested),
+        ("platform:github", 1, 1)
+    );
+    // In an hour when a wave of new accounts arrives (a launch, a news
+    // story), the same four say little: the rate they are read against is
+    // the hour's, so the wave is not counted once in the timing and again
+    // in the accounts.
+    let mut r = Lcg(99);
+    for i in 0..80 {
+        let words = 10 + (r.next() % 20) as usize;
+        let text = r.sentence(words);
+        evs.push(ev(
+            Ev {
+                id: format!("wave{i}"),
+                ts: T0 + 2 * HOUR + (r.next() % 3000) as i64,
+                actor: format!("newcomer{i}"),
+                rank: Some(160_600 + i as u64),
+                target: "alpha/one",
+                action: Action::Comment,
+                platform: Platform::Github,
+            },
+            Some(&text),
+            &rules,
+        ));
+    }
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    assert!(rep.below_threshold >= 1);
+}
+
 #[test]
 fn near_duplicates_with_reworded_lines_still_group() {
     let rules = Rules::default_rules();

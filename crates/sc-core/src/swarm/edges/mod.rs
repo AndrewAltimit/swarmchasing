@@ -11,6 +11,7 @@ use super::artifacts::artifacts;
 use super::runs::{Keyed, Run, first_by_key, indexes, sort_keyed};
 use super::{EdgeStrength, RunRef, SwarmEdge, SwarmEdgeKind};
 use crate::analyze::{Cluster, ObsResult};
+use crate::chance::TestFamily;
 use crate::rules::Rules;
 
 /// Edges kept when their chance is at most this (S4).
@@ -22,13 +23,47 @@ const MAX_SHARING: usize = 10;
 /// Record ids kept per side.
 const MAX_RECORDS: usize = 3;
 
-/// Every edge between `runs`, in kind order (`S1` first).
+/// The tests one kind with a chance model read: each passing test's chance
+/// (at or under the kind's own limit) with the edges it draws, and how many
+/// tests were read in all.
+#[derive(Default)]
+pub(super) struct Tests {
+    pub found: Vec<(f64, Vec<SwarmEdge>)>,
+    pub tested: usize,
+}
+
+impl Tests {
+    /// The edges whose test survives a Benjamini-Hochberg cut at `fdr` over
+    /// every test read, each stating the count, and the family's budget.
+    fn keep(self, kind: SwarmEdgeKind, fdr: f64, out: &mut Vec<SwarmEdge>) -> TestFamily {
+        let ps: Vec<f64> = self.found.iter().map(|f| f.0).collect();
+        let family = TestFamily::cut(kind.name(), &ps, self.tested, fdr);
+        for (p, edges) in self.found {
+            if !family.keeps(p) {
+                continue;
+            }
+            for mut e in edges {
+                e.tested = family.tested;
+                e.detail.push_str(&format!(
+                    "; {:.2} such pairs expected among {} tested",
+                    p * family.tested as f64,
+                    family.tested
+                ));
+                out.push(e);
+            }
+        }
+        family
+    }
+}
+
+/// Every edge between `runs`, in kind order (`S1` first), and the
+/// multiplicity budget of S3, S4 and S5.
 pub(super) fn detect(
     runs: &[Run],
     clusters: &[Cluster],
     results: &[ObsResult],
     rules: &Rules,
-) -> Vec<SwarmEdge> {
+) -> (Vec<SwarmEdge>, Vec<TestFamily>) {
     // Every artifact each run names, by id; the value indexes `meta`
     // (run, strand, written, record).
     let (mut named, mut meta) = (Keyed::new(), Vec::new());
@@ -68,10 +103,16 @@ pub(super) fn detect(
     for (id, g) in &groups {
         cx.handoff(id, g, &mut out);
     }
-    cx.lockstep(&mut out);
-    cx.role_sequences(&mut out);
-    cx.partitions(&mut out);
-    out
+    let fdr = rules.set.swarm.fdr;
+    let families = vec![
+        cx.lockstep()
+            .keep(SwarmEdgeKind::SynchronizedStart, fdr, &mut out),
+        cx.role_sequences()
+            .keep(SwarmEdgeKind::RoleSequence, fdr, &mut out),
+        cx.partitions()
+            .keep(SwarmEdgeKind::DisjointPartition, fdr, &mut out),
+    ];
+    (out, families)
 }
 
 /// Where an artifact was named: (run, strand, written, record).
@@ -108,19 +149,31 @@ impl Ctx<'_> {
         &self,
         out: &mut Vec<SwarmEdge>,
         kind: SwarmEdgeKind,
-        (x, y): (Side, Side),
+        sides: (Side, Side),
         strength: EdgeStrength,
         chance: Option<f64>,
         detail: String,
     ) {
-        out.push(SwarmEdge {
+        out.push(self.edge(kind, sides, strength, chance, detail));
+    }
+
+    fn edge(
+        &self,
+        kind: SwarmEdgeKind,
+        (x, y): (Side, Side),
+        strength: EdgeStrength,
+        chance: Option<f64>,
+        detail: String,
+    ) -> SwarmEdge {
+        SwarmEdge {
             kind,
             a: self.side(x),
             b: self.side(y),
             strength,
             chance,
+            tested: 0,
             detail,
-        });
+        }
     }
 }
 

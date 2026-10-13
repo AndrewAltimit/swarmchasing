@@ -448,6 +448,8 @@ fn single_cluster_reports_name_no_other_cluster() {
         on_the_hour: 0,
         expected: 0.001,
         p_chance: 0.001,
+        tested: 1,
+        expected_pairs: 0.001,
         reason: "2 pause(s) matched".into(),
     });
     for audience in [Audience::Provider, Audience::Affected, Audience::Public] {

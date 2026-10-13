@@ -222,14 +222,19 @@ clock_weight = 0.25
 # requests and `lockstep_min_share` of the shorter run. Kept when the larger
 # of two chances is at most `lockstep_max_chance`: the shorter run placed at
 # random over the analysis span, and its own gaps permuted
-# `lockstep_permutations` times with its start kept. Capture times never count.
+# `lockstep_permutations` times with its start kept, continued to
+# `lockstep_max_permutations` when none lines up as well. Capture times never
+# count. S3, S4 and S5 edges are each cut at false discovery rate `fdr` over
+# the pairs their test read.
 [swarm]
 lockstep_tolerance_secs = 3
 lockstep_min_events = 4
 lockstep_min_share = 0.6
 lockstep_max_offset_secs = 120
 lockstep_permutations = 199
+lockstep_max_permutations = 1999
 lockstep_max_chance = 0.01
+fdr = 0.05
 
 # Repeated cut lengths: at least `min_records` truncated URLs within
 # `tolerance` characters of a common length. `rule` marks a URL as cut off.

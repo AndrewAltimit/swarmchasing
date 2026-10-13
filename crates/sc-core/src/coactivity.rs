@@ -11,9 +11,10 @@
 //! activity at that cluster's own rate over the union span (a
 //! Poisson-binomial tail, times the lags tried), which a short span does
 //! not floor; and the share of circular shifts of one cluster's activity
-//! over the union span that align as well, which keeps each cluster's own
-//! burstiness and period. The pairs kept are cut at a false discovery rate
-//! over every pair tested.
+//! over the union span that align as well, the real alignment counted among
+//! them, which keeps each cluster's own burstiness and period. When the span
+//! allows too few shifts to reach the chance limit, the shifts only veto.
+//! The pairs kept are cut at a false discovery rate over every pair tested.
 //!
 //! Scheduled jobs line up on the clock without any tie between them. As for
 //! shared pauses, a coincidence within `clock_tolerance_secs` of a clock
@@ -25,6 +26,7 @@
 //! link or merge.
 
 use crate::analyze::{Cluster, ObsResult};
+use crate::chance::TestFamily;
 use crate::model::Tier;
 use crate::timing::request_like;
 use serde::{Deserialize, Serialize};
@@ -90,7 +92,9 @@ pub struct CoActivePair {
     pub active_b: usize,
     /// Coincidences expected at the best lag under the analytic model.
     pub expected: f64,
-    /// The larger of the two chances below.
+    /// The larger of the two chances below; the analytic one alone when the
+    /// span allows too few shifts to reach `max_chance` and none aligned as
+    /// well.
     pub chance: f64,
     /// Analytic chance: each active bin of the quieter cluster meets the
     /// other's activity with the share of the union span it covers (of the
@@ -98,8 +102,9 @@ pub struct CoActivePair {
     /// Poisson-binomial tail, times the lags tried.
     #[serde(default)]
     pub analytic: f64,
-    /// Share of circular shifts of one cluster's activity over the union
-    /// span that align at least as well, the real alignment not counted.
+    /// Share of the arrangements that align at least as well: the circular
+    /// shifts of one cluster's activity over the union span and the real
+    /// alignment, `(ge + 1) / (shifts + 1)`.
     #[serde(default)]
     pub shifted: f64,
     pub shifts: usize,
@@ -158,14 +163,16 @@ struct Series<'a> {
 }
 
 /// Pairs of clusters above noise active together beyond chance, most
-/// unlikely first. `max_shared` is `soft_links.max_shared`: a bin with more
-/// clusters active than that says nothing about any two of them.
+/// unlikely first, and the family's multiplicity budget. `max_shared` is
+/// `soft_links.max_shared`: a bin with more clusters active than that says
+/// nothing about any two of them.
 pub(crate) fn coactive_pairs(
     clusters: &[Cluster],
     results: &[ObsResult],
     max_shared: usize,
     opts: &CoActivityOptions,
-) -> Vec<CoActivePair> {
+) -> (Vec<CoActivePair>, TestFamily) {
+    let none = || (Vec::new(), TestFamily::cut("co_activity", &[], 0, opts.fdr));
     let bin = opts.bin_secs.max(1);
     let m = opts.max_lag_bins.max(0);
     let series: Vec<Series> = clusters
@@ -185,7 +192,7 @@ pub(crate) fn coactive_pairs(
         })
         .collect();
     if series.len() < 2 {
-        return Vec::new();
+        return none();
     }
 
     // Candidates: pairs with enough bins within the lag of each other,
@@ -232,10 +239,8 @@ pub(crate) fn coactive_pairs(
     }
     // Many pairs are tested: keep those under the false-discovery cut.
     let ps: Vec<f64> = out.iter().map(|p| p.chance).collect();
-    match crate::chance::bh_cut(&ps, tested, opts.fdr) {
-        Some(cut) => out.retain(|p| p.chance <= cut),
-        None => out.clear(),
-    }
+    let family = TestFamily::cut("co_activity", &ps, tested, opts.fdr);
+    out.retain(|p| family.keeps(p.chance));
     for p in &mut out {
         p.tested = tested;
         p.expected_pairs = p.chance * tested as f64;
@@ -246,7 +251,7 @@ pub(crate) fn coactive_pairs(
             .then(q.coincidences.total_cmp(&p.coincidences))
     });
     out.truncate(MAX_PAIRS);
-    out
+    (out, family)
 }
 
 /// The best-lag statistic of `x` against `y` over the union of their
@@ -334,8 +339,8 @@ fn test_pair(x: &Series, y: &Series, opts: &CoActivityOptions) -> Option<CoActiv
     let expected: f64 = rho.iter().sum();
 
     // Circular shifts over the union span, beyond the lags; the share at
-    // least as aligned, the real alignment not counted, so a short span
-    // sets no floor. Periodic jobs align under the shifts by their period.
+    // least as aligned. Periodic jobs align under the shifts by their
+    // period.
     let guard = 2 * (m + 1);
     let admissible: Vec<i64> = (1..w)
         .filter(|&s| s % step == 0 && s.min(w - s) > guard)
@@ -346,7 +351,17 @@ fn test_pair(x: &Series, y: &Series, opts: &CoActivityOptions) -> Option<CoActiv
         let (v, _) = stat(admissible[i * admissible.len() / k]);
         ge += usize::from(v >= observed - 1e-9);
     }
-    let shifted = if k == 0 { 0.0 } else { ge as f64 / k as f64 };
+    // The real alignment counts as one of the arrangements, so the share is
+    // never zero. When the span allows too few shifts to reach `max_chance`
+    // at all, the shifts can only veto: no shift may align as well, and the
+    // analytic chance stands.
+    let shifted = (ge + 1) as f64 / (k + 1) as f64;
+    let resolves = 1.0 / (k + 1) as f64 <= opts.max_chance;
+    let chance = if resolves || ge > 0 {
+        analytic.max(shifted)
+    } else {
+        analytic
+    };
     // `more` trails `fewer` by `lag` to `lag + 1` bins.
     let lag = if flip { -lag - 1 } else { lag };
     Some(CoActivePair {
@@ -357,7 +372,7 @@ fn test_pair(x: &Series, y: &Series, opts: &CoActivityOptions) -> Option<CoActiv
         active_a: bx.len(),
         active_b: by.len(),
         expected,
-        chance: analytic.max(shifted),
+        chance,
         analytic,
         shifted,
         shifts: k,
@@ -440,6 +455,15 @@ mod tests {
         let x = &p[0];
         assert!(x.coincidences >= 9.0, "{x:?}");
         assert!(x.chance <= 0.01, "{x:?}");
+        // The real alignment counts among the arrangements: never zero.
+        assert!(x.shifted >= 1.0 / (x.shifts + 1) as f64, "{x:?}");
+        assert!(x.chance >= x.shifted, "{x:?}");
+        let f = a
+            .multiplicity
+            .iter()
+            .find(|f| f.family == "co_activity")
+            .expect("the co-activity family");
+        assert_eq!((f.kept, f.tested), (1, x.tested), "{f:?}");
         // The lag points from the planner to the worker.
         let planner = a.cluster_index("C1").map(|i| &a.clusters[i]).unwrap();
         let planner_first = a.results[planner.members[0]].obs.id.starts_with('p');
@@ -475,6 +499,10 @@ mod tests {
         assert_eq!(p.len(), 1, "{p:?}");
         let x = &p[0];
         assert!(x.chance <= 0.01 && x.analytic <= x.chance, "{x:?}");
+        // Too few shifts to reach 1%: they could only veto, and none
+        // aligned as well.
+        assert!(1.0 / (x.shifts + 1) as f64 > 0.01, "{x:?}");
+        assert_eq!(x.chance, x.analytic, "{x:?}");
         assert_eq!(x.tested, 1, "{x:?}");
         assert!((x.expected_pairs - x.chance).abs() < 1e-12);
         assert!(x.detail().contains("analytic"), "{}", x.detail());

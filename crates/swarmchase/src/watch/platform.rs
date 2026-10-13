@@ -392,6 +392,7 @@ mod tests {
             targets: vec![("some.example/repo".into(), 2)],
             distinct_targets: 3,
             p_chance: 1e-6,
+            tested: 1,
             strength: sc_core::platform::HintStrength::Moderate,
             caveats: vec!["no account is new".into()],
             links: vec!["https://github.com/a/b/issues/1".into()],

@@ -11,14 +11,18 @@
 //!   analysis span. Runs that merely overlap in a quiet stretch of a long
 //!   analysis pass this one, so it is not enough alone.
 //! - **own gaps**: the shorter run's start kept and its own gaps between
-//!   requests permuted (seeded). Two jobs that start together and send at
-//!   a steady rate stay aligned under every permutation and do not pass;
-//!   only a shared order of uneven gaps does. Schedulers get no other
-//!   allowance, and a start on the clock hour neither helps nor hurts.
+//!   requests permuted (seeded), continued while none lines up as well.
+//!   Two jobs that start together and send at a steady rate stay aligned
+//!   under every permutation and do not pass; only a shared order of uneven
+//!   gaps does. Schedulers get no other allowance, and a start on the clock
+//!   hour neither helps nor hurts.
+//!
+//! Every pair of different clients within reach is a test, and the edges
+//! kept are cut at a false discovery rate over them.
 
-use super::Ctx;
+use super::{Ctx, Tests};
 use crate::swarm::runs::{Run, differ};
-use crate::swarm::{EdgeStrength, SwarmEdge, SwarmEdgeKind};
+use crate::swarm::{EdgeStrength, SwarmEdgeKind};
 
 /// Requests per run read, earliest first.
 const MAX_EVENTS: usize = 400;
@@ -148,12 +152,16 @@ struct Lockstep {
     offset: i64,
     placement: f64,
     gaps: f64,
+    /// Permutations run.
+    perms: usize,
 }
 
 impl Ctx<'_> {
     /// S3: run pairs of different clients in lockstep beyond both chance
-    /// models.
-    pub(super) fn lockstep(&self, out: &mut Vec<SwarmEdge>) {
+    /// models. Every pair of different clients within reach of each other
+    /// is a test.
+    pub(super) fn lockstep(&self) -> Tests {
+        let mut tests = Tests::default();
         let o = self.opts;
         let min = o.lockstep_min_events.max(2);
         let timed = self.by_start(&|r| r.events.len() >= min);
@@ -164,7 +172,7 @@ impl Ctx<'_> {
                 .filter_map(|&i| self.runs[i].events.last().copied())
                 .max(),
         ) else {
-            return;
+            return tests;
         };
         let d = o.lockstep_max_offset_secs.max(0);
         for (n, &i) in timed.iter().enumerate() {
@@ -180,6 +188,7 @@ impl Ctx<'_> {
                 let Some(diff) = differ(&x.fp, &y.fp) else {
                     continue;
                 };
+                tests.tested += 1;
                 let Some(l) = self.test(x, y, (lo, hi)) else {
                     continue;
                 };
@@ -192,8 +201,7 @@ impl Ctx<'_> {
                 } else {
                     format!("; they differ in {}", diff.join(", "))
                 };
-                self.push(
-                    out,
+                let edge = self.edge(
                     SwarmEdgeKind::SynchronizedStart,
                     ((x, None, &x.members), (y, None, &y.members)),
                     if l.k >= 2 * min && !diff.is_empty() {
@@ -210,11 +218,13 @@ impl Ctx<'_> {
                         o.lockstep_tolerance_secs,
                         l.placement,
                         l.gaps,
-                        o.lockstep_permutations
+                        l.perms
                     ),
                 );
+                tests.found.push((p, vec![edge]));
             }
         }
+        tests
     }
 
     /// The lockstep statistic of `x` and `y` and its two chances, or `None`
@@ -248,11 +258,18 @@ impl Ctx<'_> {
         let (ka, kb) = (&self.cl[x.ci].key, &self.cl[y.ci].key);
         let (na, nb) = (x.n.to_string(), y.n.to_string());
         let mut rng = Mix(seed(&[ka, &na, kb, &nb]));
-        let perms = o.lockstep_permutations.max(1);
+        let base = o.lockstep_permutations.max(1);
+        let most = o.lockstep_max_permutations.max(base);
         let mut ge = 0usize;
+        let mut perms = 0usize;
         let mut g = gaps.clone();
         let mut shuffled = Vec::with_capacity(b.len());
-        for _ in 0..perms {
+        // The base permutations, continued to `most` while none lines up as
+        // well: a chance at the base floor is resolved further. Stopping
+        // early on a match keeps the chance valid, since a later stop only
+        // follows no match.
+        while perms < base || (ge == 0 && perms < most) {
+            perms += 1;
             for i in (1..g.len()).rev() {
                 g.swap(i, (rng.next() % (i as u64 + 1)) as usize);
             }
@@ -270,6 +287,7 @@ impl Ctx<'_> {
             offset: if flip { -offset } else { offset },
             placement,
             gaps: (1 + ge) as f64 / (1 + perms) as f64,
+            perms,
         })
     }
 }
