@@ -63,6 +63,16 @@ The browser toolkit runs the analysis entirely on your machine. Records are pars
 
 To run the toolkit locally instead of from the published site, build it with `scripts/ci/build-site.sh` and serve it with `python -m http.server -d _site 8080`.
 
+### Agents that name themselves
+
+Some requests say which AI provider's agent sent them: a user agent such as `ChatGPT-User` or `Claude-User`, or a Web Bot Auth signature. Anyone can write a user agent, so the toolkit's **Agent identity** page checks each one against the address ranges and signing keys the provider publishes ([how](../reference/identity.md)):
+
+1. Paste the log or use **Load file**, and name your host in the field map as above.
+2. Press **Check**. Each record gets a class: verified by signature or by address, from a provider's range without a declaration, a claim with nothing to check it against, a failed signature, or spoofed (a provider's product named from outside its published ranges). The page counts each class per provider product and lists spoofed records first.
+3. The page starts with the providers' files the site was built with and says how old they are. For a recent log, download fresh copies from the addresses it lists and load them; the page itself never contacts a provider.
+
+Signatures are checked only on JSON records that carry the request headers; Common and Combined logs have no signatures. With the CLI: `swarmchase identity refresh`, then `swarmchase identity check access.log --map host=www.example.org`.
+
 ### With the CLI
 
 Build the CLI from this repository (`cargo build --release`), then run it on your log:

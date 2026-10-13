@@ -68,6 +68,9 @@ pub struct SiteInputs {
     pub engine_bytes: Option<u64>,
     /// The same for the tools module (reports, bundle check, eval).
     pub tools_bytes: Option<u64>,
+    /// The identity page's providers' files ([`crate::identity`]); `None`
+    /// embeds the catalog alone.
+    pub identity: Option<crate::identity::Snapshot>,
 }
 
 /// Values every page's shell shows.
@@ -364,6 +367,11 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "assets/eval-set.json".into(),
         serde_json::json!({ "files": files, "ndjson": set }).to_string(),
     ));
+    let snapshot = inp
+        .identity
+        .clone()
+        .unwrap_or_else(|| crate::identity::Snapshot::empty(sc_core::identity::Catalog::bundled()));
+    out.push((crate::identity::SNAPSHOT_PATH.into(), snapshot.to_json()));
     out.extend(showcase_bundle(
         &example_bundle_records,
         &rules,
@@ -556,6 +564,16 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     p.scripts.push("js/pages/tools.js");
     pages.push(p);
     let mut p = page(
+        "identity/index.html",
+        "identity",
+        "Agent identity",
+        "Check the AI agents your access log declares against the ranges and keys their providers publish, in the browser.",
+        shells::IDENTITY.to_string(),
+    );
+    // No preload: the tools module loads on the first check.
+    p.scripts.push("js/pages/identity.js");
+    pages.push(p);
+    let mut p = page(
         "submit/index.html",
         "submit",
         "Report a swarm",
@@ -687,6 +705,7 @@ mod tests {
             version: "0.1.0".into(),
             engine_bytes: Some(1_300_000),
             tools_bytes: Some(1_500_000),
+            identity: None,
         }
     }
 
@@ -703,6 +722,7 @@ mod tests {
             "rules/index.html",
             "eval/index.html",
             "analyze/index.html",
+            "identity/index.html",
             "submit/index.html",
             "404.html",
         ] {

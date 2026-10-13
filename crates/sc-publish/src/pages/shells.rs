@@ -102,7 +102,7 @@ pub const UNWRAP: &str = r#"<header class="page-head compact"><h1>Unwrap a URL</
 </section>"#;
 
 pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
-<p class="lede">Small tools that run in this page: check an evidence bundle, read a <code>security.txt</code>, defang URLs. Each loads what it needs the first time you use it, and nothing you pick or paste leaves the page. Also: <a href="../unwrap/">unwrap a URL</a>.</p></header>
+<p class="lede">Small tools that run in this page: check an evidence bundle, read a <code>security.txt</code>, defang URLs. Each loads what it needs the first time you use it, and nothing you pick or paste leaves the page. Also: <a href="../unwrap/">unwrap a URL</a>, and <a href="../identity/">check the AI agents your log declares</a> against their providers' published ranges and keys.</p></header>
 <section class="card" aria-labelledby="bundle-h">
 <h2 id="bundle-h">Check an evidence bundle</h2>
 <p class="lede-card">Got a report? Pick the files attached to the email.</p>
@@ -131,6 +131,40 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <p class="hint card-status" data-engine-status aria-live="polite"></p>
 <pre id="defang-out" class="report" aria-live="polite"></pre>
 </section>"#;
+
+/// Agent identity: an operator checks the agents its own log declares
+/// against the providers' published ranges and keys
+/// ([`site/js/pages/identity.js`]). The page fetches nothing.
+pub const IDENTITY: &str = r##"<header class="page-head compact"><h1>Agent identity</h1>
+<p class="lede">Which requests in your log say they come from an AI provider's agent (<code>ChatGPT-User</code>, <code>Claude-User</code>, <code>Perplexity-User</code>, <code>Google-Agent</code> and others), and whether the address ranges and signing keys the provider publishes bear that out. It runs in this page: your log is never uploaded, and the page fetches nothing from the providers. Method: <a href="../docs/reference/identity/">declared agent identity</a>.</p></header>
+<section class="card" aria-labelledby="id-log-h">
+<h2 id="id-log-h">Your log</h2>
+<label for="id-input" class="sr-only">Log</label>
+<textarea id="id-input" rows="8" spellcheck="false" aria-describedby="id-input-hint" placeholder='203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET / HTTP/1.1" 200 512 "-" "Mozilla/5.0 (compatible; ChatGPT-User/1.0)"'></textarea>
+<p class="hint" id="id-input-hint">A web server access log (Combined Log Format, so the user agent is there), or NDJSON with <code>ip</code>, <code>user_agent</code> and, for signatures, the request <code>headers</code>. Behind a proxy, log the forwarded client address, not the proxy's.</p>
+<div class="row">
+<label class="file button">Load file<input type="file" id="id-file" accept=".log,.txt,.ndjson,.jsonl,.json"></label>
+<label class="sr-only" for="id-format">Input format</label>
+<select id="id-format"><option value="auto">auto-detect</option><option value="access_log">Access log</option><option value="ndjson">NDJSON</option><option value="json">JSON</option></select>
+<label class="sr-only" for="id-map">Field map</label><input id="id-map" class="grow" spellcheck="false" placeholder="field map, e.g. host=www.example.org">
+</div>
+<div class="row"><button type="button" id="id-run" class="primary">Check</button><button type="button" id="id-example">Try an example</button></div>
+<p class="hint card-status" data-tools-status aria-live="polite"></p>
+<p id="id-example-note" class="hint note" hidden>Example loaded: a synthetic log from documentation addresses, checked against synthetic range files that stand in for the providers' files. None of it is a provider's real file or a real request.</p>
+<div id="id-alert" class="alert" role="alert" hidden></div>
+</section>
+<section class="card" aria-labelledby="id-files-h">
+<h2 id="id-files-h">Providers' files</h2>
+<p class="hint">Without the ranges and keys a provider publishes, a user agent is only a claim: anyone can write one, and nothing can be verified or shown spoofed. This page never fetches those files itself: a request from your browser to a provider would tell it who is checking, and the site allows requests to its own files only. It starts with the copies this site was built with, if any, dated below. To check against newer files, download them from the addresses listed (or take the files <code>swarmchase identity refresh</code> writes into <code>&lt;data&gt;/identity/</code>) and load them here; they stay in this page.</p>
+<p id="id-snapshot" class="hint" aria-live="polite"></p>
+<div class="row"><label class="file button">Load files<input type="file" id="id-files" multiple accept=".json,.txt"></label><button type="button" id="id-reset" disabled>Forget loaded files</button></div>
+<p id="id-files-status" class="hint" role="status" hidden></p>
+<div id="id-file-table"></div>
+</section>
+<section class="card" aria-labelledby="id-out-h">
+<h2 id="id-out-h">Result</h2>
+<div id="id-out" aria-live="polite"><p class="hint">Check a log to see each record's class here.</p></div>
+</section>"##;
 
 /// Report a swarm: a form that builds an SC-Submission v1 document in the
 /// page ([`site/js/pages/submit.js`]). The page sends nothing.
@@ -191,6 +225,7 @@ pub const OPERATORS_PANEL: &str = r##"<aside class="card callout-card" aria-labe
 <h2 id="check-h">Check your access log in the browser</h2>
 <p>The workbench has an access-log preset: paste your web server's log (Common or Combined Log Format), name your host in the field map, and it runs the same rules over your requests. The log is analysed in the page and never uploaded.</p>
 <p><a class="button primary" href="../analyze/#preset=access-log">Open the access-log preset</a></p>
+<p>Requests that name an AI provider's agent (<code>ChatGPT-User</code>, <code>Claude-User</code>, a signature) can be checked against the ranges and keys the provider publishes, in the browser too: <a href="../identity/">agent identity</a> (<a href="#agents-that-name-themselves">how</a>).</p>
 </aside>
 <aside class="card callout-card" aria-labelledby="contact-h">
 <h2 id="contact-h">Received a report? Check it, and reach us privately</h2>

@@ -64,4 +64,12 @@ Nothing is recorded until the admin runs it. Reports to affected operators and p
 
 ## In the browser
 
-The tools module exposes `identity_catalog()` and `identity_check(input, format, map, files)`. `files` holds range files and directories the visitor downloaded from the catalog's URLs, by catalog id; the module fetches nothing.
+The site's **Agent identity** page (`/identity/`) runs `check` on an operator's own log in the page ([browser toolkit](browser-toolkit.md#agent-identity)). The tools module exposes `identity_catalog()` and `identity_check(input, format, map, files)`. `files` holds range files and directories by catalog id; the module fetches nothing. It is built with signature verification, so a signed JSON record is verified in the browser as in the CLI.
+
+The page never fetches a provider's file at runtime: the site's policy allows requests to its own files only, and a request from the operator's browser would tell the provider who is checking. It starts from a snapshot the site build embeds, and the operator can load newer copies.
+
+### The snapshot
+
+`sc-site --identity-snapshot <dir>` (or `SITE_IDENTITY_SNAPSHOT` for `scripts/ci/build-site.sh`) embeds the files `identity refresh` wrote into `<dir>`, normally `<data>/identity`, as `assets/identity-snapshot.json` with their URLs and fetch dates. Only `fetched.json` and the files the catalog names are read. A file is embedded only when it parses and its SHA-256 matches `fetched.json`, so the date shown is that file's. The deploy passes the runner's `<data>/identity` when it holds files and fetches nothing itself, so the snapshot is as old as the admin's last `identity refresh` there. Without one, or offline, the build embeds the catalog alone and the page says so.
+
+The files are not committed: providers change them, and a copy in git would go stale between commits.

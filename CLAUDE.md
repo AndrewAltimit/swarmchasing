@@ -106,7 +106,7 @@ python3 scripts/ci/check-md-links.py && python3 scripts/ci/check-doc-density.py
 - **urlquery content is never committed or quoted.** Not in samples, fixtures, notices or eval overrides; link the report, quote only derived indicators. Details: [configuration](docs/reference/configuration.md#urlquerynet).
 - **Fork PRs run nothing** on the self-hosted runner. To test a fork's change, push it to a branch of this repository. Details: [runner](docs/reference/runner.md).
 - **`actions/checkout` cleans the workspace.** Anything that must persist (cargo cache, wasm-opt cache, watch data) lives outside the checkout. Details: [runner](docs/reference/runner.md#what-lives-outside-the-checkout).
-- **`_site/`, `site/pkg/` and `site/pkg-rules/` are generated** and gitignored; the site build reads committed inputs only. Details: [verify skill](.claude/skills/verify/SKILL.md).
+- **`_site/`, `site/pkg/` and `site/pkg-rules/` are generated** and gitignored; the site build reads committed inputs only, plus an optional snapshot of providers' identity files ([identity](docs/reference/identity.md#the-snapshot)). Details: [verify skill](.claude/skills/verify/SKILL.md).
 - **Floors only go up.** Never lower an [`eval-gate.sh`](scripts/ci/eval-gate.sh) floor to land a change; fix the rule or argue the label.
 - **Defang in every output.** Hosts print as `a[.]b`, and a record's URL is never made clickable, in reports, digests, notices and the site.
 

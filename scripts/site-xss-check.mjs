@@ -15,7 +15,9 @@
 // hostile claims, and that declared testing reaches no view and no draft but
 // an internal one; the rules editor and the
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
-// defang on the tools page. It also checks layout: no page scrolls sideways
+// defang on the tools page; the identity page's synthetic example (each
+// class it holds renders, spoofed records in the alert), hostile records
+// and a hostile provider file. It also checks layout: no page scrolls sideways
 // at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
 // one column, and each press of the theme toggle flips the look, storing it
 // only while it differs from the system's.
@@ -525,6 +527,52 @@ try {
   if (!tools.sectxt) failures.push("the hostile security.txt did not render as text");
   if (!tools.defang) failures.push("defang did not defang");
   await audit("tools");
+
+  // Agent identity: the synthetic example, then hostile records (ids, a
+  // user agent and a Signature-Agent carrying probes) and a hostile
+  // provider file picked through its row.
+  await open("identity/", `document.querySelectorAll("#id-file-table tbody tr").length > 0`);
+  const idRun = await run(`(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const rows = () => document.querySelectorAll("#id-out table.id-records tbody tr").length;
+    document.getElementById("id-example").click();
+    for (let i = 0; i < 300 && !rows(); i++) await wait(50);
+    const pills = [...document.querySelectorAll("#id-out table.id-records .pill")].map((p) => p.className);
+    const spoofed = document.querySelectorAll("#id-out .id-spoofed tbody tr").length;
+    const box = document.getElementById("id-input");
+    box.value = ${JSON.stringify(
+      [
+        { id: program, ts: "2026-10-04T08:10:00Z", url: "https://www.example.org/", ip: "203.0.113.5", user_agent: `ChatGPT-User/1.0 ${program}` },
+        { id: tag, ts: "2026-10-04T08:10:01Z", url: "https://www.example.org/", ip: tag, user_agent: "Claude-User/1.0", headers: { "signature-agent": `"https://evil.example/${tag}"`, "signature-input": `sig1=("@authority");created=1;keyid="${tag}";tag="web-bot-auth"`, signature: `sig1=:${tag}:` } },
+      ].map((r) => JSON.stringify(r)).join("\n"),
+    )};
+    box.dispatchEvent(new Event("input"));
+    document.getElementById("id-format").value = "ndjson";
+    document.getElementById("id-map").value = "";
+    document.getElementById("id-run").click();
+    for (let i = 0; i < 100 && !document.getElementById("id-out").textContent.includes("<script>"); i++) await wait(50);
+    const out = document.getElementById("id-out").textContent;
+    return { pills, spoofed, text: out.includes("<script>"), defanged: !out.includes("https://evil.example") };
+  })()`);
+  if (!idRun.pills.length) failures.push("the identity example rendered no records");
+  for (const c of ["id-ip_verified", "id-spoofed", "id-claimed", "id-in_range"])
+    if (!idRun.pills.some((p) => p.includes(c))) failures.push(`the identity example showed no ${c} record`);
+  if (!idRun.spoofed) failures.push("the identity example listed no spoofed record in the alert");
+  if (!idRun.text) failures.push("the hostile identity records did not render as text");
+  if (!idRun.defanged) failures.push("a Signature-Agent reached the identity page undefanged");
+  {
+    const hostileRange = join(tmp, "openai.chatgpt-user.json");
+    writeFileSync(hostileRange, JSON.stringify({ creationTime: program, prefixes: [{ ipv4Prefix: "203.0.113.0/24" }], note: program }));
+    await send("DOM.enable");
+    const d = await send("DOM.getDocument");
+    const pick = await send("DOM.querySelector", { nodeId: d.result.root.nodeId, selector: "#id-files" });
+    await send("DOM.setFileInputFiles", { nodeId: pick.result.nodeId, files: [hostileRange] });
+    for (let i = 0; i < 40 && !(await run(`document.getElementById("id-file-table").textContent.includes("your copy")`)); i++) await sleep(100);
+    if (!(await run(`document.getElementById("id-file-table").textContent.includes("your copy")`))) failures.push("a provider file picked on the identity page was not taken");
+  }
+  await audit("identity");
+  // Back to the tools page for the bundle viewer.
+  await open("tools/", `!document.getElementById("sectxt-run").disabled`);
 
   // The bundle viewer: a hostile bundle (stamp, manifest and case claims
   // carry probes), picked through the file input as a visitor would.
