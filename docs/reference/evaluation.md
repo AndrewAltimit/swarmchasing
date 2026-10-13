@@ -164,7 +164,7 @@ The unit is a pair of true runs. An edge side is placed on the run most of its r
 - **Soft links and candidate fleets**, per kind: precision is the share of linked cluster pairs with one operator. Recall is over operator pairs in different clusters above noise; pairs already in one cluster are counted apart.
 - **Agent grades**: records by actor and class against the grade columns, as in [agent grades by actor](#agent-grades-by-actor).
 
-Every proportion has its Wilson interval. Kinds are read from the analysis, so a new edge or soft-link kind appears without a change to the command. The numbers are reported, never gated. The committed labelled groups are hand-written and few, so the intervals are wide and the numbers say whether a detector fires on its designed case, not how often it would on real traffic.
+Every proportion has its Wilson interval. Every kind is listed with its recall denominator in every file and seed, fired or not, so summed recall counts the true pairs a kind missed where it drew nothing. The numbers are reported, never gated. The committed labelled groups are hand-written and few, so the intervals are wide and the numbers say whether a detector fires on its designed case, not how often it would on real traffic.
 
 ### Simulated scenarios
 

@@ -3,14 +3,14 @@
 //!
 //! The unit is a pair of true runs. An edge side is placed on the run most of
 //! its records belong to; a cluster on the run most of its members belong
-//! to. Kinds are keyed by their serialised name, so a kind added to
-//! [`SwarmEdgeKind`](sc_core::SwarmEdgeKind) or
-//! [`SoftLinkKind`](sc_core::SoftLinkKind) is measured without a change
-//! here.
+//! to. Kinds are keyed by their serialised name. Every kind is listed with
+//! its recall denominator in every measurement, fired or not, so a sum over
+//! seeds and scenarios counts the true pairs a kind missed where it drew
+//! nothing.
 
 use crate::truth::Truth;
 use sc_core::eval::stats::Proportion;
-use sc_core::{Analysis, Tier};
+use sc_core::{Analysis, SoftLinkKind, Tier};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -202,10 +202,13 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
     }
 
     // Swarm edges, by kind.
+    // Every kind and `any` is listed with its denominator, fired or not, so
+    // summed recall counts the seeds where a kind drew nothing.
     let mut drawn: BTreeMap<String, BTreeSet<(&str, &str)>> = BTreeMap::new();
     for k in sc_core::SwarmEdgeKind::ALL {
         drawn.entry(kind_name(&k)).or_default();
     }
+    drawn.entry("any".into()).or_default();
     for e in &a.swarm_edges {
         let ra = majority(truth, e.a.records.iter().map(String::as_str));
         let rb = majority(truth, e.b.records.iter().map(String::as_str));
@@ -248,6 +251,12 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
         })
         .collect();
     let mut linked: BTreeMap<String, BTreeSet<(usize, usize)>> = BTreeMap::new();
+    for k in SOFT_LINK_KINDS {
+        linked.entry(kind_name(&k)).or_default();
+    }
+    for k in ["any", "candidate_fleet"] {
+        linked.entry(k.into()).or_default();
+    }
     let push = |kind: String, x: usize, y: usize, linked: &mut BTreeMap<_, BTreeSet<_>>| {
         linked.entry(kind).or_default().insert((x.min(y), x.max(y)));
     };
@@ -297,11 +306,37 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
             .count();
         out.links.insert(k, s);
     }
-    for k in ["any", "candidate_fleet"] {
-        out.links.entry(k.into()).or_insert_with(|| KindStat {
-            of: op_pairs.len(),
-            ..Default::default()
-        });
-    }
     out
 }
+
+/// Every soft-link kind. The match fails to compile when a kind is added
+/// to [`SoftLinkKind`] and not here, so none goes unmeasured.
+const SOFT_LINK_KINDS: [SoftLinkKind; 16] = {
+    use SoftLinkKind::*;
+    const fn listed(k: SoftLinkKind) {
+        match k {
+            SharedPause | Dialect | Rerun | Preamble | PathSet | Encoding | FanOut | CutLength
+            | HeaderSet | Escalation | CommonFeature | SharedSecret | RelayStack
+            | CallbackService | Scaffold | CoActivity => {}
+        }
+    }
+    listed(SharedPause);
+    [
+        SharedPause,
+        Dialect,
+        Rerun,
+        Preamble,
+        PathSet,
+        Encoding,
+        FanOut,
+        CutLength,
+        HeaderSet,
+        Escalation,
+        CommonFeature,
+        SharedSecret,
+        RelayStack,
+        CallbackService,
+        Scaffold,
+        CoActivity,
+    ]
+};

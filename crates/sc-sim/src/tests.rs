@@ -128,3 +128,36 @@ fn a_gist_one_agent_names_and_others_fetch_draws_handoff_edges() {
     let s2 = &m.edges["handoff"];
     assert!(s2.correct > 0 && s2.correct == s2.pairs, "{}", render(m));
 }
+
+#[test]
+fn every_kind_carries_its_denominator_fired_or_not() {
+    // Scenarios where most kinds draw nothing: each still counts the true
+    // pairs it could reach, so a sum over seeds reads the misses.
+    let rules = Rules::default_rules();
+    let file = ScenarioFile {
+        scenario: vec![scenario("fleet"), scenario("submit-basis")],
+    };
+    let mut total = Measurement::default();
+    for (_, m) in bench(&file, &Palette::default_palette(&rules), &rules) {
+        let links = m.operator_pairs.reachable - m.operator_pairs.joined;
+        for (k, s) in &m.edges {
+            assert_eq!(s.of, m.swarm_pairs.reachable, "{k}: {}", render(&m));
+        }
+        for (k, s) in &m.links {
+            assert_eq!(s.of, links, "{k}: {}", render(&m));
+        }
+        assert!(m.edges.contains_key("any"));
+        for k in ["any", "candidate_fleet", "co_activity", "scaffold", "rerun"] {
+            assert!(m.links.contains_key(k), "{k}");
+        }
+        total.add(&m);
+    }
+    let links = total.operator_pairs.reachable - total.operator_pairs.joined;
+    assert!(
+        total
+            .edges
+            .values()
+            .all(|s| s.of == total.swarm_pairs.reachable)
+    );
+    assert!(total.links.values().all(|s| s.of == links));
+}

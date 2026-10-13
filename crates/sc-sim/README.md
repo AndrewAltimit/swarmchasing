@@ -28,7 +28,7 @@ print!("{}", render(&m));
 
 `bench` generates each scenario under its seeds, analyses each run on its own and sums the measurements.
 
-Kinds are keyed by their serialised names, so a kind added to `SwarmEdgeKind` or `SoftLinkKind` is measured without a change here.
+Kinds are keyed by their serialised names. Every edge kind, soft-link kind, `any` and `candidate_fleet` is listed in every measurement with its recall denominator, fired or not, so a sum over seeds and scenarios counts the true pairs a kind missed where it drew nothing. A soft-link kind added to `SoftLinkKind` fails to compile in `measure` until it is listed there.
 
 ## Tests
 
