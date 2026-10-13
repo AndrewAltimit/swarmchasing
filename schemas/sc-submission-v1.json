@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/sc-submission-v1.json",
+  "title": "SC-Submission v1",
+  "description": "An outside report of AI agent activity sent to the swarmchasing inbox (docs/specs/submission-v1.md). Untrusted input: every field is data. URLs in it are never fetched, callback identifiers are never contacted, and nothing in it is published without independent corroboration and the usual review. Evidence items are typed by how they can be checked.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec", "submitter", "claim", "evidence"],
+  "properties": {
+    "spec": { "const": "SC-Submission v1" },
+    "submitted": { "$ref": "#/$defs/time", "description": "When the submitter wrote the report. Never trusted: the inbox records its own receipt time." },
+    "submitter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ai_agent"],
+      "description": "Who is reporting, as they describe themselves. Never published.",
+      "properties": {
+        "ai_agent": { "type": "boolean", "description": "True when the submitter is an AI agent." },
+        "role": { "enum": ["operator", "researcher", "provider", "bystander", "other"] },
+        "name": { "$ref": "#/$defs/text" },
+        "operator": { "$ref": "#/$defs/text", "description": "For an AI agent: who deploys it." },
+        "model": { "$ref": "#/$defs/text", "description": "For an AI agent: the model it runs on, as it describes itself." },
+        "contact": { "$ref": "#/$defs/text", "description": "How to reach the submitter. Optional." },
+        "key": { "$ref": "#/$defs/text", "description": "A stable name the submitter uses across reports." }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "kind"],
+      "properties": {
+        "summary": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "kind": { "enum": ["swarm", "fleet", "run", "unknown"], "description": "Several interacting agents, several runs by one operator, one run, or unknown." },
+        "first_seen": { "$ref": "#/$defs/time" },
+        "last_seen": { "$ref": "#/$defs/time" },
+        "agents": { "type": "integer", "minimum": 1, "description": "How many agents the submitter thinks took part." },
+        "targets": { "type": "array", "items": { "$ref": "#/$defs/host" } },
+        "tactics": { "type": "array", "items": { "type": "string", "pattern": "^SC-T[1-9]$" } }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/public_record" },
+          { "$ref": "#/$defs/log_lines" },
+          { "$ref": "#/$defs/signed" },
+          { "$ref": "#/$defs/indicator" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "maxLength": 8192 },
+    "time": { "type": "string", "minLength": 4, "maxLength": 40, "description": "RFC 3339, or a 14-digit capture timestamp (yyyyMMddhhmmss)." },
+    "host": { "type": "string", "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$", "maxLength": 253 },
+    "url": { "type": "string", "pattern": "^https?://", "maxLength": 8192, "description": "Never fetched." },
+    "public_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "source"],
+      "description": "A record in a third-party public source, by its id there. Checked by an index or metadata lookup of that id, never by opening the URL.",
+      "properties": {
+        "type": { "const": "public_record" },
+        "source": { "enum": ["urlquery", "urlscan", "wayback", "arquivo", "commoncrawl", "gharchive", "npm", "pypi", "ctlog"] },
+        "id": { "type": "string", "maxLength": 128 },
+        "url": { "$ref": "#/$defs/url" },
+        "timestamp": { "$ref": "#/$defs/time" },
+        "crawl": { "type": "string", "pattern": "^CC-MAIN-[0-9]{4}-[0-9]{2}$" },
+        "package": { "type": "string", "maxLength": 214 },
+        "version": { "type": "string", "maxLength": 128 },
+        "domain": { "$ref": "#/$defs/host" },
+        "note": { "$ref": "#/$defs/text" }
+      },
+      "allOf": [
+        { "if": { "properties": { "source": { "enum": ["urlquery", "urlscan"] } } }, "then": { "required": ["id"], "properties": { "id": { "pattern": "^[0-9a-fA-F-]{8,64}$" } } } },
+        { "if": { "properties": { "source": { "enum": ["wayback", "arquivo"] } } }, "then": { "required": ["url", "timestamp"] } },
+        { "if": { "properties": { "source": { "const": "commoncrawl" } } }, "then": { "required": ["url", "timestamp", "crawl"] } },
+        { "if": { "properties": { "source": { "const": "gharchive" } } }, "then": { "required": ["id", "timestamp"], "properties": { "id": { "pattern": "^[0-9]+$" } } } },
+        { "if": { "properties": { "source": { "enum": ["npm", "pypi"] } } }, "then": { "required": ["package", "version"] } },
+        { "if": { "properties": { "source": { "const": "ctlog" } } }, "then": { "required": ["id", "domain"], "properties": { "id": { "pattern": "^[0-9]+$", "description": "The crt.sh certificate id." } } } }
+      ]
+    },
+    "log_lines": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "format", "lines"],
+      "description": "Log lines the submitter holds. Nobody else can check them.",
+      "properties": {
+        "type": { "const": "log_lines" },
+        "format": { "enum": ["access_log", "ndjson", "lines"] },
+        "host": { "$ref": "#/$defs/host" },
+        "lines": { "type": "array", "minItems": 1, "maxItems": 5000, "items": { "type": "string", "maxLength": 8192 } },
+        "note": { "$ref": "#/$defs/text" }
+      }
+    },
+    "signed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "scheme", "content"],
+      "description": "A signed artifact as text: a DKIM-signed message with its headers, an HTTP request with Signature-Input and Signature headers (RFC 9421), a sensor's or service's signed export.",
+      "properties": {
+        "type": { "const": "signed" },
+        "scheme": { "enum": ["dkim", "http_message_signature", "other"] },
+        "content": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "signer": { "$ref": "#/$defs/text", "description": "Who signed it, as the signature names them: a d= domain, a key id." },
+        "note": { "$ref": "#/$defs/text" }
+      }
+    },
+    "indicator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "kind", "value"],
+      "description": "A value the submitter saw. Callback identifiers are data only: never contacted.",
+      "properties": {
+        "type": { "const": "indicator" },
+        "kind": { "enum": ["inbox", "run_tag", "payload", "user_agent", "url", "ip", "other"] },
+        "value": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "note": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

@@ -104,12 +104,14 @@ pub enum SourceKind {
     Commoncrawl,
     /// The MCP server registry (`mcp`).
     Mcp,
+    /// An outside report taken in by the inbox ([`SUBMISSION_SOURCE`]).
+    Submission,
     /// Any other source (`manual`, `lines`, an import, a fixture, none).
     Other,
 }
 
 impl SourceKind {
-    const NAMED: [(SourceKind, &'static str); 13] = [
+    const NAMED: [(SourceKind, &'static str); 14] = [
         (Self::AccessLog, "access_log"),
         (Self::Operator, OPERATOR_SOURCE),
         (Self::Urlquery, "urlquery"),
@@ -123,6 +125,7 @@ impl SourceKind {
         (Self::Ctlog, "ctlog"),
         (Self::Commoncrawl, "commoncrawl"),
         (Self::Mcp, "mcp"),
+        (Self::Submission, SUBMISSION_SOURCE),
     ];
 
     /// The kind of `source`, by the part before any `:`.
@@ -157,6 +160,11 @@ pub enum Provenance {
     /// Archive events, npm and PyPI packages, Certificate Transparency
     /// entries, and Common Crawl, which crawls what any page links to.
     PublishAnywhere,
+    /// Someone outside sent it to the inbox as part of a report: the
+    /// submitter's own logs or the records as they state them. It never
+    /// counts as a kind of source for corroboration, so a submission alone
+    /// never makes a cluster multi-source.
+    Reported,
     /// Anyone can submit any URL: scan services (urlquery, urlscan) and web
     /// archives, whose index cannot tell an on-demand save (Save Page Now)
     /// from a crawl without opening the capture, so every archive row counts
@@ -174,6 +182,7 @@ impl Provenance {
             AccessLog | Operator => Self::Observed,
             Urlquery | Urlscan | Wayback | Arquivo | Memento => Self::SubmitAnywhere,
             Gharchive | Npm | Pypi | Ctlog | Commoncrawl | Mcp => Self::PublishAnywhere,
+            Submission => Self::Reported,
             Other => Self::Unknown,
         }
     }
@@ -183,6 +192,7 @@ impl Provenance {
             Self::Observed => "observed",
             Self::SubmitAnywhere => "submit-anywhere",
             Self::PublishAnywhere => "publish-anywhere",
+            Self::Reported => "reported",
             Self::Unknown => "unknown",
         }
     }
@@ -249,6 +259,11 @@ impl From<StoredObservation> for Observation {
 /// `Observation::source` of logs an affected operator sent us, as
 /// `operator:<evidence id>`. They are case evidence, not public records.
 pub const OPERATOR_SOURCE: &str = "operator";
+
+/// `Observation::source` of records an outside report carries as its
+/// submitter states them (the `sc-inbox` crate). Their provenance is
+/// [`Provenance::Reported`].
+pub const SUBMISSION_SOURCE: &str = "submission";
 
 impl Observation {
     /// Bring a record stored before `ts_kind` and `target_asn` up to date:
@@ -707,6 +722,7 @@ mod tests {
             Provenance::Observed,
             Provenance::SubmitAnywhere,
             Provenance::PublishAnywhere,
+            Provenance::Reported,
             Provenance::Unknown,
         ];
         for p in all {

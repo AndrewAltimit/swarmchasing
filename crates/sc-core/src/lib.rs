@@ -58,8 +58,8 @@ pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SourceKind, Tactic,
-    Tier, TsKind, fmt_ts, parse_ts, top_counts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SUBMISSION_SOURCE,
+    SourceKind, Tactic, Tier, TsKind, fmt_ts, parse_ts, top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use plant::{Corroboration, PlantSignal, PlantSignalKind};

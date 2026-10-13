@@ -13,7 +13,8 @@
 //!
 //! [`Client`] is the HTTP client every collector shares. The record sources
 //! (see [`Kind`]) implement [`Source`] and page through [`pager`]; crt.sh,
-//! security.txt and RDAP are single lookups on the client. [`psl`] finds a
+//! security.txt and RDAP are single lookups on the client, and [`lookup`]
+//! finds single records by id. [`psl`] finds a
 //! host's registrable domain, and [`asn`] fetches and loads the offline
 //! IP-to-ASN table.
 
@@ -28,6 +29,7 @@ mod commoncrawl;
 mod crtsh;
 mod ctlog;
 mod gharchive;
+pub mod lookup;
 mod mcp;
 mod memento;
 mod npm;

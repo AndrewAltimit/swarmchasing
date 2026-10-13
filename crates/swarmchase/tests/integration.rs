@@ -11,6 +11,7 @@ mod cases;
 mod common;
 mod eval;
 mod exports;
+mod inbox;
 mod notices;
 mod watch;
 mod workflow;

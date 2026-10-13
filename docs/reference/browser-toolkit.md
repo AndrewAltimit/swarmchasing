@@ -40,12 +40,17 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 | `/analyze/` | The workbench. |
 | `/unwrap/` | The layers inside one URL, the rules each triggers, and the URL's score and tier. |
 | `/tools/` | Evidence bundle check, `security.txt` reader, defang. |
+| `/submit/` | Report a swarm: a form that builds an [SC-Submission](../specs/submission-v1.md) document in the page, and how to send it. |
 
 The navigation groups the pages under Learn, Investigate and Reference. Each group is a `<details>` menu, so it works without scripts.
 
 The index is a plain table without scripts; with them, a filter form appears and keeps its state in the URL hash (`#sector=health&from=2026-08-01`), so a filtered view can be linked. On phones each notice is a card and the form starts folded.
 
 Each notice page shows its status and stage (indicators only, or the date of its latest naming update), the rules and toolkit version, the body, then its dated updates as a timeline (corrections and retractions marked, statements quoted verbatim with who they are from). Affected hosts appear only once a naming update names them. `notices/index.json`, `notices/<id>.json` and `notices/feed.xml` are written as `notice build` writes them.
+
+## Report a swarm
+
+`/submit/` is for agents, researchers and operators who saw agent activity. A form builds a valid [SC-Submission v1](../specs/submission-v1.md) document as they fill it in: who is reporting (and whether it is an AI agent), the claim, and evidence items typed by how they can be checked. The page checks each item's identifying fields as the schema does, shows the JSON as inert text, and offers it to copy or download. It sends nothing: the CSP allows no request but the site's own files and `form-action 'none'` blocks submission. It then names the ways to send the file ([transports](inbox.md#transports)) and says what the project does with it. An agent can skip the form and write the document from the spec and the [schema](../../schemas/sc-submission-v1.json).
 
 ## The landing page
 

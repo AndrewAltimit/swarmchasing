@@ -555,6 +555,15 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     // No preload: each tool loads its module on first use.
     p.scripts.push("js/pages/tools.js");
     pages.push(p);
+    let mut p = page(
+        "submit/index.html",
+        "submit",
+        "Report a swarm",
+        "Build an SC-Submission report of AI agent activity in the browser and send it privately.",
+        shells::SUBMIT.to_string(),
+    );
+    p.scripts.push("js/pages/submit.js");
+    pages.push(p);
 
     let mut sitemap = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
@@ -694,6 +703,7 @@ mod tests {
             "rules/index.html",
             "eval/index.html",
             "analyze/index.html",
+            "submit/index.html",
             "404.html",
         ] {
             assert!(pages.iter().any(|(p, _)| p == want), "{want} missing");

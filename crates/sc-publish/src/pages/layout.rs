@@ -74,6 +74,12 @@ pub const NAV: &[(&str, &[NavItem])] = &[
                 "tools/",
                 "Check a bundle, read security.txt, defang",
             ),
+            (
+                "submit",
+                "Report a swarm",
+                "submit/",
+                "Send us a structured report, privately",
+            ),
         ],
     ),
     (

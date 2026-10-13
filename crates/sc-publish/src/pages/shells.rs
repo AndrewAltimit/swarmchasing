@@ -121,6 +121,58 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <pre id="defang-out" class="report" aria-live="polite"></pre>
 </section>"#;
 
+/// Report a swarm: a form that builds an SC-Submission v1 document in the
+/// page ([`site/js/pages/submit.js`]). The page sends nothing.
+pub const SUBMIT: &str = r##"<header class="page-head compact"><h1>Report a swarm</h1>
+<p class="lede">Saw AI agents probing, scraping or coordinating against others? Describe it here and the page builds an <a href="../docs/specs/submission-v1/">SC-Submission v1</a> document you send us privately. Agents may write the document directly from the spec and its <a href="https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/sc-submission-v1.json">schema</a>. This page sends nothing: everything stays in your browser until you send the file yourself.</p></header>
+<section class="card" aria-labelledby="sub-who-h">
+<h2 id="sub-who-h">Who is reporting</h2>
+<p class="hint">Kept private and never published. A report may be anonymous.</p>
+<div class="row">
+<label>Are you an AI agent? <select id="sub-agent"><option value="false">No, a person or organisation</option><option value="true">Yes, an AI agent</option></select></label>
+<label>Role <select id="sub-role"><option value="">(not given)</option><option value="operator">Operator of an affected system</option><option value="researcher">Researcher</option><option value="provider">AI provider</option><option value="bystander">Bystander</option><option value="other">Other</option></select></label>
+</div>
+<div class="row">
+<label class="grow">Name <input id="sub-name" spellcheck="false"></label>
+<label class="grow">Contact <input id="sub-contact" spellcheck="false" placeholder="optional"></label>
+</div>
+<div class="row" id="sub-agent-row" hidden>
+<label class="grow">Deployed by <input id="sub-operator" spellcheck="false"></label>
+<label class="grow">Model <input id="sub-model" spellcheck="false"></label>
+</div>
+</section>
+<section class="card" aria-labelledby="sub-claim-h">
+<h2 id="sub-claim-h">What you saw</h2>
+<label for="sub-summary">Summary</label>
+<textarea id="sub-summary" rows="4" spellcheck="true"></textarea>
+<div class="row">
+<label>Kind <select id="sub-kind"><option value="unknown">Not sure</option><option value="run">One agent run</option><option value="fleet">Several runs by one operator</option><option value="swarm">Several agents interacting</option></select></label>
+<label>First seen <input id="sub-first" type="datetime-local"></label>
+<label>Last seen <input id="sub-last" type="datetime-local"></label>
+<label>Agents <input id="sub-agents" type="number" min="1" step="1"></label>
+</div>
+<div class="row"><label class="grow">Target hosts <input id="sub-targets" spellcheck="false" placeholder="www.example.org, api.example.org"></label></div>
+</section>
+<section class="card" aria-labelledby="sub-ev-h">
+<h2 id="sub-ev-h">Evidence</h2>
+<p class="hint">What would be hard to fabricate counts most: records in public sources (scan services, web archives, GH Archive, package registries, certificate logs) dated well before you report, and signed requests or signed exports. Your own logs help, but only you can check them; bare values help least. We never open a URL you give, and never contact a callback inbox you name: we look records up by their id.</p>
+<div class="row">
+<label>Add <select id="ev-type"><option value="public_record">A public record</option><option value="log_lines">Log lines</option><option value="signed">A signed artifact</option><option value="indicator">An indicator value</option></select></label>
+<button type="button" id="ev-add">Add evidence</button>
+</div>
+<div id="ev-list"></div>
+</section>
+<section class="card" aria-labelledby="sub-out-h">
+<h2 id="sub-out-h">Your report</h2>
+<div id="sub-problems" class="alert" role="status" hidden></div>
+<div class="row"><button type="button" id="sub-copy" class="primary">Copy JSON</button><button type="button" id="sub-dl">Download .json</button></div>
+<pre id="sub-json" class="report" tabindex="0" aria-label="Submission JSON"></pre>
+<h3>Send it</h3>
+<p>Open a <a href="https://github.com/AndrewAltimit/swarmchasing/security/advisories/new">GitHub private vulnerability report</a> on this repository and paste the JSON into it, or attach the file. If we sent you a report, you may reply to it with the file attached instead. Please do not open a public issue: it would publish the hosts before anyone checked them.</p>
+<h3>What happens to it</h3>
+<p class="hint">Every report is treated as untrusted. We check the records you cite by their ids, compare them with what our own watch already holds, and look closer only when the evidence would have been hard to fabricate. Nothing you send is published. If we open a case, it rests on records we verified ourselves and goes through the usual review; you are not named unless you ask to be. See the <a href="../docs/reference/inbox/">inbox reference</a> and the <a href="../docs/policies/#outside-submissions">policy</a>.</p>
+</section>"##;
+
 /// Shown above the operators' guide: the access-log check, then how to tell
 /// a report is ours, when a name becomes public, and how to reach the
 /// project without naming a host in public.

@@ -36,6 +36,17 @@ How the analysis works is in [methodology.md](methodology.md). What an operator 
 
   The scheduled watch may ask a hosted model the same way, through the admin's own Claude Code login on the runner, about each run's new leads from those public sources only; its suggestions stay in the data directory and are never labels.
 
+## Outside submissions
+
+Anyone, an AI agent included, may report agent activity as an [SC-Submission](specs/submission-v1.md) document. How the inbox handles one is in the [inbox reference](reference/inbox.md).
+
+- **Untrusted.** A submission may be fabricated in whole or part, or sent to plant records or steer attribution. Every field is data. Text shaped like an instruction to its reader is flagged and shown inert, and no tool or model acts on it.
+- **Passive checks only.** Every URL in a submission is treated as one an agent submitted: never fetched. A referenced public record is checked by an index or metadata lookup of its id, and callback identifiers are matched against records already held, never contacted.
+- **Only hard-to-fabricate evidence reaches the admin.** Triage grades only the records the toolkit found itself: records the watch held before the submission arrived, records verified in an independent log that predate it, and content covered by a third party's signature the admin checked. Assertions, the submitter's own logs and records made just before the submission do not reach the admin's attention on their own.
+- **Never published unreviewed.** A submission is never published. Its records reach a notice only through a case, with independent corroboration and the usual review, checklist and second review. A submitter's own logs never go into a case.
+- **Submitters withheld.** A submitter's identity, contact and transport address stay in the data directory. Reports and notices cite what the project verified, never who sent it, unless the submitter asks to be credited and the admin agrees.
+- **Abuse limits.** Documents are size-capped, rate-limited per sender and checked for duplicates; refused ones are not stored.
+
 ## Reporting and publication
 
 | Topic | Policy |
