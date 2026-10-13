@@ -104,6 +104,8 @@ pub enum SourceKind {
     Commoncrawl,
     /// The MCP server registry (`mcp`).
     Mcp,
+    /// Wikimedia EventStreams (`wikimedia`): links added to wiki pages.
+    Wikimedia,
     /// An outside report taken in by the inbox ([`SUBMISSION_SOURCE`]).
     Submission,
     /// Any other source (`manual`, `lines`, an import, a fixture, none).
@@ -111,7 +113,7 @@ pub enum SourceKind {
 }
 
 impl SourceKind {
-    const NAMED: [(SourceKind, &'static str); 14] = [
+    const NAMED: [(SourceKind, &'static str); 15] = [
         (Self::AccessLog, "access_log"),
         (Self::Operator, OPERATOR_SOURCE),
         (Self::Urlquery, "urlquery"),
@@ -125,6 +127,7 @@ impl SourceKind {
         (Self::Ctlog, "ctlog"),
         (Self::Commoncrawl, "commoncrawl"),
         (Self::Mcp, "mcp"),
+        (Self::Wikimedia, "wikimedia"),
         (Self::Submission, SUBMISSION_SOURCE),
     ];
 
@@ -157,8 +160,8 @@ pub enum Provenance {
     /// operator sent.
     Observed,
     /// Anyone can publish the record under a name of their choosing: GH
-    /// Archive events, npm and PyPI packages, Certificate Transparency
-    /// entries, and Common Crawl, which crawls what any page links to.
+    /// Archive events, npm and PyPI packages, links added to wiki pages,
+    /// Certificate Transparency entries, and Common Crawl, which crawls what any page links to.
     PublishAnywhere,
     /// Someone outside sent it to the inbox as part of a report: the
     /// submitter's own logs or the records as they state them. It never
@@ -181,7 +184,7 @@ impl Provenance {
         match SourceKind::of(source) {
             AccessLog | Operator => Self::Observed,
             Urlquery | Urlscan | Wayback | Arquivo | Memento => Self::SubmitAnywhere,
-            Gharchive | Npm | Pypi | Ctlog | Commoncrawl | Mcp => Self::PublishAnywhere,
+            Gharchive | Npm | Pypi | Ctlog | Commoncrawl | Mcp | Wikimedia => Self::PublishAnywhere,
             Submission => Self::Reported,
             Other => Self::Unknown,
         }

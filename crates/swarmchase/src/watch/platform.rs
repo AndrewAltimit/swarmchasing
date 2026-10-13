@@ -1,5 +1,5 @@
-//! The platform pass: coordinated-account swarms on GitHub, npm, PyPI and
-//! the Hugging Face Hub (`sc_core::platform`).
+//! The platform pass: coordinated-account swarms on GitHub, npm, PyPI, the
+//! Hugging Face Hub and Wikimedia wikis (`sc_core::platform`).
 //!
 //! Each run pulls the watchlist's `[[platform.source]]` entries, adds the
 //! events carried from earlier runs, and groups them. Only events worth
@@ -66,6 +66,10 @@ pub struct SourceLine {
     pub coverage: String,
     pub automation: usize,
     pub capped: usize,
+    /// Declared coding-agent App events by product.
+    pub declared: BTreeMap<String, usize>,
+    /// Lookalike App logins: login to (product claimed, events).
+    pub lookalikes: BTreeMap<String, (String, usize)>,
     pub error: Option<String>,
 }
 
@@ -128,6 +132,8 @@ pub fn run(
                 line.coverage = p.coverage.line();
                 line.automation = p.automation;
                 line.capped = p.capped;
+                line.declared = p.declared;
+                line.lookalikes = p.lookalikes;
                 batch.extend(p.events);
             }
             Err(e) => {
@@ -225,6 +231,22 @@ pub fn section(o: &Outcome) -> String {
                         String::new()
                     }
                 );
+                if !l.declared.is_empty() {
+                    let d: Vec<String> =
+                        l.declared.iter().map(|(k, n)| format!("{k} {n}")).collect();
+                    let _ = writeln!(
+                        t,
+                        "  - Declared coding-agent Apps (tallied, not grouped): {}.",
+                        d.join(", ")
+                    );
+                }
+                for (login, (claim, n)) in &l.lookalikes {
+                    let _ = writeln!(
+                        t,
+                        "  - Spoofing lead: App `{}` ({n} event(s)) claims {claim} by name but is not its declared App; check who owns it.",
+                        login.replace('`', "'")
+                    );
+                }
             }
         }
     }
@@ -267,6 +289,7 @@ pub fn render_swarm(s: &PlatformSwarm, tag: Option<&str>) -> String {
                 sc_core::platform::Basis::NearDuplicate => "near-duplicate text",
                 sc_core::platform::Basis::Template => "a shared template",
                 sc_core::platform::Basis::NameTemplate => "templated names",
+                sc_core::platform::Basis::Target => "one target",
             })
             .collect::<Vec<_>>()
             .join(", ")
@@ -292,6 +315,14 @@ pub fn render_swarm(s: &PlatformSwarm, tag: Option<&str>) -> String {
             .map(|(k, n)| format!("{k} ({n})"))
             .collect();
         let _ = writeln!(t, "- Residue: {}", r.join(", "));
+    }
+    if !s.self_id.is_empty() {
+        let r: Vec<String> = s
+            .self_id
+            .iter()
+            .map(|(k, n)| format!("{k} ({n})"))
+            .collect();
+        let _ = writeln!(t, "- Harness self-identification (weak): {}", r.join(", "));
     }
     if !s.caveats.is_empty() {
         let _ = writeln!(t, "- Rule out: {}.", s.caveats.join("; "));
@@ -331,7 +362,15 @@ mod tests {
             toml::from_str(include_str!("../../../../watchlist.toml")).unwrap();
         for s in &wl.platform.sources {
             assert!(
-                ["gharchive", "npm", "pypi", "huggingface"].contains(&s.kind.as_str()),
+                [
+                    "gharchive",
+                    "npm",
+                    "pypi",
+                    "huggingface",
+                    "wikimedia",
+                    "golang"
+                ]
+                .contains(&s.kind.as_str()),
                 "{}",
                 s.kind
             );
@@ -355,6 +394,7 @@ mod tests {
             burst: Default::default(),
             new_accounts: None,
             residue: vec![("text.chat_opener".into(), 4)],
+            self_id: vec![("selfid.claude_code".into(), 2)],
             targets: vec![("some.example/repo".into(), 2)],
             distinct_targets: 3,
             p_chance: 1e-6,
@@ -371,6 +411,16 @@ mod tests {
                 swarms: vec![s],
                 ..Default::default()
             },
+            sources: vec![SourceLine {
+                name: "gharchive-coordination".into(),
+                declared: [("Codex (OpenAI)".to_string(), 3)].into(),
+                lookalikes: [(
+                    "claude-fleet[bot]".to_string(),
+                    ("Claude GitHub App (Anthropic)".to_string(), 2),
+                )]
+                .into(),
+                ..Default::default()
+            }],
             new: ["PS-0000abcd".to_string()].into(),
             ..Default::default()
         };
@@ -380,5 +430,8 @@ mod tests {
         assert!(t.contains("hxxps://github[.]com/a/b/issues/1"), "{t}");
         assert!(t.contains("some[.]example/repo (2)"), "{t}");
         assert!(!t.contains("https://"), "{t}");
+        assert!(t.contains("Codex (OpenAI) 3"), "{t}");
+        assert!(t.contains("Spoofing lead: App `claude-fleet[bot]`"), "{t}");
+        assert!(t.contains("selfid.claude_code (2)"), "{t}");
     }
 }

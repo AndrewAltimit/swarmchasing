@@ -1,6 +1,6 @@
 //! Coordinated-account swarms on public platforms (GitHub, npm, PyPI,
-//! Hugging Face): many accounts acting alike, found in public event archives
-//! and registry metadata.
+//! Hugging Face, Go modules, Wikimedia wikis): many accounts acting alike,
+//! found in public event archives, event streams and registry metadata.
 //!
 //! A [`PlatformEvent`] is one public action (an issue opened, a comment, a
 //! repository or package created) reduced at collection to what grouping
@@ -11,14 +11,19 @@
 //!
 //! [`detect`] groups events into candidate swarms by near-duplicate text
 //! (MinHash over word shingles), shared templates (the same text once slot
-//! values are taken out) and templated names of created items, then weighs
-//! each group by a chance model: how likely its densest burst is if the same
-//! posts fell at random over the window, and how likely so many of its
-//! accounts are new given how many accounts in the window are. Model-output
-//! residue and target overlap are reported beside the chance. Known benign
-//! automation is dropped at collection ([`automation`]) and groups whose
-//! text matches a documented benign template are listed as suppressed, not
-//! reported. A candidate is a hint for the admin, never a finding.
+//! values are taken out), templated names of created items, and, for
+//! text-less events (stars, forks, pull requests opened), the one target
+//! they act on. It then weighs each group by a chance model: how likely its
+//! densest burst is if the same posts fell at random over the window, and
+//! how likely so many of its accounts are new given how many accounts in
+//! the window are. A text-less group, and a group of wiki edits, needs its
+//! own burst: account age alone is a property of what such groups are (new
+//! editors' sandboxes, a new project's first stars). Model-output residue,
+//! coding-harness self-identification and target overlap are reported
+//! beside the chance. Known benign automation is dropped at collection
+//! ([`automation`]) and groups whose text matches a documented benign
+//! template are listed as suppressed, not reported. A candidate is a hint
+//! for the admin, never a finding.
 
 pub mod automation;
 mod detect;
@@ -29,7 +34,7 @@ pub mod text;
 mod tests;
 
 pub use detect::{detect, detect_platform};
-pub use text::{TextSketch, name_template, sketch};
+pub use text::{TextSketch, name_template, sketch, wiki_title_template};
 
 use crate::rules::Rules;
 use serde::{Deserialize, Serialize};
@@ -45,6 +50,11 @@ pub enum Platform {
     Npm,
     Pypi,
     HuggingFace,
+    /// Wikimedia wikis (Wikipedia and its sister projects), from
+    /// EventStreams.
+    Wikimedia,
+    /// Go modules, from the module proxy's index.
+    Go,
 }
 
 impl Platform {
@@ -54,6 +64,8 @@ impl Platform {
             Self::Npm => "npm",
             Self::Pypi => "pypi",
             Self::HuggingFace => "huggingface",
+            Self::Wikimedia => "wikimedia",
+            Self::Go => "go",
         }
     }
 }
@@ -73,6 +85,15 @@ pub enum Action {
     SpaceCreated,
     ModelCreated,
     DatasetCreated,
+    /// A repository starred (GitHub `WatchEvent`).
+    Starred,
+    /// A repository forked.
+    Forked,
+    ReleasePublished,
+    DiscussionOpened,
+    CommitComment,
+    /// A wiki page created or edited (a GitHub wiki, a Wikimedia wiki).
+    WikiEdited,
     #[default]
     Other,
 }
@@ -89,11 +110,17 @@ impl Action {
             Self::SpaceCreated => "Spaces created",
             Self::ModelCreated => "models created",
             Self::DatasetCreated => "datasets created",
+            Self::Starred => "stars",
+            Self::Forked => "forks",
+            Self::ReleasePublished => "releases published",
+            Self::DiscussionOpened => "discussions opened",
+            Self::CommitComment => "commit comments",
+            Self::WikiEdited => "wiki edits",
             Self::Other => "other events",
         }
     }
 
-    /// Creates a named item, so its name can follow a template.
+    /// Creates or edits a named item, so its name can follow a template.
     pub fn creates(self) -> bool {
         matches!(
             self,
@@ -102,14 +129,25 @@ impl Action {
                 | Self::SpaceCreated
                 | Self::ModelCreated
                 | Self::DatasetCreated
+                | Self::WikiEdited
         )
+    }
+
+    /// Text-less events of this action are grouped by the target they act
+    /// on: many accounts starring, forking or opening pull requests on one
+    /// repository at once. GitHub's event payloads carry no pull request
+    /// title or body, so a pull request opened is text-less.
+    pub fn by_target(self) -> bool {
+        matches!(self, Self::Starred | Self::Forked | Self::PullOpened)
     }
 }
 
 /// One public action on a platform, as a collector keeps it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlatformEvent {
-    /// Stable id: `gh:<event id>`, `npm:<name>@<version>`, `pypi:<name>@<version>`, `hf:<kind>:<id>`.
+    /// Stable id: `gh:<event id>`, `npm:<name>@<version>`,
+    /// `pypi:<name>@<version>`, `hf:<kind>:<id>`, `wm:<wiki>:<revision>`,
+    /// `go:<module>@<version>`.
     pub id: String,
     pub platform: Platform,
     pub action: Action,
@@ -124,7 +162,9 @@ pub struct PlatformEvent {
     /// proxy that does not identify the account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor_rank: Option<u64>,
-    /// The platform says this is the account's first contribution anywhere.
+    /// The platform says this is the account's first contribution anywhere
+    /// (a wiki account's first edit). GitHub's event payloads no longer
+    /// carry the author association, so GitHub events leave it unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_timer: Option<bool>,
     /// What it acted on: `owner/repo`, a package name, a Hub repo id.
@@ -236,6 +276,8 @@ pub enum Basis {
     Template,
     /// Created items whose names follow one template.
     NameTemplate,
+    /// Text-less events on one target ([`Action::by_target`]).
+    Target,
 }
 
 /// The densest burst of a group and its chance.
@@ -294,6 +336,10 @@ pub struct PlatformSwarm {
     /// Residue rule ids and how many members carry each.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub residue: Vec<(String, usize)>,
+    /// Coding-harness self-identification ids ([`residue::self_id`]) and
+    /// how many members carry each: weak context, never evidence alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub self_id: Vec<(String, usize)>,
     /// Targets by accounts that acted on them, most first (at most ten).
     pub targets: Vec<(String, usize)>,
     pub distinct_targets: usize,

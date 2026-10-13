@@ -13,7 +13,8 @@ A public record is a trace of a request that a third party publishes to anyone, 
 | Submit-anywhere archives | On-demand saves of any URL anyone submits | Arquivo.pt SavePageNow, its `SAWP` collections |
 | Certificate Transparency logs | Certificates issued for a name | crt.sh lookups; CT logs read directly |
 | Package registries | Package metadata: names, versions, publish times, maintainers | npm search, PyPI feeds |
-| Public code-host event streams | Public events: repository creation, pushes, issues | GH Archive |
+| Public code-host event streams | Public events: repository creation, issues, comments, stars, forks | GH Archive |
+| Public wiki edit streams | Edits and the external links they add | Wikimedia EventStreams |
 | Agent protocol footprints | Archive index rows for the well-known files agents and agent platforms serve | Wayback CDX for agent cards, agent registration files and signature key directories |
 | Tool-server registries | Published tool servers: name, version, publish time, declared hosts | The official MCP Registry |
 | Published security contacts | An organisation's security.txt, or its registrar's abuse address | security.txt, RDAP |

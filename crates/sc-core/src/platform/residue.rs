@@ -6,6 +6,10 @@
 //! loop. The Markdown rules are not: Markdown is how people write on these
 //! platforms. A few text-only shapes no URL carries are added below, each
 //! one weak alone: people paste chatbot answers too.
+//!
+//! [`self_id`] is a separate list: the footers, trailers and session links
+//! coding-agent harnesses add. It is weaker still, context for the admin and
+//! never part of a group's residue.
 
 use crate::rules::{Matcher, Rules};
 use regex::{Regex, RegexBuilder};
@@ -38,6 +42,59 @@ pub const TEXT_RESIDUE: [(&str, &str); 5] = [
     ),
     ("text.regenerate", r"\bregenerate\s+response\b"),
 ];
+
+/// Coding-harness self-identification: the footers, trailers and session
+/// links agent harnesses add to what they write. (id, pattern),
+/// case-insensitive. Weak context, never strong evidence: people run these
+/// harnesses for their own work every day, and anyone can paste the text.
+/// Kept apart from residue so it never makes a group residue-heavy.
+pub const SELF_ID: [(&str, &str); 7] = [
+    (
+        "selfid.claude_code",
+        r"generated with \[?claude code\]?|co-authored-by:\s*claude\b|claude\.ai/code\b",
+    ),
+    (
+        "selfid.codex",
+        r"chatgpt\.com/codex/tasks/|co-authored-by:\s*(chatgpt\s+)?codex\b",
+    ),
+    ("selfid.devin", r"app\.devin\.ai/sessions/"),
+    (
+        "selfid.copilot",
+        r"co-authored-by:\s*copilot\b|copilot-swe-agent\b",
+    ),
+    (
+        "selfid.cursor",
+        r"cursor\.com/(background-agent|agents)\b|co-authored-by:\s*cursor\s+agent\b",
+    ),
+    ("selfid.jules", r"jules\.google(\.com)?/task/"),
+    ("selfid.aider", r"co-authored-by:\s*aider\b"),
+];
+
+fn self_id_set() -> &'static [(&'static str, Regex)] {
+    static SET: OnceLock<Vec<(&'static str, Regex)>> = OnceLock::new();
+    SET.get_or_init(|| {
+        SELF_ID
+            .iter()
+            .map(|(id, p)| {
+                let re = RegexBuilder::new(p)
+                    .case_insensitive(true)
+                    .build()
+                    .expect("self-identification patterns compile");
+                (*id, re)
+            })
+            .collect()
+    })
+}
+
+/// Self-identification ids that fire on `text`, in [`SELF_ID`] order.
+pub fn self_id(text: &str) -> Vec<String> {
+    let head: String = text.chars().take(64 * 1024).collect();
+    self_id_set()
+        .iter()
+        .filter(|(_, re)| re.is_match(&head))
+        .map(|(id, _)| (*id).to_string())
+        .collect()
+}
 
 fn text_set() -> &'static [(&'static str, Regex)] {
     static SET: OnceLock<Vec<(&'static str, Regex)>> = OnceLock::new();
@@ -111,6 +168,33 @@ mod tests {
             hit("<tool_call>{\"name\": \"open_issue\"}</tool_call>")
                 .contains(&"marker.tool_call_markup".to_string())
         );
+    }
+
+    #[test]
+    fn harness_self_identification_is_its_own_list() {
+        let r = Rules::default_rules();
+        let t = "Fix the parser.\n\nGenerated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>";
+        assert_eq!(self_id(t), ["selfid.claude_code"]);
+        assert!(text_residue(t, &r).is_empty(), "self-id is not residue");
+        assert_eq!(
+            self_id("Codex task: https://chatgpt.com/codex/tasks/task_e_0123"),
+            ["selfid.codex"]
+        );
+        assert_eq!(
+            self_id("Devin session: https://app.devin.ai/sessions/abc123"),
+            ["selfid.devin"]
+        );
+        assert_eq!(
+            self_id("See https://jules.google.com/task/123"),
+            ["selfid.jules"]
+        );
+        for t in [
+            "I asked Claude about this and it agreed.",
+            "The cursor jumps to the end of the line.",
+            "Our code review found a copilot setting.",
+        ] {
+            assert!(self_id(t).is_empty(), "{t}: {:?}", self_id(t));
+        }
     }
 
     #[test]

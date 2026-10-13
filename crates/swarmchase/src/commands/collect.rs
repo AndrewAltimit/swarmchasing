@@ -47,6 +47,10 @@ pub enum CollectSource {
     /// Official MCP Registry servers whose name or declared URLs match
     /// PATTERN (`*` for all), updated since --from. Metadata only.
     Mcp(CollectArgs),
+    /// External links added to Wikimedia wiki pages (EventStreams
+    /// `page-links-change`) matching PATTERN, from an hour back; --scan is
+    /// the wall-clock minutes read. The links are never fetched.
+    Wikimedia(CollectArgs),
     /// Fetch urlquery.net reports by ID (needs URLQUERY_APIKEY), e.g. to turn a
     /// labelled report list such as Transluce's reports.csv into records for
     /// `swarmchase eval`. Appends to --out and skips IDs already in it, so an
@@ -134,6 +138,7 @@ pub fn run(source: CollectSource) -> Result<()> {
         CollectSource::Ctlog(a) => (a, Kind::CtLog),
         CollectSource::Wellknown(a) => (a, Kind::WellKnown),
         CollectSource::Mcp(a) => (a, Kind::Mcp),
+        CollectSource::Wikimedia(a) => (a, Kind::Wikimedia),
     };
     let mut client = Client::new(Duration::from_secs(2))?;
     if args.cache {

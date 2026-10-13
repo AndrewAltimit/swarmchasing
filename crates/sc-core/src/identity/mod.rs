@@ -83,13 +83,29 @@ pub struct DeclaredAgent {
     pub source: String,
 }
 
+/// A coding-agent product that acts on GitHub as a GitHub App (or as an
+/// account the platform runs for it), named by its login.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeclaredApp {
+    /// The actor login events carry (`claude[bot]`, `Copilot`), matched
+    /// case-insensitively and whole.
+    pub login: String,
+    pub provider: String,
+    pub product: String,
+    /// Words that claim this product in another App's login (`claude` in
+    /// `claude-fleet[bot]`).
+    #[serde(default)]
+    pub names: Vec<String>,
+    pub source: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CatalogMeta {
     #[serde(default)]
     pub version: String,
 }
 
-/// The catalog: products, range files, directories.
+/// The catalog: products, range files, directories, GitHub Apps.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Catalog {
     #[serde(default)]
@@ -100,6 +116,8 @@ pub struct Catalog {
     pub directories: Vec<DirectoryFile>,
     #[serde(default, rename = "agent")]
     pub agents: Vec<DeclaredAgent>,
+    #[serde(default, rename = "github_app")]
+    pub github_apps: Vec<DeclaredApp>,
 }
 
 impl Catalog {
@@ -155,6 +173,35 @@ impl Catalog {
                 let before = lower[..i].chars().next_back();
                 let after = lower[i + t.len()..].chars().next();
                 !before.is_some_and(token_char) && !after.is_some_and(token_char)
+            })
+        })
+    }
+
+    /// The declared App acting under `login`, by whole login.
+    pub fn github_app(&self, login: &str) -> Option<&DeclaredApp> {
+        self.github_apps
+            .iter()
+            .find(|a| a.login.eq_ignore_ascii_case(login))
+    }
+
+    /// The declared App an undeclared GitHub App login (`name[bot]`) claims
+    /// by name: a word of the login that starts with one of an App's
+    /// `names`. A lookalike is a spoofing lead, not a finding: any App picks
+    /// its own name.
+    pub fn github_lookalike(&self, login: &str) -> Option<&DeclaredApp> {
+        let l = login.to_ascii_lowercase();
+        let stem = l.strip_suffix("[bot]")?;
+        if self.github_app(login).is_some() {
+            return None;
+        }
+        let words: Vec<&str> = stem
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .collect();
+        self.github_apps.iter().find(|a| {
+            a.names.iter().any(|n| {
+                let n = n.to_ascii_lowercase();
+                words.iter().any(|w| w.starts_with(n.as_str()))
             })
         })
     }
