@@ -1819,6 +1819,7 @@ dependencies = [
 name = "sc-sim"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "sc-core",
  "serde",
  "serde_json",

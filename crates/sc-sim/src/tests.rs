@@ -47,3 +47,72 @@ fn measurements_add() {
     assert_eq!(two.records, 2 * one.records);
     assert_eq!(two.edges["any"].found, 2 * one.edges["any"].found);
 }
+
+const SCENARIOS: &str = include_str!("../../../samples/sim/scenarios.toml");
+
+fn scenario(name: &str) -> Scenario {
+    let f = ScenarioFile::parse(SCENARIOS).unwrap();
+    f.scenario.into_iter().find(|s| s.name == name).unwrap()
+}
+
+#[test]
+fn committed_scenarios_parse() {
+    let f = ScenarioFile::parse(SCENARIOS).unwrap();
+    assert!(f.scenario.len() >= 5);
+    assert!(ScenarioFile::parse("[[scenario]]\nname = \"x\"\n").is_err());
+}
+
+#[test]
+fn generation_is_deterministic_and_labelled() {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    let s = scenario("sink");
+    let a = to_ndjson(&generate(&s, 5, &p));
+    assert_eq!(a, to_ndjson(&generate(&s, 5, &p)));
+    assert_ne!(a, to_ndjson(&generate(&s, 6, &p)));
+    let t = Truth::from_ndjson(&a);
+    assert_eq!(t.rows.len(), a.lines().count());
+    for line in a.lines() {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        assert_eq!(v["synthetic"], true);
+        assert!(v["cite"].as_str().unwrap().starts_with("synthetic: sc-sim"));
+    }
+    let obs = parse_input(&a, Format::Auto, &FieldMap::default()).observations;
+    assert!(obs.iter().all(|o| o.ts > 0));
+    // Every target host is a reserved name the generator chose.
+    let hosts: Vec<_> = obs
+        .iter()
+        .filter_map(|o| sc_core::extract(o, &rules).target_host)
+        .collect();
+    assert!(!hosts.is_empty());
+    assert!(hosts.iter().all(|h| h.ends_with(".example")), "{hosts:?}");
+}
+
+#[test]
+fn a_swarm_sharing_one_inbox_draws_shared_sink_edges() {
+    let rules = Rules::default_rules();
+    let file = ScenarioFile {
+        scenario: vec![scenario("sink")],
+    };
+    let r = bench(&file, &Palette::default_palette(&rules), &rules);
+    let m = &r[0].1;
+    let s1 = &m.edges["shared_sink"];
+    assert!(s1.correct > 0 && s1.correct == s1.pairs, "{}", render(m));
+}
+
+#[test]
+fn separate_runs_get_separate_identifiers() {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    let text = to_ndjson(&generate(&scenario("fleet"), 51, &p));
+    let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
+    let truth = Truth::from_ndjson(&text);
+    let mut owner: std::collections::BTreeMap<String, String> = Default::default();
+    for o in &obs {
+        let run = &truth.get(&o.id).unwrap().run;
+        for f in sc_core::extract(o, &rules).features {
+            let prev = owner.entry(f.to_string()).or_insert_with(|| run.clone());
+            assert_eq!(prev, run, "{f} shared across runs");
+        }
+    }
+}

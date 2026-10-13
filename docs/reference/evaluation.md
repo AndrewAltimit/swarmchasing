@@ -166,6 +166,17 @@ The unit is a pair of true runs. An edge side is placed on the run most of its r
 
 Every proportion has its Wilson interval. Kinds are read from the analysis, so a new edge or soft-link kind appears without a change to the command. The numbers are reported, never gated. The committed labelled groups are hand-written and few, so the intervals are wide and the numbers say whether a detector fires on its designed case, not how often it would on real traffic.
 
+### Simulated scenarios
+
+`swarmchase sim bench samples/sim/scenarios.toml` generates labelled records for each scenario in the file, under each of its seeds, analyses each set on its own and prints the measurement above per scenario and summed. `sim write` saves the records instead, as ordinary labelled files that `eval` and `sim score` also read.
+
+A scenario lists actors: single agents, swarms (`modes`: `sink` for one shared callback inbox, `sync` for runs that start and stop together, `roles` for a reader followed by attackers on the same hosts, `shard` for one host family split between agents), fleets on one scaffold with separate inboxes, schedulers sharding a list from one client, planters copying another actor's identifiers from a different client, and background: people reading through relays, mail gateways, on-the-hour jobs, crawlers, people running scanners and people pasting a chatbot's payloads. Each actor has a pace, a retry rate and a time basis (request, submit or capture).
+
+The generator writes no request content. Each record copies a committed evaluation record and changes its target host to a reserved `.example` name, its linking identifiers and captured secrets to values of its own run (or of its swarm, for a shared inbox), and for a retry a cache-busting parameter. What is simulated is the senders, their clients, the times and the order.
+
+What this does not model: the variety of real request content (every actor draws from one small set of records, so habit soft links such as relay stacks and payload dialects join unrelated agents more often than they would on real traffic), hand-offs (S2), headers, real address and network structure, and archive or scan-service behaviour beyond the timestamp kind. Simulator numbers say how the detectors behave on the modelled situations, not how often they are right on real records.
+
+
 ## Frozen splits
 
 `--split` writes the ids of a held-out side to `--split-out` and exits. Write it to the data directory, never to the repository.

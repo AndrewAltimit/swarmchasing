@@ -115,13 +115,14 @@ fn evaluation_set_numbers_hold() {
     assert_eq!((w.edges, w.on_groups, w.across_groups), (4, 3, 0), "{w:?}");
     assert_eq!(w.on_non_swarm, [0, 0, 0, 0, 1], "S5 only: {w:?}");
 
-    // Fleet proposals: the three clusters on one harness pair by scaffold,
-    // the planner and its worker by co-activity, and the eight operators on
-    // one popular framework's default shape pair by neither.
+    // Fleet proposals: the three clusters on one harness pair by scaffold, and
+    // so do the sharded scheduler's two shards (one fleet in the interaction
+    // samples); the planner and its worker pair by co-activity, and the eight
+    // operators on one popular framework's default shape pair by neither.
     let f = &report.fleets;
     let row = |name: &str| f.rows.iter().find(|r| r.name == name);
     let scaffold = row("shared scaffold").expect("scaffold row");
-    assert_eq!((scaffold.proposed, scaffold.correct), (3, 3), "{f:?}");
+    assert_eq!((scaffold.proposed, scaffold.correct), (4, 4), "{f:?}");
     let co = row("co-activity").expect("co-activity row");
     assert_eq!((co.proposed, co.correct), (1, 1), "{f:?}");
 }
