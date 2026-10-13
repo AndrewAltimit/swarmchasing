@@ -5,7 +5,8 @@ use crate::input::{InputArgs, load_rules, read_records};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_sim::{
-    Measurement, Palette, ScenarioFile, Truth, bench, generate, measure, render, to_ndjson,
+    Gate, Measurement, Palette, ScenarioFile, Truth, bench, generate, measure, null_counts, render,
+    to_ndjson,
 };
 use std::path::PathBuf;
 
@@ -30,7 +31,9 @@ enum SimCmd {
         rules: Option<PathBuf>,
     },
     /// Generate every scenario under its seeds, analyse each run on its own,
-    /// and print the measurement per scenario and summed.
+    /// and print the measurement per scenario and summed, and what the null
+    /// scenarios drew. With floors or ceilings set, exits non-zero when one
+    /// is not met.
     Bench {
         scenarios: PathBuf,
         #[arg(long)]
@@ -41,6 +44,8 @@ enum SimCmd {
         /// Also write the per-scenario measurements as JSON.
         #[arg(long)]
         json: Option<PathBuf>,
+        #[command(flatten)]
+        gate: GateArgs,
     },
     /// Score interaction edges, soft links, candidate fleets and agent
     /// grades against records labelled with `run`, `swarm` and `fleet`.
@@ -56,6 +61,45 @@ enum SimCmd {
         #[arg(long)]
         json: Option<PathBuf>,
     },
+}
+
+/// Floors on precision summed over every scenario, and ceilings on the
+/// false pairs the null scenarios draw.
+#[derive(Args)]
+struct GateArgs {
+    /// Interaction edges of any kind.
+    #[arg(long)]
+    min_edge_precision: Option<f64>,
+    /// Soft links of any kind.
+    #[arg(long)]
+    min_link_precision: Option<f64>,
+    /// Candidate fleets, as cluster pairs.
+    #[arg(long)]
+    min_fleet_precision: Option<f64>,
+    /// Edges between different runs in the null scenarios, summed over
+    /// their seeds.
+    #[arg(long)]
+    max_null_edges: Option<usize>,
+    /// Soft links between different runs in the null scenarios.
+    #[arg(long)]
+    max_null_links: Option<usize>,
+    /// Candidate-fleet cluster pairs between different runs in the null
+    /// scenarios.
+    #[arg(long)]
+    max_null_fleet_pairs: Option<usize>,
+}
+
+impl GateArgs {
+    fn gate(&self) -> Gate {
+        Gate {
+            min_edge_precision: self.min_edge_precision,
+            min_link_precision: self.min_link_precision,
+            min_fleet_precision: self.min_fleet_precision,
+            max_null_edges: self.max_null_edges,
+            max_null_links: self.max_null_links,
+            max_null_fleet_pairs: self.max_null_fleet_pairs,
+        }
+    }
 }
 
 pub fn run(a: SimArgs) -> Result<()> {
@@ -85,6 +129,7 @@ pub fn run(a: SimArgs) -> Result<()> {
             rules,
             total,
             json,
+            gate,
         } => {
             let rules = load_rules(rules.as_deref())?;
             let file = read_scenarios(&scenarios)?;
@@ -100,6 +145,20 @@ pub fn run(a: SimArgs) -> Result<()> {
             }
             println!("== all scenarios");
             print!("{}", render(&sum));
+            let null = null_counts(&results, &file);
+            println!(
+                "\nNull scenarios ({} over {} seed(s)), between different runs: {} edge(s), {} soft link(s), {} candidate-fleet pair(s). Every one is false.",
+                null.scenarios, null.seeds, null.edges, null.links, null.fleet_pairs
+            );
+            let gate = gate.gate();
+            let mut failed = 0;
+            if !gate.is_empty() {
+                println!();
+                for c in gate.check(&sum, &null) {
+                    println!("{}", c.line());
+                    failed += usize::from(!c.ok);
+                }
+            }
             if let Some(j) = json {
                 let map: std::collections::BTreeMap<&str, &Measurement> = results
                     .iter()
@@ -113,6 +172,9 @@ pub fn run(a: SimArgs) -> Result<()> {
 ",
                 )
                 .with_context(|| format!("writing {}", j.display()))?;
+            }
+            if failed > 0 {
+                bail!("{failed} simulator bound(s) not met");
             }
             Ok(())
         }

@@ -16,8 +16,8 @@
 #   Cargo.lock,       cargo-deny (scripts/ci/deny.sh); skipped with a warning
 #   deny.toml         when cargo-deny is not installed
 #   Rust / Cargo      cargo fmt --check (auto-fixed), cargo clippy -D warnings
-#   rules, sc-core,   detection eval gate (scripts/ci/eval-gate.sh)
-#   samples/eval
+#   rules, sc-core,   detection eval gate and simulator bounds
+#   sc-sim, samples   (scripts/ci/eval-gate.sh)
 #   sc-core, sc-wasm, wasm32 type-check
 #   sc-case
 #
@@ -140,7 +140,7 @@ cargo clippy --all-targets --workspace --quiet -- -D warnings
 
 # Rules and the analysis they run in decide what gets flagged, so a change to
 # either re-measures precision and recall against samples/eval/.
-if grep -qE '^(rules/|crates/sc-core/|samples/eval/)' <<<"$STAGED"; then
+if grep -qE '^(rules/|crates/sc-core/|crates/sc-sim/|samples/eval/|samples/sim/)' <<<"$STAGED"; then
     printf '[pre-commit] detection eval gate\n'
     scripts/ci/eval-gate.sh >/dev/null
 fi
