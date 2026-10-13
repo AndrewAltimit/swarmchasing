@@ -204,6 +204,8 @@ What this does not model: the variety of real request content (every actor draws
 
 Tune with `--exclude-ids <file>` and measure with `--only-ids <file>`. Looking at held-out errors to change a rule spends the split ([FM-9.3](../manual/09-evaluation.md#fm-93-frozen-held-out-split)).
 
+**Freezing the membership.** A split's hash is the SHA-256 of its distinct ids, sorted, one per line: it names which records are held out, whatever their content or order, so a re-fetched or re-ordered record file keeps it. `--split` prints it and writes it into the id list's header, `eval ids-hash <file>...` prints it for an id list or a record file, and `--expect-ids-sha256 sha256:<hex>` makes `eval` fail before measuring when the labelled records it would score hash otherwise. The id lists stay in the data directory; the hash can be committed, and every saved result carries the hash of the records it scored (`scored_ids`), which `eval repro` checks again.
+
 ## Saved results
 
 `--save-result <file>` writes JSON with numbers only, for [`samples/eval/results/`](../../samples/eval/results/README.md):
@@ -218,6 +220,7 @@ Tune with `--exclude-ids <file>` and measure with `--only-ids <file>`. Looking a
 | `toolkit` | Toolkit version and git commit (`-dirty` with uncommitted changes). |
 | `records`, `labels` | `path`, SHA-256 and size of each input and label file, in order. |
 | `only_ids`, `exclude_ids` | The same for the id lists, when used. |
+| `scored_ids` | `sha256` and `count` of the labelled records scored, by id ([freezing the membership](#frozen-splits)). |
 | `counts` | `labelled`, `agents`, `benign`, `non_synthetic_labelled`, `non_synthetic_benign`. |
 | `allow_no_benign` | `true` when saved with `--allow-no-benign`. |
 | `summary` | The [summary JSON](#summary-json). |

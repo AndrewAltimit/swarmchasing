@@ -102,8 +102,9 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 | `review sample` | Writes a stratified, seeded sample of low-tier records as a queue for a [reviewed benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline); `review <queue> --all` labels it. |
 | `eval <input>…` | Precision and recall of the rules on labelled records, per record and per cluster, for all and for non-synthetic records. With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. `--before <date>` runs a pre-agent negative control instead. Details: [Evaluation](../../docs/reference/evaluation.md). |
 | `eval repro`, `eval check-results`, `eval export-bench` | Measure a saved result again; check the committed results; write an SC-Bench file (`eval --bench` scores one). |
+| `eval ids-hash <file>…` | A split's membership hash, for an id list or a record file; `eval --expect-ids-sha256` checks it ([frozen splits](../../docs/reference/evaluation.md#frozen-splits)). |
 | `sim write <scenarios> -o <dir>` | Simulated labelled records, one NDJSON file per scenario and seed ([simulated scenarios](../../docs/reference/evaluation.md#simulated-scenarios)). |
-| `sim bench <scenarios>` | Generate, analyse and measure every scenario; per scenario and summed, `--total` for the sum only, `--json` to save. Report only. |
+| `sim bench <scenarios>` | Generate, analyse and measure every scenario; per scenario and summed, `--total` for the sum only, `--json` to save. `--min-*` floors and `--max-null-*` ceilings make it a gate ([simulator bounds](../../docs/reference/evaluation.md#simulator-bounds)). |
 | `sim score <input>…` | Interaction edges, soft links, candidate fleets and agent grades against labelled true runs, swarms and fleets ([swarm and fleet measurement](../../docs/reference/evaluation.md#swarm-and-fleet-measurement)). Report only. |
 
 ```sh
