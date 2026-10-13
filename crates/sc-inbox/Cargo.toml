@@ -1,6 +1,6 @@
 [package]
 name = "sc-inbox"
-description = "Outside swarm reports (SC-Submission v1): validation, redaction, evidence classes and triage, without I/O"
+description = "Outside swarm reports (SC-Submission v1; STIX 2.1, X-ARF and IODEF converted): validation, redaction, evidence classes and triage, without I/O"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,3 +12,6 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 regex.workspace = true
+base64.workspace = true
+quick-xml.workspace = true
+sc-stix.workspace = true

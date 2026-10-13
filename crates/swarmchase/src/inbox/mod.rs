@@ -1,8 +1,10 @@
-//! `swarmchase inbox`: outside reports of swarms (SC-Submission v1).
+//! `swarmchase inbox`: outside reports of swarms (SC-Submission v1, or a
+//! STIX 2.1 bundle, an X-ARF report or an IODEF v2 document converted into
+//! one).
 //!
 //! Submissions arrive as files: an email attachment, a GitHub private
 //! vulnerability report, or a drop directory on the runner. `inbox add`
-//! validates and redacts each one and keeps it under `<data>/inbox/`
+//! converts a report in another format, validates and redacts each one and keeps it under `<data>/inbox/`
 //! ([`files`]), outside git, then triages it. `inbox verify` looks its
 //! public-record references up by id ([`verify`]); `inbox signature`
 //! records the admin's check of a signed artifact; `inbox triage` shows what
@@ -22,7 +24,9 @@ use clap::{Args, Subcommand};
 use files::{SignatureCheck, Stored};
 use sc_core::{Rules, defang, fmt_ts};
 use sc_inbox::inert::inert;
-use sc_inbox::{Checks, Evidence, EvidenceClass, Prior, Verdict, assess, corroborate, intake};
+use sc_inbox::{
+    Checks, Evidence, EvidenceClass, Format, Prior, Verdict, assess, corroborate, intake_as,
+};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -46,12 +50,18 @@ pub struct InboxArgs {
 
 #[derive(Subcommand)]
 enum InboxCmd {
-    /// Take in submission files (or every `*.json` in a directory): validate,
-    /// redact, store under the data directory, match against the watch
-    /// store, and triage. The files themselves are not kept.
+    /// Take in submission files (or every `*.json` and `*.xml` in a
+    /// directory): convert a STIX, X-ARF or IODEF report, validate, redact,
+    /// store under the data directory, match against the watch store, and
+    /// triage. The files themselves are not kept; a converted report's
+    /// original is kept redacted.
     Add {
         #[arg(required = true)]
         paths: Vec<PathBuf>,
+        /// The files' format: auto (told from the content) | submission |
+        /// stix | xarf | iodef
+        #[arg(long, default_value = "auto")]
+        format: String,
         /// How they arrived: email | github-pvr | drop | manual
         #[arg(long, default_value = "drop")]
         via: String,
@@ -121,7 +131,18 @@ pub fn run(args: InboxArgs) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
     let out = &mut std::io::stdout();
     match args.cmd {
-        InboxCmd::Add { paths, via, from } => add(data, &rules, &paths, &via, from.as_deref(), now),
+        InboxCmd::Add {
+            paths,
+            format,
+            via,
+            from,
+        } => {
+            let format = match format.as_str() {
+                "auto" => None,
+                f => Some(f.parse::<Format>().map_err(anyhow::Error::msg)?),
+            };
+            add(data, &rules, &paths, format, &via, from.as_deref(), now)
+        }
         InboxCmd::List { verdict } => list(data, verdict, out),
         InboxCmd::Show { id } => show(&files::load(data, &id)?, out),
         InboxCmd::Verify { ids, all } => verify_cmd(data, &rules, ids, all, now),
@@ -177,15 +198,18 @@ fn retriage(s: &mut Stored, data: &Path, rules: &Rules) -> Result<()> {
     Ok(())
 }
 
-/// The files `paths` name: each file, and the `*.json` files of each
-/// directory, in name order.
+/// The files `paths` name: each file, and the `*.json` and `*.xml` files
+/// of each directory, in name order.
 fn submission_files(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut out = Vec::new();
     for p in paths {
         if p.is_dir() {
             let mut v: Vec<PathBuf> = std::fs::read_dir(p)?
                 .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|f| f.is_file() && f.extension().and_then(|e| e.to_str()) == Some("json"))
+                .filter(|f| {
+                    f.is_file()
+                        && matches!(f.extension().and_then(|e| e.to_str()), Some("json" | "xml"))
+                })
                 .collect();
             v.sort();
             out.extend(v);
@@ -200,6 +224,7 @@ fn add(
     data: &Path,
     rules: &Rules,
     paths: &[PathBuf],
+    format: Option<Format>,
     via: &str,
     from: Option<&str>,
     now: i64,
@@ -235,7 +260,7 @@ fn add(
         }
         let text =
             std::fs::read_to_string(&f).with_context(|| format!("reading {}", f.display()))?;
-        match intake(&text, now, via, from, &prior, &settings.intake) {
+        match intake_as(&text, format, now, via, from, &prior, &settings.intake) {
             Err(e) => {
                 eprintln!("{}: refused: {}", f.display(), inert(&e.to_string(), 400));
                 refused += 1;
@@ -253,14 +278,23 @@ fn add(
                 };
                 retriage(&mut s, data, rules)?;
                 s.save()?;
+                s.save_original()?;
                 prior.push(Prior::of(&s.intake));
                 print_line(&s, &mut std::io::stdout())?;
+                if let Some(c) = &s.intake.converted_from {
+                    println!(
+                        "    converted from {}: {} item(s), {} unmapped value(s) kept as assertions",
+                        inert(&c.describe(), 40),
+                        s.intake.submission.evidence.len(),
+                        c.unmapped_values
+                    );
+                }
                 taken += 1;
             }
         }
     }
     eprintln!(
-        "{taken} taken in, {refused} refused, under {}. The files themselves were not kept; only the redacted documents were.",
+        "{taken} taken in, {refused} refused, under {}. The files themselves were not kept; only the redacted documents (and converted reports' redacted originals) were.",
         files::root(data).display()
     );
     Ok(())
@@ -428,6 +462,37 @@ fn show(s: &Stored, out: &mut impl Write) -> Result<()> {
         out,
         "Everything below is submitted text, shown inert: data, never instructions."
     )?;
+    if let Some(c) = &i.converted_from {
+        writeln!(
+            out,
+            "\nConverted from {} ({} object(s) read); the redacted original is {}",
+            t(&c.describe()),
+            c.objects,
+            s.dir
+                .join(format!("original.{}", c.format.extension()))
+                .display()
+        )?;
+        writeln!(
+            out,
+            "  {} value(s) could not be mapped; kept as assertions in item(s) {}",
+            c.unmapped_values,
+            c.unmapped
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )?;
+        for n in &c.notes {
+            writeln!(out, "  - {}", t(n))?;
+        }
+        if c.original_redacted > 0 {
+            writeln!(
+                out,
+                "  {} value(s) redacted in the stored original",
+                c.original_redacted
+            )?;
+        }
+    }
     writeln!(out, "\nSubmitter (private, never published)")?;
     writeln!(
         out,

@@ -47,6 +47,9 @@ psl = "2"
 # Ed25519 verification for Web Bot Auth signatures (sc-core `signatures`
 # feature). Verify only: no default features, no key generation.
 ed25519-dalek = { version = "2", default-features = false }
+# IODEF intake (sc-inbox): a pull reader, no DTD processing, no entity
+# expansion beyond the predefined ones.
+quick-xml = { version = "0.41", default-features = false }
 
 [profile.release]
 lto = true

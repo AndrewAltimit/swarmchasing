@@ -8,6 +8,8 @@
 //! fabricate:
 //!
 //! - [`spec`]: the document, its validation and its size caps.
+//! - [`import`]: STIX 2.1, X-ARF and IODEF v2 reports converted into
+//!   SC-Submissions, under depth and size caps.
 //! - [`intake`]: redaction at ingest, fingerprints, duplicate and repeat
 //!   detection, rate limits per submitter.
 //! - [`inert`]: instruction-shaped text flagged, and every string shown
@@ -24,6 +26,7 @@
 //! submission is ever opened, and callback identifiers are data only.
 
 pub mod evidence;
+pub mod import;
 pub mod inert;
 pub mod intake;
 pub mod spec;
@@ -31,7 +34,8 @@ pub mod triage;
 pub mod verify;
 
 pub use evidence::EvidenceClass;
-pub use intake::{Intake, IntakeSettings, Prior, Refused, intake};
+pub use import::{ConvertedFrom, Format};
+pub use intake::{Intake, IntakeSettings, Prior, Refused, intake, intake_as};
 pub use spec::{Caps, Evidence, PublicRecord, RecordSource, SPEC, Submission, parse};
 pub use triage::{Assessment, Checks, Corroboration, TriageSettings, Verdict, assess, corroborate};
 pub use verify::{Status, Verification, check};

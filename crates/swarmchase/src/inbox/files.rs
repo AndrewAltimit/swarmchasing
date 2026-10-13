@@ -10,9 +10,12 @@
 //! <id>/admin.json          the admin's signature checks and actions
 //! <id>/assessment.json     the latest triage
 //! <id>/lead.ndjson         the records `inbox promote` queued for review
+//! <id>/original.<format>   a converted report's original, redacted
+//!                          (`original.stix.json`, `.xarf.json`, `.iodef.xml`)
 //! ```
 //!
-//! The bytes as received are never kept, only the redacted document.
+//! The bytes as received are never kept, only the redacted document (and,
+//! for a converted report, its redacted original).
 
 use crate::store::{read_json, write_json};
 use anyhow::{Context, Result, bail};
@@ -134,6 +137,21 @@ impl Stored {
             self.dir.join("found.ndjson"),
             crate::store::to_ndjson(&self.found)?,
         )?;
+        Ok(())
+    }
+}
+
+impl Stored {
+    /// Write a converted report's redacted original beside it. Only intake
+    /// holds the original; a loaded submission has none to write.
+    pub fn save_original(&self) -> Result<()> {
+        if let (Some(c), Some(o)) = (&self.intake.converted_from, &self.intake.original) {
+            std::fs::create_dir_all(&self.dir)?;
+            std::fs::write(
+                self.dir.join(format!("original.{}", c.format.extension())),
+                o,
+            )?;
+        }
         Ok(())
     }
 }

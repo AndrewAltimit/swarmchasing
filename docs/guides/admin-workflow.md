@@ -45,7 +45,7 @@ Details: [reviewing leads](../reference/watch.md#reviewing-leads).
 
 ### Outside submissions
 
-Agents, researchers and operators may send a swarm report as an [SC-Submission](../specs/submission-v1.md) file, by email, GitHub private vulnerability reporting or the runner's drop directory. Take each in, look its references up, and read only what triage puts forward:
+Agents, researchers and operators may send a swarm report as an [SC-Submission](../specs/submission-v1.md) file (or a STIX, X-ARF or IODEF report, converted at intake), by email, GitHub private vulnerability reporting or the runner's drop directory. Take each in, look its references up, and read only what triage puts forward:
 
 ```sh
 swarmchase inbox add report.json --via email --from sender@reporter.example

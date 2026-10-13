@@ -138,7 +138,16 @@ pub fn corroborate(
     let mut out = Corroboration::default();
     let mut ids = BTreeSet::new();
     let claimed = claimed_records(&intake.id, &intake.submission.evidence);
+    let unmapped: &[usize] = intake
+        .converted_from
+        .as_ref()
+        .map_or(&[], |c| c.unmapped.as_slice());
     for (i, e) in intake.submission.evidence.iter().enumerate() {
+        // A value a conversion could not map stays an assertion: it never
+        // matches the store.
+        if unmapped.contains(&i) {
+            continue;
+        }
         let hits: Vec<&Observation> = match e {
             Evidence::PublicRecord(r) => store
                 .iter()
@@ -480,6 +489,13 @@ pub fn assess(intake: &Intake, checks: Checks, rules: &Rules, s: &TriageSettings
                 ""
             },
             f.matched
+        ));
+    }
+    if let Some(c) = &intake.converted_from {
+        reasons.push(format!(
+            "converted from {}; {} value(s) could not be mapped and are kept as assertions",
+            inert(&c.describe(), 40),
+            c.unmapped_values
         ));
     }
     let cost = cost(&items, verifications, held, s);

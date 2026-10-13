@@ -24,7 +24,7 @@ What each part does and how it is configured.
 |---|---|
 | [`reference/watch.md`](reference/watch.md) | The data directory, incremental collection, the digest, retention, reviewing leads. |
 | [`reference/cases.md`](reference/cases.md) | Case files: `case.toml`, every `case` subcommand, contacts, drafts, bundles, pinned rules, STIX and MISP exports, incident drafts, operator evidence. |
-| [`reference/inbox.md`](reference/inbox.md) | Outside submissions: transports, `inbox` commands, storage, intake caps, verification by id, triage and its settings, promotion. |
+| [`reference/inbox.md`](reference/inbox.md) | Outside submissions: transports, `inbox` commands, storage, other formats, intake caps, verification by id, triage and its settings, promotion. |
 | [`reference/notices.md`](reference/notices.md) | Drafting, adding and updating notices; what they withhold; lint and build. |
 | [`reference/identity.md`](reference/identity.md) | Declared agent identity: the catalog, `identity refresh` and `check`, the classes, report lines and suggested claims. |
 | [`reference/evaluation.md`](reference/evaluation.md) | `swarmchase eval`, the CI eval gate and its floors, the held-out measurement. |
@@ -62,4 +62,4 @@ Formats other groups can implement, each with a JSON Schema under `schemas/`.
 | [`scripts/README.md`](../scripts/README.md) | Every script and gate, and where each runs. |
 | [`samples/eval/README.md`](../samples/eval/README.md) | The labelled evaluation set and the held-out Transluce steps. |
 | [`samples/showcase/README.md`](../samples/showcase/README.md) | The synthetic set the landing page walks through. |
-| [`samples/submissions/README.md`](../samples/submissions/README.md) | A synthetic SC-Submission document. |
+| [`samples/submissions/README.md`](../samples/submissions/README.md) | Synthetic SC-Submission, STIX, X-ARF and IODEF reports. |

