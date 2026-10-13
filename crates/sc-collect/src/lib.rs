@@ -39,6 +39,7 @@ pub mod lookup;
 mod mcp;
 mod memento;
 mod npm;
+pub mod osv;
 pub mod pager;
 pub mod platform;
 pub mod psl;

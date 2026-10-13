@@ -25,6 +25,7 @@ The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read
 | Wikimedia EventStreams | External links added to wiki pages, matching relay hosts and run tags or added to configuration pages | Scheduled watch, as leads for review |
 | Hacker News search index | Links in stories and comments matching relay hosts and run tags | Scheduled watch, as leads for review |
 | GH Archive, npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Hugging Face Hub, Go module index, Wikimedia EventStreams, Hacker News, GitHub Advisory Database, CVE List | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
+| OSV data dumps | Malicious-package records (`MAL-` ids) for npm and PyPI | Scheduled watch's platform pass, as labels on candidates |
 | CT logs, crt.sh | Certificate Transparency entries | Watch sample of one log (relay look-alikes); case work (`swarmchase certs`) |
 | security.txt, RDAP | The affected organisation's published security contact, or its registrar's abuse address | Finding who to report to |
 
@@ -325,6 +326,8 @@ Automation accounts are dropped by login before anything is kept ([`automation.r
 **Residue.** The bundled rules whose patterns mean the same in prose run on each line of the raw text: `marker.placeholder`, `marker.tool_call_markup`, `marker.chat_opener` and the generation-loop check. The Markdown rules do not: Markdown is how people write there. Five text-only shapes are added ([`residue.rs`](../crates/sc-core/src/platform/residue.rs)): an AI disclaimer, a knowledge-cutoff remark, a chat reply's opener, an `[Insert ...]` slot and "regenerate response". Each is weak alone. Harness self-identification is kept apart (`selfid.*`): a candidate lists it as weak context, and it never makes a group residue-heavy, since people run these harnesses for their own work every day and anyone can paste the footer.
 
 **Suppressed and dropped.** A group whose template matches a benign kind (dependency update, translation sync, release automation, contribution drive, classroom or course, declared scanner, platform default text) is listed as suppressed with its kind, as is a text-less group on a practice repository built for first-time contributors. A burst on one owner's repositories by established accounts is counted below threshold: an outage, a release or a linked discussion looks the same. Each candidate lists what is left to rule out (on the hour, one owner, one target, no new account, no account data, a span over a day).
+
+**Labels.** Reference sources label targets rather than add events: OSV's malicious-package records (`MAL-` ids) name packages later found malicious ([`osv.rs`](../crates/sc-collect/src/osv.rs)). Labels are kept for `label_days`. A candidate whose members published a labelled package lists the label and the records behind it. A label says what a target was, never who acted, and it changes neither a candidate's chance nor its strength.
 
 **Identifiers.** A candidate's id is `PS-` and 8 hex digits derived from its earliest member, so it stays while that member stays and new members join under it.
 

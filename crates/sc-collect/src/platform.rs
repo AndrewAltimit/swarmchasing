@@ -65,6 +65,7 @@ pub const PLATFORM_KINDS: &[&str] = &[
     "rubygems",
     "crates",
     "cve",
+    "osv",
 ];
 
 /// A platform source in the watchlist (`[[platform.source]]`).
@@ -97,6 +98,46 @@ pub struct PlatformPull {
     /// Events from undeclared App logins that claim a declared product's
     /// name: login to (the product claimed, events). Spoofing leads.
     pub lookalikes: BTreeMap<String, (String, usize)>,
+    /// Labels a reference source puts on targets (`osv`): no events.
+    pub labels: Vec<TargetLabel>,
+}
+
+/// A label a reference source puts on a target other sources' events act
+/// on: a package an OSV malicious-package record names, a wiki page
+/// editors tagged as suspected AI-generated text. Reference data joined to
+/// candidates, never a finding about an account.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct TargetLabel {
+    pub platform: Platform,
+    /// The target as [`label_key`] normalises it.
+    pub target: String,
+    /// What the label says: `osv-malicious`, `wiki-ai-cleanup`.
+    pub kind: String,
+    /// The record or category that says so (`MAL-2026-1`).
+    pub source_id: String,
+    pub link: String,
+    /// When the label was published or applied (Unix seconds).
+    pub ts: i64,
+}
+
+/// A target as labels and events are matched: lower case, and on PyPI
+/// with each run of `-`, `_` and `.` as one `-`, as PyPI normalises names.
+pub fn label_key(platform: Platform, target: &str) -> String {
+    let t = target.trim().to_lowercase();
+    if platform != Platform::Pypi {
+        return t;
+    }
+    let mut out = String::with_capacity(t.len());
+    for c in t.chars() {
+        if matches!(c, '-' | '_' | '.') {
+            if !out.ends_with('-') {
+                out.push('-');
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 impl PlatformPull {
@@ -158,6 +199,7 @@ pub fn pull_platform(
         "wikimedia" => crate::wikimedia::pull_platform(client, &src.query, mark, rules, max),
         "golang" => pull_golang(client, &src.query, mark, max),
         "cve" => crate::cve::pull_platform(client, &src.query, mark, rules, max),
+        "osv" => crate::osv::pull_labels(client, &src.query, mark),
         "hackernews" => crate::hackernews::pull_platform(
             client,
             &src.query,

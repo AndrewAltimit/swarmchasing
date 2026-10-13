@@ -447,6 +447,7 @@ page_size = 100
 # `carry_hours`. Output is a digest section of hints, never a finding.
 [platform]
 carry_hours = 72
+label_days = 30           # keep labels from reference sources (osv) this long
 # [platform.options] takes the detector's tunables (min_accounts, burst_secs,
 # max_chance, ...); the defaults are in crates/sc-core/src/platform/mod.rs.
 
@@ -594,6 +595,30 @@ kind = "cve"
 endpoint = "unreviewed"
 pattern = "*"
 scan = 6                  # requests of 100 advisories per run
+
+# Rationale: reference data, not events. A package flood is worth more
+# once its packages are known to be malicious: OSV's malicious-package
+# records (`MAL-` ids, from OpenSSF's malicious-packages project) name the
+# packages, and the watch labels any candidate whose members published one
+# ("Labelled" in the digest). Reads the ecosystem's modified_id.csv from
+# the top down to the last record read, then fetches the new `MAL-`
+# records, up to `scan` a run. Noise: none of its own; a label says what
+# a package was, not who published it. Terms: the OSV data dumps
+# (https://google.github.io/osv.dev/data/) are public for bulk use, OSV
+# data is CC-BY 4.0 and the malicious-packages records Apache 2.0.
+[[platform.source]]
+name = "osv-malicious-npm"
+kind = "osv"
+endpoint = "npm"
+pattern = "*"
+scan = 50                 # records fetched per run
+
+[[platform.source]]
+name = "osv-malicious-pypi"
+kind = "osv"
+endpoint = "PyPI"
+pattern = "*"
+scan = 50
 
 # Rationale: agents told to test or prove they can edit open wikis make
 # sandbox and draft edits from new accounts, many at once, with templated

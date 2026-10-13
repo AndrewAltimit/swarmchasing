@@ -10,11 +10,17 @@
 //! `runs/<stamp>/platform-swarms.json` and a digest section that lists new
 //! and grown ones. Candidates never become triage leads: the hosted triage
 //! model may see archive and urlquery records only (docs/policies.md).
+//!
+//! Reference sources (`osv`, `wikimedia-ai-cleanup`) give labels, not
+//! events: a package OSV lists as malicious, a wiki page tagged as
+//! suspected AI-generated text. Labels are kept in
+//! `<out>/platform/labels.ndjson` for `label_days`, and a candidate whose
+//! members acted on a labelled target says so in the digest.
 
 use crate::store::{read_json, write_json};
 use anyhow::Result;
 use sc_collect::Client;
-use sc_collect::platform::{PlatformSource, pull_platform};
+use sc_collect::platform::{PlatformSource, TargetLabel, label_key, pull_platform};
 use sc_core::platform::{PlatformEvent, PlatformOptions, PlatformReport, PlatformSwarm, detect};
 use sc_core::{Rules, defang, defang_host, fmt_ts};
 use serde::{Deserialize, Serialize};
@@ -30,6 +36,9 @@ pub struct Config {
     pub carry_hours: i64,
     #[serde(default)]
     pub options: PlatformOptions,
+    /// How long labels from reference sources are kept.
+    #[serde(default = "default_label_days")]
+    pub label_days: i64,
     #[serde(default, rename = "source")]
     pub sources: Vec<PlatformSource>,
 }
@@ -38,6 +47,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             carry_hours: default_carry(),
+            label_days: default_label_days(),
             options: PlatformOptions::default(),
             sources: Vec::new(),
         }
@@ -46,6 +56,10 @@ impl Default for Config {
 
 fn default_carry() -> i64 {
     72
+}
+
+fn default_label_days() -> i64 {
+    30
 }
 
 /// `<out>/platform/state.json`.
@@ -71,7 +85,22 @@ pub struct SourceLine {
     pub declared: BTreeMap<String, usize>,
     /// Lookalike App logins: login to (product claimed, events).
     pub lookalikes: BTreeMap<String, (String, usize)>,
+    /// Labels a reference source gave this run.
+    pub labels: usize,
     pub error: Option<String>,
+}
+
+/// A candidate's members that acted on labelled targets.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct LabelMatch {
+    /// The label kind (`osv-malicious`, `wiki-ai-cleanup`).
+    pub kind: String,
+    /// Member events on a target with this label.
+    pub members: usize,
+    /// The labelled targets, at most five.
+    pub targets: Vec<String>,
+    /// The records that gave the labels, at most five.
+    pub sources: Vec<String>,
 }
 
 /// What the pass found, for the digest.
@@ -83,6 +112,10 @@ pub struct Outcome {
     /// Candidate ids new this run, and grown since they were reported.
     pub new: BTreeSet<String>,
     pub grown: BTreeSet<String>,
+    /// Labels kept from reference sources.
+    pub labels: usize,
+    /// Candidate id to its members on labelled targets.
+    pub labelled: BTreeMap<String, Vec<LabelMatch>>,
 }
 
 impl Outcome {
@@ -117,6 +150,7 @@ pub fn run(
         carried: batch.len(),
         ..Default::default()
     };
+    let mut new_labels: Vec<TargetLabel> = Vec::new();
     for src in &cfg.sources {
         eprint!("{:<24} platform {} … ", src.name, src.kind);
         let mut line = SourceLine {
@@ -135,7 +169,9 @@ pub fn run(
                 line.capped = p.capped;
                 line.declared = p.declared;
                 line.lookalikes = p.lookalikes;
+                line.labels = p.labels.len();
                 batch.extend(p.events);
+                new_labels.extend(p.labels);
             }
             Err(e) => {
                 eprintln!("error: {e:#}");
@@ -146,6 +182,29 @@ pub fn run(
         write_json(&state_path, &state)?;
     }
     let report = detect(&batch, &cfg.options);
+
+    let labels_path = dir.join("labels.ndjson");
+    let label_cutoff = now - cfg.label_days.max(1) * 86_400;
+    let mut labels: Vec<TargetLabel> = if labels_path.exists() {
+        crate::store::read_ndjson(&labels_path)?.0
+    } else {
+        Vec::new()
+    };
+    labels.extend(new_labels);
+    labels.retain(|l| l.ts >= label_cutoff);
+    labels.sort();
+    labels.dedup();
+    let mut text = String::new();
+    for l in &labels {
+        text.push_str(&serde_json::to_string(l)?);
+        text.push('\n');
+    }
+    crate::store::write_atomic(&labels_path, text.as_bytes())?;
+    outcome.labels = labels.len();
+    outcome.labelled = match_labels(&report, &batch, &labels);
+    if !outcome.labelled.is_empty() {
+        write_json(&run_dir.join("platform-labels.json"), &outcome.labelled)?;
+    }
 
     // Carry what may join a group later; the rest of the stream is dropped.
     let keep: BTreeSet<&str> = report.carry.iter().map(String::as_str).collect();
@@ -176,6 +235,65 @@ pub fn run(
     write_json(&run_dir.join("platform-swarms.json"), &report)?;
     outcome.report = report;
     Ok(Some(outcome))
+}
+
+/// Each candidate's members that acted on a labelled target, by label kind.
+pub fn match_labels(
+    report: &PlatformReport,
+    events: &[PlatformEvent],
+    labels: &[TargetLabel],
+) -> BTreeMap<String, Vec<LabelMatch>> {
+    let mut by_target: BTreeMap<(sc_core::platform::Platform, &str), Vec<&TargetLabel>> =
+        BTreeMap::new();
+    for l in labels {
+        by_target
+            .entry((l.platform, l.target.as_str()))
+            .or_default()
+            .push(l);
+    }
+    let by_id: BTreeMap<&str, &PlatformEvent> = events.iter().map(|e| (e.id.as_str(), e)).collect();
+    let mut out = BTreeMap::new();
+    for s in &report.swarms {
+        let mut kinds: BTreeMap<&str, LabelMatch> = BTreeMap::new();
+        for id in &s.members {
+            let Some(e) = by_id.get(id.as_str()) else {
+                continue;
+            };
+            let key = label_key(e.platform, &e.target);
+            let Some(ls) = by_target.get(&(e.platform, key.as_str())) else {
+                continue;
+            };
+            let mut counted = BTreeSet::new();
+            for l in ls {
+                let m = kinds.entry(&l.kind).or_insert_with(|| LabelMatch {
+                    kind: l.kind.clone(),
+                    ..Default::default()
+                });
+                if counted.insert(l.kind.as_str()) {
+                    m.members += 1;
+                }
+                if m.targets.len() < 5 && !m.targets.contains(&l.target) {
+                    m.targets.push(l.target.clone());
+                }
+                if m.sources.len() < 5 && !m.sources.contains(&l.source_id) {
+                    m.sources.push(l.source_id.clone());
+                }
+            }
+        }
+        if !kinds.is_empty() {
+            out.insert(s.id.clone(), kinds.into_values().collect());
+        }
+    }
+    out
+}
+
+/// What a label kind says, for the digest.
+fn label_phrase(kind: &str) -> &str {
+    match kind {
+        "osv-malicious" => "packages OSV lists as malicious",
+        "wiki-ai-cleanup" => "wiki pages editors tagged as suspected AI-generated text",
+        k => k,
+    }
 }
 
 /// Platform events from NDJSON; blank and unreadable lines are skipped.
@@ -235,6 +353,13 @@ pub fn section(o: &Outcome) -> String {
                         d.join(", ")
                     );
                 }
+                if l.labels > 0 {
+                    let _ = writeln!(
+                        t,
+                        "  - {} label(s) from this reference source ({} kept).",
+                        l.labels, o.labels
+                    );
+                }
                 for (login, (claim, n)) in &l.lookalikes {
                     let _ = writeln!(
                         t,
@@ -253,6 +378,17 @@ pub fn section(o: &Outcome) -> String {
             "grown"
         };
         t.push_str(&render_swarm(s, Some(tag)));
+        for m in o.labelled.get(&s.id).into_iter().flatten() {
+            let targets: Vec<String> = m.targets.iter().map(|x| defang_host(x)).collect();
+            let _ = writeln!(
+                t,
+                "- Labelled: {} member(s) acted on {} ({}; {}).\n",
+                m.members,
+                label_phrase(&m.kind),
+                targets.join(", "),
+                m.sources.join(", ")
+            );
+        }
     }
     t.push_str(&render_suppressed(r));
     t
@@ -420,5 +556,79 @@ mod tests {
         assert!(t.contains("Codex (OpenAI) 3"), "{t}");
         assert!(t.contains("Spoofing lead: App `claude-fleet[bot]`"), "{t}");
         assert!(t.contains("selfid.claude_code (2)"), "{t}");
+    }
+
+    #[test]
+    fn candidates_on_labelled_targets_say_so() {
+        use sc_core::platform::Platform;
+        let ev = |id: &str, target: &str| PlatformEvent {
+            id: id.into(),
+            platform: Platform::Pypi,
+            target: target.into(),
+            ..Default::default()
+        };
+        let events = vec![
+            ev("pypi:Agent_Probe.0042@0.0.1", "Agent_Probe.0042"),
+            ev("pypi:agent-probe-0043@0.0.1", "agent-probe-0043"),
+            ev("pypi:unrelated@1.0", "unrelated"),
+        ];
+        let swarm = PlatformSwarm {
+            id: "PS-00000001".into(),
+            platform: Platform::Pypi,
+            basis: vec![],
+            actions: vec![],
+            events: 3,
+            accounts: 0,
+            start: 0,
+            end: 0,
+            template: String::new(),
+            similarity: None,
+            burst: Default::default(),
+            new_accounts: None,
+            residue: vec![],
+            self_id: vec![],
+            targets: vec![],
+            distinct_targets: 3,
+            p_chance: 1e-6,
+            strength: sc_core::platform::HintStrength::Weak,
+            caveats: vec![],
+            links: vec![],
+            members: events.iter().map(|e| e.id.clone()).collect(),
+            reason: String::new(),
+        };
+        let report = PlatformReport {
+            swarms: vec![swarm],
+            ..Default::default()
+        };
+        let label = |target: &str, id: &str, platform| TargetLabel {
+            platform,
+            target: target.into(),
+            kind: "osv-malicious".into(),
+            source_id: id.into(),
+            link: String::new(),
+            ts: 0,
+        };
+        let labels = vec![
+            label("agent-probe-0042", "MAL-2026-1", Platform::Pypi),
+            label("agent-probe-0043", "MAL-2026-2", Platform::Pypi),
+            // The same name on another platform is another package.
+            label("unrelated", "MAL-2026-3", Platform::Npm),
+        ];
+        let m = match_labels(&report, &events, &labels);
+        let got = &m["PS-00000001"];
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].members, 2);
+        assert_eq!(got[0].sources, ["MAL-2026-1", "MAL-2026-2"]);
+        let o = Outcome {
+            new: ["PS-00000001".to_string()].into(),
+            report,
+            labelled: m,
+            ..Default::default()
+        };
+        let t = section(&o);
+        assert!(
+            t.contains("Labelled: 2 member(s) acted on packages OSV lists as malicious"),
+            "{t}"
+        );
     }
 }
