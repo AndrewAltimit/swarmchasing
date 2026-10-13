@@ -1,26 +1,24 @@
-//! The engine module: what every analysis page loads on arrival.
+//! The engine's bindings: `analyze`, `unwrap`, `endpoints` and helpers. The
+//! engine module is these alone; the tools module carries them too, so the
+//! workbench loads one module for its analysis and its report.
 //!
-//! `analyze` keeps its result in this module, and `endpoints` reads it from
-//! there, so the page never sends a whole analysis back across the boundary
-//! and the module carries no deserialiser for one.
+//! `analyze` keeps its result in the module ([`super::hold`]), and
+//! `endpoints` (and in the tools module `report`, `sightings` and
+//! `attribution`) read it from there, so the page never sends a whole
+//! analysis back across the boundary and the engine carries no
+//! deserialiser for one.
 
-use super::{json, parse_claims, rules_from};
+use super::{hold, json, parse_claims, rules_from, with_held};
 use sc_core::timing::DateTagOffset;
 use sc_core::{Analysis, Evidence, FieldMap, Format};
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use wasm_bindgen::prelude::*;
-
-thread_local! {
-    /// The most recent `analyze` result.
-    static LAST: RefCell<Option<Analysis>> = const { RefCell::new(None) };
-}
 
 /// Parse + analyse. `format`: auto|ndjson|json|lines|access_log. `map`:
 /// `ts=a.b,url=c` or empty. Returns `{"analysis": Analysis, "warnings":
 /// [...], "redacted": n, "cluster_date_tags": {"C1": DateTagOffset}}`.
 /// Secrets are replaced with hashes before analysis (see `sc_core::redact`).
-/// The analysis is kept for `endpoints`.
+/// The analysis is kept for `endpoints` (and the tools module's reports).
 #[wasm_bindgen]
 pub fn analyze(input: &str, format: &str, map: &str, rules_json: &str) -> Result<String, JsError> {
     let rules = rules_from(rules_json)?;
@@ -38,7 +36,7 @@ pub fn analyze(input: &str, format: &str, map: &str, rules_json: &str) -> Result
         warnings: &parsed.warnings,
         redacted: parsed.redacted,
     })?;
-    LAST.with(|l| *l.borrow_mut() = Some(a));
+    hold(a);
     Ok(out)
 }
 
@@ -50,13 +48,6 @@ struct Analyzed<'a> {
     analysis: &'a Analysis,
     warnings: &'a [String],
     redacted: usize,
-}
-
-fn with_last<T>(f: impl FnOnce(&Analysis) -> Result<T, JsError>) -> Result<T, JsError> {
-    LAST.with(|l| match l.borrow().as_ref() {
-        Some(a) => f(a),
-        None => Err(JsError::new("nothing analysed yet")),
-    })
 }
 
 /// Unwrap a single URL; returns `{"layers": [...], "extracted": {...}}`.
@@ -102,7 +93,9 @@ pub fn endpoints(opts_json: &str) -> Result<String, JsError> {
     } else {
         serde_json::from_str(opts_json).map_err(|e| JsError::new(&format!("options: {e}")))?
     };
-    with_last(|a| json(&sc_core::endpoints(a, &opts)))
+    with_held("nothing analysed yet", |a| {
+        json(&sc_core::endpoints(a, &opts))
+    })
 }
 
 #[cfg(test)]

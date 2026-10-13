@@ -5,10 +5,12 @@
 //!
 //! - `engine` (the default): what every analysis page loads on arrival,
 //!   `analyze`, `unwrap`, `endpoints` and the small helpers ([`engine`]).
-//! - `tools`: what a page loads only when a visitor asks for it, report
-//!   drafts, the evidence bundle check and the labelled-set eval
-//!   ([`tools`], [`case`]). Keeping them out of the engine keeps the module
-//!   every analysis page downloads small.
+//! - `tools`: report drafts, the evidence bundle check and the
+//!   labelled-set eval ([`tools`], [`case`]), plus everything the engine
+//!   has. Keeping them out of the engine keeps the module the unwrap, rules
+//!   and landing pages download small; carrying the engine's bindings lets
+//!   the workbench load this one module for both its analysis and its
+//!   report, never the two.
 //!
 //! Both carry the helpers in this file. Tests build both.
 //!
@@ -16,15 +18,40 @@
 //! built, and edited rules (TOML, as the CLI reads them) by the small
 //! `sc-rules-wasm` module, which keeps a TOML parser out of these.
 
-use sc_core::{Claim, RuleSet, Rules};
+use sc_core::{Analysis, Claim, RuleSet, Rules};
+use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 
 #[cfg(any(feature = "tools", test))]
 mod case;
-#[cfg(any(feature = "engine", test))]
+#[cfg(any(feature = "engine", feature = "tools", test))]
 mod engine;
 #[cfg(any(feature = "tools", test))]
 mod tools;
+
+thread_local! {
+    /// The analysis the module holds: the latest `analyze` (engine) or
+    /// `prepare` (tools) result, which `endpoints`, `report`, `sightings`
+    /// and `attribution` read. One slot, so in the tools module a report
+    /// follows from the analysis the page shows without a re-run.
+    static HELD: RefCell<Option<Analysis>> = const { RefCell::new(None) };
+}
+
+/// Keep `a` as the module's analysis.
+fn hold(a: Analysis) {
+    HELD.with(|h| *h.borrow_mut() = Some(a));
+}
+
+/// Run `f` on the module's analysis; `missing` is the error without one.
+fn with_held<T>(
+    missing: &str,
+    f: impl FnOnce(&Analysis) -> Result<T, JsError>,
+) -> Result<T, JsError> {
+    HELD.with(|h| match h.borrow().as_ref() {
+        Some(a) => f(a),
+        None => Err(JsError::new(missing)),
+    })
+}
 
 /// `rules/default.toml` as JSON, converted by `build.rs`.
 const DEFAULT_RULES_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/default_rules.json"));

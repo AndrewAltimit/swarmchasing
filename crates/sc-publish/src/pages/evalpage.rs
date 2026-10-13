@@ -40,13 +40,14 @@ pub fn body(s: &Summary, set_href: &str) -> String {
     let _ = writeln!(
         o,
         "<header class=\"page-head\"><h1>Evaluation</h1>\
-<p class=\"lede\">How the bundled rules (version <code>{}</code>) score on the committed labelled set: {} labelled records, {} agent and {} benign, from the files in <a href=\"{}\">samples/eval/</a>. The numbers are computed when the site is built; the same summary is in <a href=\"../assets/eval-summary.json\">eval-summary.json</a>.</p>\
-<p class=\"callout\" role=\"note\"><strong>A regression floor, not a precision estimate.</strong> The rules were written and tuned against these records, and most of them are synthetic, written to match a rule. The record unit counts every flagged record, so a cluster of ten flagged records counts ten times; the cluster unit and the non-synthetic rows below are the closer guide. Real-world precision is lower. Intervals are 95% Wilson score intervals. See <a href=\"../docs/reference/evaluation/\">evaluation</a> for the held-out measurement.</p></header>",
+<p class=\"lede\">How the bundled rules (version <code>{}</code>) score on the committed labelled set: {} labelled records, {} agent and {} benign, from the files in <a href=\"{}\">samples/eval/</a>. The numbers are computed when the site is built; the same summary is in <a href=\"../assets/eval-summary.json\">eval-summary.json</a>.</p></header>\n{}\
+<p class=\"callout\" role=\"note\"><strong>A regression floor, not a precision estimate.</strong> The rules were written and tuned against these records, and most of them are synthetic, written to match a rule. The record unit counts every flagged record, so a cluster of ten flagged records counts ten times; the cluster unit and the non-synthetic rows below are the closer guide. Real-world precision is lower. Intervals are 95% Wilson score intervals. See <a href=\"../docs/reference/evaluation/\">evaluation</a> for the held-out measurement.</p>",
         esc(&s.rules_version),
         s.labelled,
         s.agents,
         s.benign,
         esc(set_href),
+        plain_words(s),
     );
 
     o.push_str("<section aria-labelledby=\"tiers\"><h2 id=\"tiers\">Precision and recall by tier</h2>\
@@ -374,6 +375,87 @@ fn recall_section(
 
 /// The same tier on the records that are not synthetic, as prominent as
 /// the numbers above it, or nothing when the summary has none.
+/// A whole percentage, "85%", or "n/a".
+fn whole(v: Option<f64>) -> String {
+    v.map_or_else(|| "n/a".into(), |v| format!("{:.0}%", v * 100.0))
+}
+
+/// What each tier's numbers mean, in sentences made from them, for a
+/// reader who does not read intervals: on the records collected rather
+/// than written for the set when there are any, else on all of them.
+fn plain_words(s: &Summary) -> String {
+    let ns = &s.non_synthetic;
+    let (tiers, scope) = if ns.labelled > 0 && !ns.tiers.is_empty() {
+        (
+            &ns.tiers,
+            format!(
+                "the {} labelled records that were collected rather than written for this set ({} from agents, {} benign)",
+                ns.labelled, ns.agents, ns.benign
+            ),
+        )
+    } else {
+        (
+            &s.tiers,
+            format!(
+                "all {} labelled records ({} from agents, {} benign)",
+                s.labelled, s.agents, s.benign
+            ),
+        )
+    };
+    let mut o = format!(
+        "<section class=\"plain card\" aria-labelledby=\"plain-h\"><h2 id=\"plain-h\">In plain words</h2>\
+<p>On {}:</p><ul class=\"plain-tiers\">",
+        esc(&scope)
+    );
+    for t in tiers {
+        let (r, p) = (&t.recall, &t.precision);
+        let caught = if r.n == 0 {
+            "There is no agent record to find at this tier.".to_string()
+        } else {
+            format!(
+                "Of {} agent records, the rules flag {} at this tier or above (about {} of them) and miss {}.",
+                r.n,
+                r.k,
+                whole(r.value),
+                r.n - r.k
+            )
+        };
+        let right = match (p.n, t.fp) {
+            (0, _) => "They flag no record at all.".to_string(),
+            (n, 0) => format!(
+                "None of the {n} record{} they flag is benign.",
+                if n == 1 { "" } else { "s" }
+            ),
+            (n, fp) => format!(
+                "{fp} of the {n} records they flag {} benign: false alarms.",
+                if fp == 1 { "is" } else { "are" }
+            ),
+        };
+        let chance = match (p.lo, p.hi) {
+            (Some(lo), Some(hi)) => format!(
+                " With this few records, the share of flags that are right could be anywhere from {} to {}.",
+                whole(Some(lo)),
+                whole(Some(hi))
+            ),
+            _ => String::new(),
+        };
+        let _ = write!(
+            o,
+            "<li><strong>{} or above.</strong> {caught} {right}{chance}</li>",
+            esc(&capitalised(t.tier.label()))
+        );
+    }
+    o.push_str("</ul><p class=\"hint\">The rules were tuned on these records, so on new records they do worse. The cards below give each rate as a 95% interval, for these records and for the whole labelled set the build gate holds.</p></section>\n");
+    o
+}
+
+fn capitalised(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
 fn non_synthetic_block(s: &Summary, t: &TierSummary) -> String {
     let ns = &s.non_synthetic;
     let Some(n) = ns.tiers.iter().find(|x| x.tier == t.tier) else {

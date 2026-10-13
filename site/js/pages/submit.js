@@ -107,7 +107,7 @@ function build() {
     return d.toISOString().replace(/\.\d{3}Z$/, "Z");
   };
   const agents = $("sub-agents").value ? Number($("sub-agents").value) : undefined;
-  if (agents !== undefined && !(Number.isInteger(agents) && agents >= 1)) problems.push("Agents must be a whole number of at least 1");
+  if (agents !== undefined && !(Number.isInteger(agents) && agents >= 1)) problems.push("Number of agents must be a whole number of at least 1");
   const targets = $("sub-targets").value.split(/[\s,]+/).map((h) => h.trim().toLowerCase()).filter(Boolean);
   for (const h of targets) if (!HOST.test(h)) problems.push(`Target ${h} is not a plain host name`);
   const summary = text($("sub-summary").value);

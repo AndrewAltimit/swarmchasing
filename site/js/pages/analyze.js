@@ -5,7 +5,7 @@
 // id, a view), never hosts, URLs or other record data.
 import { $, el, activate, download, fetchRoot, showAlert, showError } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
-import { engine, tools, host as hostOf, pageRules, sizeNote } from "../lib/wasm.js";
+import { workbench, host as hostOf, pageRules } from "../lib/wasm.js";
 import { figure, legend, legendKey, edgeKey, swarmKey, tierLegend, rampLegend, swimlanes, runExtent, zoomWindow, fleetGraph, swarmGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
 import {
   kindClass, kindLabel, tactic, route, fleetItems, language, levelOf, swarmKind, provenanceLabel, corroborationLabel, plantLabel,
@@ -19,15 +19,31 @@ const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
 const MAX_LANES = 40;
 const MAX_ROWS = 300;
-const mobile = () => matchMedia("(max-width: 899px)").matches;
+const mobile = () => matchMedia("(max-width: 960px)").matches;
 
-const sc = await engine();
-const rules = await pageRules(sc, $("rules-note"));
-{
-  const ev = JSON.parse(sc.evidence_levels());
-  $("min-named").replaceChildren(...ev.levels.map((l) => el("option", { value: l.id }, l.label)));
-  $("min-named").value = ev.default;
+// The module loads on the first sign of input (focus on the records box, a
+// file picked or dropped, the example), not on arrival. It is the tools
+// module, which carries the engine too: the analysis shown is the one the
+// report drafts from, so the page never downloads two modules.
+let sc = null; // the module's exports, once loaded
+let rules = ""; // the rules this page runs, as JSON ("" for the bundled ones)
+let ready = null;
+function ensure() {
+  ready ??= workbench().then(async (m) => {
+    rules = await pageRules(m, $("rules-note"));
+    const ev = JSON.parse(m.evidence_levels());
+    $("min-named").replaceChildren(...ev.levels.map((l) => el("option", { value: l.id }, l.label)));
+    $("min-named").value = ev.default;
+    sc = m;
+    return m;
+  }).catch((e) => {
+    ready = null;
+    throw e;
+  });
+  return ready;
 }
+/** Start loading the module; a failure is shown in the status line. */
+const warm = () => ensure().catch(() => {});
 
 let a = null; // the analysis
 let dateTags = {};
@@ -37,12 +53,7 @@ let view = "runs";
 let lastWidth = 0; // the views panel width the current view was drawn at
 let zoom = null; // the swim-lanes' time window, null for all of it
 let fit = true; // the whole span drawn fitted to activity: idle stretches shrink
-// The input the shown analysis came from, for the tools module, which
-// re-runs it (deterministically) to draft reports and attribution layers.
-let source = null;
-let generation = 0; // bumped per analysis
-let preparedGen = -1; // the generation the tools module holds
-let wantReport = false; // the visitor reached the report: load the tools module
+let wantReport = false; // the visitor asked for the report, or reached it
 
 const host = (h) => hostOf(sc, h);
 const safe = (s, n = 120) => trunc(sc.defang(String(s ?? "")), n);
@@ -83,6 +94,7 @@ function goStep(step, scroll = true) {
 }
 for (const b of document.querySelectorAll(".steps button")) b.addEventListener("click", () => goStep(b.dataset.step));
 goStep("input", false);
+$("viz-panel").replaceChildren(exploreEmpty());
 
 // ── Views (tabs) ───────────────────────────────────────────────────────────
 const tabs = [...document.querySelectorAll(".viz-tabs [role=tab]")];
@@ -113,6 +125,19 @@ tabs.forEach((t, i) => {
     }
   });
 });
+
+// Tabs wider than the pane fade at the side with more to scroll to.
+{
+  const strip = document.querySelector(".viz-tabs");
+  const edge = () => {
+    const max = strip.scrollWidth - strip.clientWidth;
+    const at = strip.scrollLeft;
+    strip.dataset.fade = max <= 1 ? "" : at <= 1 ? "end" : at >= max - 1 ? "start" : "both";
+  };
+  strip.addEventListener("scroll", edge, { passive: true });
+  if ("ResizeObserver" in window) new ResizeObserver(edge).observe(strip);
+  edge();
+}
 
 // ── Input ──────────────────────────────────────────────────────────────────
 /** Analyze is offered only when there is something to analyse. */
@@ -149,15 +174,13 @@ function nothingRead(title, first) {
 /** Back to the empty workbench: no dashboard for an input that read nothing. */
 function clearAnalysis() {
   a = null;
-  source = null;
-  generation++;
   endpointsCache = null;
   sel = { c: null, r: null, rule: null };
   const hint = (text, cls = "hint") => el("p", { class: cls }, text);
   $("summary").hidden = true;
   $("summary").replaceChildren();
   $("cluster-list").replaceChildren(hint("Analyse records to see their clusters: records linked by shared inbox IDs, unique tags, or the same target in a short window."));
-  $("viz-panel").replaceChildren(hint("Views appear here after an analysis.", "hint empty-state"));
+  $("viz-panel").replaceChildren(exploreEmpty());
   $("filter-bar").replaceChildren();
   $("records-h").textContent = "Flagged records";
   $("records").replaceChildren(hint("No records yet."));
@@ -169,6 +192,17 @@ function clearAnalysis() {
   syncResultControls();
   resetSightings();
   writeHash();
+}
+
+/** The empty views pane: what will show here, and the example to try. */
+function exploreEmpty() {
+  const b = el("button", { type: "button", class: "primary" }, "Try an example");
+  b.addEventListener("click", loadExample);
+  b.addEventListener("pointerenter", warm, { once: true });
+  return el("div", { class: "empty-state" },
+    el("p", {}, "Runs over time, the fleet and swarm graphs, rules against clusters and the hourly rhythm appear here once records are analysed."),
+    el("p", { class: "hint" }, "No records to hand? The example is the synthetic incident the home page walks through."),
+    b);
 }
 
 /** Drafting, sightings and the CSV downloads wait for an analysis. */
@@ -205,8 +239,6 @@ function runAnalysis() {
     warn.textContent = notes.join(" ");
   }
   a = out.analysis;
-  source = src;
-  generation++;
   zoom = null;
   allRecords = false;
   // Declared testing (the declaring text and the contact it names) is for
@@ -830,7 +862,7 @@ function attributionPanel(c) {
     }
   };
   btn.addEventListener("click", load);
-  box.append(el("p", { class: "hint" }, "Developer, host, harness and model family: who the records point at, and on what evidence. Loads the report tools."), btn);
+  box.append(el("p", { class: "hint" }, "Developer, host, harness and model family: who the records point at, and on what evidence."), btn);
   return el("section", { class: "ctx-section", "aria-label": "Attribution layers" }, el("h4", {}, "Attribution"), box);
 }
 
@@ -884,21 +916,24 @@ function renderContext() {
 function renderLinks() {
   const pauses = arr(a.shared_pauses);
   const out = [];
-  out.push(el("h4", {}, "Shared pauses"));
-  out.push(pauses.length
-    ? el("ul", {}, pauses.map((sp) => el("li", {}, el("strong", {}, `${sp.a} and ${sp.b}`), ` went quiet together: ${sp.reason ?? ""}. Their records share no identifier; a link to check, not a merge.`,
-        num(sp.p_chance) != null ? el("span", { class: "hint" }, ` (chance ${sp.p_chance.toExponential(1)})`) : null)))
-    : el("p", { class: "hint" }, "No pair of clusters went quiet together more often than chance allows."));
+  // Kinds with nothing found share one line at the end, with what each
+  // would have meant, instead of a heading each.
+  const none = [];
+  if (pauses.length) {
+    out.push(el("h4", {}, `Shared pauses (${pauses.length})`));
+    out.push(el("ul", {}, pauses.map((sp) => el("li", {}, el("strong", {}, `${sp.a} and ${sp.b}`), ` went quiet together: ${sp.reason ?? ""}. Their records share no identifier; a link to check, not a merge.`,
+      num(sp.p_chance) != null ? el("span", { class: "hint" }, ` (chance ${sp.p_chance.toExponential(1)})`) : null))));
+  } else none.push(["shared pauses", "no pair of clusters went quiet together more often than chance allows"]);
   const dp = arr(a.dialect_pairs);
-  out.push(el("h4", {}, "Shared payload dialects"));
-  out.push(dp.length
-    ? el("ul", {}, dp.map((p) => el("li", {}, el("strong", {}, `${p.a} and ${p.b}`), ` use the same uncommon mix of test payloads (Jaccard ${(num(p.jaccard) ?? 0).toFixed(2)}): `, chips(arr(p.shared).slice(0, 12).map((v) => safe(v, 40))), " A link to check, not a merge.")))
-    : el("p", { class: "hint" }, "No pair of clusters shares an uncommon mix of test payloads."));
+  if (dp.length) {
+    out.push(el("h4", {}, `Shared payload dialects (${dp.length})`));
+    out.push(el("ul", {}, dp.map((p) => el("li", {}, el("strong", {}, `${p.a} and ${p.b}`), ` use the same uncommon mix of test payloads (Jaccard ${(num(p.jaccard) ?? 0).toFixed(2)}): `, chips(arr(p.shared).slice(0, 12).map((v) => safe(v, 40))), " A link to check, not a merge."))));
+  } else none.push(["shared payload dialects", "no pair shares an uncommon mix of test payloads"]);
   const chains = arr(a.chains);
-  out.push(el("h4", {}, `Probe chains (${chains.length})`));
-  out.push(chains.length
-    ? el("ul", {}, chains.slice(0, 30).map((ch) => el("li", {}, chainLine(ch))), chains.length > 30 ? el("li", { class: "hint" }, `${chains.length - 30} more`) : null)
-    : el("p", { class: "hint" }, "No probe chains: no runs of three or more variants of one request."));
+  if (chains.length) {
+    out.push(el("h4", {}, `Probe chains (${chains.length})`));
+    out.push(el("ul", {}, chains.slice(0, 30).map((ch) => el("li", {}, chainLine(ch))), chains.length > 30 ? el("li", { class: "hint" }, `${chains.length - 30} more`) : null));
+  } else none.push(["probe chains", "no run of three or more variants of one request"]);
   const common = arr(a.common_features);
   if (common.length) {
     out.push(el("h4", {}, `Common features (${common.length})`));
@@ -922,14 +957,21 @@ function renderLinks() {
       out.push(el("h4", {}, `Candidate fleets (${fleets.length})`));
       out.push(el("ul", {}, fleetItems(fleets.slice(0, 20), idOf)));
     }
-    out.push(el("h4", {}, `Soft links (${edges.length})`));
-    out.push(edges.length ? el("ul", {}, edges.slice(0, 40).map((e) => el("li", {}, el("strong", {}, `${idOf(e.a)} and ${idOf(e.b)}`), ` ${e.label}`))) : el("p", { class: "hint" }, "None between these clusters beyond the shared pauses and dialects above."));
+    if (edges.length) {
+      out.push(el("h4", {}, `Soft links (${edges.length})`));
+      out.push(el("ul", {}, edges.slice(0, 40).map((e) => el("li", {}, el("strong", {}, `${idOf(e.a)} and ${idOf(e.b)}`), ` ${e.label}`))));
+    } else none.push(["soft links", "none between these clusters beyond the shared pauses and dialects"]);
   }
   const sw = swarmData().edges;
   if (sw.length) {
     out.push(el("h4", {}, `Interaction hints (${sw.length})`));
     out.push(el("p", { class: "hint" }, "Runs that may act on each other's output (S1–S5): weak-to-moderate hints, never a merge. See the Swarm view."));
     out.push(el("ul", {}, sw.slice(0, 40).map((e) => el("li", {}, el("strong", {}, `${e.name} (${e.strength})`), ` ${e.from} → ${e.to}: ${e.detail}`))));
+  }
+  if (none.length) {
+    // One line; each kind says in its tooltip what finding none means.
+    const kinds = none.flatMap(([k, why], i) => [i ? ", " : "", el("span", { title: `${why[0].toUpperCase()}${why.slice(1)}.` }, k)]);
+    out.push(el("p", { class: "hint none-found" }, el("strong", {}, "None found: "), ...kinds, "."));
   }
   $("links").replaceChildren(...out);
 }
@@ -950,14 +992,9 @@ function readClaims() {
   }
 }
 
-/** The tools module, holding this analysis (re-run on the same input). */
+/** The module, holding the analysis shown (its own `analyze` made it). */
 async function prepared() {
-  const t = await tools();
-  if (preparedGen !== generation) {
-    t.prepare(source.input, source.format, source.map, rules);
-    preparedGen = generation;
-  }
-  return t;
+  return ensure();
 }
 
 /**
@@ -981,7 +1018,7 @@ async function renderReport() {
     return;
   }
   if (!wantReport) {
-    $("report").textContent = `Drafting loads the report tools${sizeNote("toolsSize")}. Press "Draft the report", or scroll here.`;
+    $("report").textContent = 'Press "Draft the report", or scroll here.';
     return;
   }
   const opts = {
@@ -1013,7 +1050,7 @@ $("draft-report").addEventListener("click", startReport);
 // Sightings to share: built by the tools module from this analysis, shown in
 // full, saved only on Download.
 sightingsPanel(async () => (a ? prepared() : null));
-// Reaching the report section starts the draft (and the module download).
+// Reaching the report section starts the draft (the module is loaded).
 if ("IntersectionObserver" in window) {
   new IntersectionObserver((entries) => {
     if (a && entries.some((e) => e.isIntersecting)) startReport();
@@ -1022,11 +1059,13 @@ if ("IntersectionObserver" in window) {
 
 // ── Wiring ─────────────────────────────────────────────────────────────────
 async function loadExample() {
+  const mod = ensure();
   try {
     $("input").value = await fetchRoot("assets/example.ndjson", "text");
   } catch (e) {
     return showAlert($("alert"), "The example did not load.", String(e?.message ?? e));
   }
+  if (!(await mod.catch(() => null))) return;
   syncRun();
   $("format").value = "ndjson";
   syncPlaceholder();
@@ -1035,15 +1074,19 @@ async function loadExample() {
   if (runAnalysis()) $("example-note").hidden = false;
 }
 
-$("run").addEventListener("click", () => {
+$("run").addEventListener("click", async () => {
   $("example-note").hidden = true;
-  runAnalysis();
+  if (await ensure().catch(() => null)) runAnalysis();
 });
 $("example").addEventListener("click", loadExample);
 $("input").addEventListener("input", () => {
   $("example-note").hidden = true;
   syncRun();
+  warm();
 });
+// Signs of input start the download, so the module is ready by Analyse.
+$("input").addEventListener("focus", warm, { once: true });
+for (const [id, ev] of [["example", "pointerenter"], ["example", "focus"], ["file", "focus"], ["file", "click"], ["drop", "dragenter"]]) $(id).addEventListener(ev, warm, { once: true });
 $("input-edit").addEventListener("click", () => expandInput(true));
 /** Read a picked or dropped file into the records box and analyse it. */
 async function loadFile(f) {
@@ -1058,7 +1101,7 @@ async function loadFile(f) {
   }
   status.hidden = true;
   syncRun();
-  runAnalysis();
+  if (await ensure().catch(() => null)) runAnalysis();
 }
 $("file").addEventListener("change", async (e) => {
   const f = e.target.files[0];
@@ -1076,7 +1119,7 @@ function syncPlaceholder() {
 $("format").addEventListener("change", syncPlaceholder);
 for (const id of ["audience", "min-named"]) $(id).addEventListener("change", renderReport);
 $("reporter").addEventListener("input", renderReport);
-$("claims").addEventListener("input", () => (a ? renderReport() : readClaims()));
+$("claims").addEventListener("input", () => (a ? renderReport() : sc && readClaims()));
 $("copy-report").addEventListener("click", () => navigator.clipboard?.writeText($("report").textContent));
 $("dl-report").addEventListener("click", () => download("swarmchase-report.md", $("report").textContent, "text/markdown"));
 $("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.json", JSON.stringify(a, null, 2), "application/json"));
@@ -1152,6 +1195,7 @@ $("csv-endpoints").addEventListener("click", () => {
     $("input-box").prepend($("preset-note"));
     $("preset-note").hidden = false;
     $("input").focus();
+    warm();
   } else if (h.example) {
     await loadExample();
   }
