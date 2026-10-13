@@ -69,6 +69,12 @@ pub const NAV: &[(&str, &[NavItem])] = &[
                 "The layers inside one URL",
             ),
             (
+                "identity",
+                "Agent identity",
+                "identity/",
+                "Check declared agents in your log against providers' files",
+            ),
+            (
                 "tools",
                 "Tools",
                 "tools/",

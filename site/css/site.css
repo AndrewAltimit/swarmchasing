@@ -219,6 +219,16 @@ label { font-weight: 600; font-size: 13px; color: var(--text-secondary); }
 .pill.significant, .pill.active { --dot: var(--critical); }
 .pill.suggestive, .pill.contained { --dot: var(--serious); }
 .pill.noise, .pill.historical { --dot: var(--text-muted); }
+/* Declared agent identity classes (the identity page). */
+.pill.id-signature_verified, .pill.id-ip_verified, .pill.id-in_range { --dot: var(--good); }
+.pill.id-signature_present, .pill.id-claimed { --dot: var(--accent); }
+.pill.id-signature_failed { --dot: var(--serious); }
+.pill.id-spoofed { --dot: var(--critical); }
+.pill.id-none { --dot: var(--text-muted); }
+.alert.id-spoofed { border-left-color: var(--critical); max-width: none; }
+tr.id-row-spoofed > td:first-child { box-shadow: inset 3px 0 0 var(--critical); }
+.id-counts dd.id-alarm .big { color: var(--critical); }
+table.id-files td.url code { overflow-wrap: anywhere; white-space: normal; }
 .chip { display: inline-block; background: var(--code-bg); border-radius: 5px; padding: 0 6px; margin: 1px 3px 1px 0; font-size: 12px; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
 .badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); white-space: nowrap; }
 .flag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 5px; margin-right: 4px; border: 1px solid var(--border); }

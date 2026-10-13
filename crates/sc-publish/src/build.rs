@@ -9,6 +9,13 @@
 //! Unlike the rest of this crate it reads and writes files; it never touches
 //! the network.
 //!
+//! One input is not committed: with `identity_snapshot` set, the providers'
+//! range files and key directories `swarmchase identity refresh` holds, for
+//! the identity page ([`crate::identity`]). Only `fetched.json` and the files
+//! the catalog names are read, and each is embedded only when it parses and
+//! matches its recorded SHA-256. They are the providers' public documents,
+//! never watch data.
+//!
 //! It adds the agent-facing files ([`crate::agents`]). When
 //! `SWARMCHASE_CANARY_SEED` holds the secret seed, every page and agent
 //! file carries its own canary token for the build's month
@@ -34,6 +41,10 @@ pub struct BuildOptions {
     /// Notice files from another directory (the XSS check's hostile
     /// fixture). A deploy never sets it.
     pub extra_notices: Option<PathBuf>,
+    /// A directory `swarmchase identity refresh` wrote (`<data>/identity`):
+    /// the providers' files the identity page starts with. Unset or without
+    /// `fetched.json`, the page has the catalog alone.
+    pub identity_snapshot: Option<PathBuf>,
 }
 
 impl Default for BuildOptions {
@@ -44,6 +55,7 @@ impl Default for BuildOptions {
             root: PathBuf::from("."),
             inputs_log: None,
             extra_notices: None,
+            identity_snapshot: None,
         }
     }
 }
@@ -58,6 +70,9 @@ pub struct Built {
     pub warnings: Vec<String>,
     /// The canary period (`YYMM`) when tokens were embedded.
     pub canary_period: Option<String>,
+    /// The providers' files embedded for the identity page: (catalog id,
+    /// fetch date).
+    pub identity_files: Vec<(String, String)>,
 }
 
 /// The build's time: `SOURCE_DATE_EPOCH` when set (reproducible builds),
@@ -289,6 +304,20 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
     let size = |p: &str| fs::read(r.root.join(p)).ok().map(|b| gzip_len(&b));
     let engine_bytes = size("site/pkg/sc_wasm_bg.wasm");
     let tools_bytes = size("site/pkg/tools/sc_tools_bg.wasm");
+    let mut warnings = Vec::new();
+    let identity = match &o.identity_snapshot {
+        Some(dir) => read_identity_snapshot(dir, &mut warnings)?,
+        None => None,
+    };
+    let identity_files: Vec<(String, String)> = identity
+        .as_ref()
+        .map(|s| {
+            s.files
+                .iter()
+                .map(|f| (f.id.clone(), f.fetched.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut inputs = SiteInputs {
         notices,
         docs,
@@ -301,6 +330,7 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         version: env!("CARGO_PKG_VERSION").to_string(),
         engine_bytes,
         tools_bytes,
+        identity,
     };
     let mut files = build_pages(&mut inputs)?;
     let now = build_time();
@@ -367,7 +397,6 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         };
         fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;
     }
-    let mut warnings = Vec::new();
     if !r.root.join("site/pkg/sc_wasm.js").is_file() {
         warnings.push(
             "site/pkg is missing; run scripts/ci/build-site.sh for the analysis pages".to_string(),
@@ -385,7 +414,59 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         out,
         warnings,
         canary_period: canary.map(|(_, p)| p),
+        identity_files,
     })
+}
+
+/// The providers' files in `dir` (as `identity refresh` writes them), for
+/// the identity page. `None` when `dir` holds no `fetched.json`. Reads only
+/// `fetched.json` and `<id>.json` for each catalog id; a file over the size
+/// `identity refresh` accepts is left out.
+fn read_identity_snapshot(
+    dir: &Path,
+    warnings: &mut Vec<String>,
+) -> Result<Option<crate::identity::Snapshot>, String> {
+    const MAX: u64 = 4 << 20;
+    let index = dir.join("fetched.json");
+    if !index.is_file() {
+        warnings.push(format!(
+            "identity snapshot: {} has no fetched.json; the identity page has the catalog only",
+            dir.display()
+        ));
+        return Ok(None);
+    }
+    let catalog = sc_core::identity::Catalog::bundled();
+    let read = |p: &Path| -> Result<String, String> {
+        let len = fs::metadata(p)
+            .map_err(|e| format!("{}: {e}", p.display()))?
+            .len();
+        if len > MAX {
+            return Err(format!("{}: over {MAX} bytes", p.display()));
+        }
+        fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))
+    };
+    let mut files = BTreeMap::new();
+    let ids = catalog
+        .range_files
+        .iter()
+        .map(|f| f.id.clone())
+        .chain(catalog.directories.iter().map(|d| d.id.clone()));
+    for id in ids {
+        let p = dir.join(format!("{id}.json"));
+        if !p.is_file() {
+            continue;
+        }
+        match read(&p) {
+            Ok(t) => {
+                files.insert(id, t);
+            }
+            Err(e) => warnings.push(format!("identity snapshot: {e}; left out")),
+        }
+    }
+    let (snap, w) = crate::identity::snapshot(catalog, &read(&index)?, &files)
+        .map_err(|e| format!("identity snapshot: {e}"))?;
+    warnings.extend(w.into_iter().map(|w| format!("identity snapshot: {w}")));
+    Ok(Some(snap))
 }
 
 /// The length of `bytes` gzip-compressed at the default level.
