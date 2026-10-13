@@ -190,6 +190,15 @@ pub struct Actor {
     /// Hours after the scenario start the actor begins.
     #[serde(default)]
     pub offset_hours: f64,
+    /// Move the start to a seeded 7 to 53 minutes past its hour, so the
+    /// actor's runs do not begin on a clock hour.
+    #[serde(default)]
+    pub off_hour: bool,
+    /// Share of each use's templates a run draws from: a seeded subset per
+    /// swarm or fleet, else per run, so unrelated actors do not all copy one
+    /// small set of records and share its habits. 1 is the whole palette.
+    #[serde(default = "whole")]
+    pub palette_share: f64,
     /// For a planter: the actor (by index) whose identifiers it copies.
     #[serde(default)]
     pub copies: Option<usize>,
@@ -203,4 +212,7 @@ fn default_hosts() -> usize {
 }
 fn yes() -> bool {
     true
+}
+fn whole() -> f64 {
+    1.0
 }

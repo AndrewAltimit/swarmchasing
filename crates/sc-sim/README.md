@@ -18,7 +18,7 @@ print!("{}", render(&m));
 
 | Module | Covers |
 |---|---|
-| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, single agents, background and planters), pace, retries, time basis, seeds. |
+| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, single agents, background and planters), pace, retries, start offsets, palette shares, time basis, seeds. |
 | [`palette`](src/palette.rs) | The committed records the generator copies, sorted by use (attack, read, callback inbox, benign, person, tool). |
 | [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers. |
 | [`rng`](src/rng.rs) | A small seeded generator, the same on every platform. |
