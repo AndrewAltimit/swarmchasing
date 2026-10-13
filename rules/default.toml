@@ -169,8 +169,9 @@ max_shared = 10
 shared_pause = 4.0
 # Simulation: weak (point ratio above 3, low bound near 1); listed when rare.
 dialect = 2.0
-# Judgment for the next six: the simulation does not produce them.
-rerun = 10.0
+# Judgment for the next six: the simulation does not produce them. A rerun of
+# a whole host list in order on another day is a fleet edge on its own.
+rerun = 25.0
 preamble = 3.0
 path_set = 3.0
 cut_length = 2.0
