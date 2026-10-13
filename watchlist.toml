@@ -447,7 +447,7 @@ page_size = 100
 # `carry_hours`. Output is a digest section of hints, never a finding.
 [platform]
 carry_hours = 72
-label_days = 30           # keep labels from reference sources (osv) this long
+label_days = 30           # keep labels from reference sources (osv, wikimedia-ai-cleanup) this long
 # [platform.options] takes the detector's tunables (min_accounts, burst_secs,
 # max_chance, ...); the defaults are in crates/sc-core/src/platform/mod.rs.
 
@@ -619,6 +619,26 @@ kind = "osv"
 endpoint = "PyPI"
 pattern = "*"
 scan = 50
+
+# Rationale: reference data, not events: human labels for free. English
+# Wikipedia editors tag articles they suspect hold AI-generated text with a
+# cleanup template that files them in a monthly category ("Articles
+# containing suspected AI-generated texts from <month> <year>"). The watch
+# labels any wiki candidate whose members edited a tagged page. Reads the
+# category's members added since the last run through the MediaWiki API
+# (list=categorymembers, sorted by when each was added), a request or two a
+# run, rather than the recentchange stream that carries the same
+# categorize events among every other change. Noise: a tag is an editor's
+# suspicion, and most tagged pages were edited by one person, not a swarm.
+# Terms: the MediaWiki API etiquette (https://www.mediawiki.org/wiki/API:Etiquette)
+# asks for serial requests and an identifying user agent, which every
+# request sends; page titles and times only are kept.
+[[platform.source]]
+name = "wikipedia-ai-cleanup"
+kind = "wikimedia-ai-cleanup"
+endpoint = "en.wikipedia.org"
+pattern = "*"             # the default category name
+scan = 4                  # API requests per run
 
 # Rationale: agents told to test or prove they can edit open wikis make
 # sandbox and draft edits from new accounts, many at once, with templated

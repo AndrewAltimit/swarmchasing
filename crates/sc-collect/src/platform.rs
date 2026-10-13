@@ -66,6 +66,7 @@ pub const PLATFORM_KINDS: &[&str] = &[
     "crates",
     "cve",
     "osv",
+    "wikimedia-ai-cleanup",
 ];
 
 /// A platform source in the watchlist (`[[platform.source]]`).
@@ -200,6 +201,7 @@ pub fn pull_platform(
         "golang" => pull_golang(client, &src.query, mark, max),
         "cve" => crate::cve::pull_platform(client, &src.query, mark, rules, max),
         "osv" => crate::osv::pull_labels(client, &src.query, mark),
+        "wikimedia-ai-cleanup" => crate::wikimedia::pull_ai_cleanup(client, &src.query, mark),
         "hackernews" => crate::hackernews::pull_platform(
             client,
             &src.query,

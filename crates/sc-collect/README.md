@@ -95,9 +95,9 @@ Hacker News walks its search index back from the pull's start to the checkpoint,
 
 ### Platform events
 
-[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (a kind in `PLATFORM_KINDS`: `gharchive`, `npm`, `pypi`, `huggingface`, `golang`, `wikimedia`, `hackernews`, `nuget`, `packagist`, `rubygems`, `crates`, `cve`, `osv`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped.
+[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (a kind in `PLATFORM_KINDS`: `gharchive`, `npm`, `pypi`, `huggingface`, `golang`, `wikimedia`, `hackernews`, `nuget`, `packagist`, `rubygems`, `crates`, `cve`, `osv`, `wikimedia-ai-cleanup`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped.
 
-A reference source (`osv`) returns `PlatformPull::labels` instead of events: a `TargetLabel` names a target on a platform (`label_key` normalises it as events name it), what it says (`osv-malicious`) and the record that says so.
+A reference source (`osv`, `wikimedia-ai-cleanup`) returns `PlatformPull::labels` instead of events: a `TargetLabel` names a target on a platform (`label_key` normalises it as events name it), what it says (`osv-malicious`, `wiki-ai-cleanup`) and the record or category that says so.
 
 Declared coding-agent Apps are tallied by product and lookalike App logins by login (`PlatformPull::declared`, `lookalikes`). GitHub's trimmed payloads give a pull request opened no text; it is kept text-less with its repository as the target, as stars and forks are. `gharchive_file` reads a GH Archive hour file from disk. Nothing inside an event's text is fetched, and a Space or repository is never opened ([methodology](../../docs/methodology.md#coordinated-accounts-on-public-platforms)).
 
@@ -149,7 +149,7 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`urlquery.rs`](src/urlquery.rs), [`urlscan.rs`](src/urlscan.rs) | Scan-service sources. |
 | [`gharchive.rs`](src/gharchive.rs), [`npm.rs`](src/npm.rs), [`pypi.rs`](src/pypi.rs), [`mcp.rs`](src/mcp.rs) | Event-stream and registry sources. |
 | [`platform.rs`](src/platform.rs) | Platform events for the coordinated-account detector: GH Archive, npm, PyPI, Hugging Face Hub and Go module index listings, sketched at parse time. |
-| [`wikimedia.rs`](src/wikimedia.rs) | Wikimedia EventStreams: an SSE reader, added external links as records, edits as platform events. |
+| [`wikimedia.rs`](src/wikimedia.rs) | Wikimedia EventStreams: an SSE reader, added external links as records, edits as platform events; pages tagged as suspected AI-generated text as labels. |
 | [`registries.rs`](src/registries.rs) | NuGet's catalog, Packagist's change feed, RubyGems' newest gems and crates.io's newest crates as platform events. |
 | [`cve.rs`](src/cve.rs) | CVE records and GitHub advisories as platform events, grouped by the repository their references name. |
 | [`osv.rs`](src/osv.rs) | OSV malicious-package records as labels on package targets (`TargetLabel`), joined to candidates by the watch. |
