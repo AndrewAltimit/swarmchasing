@@ -38,7 +38,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 
 - **Cursors.** Each source keeps a time cursor in `state.json`. New records are deduplicated by ID and appended to the source's store file. A record stamped in the future moves the cursor no further than the run's own time. A source that cannot page and returns `limit` records moves its cursor no further than the oldest of them, since what lies before may be missing. IDs of records with no time stay in the seen list, so they are never added twice.
 - **Wayback paging.** Wayback's index is sorted by URL rather than time, so a pull cut short by `limit`, or by a failed page, resumes from its resume key on the next run. A host too big for one index query is read by path prefix, and `slice_days` reads the time range in windows.
-- **Checkpoints.** GH Archive, Wikimedia EventStreams and CT logs read on from where the last run stopped (`mark` in `state.json`), within a per-run budget. Every page read counts as progress, matches or not, so a failure after matchless hours resumes after them. A GH Archive hour whose file is corrupt or cut off is skipped and counted, not retried each run.
+- **Checkpoints.** GH Archive, Wikimedia EventStreams, Hacker News and CT logs read on from where the last run stopped (`mark` in `state.json`), within a per-run budget. Every page read counts as progress, matches or not, so a failure after matchless hours resumes after them. A GH Archive hour whose file is corrupt or cut off is skipped and counted, not retried each run.
 - **Unavailable hosts.** A host answering HTTP 503 gets ten minutes of retries; if it stays down, later requests to it in the same run are not sent, and its sources continue next run.
 - **Overlap.** Each pull overlaps the last by `overlap_days` to catch late-indexed captures.
 - **Analysis window.** Every run analyses the stored records captured in the last `analysis_window_days` together, so clusters can span runs. The overlap before the window is read for the archive burst baseline only. `case new` defaults to the same window, so a cluster number from the digest names the same cluster there.
@@ -62,6 +62,7 @@ Each `[[source]]` names a `kind`. Its `pattern` means what the table says; `endp
 | `urlscan` | urlscan.io public search | search query | per case only (terms) |
 | `gharchive` | GH Archive events | substrings | `scan`: hours per run; `max_mb` |
 | `wikimedia` | External links added to wiki pages | substrings of the link or title | `scan`: minutes per run; `max_mb`; `filter` |
+| `hackernews` | Links in Hacker News stories and comments | substrings of the link, title or text | `scan`: index queries of 1000 items per run |
 | `npm` | npm registry search | search text | `canary`: a search that always hits |
 | `pypi` | PyPI RSS feed | substrings | `endpoint`: `updates` or `packages` |
 | `ctlog` | One CT log | substrings | `endpoint`: log URL; `scan`: entries per run |
@@ -186,9 +187,9 @@ The watch changes nothing itself. Apply an approved proposal with `swarmchase no
 
 ## Platform swarms
 
-A separate pass in each run looks for accounts acting alike on GitHub, npm, PyPI, the Hugging Face Hub, Go modules and Wikimedia wikis: near-identical or templated text, templated names, or text-less stars, forks and pull requests on one target, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
+A separate pass in each run looks for accounts acting alike on GitHub, package registries (npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Go modules), the Hugging Face Hub, Wikimedia wikis, Hacker News, Bluesky and CVE records: near-identical or templated text, templated names, or text-less stars, forks and pull requests on one target, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
 
-**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
+**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), `label_days` (default 30), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
 
 | Kind | Reads | Fields |
 |---|---|---|
@@ -198,8 +199,19 @@ A separate pass in each run looks for accounts acting alike on GitHub, npm, PyPI
 | `huggingface` | The Hub's newest listing | `endpoint`: `spaces` (default), `models` or `datasets`; `limit` (at most 1000) |
 | `golang` | The Go module index, oldest first from the checkpoint | `scan`: requests of 2000 entries per run (default 6) |
 | `wikimedia` | Edits from the `mediawiki.revision-create` stream | `scan`: minutes per run (default 5); `max_mb`; `filter` |
+| `nuget` | NuGet's catalog pages committed since the checkpoint, oldest first | `scan`: pages per run (default 4) |
+| `packagist` | Packagist's change feed since the checkpoint | none; the feed keeps a day |
+| `rubygems` | RubyGems' newest listing (fifty gems) | `endpoint`: `latest` (default) or `just_updated` |
+| `crates` | crates.io's newest crates, back to the checkpoint | `scan`: pages of 100 per run (default 3) |
+| `cve` | GitHub advisories of one type, oldest first from the checkpoint, or CVE List records new in its delta log | `endpoint`: `unreviewed` (default), `reviewed`, `malware` or `cvelist`; `scan`: requests of 100 (default 3), or records for `cvelist` (default 30) |
+| `wikimedia-ai-cleanup` | Pages added to a wiki's suspected-AI-generated-text cleanup categories since the checkpoint, as labels | `endpoint`: the wiki (default `en.wikipedia.org`); `pattern`: the category name before ` from <month>`, `*` for the default; `scan`: API requests (default 4) |
+| `osv` | OSV malicious-package records for one ecosystem, as labels | `endpoint`: `npm` (default), `PyPI`, `Go`, `crates.io`, `NuGet`, `Packagist` or `RubyGems`; `scan`: records per run (default 50) |
+| `bluesky` | Posts from Jetstream, from the checkpoint or the newest half hour of stream time, whichever is later | `endpoint`: the Jetstream instance; `scan`: wall-clock minutes (default 3); `max_mb`; `max_events`; `max_lookups` (default 40) |
+| `hackernews` | Stories and comments from the search index, newest back to the checkpoint | `scan`: queries of 1000 items (default 10); `max_lookups`: account-age lookups (default 40) |
 
-`pattern` is required by the format; `gharchive`, `golang` and `wikimedia` ignore it. These sources keep their checkpoint in `platform/state.json`; a backlog over 24 hours is skipped to the newest stretch, and the section shows how much was read and skipped. A corrupt GH Archive hour is skipped and counted.
+`pattern` is required by the format; only `npm` and `pypi` read it. Sources that read from a checkpoint (all but `npm`, `pypi`, `huggingface` and `rubygems`) keep it in `platform/state.json`; a backlog over 24 hours (a week for `osv` and `wikimedia-ai-cleanup`, half an hour of stream for `bluesky`) is skipped to the newest stretch, and the section shows how much was read and skipped. A corrupt GH Archive hour is skipped and counted.
+
+**Labels.** An `osv` or `wikimedia-ai-cleanup` source gives labels, not events: the packages OSV's malicious-package records name, or the wiki pages editors tagged as suspected AI-generated text. They are kept in `platform/labels.ndjson` for `label_days` (default 30). A candidate shown in the digest whose members published a labelled package or edited a labelled page gets a *Labelled* line with the records behind it, and `runs/<stamp>/platform-labels.json` lists every candidate's matches.
 
 **Declared coding agents.** GitHub events from the coding-agent Apps that [`declared-agents.toml`](../../declared-agents.toml) lists (`github_app`) are tallied by product on the source's line, not grouped. An undeclared App whose login carries one of those products' names is listed below it as a spoofing lead, by login: App logins name software, not people.
 

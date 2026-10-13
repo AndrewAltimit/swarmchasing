@@ -106,6 +106,8 @@ pub enum SourceKind {
     Mcp,
     /// Wikimedia EventStreams (`wikimedia`): links added to wiki pages.
     Wikimedia,
+    /// Hacker News (`hackernews`): links in stories and comments.
+    HackerNews,
     /// An outside report taken in by the inbox ([`SUBMISSION_SOURCE`]).
     Submission,
     /// Any other source (`manual`, `lines`, an import, a fixture, none).
@@ -113,7 +115,7 @@ pub enum SourceKind {
 }
 
 impl SourceKind {
-    const NAMED: [(SourceKind, &'static str); 15] = [
+    const NAMED: [(SourceKind, &'static str); 16] = [
         (Self::AccessLog, "access_log"),
         (Self::Operator, OPERATOR_SOURCE),
         (Self::Urlquery, "urlquery"),
@@ -128,6 +130,7 @@ impl SourceKind {
         (Self::Commoncrawl, "commoncrawl"),
         (Self::Mcp, "mcp"),
         (Self::Wikimedia, "wikimedia"),
+        (Self::HackerNews, "hackernews"),
         (Self::Submission, SUBMISSION_SOURCE),
     ];
 
@@ -161,6 +164,7 @@ pub enum Provenance {
     Observed,
     /// Anyone can publish the record under a name of their choosing: GH
     /// Archive events, npm and PyPI packages, links added to wiki pages,
+    /// links posted to Hacker News,
     /// Certificate Transparency entries, and Common Crawl, which crawls what any page links to.
     PublishAnywhere,
     /// Someone outside sent it to the inbox as part of a report: the
@@ -184,7 +188,9 @@ impl Provenance {
         match SourceKind::of(source) {
             AccessLog | Operator => Self::Observed,
             Urlquery | Urlscan | Wayback | Arquivo | Memento => Self::SubmitAnywhere,
-            Gharchive | Npm | Pypi | Ctlog | Commoncrawl | Mcp | Wikimedia => Self::PublishAnywhere,
+            Gharchive | Npm | Pypi | Ctlog | Commoncrawl | Mcp | Wikimedia | HackerNews => {
+                Self::PublishAnywhere
+            }
             Submission => Self::Reported,
             Other => Self::Unknown,
         }
