@@ -96,7 +96,7 @@ Tools draft reports, find contacts and prepare notices. They never send or publi
 - the scope finding for each cluster ([FM-15.4](15-misalignment.md#fm-154-stating-a-scope-finding)) and the agent grade;
 - the self-review and second reviews below.
 
-An evidence bundle sent with a report holds the records, their analysis, a stamp with the rules and toolkit versions, and a hash manifest, so a recipient can re-run the analysis and check every tier ([evidence bundles](../reference/cases.md#evidence-bundles)).
+An evidence bundle sent with a report holds the records, their analysis, a stamp with the rules and toolkit versions, and a hash manifest, so a recipient can re-run the analysis and check every tier ([evidence bundles](../reference/cases.md#evidence-bundles)). A practitioner who sends reports **should** sign the manifest and publish the public key on a channel the recipient can reach independently of the report, so a recipient can tell a report from the practitioner from one that only cites its case id ([signed bundles](../reference/cases.md#signed-bundles)).
 
 ## FM-10.9 Self-review and second review
 

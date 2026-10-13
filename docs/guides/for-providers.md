@@ -37,12 +37,39 @@ Records sometimes carry a key or token an agent used, often one issued by a mode
 
 ## Check the evidence
 
-A report sent by email carries an evidence bundle: the redacted records, their analysis, a stamp (rules version, toolkit version and commit, method version, and the tier of every flagged record and cluster) and a SHA-256 manifest. Two ways to check it:
+A report sent by email carries an evidence bundle: the redacted records, their analysis, a stamp (rules version, toolkit version and commit, method version, and the tier of every flagged record and cluster), a SHA-256 manifest and, once a signing key is published, the manifest's signature (`MANIFEST.sha256.sig`). Two ways to check it:
 
 - **In the browser.** The site's [Tools page](../reference/browser-toolkit.md#evidence-bundles) loads the bundle and re-runs the check in the page. Nothing is uploaded and nothing needs installing.
-- **With the CLI.** From a checkout of this repository, `swarmchase case verify path/to/bundle`. It checks the manifest, re-runs the analysis and fails if any tier or cluster differs from the stamp.
+- **With the CLI.** From a checkout of this repository, `swarmchase case verify path/to/bundle`. It checks the signature against the committed key, checks the manifest, re-runs the analysis and fails if the signature is invalid or any tier or cluster differs from the stamp.
 
-The check needs the rules the bundle was made with; the stamp names them. A bundle that verifies shows that the tiers and clusters follow from the records under those rules. It does not show that the records are genuine, and the manifest is not signed. Follow each record's link to the archive capture or scan report it came from. The full procedure is in [for-operators.md](for-operators.md#verify-an-evidence-bundle).
+The check needs the rules the bundle was made with; the stamp names them. A bundle that verifies shows that the tiers and clusters follow from the records under those rules. It does not show that the records are genuine. Follow each record's link to the archive capture or scan report it came from. The full procedure is in [for-operators.md](for-operators.md#verify-an-evidence-bundle).
+
+### Check who sent it
+
+Anyone can write an email that cites a real case id. The signature shows whether the bundle came from us: it is an Ed25519 signature over `MANIFEST.sha256`, and the manifest holds the SHA-256 of every other file, including `stamp.json`, which names the case. So a valid signature, with the manifest check passing, shows that the whole bundle is as the holder of our signing key wrote it.
+
+<!-- bundle-signing-key -->
+
+Both checks print one of:
+
+- **signed by key `<key id>`**: the signature is valid under the published key with that id;
+- **signature invalid**: the bundle was altered after signing, or signed by a key we do not publish. Treat the report as not from us, and tell us through [private vulnerability reporting](https://github.com/AndrewAltimit/swarmchasing/security/advisories/new);
+- **unsigned**: the bundle carries no signature. Before a key is published every bundle is unsigned; after, ask us through the address the report came from before relying on an unsigned one;
+- **not checked**: the bundle is signed, but the checkout or site doing the check has no published key to check it against.
+
+The key id is the first 16 hex digits of the SHA-256 of the 32-byte public key. Compare it with the key id the project publishes: on this page as the site serves it, in the site's `.well-known/swarm-report.json` under `bundle_signing`, and in the repository's `keys/bundle-signing.pub`. Never take the key or its id from the email that carried the bundle. A key we retire stays in the file beside the newer one, so older bundles keep verifying; a key that leaked is removed, and its bundles then fail.
+
+The signature is plain Ed25519 over the manifest's bytes, so any implementation can check it. With OpenSSL 3, given the base64 key from `keys/bundle-signing.pub`:
+
+```sh
+( printf '\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00'; echo '<base64 key>' | base64 -d ) > key.der
+openssl pkey -pubin -inform DER -in key.der -out key.pem
+grep '^signature:' MANIFEST.sha256.sig | cut -d' ' -f2 | base64 -d > sig.bin
+openssl pkeyutl -verify -pubin -inkey key.pem -rawin -in MANIFEST.sha256 -sigfile sig.bin
+sha256sum -c MANIFEST.sha256
+```
+
+The signature covers the bundle, not the email it came in: check that the case id in the subject matches the one in `stamp.json`.
 
 The URLs in `records.ndjson` are as they were recorded, with secrets replaced by hashes. They can carry attack payloads and live callback channels. We never open them; treat them the same way, and open them only in an isolated environment if you must.
 

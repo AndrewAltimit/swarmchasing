@@ -41,11 +41,14 @@ clap = { version = "4", features = ["derive", "env"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 wasm-bindgen = "0.2"
 age = "0.11"
+# The seed `swarmchase key generate` makes (the version age and ring use).
+getrandom = "0.2"
 tar = { version = "0.4", default-features = false }
 flate2 = "1"
 psl = "2"
-# Ed25519 verification for Web Bot Auth signatures (sc-core `signatures`
-# feature). Verify only: no default features, no key generation.
+# Ed25519: verification for Web Bot Auth signatures (sc-core `signatures`
+# feature), and signing evidence bundle manifests (sc-case `signatures`). No
+# default features: keys come from a seed, never from the crate's own RNG.
 ed25519-dalek = { version = "2", default-features = false }
 # IODEF intake (sc-inbox): a pull reader, no DTD processing, no entity
 # expansion beyond the predefined ones.

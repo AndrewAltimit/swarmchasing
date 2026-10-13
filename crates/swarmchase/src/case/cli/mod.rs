@@ -125,19 +125,24 @@ pub enum CaseCmd {
         cmd: contacts::ContactCmd,
     },
     /// Write an evidence bundle: records, analysis, reproducibility stamp and
-    /// a SHA-256 manifest.
+    /// a SHA-256 manifest, signed when SWARMCHASE_SIGNING_KEY is set.
     Bundle {
         id: String,
         #[arg(long)]
         rules: Option<PathBuf>,
     },
-    /// Check a bundle: manifest hashes, then re-run the analysis and compare
-    /// every tier and cluster with its stamp.
+    /// Check a bundle: its signature against the published key, the
+    /// manifest hashes, then re-run the analysis and compare every tier and
+    /// cluster with its stamp. An invalid signature fails; an unsigned
+    /// bundle is reported as unsigned.
     Verify {
         bundle: PathBuf,
         /// The rules the bundle was made with, if not the bundled rules.
         #[arg(long)]
         rules: Option<PathBuf>,
+        /// The published key file. Default: keys/bundle-signing.pub.
+        #[arg(long, env = crate::signing::PUBLIC_ENV)]
+        key: Option<PathBuf>,
     },
     /// Prepare a report for one contact: an unsent .eml with a fresh evidence
     /// bundle attached for e-mail, paste-ready text otherwise. Nothing is sent.
@@ -231,7 +236,9 @@ pub fn run(args: CaseArgs) -> Result<()> {
         CaseCmd::Draft(a) => sending::draft(&ctx, a),
         CaseCmd::Sent(a) => sending::sent(&ctx, a),
         CaseCmd::Bundle { id, rules } => sending::bundle(&ctx, &id, rules.as_deref()),
-        CaseCmd::Verify { bundle, rules } => sending::verify(&ctx, &bundle, rules.as_deref()),
+        CaseCmd::Verify { bundle, rules, key } => {
+            sending::verify(&ctx, &bundle, rules.as_deref(), key.as_deref())
+        }
         CaseCmd::Evidence { cmd } => crate::evidence::run_evidence(&ctx.root, cmd, &ctx.today),
         CaseCmd::Notice {
             id,

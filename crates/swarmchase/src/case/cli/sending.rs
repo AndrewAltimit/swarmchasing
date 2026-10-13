@@ -136,15 +136,21 @@ pub(super) fn bundle(ctx: &Ctx, id: &str, rules: Option<&Path>) -> Result<()> {
         &rules,
         &ctx.today,
         crate::bundle::git_commit(),
+        crate::signing::signer()?.as_ref(),
     )?;
     println!("wrote {}", dir.display());
     Ok(())
 }
 
-pub(super) fn verify(ctx: &Ctx, bundle: &Path, rules: Option<&Path>) -> Result<()> {
+pub(super) fn verify(
+    ctx: &Ctx,
+    bundle: &Path,
+    rules: Option<&Path>,
+    key: Option<&Path>,
+) -> Result<()> {
     let rules = match rules {
         Some(p) => load_rules(Some(p))?,
         None => bundle_rules(&ctx.root, bundle)?,
     };
-    crate::bundle::report_verify(bundle, &rules)
+    crate::bundle::report_verify(bundle, &rules, key)
 }

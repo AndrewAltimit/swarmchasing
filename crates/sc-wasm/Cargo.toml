@@ -15,8 +15,9 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["engine"]
 engine = []
-# The tools module verifies Web Bot Auth signatures (identity checks).
-tools = ["sc-core/signatures"]
+# The tools module verifies Web Bot Auth signatures (identity checks) and
+# evidence bundle signatures.
+tools = ["sc-core/signatures", "sc-case/signatures"]
 
 [dependencies]
 sc-case.workspace = true
@@ -30,6 +31,8 @@ serde_json.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
+# The signature check is tested natively without the tools feature.
+sc-case = { workspace = true, features = ["signatures"] }
 sc-rules-wasm = { path = "../sc-rules-wasm" }
 
 [package.metadata.wasm-pack.profile.release]

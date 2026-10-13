@@ -30,6 +30,7 @@ pub mod notice;
 pub mod pinning;
 pub mod review;
 pub mod sightings;
+pub mod signing;
 pub mod stix;
 pub mod store;
 pub mod suggest;
@@ -123,6 +124,10 @@ pub enum Cmd {
     /// Canary tokens on our own published pages: register a built site's
     /// tokens, list them, derive one, or find copies in records.
     Canary(canary::CanaryArgs),
+    /// The Ed25519 key evidence bundles are signed with: generate one (the
+    /// secret goes to a file, never the terminal), or show the public key of
+    /// SWARMCHASE_SIGNING_KEY.
+    Key(signing::KeyArgs),
     /// The offline IP-to-ASN table: fetch it into the data directory, look up addresses.
     Asn(commands::asn::AsnArgs),
     /// Sightings (SC-Sightings v1): `export` makes one from your own logs,
@@ -170,6 +175,7 @@ pub fn run() -> Result<()> {
         Cmd::Asn(a) => commands::asn::run(a),
         Cmd::Sightings(a) => sightings::run(a),
         Cmd::Canary(a) => canary::run(a),
+        Cmd::Key(a) => signing::run(a),
         Cmd::Identity(a) => commands::identity::run(a),
         Cmd::Rules { file, dump } => commands::rules::run(file.as_deref(), dump),
     }

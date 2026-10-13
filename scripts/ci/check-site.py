@@ -86,6 +86,7 @@ INPUT_PREFIXES = {
     "samples/eval/",
     "samples/eval/coverage-allow.txt",
     "samples/showcase/",
+    "keys/bundle-signing.pub",
     "site/",
 }
 # Inputs that are built, not committed: the WASM package.

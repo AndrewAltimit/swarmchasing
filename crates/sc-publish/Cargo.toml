@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 sc-core.workspace = true
-sc-case.workspace = true
+sc-case = { workspace = true, features = ["signatures"] }
 serde.workspace = true
 sha2.workspace = true
 chrono.workspace = true

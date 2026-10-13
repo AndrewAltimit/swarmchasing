@@ -2,7 +2,8 @@
 //! checks the manifest hashes itself (Web Crypto); this re-runs the analysis
 //! and compares it with the stamp through `sc_case::bundle::check`, the same
 //! check `swarmchase case verify` runs, and lists the attribution layers the
-//! re-run supports, with any claims from case work merged in.
+//! re-run supports, with any claims from case work merged in. The manifest's
+//! signature is checked here too, against the key file the site publishes.
 
 use sc_case::bundle::Checked;
 use sc_core::attribution::{LayerSummary, merge, summaries};
@@ -66,6 +67,42 @@ fn check(
         layers,
         withheld,
     })
+}
+
+/// Check a bundle's `MANIFEST.sha256.sig` (`signature`, empty when the
+/// bundle has none) over `manifest` against `public_keys`, the text of the
+/// site's published key file (empty when it publishes none), through
+/// `sc_case::signing::check` as `swarmchase case verify` does. Returns
+/// `{"status": "signed"|"unchecked"|"invalid"|"unsigned", "key_id", "reason",
+/// "line", "published": [key id]}`. A key file that does not parse throws.
+#[wasm_bindgen]
+pub fn verify_signature(
+    manifest: &str,
+    signature: &str,
+    public_keys: &str,
+) -> Result<String, JsError> {
+    signature_check(manifest, signature, public_keys)
+        .map(|v| v.to_string())
+        .map_err(|e| JsError::new(&e))
+}
+
+fn signature_check(
+    manifest: &str,
+    signature: &str,
+    public_keys: &str,
+) -> Result<serde_json::Value, String> {
+    use sc_case::signing::{check, parse_public_keys};
+    let keys = if public_keys.trim().is_empty() {
+        Vec::new()
+    } else {
+        parse_public_keys(public_keys).map_err(|e| format!("published key file: {e}"))?
+    };
+    let sig = (!signature.trim().is_empty()).then_some(signature);
+    let c = check(manifest, sig, &keys);
+    let mut v = serde_json::to_value(&c).map_err(|e| e.to_string())?;
+    v["line"] = c.line().into();
+    v["published"] = keys.iter().map(|k| k.key_id()).collect::<Vec<_>>().into();
+    Ok(v)
 }
 
 /// `verify_bundle`'s result: the check, then the layers.
@@ -132,6 +169,43 @@ mod tests {
             .unwrap();
         assert_eq!(dev["party"], "Example AI");
         assert_eq!(dev["label"], "confirmed");
+    }
+
+    #[test]
+    fn signatures_check_against_the_published_file() {
+        use sc_case::signing::{SecretKey, public_key_file};
+        let k = SecretKey::from_seed(&[4; 32]);
+        let manifest = "aa  records.ndjson
+";
+        let sig = k.sign_manifest(manifest);
+        let file = public_key_file(&[k.public()]);
+        let v = signature_check(manifest, &sig, &file).unwrap();
+        assert_eq!(v["status"], "signed");
+        assert_eq!(v["key_id"], k.public().key_id());
+        assert_eq!(v["published"][0], k.public().key_id());
+        let v = signature_check(
+            "bb  records.ndjson
+",
+            &sig,
+            &file,
+        )
+        .unwrap();
+        assert_eq!(v["status"], "invalid");
+        assert!(v["line"].as_str().unwrap().starts_with("signature invalid"));
+        let other = public_key_file(&[SecretKey::from_seed(&[5; 32]).public()]);
+        assert_eq!(
+            signature_check(manifest, &sig, &other).unwrap()["status"],
+            "invalid"
+        );
+        assert_eq!(
+            signature_check(manifest, "", &file).unwrap()["status"],
+            "unsigned"
+        );
+        assert_eq!(
+            signature_check(manifest, &sig, "").unwrap()["status"],
+            "unchecked"
+        );
+        assert!(signature_check(manifest, &sig, "ed25519 nope").is_err());
     }
 
     #[test]
