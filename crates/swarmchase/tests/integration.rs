@@ -12,5 +12,6 @@ mod common;
 mod eval;
 mod exports;
 mod notices;
+mod platform;
 mod watch;
 mod workflow;

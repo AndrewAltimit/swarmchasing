@@ -22,6 +22,7 @@ The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read
 | urlscan.io | Public search results | Per-case lookups only; its terms need permission for systematic retrieval |
 | GH Archive | Public GitHub events whose repository name or URLs match | Scheduled watch, as leads for review |
 | npm, PyPI | Package names, versions and publish times matching run tags | Scheduled watch, as leads for review |
+| GH Archive, npm, PyPI, Hugging Face Hub | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
 | CT logs, crt.sh | Certificate Transparency entries | Watch sample of one log (relay look-alikes); case work (`swarmchase certs`) |
 | security.txt, RDAP | The affected organisation's published security contact, or its registrar's abuse address | Finding who to report to |
 
@@ -269,6 +270,33 @@ The kinds and their thresholds:
 
 At most 200 edges are kept. Internal and provider reports list those touching the report's clusters (a provider report only those between two of them) under *Possible interaction (SC-T9)*, details defanged. Affected-operator reports and notices do not.
 
+## Coordinated accounts on public platforms
+
+Agent swarms also act through accounts: near-identical issues, comments and vulnerability reports from fresh accounts, repositories, packages and Spaces created with templated names, many at once. [`platform`](../crates/sc-core/src/platform/mod.rs) groups such public actions into **platform swarm candidates**, separately from the record analysis. A candidate is a hint for the admin; it never joins a cluster, scores a record or makes a fleet. The method is [SC-FM 5.15](manual/05-linking.md#fm-515-coordinated-accounts-on-public-platforms).
+
+**What is kept.** The [collectors](../crates/sc-collect/src/platform.rs) read GH Archive events (issues and pull requests opened, issue and review comments, repositories created), npm search results, PyPI's newest-projects feed and the Hugging Face Hub's newest Spaces, models or datasets. Each event keeps its id, time, target and public link, plus:
+
+- the account as a keyed hash of its id or login, never the login itself;
+- on GitHub, the account id divided by 1000 (`actor_rank`): ids rise with account creation, so a rank near the newest seen marks a new account without identifying it; the platform's own first-timer flag where the payload still carries it;
+- the text (title and body, a description or a summary) as a sketch: lower-cased words with URLs, addresses, mentions, paths, numbers, hex strings, mixed letter-and-digit tokens and the target's and actor's own names replaced by slots (`<url>`, `<user>`, `<num>` and so on); a 32-value MinHash signature over word 3-shingles; a hash of the first 48 slotted words (the template); the first 160 characters of slotted text; and the residue rules that fire on the raw text;
+- for a created item, its name as a template (`reach-check-<num>`), only when the name keeps a word of three letters or more and has a slot.
+
+Automation accounts are dropped by login before anything is kept ([`automation.rs`](../crates/sc-core/src/platform/automation.rs)): GitHub Apps (`[bot]`), logins ending in `-bot`, `_bot` or `-robot`, and a list of dependency, CI, release, translation and classroom accounts. An App acts only where a repository owner installed it, AI coding agents among them.
+
+**Grouping.** Events on one platform join when their templates are equal (at least 8 words), when their MinHash signatures agree in any of 8 bands of 4 values and the full signatures estimate a similarity of at least 0.6, or when created items share a name template. Groups are the connected components.
+
+**Chance.** For each group with at least 3 accounts (or, where the source names no account, at least 5 events):
+
+- **Burst.** Each account's first event in the group is a point. The densest 15-minute window holds `m` of the `k` points. With `k` points placed at random over `S`, the clock hours read in full (those holding at least a tenth of the busiest hour's events, so hours that hold only carried events do not count) plus the group's own hours, one window expects `k × 900 / S`, and the chance of a window this dense anywhere is `(S / 900) × P(Poisson ≥ m)`. A window starting within 2 minutes of a clock hour counts a quarter of its points.
+- **New accounts.** The share of all accounts in the window that are new is the base rate `q`; the chance of at least `n` new among the group's `a` accounts with age data is `P(Poisson(a × q) ≥ n)`.
+- The two chances are multiplied as if independent. A group is reported when the product is at most 1%, or when at least half its text members carry residue. It is moderate when the product is at most 0.01% and two of burst, new accounts, residue and target overlap (one target hit by 3 accounts, across several owners) stand; otherwise weak. There is no strong grade.
+
+**Residue.** The bundled rules whose patterns mean the same in prose run on each line of the raw text: `marker.placeholder`, `marker.tool_call_markup`, `marker.chat_opener` and the generation-loop check. The Markdown rules do not: Markdown is how people write there. Five text-only shapes are added ([`residue.rs`](../crates/sc-core/src/platform/residue.rs)): an AI disclaimer, a knowledge-cutoff remark, a chat reply's opener, an `[Insert ...]` slot and "regenerate response". Each is weak alone.
+
+**Suppressed and dropped.** A group whose template matches a benign kind (dependency update, translation sync, release automation, contribution drive, classroom or course, declared scanner, platform default text) is listed as suppressed with its kind. A burst on one owner's repositories by established accounts is counted below threshold: an outage, a release or a linked discussion looks the same. Each candidate lists what is left to rule out (on the hour, one owner, one target, no new account, no account data, a span over a day).
+
+**Identifiers.** A candidate's id is `PS-` and 8 hex digits derived from its earliest member, so it stays while that member stays and new members join under it.
+
 ## Endpoints
 
 Flagged requests are also grouped per target host: hits, first and last seen, attack payloads, the clusters involved, and whether the hits are ongoing or historical. `swarmchase endpoints` prints this table, and a report to an affected operator carries it for that operator's hosts. In a case, the admin classifies each endpoint ([case files](reference/cases.md#what-casetoml-holds)).
@@ -373,6 +401,8 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 **A tier is not misalignment.** A benign data task done with fetch programs through an echo service grades suggestive, and significant once an independent indicator such as a run tag comes with the program. Whether activity was out of scope is a separate finding ([FM-14.21](manual/14-limits.md#fm-1421-a-tier-is-not-misalignment)).
 
 **Model-output residue from people.** A person who pastes a chatbot answer into a scan form leaves the same Markdown, placeholders and JSON. This is why residue rules carry low weights and never link.
+
+**Accounts acting alike are not always one operator.** A platform swarm candidate rests on shape and timing. Contribution drives, coursework, an outage, a popular tutorial and scheduled jobs make many accounts post alike at once, and the benign templates cover only the common ones. The account-age rank is GitHub's id order, a proxy: an old account bought or revived reads as established. The GH Archive pass reads a sample of hours, so a swarm spread thinly may be missed, and events whose payload carries no text group only by name, or not at all. A candidate is reviewed by reading its events on the platform, never by contacting its accounts.
 
 **Self-identification is cheap.** Anyone can type a vendor name into a URL. It never names a developer.
 

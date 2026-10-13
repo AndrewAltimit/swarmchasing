@@ -88,6 +88,10 @@ Wayback's resume key (with its time window, when sliced), Common Crawl's crawl-a
 
 Streamed sources read a bounded amount each pull from a checkpoint (`Source::checkpointed`): GH Archive reads on from the last hour read, up to `scan` hours and `max_mb`, decoded a line at a time; a CT log reads from its checkpoint when that is within the newest `scan` entries, else the newest `scan`. A backlog too long to catch up on is skipped and counted.
 
+### Platform events
+
+[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (`gharchive`, `npm`, `pypi` or `huggingface`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped. `gharchive_file` reads a GH Archive hour file from disk. Nothing inside an event's text is fetched, and a Space or repository is never opened ([methodology](../../docs/methodology.md#coordinated-accounts-on-public-platforms)).
+
 ### Coverage and canaries
 
 Sources that read a stream or feed and keep only matches report a `Coverage` on each page, folded into `Pull::coverage`: what was read against what there was to read since the checkpoint, what was skipped, the next checkpoint, and a canary. The canary is something every working pull sees: GH Archive events that parse, CT entries with DNS names, PyPI feed items, or hits for npm's `canary` search. A failed canary means the source answered in a shape the parser no longer understands, so an empty pull proves nothing.
@@ -135,6 +139,7 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`wayback.rs`](src/wayback.rs), [`arquivo.rs`](src/arquivo.rs), [`commoncrawl.rs`](src/commoncrawl.rs), [`memento.rs`](src/memento.rs) | Archive index sources. |
 | [`urlquery.rs`](src/urlquery.rs), [`urlscan.rs`](src/urlscan.rs) | Scan-service sources. |
 | [`gharchive.rs`](src/gharchive.rs), [`npm.rs`](src/npm.rs), [`pypi.rs`](src/pypi.rs), [`mcp.rs`](src/mcp.rs) | Event-stream and registry sources. |
+| [`platform.rs`](src/platform.rs) | Platform events for the coordinated-account detector: GH Archive, npm, PyPI and Hugging Face Hub listings, sketched at parse time. |
 | [`wellknown.rs`](src/wellknown.rs) | Agent protocol footprints in the Wayback index. |
 | [`ctlog.rs`](src/ctlog.rs) | The CT log source and its SAN parser. |
 | [`crtsh.rs`](src/crtsh.rs), [`securitytxt.rs`](src/securitytxt.rs), [`rdap.rs`](src/rdap.rs) | Lookups: certificates, security.txt, RDAP. |

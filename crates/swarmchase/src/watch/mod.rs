@@ -8,6 +8,7 @@
 //! <out>/summary.json            clusters and endpoints as of the last run (digest baseline)
 //! <out>/ledger.json             each cluster's history across runs (ledger)
 //! <out>/autonomy.ndjson         what autonomy levels did or would have done (autonomy)
+//! <out>/platform/               platform pass state and carried events (platform)
 //! <out>/runs/<stamp>/           new records per source, analysis, case notes, digest, run.json
 //! <out>/LATEST                  stamp of the most recent run
 //! ```
@@ -60,6 +61,7 @@ pub(crate) mod autonomy;
 pub(crate) mod cases;
 pub(crate) mod digest;
 pub(crate) mod ledger;
+pub(crate) mod platform;
 pub(crate) mod priority;
 mod pull;
 pub(crate) mod run_summary;
@@ -107,6 +109,9 @@ pub struct Watchlist {
     /// shadow by default.
     #[serde(default)]
     pub autonomy: autonomy::Config,
+    /// Coordinated-account sources and options ([`platform`]).
+    #[serde(default)]
+    pub platform: platform::Config,
     #[serde(default, rename = "source")]
     pub sources: Vec<WatchSource>,
 }
@@ -370,6 +375,17 @@ fn watch(
 
     let canaries = crate::canary::watch_sightings(out, &fresh, &run_dir)?;
 
+    // Coordinated accounts on public platforms: its own pull and store, so a
+    // failure here never stops the record analysis.
+    let platform_outcome =
+        match platform::run(&client, out, &run_dir, now.timestamp(), &wl.platform, rules) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("platform pass: error: {e:#}");
+                None
+            }
+        };
+
     // Rolling analysis over everything recent, not just this run's records,
     // so clusters can span runs.
     let since = now.timestamp() - wl.analysis_window_days * DAY;
@@ -486,6 +502,11 @@ fn watch(
         .text
         .push_str(&crate::canary::digest_section(&canaries));
     digest.changed |= !canaries.is_empty();
+
+    if let Some(o) = &platform_outcome {
+        digest.text.push_str(&platform::section(o));
+        digest.changed |= o.changed();
+    }
     std::fs::write(run_dir.join("digest.md"), &digest.text)?;
     write_json(&run_dir.join(attention::FILE), &queue)?;
     write_json(&ledger_path, &ledger)?;

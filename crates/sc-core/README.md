@@ -78,6 +78,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`identity`](src/identity/mod.rs) | Declared agent identity: product claims, published ranges (`ranges`), Web Bot Auth signatures (`httpsig`, `sfv`); verified, spoofed or claimed. Ed25519 checks need the `signatures` feature. |
 | [`agentness`](src/agentness.rs) | Each cluster's agent grade (L0 payloads only to L4 agent likely) with its signals, counter-signals and caps; L5 only from a case decision. |
 | [`swarm`](src/swarm/mod.rs) | Interaction edges between runs (SC-T9): runs and strands (`runs`), named artifacts (`artifacts`), one detector per kind (`edges`), edges against labels (`eval`). |
+| [`platform`](src/platform/mod.rs) | Coordinated-account swarm candidates on public platforms: slotted text sketches and MinHash (`text`), residue in prose (`residue`), benign automation and templates (`automation`), grouping and the chance model (`detect`). Hints, never findings. |
 | [`report`](src/report/mod.rs) | Markdown drafts and the public notice, one module per section; per-audience wording (`audience`) and cluster hint lines (`hints`). |
 | [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |

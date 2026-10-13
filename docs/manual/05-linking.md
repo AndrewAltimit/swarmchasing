@@ -166,3 +166,19 @@ Two clusters are compared by their mixes of templates, each template weighted do
 - **Chance.** A pair is kept only when two unrelated clusters of the same analysis would rarely both hold the rarest template they share. The toolkit takes the share of the other clusters holding it, squared, and states it with the expected number of such pairs among all the analysis's pairs. A shape held by more than a set number of clusters ties none of them.
 
 A shared scaffold is a soft link ([FM-5.7](#fm-57-soft-links)). It **must not** merge clusters or raise a tier: a published harness, a tutorial or a framework default makes it without any tie between operators, and the chance model only knows the clusters in the analysis. The templates hold no host, path word or value, so the evidence shows how requests were built without repeating what they said. Toolkit: `scaffold_pairs` in the analysis and the `scaffold` soft link, with the settings in `[scaffold]` ([methodology](../methodology.md#descriptive-hints)).
+
+## FM-5.15 Coordinated accounts on public platforms
+
+Agent swarms also show up on platforms where accounts publish: many accounts opening near-identical issues or comments, creating repositories, packages or Spaces with templated names, or filing templated vulnerability reports. Here the unit is an account's public action, not a request, and the grouping is a **platform swarm candidate**: accounts acting alike beyond chance. It is a hint for review, like an interaction edge ([FM-5.12](#fm-512-interaction-edges)); it never joins a cluster and never makes a fleet or a swarm on its own.
+
+What is read and kept **must** pass the passivity test ([FM-3.2](03-sources.md#fm-32-passivity-test)): public event archives and registry listings only, with no URL inside the text fetched and no account, repository, package or Space opened. Collection **should** keep no more personal data than grouping needs: a keyed hash in place of the login, a coarse account-age rank in place of the account id, and the text reduced to a sketch with URLs, addresses, mentions, numbers and identifiers replaced by slots.
+
+A candidate needs all of:
+
+- **A shared shape.** Near-duplicate text (estimated similarity of word shingles), one template once per-instance values are slots, or created items whose names follow one template with a counter or identifier. A plain name many people pick ("portfolio") is not a template.
+- **Several accounts.** At least three distinct accounts, or, where the source names no account, a flood of at least five items, reported as such.
+- **More than chance.** The densest burst of the accounts' first actions, weighed against the same number of actions placed at random over the window read (a scan statistic), and the share of new accounts, weighed against the window's base rate, together at most 1%. A burst starting on a clock hour counts a quarter, as for synchronized starts ([FM-6.7](06-timing.md#fm-67-shared-pauses)). Model-output residue ([FM-4.5](04-indicators.md#fm-45-artifact-families)) in at least half the members can stand in for the chance.
+
+Benign coordination is common and **must** be ruled out before a candidate is read as a swarm: dependency and release bots, translation syncs, contribution drives and coursework, scheduled jobs, organisation-wide automation, an outage that brings many users to one project at once, and issue templates. Known automation accounts are dropped at collection and known benign templates are listed as suppressed with their kind. A burst on one owner's projects by established accounts is not reported. Each candidate lists what is left to rule out.
+
+Toolkit: `sc_core::platform` and `swarmchase platform-swarms`; the watch's platform pass lists new and grown candidates in the digest ([methodology](../methodology.md#coordinated-accounts-on-public-platforms), [watch](../reference/watch.md#platform-swarms)).
