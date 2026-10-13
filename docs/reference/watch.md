@@ -24,6 +24,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `runs/<stamp>/canary.json` | The run's canary sightings, when it has any. |
 | `cache/http/` | Cached collector responses; safe to delete. |
 | `asn/ip2asn-v4.tsv.gz` | The IP-to-ASN table, once fetched. |
+| `identity/` | Providers' published agent ranges and key directories, once fetched ([identity](identity.md)). |
 
 ## Collection
 

@@ -43,6 +43,9 @@ age = "0.11"
 tar = { version = "0.4", default-features = false }
 flate2 = "1"
 psl = "2"
+# Ed25519 verification for Web Bot Auth signatures (sc-core `signatures`
+# feature). Verify only: no default features, no key generation.
+ed25519-dalek = { version = "2", default-features = false }
 
 [profile.release]
 lto = true

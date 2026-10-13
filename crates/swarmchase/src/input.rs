@@ -101,7 +101,11 @@ pub fn read_records(args: &InputArgs) -> Result<Vec<Observation>> {
     Ok(all)
 }
 
+/// Analyse the inputs, and add each cluster's declared agent identity from
+/// the published ranges and keys held in the data directory.
 pub fn run_analysis(args: &InputArgs) -> Result<Analysis> {
     let rules = load_rules(args.rules.as_deref())?;
-    Ok(analyze(read_inputs(args)?, &rules))
+    let mut a = analyze(read_inputs(args)?, &rules);
+    crate::commands::identity::annotate(&mut a);
+    Ok(a)
 }

@@ -119,6 +119,7 @@ impl std::str::FromStr for AgentLevel {
 pub enum SignalKind {
     // L1
     SelfId,
+    VerifiedPlatform,
     // L2
     Residue,
     Prose,
@@ -141,6 +142,7 @@ pub enum SignalKind {
     ScannerPace,
     AutoSubmitter,
     WorkingHours,
+    SpoofedIdentity,
 }
 
 impl SignalKind {
@@ -148,13 +150,14 @@ impl SignalKind {
     pub fn level(self) -> Option<AgentLevel> {
         use SignalKind::*;
         Some(match self {
-            SelfId => AgentLevel::SelfDescribed,
+            SelfId | VerifiedPlatform => AgentLevel::SelfDescribed,
             Residue | Prose | FabricatedIds | CutLengths | StaleKnowledge | StaleDates => {
                 AgentLevel::ModelWritten
             }
             RetryAfterError | Escalation | ModelPaceChain => AgentLevel::Adaptive,
             MachinePace | FanOut | CrossService | RoundTheClock => AgentLevel::AgentLikely,
-            DeclaredTesting | Benchmark | ScannerPace | AutoSubmitter | WorkingHours => {
+            DeclaredTesting | Benchmark | ScannerPace | AutoSubmitter | WorkingHours
+            | SpoofedIdentity => {
                 return None;
             }
         })
@@ -165,6 +168,9 @@ impl SignalKind {
         match self {
             SelfId => {
                 "names a model or vendor, or carries an agent test tag (anyone can write this)"
+            }
+            VerifiedPlatform => {
+                "sent by a provider's agent platform, verified by its published key or address range (it shows who relayed the request, not that a model chose it)"
             }
             Residue => "model-output residue in requests",
             Prose => "natural-language prose in parameters",
@@ -188,6 +194,9 @@ impl SignalKind {
                 "ordinary links around it sent to the same services alike, as a mail gateway or security product submits every link it sees (whoever sent it the link made the records)"
             }
             WorkingHours => "activity in one time zone's working hours",
+            SpoofedIdentity => {
+                "names a provider's agent product from outside that provider's published ranges (the self-description is false)"
+            }
         }
     }
 }

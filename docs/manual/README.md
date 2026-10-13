@@ -40,7 +40,7 @@ Formats other groups can implement, such as the rules file and the incident docu
 | [4. Indicators](04-indicators.md) | Rule anatomy, the SC-T tactics, artifact families, ATLAS and ATT&CK cross-walk, rule-writing standard, interaction signals, independence groups. |
 | [5. Linking](05-linking.md) | Hard links, soft links, candidate fleets, merge and split, escalation sequences, reruns, interaction edges, the cluster lifecycle, scaffold fingerprints. |
 | [6. Timing and concurrency](06-timing.md) | Timestamp kinds, cadence, bursts, rhythm, clock offset, stale dates, shared pauses, co-activity. |
-| [7. Attribution](07-attribution.md) | Four attribution layers, the evidence ladder, claim tags, labels, the naming gate, false flags, agent likelihood, signed agents, competing hypotheses. |
+| [7. Attribution](07-attribution.md) | Four attribution layers, the evidence ladder, claim tags, labels, the naming gate, false flags, agent likelihood, signed agents, competing hypotheses, published address ranges. |
 | [8. Confidence language](08-confidence.md) | The words-to-probability table every report uses. |
 | [9. Evaluation](09-evaluation.md) | Evaluation sets, metrics, agreement, what to publish with a number, benchmarks, agent-grade evaluation, calibrated public language. |
 | [10. Disclosure](10-disclosure.md) | Parties, two-stage publication and its lead times, relation to ISO/IEC and FIRST guidance, reply, consent, self-review and second review. |

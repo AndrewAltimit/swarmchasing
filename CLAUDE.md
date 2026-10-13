@@ -35,6 +35,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`samples/showcase/`](samples/showcase/README.md) | Synthetic records the landing page walks through and the workbench loads. |
 | [`schemas/`](schemas/sc-rules-v1.json) | JSON Schemas for the specs (rules, incident, sightings, SC-Bench) and the STIX extension. |
 | [`watchlist.toml`](watchlist.toml) | Sources the scheduled watch pulls, each with its rationale. |
+| [`declared-agents.toml`](declared-agents.toml) | Agent products that declare themselves, with their providers' range files and key directories ([identity](docs/reference/identity.md)). |
 | [`contacts/providers.toml`](contacts/providers.toml) | Providers' security and abuse channels, each with its source and verified date; `swarmchase contacts verify` re-checks them. |
 | [`scripts/`](scripts/README.md) | CI gates, helpers and the pre-commit hook; the README says what runs where. |
 | [`.github/workflows/`](.github/workflows/main-ci.yml) | `main-ci.yml` (gates, then build/test, then Pages) and `watch.yml` (6-hourly watch, digest email). |
@@ -53,6 +54,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`reference/watch.md`](docs/reference/watch.md) | Data directory, incremental collection, digest, retention, review. |
 | [`reference/cases.md`](docs/reference/cases.md) | `case.toml`, every `case` subcommand, drafts, bundles, pinned rules. |
 | [`reference/notices.md`](docs/reference/notices.md) | Notice lifecycle, what notices withhold, lint and build. |
+| [`reference/identity.md`](docs/reference/identity.md) | Declared agent identity: range files, key directories, verified and spoofed agents. |
 | [`reference/evaluation.md`](docs/reference/evaluation.md) | `eval`, the eval gate's floors, held-out measurement. |
 | [`reference/browser-toolkit.md`](docs/reference/browser-toolkit.md) | The Pages site: build, pages, workbench, payload safety. |
 | [`reference/configuration.md`](docs/reference/configuration.md) | `env.list`, environment variables, urlquery key and terms. |

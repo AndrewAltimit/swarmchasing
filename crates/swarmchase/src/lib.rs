@@ -119,6 +119,9 @@ pub enum Cmd {
     /// Sightings (SC-Sightings v1): `export` makes one from your own logs,
     /// `match` finds clusters several operators saw. Never merges clusters.
     Sightings(sightings::SightingsArgs),
+    /// Declared agent identity: fetch providers' published ranges and keys,
+    /// and check which records' agent claims they bear out or contradict.
+    Identity(commands::identity::IdentityArgs),
     /// Validate a rules file, or print the bundled rules.
     Rules {
         file: Option<PathBuf>,
@@ -156,6 +159,7 @@ pub fn run() -> Result<()> {
         Cmd::Asn(a) => commands::asn::run(a),
         Cmd::Sightings(a) => sightings::run(a),
         Cmd::Canary(a) => canary::run(a),
+        Cmd::Identity(a) => commands::identity::run(a),
         Cmd::Rules { file, dump } => commands::rules::run(file.as_deref(), dump),
     }
 }

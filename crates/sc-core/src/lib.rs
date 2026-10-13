@@ -23,6 +23,7 @@ pub mod extract;
 pub mod fanout;
 pub mod fingerprint;
 pub mod fleets;
+pub mod identity;
 pub mod ingest;
 pub mod knowledge;
 pub mod model;
@@ -60,6 +61,7 @@ pub use extract::{Extracted, Layer, defang, defang_host, extract, unwrap_layers}
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
+pub use identity::{Catalog, ClusterIdentity, IdentityClass, IdentityData, RecordIdentity};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
     Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SourceKind, Tactic,
