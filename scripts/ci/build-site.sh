@@ -41,6 +41,12 @@
 # with --no-opt and this script runs wasm-opt itself, caching the optimised
 # module outside the checkout (actions/checkout cleans the workspace) under
 # the SHA-256 of the unoptimised module, the flags and the wasm-opt version.
+# The modules are built one after another, then optimised in parallel, one
+# background wasm-opt per module; the build fails if any of them fails. The
+# wasm-pack builds stay serial: the engine and the tools module are the same
+# crate with different features, so cargo writes both to the same artifact
+# path, and a second build running beside the first could hand wasm-bindgen
+# the other module.
 # The flags are read from `[package.metadata.wasm-pack.profile.release]
 # wasm-opt = [...]` in crates/sc-wasm/Cargo.toml, the list wasm-pack would
 # pass. wasm-opt is taken from $WASM_OPT, else PATH, else wasm-pack's own
@@ -76,6 +82,9 @@ ENGINE_BUDGET=$((1536 * 1024))
 TOOLS_BUDGET=$((1792 * 1024)) # loaded on demand, never on arrival
 RULES_BUDGET=$((512 * 1024))
 SIZES=()                # "<module> <bytes> <budget>" per release module built
+BUILT=()                # "<module> <budget>" per release module built
+OPT_QUEUE=()            # "<module> <crate>" per module wasm-opt is still to run on
+OPT=""                  # the wasm-opt binary, when one is found
 
 python_bin() {
     local p
@@ -145,15 +154,16 @@ sha256() {
     fi
 }
 
-# build_release_module <crate> <out dir under site/> <out name> <cargo features> <budget bytes>
-build_release_module() {
+# pack_release <crate> <out dir under site/> <out name> <cargo features> <budget bytes>
+# Builds one release module. When wasm-opt is ours to run, the module is
+# queued in OPT_QUEUE for optimise_queued; otherwise wasm-pack has done all
+# there is to do. Every module is queued in BUILT for check_sizes.
+pack_release() {
     local crate=$1 out=$2 name=$3 features=$4 budget=$5
-    local WASM="site/$out/${name}_bg.wasm"
-    local -a FLAGS
-    mapfile -t FLAGS < <(opt_flags "$crate")
-    local OPT
-    OPT="$(find_wasm_opt || true)"
-    if [[ ${#FLAGS[@]} -eq 0 ]]; then
+    local wasm="site/$out/${name}_bg.wasm"
+    local -a flags
+    mapfile -t flags < <(opt_flags "$crate")
+    if [[ ${#flags[@]} -eq 0 ]]; then
         echo "[build-site] wasm-opt disabled in crates/$crate/Cargo.toml; building unoptimised"
         pack "$crate" "$out" "$name" "$features" --release --no-opt
     elif [[ -z "$OPT" ]]; then
@@ -161,36 +171,82 @@ build_release_module() {
         pack "$crate" "$out" "$name" "$features" --release
     else
         pack "$crate" "$out" "$name" "$features" --release --no-opt
-        local version key hit start
-        version="$("$OPT" --version | head -n1)"
-        key="$({ sha256 <"$WASM"; printf '%s\n' "${FLAGS[@]}" "$version"; } | sha256)"
-        mkdir -p "$CACHE"
-        hit="$CACHE/$key.wasm"
-        if [[ -s "$hit" ]]; then
-            echo "[build-site] wasm-opt cache hit ($key)"
-            cp "$hit" "$WASM"
-            touch "$hit"
-        else
-            echo "[build-site] wasm-opt ${FLAGS[*]} ($version); cache miss ($key)"
-            start=$SECONDS
-            "$OPT" "$WASM" -o "$WASM.opt" "${FLAGS[@]}"
-            mv "$WASM.opt" "$WASM"
-            # Write then rename, so an interrupted copy never becomes a cache hit.
-            cp "$WASM" "$hit.tmp.$$"
-            mv "$hit.tmp.$$" "$hit"
-            echo "[build-site] wasm-opt took $((SECONDS - start))s"
-        fi
-        # Keep the newest $KEEP modules (a hit refreshes its mtime).
-        ls -1t "$CACHE"/*.wasm 2>/dev/null | tail -n +$((KEEP + 1)) | while IFS= read -r old; do
-            rm -f -- "$old"
-        done
+        OPT_QUEUE+=("$wasm $crate")
     fi
-    local size
-    size=$(wc -c <"$WASM" | tr -d ' ')
-    echo "[build-site] $WASM: $size bytes ($((size / 1024)) KiB)"
-    SIZES+=("$WASM $size $budget")
-    if ((size > budget)); then
-        echo "[build-site] $WASM is over its size budget of $((budget / 1024)) KiB; trim it before deploying" >&2
+    BUILT+=("$wasm $budget")
+}
+
+# optimise <module> <crate>: wasm-opt one module in place, through the cache.
+# Runs as a background job beside the other modules' passes.
+optimise() {
+    local wasm=$1 crate=$2
+    local -a flags
+    mapfile -t flags < <(opt_flags "$crate")
+    local version key hit start
+    version="$("$OPT" --version | head -n1)"
+    key="$({ sha256 <"$wasm"; printf '%s\n' "${flags[@]}" "$version"; } | sha256)"
+    hit="$CACHE/$key.wasm"
+    if [[ -s "$hit" ]]; then
+        echo "[build-site] $wasm: wasm-opt cache hit ($key)"
+        cp "$hit" "$wasm"
+        touch "$hit"
+        return
+    fi
+    echo "[build-site] $wasm: wasm-opt ${flags[*]} ($version); cache miss ($key)"
+    start=$SECONDS
+    "$OPT" "$wasm" -o "$wasm.opt" "${flags[@]}"
+    mv "$wasm.opt" "$wasm"
+    # Write then rename, so an interrupted copy never becomes a cache hit.
+    cp "$wasm" "$hit.tmp.$BASHPID"
+    mv "$hit.tmp.$BASHPID" "$hit"
+    echo "[build-site] $wasm: wasm-opt took $((SECONDS - start))s"
+}
+
+# Run optimise for every queued module at once, print each one's output
+# when it is done, and fail if any failed.
+optimise_queued() {
+    ((${#OPT_QUEUE[@]})) || return 0
+    mkdir -p "$CACHE"
+    local logs line wasm crate i failed=0
+    logs="$(mktemp -d)"
+    local -a pids=()
+    for i in "${!OPT_QUEUE[@]}"; do
+        read -r wasm crate <<<"${OPT_QUEUE[$i]}"
+        optimise "$wasm" "$crate" >"$logs/$i.log" 2>&1 &
+        pids+=($!)
+    done
+    for i in "${!pids[@]}"; do
+        if ! wait "${pids[$i]}"; then
+            failed=1
+            read -r wasm crate <<<"${OPT_QUEUE[$i]}"
+            echo "[build-site] wasm-opt failed for $wasm" >&2
+        fi
+        cat "$logs/$i.log"
+    done
+    rm -rf "$logs"
+    if ((failed)); then
+        exit 1
+    fi
+    # Keep the newest $KEEP modules (a hit refreshes its mtime).
+    ls -1t "$CACHE"/*.wasm 2>/dev/null | tail -n +$((KEEP + 1)) | while IFS= read -r line; do
+        rm -f -- "$line"
+    done
+}
+
+# Each built module's size, against its budget.
+check_sizes() {
+    local line wasm budget size over=0
+    for line in "${BUILT[@]}"; do
+        read -r wasm budget <<<"$line"
+        size=$(wc -c <"$wasm" | tr -d ' ')
+        echo "[build-site] $wasm: $size bytes ($((size / 1024)) KiB)"
+        SIZES+=("$wasm $size $budget")
+        if ((size > budget)); then
+            echo "[build-site] $wasm is over its size budget of $((budget / 1024)) KiB; trim it before deploying" >&2
+            over=1
+        fi
+    done
+    if ((over)); then
         exit 1
     fi
 }
@@ -206,11 +262,14 @@ report_sizes() {
 
 case "$mode" in
     --release)
+        OPT="$(find_wasm_opt || true)"
         # The engine first: the tools module goes in a directory under its
         # output.
-        build_release_module sc-wasm pkg sc_wasm "" "$ENGINE_BUDGET"
-        build_release_module sc-wasm pkg/tools sc_tools tools "$TOOLS_BUDGET"
-        build_release_module sc-rules-wasm pkg-rules sc_rules_wasm "" "$RULES_BUDGET"
+        pack_release sc-wasm pkg sc_wasm "" "$ENGINE_BUDGET"
+        pack_release sc-wasm pkg/tools sc_tools tools "$TOOLS_BUDGET"
+        pack_release sc-rules-wasm pkg-rules sc_rules_wasm "" "$RULES_BUDGET"
+        optimise_queued
+        check_sizes
         report_sizes
         ;;
     --dev)
