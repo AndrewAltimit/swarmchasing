@@ -43,6 +43,7 @@ pub mod platform;
 pub mod psl;
 mod pypi;
 mod rdap;
+pub mod registries;
 pub mod securitytxt;
 mod urlquery;
 mod urlscan;

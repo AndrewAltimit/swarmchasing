@@ -511,6 +511,64 @@ kind = "golang"
 pattern = "*"
 scan = 12                 # index requests per run
 
+# Rationale: the same package floods on NuGet. The catalog is NuGet's
+# append-only log of every package pushed, changed or deleted, in pages of
+# ids, versions and commit times; it names no owner, so groups here are
+# floods of templated names (`probe-<num>`), not accounts. Reads the pages
+# committed since the last run, oldest first, up to `scan` pages (each
+# about an hour and a half of commits). Noise: vendors releasing a numbered
+# family of packages at once, and nightly builds. Terms: the catalog is
+# NuGet's documented way to follow every package operation
+# (https://learn.microsoft.com/en-us/nuget/api/catalog-resource); the
+# nuget.org Terms of Use (https://www.nuget.org/policies/Terms) forbid
+# disrupting the service. Package contents are never fetched.
+[[platform.source]]
+name = "nuget-catalog"
+kind = "nuget"
+pattern = "*"
+scan = 6                  # catalog pages per run
+
+# Rationale: the same floods on Packagist (PHP). Its change feed lists
+# every package updated since a timestamp it hands out; the vendor
+# (`vendor/name`) stands for the account, as a keyed hash, so a swarm
+# publishing under several new vendors with templated names groups. One
+# request a run; the feed keeps a day, so a missed day is counted as a
+# gap. Noise: monorepo splits that update dozens of a vendor's packages at
+# once (one vendor, so one account). Terms: Packagist's API documentation
+# (https://packagist.org/apidoc) points mirrors at this feed and asks for a
+# User-Agent with a contact address (set SWARMCHASE_UA to add a mailto=)
+# and runs off the hour.
+[[platform.source]]
+name = "packagist-changes"
+kind = "packagist"
+pattern = "*"
+
+# Rationale: the same floods on RubyGems. The newest-gems listing gives
+# fifty gems with their first version's time, the gemspec's author string
+# (a keyed hash) and summary (a sketch); one request a run, so a sample of
+# the last hour or two. Noise: SDK generators that publish many gems with
+# one author string and templated names. Terms: RubyGems allows 10 API
+# requests a second per IP (https://guides.rubygems.org/rubygems-org-rate-limits/).
+[[platform.source]]
+name = "rubygems-new"
+kind = "rubygems"
+endpoint = "latest"
+pattern = "*"
+
+# Rationale: the same floods on crates.io. The newest-crates listing gives
+# names, creation times, descriptions and the declared repository, whose
+# host and owner (`github.com/<owner>`) stand for the account as a keyed
+# hash. Pages of 100, newest first, back to the last run, up to `scan`
+# pages. Noise: workspaces publishing a family of crates at once (one
+# owner, so one account). Terms: crates.io's data access policy
+# (https://crates.io/data-access) allows one API request a second with an
+# identifying User-Agent; the watch paces every host at `min_interval_secs`.
+[[platform.source]]
+name = "crates-new"
+kind = "crates"
+pattern = "*"
+scan = 6                  # listing pages per run
+
 # Rationale: agents told to test or prove they can edit open wikis make
 # sandbox and draft edits from new accounts, many at once, with templated
 # titles and summaries. Wikimedia's revision stream carries the editor, the

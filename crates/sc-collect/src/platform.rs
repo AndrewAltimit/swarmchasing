@@ -60,6 +60,10 @@ pub const PLATFORM_KINDS: &[&str] = &[
     "wikimedia",
     "golang",
     "hackernews",
+    "nuget",
+    "packagist",
+    "rubygems",
+    "crates",
 ];
 
 /// A platform source in the watchlist (`[[platform.source]]`).
@@ -161,6 +165,7 @@ pub fn pull_platform(
             src.max_lookups
                 .unwrap_or(crate::hackernews::DEFAULT_LOOKUPS),
         ),
+        k if let Some(r) = crate::registries::pull(client, k, &src.query, mark, rules, max) => r,
         k => bail!(
             "unknown platform source kind `{k}` (expected one of {})",
             PLATFORM_KINDS.join(", ")

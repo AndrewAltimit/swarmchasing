@@ -178,7 +178,7 @@ The watch changes nothing itself. Apply an approved proposal with `swarmchase no
 
 ## Platform swarms
 
-A separate pass in each run looks for accounts acting alike on GitHub, npm, PyPI, the Hugging Face Hub, Go modules, Wikimedia wikis and Hacker News: near-identical or templated text, templated names, or text-less stars, forks and pull requests on one target, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
+A separate pass in each run looks for accounts acting alike on GitHub, package registries (npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Go modules), the Hugging Face Hub, Wikimedia wikis and Hacker News: near-identical or templated text, templated names, or text-less stars, forks and pull requests on one target, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
 
 **Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
 
@@ -190,9 +190,13 @@ A separate pass in each run looks for accounts acting alike on GitHub, npm, PyPI
 | `huggingface` | The Hub's newest listing | `endpoint`: `spaces` (default), `models` or `datasets`; `limit` (at most 1000) |
 | `golang` | The Go module index, oldest first from the checkpoint | `scan`: requests of 2000 entries per run (default 6) |
 | `wikimedia` | Edits from the `mediawiki.revision-create` stream | `scan`: minutes per run (default 5); `max_mb`; `filter` |
+| `nuget` | NuGet's catalog pages committed since the checkpoint, oldest first | `scan`: pages per run (default 4) |
+| `packagist` | Packagist's change feed since the checkpoint | none; the feed keeps a day |
+| `rubygems` | RubyGems' newest listing (fifty gems) | `endpoint`: `latest` (default) or `just_updated` |
+| `crates` | crates.io's newest crates, back to the checkpoint | `scan`: pages of 100 per run (default 3) |
 | `hackernews` | Stories and comments from the search index, newest back to the checkpoint | `scan`: queries of 1000 items (default 10); `max_lookups`: account-age lookups (default 40) |
 
-`pattern` is required by the format; `gharchive`, `golang`, `wikimedia` and `hackernews` ignore it. These sources keep their checkpoint in `platform/state.json`; a backlog over 24 hours is skipped to the newest stretch, and the section shows how much was read and skipped. A corrupt GH Archive hour is skipped and counted.
+`pattern` is required by the format; only `npm` and `pypi` read it. Sources that read from a checkpoint (all but `npm`, `pypi`, `huggingface` and `rubygems`) keep it in `platform/state.json`; a backlog over 24 hours is skipped to the newest stretch, and the section shows how much was read and skipped. A corrupt GH Archive hour is skipped and counted.
 
 **Declared coding agents.** GitHub events from the coding-agent Apps that [`declared-agents.toml`](../../declared-agents.toml) lists (`github_app`) are tallied by product on the source's line, not grouped. An undeclared App whose login carries one of those products' names is listed below it as a spoofing lead, by login: App logins name software, not people.
 
