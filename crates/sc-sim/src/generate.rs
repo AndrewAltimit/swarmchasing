@@ -323,6 +323,18 @@ impl Gen<'_> {
         let note = format!("https://gist.github.com/{user}/{gist}");
         let raw = format!("https://r.jina.ai/https://gist.githubusercontent.com/{user}/{gist}/raw");
         let handoff = has(Mode::Handoff);
+        // Dispatch times, from their own stream so other modes draw as before.
+        let dispatch = has(Mode::Dispatch);
+        let mut drng = rng.fork("dispatch");
+        let dispatch_gaps: Vec<i64> = (0..a.records)
+            .map(|_| {
+                if dispatch {
+                    drng.range(10 * 60, 50 * 60)
+                } else {
+                    0
+                }
+            })
+            .collect();
         let mut t = start;
         for k in 0..n {
             let reader = (has(Mode::Roles) || handoff) && k == 0;
@@ -344,7 +356,19 @@ impl Gen<'_> {
             } else {
                 read_then_attack(a.records, hosts.len())
             };
-            let begin = if handoff && k > 0 {
+            // A worker's delay after each dispatch.
+            let late: Vec<i64> = (0..a.records)
+                .map(|_| {
+                    if dispatch && k > 0 {
+                        drng.range(40, 85)
+                    } else {
+                        0
+                    }
+                })
+                .collect();
+            let begin = if dispatch {
+                start + late.first().copied().unwrap_or(0)
+            } else if handoff && k > 0 {
                 t + rng.range(5 * 60, 45 * 60)
             } else if has(Mode::Roles) && k > 0 {
                 t + rng.range(15 * 60, 90 * 60)
@@ -371,15 +395,23 @@ impl Gen<'_> {
                 pace,
                 // One dispatcher sends each step to every agent; each
                 // request leaves 0 to 2 s after its dispatch.
-                gaps: has(Mode::Sync).then(|| {
-                    let late: Vec<i64> = sync_gaps.iter().map(|_| rng.range(0, 2)).collect();
-                    (0..sync_gaps.len())
-                        .map(|r| {
-                            let prev = late[r.saturating_sub(1)];
-                            (sync_gaps[r] + late[r] - prev).max(0)
-                        })
-                        .collect()
-                }),
+                gaps: if dispatch {
+                    Some(
+                        (0..a.records)
+                            .map(|r| dispatch_gaps[r] + late[r] - late[r.saturating_sub(1)])
+                            .collect(),
+                    )
+                } else {
+                    has(Mode::Sync).then(|| {
+                        let late: Vec<i64> = sync_gaps.iter().map(|_| rng.range(0, 2)).collect();
+                        (0..sync_gaps.len())
+                            .map(|r| {
+                                let prev = late[r.saturating_sub(1)];
+                                (sync_gaps[r] + late[r] - prev).max(0)
+                            })
+                            .collect()
+                    })
+                },
                 // A reader and an attacker go through the hosts in one order.
                 hosts: if has(Mode::Roles) {
                     in_order(&hosts, a.records)

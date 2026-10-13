@@ -119,6 +119,7 @@
         "min_coincidences": { "type": "number", "minimum": 0 },
         "shifts": { "type": "integer", "minimum": 1 },
         "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" },
         "clock_tolerance_secs": { "$ref": "#/$defs/secs" },
         "clock_weight": { "$ref": "#/$defs/share" }
       }

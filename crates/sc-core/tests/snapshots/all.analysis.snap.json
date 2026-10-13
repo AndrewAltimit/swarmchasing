@@ -61415,10 +61415,14 @@
       "coincidences": 8.25,
       "active_a": 10,
       "active_b": 10,
-      "expected": 1.6092964824120604,
-      "chance": 0.005,
+      "expected": 0.6493506493506495,
+      "chance": 2.125952118872989e-9,
+      "analytic": 2.125952118872989e-9,
+      "shifted": 0.0,
       "shifts": 199,
       "on_the_hour": 1,
+      "tested": 2,
+      "expected_pairs": 4.251904237745978e-9,
       "bin_secs": 60
     }
   ],
@@ -61456,7 +61460,7 @@
       "b": "C2",
       "kind": "co_activity",
       "strength": 0.49499999999999994,
-      "detail": "8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 1.6 expected under 199 circular shifts (chance 5.0e-3), 1 on a clock hour: one dispatcher or scheduler may drive both"
+      "detail": "8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 2.1e-9: 2.1e-9 analytic, a share of 0.000 of 199 circular shifts; 0.00 such pairs expected among 2 tested), 1 on a clock hour: one dispatcher or scheduler may drive both"
     },
     {
       "a": "C6",

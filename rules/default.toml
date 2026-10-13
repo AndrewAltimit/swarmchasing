@@ -183,10 +183,14 @@ max_chance = 0.001
 fdr = 0.05
 
 # Co-activity: request and submit times (never capture times) in `bin_secs`
-# bins; coincidences at lags up to `max_lag_bins` either way, a bin on a clock
-# hour (within `clock_tolerance_secs`) counting `clock_weight`. The chance is
-# the share of `shifts` circular shifts of one cluster's activity that align as
-# well, shifts of whole hours when most activity sits on the hour.
+# bins over the union of the two clusters' spans; coincidences at lags up to
+# `max_lag_bins` either way, a bin on a clock hour (within
+# `clock_tolerance_secs`) counting `clock_weight`. The chance is the larger of
+# an analytic one (each bin of the quieter cluster meeting the other's activity
+# at its own rate over the span) and the share of `shifts` circular shifts of
+# one cluster's activity that align as well; shifts of whole hours, and rates
+# at the same minute of the hour, when most activity sits on the hour. Kept
+# at `max_chance`, then cut at false discovery rate `fdr` over the pairs tested.
 [co_activity]
 bin_secs = 60
 max_lag_bins = 5
@@ -194,6 +198,7 @@ min_active_bins = 4
 min_coincidences = 4.0
 shifts = 199
 max_chance = 0.01
+fdr = 0.05
 clock_tolerance_secs = 120
 clock_weight = 0.25
 

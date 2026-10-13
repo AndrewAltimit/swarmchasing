@@ -131,6 +131,11 @@ pub enum Mode {
     /// The first agent names a gist in its requests; the rest fetch it
     /// within the hour, then work their own hosts (S2).
     Handoff,
+    /// The first agent is a planner sending a request at irregular
+    /// dispatches, twenty times its pace apart (80 s to 30 min at model pace);
+    /// each other agent sends one 40 to 85 seconds after each dispatch
+    /// (co-activity).
+    Dispatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
