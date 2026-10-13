@@ -58,6 +58,18 @@ pub enum ContactCmd {
 pub(super) fn find(ctx: &Ctx, a: ContactsArgs, out: &mut impl Write) -> Result<()> {
     let c = load(&ctx.root, &a.id)?;
     let claims = sc_case::report::all_claims(&c, &analysis(&ctx.root, &c, &Scope::All)?);
+    // Relay, carrier and callback hosts by the case's pinned rules and the
+    // current ones, and every host such a rule matched in the case's records
+    // (an inbox id a URL pattern needs): none of them is ever read.
+    let rules = [
+        crate::case::Pinned::new(&ctx.root, &c)?.rules,
+        sc_core::Rules::default_rules(),
+    ];
+    let callbacks: std::collections::BTreeSet<String> =
+        crate::case::case_records(&ctx.root, &c, &Scope::All)?
+            .iter()
+            .flat_map(|o| rules.iter().flat_map(|r| sc_core::intermediary_hosts(o, r)))
+            .collect();
     let dir = sc_case::providers::Directory::builtin();
     let csirts = crate::csirts::Csirts::builtin();
     let today = ctx.today.as_str();
@@ -76,7 +88,11 @@ pub(super) fn find(ctx: &Ctx, a: ContactsArgs, out: &mut impl Write) -> Result<(
             );
         }
         let client = sc_collect::Client::new(std::time::Duration::from_millis(500))?;
-        crate::contacts::find_contacts(c, &client, a.refresh, today, out)
+        let off = |h: &str| {
+            let h = h.to_ascii_lowercase();
+            rules.iter().any(|r| sc_core::is_intermediary_host(r, &h)) || callbacks.contains(&h)
+        };
+        crate::contacts::find_contacts(c, &client, &off, a.refresh, today, out)
     })
 }
 

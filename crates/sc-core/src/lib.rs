@@ -58,7 +58,10 @@ pub use endpoints::{Activity, EndpointOptions, EndpointView, endpoints};
 pub use escalation::{Escalation, Route};
 pub use eval::summary::{Summary, summarize};
 pub use eval::{EvalReport, Label, LabelSet, evaluate, parse_labels};
-pub use extract::{Extracted, Layer, defang, defang_host, extract, unwrap_layers};
+pub use extract::{
+    Extracted, Layer, defang, defang_host, extract, intermediary_hosts, is_intermediary_host,
+    unwrap_layers,
+};
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
