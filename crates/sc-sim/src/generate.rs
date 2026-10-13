@@ -79,6 +79,10 @@ struct RunSpec {
     sink_scope: Option<String>,
     tag: bool,
     retry: f64,
+    /// An artifact URL each request names as where its notes go (a writer).
+    writes: Option<String>,
+    /// An artifact URL the run fetches first (a reader of another's notes).
+    fetches: Option<String>,
     /// Change the request after an error (models and people do; a scanner
     /// working through its list does not).
     adapt: bool,
@@ -163,6 +167,8 @@ impl Gen<'_> {
                         sink_scope: None,
                         tag: a.tag,
                         retry: a.retry,
+                        writes: None,
+                        fetches: None,
                         adapt: true,
                     };
                     self.run(spec, &mut rng);
@@ -195,6 +201,8 @@ impl Gen<'_> {
                         sink_scope: None,
                         tag: a.tag,
                         retry: a.retry,
+                        writes: None,
+                        fetches: None,
                         adapt: true,
                     };
                     self.run(spec, &mut rng);
@@ -229,6 +237,8 @@ impl Gen<'_> {
                         sink_scope: None,
                         tag: a.tag,
                         retry: a.retry,
+                        writes: None,
+                        fetches: None,
                         adapt: true,
                     };
                     self.run(spec, &mut rng);
@@ -258,6 +268,8 @@ impl Gen<'_> {
                         sink_scope: Some(format!("{victim}:sink")),
                         tag: a.tag,
                         retry: 0.0,
+                        writes: None,
+                        fetches: None,
                         adapt: true,
                     };
                     self.run(spec, &mut rng);
@@ -281,9 +293,19 @@ impl Gen<'_> {
         // address, as an orchestrator's workers are.
         let base = rng.below(AGENT_UAS.len());
         let net = rng.below(CLOUD_ASNS.len());
+        // The hand-off artifact: one gist per swarm, its ids of the swarm's own.
+        let mut ids = Ids::new(self.seed);
+        let scope = format!("{i}:handoff");
+        let (user, gist) = (
+            format!("u{}", ids.token(&scope, "user", 6)),
+            ids.token(&scope, "gist", 32),
+        );
+        let note = format!("https://gist.github.com/{user}/{gist}");
+        let raw = format!("https://r.jina.ai/https://gist.githubusercontent.com/{user}/{gist}/raw");
+        let handoff = has(Mode::Handoff);
         let mut t = start;
         for k in 0..n {
-            let reader = has(Mode::Roles) && k == 0;
+            let reader = (has(Mode::Roles) || handoff) && k == 0;
             let hosts: Vec<String> = if has(Mode::Shard) {
                 shared.iter().skip(k).step_by(n).cloned().collect()
             } else if has(Mode::Roles) {
@@ -302,7 +324,9 @@ impl Gen<'_> {
             } else {
                 read_then_attack(a.records, hosts.len())
             };
-            let begin = if has(Mode::Roles) && k > 0 {
+            let begin = if handoff && k > 0 {
+                t + rng.range(5 * 60, 45 * 60)
+            } else if has(Mode::Roles) && k > 0 {
                 t + rng.range(15 * 60, 90 * 60)
             } else if has(Mode::Sync) {
                 start + rng.range(0, 20)
@@ -339,6 +363,8 @@ impl Gen<'_> {
                 sink_scope: has(Mode::Sink).then(|| format!("{i}:sink")),
                 tag: a.tag,
                 retry: a.retry,
+                writes: (handoff && k == 0).then(|| note.clone()),
+                fetches: (handoff && k > 0).then(|| raw.clone()),
                 adapt: true,
             };
             let end = self.run(spec, rng);
@@ -473,6 +499,8 @@ impl Gen<'_> {
             sink_scope: None,
             tag: false,
             retry: a.retry,
+            writes: None,
+            fetches: None,
             adapt,
         }
     }
@@ -505,6 +533,19 @@ impl Gen<'_> {
         let mut step = 0usize;
         let mut ids = Ids::new(self.seed);
         let basis = self.scenario.basis;
+        if let Some(f) = &spec.fetches {
+            let mut url = f.clone();
+            if spec.tag {
+                url = add_param(
+                    &url,
+                    "uqtag",
+                    &format!("r{}", ids.token(&spec.scope, "uqtag", 10)),
+                );
+            }
+            let status = (basis == Basis::Request).then_some(200);
+            self.emit(&spec, "generated hand-off fetch", url, t, status, basis);
+            t += gap(rng, spec.pace);
+        }
         for (r, (host, u)) in spec.hosts.iter().zip(&spec.uses).enumerate() {
             let pool: Vec<&Template> = match &spec.fixed {
                 Some(f) if !f.is_empty() => f.iter().collect(),
@@ -543,12 +584,15 @@ impl Gen<'_> {
                     let tag = ids.token(&spec.scope, "uqtag", 10);
                     url = add_param(&url, "uqtag", &format!("r{tag}"));
                 }
+                if let Some(w) = &spec.writes {
+                    url = add_param(&url, "notes", w);
+                }
                 let status = (basis == Basis::Request).then_some(if error && k + 1 < tries {
                     404
                 } else {
                     200
                 });
-                self.emit(&spec, tpl, url, t, status, basis);
+                self.emit(&spec, &tpl.origin, url, t, status, basis);
                 step += 1;
             }
         }
@@ -559,7 +603,7 @@ impl Gen<'_> {
     fn emit(
         &mut self,
         spec: &RunSpec,
-        tpl: &Template,
+        origin: &str,
         url: String,
         ts: i64,
         status: Option<u16>,
@@ -599,8 +643,8 @@ impl Gen<'_> {
         }
         v["synthetic"] = json!(true);
         v["cite"] = json!(format!(
-            "synthetic: sc-sim {} from {}",
-            self.scenario.name, tpl.origin
+            "synthetic: sc-sim {} from {origin}",
+            self.scenario.name
         ));
         self.out.push(v);
     }

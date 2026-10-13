@@ -116,3 +116,15 @@ fn separate_runs_get_separate_identifiers() {
         }
     }
 }
+
+#[test]
+fn a_gist_one_agent_names_and_others_fetch_draws_handoff_edges() {
+    let rules = Rules::default_rules();
+    let file = ScenarioFile {
+        scenario: vec![scenario("handoff")],
+    };
+    let r = bench(&file, &Palette::default_palette(&rules), &rules);
+    let m = &r[0].1;
+    let s2 = &m.edges["handoff"];
+    assert!(s2.correct > 0 && s2.correct == s2.pairs, "{}", render(m));
+}

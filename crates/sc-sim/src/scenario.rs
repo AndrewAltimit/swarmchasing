@@ -127,6 +127,9 @@ pub enum Mode {
     Roles,
     /// Agents split one host family between them and start together (S5).
     Shard,
+    /// The first agent names a gist in its requests; the rest fetch it
+    /// within the hour, then work their own hosts (S2).
+    Handoff,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

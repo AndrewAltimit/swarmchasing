@@ -134,6 +134,25 @@ agents = 10
 retry = 0.2
 
 [[scenario]]
+name = "handoff"
+seed = 81
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["handoff"]
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 8
+records = 3
+
+[[scenario]]
 name = "submit-basis"
 seed = 71
 seeds = 4
