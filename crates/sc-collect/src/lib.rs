@@ -7,15 +7,19 @@
 //!   Never open captured pages or the URLs agents submitted: they may be live
 //!   exploit payloads or trigger callbacks to the operator.
 //! - Never read or write agent callback channels (inboxes, ntfy topics, pastes).
+//! - Never fetch an address a record supplied (a `Signature-Agent` URI):
+//!   provider documents are read only from the addresses the provider documents.
 //! - Be polite: one request at a time, with a minimum interval per host, an
 //!   identifying user agent, and backoff when a server says it is overloaded.
 //! - Redact secrets before records leave this crate (see `sc_core::redact`).
 //!
 //! [`Client`] is the HTTP client every collector shares. The record sources
 //! (see [`Kind`]) implement [`Source`] and page through [`pager`]; crt.sh,
-//! security.txt and RDAP are single lookups on the client. [`psl`] finds a
+//! security.txt and RDAP are single lookups on the client, and [`lookup`]
+//! finds single records by id. [`psl`] finds a
 //! host's registrable domain, and [`asn`] fetches and loads the offline
-//! IP-to-ASN table.
+//! IP-to-ASN table. [`identity`] fetches the range files and key
+//! directories providers publish for their own agents.
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -28,10 +32,13 @@ mod commoncrawl;
 mod crtsh;
 mod ctlog;
 mod gharchive;
+pub mod identity;
+pub mod lookup;
 mod mcp;
 mod memento;
 mod npm;
 pub mod pager;
+pub mod platform;
 pub mod psl;
 mod pypi;
 mod rdap;

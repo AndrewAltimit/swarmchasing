@@ -1,0 +1,171 @@
+# Scenarios for `swarmchase sim bench` (crates/sc-sim). Synthetic: request
+# content is copied from samples/eval and only who sends it, when and in what
+# order is simulated. Each scenario runs under `seeds` seeds and is measured
+# on its own; the background actors are the hard negatives.
+
+[[scenario]]
+name = "sink"
+seed = 11
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["sink"]
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 12
+records = 3
+
+[[scenario]]
+name = "roles"
+seed = 21
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 2
+modes = ["roles"]
+records = 10
+hosts = 5
+[[scenario.actor]]
+kind = "pentester"
+agents = 2
+records = 12
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 12
+records = 3
+
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+[[scenario]]
+name = "sync"
+seed = 31
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["sync"]
+records = 8
+offset_hours = 5
+[[scenario.actor]]
+kind = "cron"
+agents = 2
+records = 24
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+[[scenario]]
+name = "shard"
+seed = 41
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["shard"]
+records = 6
+hosts = 4
+[[scenario.actor]]
+kind = "scheduler"
+agents = 2
+records = 6
+hosts = 4
+offset_hours = 12
+
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+[[scenario]]
+name = "fleet"
+seed = 51
+seeds = 4
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 6
+
+[[scenario.actor]]
+kind = "chatbot_paster"
+agents = 2
+records = 6
+retry = 0.3
+
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+[[scenario]]
+name = "planted"
+seed = 61
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 2
+modes = ["sink"]
+records = 8
+[[scenario.actor]]
+kind = "planter"
+copies = 0
+agents = 1
+records = 3
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 8
+records = 3
+
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+[[scenario]]
+name = "handoff"
+seed = 81
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["handoff"]
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 8
+records = 3
+
+[[scenario]]
+name = "submit-basis"
+seed = 71
+seeds = 4
+basis = "submit"
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["sink", "sync"]
+records = 8
+[[scenario.actor]]
+kind = "mail_gateway"
+agents = 3
+records = 6
+[[scenario.actor]]
+kind = "agent"
+agents = 3

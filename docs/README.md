@@ -24,7 +24,9 @@ What each part does and how it is configured.
 |---|---|
 | [`reference/watch.md`](reference/watch.md) | The data directory, incremental collection, the digest, retention, reviewing leads. |
 | [`reference/cases.md`](reference/cases.md) | Case files: `case.toml`, every `case` subcommand, contacts, drafts, bundles, pinned rules, STIX and MISP exports, incident drafts, operator evidence. |
+| [`reference/inbox.md`](reference/inbox.md) | Outside submissions: transports, `inbox` commands, storage, other formats, intake caps, verification by id, triage and its settings, promotion. |
 | [`reference/notices.md`](reference/notices.md) | Drafting, adding and updating notices; what they withhold; lint and build. |
+| [`reference/identity.md`](reference/identity.md) | Declared agent identity: the catalog, `identity refresh` and `check`, the classes, report lines and suggested claims. |
 | [`reference/evaluation.md`](reference/evaluation.md) | `swarmchase eval`, the CI eval gate and its floors, the held-out measurement. |
 | [`reference/browser-toolkit.md`](reference/browser-toolkit.md) | The Pages site: how it is built, each page, the workbench, and how it keeps payloads inert. |
 | [`reference/configuration.md`](reference/configuration.md) | `env.list`, environment variables, the urlquery.net key and terms. |
@@ -47,6 +49,8 @@ Formats other groups can implement, each with a JSON Schema under `schemas/`.
 | [`specs/README.md`](specs/README.md) | Index of the specs and their versions. |
 | [`specs/rules-v1.md`](specs/rules-v1.md) | SC-Rules v1: the indicator rules file, scoring semantics and conformance vectors. |
 | [`specs/incident-v1.md`](specs/incident-v1.md) | SC-Incident v1: one JSON document per published incident. |
+| [`specs/sightings-v1.md`](specs/sightings-v1.md) | SC-Sightings v1: an operator's sightings of a swarm, shared without its logs, and matching across operators. |
+| [`specs/submission-v1.md`](specs/submission-v1.md) | SC-Submission v1: an outside report of agent activity, evidence typed by how it can be checked. |
 | [`specs/adopting.md`](specs/adopting.md) | How another group adopts the method and states conformance. |
 | [`schemas/sc-bench-v1.json`](../schemas/sc-bench-v1.json) | SC-Bench v1: a labelled set, by record id, that other detectors are scored against ([evaluation](reference/evaluation.md#sc-bench)). |
 
@@ -58,3 +62,4 @@ Formats other groups can implement, each with a JSON Schema under `schemas/`.
 | [`scripts/README.md`](../scripts/README.md) | Every script and gate, and where each runs. |
 | [`samples/eval/README.md`](../samples/eval/README.md) | The labelled evaluation set and the held-out Transluce steps. |
 | [`samples/showcase/README.md`](../samples/showcase/README.md) | The synthetic set the landing page walks through. |
+| [`samples/submissions/README.md`](../samples/submissions/README.md) | Synthetic SC-Submission, STIX, X-ARF and IODEF reports. |

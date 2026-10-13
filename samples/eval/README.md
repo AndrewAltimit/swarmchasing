@@ -15,6 +15,7 @@ Each record is an ordinary record plus label fields:
 | `hard_negative_for` | benign, optional | Rule ids the record was written to resemble and must not be flagged for. |
 | `actor` | optional | Who sent it: `agent`, `human` or `tool`, for the [agent grade table](../../docs/reference/evaluation.md#agent-grades-by-actor). A record with an `actor` and no `label` is graded, not scored. |
 | `swarm` | optional | The interacting group (swarm) the record's run belongs to, or `none` for a run known not to interact. Scored by the [interaction-edge summary](../../docs/reference/evaluation.md#interaction-edges). |
+| `fleet` | optional | The fleet (one operator's runs: one scheduler, one scaffold deployment) the record's run belongs to, or `none` for a cluster known to be its operator's only one. Scored by the [fleet-proposal summary](../../docs/reference/evaluation.md#fleet-proposals) and the [swarm and fleet measurement](../../docs/reference/evaluation.md#swarm-and-fleet-measurement). |
 | `synthetic` | written records | `true`: written by hand to exercise the rules. `eval` reports every number again without these ([synthetic and non-synthetic](../../docs/reference/evaluation.md#synthetic-and-non-synthetic-records)). |
 | `reconstructed` | rebuilt records | `true`: rebuilt from a published incident. |
 | `labeller` | optional | Who labelled the record, for [SC-Bench](../../docs/reference/evaluation.md#sc-bench) exports. |
@@ -75,6 +76,18 @@ Synthetic agent records for the interaction edges ([SC-FM 5.12](../../docs/manua
 - **`handoff-1`**: one run names a gist as where its notes go; a different client fetches that gist 25 minutes later and probes other hosts.
 - **`sink-1`**: two clients, one direct with a headless browser and one through a relay from another network, writing to one webhook.site inbox. The inbox joins them into one cluster; the shared-sink edge is between its strands.
 - **`roles-1`**: one client reads five hosts; a different client attacks the same five in the same order half an hour later.
+
+Each client's records carry their own `run`, and the two shards share a `fleet`, so `swarmchase sim score` can place every edge on its true runs.
+
+Every record is flagged significant on its own, so the file raises recall at both tiers and leaves precision unchanged.
+
+## `scaffold-fleets.ndjson`
+
+Synthetic agent records for fleet proposals that rest on no shared identifier ([methodology](../../docs/methodology.md#descriptive-hints)), each marked `"synthetic": true`, on reserved `.example` hosts with made-up run tags, and carrying a `run` and a `fleet`:
+
+- **`scaffold-1`**: three agents on one harness, days apart, each with its own run tag and hosts, sending one request structure (a relay, a payload, then a tag, a step counter and a timestamp). Each pair should draw a shared-scaffold link.
+- **`lookalike-1` to `lookalike-8`**: eight unrelated operators using one framework's default probe shape. The shape is common in the analysis, so no pair of them should draw a shared-scaffold link.
+- **`orchestra-1`**: a planner and a worker with different tags, hosts and request shapes; each worker request comes 40 to 85 seconds after a planner request, at irregular times over eight hours, with submit times. The pair should draw a co-activity link.
 
 Every record is flagged significant on its own, so the file raises recall at both tiers and leaves precision unchanged.
 

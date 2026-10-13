@@ -8,6 +8,7 @@
 //! <out>/summary.json            clusters and endpoints as of the last run (digest baseline)
 //! <out>/ledger.json             each cluster's history across runs (ledger)
 //! <out>/autonomy.ndjson         what autonomy levels did or would have done (autonomy)
+//! <out>/platform/               platform pass state and carried events (platform)
 //! <out>/runs/<stamp>/           new records per source, analysis, case notes, digest, run.json
 //! <out>/LATEST                  stamp of the most recent run
 //! ```
@@ -31,6 +32,10 @@
 //! The digest also lists runs whose target sequence repeats an earlier run in
 //! another cluster (possible reruns, never merged) and bursts of archive
 //! captures of a host the store normally holds few captures of.
+//!
+//! New records are also searched for canary tokens from our own published
+//! pages ([`crate::canary`]); a sighting gets its own digest section and a
+//! medium priority reason, and never links records.
 //!
 //! New records are also matched against every case's indicators (see
 //! [`crate::case::indicators`]), under the case's pinned rules, and the hits are kept
@@ -56,6 +61,7 @@ pub(crate) mod autonomy;
 pub(crate) mod cases;
 pub(crate) mod digest;
 pub(crate) mod ledger;
+pub(crate) mod platform;
 pub(crate) mod priority;
 mod pull;
 pub(crate) mod run_summary;
@@ -103,6 +109,9 @@ pub struct Watchlist {
     /// shadow by default.
     #[serde(default)]
     pub autonomy: autonomy::Config,
+    /// Coordinated-account sources and options ([`platform`]).
+    #[serde(default)]
+    pub platform: platform::Config,
     #[serde(default, rename = "source")]
     pub sources: Vec<WatchSource>,
 }
@@ -364,6 +373,19 @@ fn watch(
         ));
     }
 
+    let canaries = crate::canary::watch_sightings(out, &fresh, &run_dir)?;
+
+    // Coordinated accounts on public platforms: its own pull and store, so a
+    // failure here never stops the record analysis.
+    let platform_outcome =
+        match platform::run(&client, out, &run_dir, now.timestamp(), &wl.platform, rules) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("platform pass: error: {e:#}");
+                None
+            }
+        };
+
     // Rolling analysis over everything recent, not just this run's records,
     // so clusters can span runs.
     let since = now.timestamp() - wl.analysis_window_days * DAY;
@@ -450,7 +472,17 @@ fn watch(
     );
     let mut priority = priority::assess(&leads, &health.alerts, &cases.due);
     priority.add(autonomy::priority_reasons(&decisions));
-    let digest = digest(&DigestInput {
+    priority.add(
+        canaries
+            .iter()
+            .map(|s| priority::Reason {
+                level: priority::Level::Medium,
+                kind: "canary".into(),
+                text: format!("canary token seen: {}", s.line()),
+            })
+            .collect(),
+    );
+    let mut digest = digest(&DigestInput {
         stamp: &stamp,
         analysis: &a,
         prev: &prev,
@@ -466,6 +498,15 @@ fn watch(
         attention: &queue,
         autonomy: &decisions,
     });
+    digest
+        .text
+        .push_str(&crate::canary::digest_section(&canaries));
+    digest.changed |= !canaries.is_empty();
+
+    if let Some(o) = &platform_outcome {
+        digest.text.push_str(&platform::section(o));
+        digest.changed |= o.changed();
+    }
     std::fs::write(run_dir.join("digest.md"), &digest.text)?;
     write_json(&run_dir.join(attention::FILE), &queue)?;
     write_json(&ledger_path, &ledger)?;

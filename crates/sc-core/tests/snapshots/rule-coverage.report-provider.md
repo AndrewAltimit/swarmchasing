@@ -6,7 +6,7 @@
 - **Window:** 2026-08-03 09:00:00 UTC → 2026-08-11 09:00:30 UTC
 - **Records:** 22 linked public records in 9 cluster(s) (of 50 records reviewed, 35 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-11.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.1
 
 ## Summary
 
@@ -124,6 +124,26 @@ A person or a conventional scanner sending the same payloads through the same se
   - linked by: `exfil.ntfy:/ntfy.sh/covrun7results`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S6 (data was sent to a callback inbox or side channel)
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-08-03 09:00:00 UTC to 2026-08-03 09:00:45 UTC, times of unknown kind
+- **C2**: 2026-08-05 10:00:00 UTC to 2026-08-07 13:00:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=covrun7`
+- **C3**: 2026-08-06 16:00:00 UTC to 2026-08-07 12:00:00 UTC, times of unknown kind
+  - identifiers: `exfil.requestbin:c0ve7x9.m.pipedream.net`
+- **C4**: 2026-08-03 09:01:10 UTC to 2026-08-03 09:01:40 UTC, times of unknown kind
+- **C5**: 2026-08-10 09:20:00 UTC to 2026-08-10 09:30:00 UTC, times of unknown kind
+- **C6**: 2026-08-11 09:00:00 UTC to 2026-08-11 09:00:30 UTC, times of unknown kind
+  - identifiers: `param:uqtag=covscope`
+- **C7**: 2026-08-09 09:10:00 UTC to 2026-08-09 11:05:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=covrun9`
+- **C8**: 2026-08-06 14:00:00 UTC to 2026-08-06 14:00:30 UTC, times of unknown kind
+  - identifiers: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
+- **C9**: 2026-08-07 09:00:00 UTC to 2026-08-07 09:01:00 UTC, times of unknown kind
+  - identifiers: `exfil.ntfy:/ntfy.sh/covrun7results`
+
 
 ## Representative records
 

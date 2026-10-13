@@ -148,6 +148,35 @@ The index is sorted by URL within a year, so a year's share is the first capture
 
 Records labelled with `swarm` measure the interaction edges ([SC-FM 5.12](../manual/05-linking.md#fm-512-interaction-edges)). The value names the interacting group a record's run belongs to, or `none` for runs known not to interact. `eval` prints the edges found by kind, how many labelled groups have an edge inside them, and how many edges touch a `none` run, by kind. Each side of an edge is placed by its first labelled record. The numbers are reported, never gated, and the committed groups are synthetic ([evaluation set](../../samples/eval/README.md#swarm-interactionndjson)). A disjoint partition on a `none` run is expected: a sharded scheduler draws one.
 
+## Fleet proposals
+
+Records labelled with `fleet` measure the soft links and candidate fleets as proposals of cluster pairs that one operator runs ([SC-FM 5.8](../manual/05-linking.md#fm-58-candidate-fleets-merge-and-split)). A cluster takes the most common `fleet` among its labelled members; `none` marks a cluster known to be its operator's only one, so any pair touching it is wrong.
+
+`eval` prints, per soft-link kind, over all soft links and over the pairs inside candidate fleets: the pairs proposed between two labelled clusters, how many are in one fleet (precision, with its Wilson interval), the share of true pairs found (recall), and a few wrong pairs. Pairs touching an unlabelled cluster are not counted. The numbers are reported, never gated: the committed fleets are synthetic and few ([evaluation set](../../samples/eval/README.md#scaffold-fleetsndjson)).
+
+## Swarm and fleet measurement
+
+`swarmchase sim score <files>` measures the interaction edges, soft links, candidate fleets and agent grades against records labelled with `run`, `swarm` and `fleet` ([`sc-sim`](../../crates/sc-sim/README.md)). `fleet` names the operator group a run belongs to (one scheduler, one scaffold deployment); a swarm's runs share one. A run with neither is its own operator. Each file is analysed on its own and the counts are summed; `--json` writes them.
+
+The unit is a pair of true runs. An edge side is placed on the run most of its records belong to, and a cluster on the run most of its members belong to.
+
+- **Edges**, per kind: precision is the share of drawn run pairs that are two distinct runs in one swarm. The table also counts pairs on one run (one client changing route) and pairs with one operator that do not interact (a fleet signal). Recall is over swarm pairs both of whose runs reach a cluster above noise.
+- **Soft links and candidate fleets**, per kind: precision is the share of linked cluster pairs with one operator. Recall is over operator pairs in different clusters above noise; pairs already in one cluster are counted apart.
+- **Agent grades**: records by actor and class against the grade columns, as in [agent grades by actor](#agent-grades-by-actor).
+
+Every proportion has its Wilson interval. Kinds are read from the analysis, so a new edge or soft-link kind appears without a change to the command. The numbers are reported, never gated. The committed labelled groups are hand-written and few, so the intervals are wide and the numbers say whether a detector fires on its designed case, not how often it would on real traffic.
+
+### Simulated scenarios
+
+`swarmchase sim bench samples/sim/scenarios.toml` generates labelled records for each scenario in the file, under each of its seeds, analyses each set on its own and prints the measurement above per scenario and summed. `sim write` saves the records instead, as ordinary labelled files that `eval` and `sim score` also read.
+
+A scenario lists actors: single agents, swarms (`modes`: `sink` for one shared callback inbox, `sync` for runs that start and stop together, `roles` for a reader followed by attackers on the same hosts, `shard` for one host family split between agents, `handoff` for a gist one agent names and the others fetch within the hour), fleets on one scaffold with separate inboxes, schedulers sharding a list from one client, planters copying another actor's identifiers from a different client, and background: people reading through relays, mail gateways, on-the-hour jobs, crawlers, people running scanners and people pasting a chatbot's payloads. Each actor has a pace, a retry rate and a time basis (request, submit or capture).
+
+The generator writes no request content. Each record copies a committed evaluation record and changes its target host to a reserved `.example` name, its linking identifiers and captured secrets to values of its own run (or of its swarm, for a shared inbox), and for a retry a cache-busting parameter. A hand-off adds the gist's address to the writer's requests and one fetch of it through a reader relay to each reader's run. What is simulated is the senders, their clients, the times and the order.
+
+What this does not model: the variety of real request content (every actor draws from one small set of records, so habit soft links such as relay stacks and payload dialects join unrelated agents more often than they would on real traffic), hand-offs through anything but a gist, headers, real address and network structure, and archive or scan-service behaviour beyond the timestamp kind. Simulator numbers say how the detectors behave on the modelled situations, not how often they are right on real records.
+
+
 ## Frozen splits
 
 `--split` writes the ids of a held-out side to `--split-out` and exits. Write it to the data directory, never to the repository.

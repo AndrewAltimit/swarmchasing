@@ -333,7 +333,7 @@ pub(crate) fn target_text(r: &ObsResult) -> &str {
 
 /// Canonical payload variants in one record's unwrapped layers and their
 /// parameter values.
-fn payload_variants(r: &ObsResult) -> BTreeSet<String> {
+pub(crate) fn payload_variants(r: &ObsResult) -> BTreeSet<String> {
     let texts = r.layers.iter().flat_map(|l| {
         std::iter::once(l.text.as_str()).chain(l.params.iter().map(|(_, v)| v.as_str()))
     });

@@ -13,11 +13,13 @@ name = "integration"
 path = "tests/integration.rs"
 
 [dependencies]
-sc-core.workspace = true
+sc-core = { workspace = true, features = ["signatures"] }
 sc-collect.workspace = true
 sc-publish.workspace = true
 sc-case.workspace = true
 sc-stix.workspace = true
+sc-sim.workspace = true
+sc-inbox.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true

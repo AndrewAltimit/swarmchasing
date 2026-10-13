@@ -62,6 +62,26 @@ pub fn report(opts_json: &str) -> Result<String, JsError> {
     })
 }
 
+/// The sightings document (SC-Sightings v1) of the analysis `prepare` made,
+/// pretty-printed, so the page shows exactly the bytes it would download.
+/// `opts` is ExportOptions JSON: `{"include_hosts":false,"operator":null,
+/// "cluster":null,"generated":"2026-10-12"}`. Nothing is sent anywhere.
+#[wasm_bindgen]
+pub fn sightings(opts_json: &str) -> Result<String, JsError> {
+    let opts: sc_core::sightings::ExportOptions = if opts_json.trim().is_empty() {
+        Default::default()
+    } else {
+        serde_json::from_str(opts_json).map_err(|e| JsError::new(&format!("options: {e}")))?
+    };
+    PREPARED.with(|p| match p.borrow().as_ref() {
+        Some(a) => {
+            let doc = sc_core::sightings::export(a, &opts, &Default::default());
+            serde_json::to_string_pretty(&doc).map_err(|e| JsError::new(&e.to_string()))
+        }
+        None => Err(JsError::new("nothing prepared yet")),
+    })
+}
+
 /// What `attribution` reads: a cluster id or key, the claims from case work
 /// (as `report --claims` reads them) and the naming level.
 #[derive(serde::Deserialize)]
@@ -106,6 +126,121 @@ pub fn attribution(opts_json: &str) -> Result<String, JsError> {
             withheld,
         })
     })
+}
+
+/// `declared-agents.toml` as JSON, converted by `build.rs`.
+const DECLARED_AGENTS_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/declared_agents.json"));
+
+fn catalog() -> Result<sc_core::identity::Catalog, JsError> {
+    serde_json::from_str::<sc_core::identity::Catalog>(DECLARED_AGENTS_JSON)
+        .map_err(|e| e.to_string())
+        .and_then(sc_core::identity::Catalog::checked)
+        .map_err(|e| JsError::new(&e))
+}
+
+/// The declared-agent catalog: products, and the range files and key
+/// directories with the URLs their providers document, so a page can say
+/// which files to download. The module never fetches them.
+#[wasm_bindgen]
+pub fn identity_catalog() -> Result<String, JsError> {
+    json(&catalog()?)
+}
+
+/// One record's declared identity, for the page.
+#[derive(serde::Serialize)]
+struct IdentityRow {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ip: Option<String>,
+    #[serde(flatten)]
+    identity: sc_core::RecordIdentity,
+}
+
+/// The range files and key directories a visitor supplies, by catalog id.
+#[derive(serde::Deserialize, Default)]
+struct IdentityFiles {
+    #[serde(default)]
+    ranges: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    directories: std::collections::BTreeMap<String, String>,
+}
+
+/// Class each record's declared identity (verified, spoofed, claimed), as
+/// `swarmchase identity check` does. `files_json` holds the range files and
+/// key directories the visitor downloaded from the catalog's URLs, by
+/// catalog id: `{"ranges": {"openai.chatgpt-user": "<file text>"},
+/// "directories": {"openai.chatgpt": "<file text>"}}`; empty checks claims
+/// only. Returns `{"records": [...], "counts": {...}, "warnings": [...]}`;
+/// records with no declared identity are counted, not listed.
+#[wasm_bindgen]
+pub fn identity_check(
+    input: &str,
+    format: &str,
+    map: &str,
+    files_json: &str,
+) -> Result<String, JsError> {
+    use sc_core::identity::httpsig::KeyDirectory;
+    use sc_core::identity::ranges::RangeTable;
+    use sc_core::identity::{IdentityClass, IdentityData, classify};
+    use std::collections::BTreeMap;
+
+    let cat = catalog()?;
+    let files: IdentityFiles = if files_json.trim().is_empty() {
+        IdentityFiles::default()
+    } else {
+        serde_json::from_str(files_json).map_err(|e| JsError::new(&format!("files: {e}")))?
+    };
+    let mut data = IdentityData::default();
+    let mut warnings = Vec::new();
+    for (id, text) in &files.ranges {
+        if !cat.range_files.iter().any(|f| &f.id == id) {
+            warnings.push(format!("{id}: not a range file in the catalog"));
+            continue;
+        }
+        match RangeTable::parse(id, text) {
+            Ok(t) => {
+                data.ranges.insert(id.clone(), t);
+            }
+            Err(e) => warnings.push(e),
+        }
+    }
+    for (id, text) in &files.directories {
+        let Some(d) = cat.directories.iter().find(|d| &d.id == id) else {
+            warnings.push(format!("{id}: not a directory in the catalog"));
+            continue;
+        };
+        match KeyDirectory::parse(id, &d.signature_agent, text) {
+            Ok(k) => {
+                data.directories.insert(id.clone(), k);
+            }
+            Err(e) => warnings.push(e),
+        }
+    }
+    let format: Format = format.parse().map_err(|e: String| JsError::new(&e))?;
+    let map = if map.trim().is_empty() {
+        FieldMap::default()
+    } else {
+        FieldMap::parse(map).map_err(|e| JsError::new(&e))?
+    };
+    let parsed = sc_core::parse_input(input, format, &map);
+    let mut counts: BTreeMap<IdentityClass, usize> = BTreeMap::new();
+    let mut records = Vec::new();
+    for o in parsed.observations {
+        let r = classify(&o, &cat, &data);
+        *counts.entry(r.class).or_default() += 1;
+        if r.class != IdentityClass::None {
+            records.push(IdentityRow {
+                id: o.id,
+                ip: o.ip,
+                identity: r,
+            });
+        }
+    }
+    json(&serde_json::json!({
+        "records": records,
+        "counts": counts,
+        "warnings": warnings,
+    }))
 }
 
 #[wasm_bindgen]
@@ -235,6 +370,61 @@ mod tests {
             panic!("report failed");
         };
         md
+    }
+
+    #[test]
+    fn sightings_of_the_showcase_hold_no_host_unless_asked() {
+        let input = include_str!("../../../samples/showcase/showcase.ndjson");
+        assert!(prepare(input, "ndjson", "", "").is_ok());
+        let Ok(doc) = sightings(r#"{"generated":"2026-10-12"}"#) else {
+            panic!("sightings failed");
+        };
+        let s = sc_core::sightings::parse(&doc).unwrap();
+        assert!(!s.sightings.is_empty());
+        assert!(
+            !doc.contains("county-records") && !doc.contains("jina.ai"),
+            "{doc}"
+        );
+        let Ok(doc) = sightings(r#"{"include_hosts":true}"#) else {
+            panic!("sightings failed");
+        };
+        assert!(
+            doc.contains("county-records[.]example") && !doc.contains("county-records.example")
+        );
+    }
+
+    #[test]
+    fn identity_check_classes_log_lines() {
+        let ua = "Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)";
+        let log = format!(
+            "192.0.2.9 - - [04/Oct/2026:08:10:00 +0000] \"GET / HTTP/1.1\" 200 5 \"-\" \"{ua}\"\n\
+             203.0.113.9 - - [04/Oct/2026:08:10:01 +0000] \"GET / HTTP/1.1\" 200 5 \"-\" \"{ua}\"\n\
+             203.0.113.10 - - [04/Oct/2026:08:10:02 +0000] \"GET / HTTP/1.1\" 200 5 \"-\" \"curl/8.5\""
+        );
+        let files = serde_json::json!({
+            "ranges": {
+                "openai.chatgpt-user": r#"{"prefixes":[{"ipv4Prefix":"192.0.2.0/28"}]}"#,
+                "unknown.file": "192.0.2.0/24",
+            }
+        });
+        let Ok(out) = identity_check(&log, "access_log", "host=shop.example", &files.to_string())
+        else {
+            panic!("identity_check failed");
+        };
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let classes: Vec<&str> = v["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["class"].as_str().unwrap())
+            .collect();
+        assert_eq!(classes, ["ip_verified", "spoofed"], "{out}");
+        assert_eq!(v["counts"]["none"], 1);
+        assert_eq!(v["warnings"].as_array().unwrap().len(), 1, "{out}");
+        let Ok(c) = identity_catalog() else {
+            panic!("catalog")
+        };
+        assert!(c.contains("ChatGPT-User"));
     }
 
     #[test]

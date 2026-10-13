@@ -140,6 +140,26 @@ pub(super) const PASSES: &[Pass] = &[
         );
     }),
     pass("trim_layers", &["paths", "dialect", "totals"], trim_layers),
+    // Reads members' layers and parameters, which trimming keeps for
+    // flagged records.
+    pass("scaffolds", &["number", "trim_layers"], |cx| {
+        let s = &cx.rules.set;
+        cx.a.scaffold_pairs = crate::scaffold::scaffold_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.scaffold,
+        );
+    }),
+    pass("co_activity", &["number"], |cx| {
+        let s = &cx.rules.set;
+        cx.a.coactive_pairs = crate::coactivity::coactive_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.co_activity,
+        );
+    }),
     pass(
         "fleets",
         &[
@@ -147,6 +167,8 @@ pub(super) const PASSES: &[Pass] = &[
             "dialect_pairs",
             "escalations",
             "trim_layers",
+            "scaffolds",
+            "co_activity",
         ],
         fleets,
     ),
@@ -379,6 +401,8 @@ fn fleets(cx: &mut AnalysisCtx) {
             dialect_pairs: &a.dialect_pairs,
             escalations: &a.escalations,
             common_features: &a.common_features,
+            scaffold_pairs: &a.scaffold_pairs,
+            coactive_pairs: &a.coactive_pairs,
         },
         opts,
     );

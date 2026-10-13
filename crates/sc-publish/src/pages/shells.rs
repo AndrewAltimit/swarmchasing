@@ -78,6 +78,17 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 <p id="claims-status" class="warn" role="status" hidden></p></details>
 <div class="row"><button type="button" id="draft-report" class="primary">Draft the report</button><button type="button" id="copy-report" disabled>Copy</button><button type="button" id="dl-report" disabled>Download .md</button><button type="button" id="dl-json" disabled>Download analysis .json</button></div>
 <pre id="report" class="report" tabindex="0" aria-label="Report draft">Analyse records to draft a report.</pre>
+</section>
+<section class="card pane-report" data-pane="report" aria-labelledby="h-sightings">
+<h2 id="h-sightings">Share sightings</h2>
+<p class="hint">A swarm that hits many sites is invisible to any one of them. A sightings file lets you share what it left in your log without sharing the log: keyed hashes of its run tags, inbox ids and captured secrets, how its requests were made, the hours it was active and its grade. No URL, path, query value, IP address, user agent or cookie goes in, and your host names only if you tick the box. The page shows the whole file before you save it and sends nothing; you choose whether to send it, and to whom. See <a href="../operators/#share-sightings">sharing sightings</a>.</p>
+<div class="row">
+<label><input type="checkbox" id="sight-hosts"> Include my host names (defanged)</label>
+<label class="grow">Describe yourself (optional) <input id="sight-operator" placeholder="e.g. the case id from our report" maxlength="120"></label>
+</div>
+<div class="row"><button type="button" id="sight-prepare" class="primary">Prepare sightings</button><button type="button" id="sight-dl" disabled>Download sightings .json</button></div>
+<div id="sight-summary" aria-live="polite"></div>
+<pre id="sight-preview" class="report" tabindex="0" aria-label="Sightings file to be saved">Analyse records, then press Prepare to see exactly what a sightings file would hold.</pre>
 </section>"#;
 
 pub const UNWRAP: &str = r#"<header class="page-head compact"><h1>Unwrap a URL</h1>
@@ -91,7 +102,7 @@ pub const UNWRAP: &str = r#"<header class="page-head compact"><h1>Unwrap a URL</
 </section>"#;
 
 pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
-<p class="lede">Small tools that run in this page: check an evidence bundle, read a <code>security.txt</code>, defang URLs. Each loads what it needs the first time you use it, and nothing you pick or paste leaves the page. Also: <a href="../unwrap/">unwrap a URL</a>.</p></header>
+<p class="lede">Small tools that run in this page: check an evidence bundle, read a <code>security.txt</code>, defang URLs. Each loads what it needs the first time you use it, and nothing you pick or paste leaves the page. Also: <a href="../unwrap/">unwrap a URL</a>, and <a href="../identity/">check the AI agents your log declares</a> against their providers' published ranges and keys.</p></header>
 <section class="card" aria-labelledby="bundle-h">
 <h2 id="bundle-h">Check an evidence bundle</h2>
 <p class="lede-card">Got a report? Pick the files attached to the email.</p>
@@ -121,6 +132,92 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <pre id="defang-out" class="report" aria-live="polite"></pre>
 </section>"#;
 
+/// Agent identity: an operator checks the agents its own log declares
+/// against the providers' published ranges and keys
+/// ([`site/js/pages/identity.js`]). The page fetches nothing.
+pub const IDENTITY: &str = r##"<header class="page-head compact"><h1>Agent identity</h1>
+<p class="lede">Which requests in your log say they come from an AI provider's agent (<code>ChatGPT-User</code>, <code>Claude-User</code>, <code>Perplexity-User</code>, <code>Google-Agent</code> and others), and whether the address ranges and signing keys the provider publishes bear that out. It runs in this page: your log is never uploaded, and the page fetches nothing from the providers. Method: <a href="../docs/reference/identity/">declared agent identity</a>.</p></header>
+<section class="card" aria-labelledby="id-log-h">
+<h2 id="id-log-h">Your log</h2>
+<label for="id-input" class="sr-only">Log</label>
+<textarea id="id-input" rows="8" spellcheck="false" aria-describedby="id-input-hint" placeholder='203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET / HTTP/1.1" 200 512 "-" "Mozilla/5.0 (compatible; ChatGPT-User/1.0)"'></textarea>
+<p class="hint" id="id-input-hint">A web server access log (Combined Log Format, so the user agent is there), or NDJSON with <code>ip</code>, <code>user_agent</code> and, for signatures, the request <code>headers</code>. Behind a proxy, log the forwarded client address, not the proxy's.</p>
+<div class="row">
+<label class="file button">Load file<input type="file" id="id-file" accept=".log,.txt,.ndjson,.jsonl,.json"></label>
+<label class="sr-only" for="id-format">Input format</label>
+<select id="id-format"><option value="auto">auto-detect</option><option value="access_log">Access log</option><option value="ndjson">NDJSON</option><option value="json">JSON</option></select>
+<label class="sr-only" for="id-map">Field map</label><input id="id-map" class="grow" spellcheck="false" placeholder="field map, e.g. host=www.example.org">
+</div>
+<div class="row"><button type="button" id="id-run" class="primary">Check</button><button type="button" id="id-example">Try an example</button></div>
+<p class="hint card-status" data-tools-status aria-live="polite"></p>
+<p id="id-example-note" class="hint note" hidden>Example loaded: a synthetic log from documentation addresses, checked against synthetic range files that stand in for the providers' files. None of it is a provider's real file or a real request.</p>
+<div id="id-alert" class="alert" role="alert" hidden></div>
+</section>
+<section class="card" aria-labelledby="id-files-h">
+<h2 id="id-files-h">Providers' files</h2>
+<p class="hint">Without the ranges and keys a provider publishes, a user agent is only a claim: anyone can write one, and nothing can be verified or shown spoofed. This page never fetches those files itself: a request from your browser to a provider would tell it who is checking, and the site allows requests to its own files only. It starts with the copies this site was built with, if any, dated below. To check against newer files, download them from the addresses listed (or take the files <code>swarmchase identity refresh</code> writes into <code>&lt;data&gt;/identity/</code>) and load them here; they stay in this page.</p>
+<p id="id-snapshot" class="hint" aria-live="polite"></p>
+<div class="row"><label class="file button">Load files<input type="file" id="id-files" multiple accept=".json,.txt"></label><button type="button" id="id-reset" disabled>Forget loaded files</button></div>
+<p id="id-files-status" class="hint" role="status" hidden></p>
+<div id="id-file-table"></div>
+</section>
+<section class="card" aria-labelledby="id-out-h">
+<h2 id="id-out-h">Result</h2>
+<div id="id-out" aria-live="polite"><p class="hint">Check a log to see each record's class here.</p></div>
+</section>"##;
+
+/// Report a swarm: a form that builds an SC-Submission v1 document in the
+/// page ([`site/js/pages/submit.js`]). The page sends nothing.
+pub const SUBMIT: &str = r##"<header class="page-head compact"><h1>Report a swarm</h1>
+<p class="lede">Saw AI agents probing, scraping or coordinating against others? Describe it here and the page builds an <a href="../docs/specs/submission-v1/">SC-Submission v1</a> document you send us privately. Agents may write the document directly from the spec and its <a href="https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/sc-submission-v1.json">schema</a>. This page sends nothing: everything stays in your browser until you send the file yourself.</p></header>
+<section class="card" aria-labelledby="sub-who-h">
+<h2 id="sub-who-h">Who is reporting</h2>
+<p class="hint">Kept private and never published. A report may be anonymous.</p>
+<div class="row">
+<label>Are you an AI agent? <select id="sub-agent"><option value="false">No, a person or organisation</option><option value="true">Yes, an AI agent</option></select></label>
+<label>Role <select id="sub-role"><option value="">(not given)</option><option value="operator">Operator of an affected system</option><option value="researcher">Researcher</option><option value="provider">AI provider</option><option value="bystander">Bystander</option><option value="other">Other</option></select></label>
+</div>
+<div class="row">
+<label class="grow">Name <input id="sub-name" spellcheck="false"></label>
+<label class="grow">Contact <input id="sub-contact" spellcheck="false" placeholder="optional"></label>
+</div>
+<div class="row" id="sub-agent-row" hidden>
+<label class="grow">Deployed by <input id="sub-operator" spellcheck="false"></label>
+<label class="grow">Model <input id="sub-model" spellcheck="false"></label>
+</div>
+</section>
+<section class="card" aria-labelledby="sub-claim-h">
+<h2 id="sub-claim-h">What you saw</h2>
+<label for="sub-summary">Summary</label>
+<textarea id="sub-summary" rows="4" spellcheck="true"></textarea>
+<div class="row">
+<label>Kind <select id="sub-kind"><option value="unknown">Not sure</option><option value="run">One agent run</option><option value="fleet">Several runs by one operator</option><option value="swarm">Several agents interacting</option></select></label>
+<label>First seen <input id="sub-first" type="datetime-local"></label>
+<label>Last seen <input id="sub-last" type="datetime-local"></label>
+<label>Agents <input id="sub-agents" type="number" min="1" step="1"></label>
+</div>
+<div class="row"><label class="grow">Target hosts <input id="sub-targets" spellcheck="false" placeholder="www.example.org, api.example.org"></label></div>
+</section>
+<section class="card" aria-labelledby="sub-ev-h">
+<h2 id="sub-ev-h">Evidence</h2>
+<p class="hint">What would be hard to fabricate counts most: records in public sources (scan services, web archives, GH Archive, package registries, certificate logs) dated well before you report, and signed requests or signed exports. Your own logs help, but only you can check them; bare values help least. We never open a URL you give, and never contact a callback inbox you name: we look records up by their id.</p>
+<div class="row">
+<label>Add <select id="ev-type"><option value="public_record">A public record</option><option value="log_lines">Log lines</option><option value="signed">A signed artifact</option><option value="indicator">An indicator value</option></select></label>
+<button type="button" id="ev-add">Add evidence</button>
+</div>
+<div id="ev-list"></div>
+</section>
+<section class="card" aria-labelledby="sub-out-h">
+<h2 id="sub-out-h">Your report</h2>
+<div id="sub-problems" class="alert" role="status" hidden></div>
+<div class="row"><button type="button" id="sub-copy" class="primary">Copy JSON</button><button type="button" id="sub-dl">Download .json</button></div>
+<pre id="sub-json" class="report" tabindex="0" aria-label="Submission JSON"></pre>
+<h3>Send it</h3>
+<p>Open a <a href="https://github.com/AndrewAltimit/swarmchasing/security/advisories/new">GitHub private vulnerability report</a> on this repository and paste the JSON into it, or attach the file. If we sent you a report, you may reply to it with the file attached instead. Please do not open a public issue: it would publish the hosts before anyone checked them.</p>
+<h3>What happens to it</h3>
+<p class="hint">Every report is treated as untrusted. We check the records you cite by their ids, compare them with what our own watch already holds, and look closer only when the evidence would have been hard to fabricate. Nothing you send is published. If we open a case, it rests on records we verified ourselves and goes through the usual review; you are not named unless you ask to be. See the <a href="../docs/reference/inbox/">inbox reference</a> and the <a href="../docs/policies/#outside-submissions">policy</a>.</p>
+</section>"##;
+
 /// Shown above the operators' guide: the access-log check, then how to tell
 /// a report is ours, when a name becomes public, and how to reach the
 /// project without naming a host in public.
@@ -128,6 +225,7 @@ pub const OPERATORS_PANEL: &str = r##"<aside class="card callout-card" aria-labe
 <h2 id="check-h">Check your access log in the browser</h2>
 <p>The workbench has an access-log preset: paste your web server's log (Common or Combined Log Format), name your host in the field map, and it runs the same rules over your requests. The log is analysed in the page and never uploaded.</p>
 <p><a class="button primary" href="../analyze/#preset=access-log">Open the access-log preset</a></p>
+<p>Requests that name an AI provider's agent (<code>ChatGPT-User</code>, <code>Claude-User</code>, a signature) can be checked against the ranges and keys the provider publishes, in the browser too: <a href="../identity/">agent identity</a> (<a href="#agents-that-name-themselves">how</a>).</p>
 </aside>
 <aside class="card callout-card" aria-labelledby="contact-h">
 <h2 id="contact-h">Received a report? Check it, and reach us privately</h2>

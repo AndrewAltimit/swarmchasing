@@ -69,6 +69,8 @@ Soft links are leads for a reviewer, listed with the evidence for each:
 | Shared captured secret | One client's captured token used again by another cluster. The strongest soft link. | A token can leak or be published. Stock passwords are sent by everyone and do not count. |
 | Same relay stack | The same chain of two or more relays and carriers: one harness's route. | Tools and tutorials share routes. A single relay is every relay user's habit and does not count. |
 | Same callback service | A fresh inbox per run on one service: one operator's habit. | Many clients use the same service. The same inbox is a hard link ([FM-5.2](#fm-52-shared-link-features)). |
+| Shared scaffold | One harness behind clusters with separate inboxes and tags ([FM-5.14](#fm-514-scaffold-fingerprints)). | Popular libraries and frameworks give unrelated operators one request shape. |
+| Co-activity | One dispatcher starting both, or one starting the other ([FM-6.9](06-timing.md#fm-69-co-activity)). | One scheduler drives unrelated jobs; busy clusters overlap. |
 
 ## FM-5.8 Candidate fleets, merge and split
 
@@ -80,7 +82,7 @@ Clusters joined by soft links form a **candidate fleet**. A candidate fleet is n
 
 Merges and splits are reversible and both are logged. A fleet grows, merges with another or breaks apart as evidence arrives. This mirrors how threat-intelligence teams handle uncategorised activity clusters, which "can grow, merge with, or break off from other clusters" before they are named ([Mandiant](references.md#attribution-practice)).
 
-Toolkit: the analysis lists soft links between clusters with a kind and a strength (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services), and groups strongly soft-linked clusters into candidate fleets, shown in internal reports. Candidate fleets never merge clusters or change a tier. The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
+Toolkit: the analysis lists soft links between clusters with a kind and a strength (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services, shared scaffolds, co-activity), and groups strongly soft-linked clusters into candidate fleets, shown in internal reports. Candidate fleets never merge clusters or change a tier. The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
 
 ## FM-5.9 Escalation sequences
 
@@ -147,3 +149,36 @@ Rules for identifiers:
 - **Neutral names.** A fleet identifier carries no provider, model, country or organisation name. A name is not an attribution, and a neutral one cannot become a false one when the attribution changes.
 
 Moving back is allowed at every stage: a swarm whose interaction record is withdrawn is a fleet again, and a named fleet whose merge evidence fails review is split, with the reason logged. Toolkit: cluster keys, candidate fleets, case fleets (`case fleet merge`, `case fleet split`) and swarm records are built ([cases](../reference/cases.md#swarms)). Named fleets, aliases and cross-case identifiers are (planned); until then a notice refers to a fleet by its case and `fleet-<n>`.
+
+## FM-5.14 Scaffold fingerprints
+
+A fleet built on one harness (one prompt, one tool wrapper, one request builder) can give every agent its own inbox and run tag, so no identifier joins its clusters. Its requests still share a structure. A **scaffold fingerprint** reduces each record, after unwrapping, to a template with every value replaced by its slot type:
+
+- the relay and carrier route, outermost first;
+- the path's shape: each segment's type (word, number, hex, UUID, token), with a short file extension kept;
+- the parameters in the order sent, each as its name and the kind of its value (a URL, a payload, prose, a secret, or a number, word or token with a length class);
+- the URL's encoding choices ([FM-5.7](#fm-57-soft-links));
+- the canonical test payloads it carries, and whether it was cut off.
+
+Two clusters are compared by their mixes of templates, each template weighted down by how many clusters hold it. Two guards keep a popular library or framework, which gives unrelated operators one shape, from reading as one fleet:
+
+- **Specificity.** A template ties clusters only when it has several structural parts. A bare search through one relay has too few.
+- **Chance.** A pair is kept only when two unrelated clusters of the same analysis would rarely both hold the rarest template they share. The toolkit takes the share of the other clusters holding it, squared, and states it with the expected number of such pairs among all the analysis's pairs. A shape held by more than a set number of clusters ties none of them.
+
+A shared scaffold is a soft link ([FM-5.7](#fm-57-soft-links)). It **must not** merge clusters or raise a tier: a published harness, a tutorial or a framework default makes it without any tie between operators, and the chance model only knows the clusters in the analysis. The templates hold no host, path word or value, so the evidence shows how requests were built without repeating what they said. Toolkit: `scaffold_pairs` in the analysis and the `scaffold` soft link, with the settings in `[scaffold]` ([methodology](../methodology.md#descriptive-hints)).
+
+## FM-5.15 Coordinated accounts on public platforms
+
+Agent swarms also show up on platforms where accounts publish: many accounts opening near-identical issues or comments, creating repositories, packages or Spaces with templated names, or filing templated vulnerability reports. Here the unit is an account's public action, not a request, and the grouping is a **platform swarm candidate**: accounts acting alike beyond chance. It is a hint for review, like an interaction edge ([FM-5.12](#fm-512-interaction-edges)); it never joins a cluster and never makes a fleet or a swarm on its own.
+
+What is read and kept **must** pass the passivity test ([FM-3.2](03-sources.md#fm-32-passivity-test)): public event archives and registry listings only, with no URL inside the text fetched and no account, repository, package or Space opened. Collection **should** keep no more personal data than grouping needs: a keyed hash in place of the login, a coarse account-age rank in place of the account id, and the text reduced to a sketch with URLs, addresses, mentions, numbers and identifiers replaced by slots.
+
+A candidate needs all of:
+
+- **A shared shape.** Near-duplicate text (estimated similarity of word shingles), one template once per-instance values are slots, or created items whose names follow one template with a counter or identifier. A plain name many people pick ("portfolio") is not a template.
+- **Several accounts.** At least three distinct accounts, or, where the source names no account, a flood of at least five items, reported as such.
+- **More than chance.** The densest burst of the accounts' first actions, weighed against the same number of actions placed at random over the window read (a scan statistic), and the share of new accounts, weighed against the window's base rate, together at most 1%. A burst starting on a clock hour counts a quarter, as for synchronized starts ([FM-6.7](06-timing.md#fm-67-shared-pauses)). Model-output residue ([FM-4.5](04-indicators.md#fm-45-artifact-families)) in at least half the members can stand in for the chance.
+
+Benign coordination is common and **must** be ruled out before a candidate is read as a swarm: dependency and release bots, translation syncs, contribution drives and coursework, scheduled jobs, organisation-wide automation, an outage that brings many users to one project at once, and issue templates. Known automation accounts are dropped at collection and known benign templates are listed as suppressed with their kind. A burst on one owner's projects by established accounts is not reported. Each candidate lists what is left to rule out.
+
+Toolkit: `sc_core::platform` and `swarmchase platform-swarms`; the watch's platform pass lists new and grown candidates in the digest ([methodology](../methodology.md#coordinated-accounts-on-public-platforms), [watch](../reference/watch.md#platform-swarms)).

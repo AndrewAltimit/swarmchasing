@@ -15,13 +15,18 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `runs/<stamp>/attention.json` | The run's [attention queue](#the-attention-queue). |
 | `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
 | `autonomy.ndjson` | What each [autonomy](#autonomy) level did or would have done. |
+| `platform/` | The [platform pass](#platform-swarms): checkpoints, reported candidates and carried events. |
+| `runs/<stamp>/platform-swarms.json` | The run's platform swarm candidates. |
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
 | `labels/suggestions-local.ndjson` | The local model's suggestions on new leads ([model triage](#model-triage)). |
 | `labels/suggestions-claude-watch.ndjson` | Claude's suggestions on new leads from hosted sources ([model triage](#model-triage)). |
 | `cases/<id>/` | Case files ([cases](cases.md)). |
 | `rules/<version>.toml` | Rules versions that cases pin. |
+| `canary/registry.json` | Canary tokens registered from built sites ([canary sightings](#canary-sightings)). |
+| `runs/<stamp>/canary.json` | The run's canary sightings, when it has any. |
 | `cache/http/` | Cached collector responses; safe to delete. |
 | `asn/ip2asn-v4.tsv.gz` | The IP-to-ASN table, once fetched. |
+| `identity/` | Providers' published agent ranges and key directories, once fetched ([identity](identity.md)). |
 
 ## Collection
 
@@ -141,6 +146,10 @@ The rest is common to both:
 
 A suggestion is never a label: review saves it beside the admin's label as `suggested`, and eval reads only the admin's.
 
+### Canary sightings
+
+When the registry holds tokens ([page references](browser-toolkit.md#page-references)), each run searches its new records for them: the URL and every layer unwrapped from it, the final URL, the user agent and the header values. Each copy is a line under **Canary sightings** with the token, the field, the record id and source, the file it was issued on and its month, and a medium priority reason of kind `canary`. A token-shaped value the registry does not hold is listed as unverified. A record dated before its token's month is marked: the seed has leaked, the value was made up, or the record's time is wrong. Sightings never link records and never become leads in the attention queue. With an empty registry the check does nothing.
+
 ### Case status
 
 The watch matches new records against every case's indicators: its clusters' linking features and its endpoints, under the case's pinned rules. The *Case status* section then proposes:
@@ -150,6 +159,27 @@ The watch matches new records against every case's indicators: its clusters' lin
 - re-checking cases whose records would change tier under the current rules.
 
 The watch changes nothing itself. Apply an approved proposal with `swarmchase notice update <id> --kind status --status <s>`, which also updates the case.
+
+## Platform swarms
+
+A separate pass in each run looks for accounts acting alike on GitHub, npm, PyPI and the Hugging Face Hub: near-identical or templated text, or templated names, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
+
+**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
+
+| Kind | Reads | Fields |
+|---|---|---|
+| `gharchive` | GH Archive hours, every event of the kinds the detector reads | `scan`: hours per run (default 1); `max_mb`; `max_events` |
+| `npm` | One npm search page | `pattern`: search text; `page_size` |
+| `pypi` | One PyPI feed | `endpoint`: `packages` (default) or `updates`; `pattern`: substrings or `*` |
+| `huggingface` | The Hub's newest listing | `endpoint`: `spaces` (default), `models` or `datasets`; `limit` (at most 1000) |
+
+`pattern` is required by the format; `gharchive` ignores it. A `gharchive` source keeps its next hour in `platform/state.json`; a backlog over 24 hours is skipped to the newest hours, and the section shows hours read and skipped.
+
+**What is stored.** Nothing from the full stream. After grouping, only events worth another look are carried in `platform/carry.ndjson` for `carry_hours`: members of a group with two or more accounts and events carrying residue. Events hold a keyed hash for the account, never its login, and slotted text sketches, never the text. The run's candidates, suppressed groups and counts go to `runs/<stamp>/platform-swarms.json`.
+
+**In the digest.** *Platform swarm hints* lists candidates that are new this run or have grown since they were last listed, each with its reason line (burst, new accounts, residue and their chances), what joined it, the slotted template, its targets, what is left to rule out, and up to five defanged links. A new or grown candidate counts as a change. Suppressed groups are summed by benign kind. Candidates are not leads for triage: the hosted model may see only archive and urlquery records ([policies](../policies.md#evidence-and-attribution)).
+
+**On demand.** `swarmchase platform-swarms <events.ndjson>` runs the detector over carried events or fixtures, and `--gharchive <hour.json.gz>` over GH Archive hour files read locally; `--json` prints the full report and `--options` takes a TOML of tunables.
 
 ## The run summary
 
@@ -270,7 +300,7 @@ A lead's thread counts with every thread it was merged into. For `draft_case`, *
 
 ## Retention
 
-At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
+At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. The platform pass keeps its carried events for `carry_hours` only. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
 
 ## The dashboard
 

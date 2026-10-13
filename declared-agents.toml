@@ -1,0 +1,184 @@
+# Declared agent identities: the agent products that name themselves in their
+# requests, the address-range files and Web Bot Auth key directories their
+# providers publish, and where each provider documents them.
+#
+# Compiled into sc-core (`sc_core::identity::Catalog::bundled`) and read by
+# `swarmchase identity`. The range files and key directories themselves are
+# data: `swarmchase identity refresh` fetches them from the URLs below into
+# `<data>/identity/`, and they are never committed.
+#
+# Every URL here comes from the provider's own documentation (`source`). The
+# collector fetches only these URLs, never a `Signature-Agent` value seen in a
+# request: that address is agent-supplied (FM-2.1, FM-7.11). Adding an entry is
+# a review decision: cite the provider's page that names the file.
+#
+# Fields:
+#   [[range_file]]  id, provider, url, source; `exhaustive = false` when the
+#                   provider does not say the file lists every address its
+#                   agents use, so an address outside it is unlisted, not spoofed.
+#   [[directory]]   id, provider, signature_agent (the `Signature-Agent` URI the
+#                   provider documents), url (its key directory), source.
+#   [[agent]]       token (the user-agent product token, matched
+#                   case-insensitively as a whole token), provider, product,
+#                   purpose (user_fetch | agent | search | training),
+#                   ranges (range_file ids), directory (directory id, when the
+#                   product signs), source.
+
+[meta]
+version = "2026-10-12"
+
+# ── OpenAI ────────────────────────────────────────────────────────────────
+# https://developers.openai.com/api/docs/bots lists each user agent with its
+# published range file.
+
+[[range_file]]
+id = "openai.chatgpt-user"
+provider = "OpenAI"
+url = "https://openai.com/chatgpt-user.json"
+source = "https://developers.openai.com/api/docs/bots"
+
+[[range_file]]
+id = "openai.searchbot"
+provider = "OpenAI"
+url = "https://openai.com/searchbot.json"
+source = "https://developers.openai.com/api/docs/bots"
+
+[[range_file]]
+id = "openai.gptbot"
+provider = "OpenAI"
+url = "https://openai.com/gptbot.json"
+source = "https://developers.openai.com/api/docs/bots"
+
+# ChatGPT agent signs its requests with Web Bot Auth and sends
+# `Signature-Agent: "https://chatgpt.com"`; it uses a browser user agent, so
+# the signature is its only declaration.
+[[directory]]
+id = "openai.chatgpt"
+provider = "OpenAI"
+signature_agent = "https://chatgpt.com"
+url = "https://chatgpt.com/.well-known/http-message-signatures-directory"
+source = "https://help.openai.com/en/articles/11845367-chatgpt-agent-allowlisting"
+
+[[agent]]
+token = "ChatGPT-User"
+provider = "OpenAI"
+product = "ChatGPT user-triggered fetches"
+purpose = "user_fetch"
+ranges = ["openai.chatgpt-user"]
+directory = "openai.chatgpt"
+source = "https://developers.openai.com/api/docs/bots"
+
+[[agent]]
+token = "OAI-SearchBot"
+provider = "OpenAI"
+product = "ChatGPT search crawler"
+purpose = "search"
+ranges = ["openai.searchbot"]
+source = "https://developers.openai.com/api/docs/bots"
+
+[[agent]]
+token = "GPTBot"
+provider = "OpenAI"
+product = "OpenAI training crawler"
+purpose = "training"
+ranges = ["openai.gptbot"]
+source = "https://developers.openai.com/api/docs/bots"
+
+# ── Anthropic ─────────────────────────────────────────────────────────────
+# https://privacy.claude.com/en/articles/8896518 links one list for its bots
+# and says an address on it shows the crawler is Anthropic's. The list does
+# not say which bot uses which address, nor that it covers Claude-User, so it
+# is not taken as exhaustive.
+
+[[range_file]]
+id = "anthropic.bots"
+provider = "Anthropic"
+url = "https://claude.com/crawling/bots.json"
+source = "https://privacy.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler"
+exhaustive = false
+
+[[agent]]
+token = "Claude-User"
+provider = "Anthropic"
+product = "Claude user-triggered fetches"
+purpose = "user_fetch"
+ranges = ["anthropic.bots"]
+source = "https://privacy.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler"
+
+[[agent]]
+token = "Claude-SearchBot"
+provider = "Anthropic"
+product = "Claude search crawler"
+purpose = "search"
+ranges = ["anthropic.bots"]
+source = "https://privacy.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler"
+
+[[agent]]
+token = "ClaudeBot"
+provider = "Anthropic"
+product = "Anthropic training crawler"
+purpose = "training"
+ranges = ["anthropic.bots"]
+source = "https://privacy.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler"
+
+# ── Perplexity ────────────────────────────────────────────────────────────
+# https://docs.perplexity.ai/guides/bots lists each user agent with its file
+# under www.perplexity.com, which redirects to www.perplexity.ai; the
+# collector follows redirects only within one host, so the target is given.
+
+[[range_file]]
+id = "perplexity.user"
+provider = "Perplexity"
+url = "https://www.perplexity.ai/perplexity-user.json"
+source = "https://docs.perplexity.ai/guides/bots"
+
+[[range_file]]
+id = "perplexity.bot"
+provider = "Perplexity"
+url = "https://www.perplexity.ai/perplexitybot.json"
+source = "https://docs.perplexity.ai/guides/bots"
+
+[[agent]]
+token = "Perplexity-User"
+provider = "Perplexity"
+product = "Perplexity user-triggered fetches"
+purpose = "user_fetch"
+ranges = ["perplexity.user"]
+source = "https://docs.perplexity.ai/guides/bots"
+
+[[agent]]
+token = "PerplexityBot"
+provider = "Perplexity"
+product = "Perplexity search crawler"
+purpose = "search"
+ranges = ["perplexity.bot"]
+source = "https://docs.perplexity.ai/guides/bots"
+
+# ── Google ────────────────────────────────────────────────────────────────
+# https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers
+# gives Google-Agent its own range file, and
+# https://developers.google.com/crawling/docs/crawlers-fetchers/web-bot-auth
+# says some Google-Agent requests are signed, with `Signature-Agent:
+# g="https://agent.bot.goog"` and the directory below.
+
+[[range_file]]
+id = "google.user-triggered-agents"
+provider = "Google"
+url = "https://developers.google.com/static/crawling/ipranges/user-triggered-agents.json"
+source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+
+[[directory]]
+id = "google.agent"
+provider = "Google"
+signature_agent = "https://agent.bot.goog"
+url = "https://agent.bot.goog/.well-known/http-message-signatures-directory"
+source = "https://developers.google.com/crawling/docs/crawlers-fetchers/web-bot-auth"
+
+[[agent]]
+token = "Google-Agent"
+provider = "Google"
+product = "Google agents acting on a user's request"
+purpose = "agent"
+ranges = ["google.user-triggered-agents"]
+directory = "google.agent"
+source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"

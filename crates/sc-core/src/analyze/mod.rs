@@ -10,7 +10,7 @@ mod link;
 mod pipeline;
 
 pub use hints::is_context_kind;
-pub(crate) use hints::{relay_stack, target_text};
+pub(crate) use hints::{payload_variants, relay_stack, target_text};
 
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::Layer;
@@ -165,6 +165,15 @@ pub struct Cluster {
     /// scored, never linked on.
     #[serde(default, skip_serializing_if = "crate::scope::Scope::is_default")]
     pub scope: crate::scope::Scope,
+    /// Declared agent identities of the members, checked against the
+    /// providers' published ranges and keys ([`crate::identity`]). Filled by
+    /// [`crate::identity::annotate`], not by the pipeline: it needs data the
+    /// caller holds. Descriptive: never scored, never linked on.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::identity::ClusterIdentity::is_empty"
+    )]
+    pub identity: crate::identity::ClusterIdentity,
 }
 
 /// What the members' targets say about the agent's knowledge
@@ -240,10 +249,20 @@ pub struct Analysis {
     /// remote browser) within a window: a hint on the clusters they touch.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub escalations: Vec<crate::escalation::Escalation>,
+    /// Pairs of clusters whose requests share a structure (relay route,
+    /// parameter slots, encoding, payloads) beyond chance: a link to check,
+    /// never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scaffold_pairs: Vec<crate::scaffold::ScaffoldPair>,
+    /// Pairs of clusters active in the same minutes, or one trailing the
+    /// other, beyond a circular-shift chance model: a link to check, never a
+    /// merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coactive_pairs: Vec<crate::coactivity::CoActivePair>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
     /// lengths, header sets, escalations, common features, captured
-    /// secrets), strongest
+    /// secrets, scaffolds, co-activity), strongest
     /// first. They never merge clusters or change a score.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub soft_links: Vec<crate::fleets::SoftLink>,
@@ -271,8 +290,9 @@ pub struct CommonFeature {
     pub end: i64,
     /// Which limit it passed.
     pub reason: String,
-    /// Its value is quoted in a public report (`linking.published_tags`): a
-    /// burned identifier, which is no soft link either.
+    /// Its value is quoted in a public report (`linking.published_tags`) or
+    /// carries one of our canary tokens ([`crate::canary`]): a burned
+    /// identifier, which is no soft link either.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub published: bool,
 }

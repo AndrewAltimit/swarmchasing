@@ -56,6 +56,7 @@ let records = client.wayback_cdx(&q)?;
 | `security_txt`, `security_txt_checked` | A domain's security.txt; the checked form says whether it has expired. |
 | `rdap_domain` | A domain's RDAP record, for the registrar's abuse contact. |
 | `download` | A large file streamed to disk (the ASN table). |
+| `urlscan_by_id`, `gharchive_event`, `npm_release`, `pypi_release`, `crtsh_entry` | One record by id, for checking a reference a submission names ([`lookup.rs`](src/lookup.rs)). |
 
 Every source has a `parse_*` function that reads a saved response without the network.
 
@@ -87,6 +88,10 @@ A pull that fails after its first page keeps what it has and says so in `Pull::s
 Wayback's resume key (with its time window, when sliced), Common Crawl's crawl-and-page cursor, the footprint source's scope-and-key cursor and the MCP Registry's cursor stay valid across runs (`Source::resumable`), so the watch continues a cut-short pull on its next run. A urlquery or npm offset is valid only within one pull.
 
 Streamed sources read a bounded amount each pull from a checkpoint (`Source::checkpointed`): GH Archive reads on from the last hour read, up to `scan` hours and `max_mb`, decoded a line at a time; a CT log reads from its checkpoint when that is within the newest `scan` entries, else the newest `scan`. A backlog too long to catch up on is skipped and counted.
+
+### Platform events
+
+[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (`gharchive`, `npm`, `pypi` or `huggingface`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped. `gharchive_file` reads a GH Archive hour file from disk. Nothing inside an event's text is fetched, and a Space or repository is never opened ([methodology](../../docs/methodology.md#coordinated-accounts-on-public-platforms)).
 
 ### Coverage and canaries
 
@@ -135,7 +140,10 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`wayback.rs`](src/wayback.rs), [`arquivo.rs`](src/arquivo.rs), [`commoncrawl.rs`](src/commoncrawl.rs), [`memento.rs`](src/memento.rs) | Archive index sources. |
 | [`urlquery.rs`](src/urlquery.rs), [`urlscan.rs`](src/urlscan.rs) | Scan-service sources. |
 | [`gharchive.rs`](src/gharchive.rs), [`npm.rs`](src/npm.rs), [`pypi.rs`](src/pypi.rs), [`mcp.rs`](src/mcp.rs) | Event-stream and registry sources. |
+| [`platform.rs`](src/platform.rs) | Platform events for the coordinated-account detector: GH Archive, npm, PyPI and Hugging Face Hub listings, sketched at parse time. |
 | [`wellknown.rs`](src/wellknown.rs) | Agent protocol footprints in the Wayback index. |
 | [`ctlog.rs`](src/ctlog.rs) | The CT log source and its SAN parser. |
+| [`lookup.rs`](src/lookup.rs) | Single records by id, for `swarmchase inbox verify`. |
 | [`crtsh.rs`](src/crtsh.rs), [`securitytxt.rs`](src/securitytxt.rs), [`rdap.rs`](src/rdap.rs) | Lookups: certificates, security.txt, RDAP. |
 | [`psl.rs`](src/psl.rs), [`asn.rs`](src/asn.rs) | Registrable domains; the IP-to-ASN table download. |
+| [`identity.rs`](src/identity.rs) | Providers' published range files and key directories, from the catalog's URLs only ([identity](../../docs/reference/identity.md)). |

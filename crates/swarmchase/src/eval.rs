@@ -234,6 +234,7 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
     print_clusters(s);
     print_grades(&r.grades, "actor");
     print_swarm(&r.swarm);
+    print_fleets(&r.fleets);
     println!(
         "\ncoverage: {}/{} rules have a positive · {} allow-listed · {} uncovered · {} with hard negatives",
         s.coverage.covered,
@@ -448,6 +449,40 @@ pub fn print_calibration(c: &Calibration) {
             .collect();
         if !row.is_empty() {
             println!("  {title:<12} {}", row.join(" · "));
+        }
+    }
+}
+
+/// Proposed fleet pairs against `fleet` labels. Report only.
+fn print_fleets(f: &sc_core::eval::fleets::FleetEval) {
+    if f.is_empty() {
+        return;
+    }
+    println!(
+        "\nfleet proposals (report only): {} clusters with a fleet label · {} fleets · {} true pairs",
+        f.labelled_clusters, f.fleets, f.true_pairs
+    );
+    println!(
+        "{:<24} {:>8} {:>8} {:>24} {:>8}",
+        "proposed by", "pairs", "correct", "precision", "recall"
+    );
+    for r in &f.rows {
+        let precision = match (r.precision, r.precision_ci) {
+            (Some(v), Some((lo, hi))) => {
+                format!("{:.1}% [{:.1}–{:.1}]", v * 100.0, lo * 100.0, hi * 100.0)
+            }
+            _ => "n/a".into(),
+        };
+        println!(
+            "{:<24} {:>8} {:>8} {:>24} {:>8}",
+            r.name,
+            r.proposed,
+            r.correct,
+            precision,
+            pct(r.recall)
+        );
+        for w in &r.wrong {
+            println!("  wrong: {w}");
         }
     }
 }

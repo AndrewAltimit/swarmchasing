@@ -372,3 +372,56 @@ page_size = 100
 # match_type = "domain"
 # from = "20260901"
 # limit = 5000
+
+# ── Coordinated accounts on public platforms (docs/reference/watch.md#platform-swarms) ──
+# A separate pass: many accounts acting alike (near-identical or templated
+# issues, comments and descriptions, templated names) in a burst beyond
+# chance. Sources here are read in full and grouped, not filtered by a
+# pattern; only events worth another look are carried between runs, for
+# `carry_hours`. Output is a digest section of hints, never a finding.
+[platform]
+carry_hours = 72
+# [platform.options] takes the detector's tunables (min_accounts, burst_secs,
+# max_chance, ...); the defaults are in crates/sc-core/src/platform/mod.rs.
+
+# Rationale: agent swarms told to report bugs, ask for reviews or "prove
+# reach" open near-identical issues and comments from fresh accounts, or
+# create templated repositories, many at once. GH Archive carries the text,
+# the account id (creation order, so a coarse age) and the time. Three hours per
+# run on top of the record source's reads: a sample of the stream, not a
+# monitor; the digest says how many hours were read and skipped. Logins
+# become keyed hashes and text a slotted sketch at parse time; automation
+# logins are dropped. Noise: contribution drives, outages and issue templates,
+# handled by the benign templates and the chance model. Terms as for
+# `gharchive-relays` above.
+[[platform.source]]
+name = "gharchive-coordination"
+kind = "gharchive"
+pattern = "*"
+scan = 3                  # hours per run
+max_mb = 256              # compressed bytes per run
+
+# Rationale: package floods from one task fan out as new projects with
+# templated names and summaries. The newest-projects feed carries names,
+# summaries and times, no uploader, so groups here are floods, not accounts.
+# One request per run, cached and revalidated. Terms as for `pypi-tags` above.
+[[platform.source]]
+name = "pypi-new-projects"
+kind = "pypi"
+endpoint = "packages"
+pattern = "*"
+
+# Rationale: Spaces created in bursts from fresh accounts with templated
+# names. The Hub's listing API, newest first, gives ids, owners and creation
+# times; a Space's page and app are never opened (an app runs its owner's
+# code). One request per run. Terms: the Hub API is public and documented
+# (https://huggingface.co/docs/hub/api); anonymous callers get hundreds of API
+# requests per five minutes (https://huggingface.co/docs/hub/rate-limits); the
+# content policy (https://huggingface.co/content-policy) forbids excessive bulk
+# activity and publishing others' private information.
+[[platform.source]]
+name = "hf-new-spaces"
+kind = "huggingface"
+endpoint = "spaces"
+pattern = "*"
+limit = 500

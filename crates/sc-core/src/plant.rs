@@ -115,11 +115,26 @@ impl PlantSignal {
 const MAX_SIGNALS: usize = 8;
 
 /// A value quoted in a public report (`linking.published_tags`, ignoring
-/// case).
+/// case), or one carrying a canary token from our own site
+/// ([`crate::canary`]): anyone who read either can copy it.
 pub(crate) fn burned(cfg: &Linking, value: &str) -> bool {
-    cfg.published_tags
+    burned_why(cfg, value).is_some()
+}
+
+/// Why a value is burned, for the common-feature reason and the plant
+/// signal; `None` when it is not.
+pub(crate) fn burned_why(cfg: &Linking, value: &str) -> Option<&'static str> {
+    if cfg
+        .published_tags
         .iter()
         .any(|t| t.eq_ignore_ascii_case(value))
+    {
+        Some("quoted in a public report (linking.published_tags)")
+    } else if crate::canary::contains_token(value) {
+        Some("carries a canary token published on our own site")
+    } else {
+        None
+    }
 }
 
 /// Members by provenance.
@@ -135,7 +150,9 @@ pub(crate) fn provenance_counts(
 }
 
 /// Operator-confirmed when an operator's logs hold a member; several kinds
-/// of source when two or more known provenances are present.
+/// of source when two or more known provenances are present. Reported
+/// records (an outside submission) count as no kind: a submission alone
+/// never makes a cluster multi-source.
 pub(crate) fn corroboration(results: &[ObsResult], members: &[usize]) -> Corroboration {
     let mut kinds = 0u8;
     for &i in members {
@@ -144,7 +161,7 @@ pub(crate) fn corroboration(results: &[ObsResult], members: &[usize]) -> Corrobo
             return Corroboration::OperatorConfirmed;
         }
         match o.provenance() {
-            Provenance::Unknown => {}
+            Provenance::Unknown | Provenance::Reported => {}
             p => kinds |= 1 << p as u8,
         }
     }
@@ -247,11 +264,17 @@ fn burned_in(results: &[ObsResult], c: &Cluster, cfg: &Linking, out: &mut Vec<Pl
     crate::sort::sort(&mut found);
     found.dedup();
     for g in found.chunk_by(|a, b| a.0 == b.0) {
+        let why = burned_why(cfg, g[0].0.value()).unwrap_or_default();
+        let why = if why.starts_with("quoted") {
+            format!("is {why}")
+        } else {
+            why.to_string()
+        };
         out.push(PlantSignal {
             kind: PlantSignalKind::BurnedIdentifier,
             records: g.iter().map(|x| x.1).collect(),
             detail: format!(
-                "`{}` on {} record(s) is quoted in a public report (linking.published_tags): anyone who read it can copy it",
+                "`{}` on {} record(s) {why}: anyone who read it can copy it",
                 defang(&truncate(&g[0].0.to_string(), 90)),
                 g.len()
             ),
@@ -507,6 +530,7 @@ mod tests {
             ("commoncrawl", Provenance::PublishAnywhere),
             ("access_log", Provenance::Observed),
             ("operator:e1", Provenance::Observed),
+            ("submission", Provenance::Reported),
             ("manual", Provenance::Unknown),
             ("", Provenance::Unknown),
         ] {
@@ -527,6 +551,7 @@ mod tests {
         let multi = crate::analyze(obs("gharchive"), &rules);
         let op = crate::analyze(obs("operator:e1"), &rules);
         let unknown = crate::analyze(obs("manual"), &rules);
+        let reported = crate::analyze(obs("submission"), &rules);
         let c = |a: &Analysis| a.clusters[0].clone();
         assert_eq!(c(&single).origin.corroboration, Corroboration::SingleSource);
         assert_eq!(
@@ -545,7 +570,12 @@ mod tests {
             c(&unknown).origin.corroboration,
             Corroboration::SingleSource
         );
-        for a in [&multi, &op, &unknown] {
+        // A submission's own records never make a cluster multi-source.
+        assert_eq!(
+            c(&reported).origin.corroboration,
+            Corroboration::SingleSource
+        );
+        for a in [&multi, &op, &unknown, &reported] {
             assert_eq!(
                 (&c(a).members, c(a).tier, c(a).score),
                 (&c(&single).members, c(&single).tier, c(&single).score)

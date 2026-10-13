@@ -67,18 +67,24 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`dialect`](src/dialect.rs) | Payload dialect, shared dialects between clusters, repeated cut lengths. |
 | [`fanout`](src/fanout.rs) | Parallel fan-out width. |
 | [`fleets`](src/fleets.rs) | Soft links between clusters and the candidate fleets they suggest; never merges. |
+| [`scaffold`](src/scaffold.rs) | Request templates with values as slot types, and cluster pairs sharing them beyond chance. |
+| [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |
+| [`canary`](src/canary.rs) | Canary tokens for our own published pages: derivation from a seed, the registry, and copies found in records. |
 | [`bursts`](src/bursts.rs) | Bursts of archive captures of a host the archives rarely capture. |
 | [`endpoints`](src/endpoints.rs) | Flagged activity grouped by target host. |
 | [`escalation`](src/escalation.rs) | Route escalation: one target requested directly, then through a relay, a program carrier, a remote browser. |
 | [`attribution`](src/attribution.rs) | The evidence ladder and who a report may name. |
+| [`identity`](src/identity/mod.rs) | Declared agent identity: product claims, published ranges (`ranges`), Web Bot Auth signatures (`httpsig`, `sfv`); verified, spoofed or claimed. Ed25519 checks need the `signatures` feature. |
 | [`agentness`](src/agentness.rs) | Each cluster's agent grade (L0 payloads only to L4 agent likely) with its signals, counter-signals and caps; L5 only from a case decision. |
 | [`swarm`](src/swarm/mod.rs) | Interaction edges between runs (SC-T9): runs and strands (`runs`), named artifacts (`artifacts`), one detector per kind (`edges`), edges against labels (`eval`). |
+| [`platform`](src/platform/mod.rs) | Coordinated-account swarm candidates on public platforms: slotted text sketches and MinHash (`text`), residue in prose (`residue`), benign automation and templates (`automation`), grouping and the chance model (`detect`). Hints, never findings. |
 | [`report`](src/report/mod.rs) | Markdown drafts and the public notice, one module per section; per-audience wording (`audience`) and cluster hint lines (`hints`). |
 | [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |
 | [`eval`](src/eval.rs) | Precision and recall against labelled records, per record and per cluster (`units`); agent grades by actor (`grades`); the negative control (`control`); SC-Bench (`bench`). |
 | [`securitytxt`](src/securitytxt.rs) | RFC 9116 `security.txt` parsing. |
+| [`sightings`](src/sightings/mod.rs) | SC-Sightings v1: an analysis as a shareable sightings file (keyed per-epoch hashes, scaffold, hours), and the matcher across parties. |
 | [`sort`](src/sort.rs) | Stable sorts that share one compiled routine, so each call site does not add a copy of the standard sort to the browser module. Same order as `slice::sort_by`. |
 
 ## Rules

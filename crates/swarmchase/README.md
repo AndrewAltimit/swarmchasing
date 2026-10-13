@@ -78,6 +78,7 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |
 | `collect mcp <substrings>` | Official MCP Registry servers whose name or declared URLs match (`*` for all), updated since `--from`. Metadata only; no server is contacted. |
 | `asn fetch`, `asn lookup <ip>…` | The offline IP-to-ASN table in `<data>/asn/`. |
+| `identity refresh`, `identity status`, `identity check <input>` | Providers' published agent ranges and keys in `<data>/identity/`, and each record's declared identity: verified, spoofed or claimed ([identity](../../docs/reference/identity.md)). |
 | `collect urlquery-reports <ids> -o <out>` | Fetches urlquery reports by ID, or every ID in a labels file such as Transluce's `reports.csv`. Appends to `--out` and skips IDs already there; `--sample N` caps the agent-labelled reports. |
 | `certs <query>` | Certificate Transparency lookup via crt.sh, e.g. `'%.example.com'`. |
 | `contact <domain>` | The domain's RFC 9116 security.txt contact. |
@@ -96,9 +97,13 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 | `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest`, `--serve` and `--export-hosted` add suggestions and a local page. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
 | `review agreement`, `misfires`, `check-suggestions`, `suggest-claude` | Compare model suggestions with the admin's labels, list rules that fire on benign records, validate a suggestions file, and ask Claude Code for suggestions on an export. Details: [AI assistance](../../docs/guides/ai-assistance.md). |
 | `dashboard` | A read-only local page of the attention queue, what is new since you last looked, an activity timeline, a link graph of soft links, interaction and candidate fleets, source health and rule drift, the review queue, open cases and the autonomy record, with the command for each next step. `--json` prints the same overview. Details: [The dashboard](../../docs/reference/watch.md#the-dashboard). |
+| `platform-swarms <events>…` | Candidate coordinated-account swarms in platform events (the watch's carried events, fixtures, or GH Archive hour files with `--gharchive`), defanged; `--json` for the full report. Hints, never findings. Details: [Platform swarms](../../docs/reference/watch.md#platform-swarms). |
 | `review sample` | Writes a stratified, seeded sample of low-tier records as a queue for a [reviewed benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline); `review <queue> --all` labels it. |
 | `eval <input>…` | Precision and recall of the rules on labelled records, per record and per cluster, for all and for non-synthetic records. With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. `--before <date>` runs a pre-agent negative control instead. Details: [Evaluation](../../docs/reference/evaluation.md). |
 | `eval repro`, `eval check-results`, `eval export-bench` | Measure a saved result again; check the committed results; write an SC-Bench file (`eval --bench` scores one). |
+| `sim write <scenarios> -o <dir>` | Simulated labelled records, one NDJSON file per scenario and seed ([simulated scenarios](../../docs/reference/evaluation.md#simulated-scenarios)). |
+| `sim bench <scenarios>` | Generate, analyse and measure every scenario; per scenario and summed, `--total` for the sum only, `--json` to save. Report only. |
+| `sim score <input>…` | Interaction edges, soft links, candidate fleets and agent grades against labelled true runs, swarms and fleets ([swarm and fleet measurement](../../docs/reference/evaluation.md#swarm-and-fleet-measurement)). Report only. |
 
 ```sh
 swarmchase watch                              # uses watchlist.toml and $SWARMCHASE_DATA (or data/)
@@ -125,6 +130,28 @@ swarmchase case status
 
 Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (`--format stix`, `misp`, `oecd` with its EU AI Act Article 73 section, or `aiid`), `no-contact`, `scope`, `consent`, `naming`, `alternative`, `plant-review` and `checklist` for the self-review, `review-packet` and `review` for the second review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
+### Sightings
+
+An operator's sightings file ([SC-Sightings v1](../../docs/specs/sightings-v1.md)) carries what a swarm left in its logs without the logs. `match` is read-only: it writes nothing into the watch data or a case, and the scheduled watch never runs it.
+
+```sh
+swarmchase sightings export access.log --map host=www.example.org -o sightings.json   # --include-hosts to add your hosts
+swarmchase sightings match a.json b.json --vouch a.json=2026-10-portal --store       # clusters more than one party saw
+```
+
+### Inbox
+
+`inbox` takes in outside swarm reports ([SC-Submission v1](../../docs/specs/submission-v1.md)) as files, keeps them redacted under `<data>/inbox/`, looks their public-record references up by id, and triages them so only hard-to-fabricate evidence reaches the admin. Details: [The inbox](../../docs/reference/inbox.md).
+
+```sh
+swarmchase inbox add drop/ --via drop
+swarmchase inbox verify --all
+swarmchase inbox triage
+swarmchase inbox promote sub-20261010-1a2b3c4d --case 2026-10-portal
+```
+
+Other subcommands: `list`, `show`, `signature`.
+
 ### Notices
 
 | Command | What it does |
@@ -134,6 +161,7 @@ Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, 
 | `notice update <id> --naming` | Appends the case's reviewed `naming.md`, naming the operators whose lead has run or who consented. |
 | `notice lint [files]` | Checks front matter, update order, attribution wording and that nothing withheld got through. CI and the pre-commit hook run it. |
 | `notice build --out <dir> --base-url <url>` | Writes the site's notice index, pages and Atom feed. |
+| `canary register [_site]`, `list`, `token`, `scan` | Canary tokens on our own pages: register a built site's tokens, list them, derive one, find copies in records ([page references](../../docs/reference/browser-toolkit.md#page-references)). |
 | `site build [--out _site] [--base-url <url>]` | Builds the whole public site from the checkout, as `sc-site` does ([how the site is built](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). |
 
 Details: [Notices](../../docs/reference/notices.md).
@@ -148,6 +176,7 @@ Details: [Notices](../../docs/reference/notices.md).
 | `URLSCAN_APIKEY` | Optional key for `collect urlscan`. |
 | `SWARMCHASE_SITE_URL` | `notice build --base-url`. |
 | `SWARMCHASE_UA` | Overrides the collectors' user agent. |
+| `SWARMCHASE_CANARY_SEED` | The secret seed of `canary`; never committed. |
 
 Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../../scripts/with-env.sh); see [Local secrets](../../docs/reference/configuration.md#local-secrets).
 
@@ -185,4 +214,5 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
 | [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
 | [`stix/`](src/stix/mod.rs) | `case export --format stix\|misp`: the case scoped to an audience, built by [`sc-stix`](../sc-stix/README.md). |
+| [`inbox/`](src/inbox/mod.rs) | `swarmchase inbox`: the files under `<data>/inbox/` ([`files.rs`](src/inbox/files.rs)) and lookups by id ([`verify.rs`](src/inbox/verify.rs)). What a submission is and how it is judged is [`sc-inbox`](../sc-inbox/README.md). |
 | [`notice.rs`](src/notice.rs) | The notice draft (`case notice`); adding, updating, linting and building notices. |

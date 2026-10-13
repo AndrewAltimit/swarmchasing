@@ -9,6 +9,12 @@
 #     SITE_OUT                output directory (default _site)
 #     SITE_BASE_URL           the site's public URL, for the feed and the sitemap
 #                             (default http://localhost:8080/)
+#     SWARMCHASE_CANARY_SEED  set: embed canary tokens; unset: none
+#                             (docs/reference/configuration.md#canary-tokens)
+#     SITE_IDENTITY_SNAPSHOT  a directory `swarmchase identity refresh` wrote
+#                             (<data>/identity): the identity page embeds its
+#                             providers' files with their fetch dates; unset,
+#                             the page has the catalog only
 #     WASM_OPT                path to a wasm-opt binary
 #     SWARMCHASE_WASM_OPT_CACHE  wasm-opt cache directory
 #                             (default ${XDG_CACHE_HOME:-$HOME/.cache}/swarmchase-wasm-opt)
@@ -217,7 +223,11 @@ esac
 
 LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
+SNAPSHOT=()
+if [[ -n "${SITE_IDENTITY_SNAPSHOT:-}" ]]; then
+    SNAPSHOT=(--identity-snapshot "$SITE_IDENTITY_SNAPSHOT")
+fi
 cargo run -q --profile release-test -p sc-publish --bin sc-site -- \
-    --out "$OUT" --base-url "$BASE_URL" --inputs-log "$LOG"
+    --out "$OUT" --base-url "$BASE_URL" --inputs-log "$LOG" "${SNAPSHOT[@]}"
 "$(python_bin)" scripts/ci/check-site.py --built "$OUT" --inputs "$LOG"
 echo "site ready: serve ./$OUT (e.g. python -m http.server -d $OUT 8080)"

@@ -8,6 +8,19 @@
 //! `$SWARMCHASE_DATA`: watch data and case files never reach the site.
 //! Unlike the rest of this crate it reads and writes files; it never touches
 //! the network.
+//!
+//! One input is not committed: with `identity_snapshot` set, the providers'
+//! range files and key directories `swarmchase identity refresh` holds, for
+//! the identity page ([`crate::identity`]). Only `fetched.json` and the files
+//! the catalog names are read, and each is embedded only when it parses and
+//! matches its recorded SHA-256. They are the providers' public documents,
+//! never watch data.
+//!
+//! It adds the agent-facing files ([`crate::agents`]). When
+//! `SWARMCHASE_CANARY_SEED` holds the secret seed, every page and agent
+//! file carries its own canary token for the build's month
+//! ([`sc_core::canary`]); unset or empty, none does. The seed is read from
+//! the environment and never written anywhere.
 
 use crate::{SiteInputs, build_pages, check_notice, parse_notice};
 use std::collections::{BTreeMap, HashSet};
@@ -28,6 +41,10 @@ pub struct BuildOptions {
     /// Notice files from another directory (the XSS check's hostile
     /// fixture). A deploy never sets it.
     pub extra_notices: Option<PathBuf>,
+    /// A directory `swarmchase identity refresh` wrote (`<data>/identity`):
+    /// the providers' files the identity page starts with. Unset or without
+    /// `fetched.json`, the page has the catalog alone.
+    pub identity_snapshot: Option<PathBuf>,
 }
 
 impl Default for BuildOptions {
@@ -38,6 +55,7 @@ impl Default for BuildOptions {
             root: PathBuf::from("."),
             inputs_log: None,
             extra_notices: None,
+            identity_snapshot: None,
         }
     }
 }
@@ -50,6 +68,39 @@ pub struct Built {
     pub notices: usize,
     pub out: PathBuf,
     pub warnings: Vec<String>,
+    /// The canary period (`YYMM`) when tokens were embedded.
+    pub canary_period: Option<String>,
+    /// The providers' files embedded for the identity page: (catalog id,
+    /// fetch date).
+    pub identity_files: Vec<(String, String)>,
+}
+
+/// The build's time: `SOURCE_DATE_EPOCH` when set (reproducible builds),
+/// else the clock.
+fn build_time() -> i64 {
+    std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs() as i64)
+        })
+}
+
+/// The seed and period when canary tokens are on: whenever
+/// `SWARMCHASE_CANARY_SEED` is set and not empty. A seed too short to use
+/// is an error.
+fn canary_setting(now: i64) -> Result<Option<(String, String)>, String> {
+    let seed = std::env::var("SWARMCHASE_CANARY_SEED").unwrap_or_default();
+    if seed.trim().is_empty() {
+        return Ok(None);
+    }
+    sc_core::canary::check_seed(&seed).map_err(|e| format!("SWARMCHASE_CANARY_SEED: {e}"))?;
+    Ok(Some((
+        seed.trim().to_string(),
+        sc_core::canary::period_of(now),
+    )))
 }
 
 /// Repository paths the build may read: a prefix and the extension its
@@ -253,6 +304,20 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
     let size = |p: &str| fs::read(r.root.join(p)).ok().map(|b| gzip_len(&b));
     let engine_bytes = size("site/pkg/sc_wasm_bg.wasm");
     let tools_bytes = size("site/pkg/tools/sc_tools_bg.wasm");
+    let mut warnings = Vec::new();
+    let identity = match &o.identity_snapshot {
+        Some(dir) => read_identity_snapshot(dir, &mut warnings)?,
+        None => None,
+    };
+    let identity_files: Vec<(String, String)> = identity
+        .as_ref()
+        .map(|s| {
+            s.files
+                .iter()
+                .map(|f| (f.id.clone(), f.fetched.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut inputs = SiteInputs {
         notices,
         docs,
@@ -265,8 +330,29 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         version: env!("CARGO_PKG_VERSION").to_string(),
         engine_bytes,
         tools_bytes,
+        identity,
     };
-    let files = build_pages(&mut inputs)?;
+    let mut files = build_pages(&mut inputs)?;
+    let now = build_time();
+    files.extend(crate::agents::files(&crate::agents::AgentInputs {
+        base: &if o.base_url.ends_with('/') {
+            o.base_url.clone()
+        } else {
+            format!("{}/", o.base_url)
+        },
+        repo: &inputs.repo,
+        now,
+        docs: &inputs.docs,
+    }));
+    let canary = canary_setting(now)?;
+    for (path, text) in files.iter_mut() {
+        if crate::agents::is_surface(path) {
+            let token = canary
+                .as_ref()
+                .map(|(seed, period)| sc_core::canary::derive(seed.as_bytes(), path, period));
+            *text = crate::agents::apply_canary(path, text, token.as_deref());
+        }
+    }
 
     // Start from an empty output directory, but never delete one this tool
     // did not write.
@@ -311,7 +397,6 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         };
         fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;
     }
-    let mut warnings = Vec::new();
     if !r.root.join("site/pkg/sc_wasm.js").is_file() {
         warnings.push(
             "site/pkg is missing; run scripts/ci/build-site.sh for the analysis pages".to_string(),
@@ -328,7 +413,60 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         notices: inputs.notices.len(),
         out,
         warnings,
+        canary_period: canary.map(|(_, p)| p),
+        identity_files,
     })
+}
+
+/// The providers' files in `dir` (as `identity refresh` writes them), for
+/// the identity page. `None` when `dir` holds no `fetched.json`. Reads only
+/// `fetched.json` and `<id>.json` for each catalog id; a file over the size
+/// `identity refresh` accepts is left out.
+fn read_identity_snapshot(
+    dir: &Path,
+    warnings: &mut Vec<String>,
+) -> Result<Option<crate::identity::Snapshot>, String> {
+    const MAX: u64 = 4 << 20;
+    let index = dir.join("fetched.json");
+    if !index.is_file() {
+        warnings.push(format!(
+            "identity snapshot: {} has no fetched.json; the identity page has the catalog only",
+            dir.display()
+        ));
+        return Ok(None);
+    }
+    let catalog = sc_core::identity::Catalog::bundled();
+    let read = |p: &Path| -> Result<String, String> {
+        let len = fs::metadata(p)
+            .map_err(|e| format!("{}: {e}", p.display()))?
+            .len();
+        if len > MAX {
+            return Err(format!("{}: over {MAX} bytes", p.display()));
+        }
+        fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))
+    };
+    let mut files = BTreeMap::new();
+    let ids = catalog
+        .range_files
+        .iter()
+        .map(|f| f.id.clone())
+        .chain(catalog.directories.iter().map(|d| d.id.clone()));
+    for id in ids {
+        let p = dir.join(format!("{id}.json"));
+        if !p.is_file() {
+            continue;
+        }
+        match read(&p) {
+            Ok(t) => {
+                files.insert(id, t);
+            }
+            Err(e) => warnings.push(format!("identity snapshot: {e}; left out")),
+        }
+    }
+    let (snap, w) = crate::identity::snapshot(catalog, &read(&index)?, &files)
+        .map_err(|e| format!("identity snapshot: {e}"))?;
+    warnings.extend(w.into_iter().map(|w| format!("identity snapshot: {w}")));
+    Ok(Some(snap))
 }
 
 /// The length of `bytes` gzip-compressed at the default level.
@@ -358,6 +496,17 @@ mod tests {
         };
         let built = build_site_dir(&o).unwrap();
         assert!(built.generated > 0 && out.join("sitemap.xml").is_file());
+        // The agent files, with no canary placeholder left behind.
+        for f in [
+            "llms.txt",
+            "llms-full.txt",
+            ".well-known/security.txt",
+            ".well-known/swarm-report.json",
+            "index.html",
+        ] {
+            let text = fs::read_to_string(out.join(f)).unwrap();
+            assert!(!text.contains(sc_core::canary::PLACEHOLDER), "{f}");
+        }
         // A rebuild replaces its own earlier output.
         build_site_dir(&o).unwrap();
         // Never into the inputs, never over a directory it did not write.

@@ -47,22 +47,22 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (134, 0, 7, 96),
+        (179, 0, 7, 96),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (60, 0, 81, 96), "significant");
+    assert_eq!(counts(Tier::Significant), (105, 0, 81, 96), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 282);
+    assert_eq!(a.total, 327);
     assert_eq!(
         tiers,
-        [106, 76, 100],
+        [106, 76, 145],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 36, "clusters");
+    assert_eq!(a.clusters.len(), 49, "clusters");
 
     // Agent grades by actor: no scanner run and no hand-typed pentest grades
     // above L0; a person pasting chatbot payloads reaches L3, the grade's
@@ -114,4 +114,15 @@ fn evaluation_set_numbers_hold() {
     assert_eq!(w.groups.len(), 3, "{w:?}");
     assert_eq!((w.edges, w.on_groups, w.across_groups), (4, 3, 0), "{w:?}");
     assert_eq!(w.on_non_swarm, [0, 0, 0, 0, 1], "S5 only: {w:?}");
+
+    // Fleet proposals: the three clusters on one harness pair by scaffold, and
+    // so do the sharded scheduler's two shards (one fleet in the interaction
+    // samples); the planner and its worker pair by co-activity, and the eight
+    // operators on one popular framework's default shape pair by neither.
+    let f = &report.fleets;
+    let row = |name: &str| f.rows.iter().find(|r| r.name == name);
+    let scaffold = row("shared scaffold").expect("scaffold row");
+    assert_eq!((scaffold.proposed, scaffold.correct), (4, 4), "{f:?}");
+    let co = row("co-activity").expect("co-activity row");
+    assert_eq!((co.proposed, co.correct), (1, 1), "{f:?}");
 }

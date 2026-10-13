@@ -22,6 +22,7 @@ The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read
 | urlscan.io | Public search results | Per-case lookups only; its terms need permission for systematic retrieval |
 | GH Archive | Public GitHub events whose repository name or URLs match | Scheduled watch, as leads for review |
 | npm, PyPI | Package names, versions and publish times matching run tags | Scheduled watch, as leads for review |
+| GH Archive, npm, PyPI, Hugging Face Hub | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
 | CT logs, crt.sh | Certificate Transparency entries | Watch sample of one log (relay look-alikes); case work (`swarmchase certs`) |
 | security.txt, RDAP | The affected organisation's published security contact, or its registrar's abuse address | Finding who to report to |
 
@@ -137,6 +138,8 @@ Only records with a score above zero are linked. Ordinary traffic to the same ho
    A feature can also be too common to say anything about one operator: a tag copied from a published report, or a generic parameter value. A group whose feature appears on more than `linking.feature_max_hosts` target hosts does not link, and neither does one carrying more than `linking.feature_max_share` of all records in its time span (when that span holds at least `linking.feature_share_min_records` records; the share is off by default, because in a case file one fleet can be most of the records). Such a group is listed under `common_features` in the analysis and in internal reports, with the limit it passed.
 
    A tag quoted in a public report is common by definition, however few hosts carry it: anyone who read the report can copy it. `linking.published_tags` lists those tags, each with its source in a comment. A feature whose value is one of them (ignoring case) never links, and its group is listed as a common feature with the reason "quoted in a public report".
+
+   A value carrying one of our own canary tokens ([page references](reference/browser-toolkit.md#page-references)) is treated the same way, whether or not the registry holds it: anyone can copy a token from our pages, so it never links records, and planting one cannot merge clusters. Redaction leaves a token in place, since it is public by construction. A copy is reported apart, as a canary sighting.
 2. **Close timing against the same target.** Consecutive flagged records to the same target host, at most `linking.window_secs` apart, that share at least one rule of a kind other than the context kinds (`relay`, `cache_buster`, `self_id`, `header`, `outcome`). Every reader of a page through Jina Reader shares the relay rule, so a shared relay or cache buster alone never joins two records: a record placed beside a cluster would otherwise need nothing else to join it. Only request and submit times link this way (and times of unknown kind, read as requests). Archive capture times say when a crawler saved a URL, not when a client sent it, so two captures minutes apart are not joined by timing.
 3. **Probe chains.** A run of requests to one host and path, each at most 5 minutes after the last (`chains.max_gap_secs`), with at least 3 distinct parameter sets (`chains.min_variants`) and at least one parameter whose value changes. This is one client trying variants of a request. The flagged requests in a chain are linked even when different rules fired on each. Code: [`chains.rs`](../crates/sc-core/src/chains.rs). Chains are formed on any timestamp kind, but only a chain timed by request or submit times hard-links its records; a capture-timed chain is listed as a hint and joins nothing on its own ([FM-5.4](manual/05-linking.md#fm-54-probe-chains)).
 
@@ -154,7 +157,7 @@ Probe chains also carry descriptive detail that changes nothing: their **pace** 
 
 **What the times measure.** Each record says what its timestamp is (`ts_kind`): a request or the event a public log recorded (access and operator logs; a GH Archive event, an npm or PyPI publication, a certificate log accepting an entry), a submission to a scan service (urlquery), or an archive capture (Wayback, Arquivo.pt, Common Crawl, Memento archives). Each cluster and probe chain carries the result as `time_basis`: `request`, `submit`, `capture`, or `mixed` when capture times sit alongside the others.
 
-Hints that read request timing (chain pace, fan-out width and the hour-of-day rhythm) never use capture times: rhythm and fan-out leave capture-time records out, and a chain timed by captures reports "capture times, not request times: pace not read". Submit times are close to request times and are used, labelled "submit times". Cadence, bursts and pauses describe whatever the times are.
+Hints that read request timing (chain pace, fan-out width, co-activity and the hour-of-day rhythm) never use capture times: rhythm and fan-out leave capture-time records out, and a chain timed by captures reports "capture times, not request times: pace not read". Submit times are close to request times and are used, labelled "submit times". Cadence, bursts and pauses describe whatever the times are.
 
 **Cadence, bursts and pauses.** The median and 90th-percentile gap between records. A burst is at least `linking.burst_min` records, each within `linking.burst_gap_secs` of the last. A pause is a gap at least `linking.pause_min_secs` long and at least ten times the median gap, so a slow but steady cadence does not read as a string of pauses. The analysis also reports how many cluster runs were active at the same instant.
 
@@ -175,6 +178,12 @@ Matches can happen by chance, so each pair is tested against a chance model. For
 Pauses that start or end on a clock hour are not random under this model: unrelated cron jobs stop and start on the hour together. A match within the tolerance of a clock hour counts as a quarter of a match (`SHARED_PAUSE_CLOCK_WEIGHT`), and never qualifies on its own as a long pause.
 
 A shared pause is a link to check by hand. It never merges clusters.
+
+**Co-activity** ([`coactivity.rs`](../crates/sc-core/src/coactivity.rs)). Two clusters busy in the same minutes, or one consistently a little after the other, as when a planner dispatches workers ([FM-6.9](manual/06-timing.md#fm-69-co-activity)). Each cluster above noise with at least `co_activity.min_active_bins` (4) active bins, from request and submit times only, is binned into `co_activity.bin_secs` (60 second) bins. Over the time both were active, the bins where both are active are counted at each lag up to `co_activity.max_lag_bins` (5) either way; a lag reads its bin and the next, so a follower is not lost at a bin boundary. The best lag's count is the statistic.
+
+The chance is the share of `co_activity.shifts` (199) circular shifts of one cluster's activity that align at least as well, counting the real alignment. A pair is kept with at least `co_activity.min_coincidences` (4) coincidences and a chance of at most 1% (`co_activity.max_chance`).
+
+A coincidence within `co_activity.clock_tolerance_secs` (120 seconds) of a clock hour counts `co_activity.clock_weight` (a quarter), and when half or more of either cluster's active bins sit on clock hours, the shifts are whole hours, so two jobs on one schedule stay aligned under the chance model. Bins where more than `soft_links.max_shared` clusters are active are left out when finding pairs to test. Each pair (`coactive_pairs`) carries its lag, coincidences, the mean over the shifts and the chance. It is a soft link, never a merge.
 
 ## Descriptive hints
 
@@ -198,13 +207,19 @@ Several features describe a cluster without changing its score, its tier or its 
 - **Natural-language residue** ([`prose.rs`](../crates/sc-core/src/prose.rs)). Parameter values that are prose: at least 6 words with letters (`PROSE_MIN_WORDS`), or 12 characters in a script written without spaces. Each gets an offline language guess: the script first, then for Latin script the language whose common words it uses most (seven languages), or none when unclear. Each cluster counts distinct prose values and their languages (`prose`), and how many are in a language other than their target's country domain (`.de` German, `.jp` Japanese; `mismatched`). An agent prompted in one language often searches a foreign site in it. Searches by travellers and English-language sites abroad do the same, so it is a hint.
 - **Relay stacks.** The relays and carriers each member went through, outermost first, ending at the target (`relay.jina → relay.translate_goog → target`), counted per cluster (`relay_stacks`). The order is the unwrapping order of the rule hits. A stack of two or more hops is listed in reports; one relay is every relay user's habit and is only counted.
 - **Repeated cut lengths.** Truncated URLs cut at nearly the same length, as a model or tool output limit would (the `[cut_lengths]` settings). A scan service's own display limit can do the same.
+- **Shared scaffolds** ([`scaffold.rs`](../crates/sc-core/src/scaffold.rs)). Clusters whose requests share a structure though they share no identifier: one harness behind separate inboxes and tags ([FM-5.14](manual/05-linking.md#fm-514-scaffold-fingerprints)). Each member becomes a template (see *Scaffold templates* after this list), and clusters are compared by their template mixes.
+
+**Scaffold templates.** A member's template is its relay stack, the target path's segment types, its parameters in order as `name=slot` (a URL, a payload, prose, a redacted secret, or a number, word, hex, UUID or token with a power-of-two length class), its encoding style, its payload variants and whether it was cut. No host, path word or value is kept. A template counts only with at least `scaffold.min_specificity` (3) structural parts (relay hops, parameters, an informative encoding, payloads, a cut), and only when held by at most `soft_links.max_shared` clusters. Pairs sharing one are compared by the IDF-weighted similarity of their template mixes (the reruns' weighting).
+
+A pair is kept at a similarity of at least `scaffold.min_similarity` (0.5) when the chance that two unrelated clusters of the analysis both hold the rarest shared template, `((holders - 1) / (clusters - 1))²`, is at most `scaffold.max_chance` (1%). Each pair (`scaffold_pairs`) lists up to three shared templates, the chance, and the number of pairs that unlikely expected among all the analysis's cluster pairs. An analysis with few clusters cannot reach the chance limit: a shape needs others to be rare against.
 
 **Soft links and candidate fleets** ([`fleets.rs`](../crates/sc-core/src/fleets.rs)). The hints that relate two clusters are collected as soft links (`soft_links` in the analysis). Each has a strength from 0 to 1: its weight in `[soft_links]`, times its own similarity where it has one. A value shared by more than `soft_links.max_shared` clusters links none of them. The kinds:
 
 - timing and habit: shared pauses, payload dialects, reruns of one target list;
 - how requests were written: the same recon opening, overlapping unusual path sets, one encoding style across every member, the same fan-out width, the same cut length, the same request header set;
 - routes and features: steps of one route escalation, the same relay stack of two or more hops (`relay_stack`), inboxes on the same callback service (`callback_service`: different webhook.site inboxes, say; one inbox links outright), and a linking feature too common to link on;
-- **captured secrets** (`shared_secret`): one `REDACTED-<hash>` value in records of both clusters. It is the strongest kind, because a token one client captured rarely reaches another by chance.
+- **captured secrets** (`shared_secret`): one `REDACTED-<hash>` value in records of both clusters. It is the strongest kind, because a token one client captured rarely reaches another by chance;
+- **structure and co-activity**: a shared scaffold (`scaffold`, weight times similarity) and co-activity (`co_activity`, weight times the share of the quieter cluster's active bins that coincide). A pair already tied by shared pauses gets no co-activity link, since both read one timeline.
 
 For each pair of clusters the strengths combine as `1 - Π(1 - strength)`, so several weak ties can add up and one cannot. Pairs that reach `soft_links.fleet_min_strength` are grouped into connected components, the **candidate fleets** (`candidate_fleets`), listed in internal reports. A candidate fleet is a proposal for the admin: it never merges clusters, changes a tier, or appears in a report to a provider, an operator or the public.
 
@@ -221,11 +236,12 @@ Most sources take records from anyone. A record shows that someone submitted or 
 | `observed` | Access logs; logs an affected operator sent |
 | `submit-anywhere` | urlquery, urlscan, Wayback, Arquivo.pt, Memento timemaps |
 | `publish-anywhere` | GH Archive, npm, PyPI, CT logs, Common Crawl |
+| `reported` | Records an outside submission states: its own logs and references as written ([inbox](reference/inbox.md)) |
 | `unknown` | Anything else: manual imports, fixtures |
 
 Archive rows count as submitted. A CDX row does not say whether a capture came from an on-demand save (Save Page Now, which anyone can trigger for any URL) or from a crawl, and telling them apart would mean opening the capture, which collection never does. Common Crawl counts as published: it crawls what pages link to, and anyone can publish a link.
 
-**Corroboration.** Each cluster counts its members by provenance (`provenance`) and says how many kinds of source stand behind it (`corroboration`): `single_source` (one kind at most, unknown not counted), `multi_source` (two or more), or `operator_confirmed` (an operator's logs hold a member). Two scan services count as one kind: whoever submits to one can submit to the other. Internal and provider reports carry both on each cluster's timeline. The tier does not read them, so a single-source cluster is graded like any other; the line says that such records show someone submitted them, not who.
+**Corroboration.** Each cluster counts its members by provenance (`provenance`) and says how many kinds of source stand behind it (`corroboration`): `single_source` (one kind at most, unknown not counted), `multi_source` (two or more), or `operator_confirmed` (an operator's logs hold a member). Reported records count as no kind, so a submission alone never makes a cluster multi-source. Two scan services count as one kind: whoever submits to one can submit to the other. Internal and provider reports carry both on each cluster's timeline. The tier does not read them, so a single-source cluster is graded like any other; the line says that such records show someone submitted them, not who.
 
 **Plant signals.** Each cluster lists signs that it was planted (`plant_signals`), with the records each rests on. They appear under *Plant review* in case notes and as one line per cluster in `case status`, never in a report to a provider or an operator, and never in a notice:
 
@@ -255,6 +271,33 @@ The kinds and their thresholds:
 
 At most 200 edges are kept. Internal and provider reports list those touching the report's clusters (a provider report only those between two of them) under *Possible interaction (SC-T9)*, details defanged. Affected-operator reports and notices do not.
 
+## Coordinated accounts on public platforms
+
+Agent swarms also act through accounts: near-identical issues, comments and vulnerability reports from fresh accounts, repositories, packages and Spaces created with templated names, many at once. [`platform`](../crates/sc-core/src/platform/mod.rs) groups such public actions into **platform swarm candidates**, separately from the record analysis. A candidate is a hint for the admin; it never joins a cluster, scores a record or makes a fleet. The method is [SC-FM 5.15](manual/05-linking.md#fm-515-coordinated-accounts-on-public-platforms).
+
+**What is kept.** The [collectors](../crates/sc-collect/src/platform.rs) read GH Archive events (issues and pull requests opened, issue and review comments, repositories created), npm search results, PyPI's newest-projects feed and the Hugging Face Hub's newest Spaces, models or datasets. Each event keeps its id, time, target and public link, plus:
+
+- the account as a keyed hash of its id or login, never the login itself;
+- on GitHub, the account id divided by 1000 (`actor_rank`): ids rise with account creation, so a rank near the newest seen marks a new account without identifying it; the platform's own first-timer flag where the payload still carries it;
+- the text (title and body, a description or a summary) as a sketch: lower-cased words with URLs, addresses, mentions, paths, numbers, hex strings, mixed letter-and-digit tokens and the target's and actor's own names replaced by slots (`<url>`, `<user>`, `<num>` and so on); a 32-value MinHash signature over word 3-shingles; a hash of the first 48 slotted words (the template); the first 160 characters of slotted text; and the residue rules that fire on the raw text;
+- for a created item, its name as a template (`reach-check-<num>`), only when the name keeps a word of three letters or more and has a slot.
+
+Automation accounts are dropped by login before anything is kept ([`automation.rs`](../crates/sc-core/src/platform/automation.rs)): GitHub Apps (`[bot]`), logins ending in `-bot`, `_bot` or `-robot`, and a list of dependency, CI, release, translation and classroom accounts. An App acts only where a repository owner installed it, AI coding agents among them.
+
+**Grouping.** Events on one platform join when their templates are equal (at least 8 words), when their MinHash signatures agree in any of 8 bands of 4 values and the full signatures estimate a similarity of at least 0.6, or when created items share a name template. Groups are the connected components.
+
+**Chance.** For each group with at least 3 accounts (or, where the source names no account, at least 5 events):
+
+- **Burst.** Each account's first event in the group is a point. The densest 15-minute window holds `m` of the `k` points. With `k` points placed at random over `S`, the clock hours read in full (those holding at least a tenth of the busiest hour's events, so hours that hold only carried events do not count) plus the group's own hours, one window expects `k × 900 / S`, and the chance of a window this dense anywhere is `(S / 900) × P(Poisson ≥ m)`. A window starting within 2 minutes of a clock hour counts a quarter of its points.
+- **New accounts.** The share of all accounts in the window that are new is the base rate `q`; the chance of at least `n` new among the group's `a` accounts with age data is `P(Poisson(a × q) ≥ n)`.
+- The two chances are multiplied as if independent. A group is reported when the product is at most 1%, or when at least half its text members carry residue. It is moderate when the product is at most 0.01% and two of burst, new accounts, residue and target overlap (one target hit by 3 accounts, across several owners) stand; otherwise weak. There is no strong grade.
+
+**Residue.** The bundled rules whose patterns mean the same in prose run on each line of the raw text: `marker.placeholder`, `marker.tool_call_markup`, `marker.chat_opener` and the generation-loop check. The Markdown rules do not: Markdown is how people write there. Five text-only shapes are added ([`residue.rs`](../crates/sc-core/src/platform/residue.rs)): an AI disclaimer, a knowledge-cutoff remark, a chat reply's opener, an `[Insert ...]` slot and "regenerate response". Each is weak alone.
+
+**Suppressed and dropped.** A group whose template matches a benign kind (dependency update, translation sync, release automation, contribution drive, classroom or course, declared scanner, platform default text) is listed as suppressed with its kind. A burst on one owner's repositories by established accounts is counted below threshold: an outage, a release or a linked discussion looks the same. Each candidate lists what is left to rule out (on the hour, one owner, one target, no new account, no account data, a span over a day).
+
+**Identifiers.** A candidate's id is `PS-` and 8 hex digits derived from its earliest member, so it stays while that member stays and new members join under it.
+
 ## Endpoints
 
 Flagged requests are also grouped per target host: hits, first and last seen, attack payloads, the clusters involved, and whether the hits are ongoing or historical. `swarmchase endpoints` prints this table, and a report to an affected operator carries it for that operator's hosts. In a case, the admin classifies each endpoint ([case files](reference/cases.md#what-casetoml-holds)).
@@ -279,6 +322,22 @@ In a public notice, a developer below shared identifiers is named only as the pa
 
 Reports list each claim with its layer, label and tag, and add a Conclusion line for each developer named through the gate, with the strongest likelihood word its label allows. Harness and model-family candidates appear ranked in private reports and never in public. A model-family claim needs the method's held-out accuracy and corpus size, or it is refused.
 
+## Declared agent identity
+
+Agent products declare themselves in the user agent, and some sign their requests (Web Bot Auth). [`identity/`](../crates/sc-core/src/identity/mod.rs) reads each record's declaration against the address-range files and signing keys the provider publishes, held from the addresses in [`declared-agents.toml`](../declared-agents.toml) ([FM-7.11](manual/07-attribution.md#fm-711-declared-agent-identity), [FM-7.13](manual/07-attribution.md#fm-713-published-address-ranges)). Each record gets one class, the strongest that holds:
+
+| Class | What holds |
+|---|---|
+| `signature_verified` | An Ed25519 Web Bot Auth signature verifies, in time, with a key from a held directory. |
+| `ip_verified` | A declared product, from an address in its provider's range file. |
+| `in_range` | No declaration and no signature, from an address in a held range file. |
+| `spoofed` | A declared product from outside a range file the provider presents as complete, with no signature or a failed one. |
+| `signature_failed` | A signature that is malformed, out of time at the record's timestamp, or does not verify. |
+| `signature_present` | A signature that cannot be checked: no directory held for its signer, a rotated key, an unsupported algorithm. |
+| `claimed` | A declared product and nothing to check it against. |
+
+The analysis commands give each cluster an identity line (`identity` in the analysis JSON). It is descriptive: it changes no score, tier or link. The three verified classes reach `provider_infrastructure` evidence; case notes print the developer claim they support as a `case claim` command, and nothing is claimed until the admin runs it. On the agent grade, a verified identity is a signal for L1 (`verified_platform`): it shows the provider's platform sent the request, which a user directing a fetch tool also produces, so it lifts L0 to L1 and nothing higher. A spoofed identity is a counter-signal (`spoofed_identity`). Reports to affected operators and public notices carry none of it. Without range files held, a user agent stays a claim and nothing is called spoofed.
+
 ## Agent likelihood
 
 A tier says attack payloads were present. It does not say an AI agent sent them: a penetration tester or a conventional scanner sending the same payloads through the same relays leaves the same records. [`agentness.rs`](../crates/sc-core/src/agentness.rs) grades each cluster on a separate ladder ([FM-7.10](manual/07-attribution.md#fm-710-agent-likelihood)). The grade is set by the strongest **combination** of signals the cluster shows, never by a sum: many weak signals of one rung do not reach the next.
@@ -302,7 +361,7 @@ Prose counts when a cluster has at least two prose values, or one in a language 
 - a working-hours rhythm with slow pace (no probe chain faster than slow pace, and a median gap above `chains.model_pace_max_secs`) stops at L2: possibly a person working with a model's help;
 - any other working-hours rhythm stops at L3, since an unattended fleet need not keep office hours.
 
-**Counter-signals** are listed beside the signals and never move the grade: declared testing, benchmark or practice targets, and a probe chain at tool pace with no change after errors, which is how a scanner runs its list. An auto-submitter (cross-service fan-out on ordinary links around the cluster too) is listed as a counter-signal in place of the cross-service signal, which then does not count. A working-hours rhythm is listed as a counter-signal too, besides capping.
+**Counter-signals** are listed beside the signals and never move the grade: declared testing, benchmark or practice targets, a declared agent product from outside its provider's published ranges ([declared agent identity](#declared-agent-identity)), and a probe chain at tool pace with no change after errors, which is how a scanner runs its list. An auto-submitter (cross-service fan-out on ordinary links around the cluster too) is listed as a counter-signal in place of the cross-service signal, which then does not count. A working-hours rhythm is listed as a counter-signal too, besides capping.
 
 The grade is descriptive. It changes no score, tier or link, and it has no held-out measurement. Internal and provider reports carry a section, *Why we think this is an agent*, listing each cluster's grade, signals, counter-signals and caps, and the case decision when there is one. A provider report leaves out the decision's basis and the declared-testing counter-signal, which stay in case notes like the declaration itself. Reports to affected operators carry none of it. A public notice never prints a grade: when the strongest grade (or the case decision) is L1 or below, its summary adds that the payloads alone do not show what sent them.
 
@@ -318,7 +377,9 @@ Reports and notices describe suspected AI agent activity. The word "misaligned" 
 
 ## Evaluation
 
-`swarmchase eval` scores the rules against labelled records ([`eval.rs`](../crates/sc-core/src/eval.rs)). It reports precision and recall at the significant tier and at suggestive-or-above, precision per rule with its hard negatives, recall per class of activity and per tactic, and false positives per benign class. Every proportion carries a 95% Wilson interval. Records labelled with their true run also measure linking: B-cubed precision and recall, false merges and split runs, reported but not gated. Two reviewers' labels give Cohen's κ (`review --stats`). Details are in [evaluation](reference/evaluation.md). With no embargo, a false positive is published within a day of the admin acting on it, so precision matters most.
+`swarmchase eval` scores the rules against labelled records ([`eval.rs`](../crates/sc-core/src/eval.rs)). It reports precision and recall at the significant tier and at suggestive-or-above, precision per rule with its hard negatives, recall per class of activity and per tactic, and false positives per benign class. Every proportion carries a 95% Wilson interval. Records labelled with their true run also measure linking: B-cubed precision and recall, false merges and split runs, reported but not gated.
+
+Records labelled with their true fleet measure the soft links and candidate fleets as proposed cluster pairs, with precision per kind, also reported and not gated. Two reviewers' labels give Cohen's κ (`review --stats`). Details are in [evaluation](reference/evaluation.md). With no embargo, a false positive is published within a day of the admin acting on it, so precision matters most.
 
 **The committed set** is in [`samples/eval/`](../samples/eval/README.md). It holds records reconstructed from request patterns quoted in published Transluce reports, synthetic records for the model-output residue rules, and benign records, including hard negatives built to trip the rules: SQL words in search text, JSON in ordinary API queries, unrendered front-end templates, reading `claude.ai` through a relay. CI runs [`eval-gate.sh`](../scripts/ci/eval-gate.sh) on it and fails when precision or recall, or the lower end of a precision interval, falls below the floors in that script, or when a rule has no labelled positive and is not on the coverage allow-list. The floors only go up.
 
@@ -341,6 +402,8 @@ Records the admin reviews with `swarmchase review` are saved with their labels a
 **A tier is not misalignment.** A benign data task done with fetch programs through an echo service grades suggestive, and significant once an independent indicator such as a run tag comes with the program. Whether activity was out of scope is a separate finding ([FM-14.21](manual/14-limits.md#fm-1421-a-tier-is-not-misalignment)).
 
 **Model-output residue from people.** A person who pastes a chatbot answer into a scan form leaves the same Markdown, placeholders and JSON. This is why residue rules carry low weights and never link.
+
+**Accounts acting alike are not always one operator.** A platform swarm candidate rests on shape and timing. Contribution drives, coursework, an outage, a popular tutorial and scheduled jobs make many accounts post alike at once, and the benign templates cover only the common ones. The account-age rank is GitHub's id order, a proxy: an old account bought or revived reads as established. The GH Archive pass reads a sample of hours, so a swarm spread thinly may be missed, and events whose payload carries no text group only by name, or not at all. A candidate is reviewed by reading its events on the platform, never by contacting its accounts.
 
 **Self-identification is cheap.** Anyone can type a vendor name into a URL. It never names a developer.
 

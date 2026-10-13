@@ -184,6 +184,10 @@ pub struct RuleSet {
     pub escalation: crate::escalation::EscalationOptions,
     #[serde(default)]
     pub soft_links: crate::fleets::SoftLinkOptions,
+    #[serde(default)]
+    pub scaffold: crate::scaffold::ScaffoldOptions,
+    #[serde(default)]
+    pub co_activity: crate::coactivity::CoActivityOptions,
     #[serde(default, rename = "rule")]
     pub rules: Vec<RuleDef>,
     #[serde(default, rename = "asn")]
@@ -450,6 +454,11 @@ mod tests {
             crate::escalation::EscalationOptions::default()
         );
         assert_eq!(s.soft_links, crate::fleets::SoftLinkOptions::default());
+        assert_eq!(s.scaffold, crate::scaffold::ScaffoldOptions::default());
+        assert_eq!(
+            s.co_activity,
+            crate::coactivity::CoActivityOptions::default()
+        );
     }
 
     #[test]

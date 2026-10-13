@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/sc-core", "crates/sc-collect", "crates/sc-case", "crates/sc-stix", "crates/sc-publish", "crates/swarmchase", "crates/sc-wasm", "crates/sc-rules-wasm"]
+members = ["crates/sc-core", "crates/sc-collect", "crates/sc-case", "crates/sc-stix", "crates/sc-publish", "crates/swarmchase", "crates/sc-wasm", "crates/sc-rules-wasm", "crates/sc-sim", "crates/sc-inbox"]
 
 [workspace.package]
 version = "0.1.0"
@@ -19,6 +19,8 @@ sc-collect = { path = "crates/sc-collect" }
 sc-publish = { path = "crates/sc-publish" }
 sc-case = { path = "crates/sc-case" }
 sc-stix = { path = "crates/sc-stix" }
+sc-sim = { path = "crates/sc-sim" }
+sc-inbox = { path = "crates/sc-inbox" }
 
 # External crates.
 serde = { version = "1", features = ["derive"] }
@@ -42,6 +44,12 @@ age = "0.11"
 tar = { version = "0.4", default-features = false }
 flate2 = "1"
 psl = "2"
+# Ed25519 verification for Web Bot Auth signatures (sc-core `signatures`
+# feature). Verify only: no default features, no key generation.
+ed25519-dalek = { version = "2", default-features = false }
+# IODEF intake (sc-inbox): a pull reader, no DTD processing, no entity
+# expansion beyond the predefined ones.
+quick-xml = { version = "0.41", default-features = false }
 
 [profile.release]
 lto = true

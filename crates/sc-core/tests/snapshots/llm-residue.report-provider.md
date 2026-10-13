@@ -6,7 +6,7 @@
 - **Window:** 2026-07-02 10:03:00 UTC → 2026-07-02 10:25:00 UTC
 - **Records:** 11 linked public records in 4 cluster(s) (of 62 records reviewed, 35 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-11.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.1
 
 ## Summary
 
@@ -66,6 +66,16 @@ A person or a conventional scanner sending the same payloads through the same se
   - route escalation on `data[.]portal[.]example/api/v1/records`: direct → relay over 16m. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class data retrieval; failed: S2 (the route climbed to reach one target, past a block)
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-07-02 10:03:00 UTC to 2026-07-02 10:17:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=r7k2`
+- **C2**: 2026-07-02 10:24:00 UTC to 2026-07-02 10:25:00 UTC, times of unknown kind
+- **C3**: 2026-07-02 10:07:00 UTC to 2026-07-02 10:10:00 UTC, times of unknown kind
+- **C4**: 2026-07-02 10:21:00 UTC to 2026-07-02 10:23:00 UTC, times of unknown kind
+
 
 ## Representative records
 

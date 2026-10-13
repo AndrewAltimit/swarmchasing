@@ -49,6 +49,7 @@ Each term links to the section that defines it.
 | Passivity test | The conditions every source must pass. | [FM-3.2](03-sources.md#fm-32-passivity-test) |
 | Pause | A gap long in absolute terms and against the median gap. | [FM-6.2](06-timing.md#fm-62-cadence-bursts-and-pauses) |
 | Plant signal | A sign a cluster's records were placed to be found. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
+| Platform swarm candidate | Accounts acting alike on a public platform beyond chance; a hint, never a swarm. | [FM-5.15](05-linking.md#fm-515-coordinated-accounts-on-public-platforms) |
 | Probe chain | One client trying variants of one request. | [FM-5.4](05-linking.md#fm-54-probe-chains) |
 | Provenance | Who can create a record: observed, submit- or publish-anywhere. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Provider | The organisation whose agents are attributed. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
@@ -65,6 +66,7 @@ Each term links to the section that defines it.
 | Second review | Approval of the exact draft by a person other than the admin. | [FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review) |
 | Shared pause | Two clusters going quiet together beyond chance. | [FM-6.7](06-timing.md#fm-67-shared-pauses) |
 | Signed request | A request carrying a Web Bot Auth signature and `Signature-Agent`. | [FM-7.11](07-attribution.md#fm-711-declared-agent-identity) |
+| Spoofed identity | A declared agent product from outside its provider's complete published ranges, unsigned. | [FM-7.13](07-attribution.md#fm-713-published-address-ranges) |
 | Soft link | A proposed link between clusters; never joins them. | [FM-5.1](05-linking.md#fm-51-hard-and-soft-links), [FM-5.7](05-linking.md#fm-57-soft-links) |
 | Stale date | A "today" tag well behind the observed date. | [FM-6.6](06-timing.md#fm-66-stale-dates) |
 | Stale knowledge | Retired endpoints or old clients a model still writes. | [FM-4.5](04-indicators.md#fm-45-artifact-families) |

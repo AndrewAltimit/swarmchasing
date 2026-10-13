@@ -14,11 +14,17 @@
 //!
 //! - [`build`]: the site built into a directory from a checkout, the one
 //!   entry `sc-site` and `swarmchase site build` share.
+//! - [`agents`]: `llms.txt`, `llms-full.txt` and the `.well-known` files
+//!   for AI agents and their operators, and the canary placeholder pass.
+//! - [`identity`]: the identity page's catalog and the optional snapshot of
+//!   providers' range files and key directories.
 
+pub mod agents;
 pub mod assets;
 pub mod build;
 pub mod feed;
 pub mod file;
+pub mod identity;
 pub mod markdown;
 pub mod pages;
 pub mod site;

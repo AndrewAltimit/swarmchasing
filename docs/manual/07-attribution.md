@@ -128,7 +128,7 @@ Caps:
 - **must** stop at L2 when a working-hours rhythm meets slow pace, and the report says the activity is possibly human-operated with model help;
 - **should** stop at L3 under any working-hours rhythm.
 
-Declared testing and benchmark targets ([FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing)) are reported as counter-signals and do not move the grade: anyone can declare a test.
+Declared testing and benchmark targets ([FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing)) are reported as counter-signals and do not move the grade: anyone can declare a test. A declared agent product from outside its provider's published ranges is a counter-signal too, and a verified provider identity supports L1 and nothing higher ([FM-7.13](#fm-713-published-address-ranges)).
 
 The rungs are ordered by the kind of evidence, not by measured likelihood. Nothing guarantees that a higher rung is more often an agent: a person working a request by hand through a repeater tool changes requests after errors and sends variants at model pace, which is the adaptive rung's evidence, and labelled human runs do reach L3. A grade is therefore read with the competing hypotheses it leaves open ([FM-7.12](#fm-712-competing-hypotheses)), and is a probability only once measured ([FM-9.12](09-evaluation.md#fm-912-calibrated-public-language)).
 
@@ -153,7 +153,7 @@ A verified signature shows that the request was signed with a key the signer pub
 
 Passivity limits verification. The `Signature-Agent` URI comes from a request, and a practitioner **must not** fetch it ([FM-2.1](02-principles.md#fm-21-passive-only)): it is an address the agent supplied. Keys are checked only against directories the practitioner already holds from the signer's own documentation, fetched from the address that documentation gives. Public records rarely carry request headers ([FM-3.6](03-sources.md#fm-36-known-source-biases)), so in practice this evidence comes from operator-supplied logs ([FM-10.7](10-disclosure.md#fm-107-operator-supplied-logs)).
 
-Toolkit: `selfid.signature_agent` reads the `Signature-Agent` and `Signature-Input` headers as attribution evidence (never fetching the key directory), and `header.agent_ua` flags a known agent product in the user agent, a counter-signal where that product signs its requests. No directory of signing keys is kept, so a signature is not verified.
+Toolkit: `selfid.signature_agent` reads the `Signature-Agent` and `Signature-Input` headers as attribution evidence, and `header.agent_ua` flags a known agent product in the user agent. The key directories a provider documents are held from that documentation's addresses (`swarmchase identity refresh`), and the identity check verifies an Ed25519 Web Bot Auth signature against them; a signer whose directory is not held stays unverified, and the URI a request names is never fetched ([identity](../reference/identity.md)).
 
 ## FM-7.12 Competing hypotheses
 
@@ -184,3 +184,27 @@ Reading the worksheet:
 - The report says which evidence would change the result ([FM-8.3](08-confidence.md#fm-83-usage-rules)).
 
 Toolkit: the case records each rejected alternative (authorised test, honeypot, research scanner, spoofed self-identification, planted records) with its reason, and the self-review refuses a notice until each is recorded ([cases](../reference/cases.md#self-review-checklist)). The worksheet itself is kept in case notes by hand; recording it in the case is (planned).
+
+## FM-7.13 Published address ranges
+
+Providers publish files listing the addresses their agent products and crawlers send from, beside the user agent each product declares (`ChatGPT-User`, `Claude-User`, `Perplexity-User`, `Google-Agent`), and some publish the keys their products sign with ([FM-7.11](#fm-711-declared-agent-identity)). An address in an operator's log can be read against these files ([provider pages](references.md#agent-identity)).
+
+| Observation | Reading | Layer and level |
+|---|---|---|
+| A declared product, from an address in its provider's file | The provider's systems sent the request. | Developer: `provider_infrastructure` ([FM-7.2](#fm-72-developer-and-operator-ladder)); who directed the agent is a separate claim. |
+| An address in a provider's file, no declaration | The provider's systems sent it; which product is not shown. | Developer: `provider_infrastructure`, the product unnamed. |
+| A declared product from outside a file the provider presents as complete, with no valid signature | The declaration is false: a spoofed identity. | No claim on the provider; Observed, and a counter-signal on the grade. |
+| A declared product from outside a file not presented as complete | Unlisted, not shown false. | Self-identification at most ([FM-14.1](14-limits.md#fm-141-self-identification-is-forgeable)). |
+
+A valid signature outranks the address: a product may sign from addresses its file does not list. A spoofed declaration is evidence about whoever sent it, not about the provider it names: a scanner or another operator's agent dressed in a well-known user agent.
+
+Rules for reading:
+
+- the files are the provider's own publications, read from the addresses its documentation gives, like a security contact ([FM-2.1](02-principles.md#fm-21-passive-only)); an address taken from a request is never fetched;
+- a file changes over time: a verdict names the file and the date it was fetched, and a log much older than the file is read with that gap stated;
+- the address must be the client's: a log behind a proxy or load balancer records the proxy unless the operator logs the forwarded client address;
+- an address in a shared cloud range shows the provider rented it at the file's date, not that it still does.
+
+A verified identity shows a provider's agent platform sent the request. It does not show that a model chose the payload: a user can ask a fetch tool to request a URL they wrote, and the platform then relays a person's request as a relay service does ([FM-14.7](14-limits.md#fm-147-humans-look-the-same)). It therefore supports the self-described rung of the agent grade and no higher ([FM-7.10](#fm-710-agent-likelihood)), and never L5, which stays casework.
+
+Toolkit: `swarmchase identity refresh` holds the range files and directories the catalog names, `identity check` classes each record (signature verified, address verified, in range, signature present, claimed, signature failed, spoofed), and the analysis commands add each cluster's identity line, a counter-signal for spoofs and a suggested `provider_infrastructure` claim the admin records or not ([identity](../reference/identity.md)).

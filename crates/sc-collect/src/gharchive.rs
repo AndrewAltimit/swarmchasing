@@ -30,7 +30,7 @@ use std::cell::Cell;
 use std::io::{BufRead, BufReader, Read};
 use std::rc::Rc;
 
-const BASE: &str = "https://data.gharchive.org/";
+pub(crate) const BASE: &str = "https://data.gharchive.org/";
 /// Hours one pull reads unless `query.scan` says otherwise.
 const DEFAULT_HOURS: usize = 1;
 /// Compressed megabytes one pull reads unless `query.max_mb` says otherwise.
@@ -38,11 +38,11 @@ const DEFAULT_MAX_MB: u64 = 256;
 /// A checkpoint further back than this is skipped to the newest hours.
 pub const MAX_BACKLOG_HOURS: i64 = 48;
 /// An hour's file appears about an hour after it ends; read only older ones.
-const LAG_HOURS: i64 = 2;
+pub(crate) const LAG_HOURS: i64 = 2;
 /// Cap on one hour's compressed file.
-const MAX_FILE: u64 = 1 << 30;
+pub(crate) const MAX_FILE: u64 = 1 << 30;
 /// Longest event line kept; longer events are skipped.
-const MAX_LINE: usize = 4 << 20;
+pub(crate) const MAX_LINE: usize = 4 << 20;
 
 /// A GH Archive filter as a [`Source`]. `query.pattern` is `|`-separated
 /// case-insensitive substrings (a run tag, a relay host); `query.scan` the
@@ -192,7 +192,7 @@ impl Source for GhArchive {
 
 /// GH Archive's file name for the hour holding `ts`: `2026-10-09-7` (no
 /// leading zero on the hour).
-fn hour_name(ts: i64) -> String {
+pub(crate) fn hour_name(ts: i64) -> String {
     let d = chrono::DateTime::from_timestamp(ts, 0).unwrap_or_default();
     d.format("%Y-%m-%d-%-H").to_string()
 }
@@ -251,7 +251,7 @@ pub fn filter_events_counted(
     Ok((out, parsed))
 }
 
-fn event_to_obs(v: &Value, needles: &Needles) -> Option<Observation> {
+pub(crate) fn event_to_obs(v: &Value, needles: &Needles) -> Option<Observation> {
     let repo = v.pointer("/repo/name").and_then(Value::as_str)?;
     let payload = v.get("payload");
     let hit = needles.matches(repo)

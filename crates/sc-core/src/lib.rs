@@ -8,8 +8,10 @@ pub mod analyze;
 pub mod asn;
 pub mod attribution;
 pub mod bursts;
+pub mod canary;
 pub mod capture;
 pub mod chains;
+pub mod coactivity;
 pub mod crossservice;
 pub mod crosswalk;
 pub mod declared;
@@ -21,19 +23,23 @@ pub mod extract;
 pub mod fanout;
 pub mod fingerprint;
 pub mod fleets;
+pub mod identity;
 pub mod ingest;
 pub mod knowledge;
 pub mod model;
 pub mod notice;
 pub mod paths;
 pub mod plant;
+pub mod platform;
 pub mod prose;
 pub mod recurrence;
 pub mod redact;
 pub mod report;
 pub mod rules;
+pub mod scaffold;
 pub mod scope;
 pub mod securitytxt;
+pub mod sightings;
 pub mod sort;
 pub mod stamp;
 pub mod swarm;
@@ -56,10 +62,11 @@ pub use extract::{Extracted, Layer, defang, defang_host, extract, unwrap_layers}
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
+pub use identity::{Catalog, ClusterIdentity, IdentityClass, IdentityData, RecordIdentity};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SourceKind, Tactic,
-    Tier, TsKind, fmt_ts, parse_ts, top_counts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SUBMISSION_SOURCE,
+    SourceKind, Tactic, Tier, TsKind, fmt_ts, parse_ts, top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use plant::{Corroboration, PlantSignal, PlantSignalKind};

@@ -22,18 +22,21 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 |---|---|
 | [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, reports. No I/O (compiles to WASM). |
 | [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (archive CDX, scan services, GH Archive, registries, CT logs, security.txt), HTTP cache, PSL, ASN table. |
-| [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README): [`watch/`](crates/swarmchase/src/watch/mod.rs) watch and digest, [`review/`](crates/swarmchase/src/review/mod.rs) lead labelling, [`case/`](crates/swarmchase/src/case/mod.rs) case files (subcommands in `case/cli/`), [`contacts/`](crates/swarmchase/src/contacts/mod.rs) contact discovery, [`notice.rs`](crates/swarmchase/src/notice.rs) notices. |
+| [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README): [`watch/`](crates/swarmchase/src/watch/mod.rs) watch and digest, [`review/`](crates/swarmchase/src/review/mod.rs) lead labelling, [`case/`](crates/swarmchase/src/case/mod.rs) case files (subcommands in `case/cli/`), [`contacts/`](crates/swarmchase/src/contacts/mod.rs) contact discovery, [`notice.rs`](crates/swarmchase/src/notice.rs) notices, [`canary.rs`](crates/swarmchase/src/canary.rs) canary tokens. |
 | [`crates/sc-case`](crates/sc-case/README.md) | What a case is and may do, without I/O: case model, admin actions, pinning, lead clock, bundles, notice format and linter. |
+| [`crates/sc-inbox`](crates/sc-inbox/README.md) | Outside swarm reports without I/O: SC-Submission parsing, redaction, evidence classes, triage. |
 | [`crates/sc-stix`](crates/sc-stix/README.md) | A case as a STIX 2.1 bundle or MISP event, with the SC-T cross-walk. No I/O. |
-| [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site page generation. Text in, text out. |
+| [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site pages, `llms.txt` and `.well-known/` files. Text in, text out. |
+| [`crates/sc-sim`](crates/sc-sim/README.md) | Seeded swarm simulator ([`samples/sim/`](samples/sim/README.md) scenarios) and swarm, fleet and grade measurement against ground truth. No I/O. |
 | [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit; [`sc-rules-wasm`](crates/sc-rules-wasm/README.md) converts edited rules. |
 | [`site/`](site/js/site.js) | The site's styles and page scripts; `sc-site` (sc-publish) generates the pages into `_site/`. |
 | `notices/` | Published notices (`<id>.md`, front matter + dated updates). Committing one publishes it ([notices](docs/reference/notices.md)). |
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. Every change passes the eval gate. |
 | [`samples/eval/`](samples/eval/README.md) | Labelled evaluation set behind the CI eval gate; the held-out Transluce steps. |
 | [`samples/showcase/`](samples/showcase/README.md) | Synthetic records the landing page walks through and the workbench loads. |
-| [`schemas/`](schemas/sc-rules-v1.json) | JSON Schemas for the specs (rules, incident, SC-Bench) and the STIX extension. |
+| [`schemas/`](schemas/sc-rules-v1.json) | JSON Schemas for the specs (rules, incident, sightings, SC-Bench) and the STIX extension. |
 | [`watchlist.toml`](watchlist.toml) | Sources the scheduled watch pulls, each with its rationale. |
+| [`declared-agents.toml`](declared-agents.toml) | Agent products that declare themselves, with their providers' range files and key directories ([identity](docs/reference/identity.md)). |
 | [`contacts/providers.toml`](contacts/providers.toml) | Providers' security and abuse channels, each with its source and verified date; `swarmchase contacts verify` re-checks them. |
 | [`scripts/`](scripts/README.md) | CI gates, helpers and the pre-commit hook; the README says what runs where. |
 | [`.github/workflows/`](.github/workflows/main-ci.yml) | `main-ci.yml` (gates, then build/test, then Pages) and `watch.yml` (6-hourly watch, digest email). |
@@ -51,7 +54,9 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`guides/writing-rules.md`](docs/guides/writing-rules.md) | A rule change step by step: fields, weights, hard negatives, eval and coverage. |
 | [`reference/watch.md`](docs/reference/watch.md) | Data directory, incremental collection, digest, retention, review. |
 | [`reference/cases.md`](docs/reference/cases.md) | `case.toml`, every `case` subcommand, drafts, bundles, pinned rules. |
+| [`reference/inbox.md`](docs/reference/inbox.md) | Outside submissions: intake, verification by id, triage, promotion. |
 | [`reference/notices.md`](docs/reference/notices.md) | Notice lifecycle, what notices withhold, lint and build. |
+| [`reference/identity.md`](docs/reference/identity.md) | Declared agent identity: range files, key directories, verified and spoofed agents. |
 | [`reference/evaluation.md`](docs/reference/evaluation.md) | `eval`, the eval gate's floors, held-out measurement. |
 | [`reference/browser-toolkit.md`](docs/reference/browser-toolkit.md) | The Pages site: build, pages, workbench, payload safety. |
 | [`reference/configuration.md`](docs/reference/configuration.md) | `env.list`, environment variables, urlquery key and terms. |
@@ -59,7 +64,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`methodology.md`](docs/methodology.md) | Tiers, clusters, hints, attribution levels, known limits. |
 | [`policies.md`](docs/policies.md) | Collection, attribution, reporting and publication. |
 | [`manual/README.md`](docs/manual/README.md) | Field Manual (SC-FM): the method as a citable standard, section ids `FM-n.m`. |
-| [`specs/README.md`](docs/specs/README.md) | Formats other groups implement (SC-Rules, SC-Incident), conformance vectors, adopting the method. |
+| [`specs/README.md`](docs/specs/README.md) | Formats other groups implement (SC-Rules, SC-Incident, SC-Sightings), conformance vectors, adopting the method. |
 
 ## Scripts and gates
 
@@ -101,7 +106,7 @@ python3 scripts/ci/check-md-links.py && python3 scripts/ci/check-doc-density.py
 - **urlquery content is never committed or quoted.** Not in samples, fixtures, notices or eval overrides; link the report, quote only derived indicators. Details: [configuration](docs/reference/configuration.md#urlquerynet).
 - **Fork PRs run nothing** on the self-hosted runner. To test a fork's change, push it to a branch of this repository. Details: [runner](docs/reference/runner.md).
 - **`actions/checkout` cleans the workspace.** Anything that must persist (cargo cache, wasm-opt cache, watch data) lives outside the checkout. Details: [runner](docs/reference/runner.md#what-lives-outside-the-checkout).
-- **`_site/`, `site/pkg/` and `site/pkg-rules/` are generated** and gitignored; the site build reads committed inputs only. Details: [verify skill](.claude/skills/verify/SKILL.md).
+- **`_site/`, `site/pkg/` and `site/pkg-rules/` are generated** and gitignored; the site build reads committed inputs only, plus an optional snapshot of providers' identity files ([identity](docs/reference/identity.md#the-snapshot)). Details: [verify skill](.claude/skills/verify/SKILL.md).
 - **Floors only go up.** Never lower an [`eval-gate.sh`](scripts/ci/eval-gate.sh) floor to land a change; fix the rule or argue the label.
 - **Defang in every output.** Hosts print as `a[.]b`, and a record's URL is never made clickable, in reports, digests, notices and the site.
 
