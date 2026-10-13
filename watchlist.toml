@@ -23,7 +23,8 @@ draft_case = "shadow"       # off | shadow
 interrupts_per_day = 3
 #
 # Kinds: wayback | arquivo | urlquery | commoncrawl | urlscan | memento |
-# gharchive | npm | pypi | ctlog | wellknown | mcp (docs/reference/watch.md#source-kinds).
+# gharchive | npm | pypi | ctlog | wellknown | mcp | wikimedia | hackernews
+# (docs/reference/watch.md#source-kinds).
 # Every source's terms of use are summarised in its rationale, with the URL.
 
 # ── Relays: agents wrap targets so the request comes from someone else's server ──
@@ -265,6 +266,27 @@ pattern = "*"
 filter = ["ns:8", "ns:828"]
 scan = 10
 max_mb = 512
+limit = 500
+
+# Rationale: agents that post to forums paste the relay URLs they fetch
+# through and the run tags they carry, and agent-built projects are
+# announced as stories. Hacker News's search index lists every story and
+# comment with its submitted URL and text; this keeps the links (and items
+# whose title or text carries a run tag) that match relay hosts and tags.
+# The record is the link (never fetched), its reference the item's page.
+# Feeds relay.jina, relay.allorigins, relay.corsproxy and the marker rules.
+# Noise: people discussing Jina Reader or sharing a proxied link. Reads
+# back from the run's start to the last run's, up to `scan` index queries
+# of 1000 items; the digest shows minutes read against minutes there were.
+# Terms: the Hacker News API (https://github.com/HackerNews/API) states no
+# rate limit; the Algolia search API (https://hn.algolia.com/api) allows
+# 10,000 requests an hour per IP. Items are public posts; the link and the
+# item's page are kept, never the author's name.
+[[source]]
+name = "hackernews-relay-links"
+kind = "hackernews"
+pattern = "r.jina.ai/http|api.allorigins.win|corsproxy.io|uqtag=|uqscan"
+scan = 10                 # index queries per run (1000 items each)
 limit = 500
 
 # Rationale: swarms told to "ship" or prove reach publish throwaway packages
@@ -510,3 +532,22 @@ pattern = "*"
 filter = ["!domain:www.wikidata.org", "!domain:commons.wikimedia.org"]
 scan = 10                 # wall-clock minutes per run
 max_mb = 1024
+
+# Rationale: agent swarms told to promote a project or "prove reach" post
+# near-identical comments and Show HN stories from fresh accounts, many at
+# once. The search index carries the author, the time, the title, the
+# submitted URL and the text; the author becomes a keyed hash and the text
+# a slotted sketch. A comment's target is its story, a story's the
+# submitted URL's host, so many accounts on one story or one site group by
+# target overlap. Account age comes from the Hacker News API's profile
+# creation time, looked up only for authors whose text a group could form
+# around, at most `max_lookups` a run. Noise: launch threads and memes,
+# where many people write the same short reply; short replies are below
+# the detector's word minimum. Reads back to the last run's start, up to
+# `scan` queries of 1000 items. Terms as for `hackernews-relay-links` above.
+[[platform.source]]
+name = "hackernews-posts"
+kind = "hackernews"
+pattern = "*"
+scan = 12                 # index queries per run (1000 items each)
+max_lookups = 40          # account-age lookups per run

@@ -115,6 +115,7 @@ pub fn capability(kind: &str) -> &'static str {
         "gharchive" => "GitHub event leads: run-named repositories and pasted relay URLs",
         "npm" | "pypi" => "registry leads: packages carrying run tags",
         "wikimedia" => "wiki edit leads: relay and run-tag links added to wiki pages",
+        "hackernews" => "Hacker News leads: relay and run-tag links in stories and comments",
         "ctlog" => "certificate leads: new relay look-alikes and mirrors",
         "wellknown" => "agent protocol footprints: agent cards and signature key directories",
         "mcp" => "MCP Registry metadata for linking hosts to tool servers",

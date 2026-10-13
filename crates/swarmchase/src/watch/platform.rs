@@ -1,5 +1,6 @@
-//! The platform pass: coordinated-account swarms on GitHub, npm, PyPI, the
-//! Hugging Face Hub and Wikimedia wikis (`sc_core::platform`).
+//! The platform pass: coordinated-account swarms on GitHub, package
+//! registries, the Hugging Face Hub, Wikimedia wikis and Hacker News
+//! (`sc_core::platform`).
 //!
 //! Each run pulls the watchlist's `[[platform.source]]` entries, adds the
 //! events carried from earlier runs, and groups them. Only events worth
@@ -356,15 +357,7 @@ mod tests {
             toml::from_str(include_str!("../../../../watchlist.toml")).unwrap();
         for s in &wl.platform.sources {
             assert!(
-                [
-                    "gharchive",
-                    "npm",
-                    "pypi",
-                    "huggingface",
-                    "wikimedia",
-                    "golang"
-                ]
-                .contains(&s.kind.as_str()),
+                sc_collect::platform::PLATFORM_KINDS.contains(&s.kind.as_str()),
                 "{}",
                 s.kind
             );

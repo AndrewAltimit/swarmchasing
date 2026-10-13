@@ -1,6 +1,8 @@
 //! Coordinated-account swarms on public platforms (GitHub, npm, PyPI,
-//! Hugging Face, Go modules, Wikimedia wikis): many accounts acting alike,
-//! found in public event archives, event streams and registry metadata.
+//! Hugging Face, Go modules, Wikimedia wikis, Hacker News, NuGet,
+//! Packagist, RubyGems, crates.io, CVE records): many accounts acting
+//! alike, found in public event archives, event streams and registry
+//! metadata.
 //!
 //! A [`PlatformEvent`] is one public action (an issue opened, a comment, a
 //! repository or package created) reduced at collection to what grouping
@@ -55,6 +57,18 @@ pub enum Platform {
     Wikimedia,
     /// Go modules, from the module proxy's index.
     Go,
+    /// Hacker News stories and comments.
+    HackerNews,
+    /// NuGet packages, from the catalog.
+    Nuget,
+    /// Packagist (PHP Composer) packages.
+    Packagist,
+    /// RubyGems.
+    Rubygems,
+    /// crates.io (Rust) crates.
+    Crates,
+    /// CVE records and security advisories.
+    Cve,
 }
 
 impl Platform {
@@ -66,6 +80,12 @@ impl Platform {
             Self::HuggingFace => "huggingface",
             Self::Wikimedia => "wikimedia",
             Self::Go => "go",
+            Self::HackerNews => "hackernews",
+            Self::Nuget => "nuget",
+            Self::Packagist => "packagist",
+            Self::Rubygems => "rubygems",
+            Self::Crates => "crates",
+            Self::Cve => "cve",
         }
     }
 }
@@ -94,6 +114,10 @@ pub enum Action {
     CommitComment,
     /// A wiki page created or edited (a GitHub wiki, a Wikimedia wiki).
     WikiEdited,
+    /// A story submitted to a link aggregator (Hacker News).
+    StoryPosted,
+    /// A CVE record or security advisory published.
+    AdvisoryPublished,
     #[default]
     Other,
 }
@@ -116,6 +140,8 @@ impl Action {
             Self::DiscussionOpened => "discussions opened",
             Self::CommitComment => "commit comments",
             Self::WikiEdited => "wiki edits",
+            Self::StoryPosted => "stories posted",
+            Self::AdvisoryPublished => "advisories published",
             Self::Other => "other events",
         }
     }
@@ -147,7 +173,9 @@ impl Action {
 pub struct PlatformEvent {
     /// Stable id: `gh:<event id>`, `npm:<name>@<version>`,
     /// `pypi:<name>@<version>`, `hf:<kind>:<id>`, `wm:<wiki>:<revision>`,
-    /// `go:<module>@<version>`.
+    /// `go:<module>@<version>`, `hn:<item>`, `nuget:<id>@<version>`,
+    /// `packagist:<name>@<time>`, `gem:<name>@<version>`,
+    /// `crate:<name>@<version>`, `ghsa:<id>`, `cve:<id>`.
     pub id: String,
     pub platform: Platform,
     pub action: Action,
@@ -158,8 +186,10 @@ pub struct PlatformEvent {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub actor: String,
     /// The account's numeric id divided by [`RANK_UNIT`], where the platform
-    /// numbers accounts in creation order (GitHub): a coarse account-age
-    /// proxy that does not identify the account.
+    /// numbers accounts in creation order (GitHub), or the account's
+    /// creation time in coarse units where the platform publishes it (a
+    /// wiki's registration time, a Hacker News account's creation): a
+    /// coarse account-age proxy that does not identify the account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor_rank: Option<u64>,
     /// The platform says this is the account's first contribution anywhere

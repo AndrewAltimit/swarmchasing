@@ -51,15 +51,29 @@ const DEFAULT_MAX_MB: u64 = 1024;
 /// A checkpoint further back than this is skipped to the newest hours.
 const MAX_BACKLOG_HOURS: i64 = 24;
 
+/// The `kind`s a platform source can name.
+pub const PLATFORM_KINDS: &[&str] = &[
+    "gharchive",
+    "npm",
+    "pypi",
+    "huggingface",
+    "wikimedia",
+    "golang",
+    "hackernews",
+];
+
 /// A platform source in the watchlist (`[[platform.source]]`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlatformSource {
     pub name: String,
-    /// `gharchive`, `npm`, `pypi`, `huggingface`, `wikimedia` or `golang`.
+    /// One of [`PLATFORM_KINDS`].
     pub kind: String,
     /// Events one pull keeps at most.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_events: Option<usize>,
+    /// Account-age lookups one pull makes at most (`hackernews`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_lookups: Option<usize>,
     #[serde(flatten)]
     pub query: CdxQuery,
 }
@@ -138,8 +152,18 @@ pub fn pull_platform(
         }
         "wikimedia" => crate::wikimedia::pull_platform(client, &src.query, mark, rules, max),
         "golang" => pull_golang(client, &src.query, mark, max),
+        "hackernews" => crate::hackernews::pull_platform(
+            client,
+            &src.query,
+            mark,
+            rules,
+            max,
+            src.max_lookups
+                .unwrap_or(crate::hackernews::DEFAULT_LOOKUPS),
+        ),
         k => bail!(
-            "unknown platform source kind `{k}` (expected gharchive, npm, pypi, huggingface, wikimedia or golang)"
+            "unknown platform source kind `{k}` (expected one of {})",
+            PLATFORM_KINDS.join(", ")
         ),
     }
 }
