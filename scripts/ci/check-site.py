@@ -167,6 +167,9 @@ def check_asset_refs(text: str, page: Path) -> list[str]:
     (GitHub Pages' cache headers are not ours to set), and each exists."""
     errors = []
     for ref in ASSET_REF.findall(text):
+        # A link to a source file elsewhere (GitHub) loads nothing.
+        if ref.startswith("https://"):
+            continue
         if not HASHED_NAME.search(ref):
             errors.append(f"asset {ref} is not content-hashed")
             continue

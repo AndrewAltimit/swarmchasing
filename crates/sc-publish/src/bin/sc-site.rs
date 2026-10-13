@@ -52,6 +52,9 @@ fn run() -> Result<(), String> {
     for w in &built.warnings {
         eprintln!("sc-site: warning: {w}");
     }
+    if let Some(p) = &built.canary_period {
+        println!("sc-site: canary tokens embedded for period {p}");
+    }
     println!(
         "sc-site: {} generated files, {} static files, {} notices -> {}",
         built.generated,

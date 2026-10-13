@@ -36,6 +36,7 @@ Model triage is opt-in through the variables below: a model server the runner re
 | `SWARMCHASE_WATCH_TRIAGE` | variable | `watch.yml` | `local` (or `true`) or `claude` turns on [model triage](watch.md#model-triage) of new leads. Unset, no model is asked. |
 | `SWARMCHASE_LLM_URL`, `SWARMCHASE_LLM_MODEL` | variable | `watch.yml` | The model server local triage asks, on the runner or its private network, and the model name. |
 | `SWARMCHASE_CLAUDE_MODEL`, `CLAUDE_PATH` | variable | `watch.yml` | The model Claude triage asks (default `claude-opus-5-5`) and the `claude` binary, when not on `PATH`. |
+| `SWARMCHASE_CANARY_SEED` | secret | `main-ci.yml` | Seed of the site's [canary tokens](configuration.md#canary-tokens). Unset, the site carries none. |
 | `SWARMCHASE_REQUIRE_BROWSER` | variable | `main-ci.yml` | `true` makes the deploy fail when the site XSS check cannot find Chrome, instead of skipping it with a warning. |
 
 Email goes out through [`send-mail.sh`](../../scripts/ci/send-mail.sh) (`curl` over SMTP), to the admin only.

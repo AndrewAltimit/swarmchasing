@@ -193,7 +193,11 @@ jobs:
       # over 1.5 MiB, when a notice fails its check, when a page breaks the
       # site policy (check-site.py), or when the build read anything that is
       # not a committed site input (nothing under data/ or $SWARMCHASE_DATA).
+      # With the SWARMCHASE_CANARY_SEED secret set, every page carries its
+      # canary token; without it, none.
       - name: Build site
+        env:
+          SWARMCHASE_CANARY_SEED: ${{ secrets.SWARMCHASE_CANARY_SEED }}
         run: |
           owner="$(tr '[:upper:]' '[:lower:]' <<<"$GITHUB_REPOSITORY_OWNER")"
           SITE_BASE_URL="https://${owner}.github.io/${GITHUB_REPOSITORY#*/}/" scripts/ci/build-site.sh
@@ -231,14 +235,31 @@ jobs:
           fi
           exit "$rc"
 
+      # Hidden files included: the agent-facing files live in .well-known/.
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: _site/
+          include-hidden-files: true
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+      # The tokens just published, into the watch data's registry, so watch
+      # runs find copies of them. Nothing to do without the seed.
+      - name: Register canary tokens
+        env:
+          SWARMCHASE_CANARY_SEED: ${{ secrets.SWARMCHASE_CANARY_SEED }}
+          SWARMCHASE_DATA: ${{ vars.SWARMCHASE_DATA }}
+        run: |
+          if [ -z "$SWARMCHASE_CANARY_SEED" ]; then
+            echo "no canary seed; nothing to register"
+            exit 0
+          fi
+          export SWARMCHASE_DATA="${SWARMCHASE_DATA:-$HOME/swarmchase-data}"
+          mkdir -p "$SWARMCHASE_DATA"
+          cargo run -q --profile release-test -p swarmchase -- canary register _site
 
   # -- CI Summary -------------------------------------------------------------
   notify:

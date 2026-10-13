@@ -40,6 +40,7 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 | `/analyze/` | The workbench. |
 | `/unwrap/` | The layers inside one URL, the rules each triggers, and the URL's score and tier. |
 | `/tools/` | Evidence bundle check, `security.txt` reader, defang. |
+| `/llms.txt`, `/llms-full.txt`, `/.well-known/` | Plain files for AI agents and their operators ([agent-facing files](#agent-facing-files)). |
 
 The navigation groups the pages under Learn, Investigate and Reference. Each group is a `<details>` menu, so it works without scripts.
 
@@ -131,6 +132,33 @@ The tools module carries a copy of the analysis: a report draft re-runs the anal
 The tools page preloads nothing. The bundle check and the `security.txt` reader load the tools module on first use, and defang loads the engine. Each card has its own status line, so a module that fails to load leaves the other cards working, and the next use retries it. A loading message gives the module's download size, gzip-compressed as the host serves it; the build measures it. The only render-blocking script is the few lines of `theme.js`, which apply a stored theme before the first paint.
 
 Scripts, the stylesheet and the WASM modules are published under content-hashed names (`js/site.<hash>.js`): GitHub Pages sets its own cache headers, so a changed file gets a new name and a cached one is never stale. The generator rewrites the references in pages and between modules, and `check-site.py` fails a page that loads an unhashed asset. Until a module is ready the page says so and its controls stay disabled. The release build fails when any module is over its budget (the engine's is 1.5 MiB) and prints each module's size and headroom.
+
+## Agent-facing files
+
+The build writes four files that tell an AI agent, or the person who runs it, what the project is and how to report to it. Code: [`agents.rs`](../../crates/sc-publish/src/agents.rs).
+
+| Path | Format |
+|---|---|
+| `llms.txt` | The [llms.txt](https://llmstxt.org/) convention: title, summary, sections of links. |
+| `llms-full.txt` | `llms.txt`, then the full text of the policies, the guides for operators and providers, and the submission spec. |
+| `.well-known/security.txt` | RFC 9116, for the project itself; `Expires` is 180 days after the build. |
+| `.well-known/swarm-report.json` | The same reporting facts as JSON; `descriptor` names its version. |
+
+They point at the submission page (`report/`), the submission spec (`docs/specs/submission-v1.md`) and its schema (`schemas/sc-submission-v1.json`), and the private contact. They state that a person reads every submission, that nothing is published unreviewed, and that each claim is checked against independent public records before it reaches a report or notice.
+
+The text is plain statements of fact. It never addresses the reader as a system prompt would, never asks an agent to do anything beyond an optional report, and never asks it to contact anyone else. It names only this site's pages and the repository, never a host from a record.
+
+No convention for a "where to report agent activity" descriptor exists. Agent cards and plugin manifests describe an agent or its API, not an intake, so `swarm-report.json` is a plain document under a well-known path (RFC 8615). On a project site (`<owner>.github.io/<repo>/`) the files sit under the project path, not the host root that RFC 9116 and RFC 8615 name; they reach the root only on a custom domain. The Pages upload includes hidden files so `.well-known/` is published.
+
+## Page references
+
+Every page and agent-facing file carries a canary token: a reference distinct per file and per month (`swc-<YYMM>-<12 characters>`). A token found in a public record shows that something read that surface and repeated the token, no earlier than that month. That may be an agent; the token never says who.
+
+The build embeds tokens when `SWARMCHASE_CANARY_SEED` holds the secret seed, and drops the reference line when it is unset, so a fork or a CI run without the secret builds cleanly ([configuration](configuration.md#canary-tokens)). Tokens are inert, the narrow exception in the passivity test ([FM-3.2](../manual/03-sources.md#fm-32-passivity-test)): no instruction, nothing asked of the reader, no third party, and only on hosts the project controls.
+
+A token is an HMAC of the file's path and the month under the seed. The month is in clear, the path is not, and neither the seed nor any other token can be worked out from published ones, so a copy cannot be backdated. Code: [`canary.rs`](../../crates/sc-core/src/canary.rs).
+
+After a build with a seed, `swarmchase canary register _site` checks each token against the seed and records it in `<data>/canary/registry.json`. `canary scan <records>` and every watch run look for registered tokens in records ([watch](watch.md#canary-sightings)). A sighting says that a surface was read and the token repeated, never who: anyone can copy a token from the page, so a token never links or merges records ([methodology](../methodology.md#linking-into-clusters)).
 
 ## Accessibility
 

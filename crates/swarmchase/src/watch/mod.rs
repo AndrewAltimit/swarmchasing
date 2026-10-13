@@ -32,6 +32,10 @@
 //! another cluster (possible reruns, never merged) and bursts of archive
 //! captures of a host the store normally holds few captures of.
 //!
+//! New records are also searched for canary tokens from our own published
+//! pages ([`crate::canary`]); a sighting gets its own digest section and a
+//! medium priority reason, and never links records.
+//!
 //! New records are also matched against every case's indicators (see
 //! [`crate::case::indicators`]), under the case's pinned rules, and the hits are kept
 //! per case in `state.json`. The digest's "Case status" section proposes
@@ -364,6 +368,8 @@ fn watch(
         ));
     }
 
+    let canaries = crate::canary::watch_sightings(out, &fresh, &run_dir)?;
+
     // Rolling analysis over everything recent, not just this run's records,
     // so clusters can span runs.
     let since = now.timestamp() - wl.analysis_window_days * DAY;
@@ -450,7 +456,17 @@ fn watch(
     );
     let mut priority = priority::assess(&leads, &health.alerts, &cases.due);
     priority.add(autonomy::priority_reasons(&decisions));
-    let digest = digest(&DigestInput {
+    priority.add(
+        canaries
+            .iter()
+            .map(|s| priority::Reason {
+                level: priority::Level::Medium,
+                kind: "canary".into(),
+                text: format!("canary token seen: {}", s.line()),
+            })
+            .collect(),
+    );
+    let mut digest = digest(&DigestInput {
         stamp: &stamp,
         analysis: &a,
         prev: &prev,
@@ -466,6 +482,10 @@ fn watch(
         attention: &queue,
         autonomy: &decisions,
     });
+    digest
+        .text
+        .push_str(&crate::canary::digest_section(&canaries));
+    digest.changed |= !canaries.is_empty();
     std::fs::write(run_dir.join("digest.md"), &digest.text)?;
     write_json(&run_dir.join(attention::FILE), &queue)?;
     write_json(&ledger_path, &ledger)?;

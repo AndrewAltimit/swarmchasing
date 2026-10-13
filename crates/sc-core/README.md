@@ -70,6 +70,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`scaffold`](src/scaffold.rs) | Request templates with values as slot types, and cluster pairs sharing them beyond chance. |
 | [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |
+| [`canary`](src/canary.rs) | Canary tokens for our own published pages: derivation from a seed, the registry, and copies found in records. |
 | [`bursts`](src/bursts.rs) | Bursts of archive captures of a host the archives rarely capture. |
 | [`endpoints`](src/endpoints.rs) | Flagged activity grouped by target host. |
 | [`escalation`](src/escalation.rs) | Route escalation: one target requested directly, then through a relay, a program carrier, a remote browser. |

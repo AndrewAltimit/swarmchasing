@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 pub mod backup;
 pub mod bundle;
+pub mod canary;
 pub mod case;
 pub mod commands;
 pub mod contacts;
@@ -110,6 +111,9 @@ pub enum Cmd {
     /// The public site: `site build` writes it into a directory from the
     /// committed inputs, as `sc-site` does.
     Site(commands::site::SiteArgs),
+    /// Canary tokens on our own published pages: register a built site's
+    /// tokens, list them, derive one, or find copies in records.
+    Canary(canary::CanaryArgs),
     /// The offline IP-to-ASN table: fetch it into the data directory, look up addresses.
     Asn(commands::asn::AsnArgs),
     /// Sightings (SC-Sightings v1): `export` makes one from your own logs,
@@ -151,6 +155,7 @@ pub fn run() -> Result<()> {
         Cmd::Site(a) => commands::site::run(a),
         Cmd::Asn(a) => commands::asn::run(a),
         Cmd::Sightings(a) => sightings::run(a),
+        Cmd::Canary(a) => canary::run(a),
         Cmd::Rules { file, dump } => commands::rules::run(file.as_deref(), dump),
     }
 }
