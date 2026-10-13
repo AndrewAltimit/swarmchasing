@@ -238,12 +238,31 @@ jobs:
           done
 
       # A browser for the XSS check below. A Chrome or Chromium on the runner
-      # ($CHROME, then PATH) is used when it starts (`--version`); otherwise
+      # ($CHROME, then PATH) is used when it starts headless the way the check
+      # starts it (profile under the temp dir, DevTools on a loopback port);
+      # `--version` alone passes for a sandboxed snap that cannot. Otherwise
       # the check runs against a pinned headless Chrome in a container
       # (scripts/ci/site-xss-container.sh), which needs Docker and no sudo.
       - name: Locate Chromium
         run: |
-          works() { [ -n "$1" ] && [ -x "$1" ] && "$1" --version >/dev/null 2>&1; }
+          works() {
+            [ -n "$1" ] && [ -x "$1" ] && "$1" --version >/dev/null 2>&1 || return 1
+            local prof pid ok=1
+            prof="$(mktemp -d "${TMPDIR:-/tmp}/sc-chrome-probe.XXXXXX")"
+            "$1" --headless=new --remote-debugging-port=9335 --user-data-dir="$prof" \
+              --no-first-run about:blank >/dev/null 2>&1 &
+            pid=$!
+            for _ in $(seq 1 50); do
+              if curl -sf http://127.0.0.1:9335/json/version >/dev/null 2>&1; then ok=0; break; fi
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 0.3
+            done
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            rm -rf "$prof"
+            [ "$ok" -eq 0 ] || echo "$1 does not start headless; trying the next browser"
+            return "$ok"
+          }
           for c in "${CHROME:-}" "$(command -v google-chrome || true)" "$(command -v chromium || true)" \
                    "$(command -v chromium-browser || true)"; do
             if works "$c"; then
