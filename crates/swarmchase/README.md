@@ -74,6 +74,7 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect memento <url>` | One URL's captures across archives, from a Memento timemap. |
 | `collect gharchive <substrings>` | Public GitHub events matching repo names or payload URLs. |
 | `collect wikimedia <substrings>` | External links added to Wikimedia wiki pages in the last hour, matching the link or page title; `--scan` minutes. The links are never fetched. |
+| `collect hackernews <substrings>` | Links in Hacker News stories and comments from six hours back (and items whose title or text matches), from its search index; `--scan` index queries of 1000 items. The links are never fetched. |
 | `collect npm <text>`, `collect pypi <substrings>` | Package names, versions and publish times; never code. |
 | `collect ctlog <substrings> --endpoint <log>` | Certificates in a CT log's newest entries whose names match. |
 | `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |
