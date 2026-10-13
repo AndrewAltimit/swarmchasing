@@ -152,6 +152,7 @@ pub fn render(p: &Page, ctx: &Ctx, root: &str) -> String {
 <link rel=\"icon\" href=\"{root}favicon.svg\" type=\"image/svg+xml\">\n\
 <link rel=\"stylesheet\" href=\"{root}css/site.css\">\n\
 <link rel=\"alternate\" type=\"application/atom+xml\" title=\"Swarmchasing notices\" href=\"{root}notices/feed.xml\">\n\
+<link rel=\"alternate\" type=\"text/plain\" title=\"llms.txt\" href=\"{root}llms.txt\">\n\
 <script src=\"{root}js/theme.js\"></script>\n",
         esc(&title),
         esc(&p.description),
@@ -229,7 +230,7 @@ pub fn render(p: &Page, ctx: &Ctx, root: &str) -> String {
         "<footer class=\"site-foot\"><div class=\"wrap foot-row\">\n\
 <p>Passive detection of AI agent activity in public records. Analysis on this site runs in your browser; nothing you paste is uploaded.</p>\n\
 <p class=\"page-ref\">Page reference {canary}: identifies this page and the month it was published (<a href=\"{root}docs/reference/browser-toolkit/#page-references\">what this is</a>).</p>\n\
-<p><a href=\"{root}operators/#contact\">Contact</a> · <a href=\"{root}notices/feed.xml\">Atom feed</a> · <a href=\"{}\">Source</a> · <a href=\"{root}docs/\">Docs</a> · toolkit {} · rules {}</p>\n\
+<p><a href=\"{root}operators/#contact\">Contact</a> · <a href=\"{root}notices/feed.xml\">Atom feed</a> · <a href=\"{}\">Source</a> · <a href=\"{root}docs/\">Docs</a> · For agents: <a href=\"{root}llms.txt\">llms.txt</a>, <a href=\"{root}submit/\">report a swarm</a>, <a href=\"{root}.well-known/security.txt\">security.txt</a> · toolkit {} · rules {}</p>\n\
 </div></footer>\n<div id=\"tip\" class=\"tip\" role=\"tooltip\" hidden></div>\n</body>\n</html>\n",
         esc(&ctx.repo),
         esc(&ctx.version),

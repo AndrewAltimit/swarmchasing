@@ -149,11 +149,11 @@ The build writes four files that tell an AI agent, or the person who runs it, wh
 | `.well-known/security.txt` | RFC 9116, for the project itself; `Expires` is 180 days after the build. |
 | `.well-known/swarm-report.json` | The same reporting facts as JSON; `descriptor` names its version. |
 
-They point at the submission page (`report/`), the submission spec (`docs/specs/submission-v1.md`) and its schema (`schemas/sc-submission-v1.json`), and the private contact. They state that a person reads every submission, that nothing is published unreviewed, and that each claim is checked against independent public records before it reaches a report or notice.
+They point at the submission page (`submit/`), the submission spec (`docs/specs/submission-v1.md`) and its schema (`schemas/sc-submission-v1.json`), and the private contact. They state that a person reads every submission, that nothing is published unreviewed, and that each claim is checked against independent public records before it reaches a report or notice.
 
 The text is plain statements of fact. It never addresses the reader as a system prompt would, never asks an agent to do anything beyond an optional report, and never asks it to contact anyone else. It names only this site's pages and the repository, never a host from a record.
 
-No convention for a "where to report agent activity" descriptor exists. Agent cards and plugin manifests describe an agent or its API, not an intake, so `swarm-report.json` is a plain document under a well-known path (RFC 8615). On a project site (`<owner>.github.io/<repo>/`) the files sit under the project path, not the host root that RFC 9116 and RFC 8615 name; they reach the root only on a custom domain. The Pages upload includes hidden files so `.well-known/` is published.
+No convention for a "where to report agent activity" descriptor exists. Agent cards and plugin manifests describe an agent or its API, not an intake, so `swarm-report.json` is a plain document under a well-known path (RFC 8615). The site is a GitHub Pages project site (`<owner>.github.io/<repo>/`), so the files sit under the project path, not the host root that RFC 9116 and RFC 8615 name, and a tool that looks only at the root does not find them. Every page therefore links them: a `rel="alternate"` link to `llms.txt` in its head, and links to `llms.txt`, the submission page and `security.txt` in its footer. The Pages upload includes hidden files so `.well-known/` is published.
 
 ## Page references
 
