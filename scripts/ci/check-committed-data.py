@@ -42,7 +42,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MAX_BYTES = 1 << 20
-SIZE_EXEMPT = {"Cargo.lock"}
+# The lockfile, and the committed all-samples analysis snapshot: a generated
+# fixture (regenerated with UPDATE_SNAPSHOTS) that grows with the evaluation
+# set and holds only synthetic sample data, no raw collector output.
+SIZE_EXEMPT = {"Cargo.lock", "crates/sc-core/tests/snapshots/all.analysis.snap.json"}
 WAIVER = "secret-scan: fixture"
 
 FORBIDDEN = [
@@ -66,6 +69,7 @@ SECRETS = [
     ("Google API key", r"\bAIza[0-9A-Za-z_-]{35}"),
     ("GitLab token", r"\bglpat-[A-Za-z0-9_-]{20,}"),
     ("private key block", r"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----"),
+    ("bundle signing key", r"\bSWARMCHASE_SIGNING_KEY\s*=\s*[0-9A-Za-z+/=]{40,}"),
 ]
 SECRET_RE = [(name, re.compile(rx)) for name, rx in SECRETS]
 
@@ -79,12 +83,14 @@ CONTROLS_HIT = [
     "AIza" + "B" * 35,
     "glpat-" + "c" * 20,
     "-----BEGIN " + "RSA PRIVATE KEY-----",
+    "SWARMCHASE_SIGNING" + "_KEY=" + "ab" * 32,
 ]
 CONTROLS_MISS = [
     "access_token=REDACTED-0123456789ab",
     "https://r.jina.ai/https://site.example/?uqtag=run7",
     "sk-short",
     "token=" + "eyJ" + "notajwt",
+    "#SWARMCHASE_SIGNING" + "_KEY=",
 ]
 
 

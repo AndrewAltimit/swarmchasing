@@ -104,6 +104,16 @@ fn lis(v: &[usize]) -> usize {
 /// Every pair of runs on different days whose target sequences match, earliest
 /// pair first.
 pub fn reruns(runs: &[TargetRun], opt: &RecurrenceOptions) -> Vec<Rerun> {
+    reruns_apart(runs, opt, |_, _| false)
+}
+
+/// As [`reruns`], without comparing the pairs `skip` names (by index into
+/// `runs`). Skipped runs still count towards every host's weight.
+fn reruns_apart(
+    runs: &[TargetRun],
+    opt: &RecurrenceOptions,
+    skip: impl Fn(usize, usize) -> bool,
+) -> Vec<Rerun> {
     let seqs: Vec<Seq> = runs.iter().map(seq).collect();
     let n = seqs.iter().filter(|s| !s.hosts.is_empty()).count();
     let mut df: BTreeMap<&str, usize> = BTreeMap::new();
@@ -121,9 +131,28 @@ pub fn reruns(runs: &[TargetRun], opt: &RecurrenceOptions) -> Vec<Rerun> {
         .collect();
     crate::sort::by_key(&mut order, |&i| (seqs[i].start, i));
 
+    // Only runs sharing `min_shared` hosts are compared.
+    let sets: Vec<Vec<&str>> = order
+        .iter()
+        .map(|&i| seqs[i].set.iter().map(String::as_str).collect())
+        .collect();
+    let counts = crate::dialect::SharedCounts::new(&sets);
     let mut out = Vec::new();
     for (k, &i) in order.iter().enumerate() {
-        for &j in &order[k + 1..] {
+        let later: Vec<usize> = if opt.min_shared == 0 {
+            (k + 1..order.len()).collect()
+        } else {
+            counts
+                .later(k, opt.min_shared)
+                .into_iter()
+                .map(|(kj, _)| kj)
+                .collect()
+        };
+        for kj in later {
+            let j = order[kj];
+            if skip(i, j) {
+                continue;
+            }
             let (a, b) = (&seqs[i], &seqs[j]);
             if a.start.div_euclid(DAY) == b.start.div_euclid(DAY)
                 || b.start - a.end < opt.min_gap_secs
@@ -228,10 +257,9 @@ pub(crate) fn reruns_across(
             });
         }
     }
-    let matches = reruns(&runs, &RecurrenceOptions::default())
-        .into_iter()
-        .filter(|m| infos[m.earlier].cluster != infos[m.later].cluster)
-        .collect();
+    let matches = reruns_apart(&runs, &RecurrenceOptions::default(), |i, j| {
+        infos[i].cluster == infos[j].cluster
+    });
     (infos, matches)
 }
 
@@ -355,5 +383,117 @@ mod tests {
         assert!(l.key.starts_with("k-"));
         assert_eq!(matches[0].shared.len(), 6);
         assert!(cluster_reruns(&a, &BTreeSet::new()).1.is_empty());
+    }
+
+    /// Every later run compared with every earlier one, as before the host
+    /// index.
+    fn every_pair(runs: &[TargetRun], opt: &RecurrenceOptions) -> Vec<Rerun> {
+        let seqs: Vec<Seq> = runs.iter().map(seq).collect();
+        let n = seqs.iter().filter(|s| !s.hosts.is_empty()).count();
+        let mut df: BTreeMap<&str, usize> = BTreeMap::new();
+        for s in &seqs {
+            for h in &s.set {
+                *df.entry(h.as_str()).or_default() += 1;
+            }
+        }
+        let w = |h: &str| (1.0 + n as f64 / df.get(h).copied().unwrap_or(1) as f64).ln();
+        let mut order: Vec<usize> = (0..seqs.len())
+            .filter(|&i| seqs[i].hosts.len() >= opt.min_shared.max(1))
+            .collect();
+        crate::sort::by_key(&mut order, |&i| (seqs[i].start, i));
+        let mut out = Vec::new();
+        for (k, &i) in order.iter().enumerate() {
+            for &j in &order[k + 1..] {
+                let (a, b) = (&seqs[i], &seqs[j]);
+                if a.start.div_euclid(DAY) == b.start.div_euclid(DAY)
+                    || b.start - a.end < opt.min_gap_secs
+                {
+                    continue;
+                }
+                let shared: Vec<&String> = a.hosts.iter().filter(|h| b.set.contains(*h)).collect();
+                if shared.len() < opt.min_shared {
+                    continue;
+                }
+                let union = a.set.union(&b.set).count();
+                let jaccard = shared.len() as f64 / union as f64;
+                let w_shared: f64 = shared.iter().map(|h| w(h)).sum();
+                let w_union: f64 = a.set.union(&b.set).map(|h| w(h)).sum();
+                let weighted_jaccard = if w_union > 0.0 {
+                    w_shared / w_union
+                } else {
+                    0.0
+                };
+                if weighted_jaccard < opt.min_weighted_jaccard {
+                    continue;
+                }
+                let pos: BTreeMap<&str, usize> = b
+                    .hosts
+                    .iter()
+                    .filter(|h| a.set.contains(*h))
+                    .enumerate()
+                    .map(|(p, h)| (h.as_str(), p))
+                    .collect();
+                let ranks: Vec<usize> = shared.iter().map(|h| pos[h.as_str()]).collect();
+                let order_score = lis(&ranks) as f64 / shared.len() as f64;
+                if order_score < opt.min_order {
+                    continue;
+                }
+                out.push(Rerun {
+                    earlier: i,
+                    later: j,
+                    shared: shared.into_iter().cloned().collect(),
+                    jaccard,
+                    weighted_jaccard,
+                    order: order_score,
+                });
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_host_index_finds_what_comparing_every_pair_finds() {
+        let mut seed: u64 = 5;
+        let mut next = |m: u64| {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (seed >> 33) % m
+        };
+        let pool: Vec<String> = (0..30).map(|i| format!("h{i}.example")).collect();
+        let runs: Vec<TargetRun> = (0..120)
+            .map(|k| {
+                let start = T0 + next(20) as i64 * DAY + next(3600) as i64;
+                let base = next(25) as usize;
+                let hosts: Vec<&str> = (0..next(9) as usize)
+                    .map(|i| {
+                        if next(4) == 0 {
+                            pool[next(30) as usize].as_str()
+                        } else {
+                            pool[(base + i) % 30].as_str()
+                        }
+                    })
+                    .collect();
+                run(&format!("r{k}"), start, &hosts)
+            })
+            .collect();
+        for min_shared in [0, 1, 4] {
+            let opt = RecurrenceOptions {
+                min_shared,
+                ..Default::default()
+            };
+            let want = every_pair(&runs, &opt);
+            assert_eq!(reruns(&runs, &opt), want, "min_shared {min_shared}");
+            if min_shared == 4 {
+                assert!(want.len() > 5, "{}", want.len());
+            }
+            // Skipping pairs drops exactly those pairs.
+            let skip = |i: usize, j: usize| (i + j).is_multiple_of(3);
+            let kept: Vec<Rerun> = want
+                .into_iter()
+                .filter(|m| !skip(m.earlier, m.later))
+                .collect();
+            assert_eq!(reruns_apart(&runs, &opt, skip), kept);
+        }
     }
 }

@@ -280,7 +280,11 @@ try {
       const n = (sel) => document.querySelectorAll(sel).length;
       return {
         xss: window.__xss ?? null,
-        markup: n("main img, main iframe, main object, main embed, script:not([src]), [srcdoc], main svg [onload]"),
+        // The one inline script a page may carry is the generator's JSON-LD
+        // data block in the head, which never runs; any other, or a second
+        // data block, came from content.
+        markup: n("main img, main iframe, main object, main embed, script:not([src]):not(head > script[type='application/ld+json']), [srcdoc], main svg [onload]")
+          + Math.max(0, n("script[type='application/ld+json']") - 1),
         handlers: [...document.querySelectorAll("*")].filter((e) => [...e.attributes].some((a) => a.name.startsWith("on"))).length,
         links: [...document.querySelectorAll("a[href]")].map((a) => a.getAttribute("href")).filter((h) => /^[a-z][a-z0-9+.-]*:/i.test(h) && !/^https:\\/\\//i.test(h) && !h.startsWith("blob:")),
       };

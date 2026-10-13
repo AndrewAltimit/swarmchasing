@@ -6,7 +6,7 @@
 //! ```
 //!
 //! Reads only `notices/*.md`, `docs/**/*.md`, `rules/default.toml`,
-//! `samples/eval/*.ndjson`, `samples/eval/coverage-allow.txt` and the static files in `site/` (with the WASM
+//! `samples/eval/*.ndjson`, `samples/eval/coverage-allow.txt`, `schemas/**/*.json` and the static files in `site/` (with the WASM
 //! package `scripts/ci/build-site.sh` builds into `site/pkg`). It refuses any
 //! path under `data/` or `$SWARMCHASE_DATA`: watch data and case files never
 //! reach the site. `--inputs-log` lists every file read, for

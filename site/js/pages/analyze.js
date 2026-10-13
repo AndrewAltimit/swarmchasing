@@ -36,6 +36,7 @@ let sel = { c: null, r: null, rule: null };
 let view = "runs";
 let lastWidth = 0; // the views panel width the current view was drawn at
 let zoom = null; // the swim-lanes' time window, null for all of it
+let fit = true; // the whole span drawn fitted to activity: idle stretches shrink
 // The input the shown analysis came from, for the tools module, which
 // re-runs it (deterministically) to draft reports and attribution layers.
 let source = null;
@@ -165,8 +166,14 @@ function clearAnalysis() {
   $("links").replaceChildren(hint("None yet."));
   $("report").textContent = "Analyse records to draft a report.";
   for (const b of ["copy-report", "dl-report", "dl-json"]) $(b).disabled = true;
+  syncResultControls();
   resetSightings();
   writeHash();
+}
+
+/** Drafting, sightings and the CSV downloads wait for an analysis. */
+function syncResultControls() {
+  for (const id of ["draft-report", "sight-prepare", "csv-records", "csv-endpoints"]) $(id).disabled = !a;
 }
 
 // ── Analysis ───────────────────────────────────────────────────────────────
@@ -212,6 +219,7 @@ function runAnalysis() {
   const h = readHash();
   sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
   $("dl-json").disabled = false;
+  syncResultControls();
   resetSightings();
   renderAll();
   collapseInput(a.total);
@@ -342,20 +350,26 @@ function zoomTools(full) {
     return x;
   };
   const [t0, t1] = zoom ?? full;
+  const fitBtn = el("button", { type: "button", "aria-pressed": String(fit), disabled: !!zoom, title: "Shrink idle stretches so runs days apart stay readable" }, "Fit to activity");
+  fitBtn.addEventListener("click", () => {
+    fit = !fit;
+    renderView();
+  });
   return el("div", { class: "zoom-tools" },
+    fitBtn,
     b("Zoom in", "+", () => setZoom(zoomWindow(full, zoom, 0.5))),
     b("Zoom out", "−", () => setZoom(zoomWindow(full, zoom, 2)), !zoom),
     b("Earlier", "◀", () => setZoom(zoomWindow(full, zoom, 1, -0.25)), !zoom),
     b("Later", "▶", () => setZoom(zoomWindow(full, zoom, 1, 0.25)), !zoom),
     b("Show the whole span", "Reset", () => setZoom(null), !zoom),
-    el("span", { class: "hint", "aria-live": "polite" }, zoom ? `${fmtTs(t0)} → ${fmtTs(t1)} (${dur(t1 - t0)})` : "Drag across the chart to zoom; with the chart focused, + − ← → and 0."));
+    el("span", { class: "hint", "aria-live": "polite" }, zoom ? `${fmtTs(t0)} → ${fmtTs(t1)} (${dur(t1 - t0)}), to scale` : `${fit ? "Idle stretches shrink to hatched gaps. " : ""}Drag across the chart to zoom; with the chart focused, + − ← → and 0.`));
 }
 
 function viewRuns() {
   const cl = a.clusters.filter((c) => arr(c.runs).some((r) => r.start > 0)).slice(0, MAX_LANES);
   const lanes = cl.map((c) => ({ key: keyOf(c), label: c.id, tier: c.tier, runs: c.runs.filter((r) => r.start > 0) }));
   const full = runExtent(lanes);
-  const svgChart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), bands: sharedPauseBands(), selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth(), label: "Runs per cluster over time, UTC", domain: zoom, onZoom: setZoom });
+  const svgChart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), bands: sharedPauseBands(), selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth(), label: "Runs per cluster over time, UTC", domain: zoom, onZoom: setZoom, fit });
   if (svgChart instanceof SVGElement) svgChart.setAttribute("data-focus-key", "swim-chart");
   const chart = full ? el("div", {}, zoomTools(full), svgChart) : svgChart;
   return figure({
@@ -578,7 +592,7 @@ window.addEventListener("resize", () => {
 
 // ── Records and endpoints ──────────────────────────────────────────────────
 const RECORD_HEAD = ["Tier", "Score", "Time (UTC)", "Cluster", "URL (defanged)", "Rules"];
-const ENDPOINT_HEAD = ["Host", "Tier", "Hits", "First seen", "Last seen", "Status", "Attack payloads"];
+const ENDPOINT_HEAD = ["Host", "Tier", "Hits / all", "First seen (UTC)", "Last seen (UTC)", "Status", "Attack payloads"];
 /** A cell labelled with its column, so the rows stack as cards on phones. */
 const cell = (head, col, attrs, ...kids) => el("td", { ...attrs, "data-label": head[col] }, ...kids);
 
@@ -631,8 +645,9 @@ function renderEndpoints() {
   for (const v of views) {
     const c = (col, attrs, ...kids) => cell(ENDPOINT_HEAD, col, attrs, ...kids);
     body.append(el("tr", {},
-      c(0, { class: "url" }, host(v.host)), c(1, {}, pill(v.max_tier)), c(2, { class: "num" }, `${v.hits} / ${v.records}`),
-      c(3, { class: "nowrap" }, fmtTs(v.first_seen)), c(4, { class: "nowrap" }, fmtTs(v.last_seen)), c(5, {}, String(v.activity ?? "")),
+      c(0, { class: "url" }, host(v.host)), c(1, {}, pill(v.max_tier)),
+      c(2, { class: "num hits", title: `${v.hits} suggestive or significant of ${v.records} records to this host` }, `${v.hits} / ${v.records}`),
+      c(3, { class: "nowrap", title: fmtTs(v.first_seen) }, fmtShort(v.first_seen)), c(4, { class: "nowrap", title: fmtTs(v.last_seen) }, fmtShort(v.last_seen)), c(5, {}, String(v.activity ?? "")),
       c(6, {}, v.payloads ? Object.keys(obj(v.payload_rules)).map((r) => el("span", { class: "chip" }, r)) : el("span", { class: "hint" }, "none seen"))));
   }
   $("endpoints").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "endpoints" },
@@ -1030,13 +1045,25 @@ $("input").addEventListener("input", () => {
   syncRun();
 });
 $("input-edit").addEventListener("click", () => expandInput(true));
-$("file").addEventListener("change", async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
+/** Read a picked or dropped file into the records box and analyse it. */
+async function loadFile(f) {
   $("example-note").hidden = true;
-  $("input").value = await f.text();
+  const status = $("drop-status");
+  try {
+    $("input").value = await f.text();
+  } catch (err) {
+    status.textContent = `${trunc(String(f.name), 80)} could not be read: ${String(err?.message ?? err)}`;
+    status.hidden = false;
+    return;
+  }
+  status.hidden = true;
   syncRun();
   runAnalysis();
+}
+$("file").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (f) await loadFile(f);
+  e.target.value = "";
 });
 syncRun();
 // The records box shows a sample of the format picked: a Common Log Format
@@ -1053,6 +1080,65 @@ $("claims").addEventListener("input", () => (a ? renderReport() : readClaims()))
 $("copy-report").addEventListener("click", () => navigator.clipboard?.writeText($("report").textContent));
 $("dl-report").addEventListener("click", () => download("swarmchase-report.md", $("report").textContent, "text/markdown"));
 $("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.json", JSON.stringify(a, null, 2), "application/json"));
+
+// ── CSV ────────────────────────────────────────────────────────────────────
+// Hosts and URLs go out defanged, as everywhere on the page, so nothing in
+// the file is a live link. A cell that a spreadsheet would read as a formula
+// is prefixed with a quote mark.
+const csvCell = (v) => {
+  let t = String(v ?? "");
+  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+  return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+const csv = (head, rows) => [head, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+const iso = (t) => (t > 0 ? new Date(t * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") : "");
+
+$("csv-records").addEventListener("click", () => {
+  if (!a) return;
+  const idx = [...scopeIdx()].sort((x, y) => a.results[y].score - a.results[x].score || a.results[x].obs.ts - a.results[y].obs.ts);
+  const rows = idx.map((i) => {
+    const r = a.results[i];
+    return [i, r.tier, r.score, iso(r.obs.ts), r.cluster != null ? a.clusters[r.cluster]?.id ?? "" : "", r.target_host ? host(r.target_host) : "", sc.defang(String(r.obs.url ?? "")), arr(r.hits).map((h) => h.rule_id).join(" ")];
+  });
+  download("swarmchase-flagged-records.csv", csv(["record", "tier", "score", "time_utc", "cluster", "target_host", "url_defanged", "rules"], rows), "text/csv");
+});
+$("csv-endpoints").addEventListener("click", () => {
+  if (!a) return;
+  const rows = arr(endpointsCache).map((v) => [host(v.host), v.max_tier, v.hits, v.records, iso(v.first_seen), iso(v.last_seen), v.activity ?? "", Object.keys(obj(v.payload_rules)).join(" ")]);
+  download("swarmchase-endpoints.csv", csv(["host_defanged", "max_tier", "hits", "records", "first_seen_utc", "last_seen_utc", "status", "attack_payload_rules"], rows), "text/csv");
+});
+
+// ── Drop a file ────────────────────────────────────────────────────────────
+// A file dropped on the records area loads as "Load file" does: read in the
+// page, never uploaded.
+{
+  const zone = $("drop");
+  let depth = 0;
+  const has = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+  zone.addEventListener("dragenter", (e) => {
+    if (!has(e)) return;
+    e.preventDefault();
+    depth++;
+    zone.classList.add("over");
+  });
+  zone.addEventListener("dragover", (e) => {
+    if (!has(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+  zone.addEventListener("dragleave", () => {
+    depth = Math.max(0, depth - 1);
+    if (!depth) zone.classList.remove("over");
+  });
+  zone.addEventListener("drop", async (e) => {
+    if (!has(e)) return;
+    e.preventDefault();
+    depth = 0;
+    zone.classList.remove("over");
+    const f = e.dataTransfer.files[0];
+    if (f) await loadFile(f);
+  });
+}
 
 {
   const h = readHash();

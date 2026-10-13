@@ -6,8 +6,16 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# `signatures`: sign evidence bundle manifests and check their signatures
+# (`signing`). Off by default; the CLI and the browser tools module turn it
+# on.
+[features]
+signatures = ["dep:ed25519-dalek", "dep:base64", "ed25519-dalek/zeroize"]
+
 [dependencies]
 sc-core.workspace = true
+ed25519-dalek = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true

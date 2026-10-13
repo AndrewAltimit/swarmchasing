@@ -4,13 +4,13 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-20 12:02:03 UTC
-- **Records:** 182 linked public records in 49 cluster(s) (of 327 records reviewed, 260 flagged)
+- **Records:** 187 linked public records in 51 cluster(s) (of 359 records reviewed, 281 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.3
 
 ## Summary
 
-We observed automated activity consistent with AI agents operating with little or no human oversight. Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. Targets included `records[.]agency[.]example` (21), `files[.]depot[.]example` (8), `permits[.]xsvc-a[.]example` (8), `api[.]parts[.]example` (7), `portal[.]clinic[.]example` (6).
+We observed automated activity consistent with AI agents operating with little or no human oversight. Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. Targets included `records[.]agency[.]example` (25), `files[.]depot[.]example` (8), `permits[.]xsvc-a[.]example` (8), `api[.]parts[.]example` (7), `portal[.]clinic[.]example` (6).
 
 **Attack payloads were present** (see Indicators). We did not test whether they succeeded.
 
@@ -19,16 +19,19 @@ We observed automated activity consistent with AI agents operating with little o
 | Category | Rule | Records |
 |---|---|---|
 | Relay / fetch-through services | `relay.corsproxy` | 1 |
+| Relay / fetch-through services | `relay.defuddle_md` | 1 |
 | Relay / fetch-through services | `relay.jina` | 60 |
 | Relay / fetch-through services | `relay.markdown_new` | 1 |
+| Relay / fetch-through services | `relay.pure_md` | 1 |
 | Carrier services and inline programs | `carrier.html_program` | 8 |
 | Carrier services and inline programs | `carrier.httpbin` | 1 |
 | Carrier services and inline programs | `carrier.inline_fetch_program` | 2 |
 | Attack payloads | `exploit.boundary_ids` | 1 |
 | Attack payloads | `exploit.cmdi` | 2 |
 | Attack payloads | `exploit.double_encoded_meta` | 2 |
+| Attack payloads | `exploit.open_redirect_probe` | 1 |
 | Attack payloads | `exploit.sqli_boolean` | 74 |
-| Attack payloads | `exploit.sqli_quote` | 4 |
+| Attack payloads | `exploit.sqli_quote` | 8 |
 | Attack payloads | `exploit.sqli_union` | 11 |
 | Attack payloads | `exploit.ssti` | 4 |
 | Attack payloads | `exploit.traversal` | 5 |
@@ -41,7 +44,7 @@ We observed automated activity consistent with AI agents operating with little o
 | Agent tags and markers | `marker.oai_tag` | 1 |
 | Agent tags and markers | `marker.placeholder` | 18 |
 | Agent tags and markers | `marker.placeholder_identity` | 2 |
-| Agent tags and markers | `marker.test_tag` | 2 |
+| Agent tags and markers | `marker.probe_tag` | 2 |
 | Agent tags and markers | `marker.title_write` | 1 |
 | Agent tags and markers | `marker.tool_call_markup` | 2 |
 | Agent tags and markers | `marker.truncated_output` | 2 |
@@ -54,8 +57,10 @@ We observed automated activity consistent with AI agents operating with little o
 | Callback / exfiltration channels | `exfil.requestbin` | 3 |
 | Callback / exfiltration channels | `exfil.webhook_site` | 8 |
 | Header fingerprints | `header.agent_ua` | 1 |
+| Header fingerprints | `header.cf_browser_rendering` | 1 |
 | Header fingerprints | `header.gzip_only_requests` | 1 |
 | Header fingerprints | `header.headless_ua` | 5 |
+| Header fingerprints | `header.mcp_fetch_ua` | 1 |
 | Header fingerprints | `header.scripted_ua` | 12 |
 | Header fingerprints | `header.via_ats` | 1 |
 | Outcome states | `outcome.challenge` | 1 |
@@ -80,7 +85,8 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 6. python-httpx. Label: Possible; tag: Inference. Traces: 3 record(s) sent User-Agent `python-httpx/0.27.0`; 3 record(s) match header fingerprint rule header.headless_ua; 3 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) sent User-Agent `python-httpx/0.27.0`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 7. python-requests. Label: Possible; tag: Inference. Traces: 3 record(s) sent User-Agent `python-requests/2.31.0`; 3 record(s) match header fingerprint rule header.scripted_ua; 2 record(s) encode URLs in style `sp20.sorted.noslash`.
 8. scoutagent. Label: Possible; tag: Inference. Traces: 3 record(s) sent User-Agent `ScoutAgent/1.0`.
-9. playwright. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Playwright/1.48`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
+9. modelcontextprotocol. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)`; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.mcp_fetch_ua; 1 record(s) send the header-name set 5b6270b3 (cf-brapi-request-id).
+10. playwright. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Playwright/1.48`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 
 ## Why we think this is an agent
 
@@ -137,11 +143,11 @@ A person or a conventional scanner sending the same payloads through the same se
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 3 record(s) (marker.uq_tags)
 - **C19**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
   - signal (L3): a probe chain at model pace: 3 record(s)
-- **C20**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
+- **C20**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
+  - signal (L3): a probe chain at model pace: 3 record(s)
+- **C21**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 3 record(s) (marker.uq_tags, selfid.vendor_name)
-- **C21**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
-- **C22**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
-  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 2 record(s) (marker.uq_tags)
+- **C22**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
 - **C23**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 2 record(s) (marker.uq_tags)
 - **C24**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
@@ -157,12 +163,12 @@ A person or a conventional scanner sending the same payloads through the same se
 - **C29**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 2 record(s) (marker.uq_tags)
 - **C30**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
+  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 2 record(s) (marker.uq_tags)
+- **C31**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 1 record(s) (marker.oai_tag)
-- **C31**: L2 model-written. The requests carry content a language model writes. A person pasting model output leaves the same.
+- **C32**: L2 model-written. The requests carry content a language model writes. A person pasting model output leaves the same.
   - signal (L2): model-output residue in requests: 2 record(s) (marker.placeholder_identity)
-- **C32**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
 - **C33**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
-  - signal (L3): a probe chain at model pace: 3 record(s)
 - **C34**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 2 record(s) (marker.uq_tags)
 - **C35**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
@@ -184,8 +190,8 @@ A person or a conventional scanner sending the same payloads through the same se
 - **C44**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 3 record(s) (marker.uq_tags)
   - signal (L3): a route escalation to reach one page: 2 record(s) (direct → relay)
-- **C45**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
-  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 2 record(s) (marker.test_tag)
+- **C45**: L2 model-written. The requests carry content a language model writes. A person pasting model output leaves the same.
+  - signal (L2): model-output residue in requests: 2 record(s) (marker.probe_tag)
 - **C46**: L2 model-written. The requests carry content a language model writes. A person pasting model output leaves the same.
   - signal (L2): model-output residue in requests: 2 record(s) (marker.truncated_output)
 - **C47**: L3 adaptive. Model-written requests that change in answer to responses.
@@ -193,6 +199,8 @@ A person or a conventional scanner sending the same payloads through the same se
   - signal (L3): a route escalation to reach one page: 2 record(s) (direct → relay)
 - **C48**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
 - **C49**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
+- **C50**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
+- **C51**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
 
 ## Timeline
 
@@ -316,82 +324,82 @@ A person or a conventional scanner sending the same payloads through the same se
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class data retrieval; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C20** (significant): 3 records, 2 run(s), 2026-08-05 10:00:00 UTC → 2026-08-07 13:00:00 UTC, median gap 2.1d
+- **C20** (significant): 3 records, 1 run(s), 2026-08-03 15:30:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
+  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace)
+  - provenance: unknown 3 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
+  - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C21** (significant): 3 records, 2 run(s), 2026-08-05 10:00:00 UTC → 2026-08-07 13:00:00 UTC, median gap 2.1d
   - artifacts: 3 of 3 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=covrun7`
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class account setup; failed: S5 (accounts or credentials were acquired or reused); S6 (data was sent to a callback inbox or side channel)
-- **C21** (significant): 3 records, 2 run(s), 2026-08-06 16:00:00 UTC → 2026-08-07 12:00:00 UTC, median gap 20.0h
+- **C22** (significant): 3 records, 2 run(s), 2026-08-06 16:00:00 UTC → 2026-08-07 12:00:00 UTC, median gap 20.0h
   - linked by: `exfil.requestbin:c0ve7x9.m.pipedream.net`
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them); S5 (accounts or credentials were acquired or reused); S6 (data was sent to a callback inbox or side channel)
   - relay stack `carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
-- **C22** (significant): 2 records, 1 run(s), 2026-04-01 06:03:41 UTC → 2026-04-01 06:06:01 UTC, median gap 2m
+- **C23** (significant): 2 records, 1 run(s), 2026-04-01 06:03:41 UTC → 2026-04-01 06:06:01 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=la1q7c`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C23** (significant): 2 records, 1 run(s), 2026-04-04 07:03:41 UTC → 2026-04-04 07:06:01 UTC, median gap 2m
+- **C24** (significant): 2 records, 1 run(s), 2026-04-04 07:03:41 UTC → 2026-04-04 07:06:01 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=lb8w2n`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C24** (significant): 2 records, 1 run(s), 2026-04-07 08:03:41 UTC → 2026-04-07 08:06:01 UTC, median gap 2m
+- **C25** (significant): 2 records, 1 run(s), 2026-04-07 08:03:41 UTC → 2026-04-07 08:06:01 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=lc4e9r`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C25** (significant): 2 records, 1 run(s), 2026-04-10 09:03:41 UTC → 2026-04-10 09:06:01 UTC, median gap 2m
+- **C26** (significant): 2 records, 1 run(s), 2026-04-10 09:03:41 UTC → 2026-04-10 09:06:01 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=ld6t3m`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C26** (significant): 2 records, 1 run(s), 2026-04-13 10:03:41 UTC → 2026-04-13 10:06:01 UTC, median gap 2m
+- **C27** (significant): 2 records, 1 run(s), 2026-04-13 10:03:41 UTC → 2026-04-13 10:06:01 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=le2y8k`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C27** (significant): 2 records, 1 run(s), 2026-04-16 11:03:41 UTC → 2026-04-16 11:06:01 UTC, median gap 2m
+- **C28** (significant): 2 records, 1 run(s), 2026-04-16 11:03:41 UTC → 2026-04-16 11:06:01 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=lf9u4p`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C28** (significant): 2 records, 1 run(s), 2026-04-19 12:03:41 UTC → 2026-04-19 12:06:01 UTC, median gap 2m
+- **C29** (significant): 2 records, 1 run(s), 2026-04-19 12:03:41 UTC → 2026-04-19 12:06:01 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=lg5i1x`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C29** (significant): 2 records, 1 run(s), 2026-04-22 13:03:41 UTC → 2026-04-22 13:06:01 UTC, median gap 2m
+- **C30** (significant): 2 records, 1 run(s), 2026-04-22 13:03:41 UTC → 2026-04-22 13:06:01 UTC, median gap 2m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=lh3o6v`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C30** (significant): 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
+- **C31** (significant): 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
   - artifacts: 1 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - iterative probing: 3 variants of `Measure_Id`, `State_Id`, `State_Id[]`, `survey_Year_Key` on `civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation` over 4m (median gap 3m, slow pace); 1 of its requests matched no rule
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
-- **C31** (significant): 2 records, 1 run(s), 2026-07-02 10:24:00 UTC → 2026-07-02 10:25:00 UTC, median gap 60s
+- **C32** (significant): 2 records, 1 run(s), 2026-07-02 10:24:00 UTC → 2026-07-02 10:25:00 UTC, median gap 60s
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class account setup; failed: S1 (a account setup run reached access-controlled or sensitive targets); S4 (attack payloads were sent to a party that did not sanction them); S5 (accounts or credentials were acquired or reused)
-- **C32** (significant): 2 records, 1 run(s), 2026-08-03 09:01:10 UTC → 2026-08-03 09:01:40 UTC, median gap 30s
+- **C33** (significant): 2 records, 1 run(s), 2026-08-03 09:01:10 UTC → 2026-08-03 09:01:40 UTC, median gap 30s
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `c0942b1d` over 2 records: cmd (semicolon ×1, subshell ×1); first seen cmd.semicolon → cmd.subshell. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C33** (significant): 2 records, 1 run(s), 2026-08-03 15:31:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
-  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace); 1 of its requests matched no rule
-  - provenance: unknown 2 · single source
-  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
-  - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C34** (significant): 2 records, 1 run(s), 2026-08-10 09:20:00 UTC → 2026-08-10 09:30:00 UTC, median gap 10m
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - provenance: unknown 2 · single source
@@ -473,6 +481,13 @@ A person or a conventional scanner sending the same payloads through the same se
   - linked by: `exfil.ntfy:/ntfy.sh/covrun7results`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S6 (data was sent to a callback inbox or side channel)
+- **C50** (suggestive): 2 records, 1 run(s), 2026-08-12 09:00:00 UTC → 2026-08-12 09:05:00 UTC, median gap 5m
+  - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class data retrieval; failed: S4 (attack payloads were sent to a party that did not sanction them)
+- **C51** (suggestive): 2 records, 1 run(s), 2026-08-12 09:50:00 UTC → 2026-08-12 09:55:00 UTC, median gap 5m
+  - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
+  - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
 ## Matching against your logs
 
 For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
@@ -507,30 +522,30 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C18**: 2026-04-16 09:14:07 UTC to 2026-04-16 09:17:21 UTC, times of unknown kind
   - identifiers: `param:uqtag=p7tr4z`
 - **C19**: 2026-08-03 09:00:00 UTC to 2026-08-03 09:00:45 UTC, times of unknown kind
-- **C20**: 2026-08-05 10:00:00 UTC to 2026-08-07 13:00:00 UTC, times of unknown kind
+- **C20**: 2026-08-03 15:30:00 UTC to 2026-08-03 15:32:00 UTC, times of unknown kind
+- **C21**: 2026-08-05 10:00:00 UTC to 2026-08-07 13:00:00 UTC, times of unknown kind
   - identifiers: `param:uqtag=covrun7`
-- **C21**: 2026-08-06 16:00:00 UTC to 2026-08-07 12:00:00 UTC, times of unknown kind
+- **C22**: 2026-08-06 16:00:00 UTC to 2026-08-07 12:00:00 UTC, times of unknown kind
   - identifiers: `exfil.requestbin:c0ve7x9.m.pipedream.net`
-- **C22**: 2026-04-01 06:03:41 UTC to 2026-04-01 06:06:01 UTC, times of unknown kind
+- **C23**: 2026-04-01 06:03:41 UTC to 2026-04-01 06:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=la1q7c`
-- **C23**: 2026-04-04 07:03:41 UTC to 2026-04-04 07:06:01 UTC, times of unknown kind
+- **C24**: 2026-04-04 07:03:41 UTC to 2026-04-04 07:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=lb8w2n`
-- **C24**: 2026-04-07 08:03:41 UTC to 2026-04-07 08:06:01 UTC, times of unknown kind
+- **C25**: 2026-04-07 08:03:41 UTC to 2026-04-07 08:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=lc4e9r`
-- **C25**: 2026-04-10 09:03:41 UTC to 2026-04-10 09:06:01 UTC, times of unknown kind
+- **C26**: 2026-04-10 09:03:41 UTC to 2026-04-10 09:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=ld6t3m`
-- **C26**: 2026-04-13 10:03:41 UTC to 2026-04-13 10:06:01 UTC, times of unknown kind
+- **C27**: 2026-04-13 10:03:41 UTC to 2026-04-13 10:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=le2y8k`
-- **C27**: 2026-04-16 11:03:41 UTC to 2026-04-16 11:06:01 UTC, times of unknown kind
+- **C28**: 2026-04-16 11:03:41 UTC to 2026-04-16 11:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=lf9u4p`
-- **C28**: 2026-04-19 12:03:41 UTC to 2026-04-19 12:06:01 UTC, times of unknown kind
+- **C29**: 2026-04-19 12:03:41 UTC to 2026-04-19 12:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=lg5i1x`
-- **C29**: 2026-04-22 13:03:41 UTC to 2026-04-22 13:06:01 UTC, times of unknown kind
+- **C30**: 2026-04-22 13:03:41 UTC to 2026-04-22 13:06:01 UTC, times of unknown kind
   - identifiers: `param:uqtag=lh3o6v`
-- **C30**: 2026-06-02 14:00:05 UTC to 2026-06-02 14:03:10 UTC, times of unknown kind
-- **C31**: 2026-07-02 10:24:00 UTC to 2026-07-02 10:25:00 UTC, times of unknown kind
-- **C32**: 2026-08-03 09:01:10 UTC to 2026-08-03 09:01:40 UTC, times of unknown kind
-- **C33**: 2026-08-03 15:31:00 UTC to 2026-08-03 15:32:00 UTC, times of unknown kind
+- **C31**: 2026-06-02 14:00:05 UTC to 2026-06-02 14:03:10 UTC, times of unknown kind
+- **C32**: 2026-07-02 10:24:00 UTC to 2026-07-02 10:25:00 UTC, times of unknown kind
+- **C33**: 2026-08-03 09:01:10 UTC to 2026-08-03 09:01:40 UTC, times of unknown kind
 - **C34**: 2026-08-10 09:20:00 UTC to 2026-08-10 09:30:00 UTC, times of unknown kind
 - **C35**: 2026-08-11 09:00:00 UTC to 2026-08-11 09:00:30 UTC, times of unknown kind
   - identifiers: `param:uqtag=covscope`
@@ -557,6 +572,8 @@ For each cluster, the window to search, what its times measure, and the strings 
   - identifiers: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
 - **C49**: 2026-08-07 09:00:00 UTC to 2026-08-07 09:01:00 UTC, times of unknown kind
   - identifiers: `exfil.ntfy:/ntfy.sh/covrun7results`
+- **C50**: 2026-08-12 09:00:00 UTC to 2026-08-12 09:05:00 UTC, times of unknown kind
+- **C51**: 2026-08-12 09:50:00 UTC to 2026-08-12 09:55:00 UTC, times of unknown kind
 
 
 ## Possible interaction (SC-T9)
@@ -566,7 +583,7 @@ Pairs of runs whose records suggest agents acting on each other's output. Each i
 - S1 shared sink (moderate): C6#1 (direct · Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/124.0 · AS16509) ↔ C6#1 (relay.jina → target · python-httpx/0.27.0 · AS14061): both write to `webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`; their requests differ in relay route, user agent, network: two agents on one sink, or one agent changing route. Records: eval:swarm-sink-d0, eval:swarm-sink-d1, eval:swarm-sink-d2, eval:swarm-sink-r0, eval:swarm-sink-r1, eval:swarm-sink-r2
 - S2 hand-off (strong): C43#1 → C15#1: `gist/3f9a2c1b7d4e5f60718293a4b5c6d7e8` written by the first and fetched by the second 25 min later; they differ in user agent, network. Records: eval:swarm-handoff-w0, eval:swarm-handoff-f0
 - S4 role sequence (moderate): C42#1 ↔ C9#1: the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.4e-5). Records: eval:swarm-role-x0, eval:swarm-role-x1, eval:swarm-role-x2, eval:swarm-role-y0, eval:swarm-role-y1, eval:swarm-role-y2
-- S5 disjoint partition (weak): C40#1 ↔ C41#1: started 40 s apart, they split `*.county-records[.]example` (8 and 8 hosts, 0 shared; p 1.8e-2). One scheduler sharding a list does the same: a fleet signal unless other edges join these runs. Records: eval:swarm-shard-00, eval:swarm-shard-01, eval:swarm-shard-02, eval:swarm-shard-10, eval:swarm-shard-11, eval:swarm-shard-12
+- S5 disjoint partition (weak): C40#1 ↔ C41#1: 2 runs started within 600 s split `*.county-records[.]example` (8 + 8 hosts) with no host shared, in a block split of the sorted hosts; a split that regular 6.2e-4 of the time at random; one client, or clients not told apart. One scheduler …. Records: eval:swarm-shard-00, eval:swarm-shard-01, eval:swarm-shard-02, eval:swarm-shard-10, eval:swarm-shard-11, eval:swarm-shard-12
 
 ## Representative records
 

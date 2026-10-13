@@ -468,6 +468,57 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     }
 }
 
+/// Hosts in `obs` that a relay, carrier or callback rule matched by the
+/// host itself: a reader service, a carrier, or an agent's inbox or side
+/// channel. None of them is the target, and a callback host is the agent's
+/// own channel, so nothing is ever fetched from one (contact discovery
+/// included).
+pub fn intermediary_hosts(obs: &Observation, rules: &Rules) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for layer in unwrap_layers(&obs.url) {
+        let Some(host) = layer.host.as_deref() else {
+            continue;
+        };
+        if layer_is_intermediary(&layer, host, rules) {
+            out.insert(host.to_ascii_lowercase());
+        }
+    }
+    out
+}
+
+/// True when `host` is a relay, carrier or callback host by the rules
+/// alone: a host suffix of one of those kinds, or a URL pattern of one that
+/// matches the host as a URL's authority (`https://<host>/`). A callback
+/// rule that needs a path (an inbox id) is only seen in a record; see
+/// [`intermediary_hosts`].
+pub fn is_intermediary_host(rules: &Rules, host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    if rules.is_intermediary_host(&host) {
+        return true;
+    }
+    unwrap_layers(&format!("https://{host}/"))
+        .first()
+        .is_some_and(|l| layer_is_intermediary(l, &host, rules))
+}
+
+/// The marking [`extract`] makes: a relay, carrier or callback rule matched
+/// this layer's own host.
+fn layer_is_intermediary(layer: &Layer, host: &str, rules: &Rules) -> bool {
+    let by_suffix = rules.of_target(Target::Host).any(|r| {
+        is_intermediary_kind(r.def.kind)
+            && matches!(&r.matcher, Matcher::HostSuffix(s) if host_matches(host, s))
+    });
+    if by_suffix || rules.is_intermediary_host(host) {
+        return true;
+    }
+    let host_end = layer.text.find(host).map(|p| p + host.len());
+    rules.matching(Target::Url, &layer.text).any(|r| {
+        is_intermediary_kind(r.def.kind)
+            && matches!(&r.matcher, Matcher::Re(re)
+                if re.find(&layer.text).is_some_and(|m| host_end.is_some_and(|e| m.start() < e)))
+    })
+}
+
 /// A host name made safe to print: `example[.]com`.
 pub fn defang_host(host: &str) -> String {
     host.replace('.', "[.]")
@@ -506,6 +557,46 @@ mod tests {
             hosts,
             vec!["r.jina.ai", "api.allorigins.win", "data.portal.example"]
         );
+    }
+
+    #[test]
+    fn a_callback_inbox_is_never_the_target() {
+        let rules = Rules::default_rules();
+        for (url, target, inbox) in [
+            (
+                "https://c3k9q2x7v1.oast.fun/x?d=1",
+                None,
+                "c3k9q2x7v1.oast.fun",
+            ),
+            (
+                "https://eo1a2b3c4d5e6f.m.pipedream.net/",
+                None,
+                "eo1a2b3c4d5e6f.m.pipedream.net",
+            ),
+            (
+                "https://webhook.site/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b",
+                None,
+                "webhook.site",
+            ),
+            (
+                "https://r.jina.ai/https://shop.a.example/p?cb=https://zz91k.oast.pro/q",
+                Some("shop.a.example"),
+                "zz91k.oast.pro",
+            ),
+        ] {
+            let o = obs(url);
+            let x = extract(&o, &rules);
+            assert_eq!(x.target_host.as_deref(), target, "{url}: {:?}", x.layers);
+            let hosts = intermediary_hosts(&o, &rules);
+            assert!(hosts.contains(inbox), "{url}: {hosts:?}");
+            if let Some(t) = target {
+                assert!(!hosts.contains(t), "{url}: {hosts:?}");
+            }
+        }
+        assert!(is_intermediary_host(&rules, "c3k9q2x7v1.oast.fun"));
+        assert!(is_intermediary_host(&rules, "abc.requestcatcher.com"));
+        assert!(is_intermediary_host(&rules, "r.jina.ai"));
+        assert!(!is_intermediary_host(&rules, "shop.a.example"));
     }
 
     #[test]

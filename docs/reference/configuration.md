@@ -35,6 +35,8 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | `SWARMCHASE_BACKUP_RECIPIENT` | `swarmchase backup create` | The age public key backups are encrypted to. |
 | `SWARMCHASE_BACKUP_PASSPHRASE` | `swarmchase backup` | A passphrase instead of a recipient; also what `verify --passphrase` and `restore --passphrase` read. |
 | `SWARMCHASE_CANARY_SEED` | `sc-site`, `site build`, `swarmchase canary` | The secret seed [canary tokens](#canary-tokens) derive from; set, the build embeds them. |
+| `SWARMCHASE_SIGNING_KEY` | `swarmchase case bundle`, `case draft`, `key public` | The secret seed [bundle signing](#bundle-signing) uses; set, every bundle is signed. |
+| `SWARMCHASE_SIGNING_PUBLIC` | `swarmchase case verify`, `key public` | Another published key file. Unset, `keys/bundle-signing.pub`. |
 | `SOURCE_DATE_EPOCH` | `sc-site`, `site build` | The build's time, for the canary month and `security.txt` `Expires`; else the clock. |
 | `SWARMCHASE_EVAL_DIR` | `swarmchase case bundle`, `case draft` | The evaluation set whose figures go into bundle stamps. Unset, `samples/eval/` ([evidence bundles](cases.md#evidence-bundles)). |
 | `SMTP_URL`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `MAIL_TO` | [`send-mail.sh`](../../scripts/ci/send-mail.sh) | Digest and alert email to the admin. |
@@ -65,7 +67,7 @@ Once it is there, `watch` and the commands that read record files fill the netwo
 
 ## Backups
 
-Cases, reviewed labels and pinned rules cannot be collected again, so `swarmchase backup` keeps encrypted copies of them, with `state.json`. The record store is left out: the sources refill it.
+Cases, reviewed labels and pinned rules cannot be collected again, so `swarmchase backup` keeps encrypted copies of them, with `state.json`, the cross-run history (`ledger.json`, `summary.json`, `autonomy.ndjson`) and the canary registry. The record store is left out: the sources refill it.
 
 ```sh
 swarmchase backup keygen --out swarmchase-backup.key   # once, on the admin's own machine
@@ -79,7 +81,22 @@ swarmchase backup restore <file> --identity swarmchase-backup.key --to restored/
 - It encrypts to `SWARMCHASE_BACKUP_RECIPIENT`, a public key, so the machine making backups holds no secret; `SWARMCHASE_BACKUP_PASSPHRASE` is the alternative.
 - `keygen` writes the identity file and prints the public key. Keep the identity off the runner and away from the backup drive: anyone holding it reads every backup, and without it none can be restored.
 - `verify` checks the hash; with the identity it also decrypts and reads the archive through, writing nothing.
-- `restore` refuses a directory that is not empty unless `--force`.
+- `restore` refuses a directory that is not empty unless `--force`, and holds the directory's lock while it writes. Restored without a record store, every source's cursor, seen list, resume key and stream checkpoint in `state.json` are reset, so the next watch fetches the analysis window again; health history is kept.
+
+## Bundle signing
+
+Evidence bundles carry an Ed25519 signature of their manifest when `SWARMCHASE_SIGNING_KEY` is set, and none when it is unset or empty ([signed bundles](cases.md#signed-bundles)). A value that is not a key fails the bundle.
+
+```sh
+swarmchase key generate --out ~/swarmchase-signing.key --public-out keys/bundle-signing.pub   # once, on the admin's machine
+swarmchase key public                                                                          # key id of SWARMCHASE_SIGNING_KEY, and whether it is published
+```
+
+- The value is the 32-byte secret seed, as 64 hex digits or base64. It lives in `env.list` on the machine that drafts reports; it is never committed, printed or written anywhere but the file `key generate` makes.
+- `key generate` writes the seed to `--out` as a `SWARMCHASE_SIGNING_KEY=` line, never over an existing file, readable by its owner only where the system has Unix permissions. It refuses a path inside a git checkout unless git ignores it. It prints only the public key and key id.
+- Publishing a key is the maintainer's decision: committing `keys/bundle-signing.pub` publishes it. The site build then serves it at the same path and names it on the providers page, in `security.txt` and in `swarm-report.json`; without the file they say bundles are not signed yet. The build reads only the committed public key.
+- Whoever holds the seed can sign bundles as this project. If it leaks, publish a new key and remove the old line from `keys/bundle-signing.pub`, so bundles signed with it stop verifying. To retire a key that did not leak, add the new line and keep the old one.
+- The secret-scan gate refuses a committed `SWARMCHASE_SIGNING_KEY=` line with a value.
 
 ## Canary tokens
 

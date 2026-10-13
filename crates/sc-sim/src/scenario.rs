@@ -121,7 +121,8 @@ impl Pace {
 pub enum Mode {
     /// Every agent writes to one callback inbox (S1).
     Sink,
-    /// Agents start and stop together (S3).
+    /// One dispatcher sends each step to every agent: their requests line up
+    /// step by step at one offset (S3).
     Sync,
     /// The first agent reads hosts, the rest attack the same hosts after (S4).
     Roles,
@@ -130,6 +131,11 @@ pub enum Mode {
     /// The first agent names a gist in its requests; the rest fetch it
     /// within the hour, then work their own hosts (S2).
     Handoff,
+    /// The first agent is a planner sending a request at irregular
+    /// dispatches, twenty times its pace apart (80 s to 30 min at model pace);
+    /// each other agent sends one 40 to 85 seconds after each dispatch
+    /// (co-activity).
+    Dispatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -190,6 +196,15 @@ pub struct Actor {
     /// Hours after the scenario start the actor begins.
     #[serde(default)]
     pub offset_hours: f64,
+    /// Move the start to a seeded 7 to 53 minutes past its hour, so the
+    /// actor's runs do not begin on a clock hour.
+    #[serde(default)]
+    pub off_hour: bool,
+    /// Share of each use's templates a run draws from: a seeded subset per
+    /// swarm or fleet, else per run, so unrelated actors do not all copy one
+    /// small set of records and share its habits. 1 is the whole palette.
+    #[serde(default = "whole")]
+    pub palette_share: f64,
     /// For a planter: the actor (by index) whose identifiers it copies.
     #[serde(default)]
     pub copies: Option<usize>,
@@ -203,4 +218,7 @@ fn default_hosts() -> usize {
 }
 fn yes() -> bool {
     true
+}
+fn whole() -> f64 {
+    1.0
 }

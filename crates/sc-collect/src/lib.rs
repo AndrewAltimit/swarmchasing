@@ -3,7 +3,7 @@
 //! Ground rules, enforced by what this crate does and does not implement:
 //! - Read **indexes and public records only** (CDX listings, scan-service
 //!   search results, CT log entries, registry and event-stream metadata,
-//!   security.txt). Never download archived content, package code or WARC data.
+//!   wiki edit streams, security.txt). Never download archived content, package code or WARC data.
 //!   Never open captured pages or the URLs agents submitted: they may be live
 //!   exploit payloads or trigger callbacks to the operator.
 //! - Never read or write agent callback channels (inboxes, ntfy topics, pastes).
@@ -47,6 +47,7 @@ mod urlquery;
 mod urlscan;
 mod wayback;
 mod wellknown;
+pub mod wikimedia;
 
 pub use arquivo::{Arquivo, parse_arquivo_cdx};
 pub use client::{Client, DEFAULT_MAX_BODY, Retry, USER_AGENT, parse_retry_after};
@@ -63,6 +64,7 @@ pub use urlquery::{Urlquery, UrlqueryPage, parse_urlquery_search};
 pub use urlscan::{Urlscan, parse_urlscan_search};
 pub use wayback::{CdxPage, Wayback, parse_wayback_cdx};
 pub use wellknown::{FOOTPRINTS, WellKnown};
+pub use wikimedia::WikiLinks;
 
 /// A query against a record source: a CDX URL pattern, a search query, or
 /// the filter a streamed source keeps records by. Also a `watchlist.toml`
@@ -91,11 +93,14 @@ pub struct CdxQuery {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
     /// For sources read as a stream and filtered: how much of the stream one
-    /// pull reads (CT log entries, GH Archive hours).
+    /// pull reads (CT log entries, GH Archive hours, wall-clock minutes of
+    /// Wikimedia EventStreams).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scan: Option<usize>,
     /// CDX `filter` expressions (`collection:SAWP.*`, `!statuscode:404`),
-    /// applied by the index server (Wayback, Arquivo.pt, Common Crawl).
+    /// applied by the index server (Wayback, Arquivo.pt, Common Crawl); for
+    /// Wikimedia, `domain:<wiki>`, `!domain:<wiki>` and `ns:<n>`, applied as
+    /// the stream is read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filter: Vec<String>,
     /// Wayback: read the time range in windows of this many days, oldest
@@ -108,7 +113,7 @@ pub struct CdxQuery {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canary: Option<String>,
     /// For streamed sources: most compressed megabytes one pull downloads
-    /// (GH Archive).
+    /// (GH Archive, Wikimedia EventStreams).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_mb: Option<u64>,
 }
@@ -156,10 +161,11 @@ pub enum Kind {
     CtLog,
     WellKnown,
     Mcp,
+    Wikimedia,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 12] = [
+    pub const ALL: [Kind; 13] = [
         Self::Wayback,
         Self::Arquivo,
         Self::Urlquery,
@@ -172,6 +178,7 @@ impl Kind {
         Self::CtLog,
         Self::WellKnown,
         Self::Mcp,
+        Self::Wikimedia,
     ];
 
     pub fn name(self) -> &'static str {
@@ -188,6 +195,7 @@ impl Kind {
             Self::CtLog => "ctlog",
             Self::WellKnown => "wellknown",
             Self::Mcp => "mcp",
+            Self::Wikimedia => "wikimedia",
         }
     }
 
@@ -317,6 +325,7 @@ pub fn source(kind: Kind, query: CdxQuery, api_key: Option<String>) -> Result<Bo
         Kind::CtLog => Box::new(CtLog::new(query)?),
         Kind::WellKnown => Box::new(WellKnown::new(query)?),
         Kind::Mcp => Box::new(McpRegistry { query }),
+        Kind::Wikimedia => Box::new(WikiLinks::new(query)?),
     })
 }
 

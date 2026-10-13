@@ -4,13 +4,13 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-20 12:02:03 UTC
-- **Records:** 182 linked public records in 49 cluster(s) (of 327 records reviewed, 260 flagged)
+- **Records:** 187 linked public records in 51 cluster(s) (of 359 records reviewed, 281 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.3
 
 ## Summary
 
-Public scan and archive records show automated agents sending requests to systems we believe you operate (`records[.]agency[.]example` (21), `files[.]depot[.]example` (8), `permits[.]xsvc-a[.]example` (8), `api[.]parts[.]example` (7), `portal[.]clinic[.]example` (6)). We are sharing this so you can check your own logs. We have not confirmed whether any request succeeded.
+Public scan and archive records show automated agents sending requests to systems we believe you operate (`records[.]agency[.]example` (25), `files[.]depot[.]example` (8), `permits[.]xsvc-a[.]example` (8), `api[.]parts[.]example` (7), `portal[.]clinic[.]example` (6)). We are sharing this so you can check your own logs. We have not confirmed whether any request succeeded.
 
 **Attack payloads were present** (see Indicators). We did not test whether they succeeded.
 
@@ -19,16 +19,19 @@ Public scan and archive records show automated agents sending requests to system
 | Category | Rule | Records |
 |---|---|---|
 | Relay / fetch-through services | `relay.corsproxy` | 1 |
+| Relay / fetch-through services | `relay.defuddle_md` | 1 |
 | Relay / fetch-through services | `relay.jina` | 60 |
 | Relay / fetch-through services | `relay.markdown_new` | 1 |
+| Relay / fetch-through services | `relay.pure_md` | 1 |
 | Carrier services and inline programs | `carrier.html_program` | 8 |
 | Carrier services and inline programs | `carrier.httpbin` | 1 |
 | Carrier services and inline programs | `carrier.inline_fetch_program` | 2 |
 | Attack payloads | `exploit.boundary_ids` | 1 |
 | Attack payloads | `exploit.cmdi` | 2 |
 | Attack payloads | `exploit.double_encoded_meta` | 2 |
+| Attack payloads | `exploit.open_redirect_probe` | 1 |
 | Attack payloads | `exploit.sqli_boolean` | 74 |
-| Attack payloads | `exploit.sqli_quote` | 4 |
+| Attack payloads | `exploit.sqli_quote` | 8 |
 | Attack payloads | `exploit.sqli_union` | 11 |
 | Attack payloads | `exploit.ssti` | 4 |
 | Attack payloads | `exploit.traversal` | 5 |
@@ -41,7 +44,7 @@ Public scan and archive records show automated agents sending requests to system
 | Agent tags and markers | `marker.oai_tag` | 1 |
 | Agent tags and markers | `marker.placeholder` | 18 |
 | Agent tags and markers | `marker.placeholder_identity` | 2 |
-| Agent tags and markers | `marker.test_tag` | 2 |
+| Agent tags and markers | `marker.probe_tag` | 2 |
 | Agent tags and markers | `marker.title_write` | 1 |
 | Agent tags and markers | `marker.tool_call_markup` | 2 |
 | Agent tags and markers | `marker.truncated_output` | 2 |
@@ -54,8 +57,10 @@ Public scan and archive records show automated agents sending requests to system
 | Callback / exfiltration channels | `exfil.requestbin` | 3 |
 | Callback / exfiltration channels | `exfil.webhook_site` | 8 |
 | Header fingerprints | `header.agent_ua` | 1 |
+| Header fingerprints | `header.cf_browser_rendering` | 1 |
 | Header fingerprints | `header.gzip_only_requests` | 1 |
 | Header fingerprints | `header.headless_ua` | 5 |
+| Header fingerprints | `header.mcp_fetch_ua` | 1 |
 | Header fingerprints | `header.scripted_ua` | 12 |
 | Header fingerprints | `header.via_ats` | 1 |
 | Outcome states | `outcome.challenge` | 1 |
@@ -80,7 +85,8 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 6. python-httpx. Label: Possible; tag: Inference. Traces: 3 record(s) sent User-Agent `python-httpx/0.27.0`; 3 record(s) match header fingerprint rule header.headless_ua; 3 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) sent User-Agent `python-httpx/0.27.0`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 7. python-requests. Label: Possible; tag: Inference. Traces: 3 record(s) sent User-Agent `python-requests/2.31.0`; 3 record(s) match header fingerprint rule header.scripted_ua; 2 record(s) encode URLs in style `sp20.sorted.noslash`.
 8. scoutagent. Label: Possible; tag: Inference. Traces: 3 record(s) sent User-Agent `ScoutAgent/1.0`.
-9. playwright. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Playwright/1.48`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
+9. modelcontextprotocol. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)`; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.mcp_fetch_ua; 1 record(s) send the header-name set 5b6270b3 (cf-brapi-request-id).
+10. playwright. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Playwright/1.48`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 
 ## Endpoints
 
@@ -88,17 +94,19 @@ Every flagged request to each host, including requests outside the linked cluste
 
 | Host | Hits | First seen | Last seen | Status | Attack payloads |
 |---|---|---|---|---|---|
-| `records[.]agency[.]example` | 29 | 2026-07-02 10:00:00 UTC | 2026-08-10 09:30:00 UTC | historical | `exploit.cmdi`, `exploit.double_encoded_meta`, `exploit.double_encoded_path`, `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.sqli_union`, `exploit.xss` |
+| `records[.]agency[.]example` | 37 | 2026-07-02 10:00:00 UTC | 2026-08-12 11:10:00 UTC | historical | `exploit.cmdi`, `exploit.double_encoded_meta`, `exploit.double_encoded_path`, `exploit.php_eval`, `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.sqli_union`, `exploit.userinfo_confusion`, `exploit.xss` |
 | `data[.]portal[.]example` | 11 | 2026-07-02 10:01:00 UTC | 2026-08-07 09:01:00 UTC | historical | `exploit.sqli_boolean`, `exploit.traversal`, `exploit.traversal_single` |
-| `files[.]depot[.]example` | 8 | 2026-05-15 22:05:07 UTC | 2026-05-15 22:05:16 UTC | historical | `exploit.sqli_boolean`, `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single`, `exploit.xss` |
+| `files[.]depot[.]example` | 9 | 2026-05-15 22:05:07 UTC | 2026-08-12 09:30:00 UTC | historical | `exploit.null_byte`, `exploit.sqli_boolean`, `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single`, `exploit.xss` |
 | `permits[.]xsvc-a[.]example` | 8 | 2026-09-20 10:00:00 UTC | 2026-09-20 10:02:24 UTC | ongoing | `exploit.sqli_boolean` |
 | `api[.]parts[.]example` | 7 | 2026-05-14 03:20:00 UTC | 2026-05-14 03:20:04 UTC | historical | `exploit.sqli_boolean`, `exploit.sqli_union` |
 | `portal[.]clinic[.]example` | 6 | 2026-05-11 14:02:10 UTC | 2026-05-11 14:07:35 UTC | historical | `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.sqli_union` |
 | `portal[.]xsvc-gw[.]example` | 6 | 2026-09-20 12:00:00 UTC | 2026-09-20 12:02:03 UTC | ongoing | `exploit.sqli_boolean` |
 | `intranet[.]lab[.]example` | 5 | 2026-05-16 09:30:00 UTC | 2026-05-16 09:30:04 UTC | historical | `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.ssti`, `exploit.xss` |
+| `api[.]datausa[.]io` | 4 | 2026-08-03 15:30:00 UTC | 2026-08-20 07:00:00 UTC | historical | `exploit.open_redirect_probe`, `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single` |
 | `login[.]coop[.]example` | 4 | 2026-05-13 16:40:00 UTC | 2026-05-13 16:44:00 UTC | historical | `exploit.sqli_boolean` |
 | `shop[.]bakery[.]example` | 4 | 2026-05-12 10:15:00 UTC | 2026-05-12 10:39:30 UTC | historical | `exploit.xss` |
-| `api[.]datausa[.]io` | 3 | 2026-08-03 15:31:00 UTC | 2026-08-20 07:00:00 UTC | historical | `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single` |
+| `civilrightsdata[.]ed[.]gov` | 3 | 2026-06-02 14:00:05 UTC | 2026-06-17 11:26:00 UTC | historical | `exploit.sqli_boolean` |
+| `nmdigital[.]unm[.]edu` | 3 | 2026-05-20 19:01:00 UTC | 2026-05-25 20:00:00 UTC | historical | `exploit.cmd_param` |
 | `node0[.]ledger[.]example` | 3 | 2026-05-14 03:46:09 UTC | 2026-05-14 08:09:29 UTC | historical | `exploit.sqli_boolean` |
 | `node1[.]ledger[.]example` | 3 | 2026-05-14 04:22:49 UTC | 2026-05-14 08:42:49 UTC | historical | `exploit.sqli_boolean` |
 | `recherche-collection-search[.]bac-lac[.]canada[.]ca` | 3 | 2026-06-10 09:12:00 UTC | 2026-06-10 09:14:30 UTC | historical | `exploit.double_encoded_meta`, `exploit.sqli_boolean`, `exploit.sqli_quote` |
@@ -107,7 +115,6 @@ Every flagged request to each host, including requests outside the linked cluste
 | `account[.]utility-portal[.]example` | 2 | 2026-03-12 16:03:00 UTC | 2026-03-12 16:33:00 UTC | historical | `exploit.sqli_boolean` |
 | `api[.]plant-b[.]example` | 2 | 2026-09-03 09:00:00 UTC | 2026-09-03 09:02:00 UTC | historical | `exploit.traversal`, `exploit.traversal_single` |
 | `billing[.]utility-portal[.]example` | 2 | 2026-03-12 16:00:00 UTC | 2026-03-12 16:30:00 UTC | historical | `exploit.sqli_boolean` |
-| `civilrightsdata[.]ed[.]gov` | 2 | 2026-06-02 14:00:05 UTC | 2026-06-02 14:03:10 UTC | historical | `exploit.sqli_boolean` |
 | `demo[.]testfire[.]net` | 2 | 2026-08-11 09:00:00 UTC | 2026-08-11 09:00:30 UTC | historical | `exploit.sqli_boolean`, `exploit.xss` |
 | `intranet[.]xsvc-h[.]example` | 2 | 2026-09-20 11:00:00 UTC | 2026-09-20 11:04:00 UTC | ongoing | `exploit.sqli_union` |
 | `meter[.]utility-portal[.]example` | 2 | 2026-03-12 16:02:00 UTC | 2026-03-12 16:32:00 UTC | historical | `exploit.sqli_boolean` |
@@ -154,7 +161,6 @@ Every flagged request to each host, including requests outside the linked cluste
 | `q1[.]transit-authority[.]example` | 1 | 2026-03-09 09:03:00 UTC | 2026-03-09 09:03:00 UTC | historical | none seen |
 | `q2[.]transit-authority[.]example` | 1 | 2026-03-09 09:05:00 UTC | 2026-03-09 09:05:00 UTC | historical | none seen |
 | `gist[.]github[.]com` | 3 | 2026-03-05 14:00:00 UTC | 2026-03-05 14:02:00 UTC | historical | none seen |
-| `nmdigital[.]unm[.]edu` | 2 | 2026-05-20 19:01:00 UTC | 2026-05-20 19:04:00 UTC | historical | none seen |
 | `gist[.]githubusercontent[.]com` | 1 | 2026-03-05 14:25:00 UTC | 2026-03-05 14:25:00 UTC | historical | none seen |
 | `h0[.]county-records[.]example` | 1 | 2026-03-02 10:00:00 UTC | 2026-03-02 10:00:00 UTC | historical | none seen |
 | `h1[.]county-records[.]example` | 1 | 2026-03-02 10:00:50 UTC | 2026-03-02 10:00:50 UTC | historical | none seen |
@@ -245,43 +251,43 @@ Every flagged request to each host, including requests outside the linked cluste
 - **C19** (significant): 3 records, 1 run(s), 2026-08-03 09:00:00 UTC → 2026-08-03 09:00:45 UTC, median gap 25s
   - iterative probing: 3 variants of `id` on `records[.]agency[.]example/api/items` over 45s (median gap 25s, model pace)
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C20** (significant): 3 records, 2 run(s), 2026-08-05 10:00:00 UTC → 2026-08-07 13:00:00 UTC, median gap 2.1d
+- **C20** (significant): 3 records, 1 run(s), 2026-08-03 15:30:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
+  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace)
+  - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C21** (significant): 3 records, 2 run(s), 2026-08-05 10:00:00 UTC → 2026-08-07 13:00:00 UTC, median gap 2.1d
   - linked by: `param:uqtag=covrun7`
-- **C21** (significant): 3 records, 2 run(s), 2026-08-06 16:00:00 UTC → 2026-08-07 12:00:00 UTC, median gap 20.0h
+- **C22** (significant): 3 records, 2 run(s), 2026-08-06 16:00:00 UTC → 2026-08-07 12:00:00 UTC, median gap 20.0h
   - linked by: `exfil.requestbin:c0ve7x9.m.pipedream.net`
   - relay stack `carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
-- **C22** (significant): 2 records, 1 run(s), 2026-04-01 06:03:41 UTC → 2026-04-01 06:06:01 UTC, median gap 2m
+- **C23** (significant): 2 records, 1 run(s), 2026-04-01 06:03:41 UTC → 2026-04-01 06:06:01 UTC, median gap 2m
   - linked by: `param:uqtag=la1q7c`
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C23** (significant): 2 records, 1 run(s), 2026-04-04 07:03:41 UTC → 2026-04-04 07:06:01 UTC, median gap 2m
+- **C24** (significant): 2 records, 1 run(s), 2026-04-04 07:03:41 UTC → 2026-04-04 07:06:01 UTC, median gap 2m
   - linked by: `param:uqtag=lb8w2n`
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C24** (significant): 2 records, 1 run(s), 2026-04-07 08:03:41 UTC → 2026-04-07 08:06:01 UTC, median gap 2m
+- **C25** (significant): 2 records, 1 run(s), 2026-04-07 08:03:41 UTC → 2026-04-07 08:06:01 UTC, median gap 2m
   - linked by: `param:uqtag=lc4e9r`
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C25** (significant): 2 records, 1 run(s), 2026-04-10 09:03:41 UTC → 2026-04-10 09:06:01 UTC, median gap 2m
+- **C26** (significant): 2 records, 1 run(s), 2026-04-10 09:03:41 UTC → 2026-04-10 09:06:01 UTC, median gap 2m
   - linked by: `param:uqtag=ld6t3m`
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C26** (significant): 2 records, 1 run(s), 2026-04-13 10:03:41 UTC → 2026-04-13 10:06:01 UTC, median gap 2m
+- **C27** (significant): 2 records, 1 run(s), 2026-04-13 10:03:41 UTC → 2026-04-13 10:06:01 UTC, median gap 2m
   - linked by: `param:uqtag=le2y8k`
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C27** (significant): 2 records, 1 run(s), 2026-04-16 11:03:41 UTC → 2026-04-16 11:06:01 UTC, median gap 2m
+- **C28** (significant): 2 records, 1 run(s), 2026-04-16 11:03:41 UTC → 2026-04-16 11:06:01 UTC, median gap 2m
   - linked by: `param:uqtag=lf9u4p`
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C28** (significant): 2 records, 1 run(s), 2026-04-19 12:03:41 UTC → 2026-04-19 12:06:01 UTC, median gap 2m
+- **C29** (significant): 2 records, 1 run(s), 2026-04-19 12:03:41 UTC → 2026-04-19 12:06:01 UTC, median gap 2m
   - linked by: `param:uqtag=lg5i1x`
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C29** (significant): 2 records, 1 run(s), 2026-04-22 13:03:41 UTC → 2026-04-22 13:06:01 UTC, median gap 2m
+- **C30** (significant): 2 records, 1 run(s), 2026-04-22 13:03:41 UTC → 2026-04-22 13:06:01 UTC, median gap 2m
   - linked by: `param:uqtag=lh3o6v`
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
-- **C30** (significant): 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
+- **C31** (significant): 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
   - iterative probing: 3 variants of `Measure_Id`, `State_Id`, `State_Id[]`, `survey_Year_Key` on `civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation` over 4m (median gap 3m, slow pace); 1 of its requests matched no rule
-- **C31** (significant): 2 records, 1 run(s), 2026-07-02 10:24:00 UTC → 2026-07-02 10:25:00 UTC, median gap 60s
-- **C32** (significant): 2 records, 1 run(s), 2026-08-03 09:01:10 UTC → 2026-08-03 09:01:40 UTC, median gap 30s
+- **C32** (significant): 2 records, 1 run(s), 2026-07-02 10:24:00 UTC → 2026-07-02 10:25:00 UTC, median gap 60s
+- **C33** (significant): 2 records, 1 run(s), 2026-08-03 09:01:10 UTC → 2026-08-03 09:01:40 UTC, median gap 30s
   - payload dialect `c0942b1d` over 2 records: cmd (semicolon ×1, subshell ×1); first seen cmd.semicolon → cmd.subshell. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C33** (significant): 2 records, 1 run(s), 2026-08-03 15:31:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
-  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace); 1 of its requests matched no rule
-  - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C34** (significant): 2 records, 1 run(s), 2026-08-10 09:20:00 UTC → 2026-08-10 09:30:00 UTC, median gap 10m
 - **C35** (significant): 2 records, 1 run(s), 2026-08-11 09:00:00 UTC → 2026-08-11 09:00:30 UTC, median gap 30s
   - linked by: `param:uqtag=covscope`
@@ -320,6 +326,8 @@ Every flagged request to each host, including requests outside the linked cluste
   - linked by: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
 - **C49** (suggestive): 2 records, 1 run(s), 2026-08-07 09:00:00 UTC → 2026-08-07 09:01:00 UTC, median gap 60s
   - linked by: `exfil.ntfy:/ntfy.sh/covrun7results`
+- **C50** (suggestive): 2 records, 1 run(s), 2026-08-12 09:00:00 UTC → 2026-08-12 09:05:00 UTC, median gap 5m
+- **C51** (suggestive): 2 records, 1 run(s), 2026-08-12 09:50:00 UTC → 2026-08-12 09:55:00 UTC, median gap 5m
 
 ## Representative records
 

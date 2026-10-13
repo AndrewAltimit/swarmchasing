@@ -3,13 +3,43 @@
 // with a table view, and every mark that carries a tooltip shows it on hover,
 // keyboard focus and tap. Labels are record-derived text: they go in as text.
 
-import { el, svg, activate } from "./dom.js";
+import { el, svg, activate, download } from "./dom.js";
 import { tip } from "./tip.js";
 
 export { tip };
 import { fmtShort, fmtTs, dur } from "./fmt.js";
 
-/** A chart with its legend, caption and a "View as table" toggle. */
+// Presentation properties copied onto a chart's exported copy, so the file
+// draws as the page does without the site's stylesheet.
+const EXPORT_PROPS = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-opacity", "opacity", "font-family", "font-size", "font-weight", "visibility", "dominant-baseline"];
+
+/**
+ * A chart as a standalone SVG file: a copy with each element's computed
+ * style set through CSSOM (the copy is never put in the page) and the page
+ * background behind it. Text stays text: record-derived labels are never
+ * markup.
+ */
+export function svgFile(chart) {
+  const copy = chart.cloneNode(true);
+  const from = [chart, ...chart.querySelectorAll("*")];
+  const to = [copy, ...copy.querySelectorAll("*")];
+  from.forEach((node, i) => {
+    const cs = getComputedStyle(node);
+    for (const p of EXPORT_PROPS) to[i].style.setProperty(p, cs.getPropertyValue(p));
+    to[i].removeAttribute("tabindex");
+  });
+  const box = chart.viewBox?.baseVal;
+  const bg = svg("rect", { x: box?.x ?? 0, y: box?.y ?? 0, width: box?.width ?? chart.getAttribute("width") ?? "100%", height: box?.height ?? chart.getAttribute("height") ?? "100%" });
+  bg.style.setProperty("fill", getComputedStyle(document.body).getPropertyValue("background-color"));
+  copy.prepend(bg);
+  copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(copy);
+}
+
+/** A file name from a chart's label: `swarmchase-runs-per-cluster.svg`. */
+const fileName = (label) => `swarmchase-${String(label || "chart").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "chart"}.svg`;
+
+/** A chart with its legend, caption, a "View as table" toggle and, for an SVG chart, a download. */
 export function figure({ chart, legend = null, caption = null, head = [], rows = [] }) {
   const table = el("div", { class: "scroll", hidden: true },
     el("table", {}, el("thead", {}, el("tr", {}, head.map((h) => el("th", { scope: "col" }, h)))),
@@ -22,8 +52,18 @@ export function figure({ chart, legend = null, caption = null, head = [], rows =
     btn.setAttribute("aria-expanded", String(open));
     btn.textContent = open ? "View as chart" : "View as table";
   });
+  const svgChart = chart instanceof SVGSVGElement ? chart : chart.querySelector?.("svg.chart");
+  let save = null;
+  if (svgChart) {
+    save = el("button", { type: "button", title: "Download this chart as an SVG file" }, "Download SVG");
+    save.addEventListener("click", () => {
+      // The chart may have been redrawn since: take the one shown now.
+      const now = chart instanceof SVGSVGElement ? chart : chart.querySelector?.("svg.chart") ?? svgChart;
+      download(fileName(now.getAttribute("aria-label")), svgFile(now), "image/svg+xml");
+    });
+  }
   return el("figure", { class: "chart-box" },
-    el("div", { class: "chart-tools" }, legend ?? el("span"), btn), chart, table,
+    el("div", { class: "chart-tools" }, legend ?? el("span"), el("span", { class: "chart-buttons" }, btn, save)), chart, table,
     caption ? el("figcaption", {}, caption) : null);
 }
 
@@ -66,22 +106,72 @@ export function zoomWindow(full, domain, factor = 1, shift = 0) {
   return out[0] <= f0 && out[1] >= f1 ? null : out;
 }
 
+// The width an idle stretch keeps when the runs are fitted to activity.
+const GAP_PX = 22;
+
+/**
+ * A time scale fitted to activity: the runs' active stretches share the
+ * width by duration (each at least a sliver), and every idle stretch longer
+ * than a few percent of the span shrinks to GAP_PX. Returns null when there
+ * is no idle stretch to shrink. `x` maps a time to a position, `t` back.
+ */
+export function fitScale(runs, t0, t1, x0, x1) {
+  const total = Math.max(60, t1 - t0);
+  const minGap = Math.max(600, total * 0.05);
+  const sorted = runs.map((r) => [Math.max(t0, r.start), Math.min(t1, r.end)]).filter(([a, b]) => b >= a).sort((p, q) => p[0] - q[0]);
+  const segs = [];
+  for (const [a, b] of sorted) {
+    const last = segs[segs.length - 1];
+    if (last && a - last[1] < minGap) last[1] = Math.max(last[1], b);
+    else segs.push([a, b]);
+  }
+  if (segs.length < 2) return null;
+  const avail = x1 - x0 - GAP_PX * (segs.length - 1);
+  if (avail < 80) return null;
+  const weight = segs.map(([a, b]) => Math.max(b - a, total * 0.03, 60));
+  const sum = weight.reduce((n, w) => n + w, 0);
+  const pieces = [];
+  let px = x0;
+  segs.forEach(([a, b], i) => {
+    const w = (avail * weight[i]) / sum;
+    pieces.push({ t0: a, t1: b, p0: px, p1: px + w, gap: false });
+    px += w;
+    if (i < segs.length - 1) {
+      pieces.push({ t0: b, t1: segs[i + 1][0], p0: px, p1: px + GAP_PX, gap: true });
+      px += GAP_PX;
+    }
+  });
+  const lerp = (v, a0, a1, b0, b1) => (a1 === a0 ? (b0 + b1) / 2 : b0 + ((v - a0) / (a1 - a0)) * (b1 - b0));
+  const x = (t) => {
+    const p = pieces.find((q) => t <= q.t1) ?? pieces[pieces.length - 1];
+    return lerp(Math.max(p.t0, Math.min(p.t1, t)), p.t0, p.t1, p.p0, p.p1);
+  };
+  const t = (v) => {
+    const p = pieces.find((q) => v <= q.p1) ?? pieces[pieces.length - 1];
+    return lerp(Math.max(p.p0, Math.min(p.p1, v)), p.p0, p.p1, p.t0, p.t1);
+  };
+  return { x, t, pieces };
+}
+
 /**
  * Run swim-lanes: a lane per cluster, a bar per run, `pauses` (input-wide)
  * shaded, `bands` (shared pauses, per lane key) outlined. With `onZoom`,
  * dragging across the plot zooms to that span, and the chart takes + and -
  * (zoom), the arrow keys (pan) and 0 (reset) when focused; `domain` is the
- * window shown, null for everything.
+ * window shown, null for everything. With `fit` and no `domain`, idle
+ * stretches shrink to a marked gap ([`fitScale`]), so runs days apart stay
+ * readable; a zoomed window is always drawn to scale.
  */
-export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onSelect = null, width = 900, label, domain = null, onZoom = null }) {
+export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onSelect = null, width = 900, label, domain = null, onZoom = null, fit = false }) {
   const full = runExtent(lanes);
   if (!full) return el("p", { class: "hint" }, "No runs with timestamps.");
   const [t0, t1] = domain ?? full;
   const span = Math.max(60, t1 - t0);
   const W = Math.max(320, width), LH = 26, L = 56, R = 10, T = 6, B = 26;
   const H = T + B + LH * lanes.length;
-  const x = (t) => L + ((t - t0) / span) * (W - L - R);
-  const tAt = (px) => t0 + ((px - L) / (W - L - R)) * span;
+  const fitted = fit && !domain ? fitScale(lanes.flatMap((l) => l.runs), t0, t1, L, W - R) : null;
+  const x = fitted ? fitted.x : (t) => L + ((t - t0) / span) * (W - L - R);
+  const tAt = fitted ? fitted.t : (px) => t0 + ((px - L) / (W - L - R)) * span;
   const root = svg("svg", {
     class: `chart swim${onZoom ? " zoomable" : ""}`, viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "group", "aria-label": label,
     tabindex: onZoom ? 0 : null, "aria-keyshortcuts": onZoom ? "+ - ArrowLeft ArrowRight 0" : null,
@@ -141,11 +231,29 @@ export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onS
   for (const p of clip(pauses, t0, t1)) root.append(svg("rect", { class: "pause", x: x(p.start), y: T, width: Math.max(1, x(p.end) - x(p.start)), height: H - T - B }));
   const grid = svg("g", { class: "grid" });
   const axis = svg("g", { class: "axis" });
-  const ticks = axisTicks(t0, t1, W < 520 ? 2 : 4);
-  ticks.forEach((t, i) => {
-    grid.append(svg("line", { x1: x(t), x2: x(t), y1: T, y2: H - B }));
-    axis.append(svg("text", { x: x(t), y: H - 8, "text-anchor": i === 0 ? "start" : i === ticks.length - 1 ? "end" : "middle" }, fmtShort(t)));
-  });
+  if (fitted) {
+    // A tick where each active stretch starts, labelled when there is room;
+    // each idle stretch a hatched gap with its length.
+    let lastLabel = -Infinity;
+    for (const p of fitted.pieces) {
+      if (p.gap) {
+        root.append(tip(svg("rect", { class: "idle-gap", x: p.p0 + 3, y: T, width: Math.max(2, p.p1 - p.p0 - 6), height: H - T - B }), `Idle ${dur(p.t1 - p.t0)}, compressed`));
+        axis.append(svg("path", { class: "gap-mark", d: `M${p.p0 + 6},${H - B + 6} l4,-8 M${p.p1 - 10},${H - B + 6} l4,-8` }));
+        continue;
+      }
+      grid.append(svg("line", { x1: p.p0, x2: p.p0, y1: T, y2: H - B }));
+      if (p.p0 - lastLabel >= 84 && p.p0 <= W - R - 40) {
+        axis.append(svg("text", { x: p.p0, y: H - 8, "text-anchor": "start" }, fmtShort(p.t0)));
+        lastLabel = p.p0;
+      }
+    }
+  } else {
+    const ticks = axisTicks(t0, t1, W < 520 ? 2 : 4);
+    ticks.forEach((t, i) => {
+      grid.append(svg("line", { x1: x(t), x2: x(t), y1: T, y2: H - B }));
+      axis.append(svg("text", { x: x(t), y: H - 8, "text-anchor": i === 0 ? "start" : i === ticks.length - 1 ? "end" : "middle" }, fmtShort(t)));
+    });
+  }
   root.append(grid, axis);
   lanes.forEach((lane, i) => {
     const y = T + i * LH;

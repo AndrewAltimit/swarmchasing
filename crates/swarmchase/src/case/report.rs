@@ -98,6 +98,7 @@ pub(crate) fn draft(
         &pinned.rules,
         today,
         crate::bundle::git_commit(),
+        crate::signing::signer()?.as_ref(),
     )?;
     let subject = match audience {
         Audience::Provider => format!("Suspected AI agent activity: {} [{id}]", c.title),

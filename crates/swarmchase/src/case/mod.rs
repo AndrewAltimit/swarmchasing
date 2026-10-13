@@ -52,12 +52,11 @@ pub use sc_case::report::{affected_hosts, report_options, reported};
 pub(crate) use status::status;
 
 use crate::pinning::{RulesText, case_rules, pin_rules};
-use crate::store::{read_json, write_json};
+use crate::store::{read_json_kept, write_json_kept};
 use anyhow::{Context, Result, bail};
 use sc_case::bundle::to_ndjson;
 use sc_core::{Analysis, Audience, Observation, Rules, analyze};
 use std::collections::BTreeSet;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn case_dir(root: &Path, id: &str) -> Result<PathBuf> {
@@ -75,10 +74,7 @@ pub fn load(root: &Path, id: &str) -> Result<Case> {
 pub(crate) fn save(root: &Path, c: &Case) -> Result<()> {
     let dir = case_dir(root, &c.id)?;
     std::fs::create_dir_all(&dir)?;
-    let p = dir.join("case.toml");
-    let tmp = dir.join("case.toml.tmp");
-    std::fs::write(&tmp, c.to_toml()?)?;
-    std::fs::rename(&tmp, &p).with_context(|| format!("writing {}", p.display()))
+    crate::store::write_atomic(&dir.join("case.toml"), c.to_toml()?.as_bytes())
 }
 
 pub fn update(root: &Path, id: &str, f: impl FnOnce(&mut Case) -> Result<()>) -> Result<()> {
@@ -142,6 +138,31 @@ pub fn analysis(root: &Path, c: &Case, scope: &Scope) -> Result<Analysis> {
     Pinned::new(root, c)?.analysis(scope)
 }
 
+/// Cases that did not load: each one's ID and why.
+pub(crate) type Broken = Vec<(String, String)>;
+
+/// Every case under `root` that loads, by ID, and the IDs of those that do
+/// not, with why: one damaged case.toml never hides the others.
+pub(crate) fn all_readable(root: &Path) -> Result<(Vec<Case>, Broken)> {
+    let mut cases = Vec::new();
+    let mut broken = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for e in entries {
+            let p = e?.path();
+            if p.join("case.toml").is_file() {
+                let id = p.file_name().unwrap_or_default().to_string_lossy();
+                match load(root, &id) {
+                    Ok(c) => cases.push(c),
+                    Err(e) => broken.push((id.to_string(), format!("{e:#}"))),
+                }
+            }
+        }
+    }
+    cases.sort_by(|a, b| a.id.cmp(&b.id));
+    broken.sort();
+    Ok((cases, broken))
+}
+
 /// Every case under `root`, by ID. A case file that does not parse is an error.
 pub(crate) fn all(root: &Path) -> Result<Vec<Case>> {
     let mut cases = Vec::new();
@@ -174,13 +195,16 @@ pub(crate) fn record_ids(root: &Path, id: &str) -> Result<BTreeSet<String>> {
     Ok(load_records(root, id)?.into_iter().map(|o| o.id).collect())
 }
 
+/// The case's records. A line that cannot be read (a write cut short, bytes
+/// that are not UTF-8) is skipped with a warning, so one bad line never
+/// stops the case.
 fn load_records(root: &Path, id: &str) -> Result<Vec<Observation>> {
     let p = records_path(root, id)?;
-    let text = std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
-    text.lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l).with_context(|| format!("parsing {}", p.display())))
-        .collect()
+    let (records, bad) = crate::store::read_ndjson(&p)?;
+    if bad > 0 {
+        eprintln!("warning: {}: {bad} unreadable line(s) skipped", p.display());
+    }
+    Ok(records)
 }
 
 /// Open a case from `records`, pinned to `rules`.
@@ -234,10 +258,7 @@ pub(crate) fn add_records(
     if fresh.is_empty() {
         return Ok((0, 0));
     }
-    let mut f = std::fs::OpenOptions::new()
-        .append(true)
-        .open(records_path(root, id)?)?;
-    f.write_all(to_ndjson(&fresh).as_bytes())?;
+    crate::store::append(&records_path(root, id)?, &to_ndjson(&fresh))?;
     let n = fresh.len();
     all.extend(fresh);
     // The case's own records only: an operator's logs add no endpoints.
@@ -255,7 +276,14 @@ pub(crate) fn add_records(
 /// case.toml, log it, and carry the watch's hits for it over in
 /// `<data>/state.json`. Refused once a notice is published, because the
 /// notice's ID is public.
+///
+/// The data directory's lock is held throughout, so a watch never reads
+/// the case or `state.json` half renamed. The new case.toml is written in
+/// the old directory before the move, so the move itself is the one step
+/// that changes which ID the case has.
 pub(crate) fn rename(root: &Path, old: &str, new: &str, today: &str) -> Result<()> {
+    let data = root.parent().unwrap_or(root);
+    let _lock = crate::store::lock_data(data, "case rename")?;
     let mut c = load(root, old)?;
     let to = case_dir(root, new)?;
     if to.exists() {
@@ -264,19 +292,24 @@ pub(crate) fn rename(root: &Path, old: &str, new: &str, today: &str) -> Result<(
     if c.status == CaseStatus::Published || c.publish_pending.is_some() {
         bail!("case {old} has a published notice; its ID stays");
     }
-    std::fs::rename(case_dir(root, old)?, &to)
-        .with_context(|| format!("moving case {old} to {}", to.display()))?;
+    let from = case_dir(root, old)?;
+    let before = std::fs::read(from.join("case.toml"))?;
     c.id = new.to_string();
     c.log(today, format!("renamed from {old}"));
-    save(root, &c)?;
+    crate::store::write_atomic(&from.join("case.toml"), c.to_toml()?.as_bytes())?;
+    if let Err(e) = std::fs::rename(&from, &to) {
+        // Put the old case.toml back, so the case keeps its old ID whole.
+        let _ = crate::store::write_atomic(&from.join("case.toml"), &before);
+        return Err(e).with_context(|| format!("moving case {old} to {}", to.display()));
+    }
 
-    let state = root.parent().unwrap_or(root).join("state.json");
-    if let Some(mut s) = read_json::<serde_json::Value>(&state)?
+    let state = data.join("state.json");
+    if let Some(mut s) = read_json_kept::<serde_json::Value>(&state)?
         && let Some(cases) = s.get_mut("cases").and_then(|v| v.as_object_mut())
         && let Some(w) = cases.remove(old)
     {
         cases.insert(new.to_string(), w);
-        write_json(&state, &s)?;
+        write_json_kept(&state, &s)?;
     }
     Ok(())
 }
@@ -360,6 +393,11 @@ mod tests {
 
         assert!(rename(&root, "old-1", "taken", "2026-10-13").is_err());
         assert!(rename(&root, "old-1", "Bad Id", "2026-10-13").is_err());
+        // Not while another command holds the data directory.
+        let held = crate::store::lock_data(root.parent().unwrap(), "watch").unwrap();
+        assert!(rename(&root, "old-1", "new-1", "2026-10-13").is_err());
+        assert!(load(&root, "old-1").is_ok());
+        drop(held);
         rename(&root, "old-1", "new-1", "2026-10-13").unwrap();
         assert!(!root.join("old-1").exists());
         let c = load(&root, "new-1").unwrap();
@@ -375,6 +413,25 @@ mod tests {
         })
         .unwrap();
         assert!(rename(&root, "new-1", "newer-1", "2026-10-14").is_err());
+        cleanup(&root);
+    }
+
+    #[test]
+    fn a_case_that_does_not_load_is_listed_apart() {
+        let root = scratch("broken");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        new_case(&root, "good-1", "Portal", records, &rules, "2026-10-12").unwrap();
+        std::fs::create_dir_all(root.join("bad-1")).unwrap();
+        std::fs::write(root.join("bad-1").join("case.toml"), "id = [").unwrap();
+        assert!(all(&root).is_err());
+        let (cases, broken) = all_readable(&root).unwrap();
+        assert_eq!(cases.len(), 1);
+        assert_eq!(broken.len(), 1);
+        assert_eq!(broken[0].0, "bad-1");
+        let mut out = Vec::new();
+        status::list(&root, &mut out).unwrap();
+        assert!(String::from_utf8(out).unwrap().contains("good-1"));
         cleanup(&root);
     }
 

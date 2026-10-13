@@ -11,6 +11,7 @@ pub mod bursts;
 pub mod canary;
 pub mod capture;
 pub mod chains;
+pub(crate) mod chance;
 pub mod coactivity;
 pub mod crossservice;
 pub mod crosswalk;
@@ -58,7 +59,10 @@ pub use endpoints::{Activity, EndpointOptions, EndpointView, endpoints};
 pub use escalation::{Escalation, Route};
 pub use eval::summary::{Summary, summarize};
 pub use eval::{EvalReport, Label, LabelSet, evaluate, parse_labels};
-pub use extract::{Extracted, Layer, defang, defang_host, extract, unwrap_layers};
+pub use extract::{
+    Extracted, Layer, defang, defang_host, extract, intermediary_hosts, is_intermediary_host,
+    unwrap_layers,
+};
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
@@ -76,5 +80,5 @@ pub use report::{Audience, Notice, ReportOptions, Reported, render_markdown, ren
 pub use rules::{DEFAULT_RULES, RuleSet, Rules};
 pub use securitytxt::{SecurityTxt, parse_security_txt};
 pub use stamp::{EvalSnapshot, Stamp, StampCluster};
-pub use swarm::{EdgeStrength, RunRef, SwarmEdge, SwarmEdgeKind};
+pub use swarm::{EdgeStrength, RunRef, SwarmEdge, SwarmEdgeKind, SwarmOptions};
 pub use timing::{SharedPause, SharedPauseOptions, StaleDates, shared_pauses, stale_dates};

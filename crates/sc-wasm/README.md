@@ -44,6 +44,7 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 | `check_claims(claims_json)` | Engine. The claims re-serialised after validation. |
 | `eval_labelled(rules_json, set)` | Tools. The eval report on the labelled NDJSON `set` (the site serves `samples/eval/*.ndjson` joined), every labelled record's tier, and the records misclassified. |
 | `verify_bundle(records_ndjson, analysis_json, stamp_json, rules_json, claims_json)` | Tools. Re-runs an evidence bundle's analysis and compares it, and the bundle's own `analysis.json`, with its stamp, through [`sc-case`](../sc-case/README.md) as `swarmchase case verify` does, and adds the attribution layers. The page checks the manifest hashes itself with Web Crypto. |
+| `verify_signature(manifest, signature, public_keys)` | Tools. `MANIFEST.sha256.sig` checked against the site's published keys (key file lines), through [`sc-case`](../sc-case/README.md): `status` (`signed`, `invalid`, `unsigned`, `unchecked`), `key_id`, `reason`, `line`, `published`. |
 | `defang(text)` | The text with URLs defanged. |
 | `parse_security_txt(text)` | Tools. The parsed `security.txt` fields. |
 | `identity_catalog()` | Tools. The declared-agent catalog, with each range file's and directory's URL. |

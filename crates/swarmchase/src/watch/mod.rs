@@ -3,7 +3,8 @@
 //! Data directory layout (outside git):
 //!
 //! ```text
-//! <out>/state.json              per-source cursors and pending resume keys
+//! <out>/state.json              per-source cursors and pending resume keys (.bak: the previous copy)
+//! <out>/.lock                   held by the run, so one writer works here at a time
 //! <out>/store/<source>.ndjson   every record collected within retention, redacted, deduplicated
 //! <out>/summary.json            clusters and endpoints as of the last run (digest baseline)
 //! <out>/ledger.json             each cluster's history across runs (ledger)
@@ -68,7 +69,10 @@ pub(crate) mod run_summary;
 pub(crate) mod triage;
 
 use crate::health::{RuleHistory, RuleRun};
-use crate::store::{append, load_store, prune, read_json, to_ndjson, write_json};
+use crate::store::{
+    append, load_store_counted, prune, read_json, read_json_kept, to_ndjson, write_json,
+    write_json_kept,
+};
 use anyhow::{Context, Result, bail};
 use cases::{CaseCheck, CaseWatch};
 use digest::{Alert, AlertKind, DigestInput, Health, SourceReport, Summary, digest, summarise};
@@ -247,11 +251,14 @@ fn watch(
             crate::store::describe_data(out)
         );
     }
+    // One writer at a time: a second watch, or a case rename, waits for this
+    // one to finish.
+    let _lock = crate::store::lock_data(out, "watch")?;
     std::fs::create_dir_all(&run_dir)?;
     std::fs::create_dir_all(out.join("store"))?;
 
     let state_path = out.join("state.json");
-    let mut state: State = read_json(&state_path)?.unwrap_or_default();
+    let mut state: State = read_json_kept(&state_path)?.unwrap_or_default();
     let mut reports = Vec::new();
     let mut fresh: Vec<Observation> = Vec::new();
     let mut new_ids = BTreeSet::new();
@@ -359,7 +366,7 @@ fn watch(
             }
         }
         // Save after every source so an interrupted run keeps its progress.
-        write_json(&state_path, &state)?;
+        write_json_kept(&state_path, &state)?;
         reports.push(rep);
     }
 
@@ -389,7 +396,18 @@ fn watch(
     // Rolling analysis over everything recent, not just this run's records,
     // so clusters can span runs.
     let since = now.timestamp() - wl.analysis_window_days * DAY;
-    let mut stored = load_store(&out.join("store"), since - wl.overlap_days * DAY)?;
+    let (mut stored, damaged) =
+        load_store_counted(&out.join("store"), since - wl.overlap_days * DAY)?;
+    for (file, n) in &damaged {
+        eprintln!("warning: {file}: {n} unreadable line(s) skipped");
+        alerts.push(Alert::new(
+            AlertKind::StoreDamaged,
+            file,
+            format!(
+                "`{file}` has {n} line(s) that cannot be read (a write cut short, or bytes that are not UTF-8); they were skipped. The records on the other lines were read."
+            ),
+        ));
+    }
     let have: BTreeSet<String> = stored.iter().map(|o| o.id.clone()).collect();
     stored.extend(fresh.iter().filter(|o| !have.contains(&o.id)).cloned());
     let bursts = archive_bursts(&stored, &new_ids, rules, now.timestamp());
@@ -412,7 +430,7 @@ fn watch(
             .map(|(s, ids)| (s.clone(), RuleRun::from_analysis(&a, ids)))
             .collect(),
     );
-    write_json(&state_path, &state)?;
+    write_json_kept(&state_path, &state)?;
     alerts.extend(
         drifts
             .iter()
@@ -445,14 +463,17 @@ fn watch(
     let prev: Summary = read_json(&summary_path)?.unwrap_or_default();
     let generated = now.format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let next = summarise(&a, &prev, generated.clone());
-    let mut leads = triage::leads(&a, &prev, &next, &new_ids);
+    let ledger_path = out.join(ledger::FILE);
+    let mut ledger: ledger::Ledger = read_json(&ledger_path)?.unwrap_or_else(ledger::Ledger::new);
+    let observed = ledger.observe(&a, &stamp, now.timestamp(), &new_ids);
+    // New or escalated is decided against each cluster's own thread, so a
+    // cluster whose key changed is not reported as new.
+    let base = digest::baseline(&prev, &next, &ledger, &observed, &stamp);
+    let mut leads = triage::leads(&a, &base, &next, &new_ids);
     let triaged = match triage_with {
         Some((backend, limits)) => triage::run(Some(backend), out, &a, &mut leads, &stamp, limits),
         None => triage::TriageReport::default(),
     };
-    let ledger_path = out.join(ledger::FILE);
-    let mut ledger: ledger::Ledger = read_json(&ledger_path)?.unwrap_or_else(ledger::Ledger::new);
-    let observed = ledger.observe(&a, &stamp, now.timestamp(), &new_ids);
     let covered = attention::case_threads(&cases_root, &ledger);
     let queue = attention::rank(&attention::Input {
         analysis: &a,
@@ -485,7 +506,7 @@ fn watch(
     let mut digest = digest(&DigestInput {
         stamp: &stamp,
         analysis: &a,
-        prev: &prev,
+        prev: &base,
         next: &next,
         new_ids: &new_ids,
         health: &health,
@@ -537,7 +558,7 @@ fn watch(
         for cw in state.cases.values_mut() {
             cw.hits.retain(|h| h.ts <= 0 || h.ts >= cutoff);
         }
-        write_json(&state_path, &state)?;
+        write_json_kept(&state_path, &state)?;
         if ledger.prune(cutoff) > 0 {
             write_json(&ledger_path, &ledger)?;
         }

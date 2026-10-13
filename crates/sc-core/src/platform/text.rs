@@ -31,6 +31,10 @@ pub struct TextSketch {
     /// Residue rule ids that fire on the raw text ([`super::residue`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub residue: Vec<String>,
+    /// Coding-harness self-identification on the raw text
+    /// ([`super::residue::self_id`]): weak context, not residue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub self_id: Vec<String>,
 }
 
 impl TextSketch {
@@ -100,6 +104,7 @@ pub fn sketch(text: &str, context: &[&str], rules: &Rules) -> Option<TextSketch>
         minhash,
         excerpt: crate::redact::redact_decoded(&excerpt),
         residue: super::residue::text_residue(text, rules),
+        self_id: super::residue::self_id(text),
     })
 }
 
@@ -207,6 +212,51 @@ pub fn name_template(name: &str, owner: &str) -> Option<String> {
     (literal && slot).then(|| parts.join("-"))
 }
 
+/// A wiki page title with per-instance parts as slots: the editing user's
+/// own name as `<user>`, and the [`name_template`] slots in each part
+/// (split on `/`, `_`, `-` and spaces). The namespace prefix stays
+/// (`User:<user>/sandbox`, `Draft:probe-<num>`). `None` under the same rule
+/// as [`name_template`]: a literal word and a slot.
+pub fn wiki_title_template(title: &str, user: &str) -> Option<String> {
+    let norm = |s: &str| s.replace('_', " ").to_lowercase();
+    let title = norm(title);
+    let user = norm(user);
+    let (ns, rest) = match title.split_once(':') {
+        Some((ns, rest)) if !ns.is_empty() && !ns.contains(' ') => (Some(ns), rest),
+        _ => (None, title.as_str()),
+    };
+    let mut out = String::new();
+    let (mut literal, mut slot) = (ns.is_some_and(|n| n.len() >= 3), false);
+    for (i, seg) in rest.split('/').enumerate() {
+        if i > 0 {
+            out.push('/');
+        }
+        if !user.is_empty() && seg.trim() == user {
+            out.push_str("<user>");
+            slot = true;
+            continue;
+        }
+        let parts: Vec<String> = seg
+            .split(['-', ' '])
+            .filter(|p| !p.is_empty())
+            .map(|p| {
+                let t = word_slot(p, &[]);
+                if t.starts_with('<') {
+                    slot = true;
+                } else if t.chars().filter(|c| c.is_alphabetic()).count() >= 3 {
+                    literal = true;
+                }
+                t
+            })
+            .collect();
+        out.push_str(&parts.join("-"));
+    }
+    (literal && slot).then(|| match ns {
+        Some(ns) => format!("{ns}:{out}"),
+        None => out,
+    })
+}
+
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 
 fn fnv_step(mut h: u64, bytes: &[u8]) -> u64 {
@@ -276,5 +326,19 @@ mod tests {
         );
         assert_eq!(name_template("portfolio", "x"), None);
         assert_eq!(name_template("v2-1", "x"), None);
+    }
+
+    #[test]
+    fn wiki_titles_slot_the_editor_and_counters() {
+        assert_eq!(
+            wiki_title_template("User:Fresh_Editor42/sandbox", "Fresh Editor42").as_deref(),
+            Some("user:<user>/sandbox")
+        );
+        assert_eq!(
+            wiki_title_template("Draft:Probe-page_0042", "someone").as_deref(),
+            Some("draft:probe-page-<num>")
+        );
+        assert_eq!(wiki_title_template("Paris", "someone"), None);
+        assert_eq!(wiki_title_template("Talk:Paris", "someone"), None);
     }
 }

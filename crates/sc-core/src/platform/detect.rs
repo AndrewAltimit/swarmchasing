@@ -1,6 +1,6 @@
 //! Grouping platform events into candidate swarms, and the chance model.
 
-use super::automation::benign_template;
+use super::automation::{benign_template, practice_target};
 use super::text::BANDS;
 use super::{
     Action, Basis, Burst, HintStrength, NewAccounts, Platform, PlatformEvent, PlatformOptions,
@@ -17,6 +17,11 @@ const HOUR: i64 = 3600;
 /// An hour holding at least this share of the busiest hour's events was
 /// read in full; sparser hours hold only events carried from earlier runs.
 const DENSE_SHARE: usize = 10;
+
+/// Grouped by its target ([`Action::by_target`]): no text, no name.
+fn textless(e: &PlatformEvent) -> bool {
+    e.action.by_target() && e.text.is_none() && e.name_template.is_none()
+}
 
 /// Detect candidate swarms in `events`, each platform on its own.
 pub fn detect(events: &[PlatformEvent], opts: &PlatformOptions) -> PlatformReport {
@@ -85,7 +90,11 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
     let mut skeletons: HashMap<u64, Vec<usize>> = HashMap::new();
     let mut bands: HashMap<(usize, u64), Vec<usize>> = HashMap::new();
     let mut names: HashMap<(Action, &str), Vec<usize>> = HashMap::new();
+    let mut targets: HashMap<(Action, &str), Vec<usize>> = HashMap::new();
     for (i, e) in ev.iter().enumerate() {
+        if textless(e) {
+            targets.entry((e.action, &e.target)).or_default().push(i);
+        }
         if let Some(t) = e.text.as_ref().filter(|t| t.words >= opts.min_words) {
             skeletons.entry(t.skeleton).or_default().push(i);
             for b in 0..BANDS {
@@ -98,7 +107,11 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             names.entry((e.action, nt)).or_default().push(i);
         }
     }
-    for v in skeletons.values().chain(names.values()) {
+    for v in skeletons
+        .values()
+        .chain(names.values())
+        .chain(targets.values())
+    {
         for w in v.windows(2) {
             uf.union(w[0], w[1]);
         }
@@ -187,7 +200,20 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             .map(|&i| ev[i].actor.as_str())
             .filter(|a| !a.is_empty())
             .collect();
-        if accounts.len() >= 2 || accounts.is_empty() {
+        // Text-less events on one target are common (a popular repository
+        // draws stars all day); only a group with new accounts in it is
+        // worth carrying.
+        let by_target = members.iter().all(|&i| textless(ev[i]));
+        let carry_it = if by_target {
+            accounts
+                .iter()
+                .filter(|a| account_age.get(*a).copied().unwrap_or(false))
+                .count()
+                >= 2
+        } else {
+            accounts.len() >= 2 || accounts.is_empty()
+        };
+        if carry_it {
             carry.extend(members.iter().copied());
         }
         let enough = accounts.len() >= opts.min_accounts
@@ -202,7 +228,17 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             opts,
         };
         let template = g.template();
-        if let Some(why) = benign_template(&template) {
+        if by_target && practice_target(&ev[members[0]].target) {
+            out.suppressed.push(Suppressed {
+                platform,
+                why: "practice repository".into(),
+                events: members.len(),
+                accounts: accounts.len(),
+                template: ev[members[0]].target.clone(),
+            });
+            continue;
+        }
+        if let Some(why) = benign_template(&template).filter(|_| !by_target) {
             out.suppressed.push(Suppressed {
                 platform,
                 why: why.to_string(),
@@ -237,7 +273,12 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             && !accounts.is_empty()
             && p_age > opts.max_chance
             && !residue_heavy;
-        if (p > opts.max_chance && !residue_heavy) || one_owner_burst {
+        // A text-less group, or a group of wiki edits, needs a burst of its
+        // own: new editors' sandboxes and a new project's first stars come
+        // from new accounts by nature, so account age alone says nothing.
+        let needs_burst = by_target || platform == Platform::Wikimedia;
+        let no_burst = needs_burst && burst.p_chance > opts.max_chance;
+        if (p > opts.max_chance && !residue_heavy) || one_owner_burst || no_burst {
             out.below_threshold += 1;
             continue;
         }
@@ -290,6 +331,10 @@ impl Group<'_> {
             (Some(t), Some(n)) => format!("{n}: {t}"),
             (Some(t), None) => t,
             (None, Some(n)) => n,
+            (None, None) if self.textless() => {
+                let e = self.ev[self.members[0]];
+                format!("{} on {}", e.action.label(), e.target)
+            }
             (None, None) => String::new(),
         }
     }
@@ -325,7 +370,24 @@ impl Group<'_> {
         if named >= 2 {
             b.push(Basis::NameTemplate);
         }
+        if self.textless() {
+            b.push(Basis::Target);
+        }
         b
+    }
+
+    fn textless(&self) -> bool {
+        self.members.len() >= 2 && self.members.iter().all(|&i| textless(self.ev[i]))
+    }
+
+    fn self_id(&self) -> Vec<(String, usize)> {
+        let mut c: BTreeMap<&str, usize> = BTreeMap::new();
+        for &i in self.members {
+            for r in self.ev[i].text.iter().flat_map(|t| &t.self_id) {
+                *c.entry(r).or_default() += 1;
+            }
+        }
+        c.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
     }
 
     /// The densest window among the group's points (each account's first
@@ -517,8 +579,18 @@ impl Group<'_> {
                 "the source names no accounts: one publisher may account for all of it".into(),
             );
         }
-        if similarity.is_none() {
+        if self.textless() {
+            caveats.push(
+                "no text: grouped by the one target they acted on; a launch, a giveaway or a link shared elsewhere draws stars, forks and pull requests in bursts too".into(),
+            );
+        } else if similarity.is_none() {
             caveats.push("no text: grouped by name only".into());
+        }
+        let self_id = self.self_id();
+        if !self_id.is_empty() {
+            caveats.push(
+                "coding-harness self-identification is weak context: people use these harnesses for their own work".into(),
+            );
         }
 
         let mut reason = format!(
@@ -564,6 +636,16 @@ impl Group<'_> {
                 format_args!("; {n} carry model-output residue"),
             );
         }
+        if !self_id.is_empty() {
+            let n: usize = m
+                .iter()
+                .filter(|&&i| ev[i].text.as_ref().is_some_and(|t| !t.self_id.is_empty()))
+                .count();
+            let _ = std::fmt::Write::write_fmt(
+                &mut reason,
+                format_args!("; {n} name a coding harness"),
+            );
+        }
         let earliest = &ev[m[0]].id;
         let id = format!(
             "PS-{:08x}",
@@ -585,6 +667,7 @@ impl Group<'_> {
             burst,
             new_accounts,
             residue,
+            self_id,
             targets: tl,
             distinct_targets,
             p_chance: p,

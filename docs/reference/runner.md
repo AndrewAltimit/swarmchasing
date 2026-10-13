@@ -14,13 +14,15 @@ All workflows use `runs-on: self-hosted`. The runner is Ubuntu Linux arm64 (DGX 
 - **Order.** The `gates` job runs first and the cargo job `ci` needs it, so a committed dump or a broken link fails in seconds.
 - **Pull requests** run the same jobs as `main`, except the deploy. A superseded push to a PR cancels its earlier run; runs on `main` never cancel.
 - **Pull requests from forks run nothing**, because a self-hosted runner would otherwise run untrusted code on the machine. Also enable *Settings → Actions → Require approval for all outside collaborators*.
-- **Deploy.** On `main`, after `gates` and `ci` pass, `deploy-pages` builds the site with `scripts/ci/build-site.sh` (it fails on a WASM module over budget, a page that breaks the site policy, or an input that is not committed), runs the site XSS check, then deploys `_site/` to Pages. Set *Settings → Pages → Source* to **GitHub Actions**.
+- **Deploy.** On `main`, after `gates` and `ci` pass, `deploy-pages` (one at a time, in its own concurrency group) builds the site with `scripts/ci/build-site.sh` (it fails on a WASM module over budget, a page that breaks the site policy, or an input that is not committed), runs the site XSS check, then deploys `_site/` to Pages. Set *Settings → Pages → Source* to **GitHub Actions**.
 
 ### watch.yml
 
 Results are not uploaded as artifacts: a public repo's artifacts are downloadable by anyone, and these are unreviewed leads. They stay in `$SWARMCHASE_DATA` on the runner and reach the admin only by email. Without the SMTP secrets, runs still write digests on the runner. One watch runs at a time, since runs share the state file and the record store.
 
-A source failure, an unavailable host or a failed canary is a health alert, which makes the run count as changed, so the digest reporting it is mailed the same run ([health](watch.md#health)). The mail's subject starts with the run's priority, which the watch step writes to its outputs beside `changed` ([needs attention](watch.md#needs-attention)).
+A source failure, an unavailable host or a failed canary is a health alert, which makes the run count as changed, so the digest reporting it is mailed the same run ([health](watch.md#health)). The digest is mailed whenever the run wrote a changed one, even when the watch then exits non-zero because every source failed. The mail's subject starts with the run's priority, which the watch step writes to its outputs beside `changed` ([needs attention](watch.md#needs-attention)). The failure alert goes out when the job fails or is cancelled, with the tail of the run's log.
+
+The Actions log of a public repository is public, and the watch's output describes unreviewed leads. The full output goes to `$RUNNER_TEMP/watch.log` on the runner; the public log shows only each source's counts and the run's totals.
 
 Model triage is opt-in through the variables below: a model server the runner reaches on loopback or a private network (the watch refuses any other host before sending anything), or Claude through the runner user's Claude Code login ([model triage with Claude](#model-triage-with-claude)). The workflow holds no model API key. The job's timeout leaves room for one host's ten minutes of retries on HTTP 503: after those the run stops sending to that host, and its sources continue from their checkpoints next run.
 

@@ -128,3 +128,61 @@ fn a_gist_one_agent_names_and_others_fetch_draws_handoff_edges() {
     let s2 = &m.edges["handoff"];
     assert!(s2.correct > 0 && s2.correct == s2.pairs, "{}", render(m));
 }
+
+#[test]
+fn off_hour_swarms_start_off_the_clock() {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    let s = scenario("sync-off-hour");
+    for seed in 91..95 {
+        let recs = generate(&s, seed, &p);
+        let text = to_ndjson(&recs);
+        let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
+        let truth = Truth::from_ndjson(&text);
+        let mut firsts: std::collections::BTreeMap<String, i64> = Default::default();
+        for o in &obs {
+            let t = truth.get(&o.id).unwrap();
+            if t.class == "swarm_agent" {
+                firsts.entry(t.run.clone()).or_insert(o.ts);
+            }
+        }
+        assert_eq!(firsts.len(), 3);
+        for ts in firsts.values() {
+            let past = ts.rem_euclid(3600);
+            assert!((7 * 60..54 * 60).contains(&past), "{past}");
+        }
+    }
+}
+
+#[test]
+fn every_kind_carries_its_denominator_fired_or_not() {
+    // Scenarios where most kinds draw nothing: each still counts the true
+    // pairs it could reach, so a sum over seeds reads the misses.
+    let rules = Rules::default_rules();
+    let file = ScenarioFile {
+        scenario: vec![scenario("fleet"), scenario("submit-basis")],
+    };
+    let mut total = Measurement::default();
+    for (_, m) in bench(&file, &Palette::default_palette(&rules), &rules) {
+        let links = m.operator_pairs.reachable - m.operator_pairs.joined;
+        for (k, s) in &m.edges {
+            assert_eq!(s.of, m.swarm_pairs.reachable, "{k}: {}", render(&m));
+        }
+        for (k, s) in &m.links {
+            assert_eq!(s.of, links, "{k}: {}", render(&m));
+        }
+        assert!(m.edges.contains_key("any"));
+        for k in ["any", "candidate_fleet", "co_activity", "scaffold", "rerun"] {
+            assert!(m.links.contains_key(k), "{k}");
+        }
+        total.add(&m);
+    }
+    let links = total.operator_pairs.reachable - total.operator_pairs.joined;
+    assert!(
+        total
+            .edges
+            .values()
+            .all(|s| s.of == total.swarm_pairs.reachable)
+    );
+    assert!(total.links.values().all(|s| s.of == links));
+}

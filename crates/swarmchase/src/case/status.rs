@@ -7,7 +7,10 @@ use std::io::Write;
 use std::path::Path;
 
 pub(crate) fn list(root: &Path, out: &mut impl Write) -> Result<()> {
-    let mut cases = all(root)?;
+    let (mut cases, broken) = all_readable(root)?;
+    for (id, why) in &broken {
+        eprintln!("warning: case {id} skipped: {why}");
+    }
     if cases.is_empty() {
         writeln!(out, "no cases in {}", root.display())?;
         return Ok(());

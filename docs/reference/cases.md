@@ -10,7 +10,7 @@ The CLI reads and writes the files; what a case holds and every decision on it a
 swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] [files…]
 ```
 
-`case new` copies the selected records into `raw/records.ndjson`, so watch retention cannot delete them, and writes `case.toml`. Records come from the watch store, or from files given as arguments. `--host-hits` also takes every flagged record on the same hosts, including other clusters. `review` can open a case from a lead too ([review](watch.md#reviewing-leads)).
+`case new` copies the selected records into `raw/records.ndjson`, so watch retention cannot delete them, and writes `case.toml`. Records come from the watch store, or from files given as arguments. From the store it analyses the last `--days` days, by default the `analysis_window_days` of `--watchlist` (`watchlist.toml`, else 30), the window the digest analyses, so a cluster number from the digest names the same cluster; a stable key (`k-3f9a2c1b`) names it whatever the window. A line of `raw/records.ndjson` that cannot be read is skipped with a warning. `--host-hits` also takes every flagged record on the same hosts, including other clusters. `review` can open a case from a lead too ([review](watch.md#reviewing-leads)).
 
 ## What `case.toml` holds
 
@@ -34,9 +34,9 @@ Each change is logged with its date.
 
 | Command | What it does |
 |---|---|
-| `case status [<id>]` | Lists cases, or shows one case and what it still needs. |
+| `case status [<id>]` | Lists cases (a case.toml that does not load is skipped with a warning), or shows one case and what it still needs. |
 | `case endpoint <id> <host>... <state> [--note …] [--basis …] [--single-source-reason …] [--sector "…"]` | Classifies one or more endpoints; `compromised` needs `--basis`. A host not in the case changes nothing. |
-| `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits. Refused once its notice is published. |
+| `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits, under the data directory's lock. Refused once its notice is published, or while a watch runs. |
 | `case claim <id> --party … [--layer …] --evidence … [--tag …] --detail …` | Records an attribution claim ([attribution claims](#attribution-claims)). |
 | `case set <id> --status … --notice … --min-named … --naming-days N --admin "…"` | Changes the status, the developer naming threshold, the naming lead (3 to 20 working days) or the admin's name. |
 | `case grade <id> [<L0..L5> --note … \| --clear]` | Shows each cluster's agent grade, or records the admin's ([agent grade](#agent-grade)). |
@@ -45,12 +45,12 @@ Each change is logged with its date.
 | `case fleet merge\|split\|show <id> …` | Groups soft-linked clusters into one fleet, splits one off, or lists fleets and candidates ([fleets](#fleets)). |
 | `case fleet interaction\|withdraw <id> <fleet> …` | Records reviewed interaction between a fleet's runs, or withdraws it ([swarms](#swarms)). |
 | `case add <id> …` | Adds new records. |
-| `case contacts <id> [--providers-only] [--country CC]` | Adds provider contacts from the directory, proposes national CSIRTs, then finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
+| `case contacts <id> [--providers-only] [--country CC]` | Adds provider contacts from the directory, proposes national CSIRTs, then finds a contact for each compromised, targeted or historical endpoint, never reading a relay, carrier or callback host ([contacts](#contacts)). |
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
 | `case report <id> --audience …` | Drafts a report into `reports/`, applying the case's claims and naming threshold. |
 | `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
-| `case bundle <id>` | Writes an evidence bundle without drafting a report. |
-| `case verify <bundle>` | Checks the manifest, re-runs the analysis and fails if any tier or cluster differs. |
+| `case bundle <id>` | Writes an evidence bundle without drafting a report, signed when there is a signing key ([signing](#signed-bundles)). |
+| `case verify <bundle> [--key <file>]` | Checks the signature, the manifest, re-runs the analysis and fails if the signature is invalid or any tier or cluster differs. |
 | `case sent <id> --to … --channel … [--at <time>]` | Records a send the admin made, with its time, and moves an open case to reported ([lead times](#lead-times)). |
 | `case no-contact <id> <host\|org\|provider> --searched …` | Records that no contact was found for a party ([lead times](#lead-times)). |
 | `case consent <id> --party <p> --note "…"` | Records an operator's written consent to be named before its naming lead runs ([lead times](#lead-times)). |
@@ -128,7 +128,9 @@ While a fleet has an entry, reports call it a swarm and list each entry as an In
 
 ## Contacts
 
-`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each domain is read once a run, whether the read succeeds or not, so endpoints under one registered domain (by the Public Suffix List) share its security.txt and RDAP reads. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
+`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint classified compromised, targeted or historical: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each domain is read once a run, whether the read succeeds or not, so endpoints under one registered domain (by the Public Suffix List) share its security.txt and RDAP reads. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
+
+Unreviewed endpoints are counted and left until classified with `case endpoint`. A host that a relay, carrier or callback rule matches is never read, nor is a parent domain that such a rule matches: an inbox's security.txt would be on the agent's own callback channel. The rules are the case's pinned rules and the current ones, against the host alone and against every host in the case's records (an inbox id on a request catcher matches only in a record).
 
 Each contact has a role: `provider`, `affected` (an operator), `registrar`, `host`, `csirt` or `declared_owner`. A role this toolkit version does not know reads as `other`.
 
@@ -163,7 +165,7 @@ The notice follows the reports in two stages, on the fixed clocks in [policies](
 | Operator of a compromised endpoint | 24 hours | The longer of 10 working days and `--naming-days` |
 
 - **Parties.** Each provider organisation among the case's contacts (or one unnamed provider when there is none), and the operator of each endpoint classified compromised, targeted or historical. A send counts for an operator when its recipient is a contact listed for that endpoint.
-- **Send times.** `case sent` records the time of the send: now, or `--at` (RFC 3339, such as `2026-10-12T14:05:00Z`) for a send recorded afterwards. A time in the future is refused. A send recorded with `--date` only counts from the end of that day.
+- **Send times.** `case sent` records the time of the send: now, or `--at` (RFC 3339, such as `2026-10-12T14:05:00Z`) for a send recorded afterwards. A time in the future is refused. A send recorded with `--date` (`YYYY-MM-DD`; a date that does not parse or is after today is refused) only counts from the end of that day. A `--to` that is none of the case's contacts is recorded with a warning: the send counts for no party until the address is a listed contact.
 - **Working days.** The naming clock counts Monday to Friday in UTC. A send on a Saturday or Sunday counts from the following Monday 00:00 UTC; the clock ends at the same UTC time of day once the working days have passed.
 - **Lengthening.** `case set <id> --naming-days N`, N from 3 to 20, lengthens the naming lead for the case. Nothing shortens it below the bounds, and nothing changes the indicator clock.
 - **Consent.** `case consent <id> --party <p> --note "…"` records an operator's written consent to earlier naming, with how it was given. Its name may then go in the next naming update with no wait.
@@ -227,9 +229,31 @@ An evidence bundle holds:
 - the records;
 - their analysis;
 - a stamp with the rules version, the toolkit version and commit, the method version it follows (SC-FM), the rules' precision and recall on the committed evaluation set at stamp time, and the tier of every flagged record and cluster;
-- a SHA-256 manifest of those files.
+- a SHA-256 manifest of those files;
+- with a signing key, `MANIFEST.sha256.sig`, the manifest's Ed25519 signature ([signed bundles](#signed-bundles)).
 
-`case verify` checks the manifest, re-runs the analysis and compares both it and the bundle's own `analysis.json` with the stamp. It prints the method version and evaluation figures the stamp carries; bundles stamped before those fields existed verify the same way. The evaluation set is found at `SWARMCHASE_EVAL_DIR`, else `samples/eval/` in the working directory or the checkout the CLI was built from; without it the stamp has no figures. A recipient can run the same check without installing anything, in the browser toolkit's Case tab ([for operators](../guides/for-operators.md#verify-an-evidence-bundle)).
+`case verify` checks the signature, the manifest, re-runs the analysis and compares both it and the bundle's own `analysis.json` with the stamp. It prints the method version and evaluation figures the stamp carries; bundles stamped before those fields existed verify the same way. The evaluation set is found at `SWARMCHASE_EVAL_DIR`, else `samples/eval/` in the working directory or the checkout the CLI was built from; without it the stamp has no figures. A recipient can run the same check without installing anything, in the browser toolkit's Case tab ([for operators](../guides/for-operators.md#verify-an-evidence-bundle)).
+
+### Signed bundles
+
+Signing is off until `SWARMCHASE_SIGNING_KEY` holds the secret seed ([configuration](configuration.md#bundle-signing)). With it set, `case bundle` and `case draft` write `MANIFEST.sha256.sig` beside the manifest, and the draft attaches it. A value that is not a key fails the bundle rather than leaving it unsigned.
+
+```text
+algorithm: ed25519
+key-id: <first 16 hex digits of the SHA-256 of the public key>
+signature: <Ed25519 signature of the manifest's bytes, base64>
+```
+
+`case verify` reads the published keys from `--key`, else `SWARMCHASE_SIGNING_PUBLIC`, else `keys/bundle-signing.pub` in the working directory or the checkout the CLI was built from. That file holds one `ed25519 <base64 key> <key id>` line per key; a retired key stays listed so its bundles keep verifying. The outcome is one of:
+
+| Outcome | Meaning | Check |
+|---|---|---|
+| `signed by key <id>` | Valid under a published key | Passes |
+| `signature invalid` | Altered, malformed, or by a key not published | Fails |
+| `unsigned` | No signature file | Passes, and says so |
+| `not checked` | Signed, but no published key file | Passes, and says so |
+
+The signature covers every file through the manifest, and the case id through `stamp.json`; it does not cover the email body. The site's showcase bundle is synthetic and never signed.
 
 ## Pinned rules
 

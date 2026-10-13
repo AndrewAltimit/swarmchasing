@@ -4,8 +4,11 @@
 //! Two lists. [`is_automation`] drops an event at collection by its login:
 //! GitHub Apps (`name[bot]`), and accounts that run declared automation
 //! under a user login. Apps act only where a repository owner installed
-//! them, AI coding agents among them; that is the owner's choice, not a
-//! swarm on others. [`benign_template`] names the benign kind of a group
+//! them; that is the owner's choice, not a swarm on others. The coding-agent
+//! Apps the declared-agents catalog names are told apart first
+//! ([`classify_login`]): their events are tallied by product rather than
+//! dropped unseen, and an undeclared App whose login claims one of those
+//! products is a spoofing lead. [`benign_template`] names the benign kind of a group
 //! whose slotted text matches a known automated or drive template; such
 //! groups are listed as suppressed, never reported.
 
@@ -65,6 +68,50 @@ pub fn is_automation(login: &str) -> bool {
         || l.ends_with("_bot")
         || l.ends_with("-robot")
         || AUTOMATION_LOGINS.contains(&l.as_str())
+}
+
+/// What a GitHub login is, for the collector.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LoginClass<'a> {
+    /// A coding-agent App in the declared-agents catalog
+    /// ([`crate::identity::DeclaredApp`]): tallied, not grouped.
+    Declared(&'a crate::identity::DeclaredApp),
+    /// An undeclared App whose login claims a declared product's name: a
+    /// spoofing lead, tallied by login.
+    Lookalike(&'a crate::identity::DeclaredApp),
+    /// Other automation ([`is_automation`]): dropped.
+    Automation,
+    Person,
+}
+
+/// The class of `login` against the bundled catalog.
+pub fn classify_login(login: &str) -> LoginClass<'static> {
+    static CATALOG: OnceLock<crate::identity::Catalog> = OnceLock::new();
+    let c = CATALOG.get_or_init(crate::identity::Catalog::bundled);
+    if let Some(a) = c.github_app(login) {
+        LoginClass::Declared(a)
+    } else if let Some(a) = c.github_lookalike(login) {
+        LoginClass::Lookalike(a)
+    } else if is_automation(login) {
+        LoginClass::Automation
+    } else {
+        LoginClass::Person
+    }
+}
+
+/// Repositories built to receive pull requests from first-time
+/// contributors (`owner/repo`, lower case): a burst of new accounts on one
+/// is what they are for.
+pub const PRACTICE_TARGETS: &[&str] = &[
+    "firstcontributions/first-contributions",
+    "github/training-kit",
+    "skills/introduction-to-github",
+    "eddiehubcommunity/eddiehubcommunity",
+];
+
+/// Whether `target` is a [`PRACTICE_TARGETS`] repository.
+pub fn practice_target(target: &str) -> bool {
+    PRACTICE_TARGETS.contains(&target.to_ascii_lowercase().as_str())
 }
 
 /// Benign templates on slotted text ([`super::text::slot_tokens`] joined by
@@ -142,6 +189,30 @@ mod tests {
         for l in ["abbot", "robotics-fan", "octocat", "bottle"] {
             assert!(!is_automation(l), "{l}");
         }
+    }
+
+    #[test]
+    fn declared_coding_agents_and_lookalikes() {
+        let declared = |l: &str| match classify_login(l) {
+            LoginClass::Declared(a) => Some(a.provider.as_str()),
+            _ => None,
+        };
+        assert_eq!(declared("claude[bot]"), Some("Anthropic"));
+        assert_eq!(declared("chatgpt-codex-connector[bot]"), Some("OpenAI"));
+        assert_eq!(declared("Copilot"), Some("GitHub"));
+        assert_eq!(declared("google-labs-jules[bot]"), Some("Google"));
+        match classify_login("claude-fleet[bot]") {
+            LoginClass::Lookalike(a) => assert_eq!(a.provider, "Anthropic"),
+            o => panic!("{o:?}"),
+        }
+        assert!(matches!(
+            classify_login("codex-runner-7[bot]"),
+            LoginClass::Lookalike(_)
+        ));
+        // A user login that names a product is a person, not an App.
+        assert_eq!(classify_login("claude-fan"), LoginClass::Person);
+        assert_eq!(classify_login("dependabot[bot]"), LoginClass::Automation);
+        assert!(practice_target("FirstContributions/first-contributions"));
     }
 
     #[test]

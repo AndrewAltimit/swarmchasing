@@ -23,9 +23,15 @@
 #                   purpose (user_fetch | agent | search | training),
 #                   ranges (range_file ids), directory (directory id, when the
 #                   product signs), source.
+#   [[github_app]]  login (the actor login GitHub events carry, matched
+#                   case-insensitively and whole), provider, product, names
+#                   (words that claim the product in another App's login),
+#                   source. Read by the platform pass: these Apps' events are
+#                   tallied, not grouped, and an undeclared `[bot]` login
+#                   carrying one of the names is a spoofing lead.
 
 [meta]
-version = "2026-10-12"
+version = "2026-10-12.1"
 
 # ── OpenAI ────────────────────────────────────────────────────────────────
 # https://developers.openai.com/api/docs/bots lists each user agent with its
@@ -74,6 +80,24 @@ provider = "OpenAI"
 product = "ChatGPT search crawler"
 purpose = "search"
 ranges = ["openai.searchbot"]
+source = "https://developers.openai.com/api/docs/bots"
+
+[[range_file]]
+id = "openai.adsbot"
+provider = "OpenAI"
+url = "https://openai.com/adsbot.json"
+source = "https://developers.openai.com/api/docs/bots"
+
+# OAI-AdsBot validates the safety of pages submitted as ads on ChatGPT. The
+# purpose enum has no ad-validation value; `search` is the closest (an
+# automated crawler visiting submitted pages); the product line says what it
+# does.
+[[agent]]
+token = "OAI-AdsBot"
+provider = "OpenAI"
+product = "ChatGPT ad-page safety validation"
+purpose = "search"
+ranges = ["openai.adsbot"]
 source = "https://developers.openai.com/api/docs/bots"
 
 [[agent]]
@@ -182,3 +206,188 @@ purpose = "agent"
 ranges = ["google.user-triggered-agents"]
 directory = "google.agent"
 source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+
+# The user-triggered fetchers share these two range files (Google-owned
+# fetchers resolve under *.gae.googleusercontent.com, user-owned under
+# google-proxy-*.google.com). The page does not map each fetcher to one file
+# and names three files in all, so neither is taken as exhaustive.
+[[range_file]]
+id = "google.user-triggered-fetchers"
+provider = "Google"
+url = "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json"
+source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+exhaustive = false
+
+[[range_file]]
+id = "google.user-triggered-fetchers-google"
+provider = "Google"
+url = "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json"
+source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+exhaustive = false
+
+[[agent]]
+token = "Google-GeminiNotebook"
+provider = "Google"
+product = "Gemini Notebook user-triggered fetches (formerly Google-NotebookLM)"
+purpose = "user_fetch"
+ranges = ["google.user-triggered-fetchers", "google.user-triggered-fetchers-google"]
+source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+
+[[agent]]
+token = "Google-Read-Aloud"
+provider = "Google"
+product = "Google Read Aloud user-triggered fetches"
+purpose = "user_fetch"
+ranges = ["google.user-triggered-fetchers", "google.user-triggered-fetchers-google"]
+source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+
+# ── Mistral ─────────────────────────────────────────────────────────────────
+# https://docs.mistral.ai/robots lists each user agent with its published IP
+# file. The page calls them "All published IP addresses" without claiming the
+# list is complete, so the files are not taken as exhaustive.
+
+[[range_file]]
+id = "mistral.user"
+provider = "Mistral"
+url = "https://mistral.ai/mistralai-user-ips.json"
+source = "https://docs.mistral.ai/robots"
+exhaustive = false
+
+[[range_file]]
+id = "mistral.index"
+provider = "Mistral"
+url = "https://mistral.ai/mistralai-index-ips.json"
+source = "https://docs.mistral.ai/robots"
+exhaustive = false
+
+[[agent]]
+token = "MistralAI-User"
+provider = "Mistral"
+product = "Le Chat / Vibe user-triggered fetches"
+purpose = "user_fetch"
+ranges = ["mistral.user"]
+source = "https://docs.mistral.ai/robots"
+
+[[agent]]
+token = "MistralAI-Index"
+provider = "Mistral"
+product = "Mistral search index crawler"
+purpose = "search"
+ranges = ["mistral.index"]
+source = "https://docs.mistral.ai/robots"
+
+# ── DuckDuckGo ───────────────────────────────────────────────────────────────
+# https://duckduckgo.com/duckduckgo-help-pages/results/duckassistbot names the
+# crawler and its IP file. The page says the crawler "originates from the
+# following IP addresses" without claiming the list is complete.
+
+[[range_file]]
+id = "duckduckgo.duckassistbot"
+provider = "DuckDuckGo"
+url = "https://duckduckgo.com/duckassistbot.json"
+source = "https://duckduckgo.com/duckduckgo-help-pages/results/duckassistbot"
+exhaustive = false
+
+[[agent]]
+token = "DuckAssistBot"
+provider = "DuckDuckGo"
+product = "DuckAssist real-time fetches for AI-assisted answers"
+purpose = "search"
+ranges = ["duckduckgo.duckassistbot"]
+source = "https://duckduckgo.com/duckduckgo-help-pages/results/duckassistbot"
+
+# ── Meta ─────────────────────────────────────────────────────────────────────
+# https://developers.facebook.com/docs/sharing/webmasters/web-crawlers names
+# both crawlers. Meta publishes no IP-range file for them, so neither has a
+# range (an address cannot be called spoofed from this catalog).
+
+[[agent]]
+token = "meta-externalfetcher"
+provider = "Meta"
+product = "Meta per-link fetches for agentic AI features"
+purpose = "user_fetch"
+source = "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers"
+
+[[agent]]
+token = "meta-externalagent"
+provider = "Meta"
+product = "Meta AI training and indexing crawler"
+purpose = "training"
+source = "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers"
+
+# ── Hosted-browser signers (key directories only) ───────────────────────────
+# Services that drive a browser on a user's behalf and sign their requests
+# with Web Bot Auth. No user-agent product token is tracked for them; the
+# signature and its key directory are the declaration.
+
+# Cloudflare Browser Rendering signs its browser traffic and documents the
+# Signature-Agent host and key directory.
+[[directory]]
+id = "cloudflare.browser-rendering"
+provider = "Cloudflare"
+signature_agent = "https://web-bot-auth.cloudflare-browser-rendering-085.workers.dev"
+url = "https://web-bot-auth.cloudflare-browser-rendering-085.workers.dev/.well-known/http-message-signatures-directory"
+source = "https://developers.cloudflare.com/browser-rendering/reference/automatic-request-headers/"
+
+# Browserbase publishes its key directory under its own host; the
+# Signature-Agent URI is that host (the docs show only the directory path).
+[[directory]]
+id = "browserbase"
+provider = "Browserbase"
+signature_agent = "https://www.browserbase.com"
+url = "https://www.browserbase.com/.well-known/http-message-signatures-directory"
+source = "https://docs.browserbase.com/platform/identity/web-bot-auth"
+
+# ── Coding agents on GitHub ───────────────────────────────────────────────
+# Coding agents act on GitHub through their provider's GitHub App, so their
+# events carry the App's login. An App acts only where a repository owner
+# installed it. Each source is the provider's page for the integration.
+
+[[github_app]]
+login = "chatgpt-codex-connector[bot]"
+provider = "OpenAI"
+product = "Codex"
+names = ["codex", "chatgpt", "openai"]
+source = "https://developers.openai.com/codex/integrations/github"
+
+[[github_app]]
+login = "claude[bot]"
+provider = "Anthropic"
+product = "Claude GitHub App"
+names = ["claude", "anthropic"]
+source = "https://code.claude.com/docs/en/github-actions"
+
+[[github_app]]
+login = "Copilot"
+provider = "GitHub"
+product = "Copilot cloud agent and code review"
+names = ["copilot"]
+source = "https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent"
+
+[[github_app]]
+login = "copilot-swe-agent[bot]"
+provider = "GitHub"
+product = "Copilot cloud agent"
+names = ["copilot"]
+source = "https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent"
+
+[[github_app]]
+login = "cursor[bot]"
+provider = "Cursor"
+product = "Cursor Bugbot and background agents"
+names = ["cursor"]
+source = "https://cursor.com/docs/bugbot"
+
+[[github_app]]
+login = "devin-ai-integration[bot]"
+provider = "Cognition"
+product = "Devin"
+names = ["devin"]
+source = "https://docs.devin.ai/integrations/gh"
+
+[[github_app]]
+login = "google-labs-jules[bot]"
+provider = "Google"
+product = "Jules"
+names = ["jules"]
+source = "https://jules.google/docs"

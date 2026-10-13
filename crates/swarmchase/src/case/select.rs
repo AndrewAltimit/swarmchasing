@@ -14,8 +14,14 @@ use std::path::{Path, PathBuf};
 pub struct Selection {
     /// Record files. Default: the watch store's last `--days` days.
     pub(super) input: Vec<PathBuf>,
-    #[arg(long, default_value_t = 30)]
-    pub(super) days: i64,
+    /// Days of the watch store to analyse. Default: the watchlist's
+    /// `analysis_window_days`, the span the watch's digest analyses, so a
+    /// cluster number from the digest names the same cluster here.
+    #[arg(long)]
+    pub(super) days: Option<i64>,
+    /// The watchlist whose analysis window `--days` defaults to.
+    #[arg(long, default_value = "watchlist.toml")]
+    pub(super) watchlist: PathBuf,
     /// Clusters to take, by number in this analysis (C1) or stable key
     /// (k-3f9a2c1b); `swarmchase clusters` lists both.
     #[arg(long = "cluster")]
@@ -49,7 +55,11 @@ pub(super) fn select(
                 dir.display()
             );
         }
-        load_store(&dir, now - sel.days * 86_400)?
+        let days = match sel.days {
+            Some(d) => d,
+            None => window_days(&sel.watchlist)?,
+        };
+        load_store(&dir, now - days * 86_400)?
     } else {
         read_inputs(&InputArgs {
             input: sel.input.clone(),
@@ -61,6 +71,28 @@ pub(super) fn select(
     let a = analyze(obs, &rules.rules);
     let picked = pick(&a, &sel.clusters, &sel.records, sel.host_hits)?;
     Ok((rules, picked))
+}
+
+/// The watchlist's `analysis_window_days` (30 when the file or the setting
+/// is missing): the records the watch analyses are those captured within
+/// it, and its overlap only re-reads late captures for collection.
+fn window_days(watchlist: &Path) -> Result<i64> {
+    #[derive(serde::Deserialize)]
+    struct Window {
+        #[serde(default = "thirty")]
+        analysis_window_days: i64,
+    }
+    fn thirty() -> i64 {
+        30
+    }
+    let text = match std::fs::read_to_string(watchlist) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(thirty()),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", watchlist.display())),
+    };
+    let w: Window =
+        toml::from_str(&text).with_context(|| format!("parsing {}", watchlist.display()))?;
+    Ok(w.analysis_window_days)
 }
 
 pub(super) fn pick(
@@ -103,6 +135,22 @@ pub(super) fn pick(
 mod tests {
     use super::*;
     use crate::case::test_support::fixture;
+
+    #[test]
+    fn the_default_window_is_the_watchlists() {
+        let d = std::env::temp_dir().join(format!("swarmchase-window-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.join("watchlist.toml");
+        std::fs::write(&p, "analysis_window_days = 12\noverlap_days = 3\n").unwrap();
+        assert_eq!(window_days(&p).unwrap(), 12);
+        std::fs::write(&p, "overlap_days = 3\n").unwrap();
+        assert_eq!(window_days(&p).unwrap(), 30);
+        assert_eq!(window_days(&d.join("none.toml")).unwrap(), 30);
+        // The committed watchlist parses.
+        let committed = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../watchlist.toml");
+        assert!(window_days(&committed).unwrap() > 0);
+        std::fs::remove_dir_all(&d).unwrap();
+    }
 
     #[test]
     fn pick_takes_clusters_and_optionally_every_hit_on_their_hosts() {

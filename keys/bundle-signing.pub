@@ -1,0 +1,3 @@
+# The Ed25519 keys swarmchasing signs evidence bundles with (MANIFEST.sha256.sig).
+# One per line: ed25519 <public key, base64> <key id>.
+ed25519 ot3bnSPlz++vLV/M6YVCw0bOQlGNogXMGbXRxWRuDhI= 7c6036a218e005a8

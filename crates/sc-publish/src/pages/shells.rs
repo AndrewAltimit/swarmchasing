@@ -2,7 +2,7 @@
 //! fill them in; the markup carries no data, only controls and empty states.
 
 /// The analysis workbench: input and summary, views, context, then report.
-pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
+pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1>
 <p class="lede">Paste or load records and the page grades, links and times them with the same rules as the CLI. It runs in this page via WebAssembly: nothing you paste is uploaded. Record text is shown as inert text, URLs defanged.</p></header>
 <nav class="steps" aria-label="Workbench steps">
 <button type="button" data-step="input" aria-current="step"><span>1</span> Input</button>
@@ -14,16 +14,20 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 <section class="pane pane-input" data-pane="input" aria-labelledby="h-input">
 <h2 id="h-input">Records</h2>
 <div id="input-box">
+<div id="drop" class="dropzone">
+<p class="drop-lead">Paste records below, drop a file here, or start from an example.</p>
+<div class="row drop-actions"><button type="button" id="example" class="primary" data-needs-engine disabled aria-busy="true">Try an example</button><label class="file button">Load file<input type="file" id="file" accept=".ndjson,.jsonl,.json,.txt,.csv,.log"></label></div>
 <label for="input" class="sr-only">Records</label>
-<textarea id="input" rows="9" spellcheck="false" placeholder='{"ts":"2026-10-04T08:10:00Z","url":"https://..."}' aria-describedby="input-hint"></textarea>
+<textarea id="input" class="mono" rows="8" spellcheck="false" placeholder='{"ts":"2026-10-04T08:10:00Z","url":"https://..."}' aria-describedby="input-hint"></textarea>
+<p id="drop-status" class="hint" role="status" hidden></p>
+</div>
 <p class="hint" id="input-hint">NDJSON, a JSON array, Wayback CDX JSON, one URL per line (optionally after a timestamp), or a web server access log (name your host in the field map: <code>host=www.example.org</code>).</p>
 <div class="row">
-<label class="file button">Load file<input type="file" id="file" accept=".ndjson,.jsonl,.json,.txt,.csv,.log"></label>
 <label class="sr-only" for="format">Input format</label>
 <select id="format"><option value="auto">auto-detect</option><option value="ndjson">NDJSON</option><option value="json">JSON</option><option value="lines">URL lines</option><option value="access_log">Access log</option></select>
+<label class="sr-only" for="map">Field map</label><input id="map" class="grow mono" spellcheck="false" placeholder="field map, e.g. ts=submitted_at,url=page.url">
 </div>
-<div class="row"><label class="sr-only" for="map">Field map</label><input id="map" class="grow" spellcheck="false" placeholder="field map, e.g. ts=submitted_at,url=page.url"></div>
-<div class="row"><button type="button" id="run" class="primary" data-needs-engine disabled aria-busy="true">Analyze</button><button type="button" id="example" data-needs-engine disabled aria-busy="true">Try an example</button></div>
+<div class="row"><button type="button" id="run" class="primary" data-needs-engine disabled aria-busy="true">Analyze</button></div>
 </div>
 <div id="input-collapsed" class="input-collapsed" hidden><span id="input-count"></span><button type="button" id="input-edit" aria-controls="input-box" aria-expanded="false">Edit</button></div>
 <p class="hint" data-engine-status aria-live="polite"></p>
@@ -49,10 +53,10 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 </div>
 <div id="viz-panel" class="viz-panel" role="tabpanel" aria-labelledby="tab-runs" tabindex="0"><p class="hint empty-state">Views appear here after an analysis.</p></div>
 <div id="filter-bar" class="filter-bar" aria-live="polite"></div>
-<h3 class="pane-sub" id="records-h">Flagged records</h3>
+<div class="sub-head"><h3 class="pane-sub" id="records-h">Flagged records</h3><button type="button" id="csv-records" class="small" disabled>Download CSV</button></div>
 <div id="records"><p class="hint">No records yet.</p></div>
-<h3 class="pane-sub">Endpoints</h3>
-<p class="hint">Flagged requests per target host. "Ongoing" means hit within 7 days of the newest record loaded: what an affected operator checks their logs for.</p>
+<div class="sub-head"><h3 class="pane-sub">Endpoints</h3><button type="button" id="csv-endpoints" class="small" disabled>Download CSV</button></div>
+<p class="hint">Flagged requests per target host; times are UTC. Hits counts the suggestive or significant records to the host, out of every record that targets it (hits / all). "Ongoing" means hit within 7 days of the newest record loaded: what an affected operator checks their logs for.</p>
 <div id="endpoints"><p class="hint">No endpoints yet.</p></div>
 </section>
 <aside class="pane pane-context" data-pane="context" aria-labelledby="h-ctx">
@@ -74,19 +78,19 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 </div>
 <details class="claims"><summary>Claims from case work <span id="claims-count" class="hint"></span></summary>
 <p class="hint">The JSON array <code>swarmchase report --claims</code> reads, e.g. <code>[{"party":"Example AI","role":"developer","evidence":"provider_confirmed","details":["confirmed in writing"]}]</code>. Kept in this page only.</p>
-<label for="claims" class="sr-only">Claims JSON</label><textarea id="claims" rows="4" spellcheck="false"></textarea>
+<label for="claims" class="sr-only">Claims JSON</label><textarea id="claims" class="mono" rows="4" spellcheck="false"></textarea>
 <p id="claims-status" class="warn" role="status" hidden></p></details>
-<div class="row"><button type="button" id="draft-report" class="primary">Draft the report</button><button type="button" id="copy-report" disabled>Copy</button><button type="button" id="dl-report" disabled>Download .md</button><button type="button" id="dl-json" disabled>Download analysis .json</button></div>
+<div class="row"><button type="button" id="draft-report" class="primary" disabled>Draft the report</button><button type="button" id="copy-report" disabled>Copy</button><button type="button" id="dl-report" disabled>Download .md</button><button type="button" id="dl-json" disabled>Download analysis .json</button></div>
 <pre id="report" class="report" tabindex="0" aria-label="Report draft">Analyse records to draft a report.</pre>
 </section>
 <section class="card pane-report" data-pane="report" aria-labelledby="h-sightings">
 <h2 id="h-sightings">Share sightings</h2>
 <p class="hint">A swarm that hits many sites is invisible to any one of them. A sightings file lets you share what it left in your log without sharing the log: keyed hashes of its run tags, inbox ids and captured secrets, how its requests were made, the hours it was active and its grade. No URL, path, query value, IP address, user agent or cookie goes in, and your host names only if you tick the box. The page shows the whole file before you save it and sends nothing; you choose whether to send it, and to whom. See <a href="../operators/#share-sightings">sharing sightings</a>.</p>
 <div class="row">
-<label><input type="checkbox" id="sight-hosts"> Include my host names (defanged)</label>
+<label class="check"><input type="checkbox" id="sight-hosts"> Include my host names (defanged)</label>
 <label class="grow">Describe yourself (optional) <input id="sight-operator" placeholder="e.g. the case id from our report" maxlength="120"></label>
 </div>
-<div class="row"><button type="button" id="sight-prepare" class="primary">Prepare sightings</button><button type="button" id="sight-dl" disabled>Download sightings .json</button></div>
+<div class="row"><button type="button" id="sight-prepare" class="primary" disabled>Prepare sightings</button><button type="button" id="sight-dl" disabled>Download sightings .json</button></div>
 <div id="sight-summary" aria-live="polite"></div>
 <pre id="sight-preview" class="report" tabindex="0" aria-label="Sightings file to be saved">Analyse records, then press Prepare to see exactly what a sightings file would hold.</pre>
 </section>"#;
@@ -95,7 +99,7 @@ pub const UNWRAP: &str = r#"<header class="page-head compact"><h1>Unwrap a URL</
 <p class="lede">See the relay and carrier layers inside one URL, its real target, and the rules each layer triggers. The URL is never opened; everything runs in this page.</p></header>
 <section class="card">
 <label for="unwrap-url">URL</label>
-<div class="row"><input id="unwrap-url" class="grow" spellcheck="false" placeholder="https://r.jina.ai/https://..." aria-describedby="unwrap-hint"><button type="button" id="unwrap-run" class="primary" data-needs-engine disabled aria-busy="true">Unwrap</button><button type="button" id="unwrap-example" data-needs-engine disabled aria-busy="true">Try an example</button></div>
+<div class="row"><input id="unwrap-url" class="grow mono" spellcheck="false" placeholder="https://r.jina.ai/https://..." aria-describedby="unwrap-hint"><button type="button" id="unwrap-run" class="primary" data-needs-engine disabled aria-busy="true">Unwrap</button><button type="button" id="unwrap-example" data-needs-engine disabled aria-busy="true">Try an example</button></div>
 <p class="hint" id="unwrap-hint">The whole URL, with its scheme (<code>https://</code>). The example is a synthetic record from the showcase: a relay in front of a placeholder host, with a request bin as the callback.</p>
 <p class="hint" data-engine-status aria-live="polite"></p><p id="rules-note" class="hint" hidden></p>
 <div id="unwrap-out" aria-live="polite"></div>
@@ -106,7 +110,7 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <section class="card" aria-labelledby="bundle-h">
 <h2 id="bundle-h">Check an evidence bundle</h2>
 <p class="lede-card">Got a report? Pick the files attached to the email.</p>
-<p class="hint">Pick the files of a bundle from <code>swarmchase case bundle</code> (<code>records.ndjson</code>, <code>analysis.json</code>, <code>stamp.json</code>, <code>MANIFEST.sha256</code>) or its folder. The page checks each SHA-256 against the manifest, re-runs the analysis with the bundled rules (or your edited ones), and compares every tier and cluster with the stamp, as <code>swarmchase case verify</code> does. It then shows the method and evaluation the stamp cites, the attribution layers the records support (add a <code>claims.json</code> from case work to include its claims), the runs, any candidate fleets and escalations, and the records. The files are read in this page only.</p>
+<p class="hint">Pick the files of a bundle from <code>swarmchase case bundle</code> (<code>records.ndjson</code>, <code>analysis.json</code>, <code>stamp.json</code>, <code>MANIFEST.sha256</code>, and <code>MANIFEST.sha256.sig</code> when it is signed) or its folder. The page checks the manifest's signature against the key this site publishes, each SHA-256 against the manifest, re-runs the analysis with the bundled rules (or your edited ones), and compares every tier and cluster with the stamp, as <code>swarmchase case verify</code> does. It then shows the method and evaluation the stamp cites, the attribution layers the records support (add a <code>claims.json</code> from case work to include its claims), the runs, any candidate fleets and escalations, and the records. The files are read in this page only.</p>
 <div class="row">
 <label class="file button primary">Pick files<input type="file" id="case-files" multiple accept=".ndjson,.json,.sha256"></label>
 <label class="file button">Pick folder<input type="file" id="case-dir" webkitdirectory></label>
@@ -119,7 +123,7 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <section class="card" aria-labelledby="sectxt-h">
 <h2 id="sectxt-h">Read a security.txt</h2>
 <p class="hint">Paste an organisation's <code>/.well-known/security.txt</code> to pull out who to notify. Or run <code>swarmchase contact &lt;domain&gt;</code>.</p>
-<label for="sectxt" class="sr-only">security.txt</label><textarea id="sectxt" rows="7" spellcheck="false"></textarea>
+<label for="sectxt" class="sr-only">security.txt</label><textarea id="sectxt" class="mono" rows="7" spellcheck="false"></textarea>
 <div class="row"><button type="button" id="sectxt-run" class="primary">Parse</button></div>
 <p class="hint card-status" data-tools-status aria-live="polite"></p>
 <div id="sectxt-out"></div>
@@ -127,7 +131,7 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <section class="card" aria-labelledby="defang-h">
 <h2 id="defang-h">Defang</h2>
 <p class="hint" id="defang-hint">Make URLs safe to paste into reports and chat: <code>hxxps://example[.]org/</code>. Every <code>http</code> and <code>https</code> URL in the text changes, nested ones too: its scheme, and the dots of its host. Bare host names and IP addresses outside a URL are left as typed.</p>
-<label for="defang-in" class="sr-only">Text to defang</label><textarea id="defang-in" rows="4" spellcheck="false" aria-describedby="defang-hint"></textarea>
+<label for="defang-in" class="sr-only">Text to defang</label><textarea id="defang-in" class="mono" rows="4" spellcheck="false" aria-describedby="defang-hint"></textarea>
 <p class="hint card-status" data-engine-status aria-live="polite"></p>
 <pre id="defang-out" class="report" aria-live="polite"></pre>
 </section>"#;
@@ -140,13 +144,13 @@ pub const IDENTITY: &str = r##"<header class="page-head compact"><h1>Agent ident
 <section class="card" aria-labelledby="id-log-h">
 <h2 id="id-log-h">Your log</h2>
 <label for="id-input" class="sr-only">Log</label>
-<textarea id="id-input" rows="8" spellcheck="false" aria-describedby="id-input-hint" placeholder='203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET / HTTP/1.1" 200 512 "-" "Mozilla/5.0 (compatible; ChatGPT-User/1.0)"'></textarea>
+<textarea id="id-input" class="mono" rows="8" spellcheck="false" aria-describedby="id-input-hint" placeholder='203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET / HTTP/1.1" 200 512 "-" "Mozilla/5.0 (compatible; ChatGPT-User/1.0)"'></textarea>
 <p class="hint" id="id-input-hint">A web server access log (Combined Log Format, so the user agent is there), or NDJSON with <code>ip</code>, <code>user_agent</code> and, for signatures, the request <code>headers</code>. Behind a proxy, log the forwarded client address, not the proxy's.</p>
 <div class="row">
 <label class="file button">Load file<input type="file" id="id-file" accept=".log,.txt,.ndjson,.jsonl,.json"></label>
 <label class="sr-only" for="id-format">Input format</label>
 <select id="id-format"><option value="auto">auto-detect</option><option value="access_log">Access log</option><option value="ndjson">NDJSON</option><option value="json">JSON</option></select>
-<label class="sr-only" for="id-map">Field map</label><input id="id-map" class="grow" spellcheck="false" placeholder="field map, e.g. host=www.example.org">
+<label class="sr-only" for="id-map">Field map</label><input id="id-map" class="grow mono" spellcheck="false" placeholder="field map, e.g. host=www.example.org">
 </div>
 <div class="row"><button type="button" id="id-run" class="primary">Check</button><button type="button" id="id-example">Try an example</button></div>
 <p class="hint card-status" data-tools-status aria-live="polite"></p>
@@ -169,7 +173,7 @@ pub const IDENTITY: &str = r##"<header class="page-head compact"><h1>Agent ident
 /// Report a swarm: a form that builds an SC-Submission v1 document in the
 /// page ([`site/js/pages/submit.js`]). The page sends nothing.
 pub const SUBMIT: &str = r##"<header class="page-head compact"><h1>Report a swarm</h1>
-<p class="lede">Saw AI agents probing, scraping or coordinating against others? Describe it here and the page builds an <a href="../docs/specs/submission-v1/">SC-Submission v1</a> document you send us privately. Agents may write the document directly from the spec and its <a href="https://github.com/AndrewAltimit/swarmchasing/blob/main/schemas/sc-submission-v1.json">schema</a>. This page sends nothing: everything stays in your browser until you send the file yourself.</p></header>
+<p class="lede">Saw AI agents probing, scraping or coordinating against others? Describe it here and the page builds an <a href="../docs/specs/submission-v1/">SC-Submission v1</a> document you send us privately. Agents may write the document directly from the spec and its <a href="../schemas/sc-submission-v1.json">schema</a>. This page sends nothing: everything stays in your browser until you send the file yourself.</p></header>
 <section class="card" aria-labelledby="sub-who-h">
 <h2 id="sub-who-h">Who is reporting</h2>
 <p class="hint">Kept private and never published. A report may be anonymous.</p>
@@ -192,10 +196,12 @@ pub const SUBMIT: &str = r##"<header class="page-head compact"><h1>Report a swar
 <textarea id="sub-summary" rows="4" spellcheck="true"></textarea>
 <div class="row">
 <label>Kind <select id="sub-kind"><option value="unknown">Not sure</option><option value="run">One agent run</option><option value="fleet">Several runs by one operator</option><option value="swarm">Several agents interacting</option></select></label>
-<label>First seen <input id="sub-first" type="datetime-local"></label>
-<label>Last seen <input id="sub-last" type="datetime-local"></label>
+<label>First seen <input id="sub-first" type="datetime-local" aria-describedby="sub-time-note"></label>
+<label>Last seen <input id="sub-last" type="datetime-local" aria-describedby="sub-time-note"></label>
+<label>Times are in <select id="sub-tz" aria-describedby="sub-time-note"><option value="local">my local time</option><option value="utc">UTC</option></select></label>
 <label>Agents <input id="sub-agents" type="number" min="1" step="1"></label>
 </div>
+<p class="hint" id="sub-time-note">The report stores times in UTC. Local times are converted with this browser's time zone.</p>
 <div class="row"><label class="grow">Target hosts <input id="sub-targets" spellcheck="false" placeholder="www.example.org, api.example.org"></label></div>
 </section>
 <section class="card" aria-labelledby="sub-ev-h">
@@ -249,3 +255,15 @@ pub const PROVIDERS_PANEL: &str = r##"<aside class="card callout-card" aria-labe
 /// site's root path).
 pub const NOT_FOUND: &str = r#"<header class="page-head"><h1>Page not found</h1>
 <p class="lede">Nothing is published at this address. If a report pointed you to a notice here, it may not be published yet: reports go first, the indicator notice follows on a fixed clock, and affected organisations are named later. Notices keep their address once published; a retracted notice stays at its address with the retraction shown.</p></header>"#;
+
+/// Contact, for every audience: the private channel, and which reply goes
+/// where. Linked from every page's footer.
+pub const CONTACT: &str = r##"<header class="page-head"><h1>Contact</h1>
+<p class="lede">One private channel reaches the maintainers, whoever you are: <a href="https://github.com/AndrewAltimit/swarmchasing/security/advisories/new">GitHub private vulnerability reporting</a> on this repository. Only the maintainers can read what you send. Give a case or notice id if you have one, and say how to reach you.</p>
+<p class="warn">Please do not open a public issue or discussion about an affected host or organisation. Anything posted there is public at once: it would name a party before its naming update, or show what a notice withholds.</p></header>
+<ul class="audience">
+<li><h2>You received a report about your site</h2><p>Reply to the address it came from, with the case id in the subject: questions, logs, statements, corrections and consent to earlier naming all go there. Found your organisation in a notice without a report? Use the private channel above and we will send you the full report.</p><p><a href="../operators/#contact">For operators</a></p></li>
+<li><h2>You handle reports at an AI provider</h2><p>Reply to the report's address with the case id in the subject. If it reached the wrong team, tell us the right channel. No report? Use the private channel above.</p><p><a href="../providers/#reply-confirm-or-send-a-statement">For providers</a></p></li>
+<li><h2>You saw a swarm, or you are an AI agent</h2><p>The submission page builds a structured report in your browser; send it through the private channel above. Agents can write it from the spec directly.</p><p><a href="../submit/">Report a swarm</a> · <a href="../llms.txt">llms.txt</a></p></li>
+<li><h2>A problem with the toolkit or this site</h2><p>A security problem in the code or the site goes through the private channel above too. Bugs, rules and method questions that name no affected party belong in the repository's public issues.</p><p><a href="https://github.com/AndrewAltimit/swarmchasing/issues">Public issues</a> · <a href="../.well-known/security.txt">security.txt</a></p></li>
+</ul>"##;

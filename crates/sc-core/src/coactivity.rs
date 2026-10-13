@@ -5,17 +5,22 @@
 //! planner starts sub-agents and each starts a few seconds after the
 //! dispatch. Each cluster's request and submit times are binned into active
 //! bins, and the pair's coincidences counted at every lag up to
-//! `max_lag_bins` either way; the best lag is the statistic. The chance
-//! model is a circular shift: the second cluster's activity is rotated
-//! within the time both were active, which keeps each cluster's own
-//! burstiness and only breaks their alignment, and the shifts that do as
-//! well as the real alignment give the chance.
+//! `max_lag_bins` either way; the best lag is the statistic, over the union
+//! of the two clusters' spans. Two chance models, the larger reported: an
+//! analytic one, each active bin of the quieter cluster meeting the other's
+//! activity at that cluster's own rate over the union span (a
+//! Poisson-binomial tail, times the lags tried), which a short span does
+//! not floor; and the share of circular shifts of one cluster's activity
+//! over the union span that align as well, which keeps each cluster's own
+//! burstiness and period. The pairs kept are cut at a false discovery rate
+//! over every pair tested.
 //!
 //! Scheduled jobs line up on the clock without any tie between them. As for
 //! shared pauses, a coincidence within `clock_tolerance_secs` of a clock
 //! hour counts `clock_weight` of one, and when most of either cluster's
-//! activity sits on clock hours the shifts are whole hours, so two jobs on
-//! one schedule keep their alignment under the null and do not qualify.
+//! activity sits on clock hours the shifts are whole hours and the analytic
+//! rate is read at the same minute of the hour, so two jobs on one schedule
+//! keep their alignment under both models and do not qualify.
 //! Archive capture times never count. Pairs are soft links: they never score,
 //! link or merge.
 
@@ -38,10 +43,12 @@ pub struct CoActivityOptions {
     pub min_active_bins: usize,
     /// Weighted coincidences needed at the best lag.
     pub min_coincidences: f64,
-    /// Circular shifts in the chance model (all admissible shifts when
-    /// fewer). The smallest chance it can give is `1 / (shifts + 1)`.
+    /// Circular shifts over the union span in the second chance model (all
+    /// admissible shifts when fewer).
     pub shifts: usize,
     pub max_chance: f64,
+    /// Benjamini-Hochberg false discovery rate over the pairs tested.
+    pub fdr: f64,
     /// A bin starting this close to a clock hour is on the hour.
     pub clock_tolerance_secs: i64,
     /// What a coincidence on the hour counts for.
@@ -57,6 +64,7 @@ impl Default for CoActivityOptions {
             min_coincidences: 4.0,
             shifts: 199,
             max_chance: 0.01,
+            fdr: 0.05,
             clock_tolerance_secs: 120,
             clock_weight: 0.25,
         }
@@ -80,10 +88,20 @@ pub struct CoActivePair {
     /// Active bins of each within the time both were active.
     pub active_a: usize,
     pub active_b: usize,
-    /// Mean of the statistic over the shifts, and the share of shifts at
-    /// least as aligned as the real one (with the real one counted).
+    /// Coincidences expected at the best lag under the analytic model.
     pub expected: f64,
+    /// The larger of the two chances below.
     pub chance: f64,
+    /// Analytic chance: each active bin of the quieter cluster meets the
+    /// other's activity with the share of the union span it covers (of the
+    /// bins at the same minute of the hour under hour shifts), as a
+    /// Poisson-binomial tail, times the lags tried.
+    #[serde(default)]
+    pub analytic: f64,
+    /// Share of circular shifts of one cluster's activity over the union
+    /// span that align at least as well, the real alignment not counted.
+    #[serde(default)]
+    pub shifted: f64,
     pub shifts: usize,
     /// Coincidences on a clock hour, counted at `clock_weight`.
     #[serde(default)]
@@ -91,6 +109,11 @@ pub struct CoActivePair {
     /// The shifts were whole hours, because most activity sat on the hour.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hour_shifts: bool,
+    /// Pairs tested, and pairs this unlikely expected among them.
+    #[serde(default)]
+    pub tested: usize,
+    #[serde(default)]
+    pub expected_pairs: f64,
     pub bin_secs: i64,
 }
 
@@ -105,13 +128,17 @@ impl CoActivePair {
             format!("{} trailing {} by {} to {} s", self.a, self.b, -hi, -lo)
         };
         let mut s = format!(
-            "{:.1} of {} active {}-second bins coincide, {lead}; {:.1} expected under {} circular shifts (chance {:.1e})",
+            "{:.1} of {} active {}-second bins coincide, {lead}; {:.1} expected (chance {:.1e}: {:.1e} analytic, a share of {:.3} of {} circular shifts; {:.2} such pairs expected among {} tested)",
             self.coincidences,
             self.active_a.min(self.active_b),
             self.bin_secs,
             self.expected,
+            self.chance,
+            self.analytic,
+            self.shifted,
             self.shifts,
-            self.chance
+            self.expected_pairs,
+            self.tested
         );
         if self.on_the_hour > 0 {
             s.push_str(&format!(", {} on a clock hour", self.on_the_hour));
@@ -191,16 +218,27 @@ pub(crate) fn coactive_pairs(
     }
 
     let mut out = Vec::new();
+    let mut tested = 0usize;
     for ((x, y), n) in near {
         if (n as f64) < opts.min_coincidences {
             continue;
         }
-        if let Some(p) = test_pair(&series[x], &series[y], opts)
-            && p.coincidences >= opts.min_coincidences
-            && p.chance <= opts.max_chance
-        {
-            out.push(p);
+        if let Some(p) = test_pair(&series[x], &series[y], opts) {
+            tested += 1;
+            if p.coincidences >= opts.min_coincidences && p.chance <= opts.max_chance {
+                out.push(p);
+            }
         }
+    }
+    // Many pairs are tested: keep those under the false-discovery cut.
+    let ps: Vec<f64> = out.iter().map(|p| p.chance).collect();
+    match crate::chance::bh_cut(&ps, tested, opts.fdr) {
+        Some(cut) => out.retain(|p| p.chance <= cut),
+        None => out.clear(),
+    }
+    for p in &mut out {
+        p.tested = tested;
+        p.expected_pairs = p.chance * tested as f64;
     }
     crate::sort::by(&mut out, |p, q| {
         p.chance
@@ -211,26 +249,18 @@ pub(crate) fn coactive_pairs(
     out
 }
 
-/// The best-lag statistic of `x` against `y`, and its circular-shift
-/// chance, over the time both were active.
+/// The best-lag statistic of `x` against `y` over the union of their
+/// spans, and its two chances: the analytic one, each bin of the quieter
+/// side meeting the other's activity at that side's own rate, and the
+/// share of circular shifts of the other side that align as well.
 fn test_pair(x: &Series, y: &Series, opts: &CoActivityOptions) -> Option<CoActivePair> {
     let bin = opts.bin_secs.max(1);
     let m = opts.max_lag_bins.max(0);
-    let lo = x.bins[0].max(y.bins[0]) - m;
-    let hi = x.bins[x.bins.len() - 1].min(y.bins[y.bins.len() - 1]) + m;
+    let lo = x.bins[0].min(y.bins[0]) - m;
+    let hi = x.bins[x.bins.len() - 1].max(y.bins[y.bins.len() - 1]) + m;
     let w = hi - lo + 1;
-    // The window must leave room for shifts beyond the lags.
-    if w <= 4 * (2 * m + 1) {
-        return None;
-    }
-    let inside = |s: &Series| -> Vec<i64> {
-        s.bins
-            .iter()
-            .filter(|&&b| (lo..=hi).contains(&b))
-            .map(|&b| b - lo)
-            .collect()
-    };
-    let (bx, by) = (inside(x), inside(y));
+    let rel = |s: &Series| -> Vec<i64> { s.bins.iter().map(|&b| b - lo).collect() };
+    let (bx, by) = (rel(x), rel(y));
     if bx.len() < opts.min_active_bins || by.len() < opts.min_active_bins {
         return None;
     }
@@ -254,10 +284,13 @@ fn test_pair(x: &Series, y: &Series, opts: &CoActivityOptions) -> Option<CoActiv
         .iter()
         .map(|&b| if hourly(b) { opts.clock_weight } else { 1.0 })
         .collect();
+    let lags: Vec<i64> = (0..=m)
+        .flat_map(|l| if l == 0 { vec![0] } else { vec![l, -l] })
+        .collect();
     // Best weighted coincidence count over the lags, `more` shifted by `s`.
     let stat = |s: i64| -> (f64, i64) {
         let mut best = (f64::MIN, 0);
-        for lag in (0..=m).flat_map(|l| if l == 0 { vec![0] } else { vec![l, -l] }) {
+        for &lag in &lags {
             let total: f64 = fewer
                 .iter()
                 .zip(&weights)
@@ -278,21 +311,42 @@ fn test_pair(x: &Series, y: &Series, opts: &CoActivityOptions) -> Option<CoActiv
     let clock_share = |v: &[i64]| v.iter().filter(|&&b| hourly(b)).count() as f64 / v.len() as f64;
     let hour_shifts = clock_share(&bx) >= 0.5 || clock_share(&by) >= 0.5;
     let step = if hour_shifts { (3600 / bin).max(1) } else { 1 };
+
+    // Analytic: a bin of the quieter side meets the other's activity with
+    // the share of the union span that activity covers; of the bins at the
+    // same minute of the hour, when most activity sits on the hour.
+    let per = step.min(w);
+    let mut cover = vec![(0usize, 0usize); per as usize];
+    for (u, &on) in map.iter().enumerate() {
+        let c = &mut cover[u % per as usize];
+        c.0 += usize::from(on);
+        c.1 += 1;
+    }
+    let rho: Vec<f64> = fewer
+        .iter()
+        .map(|&b| {
+            let (on, all) = cover[((b + lag).rem_euclid(w) % per) as usize];
+            on as f64 / all.max(1) as f64
+        })
+        .collect();
+    let need = (observed - 1e-9).ceil().max(0.0) as usize;
+    let analytic = (lags.len() as f64 * crate::chance::at_least(&rho, need)).min(1.0);
+    let expected: f64 = rho.iter().sum();
+
+    // Circular shifts over the union span, beyond the lags; the share at
+    // least as aligned, the real alignment not counted, so a short span
+    // sets no floor. Periodic jobs align under the shifts by their period.
     let guard = 2 * (m + 1);
     let admissible: Vec<i64> = (1..w)
         .filter(|&s| s % step == 0 && s.min(w - s) > guard)
         .collect();
-    if admissible.is_empty() {
-        return None;
-    }
     let k = opts.shifts.max(1).min(admissible.len());
-    let picks = (0..k).map(|i| admissible[i * admissible.len() / k]);
-    let (mut ge, mut sum) = (0usize, 0.0);
-    for s in picks {
-        let (v, _) = stat(s);
-        sum += v;
+    let mut ge = 0usize;
+    for i in 0..k {
+        let (v, _) = stat(admissible[i * admissible.len() / k]);
         ge += usize::from(v >= observed - 1e-9);
     }
+    let shifted = if k == 0 { 0.0 } else { ge as f64 / k as f64 };
     // `more` trails `fewer` by `lag` to `lag + 1` bins.
     let lag = if flip { -lag - 1 } else { lag };
     Some(CoActivePair {
@@ -302,11 +356,15 @@ fn test_pair(x: &Series, y: &Series, opts: &CoActivityOptions) -> Option<CoActiv
         coincidences: observed,
         active_a: bx.len(),
         active_b: by.len(),
-        expected: sum / k as f64,
-        chance: (1 + ge) as f64 / (1 + k) as f64,
+        expected,
+        chance: analytic.max(shifted),
+        analytic,
+        shifted,
         shifts: k,
         on_the_hour,
         hour_shifts,
+        tested: 0,
+        expected_pairs: 0.0,
         bin_secs: bin,
     })
 }
@@ -398,6 +456,39 @@ mod tests {
             "{:?}",
             a.soft_links
         );
+    }
+
+    #[test]
+    fn a_short_dispatch_under_two_hours_reaches_the_limit() {
+        // Eight dispatches in 70 minutes: too few circular shifts within the
+        // overlap to reach 1%, but the analytic chance reads each bin.
+        let mut t = T0;
+        let times: Vec<i64> = [300, 840, 420, 660, 360, 900, 480, 240]
+            .iter()
+            .map(|g| {
+                t += g;
+                t
+            })
+            .collect();
+        let a = analyze(pair(&times, 75, TsKind::Request), &Rules::default_rules());
+        let p = &a.coactive_pairs;
+        assert_eq!(p.len(), 1, "{p:?}");
+        let x = &p[0];
+        assert!(x.chance <= 0.01 && x.analytic <= x.chance, "{x:?}");
+        assert_eq!(x.tested, 1, "{x:?}");
+        assert!((x.expected_pairs - x.chance).abs() < 1e-12);
+        assert!(x.detail().contains("analytic"), "{}", x.detail());
+    }
+
+    #[test]
+    fn two_jobs_on_one_period_off_the_hour_are_not_co_active() {
+        // Every ten minutes from :03 for eight hours, the second 20 s after
+        // the first: aligned under every shift by a multiple of the period.
+        let start = (T0 / 3600 + 1) * 3600 + 180;
+        let times: Vec<i64> = (0..48).map(|k| start + k * 600).collect();
+        let a = analyze(pair(&times, 20, TsKind::Request), &Rules::default_rules());
+        assert_eq!(a.clusters.len(), 2);
+        assert!(a.coactive_pairs.is_empty(), "{:?}", a.coactive_pairs);
     }
 
     #[test]

@@ -46,6 +46,12 @@ pub fn run(a: PlatformArgs) -> Result<()> {
                 t.events.len(),
                 t.automation
             );
+            for (k, n) in &t.declared {
+                eprintln!("  declared coding-agent App: {k} {n}");
+            }
+            for (login, (claim, n)) in &t.lookalikes {
+                eprintln!("  spoofing lead: App {login} ({n} event(s)) claims {claim}");
+            }
             events.extend(t.events);
         } else {
             events.extend(load_events(p)?);

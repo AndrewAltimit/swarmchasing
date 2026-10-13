@@ -555,7 +555,7 @@ pub struct ScopeRow {
 pub fn scope_grid(rows: &[ScopeRow], label: &str) -> String {
     const QUESTIONS: [(&str, &str); 4] = [
         ("payload", "Payload"),
-        ("agent", "Agent"),
+        ("agent", "Agent (L4+)"),
         ("scope", "Out of scope"),
         ("coord", "Coordinated"),
     ];

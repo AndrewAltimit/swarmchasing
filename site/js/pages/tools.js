@@ -3,8 +3,9 @@
 // in its own status line while it loads or if it fails, so one module that
 // does not load leaves the other cards working: the bundle check and
 // security.txt run in the tools module, defang in the engine. Files are read in
-// this page: the manifest hashes are checked with Web Crypto and the
-// analysis is re-run by the tools module. Record contents, stamps and claims
+// this page: the manifest hashes are checked with Web Crypto, and the
+// manifest's signature (against the keys this site publishes) and the
+// analysis by the tools module. Record contents, stamps and claims
 // are untrusted: inserted as text, URLs defanged.
 import { $, el, showError, fetchRoot } from "../lib/dom.js";
 import { arr, obj, num, pct, dur, fmtTs, topEntries, trunc } from "../lib/fmt.js";
@@ -15,6 +16,10 @@ import { layersTable } from "../lib/layers.js";
 
 const FILES = ["records.ndjson", "analysis.json", "stamp.json"];
 const MANIFEST = "MANIFEST.sha256";
+// Optional: the manifest's Ed25519 signature. The keys it is checked
+// against are the ones this site's descriptor lists.
+const SIGNATURE = "MANIFEST.sha256.sig";
+const DESCRIPTOR = ".well-known/swarm-report.json";
 // Optional: the claims from case work, as `report --claims` reads them.
 const CLAIMS = "claims.json";
 // The synthetic bundle the site build makes from the showcase records.
@@ -55,11 +60,32 @@ async function checkManifest(byName) {
   return diffs;
 }
 
+/** The keys this site publishes, as key file lines, from the descriptor
+ * every build writes (`bundle_signing`), so a site without a key file is
+ * never asked for one. */
+async function publishedKeys() {
+  try {
+    const d = await fetchRoot(DESCRIPTOR);
+    return arr(obj(d.bundle_signing).keys).map((k) => `ed25519 ${String(obj(k).public_key)} ${String(obj(k).key_id)}`).join("\n");
+  } catch {
+    return "";
+  }
+}
+
+/** The signature check, or null without a manifest. With no published
+ * key, a signature is reported unchecked. */
+async function checkSignature(byName) {
+  const m = byName.get(MANIFEST);
+  if (!m) return null;
+  const sig = byName.has(SIGNATURE) ? await byName.get(SIGNATURE).text() : "";
+  return JSON.parse(sc.verify_signature(await m.text(), sig, await publishedKeys()));
+}
+
 /** Check the picked files. `synthetic` marks the showcase bundle as such. */
 async function load(files, synthetic = false) {
   const out = $("case-out");
   const byName = new Map([...files].map((f) => [f.name, f]));
-  $("case-picked").textContent = [...byName.keys()].filter((n) => FILES.includes(n) || n === MANIFEST || n === CLAIMS).join(", ");
+  $("case-picked").textContent = [...byName.keys()].filter((n) => FILES.includes(n) || n === MANIFEST || n === SIGNATURE || n === CLAIMS).join(", ");
   const missing = ["records.ndjson", "stamp.json"].filter((f) => !byName.has(f));
   if (missing.length) return showError(out, `Pick ${missing.join(" and ")} (and the rest of the bundle).`);
   try {
@@ -77,7 +103,9 @@ async function load(files, synthetic = false) {
     const hashDiffs = await checkManifest(byName);
     res = JSON.parse(sc.verify_bundle(records, analysis, stamp, rules, claims));
     res.claimsFile = byName.has(CLAIMS);
-    res.differences = [...hashDiffs, ...res.differences];
+    res.signature = await checkSignature(byName);
+    const sigDiffs = res.signature?.status === "invalid" ? [res.signature.line] : [];
+    res.differences = [...sigDiffs, ...hashDiffs, ...res.differences];
   } catch (e) {
     return showError(out, e);
   }
@@ -103,7 +131,9 @@ function render(res, synthetic) {
   const st = res.stamp;
   const a = res.analysis;
   const ok = res.differences.length === 0;
+  const signed = res.signature?.status === "signed";
   const kv = [
+    ["Signature", signatureText(res.signature)],
     ["Case", st.case],
     ["Generated", st.generated],
     ["Rules", `${st.rules_version}${st.rules_version === res.rules_version ? "" : ` (checked with ${res.rules_version})`}`],
@@ -119,7 +149,7 @@ function render(res, synthetic) {
   const runRows = lanes.flatMap((l) => l.runs.map((r) => [l.label, pill(l.tier), fmtTs(r.start), fmtTs(r.end), String(r.count)]));
   $("case-out").replaceChildren(...[
     synthetic ? el("p", { class: "hint note" }, "Synthetic example: the showcase bundle, built with this site from the showcase records. None of it was collected; target hosts are placeholders and networks documentation ASNs.") : null,
-    el("p", { class: `verdict ${ok ? "ok" : "bad"}`, role: "status" }, ok ? "Verified: manifest, tiers and clusters match the stamp." : `Does not verify: ${res.differences.length} difference(s).`),
+    el("p", { class: `verdict ${ok ? "ok" : "bad"}`, role: "status" }, ok ? `Verified: ${signed ? "signature, " : ""}manifest, tiers and clusters match the stamp.` : `Does not verify: ${res.differences.length} difference(s).`),
     ok ? null : el("ul", { class: "diffs" }, res.differences.map((d) => el("li", {}, d))),
     res.notes.length ? el("ul", { class: "hint" }, res.notes.map((n) => el("li", {}, n))) : null,
     el("dl", { class: "kv" }, kv.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
@@ -133,6 +163,23 @@ function render(res, synthetic) {
     el("h3", {}, "Records"),
     recordTable(a),
   ].filter((x) => x != null));
+}
+
+/** What the signature check found, in a line. Key ids are hex from the
+ * module, inserted as text. */
+function signatureText(sig) {
+  if (!sig) return el("span", { class: "hint" }, "not checked: no manifest picked");
+  const id = String(sig.key_id ?? "");
+  switch (sig.status) {
+    case "signed":
+      return `Signed by key ${id}, the key this site publishes.`;
+    case "unchecked":
+      return el("span", { class: "hint" }, `Signed by key ${id}, not checked: this site publishes no signing key.`);
+    case "unsigned":
+      return el("span", { class: "hint" }, `Unsigned: no ${SIGNATURE}. A signature shows who made the bundle; the checks below still hold without one.`);
+    default:
+      return `Signature invalid: ${String(sig.reason ?? "")}`;
+  }
 }
 
 /** The stamp's evaluation snapshot, or why there is none. */

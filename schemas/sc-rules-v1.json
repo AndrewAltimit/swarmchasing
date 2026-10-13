@@ -105,7 +105,9 @@
       "properties": {
         "min_specificity": { "$ref": "#/$defs/count" },
         "min_similarity": { "$ref": "#/$defs/share" },
-        "max_chance": { "$ref": "#/$defs/share" }
+        "max_holders": { "$ref": "#/$defs/count" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" }
       }
     },
     "co_activity": {
@@ -118,8 +120,21 @@
         "min_coincidences": { "type": "number", "minimum": 0 },
         "shifts": { "type": "integer", "minimum": 1 },
         "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" },
         "clock_tolerance_secs": { "$ref": "#/$defs/secs" },
         "clock_weight": { "$ref": "#/$defs/share" }
+      }
+    },
+    "swarm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lockstep_tolerance_secs": { "$ref": "#/$defs/secs" },
+        "lockstep_min_events": { "$ref": "#/$defs/count" },
+        "lockstep_min_share": { "$ref": "#/$defs/share" },
+        "lockstep_max_offset_secs": { "$ref": "#/$defs/secs" },
+        "lockstep_permutations": { "type": "integer", "minimum": 1 },
+        "lockstep_max_chance": { "$ref": "#/$defs/share" }
       }
     },
     "cut_lengths": {

@@ -474,8 +474,8 @@ pub fn case_threads(
     if !cases_root.is_dir() {
         return out;
     }
-    let cases = match crate::case::all(cases_root) {
-        Ok(c) => c,
+    let cases = match crate::case::all_readable(cases_root) {
+        Ok((c, _)) => c,
         Err(e) => {
             eprintln!("warning: cases not read for the attention queue: {e:#}");
             return out;

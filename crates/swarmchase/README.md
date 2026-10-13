@@ -59,10 +59,10 @@ Collectors read indexes and public records only. They never open a capture or a 
 
 | Option | Source | Does |
 |---|---|---|
-| `--filter <f>` | Wayback, Arquivo.pt | A CDX filter the index server applies, repeatable; `collection:SAWP.*` keeps Arquivo.pt's on-demand saves. |
+| `--filter <f>` | Wayback, Arquivo.pt, Wikimedia | A CDX filter the index server applies, repeatable; `collection:SAWP.*` keeps Arquivo.pt's on-demand saves. For Wikimedia, `domain:<wiki>`, `!domain:<wiki>` or `ns:<n>`. |
 | `--slice-days <n>` | Wayback | Reads the time range in windows of `n` days; a sliced pull resumes by window. |
 | `--canary <query>` | npm | A query known to match, run once first, so an empty result is told apart from a broken search. |
-| `--max-mb <n>` | GH Archive | The most compressed megabytes streamed per run. |
+| `--max-mb <n>` | GH Archive, Wikimedia | The most megabytes streamed per run (compressed, for GH Archive). |
 
 | Command | What it does |
 |---|---|
@@ -73,6 +73,7 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect urlscan <query>` | urlscan.io public search, per case. `URLSCAN_APIKEY` optional. |
 | `collect memento <url>` | One URL's captures across archives, from a Memento timemap. |
 | `collect gharchive <substrings>` | Public GitHub events matching repo names or payload URLs. |
+| `collect wikimedia <substrings>` | External links added to Wikimedia wiki pages in the last hour, matching the link or page title; `--scan` minutes. The links are never fetched. |
 | `collect npm <text>`, `collect pypi <substrings>` | Package names, versions and publish times; never code. |
 | `collect ctlog <substrings> --endpoint <log>` | Certificates in a CT log's newest entries whose names match. |
 | `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |
@@ -162,6 +163,7 @@ Other subcommands: `list`, `show`, `signature`.
 | `notice lint [files]` | Checks front matter, update order, attribution wording and that nothing withheld got through. CI and the pre-commit hook run it. |
 | `notice build --out <dir> --base-url <url>` | Writes the site's notice index, pages and Atom feed. |
 | `canary register [_site]`, `list`, `token`, `scan` | Canary tokens on our own pages: register a built site's tokens, list them, derive one, find copies in records ([page references](../../docs/reference/browser-toolkit.md#page-references)). |
+| `key generate --out <file> [--public-out <file>]`, `key public` | The key evidence bundles are signed with: make one (the secret goes to a file, never the terminal), or show the key id of `SWARMCHASE_SIGNING_KEY` ([bundle signing](../../docs/reference/configuration.md#bundle-signing)). |
 | `site build [--out _site] [--base-url <url>]` | Builds the whole public site from the checkout, as `sc-site` does ([how the site is built](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). |
 
 Details: [Notices](../../docs/reference/notices.md).
@@ -177,6 +179,7 @@ Details: [Notices](../../docs/reference/notices.md).
 | `SWARMCHASE_SITE_URL` | `notice build --base-url`. |
 | `SWARMCHASE_UA` | Overrides the collectors' user agent. |
 | `SWARMCHASE_CANARY_SEED` | The secret seed of `canary`; never committed. |
+| `SWARMCHASE_SIGNING_KEY` | The secret seed bundles are signed with; never committed. |
 
 Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../../scripts/with-env.sh); see [Local secrets](../../docs/reference/configuration.md#local-secrets).
 
@@ -212,6 +215,7 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`contacts/`](src/contacts/mod.rs) | security.txt and RDAP parsing, contact lookup for `case contacts`, provider seeding from the directory, `contacts verify`, and `swarmchase contacts`. |
 | [`csirts.rs`](src/csirts.rs) | National CSIRTs by country ([`contacts/csirts.toml`](../../contacts/csirts.toml)). |
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
+| [`signing.rs`](src/signing.rs) | `swarmchase key`, the signing key from the environment, and the published key file. The signature itself is [`sc-case`](../sc-case/README.md). |
 | [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
 | [`stix/`](src/stix/mod.rs) | `case export --format stix\|misp`: the case scoped to an audience, built by [`sc-stix`](../sc-stix/README.md). |
 | [`inbox/`](src/inbox/mod.rs) | `swarmchase inbox`: the files under `<data>/inbox/` ([`files.rs`](src/inbox/files.rs)) and lookups by id ([`verify.rs`](src/inbox/verify.rs)). What a submission is and how it is judged is [`sc-inbox`](../sc-inbox/README.md). |

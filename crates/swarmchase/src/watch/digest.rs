@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 /// What the previous run knew, so the digest can say what changed.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Summary {
     #[serde(default)]
     pub generated: String,
@@ -114,6 +114,7 @@ pub fn capability(kind: &str) -> &'static str {
         }
         "gharchive" => "GitHub event leads: run-named repositories and pasted relay URLs",
         "npm" | "pypi" => "registry leads: packages carrying run tags",
+        "wikimedia" => "wiki edit leads: relay and run-tag links added to wiki pages",
         "ctlog" => "certificate leads: new relay look-alikes and mirrors",
         "wellknown" => "agent protocol footprints: agent cards and signature key directories",
         "mcp" => "MCP Registry metadata for linking hosts to tool servers",
@@ -272,6 +273,9 @@ pub enum AlertKind {
     HostDown,
     /// A rule's hit rate jumped on one source's new records.
     RuleDrift,
+    /// A store file has lines that cannot be read (a write cut short, bytes
+    /// that are not UTF-8); they are skipped.
+    StoreDamaged,
     Other,
 }
 
@@ -284,6 +288,7 @@ impl AlertKind {
             AlertKind::CanaryFailed => "canary_failed",
             AlertKind::HostDown => "host_down",
             AlertKind::RuleDrift => "rule_drift",
+            AlertKind::StoreDamaged => "store_damaged",
             AlertKind::Other => "other",
         }
     }
@@ -408,6 +413,56 @@ pub fn summarise(a: &Analysis, prev: &Summary, generated: String) -> Summary {
         e.max_tier = e.max_tier.max(r.tier);
     }
     s
+}
+
+/// The previous run's summary as the ledger follows it: a cluster whose key
+/// changed this run (its earliest member left the window) is listed under
+/// its new key, at the tier its thread had on the previous run, so it is
+/// compared with itself and not reported as new. Only threads seen on the
+/// previous run carry over; a thread seen before that and back now is
+/// reported as new here and as a return by the ledger.
+pub fn baseline(
+    prev: &Summary,
+    next: &Summary,
+    ledger: &super::ledger::Ledger,
+    observed: &super::ledger::Observed,
+    stamp: &str,
+) -> Summary {
+    let mut base = prev.clone();
+    // `2026-10-12T06:00:00Z` is run `20261012T060000Z`.
+    let prev_run: String = prev
+        .generated
+        .chars()
+        .filter(|c| *c != '-' && *c != ':')
+        .collect();
+    for (k, c) in &next.clusters {
+        if prev.clusters.contains_key(k) {
+            continue;
+        }
+        let Some(th) = observed
+            .threads
+            .get(&c.id)
+            .and_then(|t| ledger.threads.get(t))
+        else {
+            continue;
+        };
+        let before = th
+            .points
+            .iter()
+            .rev()
+            .find(|p| p.run != stamp)
+            .filter(|p| prev_run.is_empty() || p.run == prev_run);
+        if let Some(p) = before {
+            base.clusters.insert(
+                k.clone(),
+                ClusterSummary {
+                    tier: p.tier,
+                    ..c.clone()
+                },
+            );
+        }
+    }
+    base
 }
 
 pub fn digest(d: &DigestInput) -> Digest {
@@ -1159,6 +1214,45 @@ mod tests {
             attention: &Default::default(),
             autonomy: &[],
         })
+    }
+
+    #[test]
+    fn a_cluster_whose_earliest_record_left_the_window_is_not_new() {
+        use super::super::ledger::Ledger;
+        let rules = sc_core::Rules::default_rules();
+        let t0 = 1_791_000_000;
+        let all: Vec<sc_core::Observation> = (0..5)
+            .map(|i| sc_core::Observation {
+                id: format!("r{i}"),
+                source: "wayback".into(),
+                ts: t0 + i * 30,
+                url: format!(
+                    "https://r.jina.ai/https://portal.example.gov/q?id=1'%20OR%201=1--&uqtag=run7&n={i}"
+                ),
+                ..Default::default()
+            })
+            .collect();
+        let ids: BTreeSet<String> = all.iter().map(|o| o.id.clone()).collect();
+        let mut ledger = Ledger::new();
+        let a1 = sc_core::analyze(all.clone(), &rules);
+        let s1 = summarise(&a1, &Summary::default(), "2026-10-12T00:00:00Z".into());
+        ledger.observe(&a1, "20261012T000000Z", t0, &ids);
+        // The earliest record leaves the window: the summary's key changes.
+        let a2 = sc_core::analyze(all[1..].to_vec(), &rules);
+        let s2 = summarise(&a2, &s1, "2026-10-12T06:00:00Z".into());
+        assert!(s2.clusters.keys().all(|k| !s1.clusters.contains_key(k)));
+        let o2 = ledger.observe(&a2, "20261012T060000Z", t0 + 6 * 3600, &BTreeSet::new());
+        let none = BTreeSet::new();
+        // Against the bare summary it looks new; against its thread it is not.
+        assert!(!super::super::triage::leads(&a2, &s1, &s2, &none).is_empty());
+        let base = baseline(&s1, &s2, &ledger, &o2, "20261012T060000Z");
+        let leads = super::super::triage::leads(&a2, &base, &s2, &none);
+        assert!(leads.is_empty(), "{leads:?}");
+        // A thread not seen on the previous run is still new.
+        let mut stale = s1.clone();
+        stale.generated = "2026-10-11T00:00:00Z".into();
+        let base = baseline(&stale, &s2, &ledger, &o2, "20261012T060000Z");
+        assert!(!super::super::triage::leads(&a2, &base, &s2, &none).is_empty());
     }
 
     #[test]

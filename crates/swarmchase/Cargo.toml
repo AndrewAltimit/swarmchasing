@@ -16,7 +16,7 @@ path = "tests/integration.rs"
 sc-core = { workspace = true, features = ["signatures"] }
 sc-collect.workspace = true
 sc-publish.workspace = true
-sc-case.workspace = true
+sc-case = { workspace = true, features = ["signatures"] }
 sc-stix.workspace = true
 sc-sim.workspace = true
 sc-inbox.workspace = true
@@ -29,6 +29,7 @@ anyhow.workspace = true
 clap.workspace = true
 reqwest.workspace = true
 age.workspace = true
+getrandom.workspace = true
 tar.workspace = true
 chrono = { workspace = true, features = ["clock"] }
 

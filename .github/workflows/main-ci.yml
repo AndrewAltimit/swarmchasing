@@ -167,6 +167,11 @@ jobs:
     name: Deploy GitHub Pages
     needs: [gates, ci]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # One deploy at a time: the workflow's groups are per commit, so two
+    # pushes to main could otherwise publish out of order.
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     runs-on: self-hosted
     timeout-minutes: 30
     permissions:
@@ -176,10 +181,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Full history: the sitemap dates each doc by its last commit, and a
+      # shallow clone cannot.
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           clean: true
 
       - name: Select per-toolchain target dir

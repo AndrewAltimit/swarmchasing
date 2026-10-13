@@ -75,24 +75,40 @@ jobs:
       # $GITHUB_OUTPUT for the email steps below. A failed source, an
       # unavailable host or a failed canary sets `changed`, so the digest
       # carrying the alert is mailed the same run.
+      #
+      # The Actions log of a public repository is public, and the watch's
+      # output describes unreviewed leads (counts by network, operator
+      # clocks). The full output goes to $RUNNER_TEMP/watch.log on the runner
+      # (the failure alert mails its tail); the public log gets only the
+      # per-source counts and the run's totals.
       - name: Collect and analyse
         id: watch
         run: |
           export SWARMCHASE_DATA="${SWARMCHASE_DATA:-$HOME/swarmchase-data}"
           mkdir -p "$SWARMCHASE_DATA"
-          cargo run --release -p swarmchase -- watch watchlist.toml 2>&1 | tee "$RUNNER_TEMP/watch.log"
+          set +e
+          cargo run --release -p swarmchase -- watch watchlist.toml > "$RUNNER_TEMP/watch.log" 2>&1
+          rc=$?
+          set -e
+          grep -E ' (pulled|skipped|error|events)|^[0-9]+ records ·|^wrote |^retention:|^error' \
+            "$RUNNER_TEMP/watch.log" | tail -n 80 || true
+          exit "$rc"
 
       # The subject leads with the run's priority (high, medium or low).
+      # Mailed whenever the run wrote a changed digest, even when the watch
+      # then exited non-zero (every source failed): that digest carries the
+      # alerts.
       - name: Email digest
-        if: steps.watch.outputs.changed == 'true' && env.SMTP_URL != ''
+        if: always() && steps.watch.outputs.changed == 'true' && env.SMTP_URL != ''
         env:
           PRIORITY: ${{ steps.watch.outputs.priority }}
+          RUN_DIR: ${{ steps.watch.outputs.run_dir }}
         run: |
-          bash scripts/ci/send-mail.sh "[swarmchase] [${PRIORITY^^}] watch digest $(basename '${{ steps.watch.outputs.run_dir }}')" \
-            "${{ steps.watch.outputs.run_dir }}/digest.md"
+          bash scripts/ci/send-mail.sh "[swarmchase] [${PRIORITY^^}] watch digest $(basename "$RUN_DIR")" \
+            "$RUN_DIR/digest.md"
 
       - name: Email failure alert
-        if: failure() && env.SMTP_URL != ''
+        if: (failure() || cancelled()) && env.SMTP_URL != ''
         run: |
           {
             echo "The scheduled watch run failed."

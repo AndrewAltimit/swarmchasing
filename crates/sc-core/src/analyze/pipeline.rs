@@ -292,9 +292,7 @@ fn cross_service(cx: &mut AnalysisCtx) {
     let opts = &cx.rules.set.fanout;
     let fans = crate::crossservice::service_fans(&cx.a.results, opts);
     let window = cx.rules.set.linking.window_secs;
-    for c in &mut cx.a.clusters {
-        c.cross_service = crate::crossservice::describe(c, &cx.a.results, &fans, opts, window);
-    }
+    crate::crossservice::describe_all(&mut cx.a.clusters, &cx.a.results, &fans, opts, window);
 }
 
 /// Plant signals per cluster.
