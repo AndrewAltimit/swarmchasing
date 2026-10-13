@@ -19,7 +19,7 @@
 use percent_encoding::percent_decode_str;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::OnceLock;
 
 /// Variants two clusters must share before their dialects are compared.
@@ -253,23 +253,26 @@ pub fn dialect(records: &[BTreeSet<String>]) -> Dialect {
 /// common payload (`alert(1)` alone) never makes a pair.
 pub fn dialect_pairs(clusters: &[(&str, &Dialect)]) -> Vec<DialectPair> {
     let mut out = Vec::new();
+    let sets: Vec<Vec<&str>> = clusters
+        .iter()
+        .map(|(_, d)| d.variants.keys().map(String::as_str).collect())
+        .collect();
+    let counts = SharedCounts::new(&sets);
     for (i, (a, da)) in clusters.iter().enumerate() {
         if da.variants.len() < PAIR_MIN_SHARED {
             continue;
         }
-        for (b, db) in &clusters[i + 1..] {
-            let shared: Vec<String> = da
-                .variants
-                .keys()
-                .filter(|k| db.variants.contains_key(*k))
-                .cloned()
-                .collect();
-            if shared.len() < PAIR_MIN_SHARED {
-                continue;
-            }
-            let union = da.variants.len() + db.variants.len() - shared.len();
-            let jaccard = shared.len() as f64 / union as f64;
+        for (k, n) in counts.later(i, PAIR_MIN_SHARED) {
+            let (b, db) = &clusters[k];
+            let union = da.variants.len() + db.variants.len() - n;
+            let jaccard = n as f64 / union as f64;
             if jaccard >= PAIR_MIN_JACCARD {
+                let shared: Vec<String> = da
+                    .variants
+                    .keys()
+                    .filter(|k| db.variants.contains_key(*k))
+                    .cloned()
+                    .collect();
                 out.push(DialectPair {
                     a: (*a).to_string(),
                     b: (*b).to_string(),
@@ -280,6 +283,43 @@ pub fn dialect_pairs(clusters: &[(&str, &Dialect)]) -> Vec<DialectPair> {
         }
     }
     out
+}
+
+/// How many elements sets share, read from an index of the sets holding
+/// each element, so sets sharing nothing are never compared.
+pub(crate) struct SharedCounts<'s> {
+    sets: &'s [Vec<&'s str>],
+    /// Each element to the sets holding it, ascending.
+    holders: HashMap<&'s str, Vec<usize>>,
+}
+
+impl<'s> SharedCounts<'s> {
+    /// `sets`: each set's distinct elements.
+    pub(crate) fn new(sets: &'s [Vec<&'s str>]) -> Self {
+        let mut holders: HashMap<&str, Vec<usize>> = HashMap::new();
+        for (i, set) in sets.iter().enumerate() {
+            for &v in set {
+                holders.entry(v).or_default().push(i);
+            }
+        }
+        Self { sets, holders }
+    }
+
+    /// Every set after `i` sharing at least `min` (at least one) elements
+    /// with set `i`, with the count, ascending.
+    pub(crate) fn later(&self, i: usize, min: usize) -> Vec<(usize, usize)> {
+        let mut shared: BTreeMap<usize, usize> = BTreeMap::new();
+        for v in &self.sets[i] {
+            let at = &self.holders[v];
+            for &k in &at[at.partition_point(|&x| x <= i)..] {
+                *shared.entry(k).or_default() += 1;
+            }
+        }
+        shared
+            .into_iter()
+            .filter(|&(_, n)| n >= min.max(1))
+            .collect()
+    }
 }
 
 /// Several truncated URLs cut at nearly the same length.
@@ -576,5 +616,79 @@ mod tests {
         assert!(
             cut_lengths(&[("https://a.example/?q=1", false)], &CutOptions::default()).is_empty()
         );
+    }
+
+    /// A small deterministic generator for the index tests.
+    fn lcg(seed: &mut u64) -> u64 {
+        *seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        *seed >> 33
+    }
+
+    #[test]
+    fn shared_counts_match_a_full_comparison() {
+        let mut seed = 17;
+        let names: Vec<String> = (0..30).map(|i| format!("v{i}")).collect();
+        let sets: Vec<Vec<&str>> = (0..90)
+            .map(|_| {
+                let n = lcg(&mut seed) % 8;
+                let s: BTreeSet<&str> = (0..n)
+                    .map(|_| names[(lcg(&mut seed) % 30) as usize].as_str())
+                    .collect();
+                s.into_iter().collect()
+            })
+            .collect();
+        let counts = SharedCounts::new(&sets);
+        for min in [0, 1, 3] {
+            for i in 0..sets.len() {
+                let brute: Vec<(usize, usize)> = (i + 1..sets.len())
+                    .map(|k| (k, sets[i].iter().filter(|v| sets[k].contains(v)).count()))
+                    .filter(|&(_, n)| n >= min.max(1))
+                    .collect();
+                assert_eq!(counts.later(i, min), brute, "set {i}, min {min}");
+            }
+        }
+    }
+
+    #[test]
+    fn dialect_pairs_match_a_full_comparison() {
+        let mut seed = 23;
+        let names: Vec<String> = (0..12).map(|i| format!("xss.v{i}")).collect();
+        let dialects: Vec<Dialect> = (0..80)
+            .map(|_| {
+                let mut d = Dialect::default();
+                for _ in 0..lcg(&mut seed) % 7 {
+                    d.variants
+                        .insert(names[(lcg(&mut seed) % 12) as usize].clone(), 1);
+                }
+                d
+            })
+            .collect();
+        let ids: Vec<String> = (0..dialects.len()).map(|i| format!("C{i}")).collect();
+        let input: Vec<(&str, &Dialect)> = ids.iter().map(String::as_str).zip(&dialects).collect();
+        let mut brute = Vec::new();
+        for (i, (a, da)) in input.iter().enumerate() {
+            for (b, db) in &input[i + 1..] {
+                let shared: Vec<String> = da
+                    .variants
+                    .keys()
+                    .filter(|k| db.variants.contains_key(*k))
+                    .cloned()
+                    .collect();
+                let union = da.variants.len() + db.variants.len() - shared.len();
+                if shared.len() >= PAIR_MIN_SHARED
+                    && shared.len() as f64 / union as f64 >= PAIR_MIN_JACCARD
+                {
+                    brute.push((a.to_string(), b.to_string(), shared));
+                }
+            }
+        }
+        let got: Vec<(String, String, Vec<String>)> = dialect_pairs(&input)
+            .into_iter()
+            .map(|p| (p.a, p.b, p.shared))
+            .collect();
+        assert!(!brute.is_empty());
+        assert_eq!(got, brute);
     }
 }

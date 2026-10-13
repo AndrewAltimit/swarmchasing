@@ -16,7 +16,7 @@ use crate::escalation::Escalation;
 use crate::model::{LinkFeature, Tier};
 use crate::timing::SharedPause;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// What a soft link rests on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -190,20 +190,28 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
         .enumerate()
         .map(|(i, c)| (c.id.as_str(), i))
         .collect();
-    let is_shown = |id: &str| shown.iter().any(|c| c.id == id);
-    let mut out: Vec<SoftLink> = Vec::new();
+    let shown_ids: HashSet<&str> = shown.iter().map(|c| c.id.as_str()).collect();
+    let is_shown = |id: &str| shown_ids.contains(id);
+    // Each link with its clusters' positions, to sort by.
+    let mut out: Vec<(usize, usize, SoftLink)> = Vec::new();
     let mut push = |x: &str, y: &str, kind, strength: f64, detail: String| {
         if x == y || strength <= 0.0 || !is_shown(x) || !is_shown(y) {
             return;
         }
-        let (a, b) = if order[x] <= order[y] { (x, y) } else { (y, x) };
-        out.push(SoftLink {
+        let (ox, oy) = (order[x], order[y]);
+        let ((a, oa), (b, ob)) = if ox <= oy {
+            ((x, ox), (y, oy))
+        } else {
+            ((y, oy), (x, ox))
+        };
+        let link = SoftLink {
             a: a.into(),
             b: b.into(),
             kind,
             strength: strength.min(1.0),
             detail,
-        });
+        };
+        out.push((oa, ob, link));
     };
 
     for p in s.shared_pauses {
@@ -253,12 +261,13 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             p.detail(),
         );
     }
+    let paused: HashSet<(&str, &str)> = s
+        .shared_pauses
+        .iter()
+        .flat_map(|q| [(q.a.as_str(), q.b.as_str()), (q.b.as_str(), q.a.as_str())])
+        .collect();
     for p in s.coactive_pairs {
-        let paused = s
-            .shared_pauses
-            .iter()
-            .any(|q| (q.a == p.a && q.b == p.b) || (q.a == p.b && q.b == p.a));
-        if !paused {
+        if !paused.contains(&(p.a.as_str(), p.b.as_str())) {
             let quieter = p.active_a.min(p.active_b).max(1) as f64;
             push(
                 &p.a,
@@ -386,14 +395,11 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
     // value shared that widely.
     let sets: Vec<BTreeSet<&str>> = shown.iter().map(|c| path_set(c)).collect();
     let mut similar: Vec<(usize, usize, f64)> = Vec::new();
-    for i in 0..shown.len() {
-        for k in i + 1..shown.len() {
-            if !sets[i].is_empty() && !sets[k].is_empty() {
-                let j = jaccard(&sets[i], &sets[k]);
-                if j >= 0.6 {
-                    similar.push((i, k, j));
-                }
-            }
+    // Jaccard 0.6 needs a shared path, so only sets sharing one are compared.
+    for (i, k) in sharing_pairs(&sets) {
+        let j = jaccard(&sets[i], &sets[k]);
+        if j >= 0.6 {
+            similar.push((i, k, j));
         }
     }
     let mut partners = vec![0usize; shown.len()];
@@ -412,33 +418,32 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             );
         }
     }
-    for (i, x) in shown.iter().enumerate() {
-        for y in &shown[i + 1..] {
-            if let (Some(gx), Some(gy)) = (&x.cut_lengths.url, &y.cut_lengths.url)
-                && gx.min <= gy.max + 2
-                && gy.min <= gx.max + 2
-            {
-                push(
-                    &x.id,
-                    &y.id,
-                    SoftLinkKind::CutLength,
-                    opts.cut_length,
-                    format!(
-                        "URLs cut at {}–{} and {}–{} characters",
-                        gx.min, gx.max, gy.min, gy.max
-                    ),
-                );
-            }
-        }
+    let groups: Vec<Option<(usize, usize)>> = shown
+        .iter()
+        .map(|c| c.cut_lengths.url.map(|g| (g.min, g.max)))
+        .collect();
+    for (i, k) in near_ranges(&groups, 2) {
+        let (x, y) = (shown[i], shown[k]);
+        let (gx, gy) = (groups[i].unwrap_or_default(), groups[k].unwrap_or_default());
+        push(
+            &x.id,
+            &y.id,
+            SoftLinkKind::CutLength,
+            opts.cut_length,
+            format!(
+                "URLs cut at {}–{} and {}–{} characters",
+                gx.0, gx.1, gy.0, gy.1
+            ),
+        );
     }
-    crate::sort::by(&mut out, |p, q| {
+    crate::sort::by(&mut out, |(pa, pb, p), (qa, qb, q)| {
         q.strength
             .total_cmp(&p.strength)
-            .then(order[p.a.as_str()].cmp(&order[q.a.as_str()]))
-            .then(order[p.b.as_str()].cmp(&order[q.b.as_str()]))
+            .then(pa.cmp(qa))
+            .then(pb.cmp(qb))
             .then(p.kind.cmp(&q.kind))
     });
-    out
+    out.into_iter().map(|(_, _, l)| l).collect()
 }
 
 /// Every `REDACTED-<12 hex>` replacement in `text`.
@@ -485,6 +490,44 @@ fn path_set(c: &Cluster) -> BTreeSet<&str> {
         .collect()
 }
 
+/// Every pair `(i, k)`, `i < k`, of non-empty sets sharing at least one
+/// element, in that order.
+fn sharing_pairs(sets: &[BTreeSet<&str>]) -> Vec<(usize, usize)> {
+    let lists: Vec<Vec<&str>> = sets.iter().map(|s| s.iter().copied().collect()).collect();
+    let counts = crate::dialect::SharedCounts::new(&lists);
+    (0..sets.len())
+        .flat_map(|i| counts.later(i, 1).into_iter().map(move |(k, _)| (i, k)))
+        .collect()
+}
+
+/// Every pair `(i, k)`, `i < k`, of ranges `(min, max)` that overlap once
+/// widened by `slack` (`min_i <= max_k + slack` and `min_k <= max_i +
+/// slack`), in that order. `None` ranges pair with nothing.
+fn near_ranges(ranges: &[Option<(usize, usize)>], slack: usize) -> Vec<(usize, usize)> {
+    let mut by_min: Vec<(usize, usize, usize)> = ranges
+        .iter()
+        .enumerate()
+        .filter_map(|(i, r)| r.map(|(lo, hi)| (lo, hi, i)))
+        .collect();
+    crate::sort::sort(&mut by_min);
+    let mut out = Vec::new();
+    for (n, &(lo, hi, i)) in by_min.iter().enumerate() {
+        // Sorted by min, so `lo <= lo_k <= hi_k` already holds; the other
+        // side holds for every later range up to the first that starts past
+        // this one's widened end.
+        for &(lo_k, hi_k, k) in &by_min[n + 1..] {
+            if lo_k > hi + slack {
+                break;
+            }
+            if lo <= hi_k + slack {
+                out.push((i.min(k), i.max(k)));
+            }
+        }
+    }
+    crate::sort::sort(&mut out);
+    out
+}
+
 fn jaccard(a: &BTreeSet<&str>, b: &BTreeSet<&str>) -> f64 {
     let inter = a.intersection(b).count();
     inter as f64 / (a.len() + b.len() - inter).max(1) as f64
@@ -528,31 +571,47 @@ pub(crate) fn candidate_fleets(
             parent[ra.max(rb)] = ra.min(rb);
         }
     }
-    let mut groups: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
-    for &((a, b), _) in &strong {
+    struct Group {
+        members: BTreeSet<usize>,
+        kinds: BTreeSet<SoftLinkKind>,
+        links: usize,
+        strength: f64,
+    }
+    let mut groups: BTreeMap<usize, Group> = BTreeMap::new();
+    // Each cluster in a group, by the group's root.
+    let mut group_of: HashMap<usize, usize> = HashMap::new();
+    for &((a, b), s) in &strong {
         let r = find(&mut parent, a);
-        groups.entry(r).or_default().extend([a, b]);
+        let g = groups.entry(r).or_insert_with(|| Group {
+            members: BTreeSet::new(),
+            kinds: BTreeSet::new(),
+            links: 0,
+            strength: 1.0,
+        });
+        g.members.extend([a, b]);
+        g.strength = g.strength.min(s);
+        group_of.insert(a, r);
+        group_of.insert(b, r);
+    }
+    for l in links {
+        let (a, b) = (pos[l.a.as_str()], pos[l.b.as_str()]);
+        if let (Some(ga), Some(gb)) = (group_of.get(&a), group_of.get(&b))
+            && ga == gb
+            && let Some(g) = groups.get_mut(ga)
+        {
+            g.kinds.insert(l.kind);
+            g.links += 1;
+        }
     }
     groups
         .into_values()
         .enumerate()
-        .map(|(n, members)| {
-            let inside = |l: &&SoftLink| {
-                members.contains(&pos[l.a.as_str()]) && members.contains(&pos[l.b.as_str()])
-            };
-            let kinds: BTreeSet<SoftLinkKind> =
-                links.iter().filter(inside).map(|l| l.kind).collect();
-            CandidateFleet {
-                id: format!("F{}", n + 1),
-                clusters: members.iter().map(|&i| order[i].clone()).collect(),
-                kinds: kinds.into_iter().collect(),
-                links: links.iter().filter(inside).count(),
-                strength: strong
-                    .iter()
-                    .filter(|((a, _), _)| members.contains(a))
-                    .map(|&(_, s)| s)
-                    .fold(1.0, f64::min),
-            }
+        .map(|(n, g)| CandidateFleet {
+            id: format!("F{}", n + 1),
+            clusters: g.members.iter().map(|&i| order[i].clone()).collect(),
+            kinds: g.kinds.into_iter().collect(),
+            links: g.links,
+            strength: g.strength,
         })
         .collect()
 }
@@ -791,5 +850,65 @@ mod tests {
             },
         );
         assert!(!provider.contains("Candidate fleets"));
+    }
+
+    /// A small deterministic generator for the index tests.
+    fn lcg(seed: &mut u64) -> u64 {
+        *seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        *seed >> 33
+    }
+
+    #[test]
+    fn near_ranges_finds_every_overlapping_pair_once() {
+        let mut seed = 3;
+        let ranges: Vec<Option<(usize, usize)>> = (0..200)
+            .map(|_| {
+                let lo = (lcg(&mut seed) % 300) as usize;
+                let w = (lcg(&mut seed) % 12) as usize;
+                (!lcg(&mut seed).is_multiple_of(5)).then_some((lo, lo + w))
+            })
+            .collect();
+        let mut brute = Vec::new();
+        for i in 0..ranges.len() {
+            for k in i + 1..ranges.len() {
+                if let (Some(x), Some(y)) = (ranges[i], ranges[k])
+                    && x.0 <= y.1 + 2
+                    && y.0 <= x.1 + 2
+                {
+                    brute.push((i, k));
+                }
+            }
+        }
+        assert!(!brute.is_empty());
+        assert_eq!(near_ranges(&ranges, 2), brute);
+        assert!(near_ranges(&[None, Some((3, 4))], 2).is_empty());
+        assert_eq!(near_ranges(&[Some((10, 12)), Some((14, 20))], 2), [(0, 1)]);
+        assert!(near_ranges(&[Some((10, 12)), Some((15, 20))], 2).is_empty());
+    }
+
+    #[test]
+    fn sharing_pairs_are_the_pairs_with_a_common_path() {
+        let mut seed = 9;
+        let names: Vec<String> = (0..40).map(|i| format!("/p{i}")).collect();
+        let sets: Vec<BTreeSet<&str>> = (0..120)
+            .map(|_| {
+                let n = lcg(&mut seed) % 4;
+                (0..n)
+                    .map(|_| names[(lcg(&mut seed) % 40) as usize].as_str())
+                    .collect()
+            })
+            .collect();
+        let mut brute = Vec::new();
+        for i in 0..sets.len() {
+            for k in i + 1..sets.len() {
+                if sets[i].intersection(&sets[k]).next().is_some() {
+                    brute.push((i, k));
+                }
+            }
+        }
+        assert!(!brute.is_empty());
+        assert_eq!(sharing_pairs(&sets), brute);
     }
 }

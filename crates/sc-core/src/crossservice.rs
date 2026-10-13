@@ -7,7 +7,7 @@
 //! services moments apart. So does a mail gateway or security product that
 //! submits every link it sees, and then whoever mailed the link made the
 //! records. [`service_fans`] finds the targets sent to at least
-//! `cross_service_min` services within `cross_service_secs`; [`describe`]
+//! `cross_service_min` services within `cross_service_secs`; [`describe_all`]
 //! says which of them touch a cluster, and counts the same fan-out on
 //! ordinary links on other hosts around it, which is how an auto-submitter
 //! shows itself.
@@ -20,7 +20,7 @@ use crate::analyze::{Cluster, ObsResult, target_text};
 use crate::fanout::FanOutOptions;
 use crate::model::{Provenance, Tier, TsKind};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// One target's submissions to several services within the window.
 #[derive(Debug, Clone, PartialEq)]
@@ -117,70 +117,117 @@ pub(crate) fn service_fans(results: &[ObsResult], opts: &FanOutOptions) -> Vec<S
     let mut out = Vec::new();
     for subs in by_target.values_mut() {
         crate::sort::by_key(subs, |&(i, _)| (results[i].obs.ts, i));
-        let mut a = 0;
+        let ts = |k: usize| results[subs[k].0].obs.ts;
+        // The window is `subs[a..e]`, its services counted in `counts`. Times
+        // are sorted, so `e` only moves forward as `a` does.
+        let (mut a, mut e) = (0, 0);
+        let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
         while a < subs.len() {
-            let t0 = results[subs[a].0].obs.ts;
-            let win: Vec<(usize, &'static str)> = subs[a..]
-                .iter()
-                .copied()
-                .take_while(|&(i, _)| results[i].obs.ts - t0 <= opts.cross_service_secs)
-                .collect();
-            let services: BTreeSet<&'static str> = win.iter().map(|&(_, s)| s).collect();
-            if services.len() < opts.cross_service_min {
+            if e < a {
+                e = a;
+                counts.clear();
+            }
+            let t0 = ts(a);
+            while e < subs.len() && ts(e) - t0 <= opts.cross_service_secs {
+                *counts.entry(subs[e].1).or_default() += 1;
+                e += 1;
+            }
+            if counts.len() < opts.cross_service_min {
+                if a < e {
+                    let s = subs[a].1;
+                    if let Some(n) = counts.get_mut(s) {
+                        *n -= 1;
+                        if *n == 0 {
+                            counts.remove(s);
+                        }
+                    }
+                }
                 a += 1;
                 continue;
             }
-            let records: Vec<usize> = win.iter().map(|&(i, _)| i).collect();
+            let records: Vec<usize> = subs[a..e].iter().map(|&(i, _)| i).collect();
             out.push(ServiceFan {
                 start: t0,
                 end: results[records[records.len() - 1]].obs.ts,
                 ordinary: records.iter().all(|&i| results[i].tier == Tier::Noise),
                 records,
-                services,
+                services: counts.keys().copied().collect(),
             });
-            a += win.len();
+            counts.clear();
+            a = e;
         }
     }
     crate::sort::by_key(&mut out, |f| (f.start, f.records[0]));
     out
 }
 
-/// Cluster `c`'s cross-service fan-out among `fans`, with the ordinary
-/// fan-outs on other hosts within `window` seconds of its span.
-pub(crate) fn describe(
-    c: &Cluster,
+/// Each cluster's cross-service fan-out among `fans` (as [`service_fans`]
+/// orders them), with the ordinary fan-outs on other hosts within `window`
+/// seconds of its span.
+pub(crate) fn describe_all(
+    clusters: &mut [Cluster],
     results: &[ObsResult],
     fans: &[ServiceFan],
     opts: &FanOutOptions,
     window: i64,
-) -> CrossService {
-    let mut x = CrossService::default();
+) {
+    // The clusters holding each fanned-out record.
+    let mut of_record: HashMap<usize, Vec<usize>> = fans
+        .iter()
+        .flat_map(|f| &f.records)
+        .map(|&i| (i, Vec::new()))
+        .collect();
+    for (n, c) in clusters.iter().enumerate() {
+        for m in &c.members {
+            if let Some(v) = of_record.get_mut(m) {
+                v.push(n);
+            }
+        }
+    }
+    let mut xs = vec![CrossService::default(); clusters.len()];
+    // The clusters each fan-out touches.
+    let mut touched: Vec<BTreeSet<usize>> = Vec::with_capacity(fans.len());
     for f in fans {
-        let mine = f.records.iter().filter(|m| c.members.contains(m)).count();
-        if mine > 0 {
+        let mut mine: BTreeMap<usize, usize> = BTreeMap::new();
+        for m in &f.records {
+            for &n in of_record.get(m).into_iter().flatten() {
+                *mine.entry(n).or_default() += 1;
+            }
+        }
+        for (&n, &k) in &mine {
+            let x = &mut xs[n];
             x.targets += 1;
-            x.records += mine;
+            x.records += k;
             x.max_spread_secs = x.max_spread_secs.max(f.end - f.start);
             for s in &f.services {
                 *x.services.entry(s.to_string()).or_default() += 1;
             }
-        } else if f.ordinary
-            && c.start > 0
-            && f.start >= c.start - window
-            && f.start <= c.end + window
-            && f.records.iter().all(|&i| {
-                results[i]
-                    .target_host
-                    .as_ref()
-                    .is_none_or(|h| !c.target_hosts.contains_key(h))
-            })
-        {
-            x.ambient += 1;
         }
+        touched.push(mine.into_keys().collect());
     }
-    x.auto_submitter =
-        !x.is_empty() && opts.cross_service_ambient > 0 && x.ambient >= opts.cross_service_ambient;
-    x
+    for (n, (c, mut x)) in clusters.iter_mut().zip(xs).enumerate() {
+        if c.start > 0 {
+            let from = fans.partition_point(|f| f.start < c.start - window);
+            let to = fans.partition_point(|f| f.start <= c.end + window);
+            for (f, t) in fans.iter().zip(&touched).take(to.max(from)).skip(from) {
+                if f.ordinary
+                    && !t.contains(&n)
+                    && f.records.iter().all(|&i| {
+                        results[i]
+                            .target_host
+                            .as_ref()
+                            .is_none_or(|h| !c.target_hosts.contains_key(h))
+                    })
+                {
+                    x.ambient += 1;
+                }
+            }
+        }
+        x.auto_submitter = !x.is_empty()
+            && opts.cross_service_ambient > 0
+            && x.ambient >= opts.cross_service_ambient;
+        c.cross_service = x;
+    }
 }
 
 #[cfg(test)]
@@ -349,5 +396,138 @@ mod tests {
         rules.set.fanout.cross_service_secs = 5;
         let a = crate::analyze(agent_run("urlscan", 8), &rules);
         assert!(a.clusters[0].cross_service.is_empty());
+    }
+
+    /// Fan-outs and per-cluster descriptions as a window rebuilt at every
+    /// record and a scan of every fan-out per cluster would find them.
+    fn naive(
+        results: &[ObsResult],
+        clusters: &[Cluster],
+        opts: &FanOutOptions,
+        window: i64,
+    ) -> (Vec<ServiceFan>, Vec<CrossService>) {
+        let mut by_target: BTreeMap<String, Vec<(usize, &'static str)>> = BTreeMap::new();
+        for (i, r) in results.iter().enumerate() {
+            if r.target_host.is_some()
+                && let Some(s) = service(r)
+            {
+                by_target
+                    .entry(target_key(target_text(r)))
+                    .or_default()
+                    .push((i, s));
+            }
+        }
+        let mut fans = Vec::new();
+        for subs in by_target.values_mut() {
+            crate::sort::by_key(subs, |&(i, _)| (results[i].obs.ts, i));
+            let mut a = 0;
+            while a < subs.len() {
+                let t0 = results[subs[a].0].obs.ts;
+                let win: Vec<(usize, &'static str)> = subs[a..]
+                    .iter()
+                    .copied()
+                    .take_while(|&(i, _)| results[i].obs.ts - t0 <= opts.cross_service_secs)
+                    .collect();
+                let services: BTreeSet<&'static str> = win.iter().map(|&(_, s)| s).collect();
+                if services.len() < opts.cross_service_min {
+                    a += 1;
+                    continue;
+                }
+                let records: Vec<usize> = win.iter().map(|&(i, _)| i).collect();
+                fans.push(ServiceFan {
+                    start: t0,
+                    end: results[records[records.len() - 1]].obs.ts,
+                    ordinary: records.iter().all(|&i| results[i].tier == Tier::Noise),
+                    records,
+                    services,
+                });
+                a += win.len();
+            }
+        }
+        crate::sort::by_key(&mut fans, |f| (f.start, f.records[0]));
+        let described = clusters
+            .iter()
+            .map(|c| {
+                let mut x = CrossService::default();
+                for f in &fans {
+                    let mine = f.records.iter().filter(|m| c.members.contains(m)).count();
+                    if mine > 0 {
+                        x.targets += 1;
+                        x.records += mine;
+                        x.max_spread_secs = x.max_spread_secs.max(f.end - f.start);
+                        for s in &f.services {
+                            *x.services.entry(s.to_string()).or_default() += 1;
+                        }
+                    } else if f.ordinary
+                        && c.start > 0
+                        && f.start >= c.start - window
+                        && f.start <= c.end + window
+                        && f.records.iter().all(|&i| {
+                            results[i]
+                                .target_host
+                                .as_ref()
+                                .is_none_or(|h| !c.target_hosts.contains_key(h))
+                        })
+                    {
+                        x.ambient += 1;
+                    }
+                }
+                x.auto_submitter = !x.is_empty()
+                    && opts.cross_service_ambient > 0
+                    && x.ambient >= opts.cross_service_ambient;
+                x
+            })
+            .collect();
+        (fans, described)
+    }
+
+    #[test]
+    fn indexed_fan_outs_match_the_naive_scan() {
+        let services = ["urlquery", "urlscan", "wayback"];
+        let mut seed: u64 = 11;
+        let mut next = |m: u64| {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (seed >> 33) % m
+        };
+        let mut obs = Vec::new();
+        for run in 0..6 {
+            obs.extend(
+                agent_run(services[run % 3], (run as i64) * 7)
+                    .into_iter()
+                    .map(|mut o| {
+                        o.id = format!("r{run}{}", o.id);
+                        o.ts += run as i64 * 400;
+                        o.url = o.url.replace("xsv1", &format!("xsv{run}"));
+                        o
+                    }),
+            );
+        }
+        for k in 0..300 {
+            let url = format!("https://n{}.mail.example/issue?utm_source=x", next(40));
+            let svc = services[next(3) as usize];
+            obs.push(rec(&format!("g{k}"), svc, T0 + next(4000) as i64, &url));
+        }
+        let rules = Rules::default_rules();
+        let a = crate::analyze(obs, &rules);
+        let mut opts = rules.set.fanout.clone();
+        for (min, secs) in [(2, opts.cross_service_secs), (3, 90), (2, 0), (2, -1)] {
+            opts.cross_service_min = min;
+            opts.cross_service_secs = secs;
+            let window = rules.set.linking.window_secs;
+            let (fans, want) = naive(&a.results, &a.clusters, &opts, window);
+            assert_eq!(
+                service_fans(&a.results, &opts),
+                fans,
+                "min {min}, secs {secs}"
+            );
+            let mut clusters = a.clusters.clone();
+            describe_all(&mut clusters, &a.results, &fans, &opts, window);
+            let got: Vec<CrossService> = clusters.into_iter().map(|c| c.cross_service).collect();
+            assert_eq!(got, want, "min {min}, secs {secs}");
+        }
+        let (fans, want) = naive(&a.results, &a.clusters, &rules.set.fanout, 600);
+        assert!(fans.len() > 10 && want.iter().any(|x| x.targets > 0 && x.ambient > 0));
     }
 }
