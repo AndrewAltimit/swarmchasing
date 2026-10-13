@@ -13,6 +13,7 @@ mod agentness;
 mod audience;
 mod hints;
 mod identity;
+mod join;
 mod overview;
 mod pairs;
 mod records;
@@ -226,6 +227,7 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
     }
 
     r.timeline(&mut s, view.as_deref_mut());
+    join::section(&mut s, a, &r.clusters, opts);
     r.ties(&mut s, view.as_deref());
     // Plant review (crate::plant): case notes only.
     if opts.audience == Audience::Internal {

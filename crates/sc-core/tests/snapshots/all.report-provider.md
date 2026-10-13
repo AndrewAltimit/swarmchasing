@@ -473,6 +473,91 @@ A person or a conventional scanner sending the same payloads through the same se
   - linked by: `exfil.ntfy:/ntfy.sh/covrun7results`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S6 (data was sent to a callback inbox or side channel)
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-05-14 03:46:09 UTC to 2026-05-14 08:42:49 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+  - identifiers: `param:uqtag=orc5pl`
+- **C2**: 2026-05-14 03:46:54 UTC to 2026-05-14 08:43:38 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+  - identifiers: `param:run=orc5wk`
+- **C3**: 2026-05-15 22:05:07 UTC to 2026-05-15 22:05:16 UTC, times of unknown kind
+- **C4**: 2026-09-20 10:00:00 UTC to 2026-09-20 10:02:24 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+  - identifiers: `param:uqtag=xsvA41`
+- **C5**: 2026-05-14 03:20:00 UTC to 2026-05-14 03:20:04 UTC, times of unknown kind
+- **C6**: 2026-03-09 09:00:00 UTC to 2026-03-09 09:05:00 UTC, times of unknown kind
+  - identifiers: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
+- **C7**: 2026-05-11 14:02:10 UTC to 2026-05-11 14:07:35 UTC, times of unknown kind
+- **C8**: 2026-09-20 12:00:00 UTC to 2026-09-20 12:02:03 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+  - identifiers: `param:uqtag=gwP7q2`
+- **C9**: 2026-03-12 16:30:00 UTC to 2026-03-12 16:34:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=hit88q`
+- **C10**: 2026-05-16 09:30:00 UTC to 2026-05-16 09:30:04 UTC, times of unknown kind
+- **C11**: 2026-07-02 10:03:00 UTC to 2026-07-02 10:17:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=r7k2`
+- **C12**: 2026-05-12 10:15:00 UTC to 2026-05-12 10:39:30 UTC, times of unknown kind
+- **C13**: 2026-05-13 16:40:00 UTC to 2026-05-13 16:44:00 UTC, times of unknown kind
+- **C14**: 2026-06-10 09:12:00 UTC to 2026-06-10 09:14:30 UTC, times of unknown kind
+- **C15**: 2026-03-05 14:25:00 UTC to 2026-03-05 14:27:30 UTC, times of unknown kind
+  - identifiers: `param:uqtag=exec4k`
+- **C16**: 2026-04-06 09:14:07 UTC to 2026-04-06 09:17:21 UTC, times of unknown kind
+  - identifiers: `param:uqtag=fx3k9q`
+- **C17**: 2026-04-11 09:14:07 UTC to 2026-04-11 09:17:21 UTC, times of unknown kind
+  - identifiers: `param:uqtag=m2v8wd`
+- **C18**: 2026-04-16 09:14:07 UTC to 2026-04-16 09:17:21 UTC, times of unknown kind
+  - identifiers: `param:uqtag=p7tr4z`
+- **C19**: 2026-08-03 09:00:00 UTC to 2026-08-03 09:00:45 UTC, times of unknown kind
+- **C20**: 2026-08-05 10:00:00 UTC to 2026-08-07 13:00:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=covrun7`
+- **C21**: 2026-08-06 16:00:00 UTC to 2026-08-07 12:00:00 UTC, times of unknown kind
+  - identifiers: `exfil.requestbin:c0ve7x9.m.pipedream.net`
+- **C22**: 2026-04-01 06:03:41 UTC to 2026-04-01 06:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=la1q7c`
+- **C23**: 2026-04-04 07:03:41 UTC to 2026-04-04 07:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lb8w2n`
+- **C24**: 2026-04-07 08:03:41 UTC to 2026-04-07 08:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lc4e9r`
+- **C25**: 2026-04-10 09:03:41 UTC to 2026-04-10 09:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=ld6t3m`
+- **C26**: 2026-04-13 10:03:41 UTC to 2026-04-13 10:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=le2y8k`
+- **C27**: 2026-04-16 11:03:41 UTC to 2026-04-16 11:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lf9u4p`
+- **C28**: 2026-04-19 12:03:41 UTC to 2026-04-19 12:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lg5i1x`
+- **C29**: 2026-04-22 13:03:41 UTC to 2026-04-22 13:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lh3o6v`
+- **C30**: 2026-06-02 14:00:05 UTC to 2026-06-02 14:03:10 UTC, times of unknown kind
+- **C31**: 2026-07-02 10:24:00 UTC to 2026-07-02 10:25:00 UTC, times of unknown kind
+- **C32**: 2026-08-03 09:01:10 UTC to 2026-08-03 09:01:40 UTC, times of unknown kind
+- **C33**: 2026-08-03 15:31:00 UTC to 2026-08-03 15:32:00 UTC, times of unknown kind
+- **C34**: 2026-08-10 09:20:00 UTC to 2026-08-10 09:30:00 UTC, times of unknown kind
+- **C35**: 2026-08-11 09:00:00 UTC to 2026-08-11 09:00:30 UTC, times of unknown kind
+  - identifiers: `param:uqtag=covscope`
+- **C36**: 2026-08-12 02:10:00 UTC to 2026-08-12 02:14:00 UTC, times of unknown kind
+- **C37**: 2026-09-02 14:00:00 UTC to 2026-09-02 14:03:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=pl4nt1`
+- **C38**: 2026-09-03 09:00:00 UTC to 2026-09-03 09:02:00 UTC, times of unknown kind
+  - identifiers: `param:run=pb7781`
+- **C39**: 2026-09-20 11:00:00 UTC to 2026-09-20 11:04:00 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+- **C40**: 2026-03-02 10:00:00 UTC to 2026-03-02 10:05:50 UTC, times of unknown kind
+  - identifiers: `param:uqtag=shardA7`
+- **C41**: 2026-03-02 10:00:40 UTC to 2026-03-02 10:06:30 UTC, times of unknown kind
+  - identifiers: `param:uqtag=shardB7`
+- **C42**: 2026-03-12 16:00:00 UTC to 2026-03-12 16:04:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=map31z`
+- **C43**: 2026-03-05 14:00:00 UTC to 2026-03-05 14:02:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=scout7f`
+- **C44**: 2026-08-09 09:10:00 UTC to 2026-08-09 11:05:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=covrun9`
+- **C45**: 2026-05-20 19:01:00 UTC to 2026-05-20 19:04:00 UTC, times of unknown kind
+- **C46**: 2026-07-02 10:07:00 UTC to 2026-07-02 10:10:00 UTC, times of unknown kind
+- **C47**: 2026-07-02 10:21:00 UTC to 2026-07-02 10:23:00 UTC, times of unknown kind
+- **C48**: 2026-08-06 14:00:00 UTC to 2026-08-06 14:00:30 UTC, times of unknown kind
+  - identifiers: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
+- **C49**: 2026-08-07 09:00:00 UTC to 2026-08-07 09:01:00 UTC, times of unknown kind
+  - identifiers: `exfil.ntfy:/ntfy.sh/covrun7results`
+
 
 ## Possible interaction (SC-T9)
 

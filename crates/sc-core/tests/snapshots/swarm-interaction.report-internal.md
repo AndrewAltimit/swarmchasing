@@ -140,6 +140,25 @@ Every flagged request to each host, including requests outside the linked cluste
   - linked by: `param:uqtag=scout7f`
   - provenance: unknown 3 · single source
   - scope: in scope · task class data retrieval
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-03-09 09:00:00 UTC to 2026-03-09 09:05:00 UTC, times of unknown kind
+  - identifiers: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
+- **C2**: 2026-03-12 16:30:00 UTC to 2026-03-12 16:34:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=hit88q`
+- **C3**: 2026-03-05 14:25:00 UTC to 2026-03-05 14:27:30 UTC, times of unknown kind
+  - identifiers: `param:uqtag=exec4k`
+- **C4**: 2026-03-02 10:00:00 UTC to 2026-03-02 10:05:50 UTC, times of unknown kind
+  - identifiers: `param:uqtag=shardA7`
+- **C5**: 2026-03-02 10:00:40 UTC to 2026-03-02 10:06:30 UTC, times of unknown kind
+  - identifiers: `param:uqtag=shardB7`
+- **C6**: 2026-03-12 16:00:00 UTC to 2026-03-12 16:04:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=map31z`
+- **C7**: 2026-03-05 14:00:00 UTC to 2026-03-05 14:02:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=scout7f`
+
 
 ## Possible interaction (SC-T9)
 

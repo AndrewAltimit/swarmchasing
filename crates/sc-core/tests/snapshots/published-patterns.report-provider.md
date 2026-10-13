@@ -73,6 +73,16 @@ A person or a conventional scanner sending the same payloads through the same se
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - provenance: unknown 2 · single source
   - scope: in scope · task class data retrieval
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-06-10 09:12:00 UTC to 2026-06-10 09:14:30 UTC, times of unknown kind
+- **C2**: 2026-06-02 14:00:05 UTC to 2026-06-02 14:03:10 UTC, times of unknown kind
+- **C3**: 2026-08-03 15:31:00 UTC to 2026-08-03 15:32:00 UTC, times of unknown kind
+- **C4**: 2026-08-12 02:10:00 UTC to 2026-08-12 02:14:00 UTC, times of unknown kind
+- **C5**: 2026-05-20 19:01:00 UTC to 2026-05-20 19:04:00 UTC, times of unknown kind
+
 
 ## Representative records
 

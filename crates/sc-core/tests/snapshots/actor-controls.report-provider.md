@@ -99,6 +99,17 @@ A person or a conventional scanner sending the same payloads through the same se
   - provenance: unknown 4 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `c1f3671f` over 2 records: sqli (quote_or_1eq1 ×1, quote_or_quoted ×1); first seen sqli.quote_or_quoted → sqli.quote_or_1eq1. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-05-15 22:05:07 UTC to 2026-05-15 22:05:16 UTC, times of unknown kind
+- **C2**: 2026-05-14 03:20:00 UTC to 2026-05-14 03:20:04 UTC, times of unknown kind
+- **C3**: 2026-05-11 14:02:10 UTC to 2026-05-11 14:07:35 UTC, times of unknown kind
+- **C4**: 2026-05-16 09:30:00 UTC to 2026-05-16 09:30:04 UTC, times of unknown kind
+- **C5**: 2026-05-12 10:15:00 UTC to 2026-05-12 10:39:30 UTC, times of unknown kind
+- **C6**: 2026-05-13 16:40:00 UTC to 2026-05-13 16:44:00 UTC, times of unknown kind
+
 
 ## Representative records
 

@@ -22,6 +22,7 @@ Its subject is "Suspected AI agent activity: <case title> [<case id>]", and its 
 - **attribution**: every claim, by layer (developer, hosting network, harness, model family), with its label, tag and evidence class. Harness and model-family candidates are ranked here and never named in public;
 - **why we think this is an agent**: each cluster's agent-likelihood grade from L0 to L5, with its signals, counter-signals and caps, and the case decision when there is one;
 - each cluster's **scope assessment** in one line, and its **timeline**: runs, sources by provenance and corroboration, and how many records carry model-written artifacts;
+- **matching against your logs**: per cluster, the window, what its times measure (request, scan-service submit or archive capture times), the identifiers that linked it, and any captured secrets as their redaction hashes ([below](#find-a-key-you-issued));
 - **possible interaction** between the report's clusters (SC-T9), as hints for review;
 - **representative records**, each linked to the public record it was taken from;
 - the **method and its limits**, the **requested action**, and a **publication** section with the times described [below](#when-the-notice-is-published).
@@ -29,6 +30,10 @@ Its subject is "Suspected AI agent activity: <case title> [<case id>]", and its 
 It leaves out the operators' **Endpoints** table, the basis of the case's agent-grade decision, and any declaration of authorised testing, which stay in the case notes. Logs an affected operator sent us may be part of its evidence.
 
 The requested action is to check whether the patterns match agents or sandboxes on your platform during the window, to stop the runs if they do, and to tell us whether you can confirm or rule out involvement.
+
+### Find a key you issued
+
+Records sometimes carry a key or token an agent used, often one issued by a model provider. Redaction replaces every secret with `REDACTED-` and the first 12 hex digits of the SHA-256 of its value ([redaction](../methodology.md#redaction-at-ingest)), and the report lists those per cluster. To check whether one is yours, hash each key you issued, as issued, and compare the first 12 hex digits. A match within the cluster's window names the account behind the activity, which no record of ours can. We keep nothing else about the secret, and stock passwords are left out.
 
 ## Check the evidence
 

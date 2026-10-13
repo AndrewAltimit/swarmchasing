@@ -64,6 +64,16 @@ A person or a conventional scanner sending the same payloads through the same se
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-09-20 10:00:00 UTC to 2026-09-20 10:02:24 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+  - identifiers: `param:uqtag=xsvA41`
+- **C2**: 2026-09-20 12:00:00 UTC to 2026-09-20 12:02:03 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+  - identifiers: `param:uqtag=gwP7q2`
+- **C3**: 2026-09-20 11:00:00 UTC to 2026-09-20 11:04:00 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+
 
 ## Representative records
 

@@ -178,6 +178,37 @@ Every flagged request to each host, including requests outside the linked cluste
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-05-14 03:46:09 UTC to 2026-05-14 08:42:49 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+  - identifiers: `param:uqtag=orc5pl`
+- **C2**: 2026-05-14 03:46:54 UTC to 2026-05-14 08:43:38 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
+  - identifiers: `param:run=orc5wk`
+- **C3**: 2026-04-06 09:14:07 UTC to 2026-04-06 09:17:21 UTC, times of unknown kind
+  - identifiers: `param:uqtag=fx3k9q`
+- **C4**: 2026-04-11 09:14:07 UTC to 2026-04-11 09:17:21 UTC, times of unknown kind
+  - identifiers: `param:uqtag=m2v8wd`
+- **C5**: 2026-04-16 09:14:07 UTC to 2026-04-16 09:17:21 UTC, times of unknown kind
+  - identifiers: `param:uqtag=p7tr4z`
+- **C6**: 2026-04-01 06:03:41 UTC to 2026-04-01 06:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=la1q7c`
+- **C7**: 2026-04-04 07:03:41 UTC to 2026-04-04 07:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lb8w2n`
+- **C8**: 2026-04-07 08:03:41 UTC to 2026-04-07 08:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lc4e9r`
+- **C9**: 2026-04-10 09:03:41 UTC to 2026-04-10 09:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=ld6t3m`
+- **C10**: 2026-04-13 10:03:41 UTC to 2026-04-13 10:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=le2y8k`
+- **C11**: 2026-04-16 11:03:41 UTC to 2026-04-16 11:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lf9u4p`
+- **C12**: 2026-04-19 12:03:41 UTC to 2026-04-19 12:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lg5i1x`
+- **C13**: 2026-04-22 13:03:41 UTC to 2026-04-22 13:06:01 UTC, times of unknown kind
+  - identifiers: `param:uqtag=lh3o6v`
+
 
 ## Representative records
 

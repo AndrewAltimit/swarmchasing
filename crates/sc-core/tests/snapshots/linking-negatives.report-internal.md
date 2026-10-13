@@ -57,6 +57,15 @@ Every flagged request to each host, including requests outside the linked cluste
   - scope: scope exceeded · task class data retrieval; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - all 2 records share one URL encoding style (`hexU.unsorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `804cd67a` over 2 records: traversal (depth4 ×2, etc_passwd ×1); first seen traversal.depth4 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+## Matching against your logs
+
+For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
+
+- **C1**: 2026-09-02 14:00:00 UTC to 2026-09-02 14:03:00 UTC, times of unknown kind
+  - identifiers: `param:uqtag=pl4nt1`
+- **C2**: 2026-09-03 09:00:00 UTC to 2026-09-03 09:02:00 UTC, times of unknown kind
+  - identifiers: `param:run=pb7781`
+
 
 ## Representative records
 
