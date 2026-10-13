@@ -45,6 +45,7 @@ pub mod sort;
 pub mod stamp;
 pub mod swarm;
 pub mod timing;
+pub mod ua_platform;
 pub mod urlquery;
 mod weburl;
 

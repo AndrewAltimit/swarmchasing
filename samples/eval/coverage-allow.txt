@@ -3,8 +3,3 @@
 # One rule id per line, then the reason. The eval gate fails on a rule with
 # no agent-labelled record it fires on unless it is listed here, and on an
 # entry whose rule now has a positive: remove the entry when a record lands.
-relay.hrefli          no eval record yet
-relay.translate_goog  no eval record yet
-relay.allorigins      no eval record yet
-carrier.livecodes     no eval record yet
-carrier.codesandbox   no eval record yet

@@ -20,8 +20,12 @@ use crate::model::Observation;
 /// Prefix of every replacement value. Redaction skips values that already carry it.
 pub const MARK: &str = "REDACTED-";
 
-/// Query/fragment parameter names whose values are always secrets.
-const SECRET_PARAM: &str = r"(?i)^(cookies?|set-cookie|auth|authorization|access_?token|session_?token|access_?key|refresh_?token|id_?token|auth_?token|api[_-]?key|x-api-key|subscription-key|client_?secret|secret|secret_?key|private_?key|password|passwd|pwd|pass|jwt|bearer|phpsessid|jsessionid|aspsessionid\w*|asp\.net_sessionid|connect\.sid|sessionid|session_id|csrftoken|csrf_token|xsrf-token|_xsrf|sid_guard|sessionid_ss|x5sec|umidtoken|bx-umidtoken|x-amz-signature|x-amz-credential|x-amz-security-token|x-goog-signature|x-goog-credential)$";
+/// Query/fragment parameter names whose values are always secrets. Matched
+/// without case, so `apiKey` and `sessionId` (the credential and session
+/// parameters of hosted-browser connect URLs such as
+/// `wss://connect.steel.dev?apiKey=...&sessionId=...`) are covered by
+/// `api_?key` and `sessionid`.
+const SECRET_PARAM: &str = r"(?i)^(cookies?|set-cookie|auth|authorization|access_?token|session_?token|access_?key|refresh_?token|id_?token|auth_?token|api[_-]?key|api[_-]?token|x-api-key|x-bb-api-key|x-browser-use-api-key|x-hyperbrowser-token|x-daytona-preview-token|subscription-key|client_?secret|secret|secret_?key|private_?key|password|passwd|pwd|pass|jwt|bearer|phpsessid|jsessionid|aspsessionid\w*|asp\.net_sessionid|connect\.sid|sessionid|session_id|csrftoken|csrf_token|xsrf-token|_xsrf|sid_guard|sessionid_ss|x5sec|umidtoken|bx-umidtoken|x-amz-signature|x-amz-credential|x-amz-security-token|x-goog-signature|x-goog-credential)$";
 
 /// Generic parameter names (`token`, `key`, an OAuth `code`, a URL
 /// signature) whose values are secrets when they look like one: an opaque
@@ -29,8 +33,12 @@ const SECRET_PARAM: &str = r"(?i)^(cookies?|set-cookie|auth|authorization|access
 /// injection probe, stays for the rules.
 const OPAQUE_PARAM: &str = r"(?i)^(token|key|code|sig|signature)$";
 
-/// Headers whose values are always secrets.
-const SECRET_HEADER: &str = r"(?i)^(cookie|set-cookie|authorization|proxy-authorization|x-api-key|x-auth-token|x-csrf-token|x-xsrf-token)$";
+/// Headers whose values are always secrets. Besides the generic ones, the
+/// key and token headers hosted-browser and sandbox services document for
+/// their APIs and preview links (Browserbase `X-BB-API-Key`, Browser Use
+/// `X-Browser-Use-API-Key`, Hyperbrowser `x-hyperbrowser-token`, Daytona
+/// `x-daytona-preview-token`, Modal `Modal-Key` and `Modal-Secret`).
+const SECRET_HEADER: &str = r"(?i)^(cookie|set-cookie|authorization|proxy-authorization|x-api-key|x-auth-token|x-csrf-token|x-xsrf-token|x-bb-api-key|x-browser-use-api-key|x-hyperbrowser-token|x-daytona-preview-token|modal-key|modal-secret)$";
 
 /// Well-known credential shapes, redacted wherever they appear.
 const SECRET_VALUE: &str = concat!(
@@ -563,6 +571,72 @@ mod tests {
             let (s, n) = r(u);
             assert_eq!((s.as_str(), n), (u, 0));
         }
+    }
+
+    /// Hosted-browser connect URLs carry the account key and the session id
+    /// in the query; both are hashed, the host and the other options stay.
+    #[test]
+    fn remote_browser_connect_urls() {
+        for (u, secrets, kept) in [
+            (
+                "wss://connect.steel.dev?apiKey=ste-9f8e7d6c5b4a3f2e1d0c&sessionId=4c1d2e3f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+                2,
+                "wss://connect.steel.dev?apiKey=REDACTED-",
+            ),
+            (
+                "wss://connect.browser-use.com?apiKey=bu_9f8e7d6c5b4a3f2e&proxyCountryCode=us",
+                1,
+                "&proxyCountryCode=us",
+            ),
+            (
+                "wss://connect.browserbase.com?api_key=bb_9f8e7d6c5b4a3f2e1d0c&session_id=a1b2c3d4&enableProxy=true",
+                2,
+                "&enableProxy=true",
+            ),
+            (
+                "wss://connect.hyperbrowser.ai?token=9f8e7d6c5b4a3f2e1d0c",
+                1,
+                "wss://connect.hyperbrowser.ai?token=REDACTED-",
+            ),
+            (
+                "https://api.example/v1?api_token=abc123def456&x-bb-api-key=bbkey987654",
+                2,
+                "https://api.example/v1?api_token=REDACTED-",
+            ),
+        ] {
+            let (s, n) = r(u);
+            assert_eq!(n, secrets, "{u} -> {s}");
+            assert!(s.contains(kept), "{s}");
+            assert_eq!(r(&s), (s.clone(), 0), "idempotent");
+        }
+        // The same key in a program that connects to the browser.
+        let prog = "const b = await puppeteer.connect({browserWSEndpoint: 'wss://connect.steel.dev?apiKey=ste-9f8e7d6c5b4a3f2e1d0c&sessionId=s1x2y3z4'})";
+        let out = redact_decoded(prog);
+        assert!(
+            !out.contains("ste-9f8e7d6c") && !out.contains("s1x2y3z4"),
+            "{out}"
+        );
+        assert!(
+            out.contains("wss://connect.steel.dev?apiKey=REDACTED-"),
+            "{out}"
+        );
+        // Service key headers.
+        let mut o = Observation {
+            url: "https://a.example/".into(),
+            ..Default::default()
+        };
+        for h in [
+            "X-BB-API-Key",
+            "X-Browser-Use-API-Key",
+            "x-hyperbrowser-token",
+            "x-daytona-preview-token",
+            "Modal-Key",
+            "Modal-Secret",
+        ] {
+            o.headers.insert(h.into(), "s3cr3t-value-1".into());
+        }
+        assert_eq!(redact_observation(&mut o), 6);
+        assert!(o.headers.values().all(|v| v.starts_with(MARK)));
     }
 
     #[test]
