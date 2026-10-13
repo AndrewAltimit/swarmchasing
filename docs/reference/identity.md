@@ -13,6 +13,9 @@ This evidence comes from operator logs. Public records rarely carry a client add
 | `[[agent]]` | A product token as it appears in the user agent (`ChatGPT-User`), its provider, purpose, range files and signing directory. |
 | `[[range_file]]` | A published address-range file: its URL, and `exhaustive = false` when the provider does not present it as complete. |
 | `[[directory]]` | A Web Bot Auth key directory: the `Signature-Agent` URI the provider documents, and the directory's URL. |
+| `[[github_app]]` | A coding-agent product's GitHub login (`claude[bot]`, `Copilot`), and the words that claim it in another App's login. |
+
+The platform pass reads `[[github_app]]`: those Apps' events are tallied by product rather than grouped, and an undeclared App whose login carries one of the words is a spoofing lead ([platform swarms](watch.md#platform-swarms)).
 
 Every entry cites the provider page (`source`) that names the file. Adding one is a review decision, as for a rule: cite the page, keep the URL the page gives (or the host it redirects to, said in a comment), and run the tests. The catalog is compiled into the CLI and the browser module.
 

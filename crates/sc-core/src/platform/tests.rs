@@ -468,3 +468,191 @@ fn a_small_group_in_one_fresh_hour_is_not_weighed_against_carried_days() {
     assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
     assert_eq!(rep.below_threshold, 1);
 }
+
+/// `n` text-less `action` events on `target`, `gap` apart, from accounts
+/// ranked by `rank`.
+fn textless(
+    tag: &str,
+    action: Action,
+    n: usize,
+    start: i64,
+    gap: i64,
+    rank: impl Fn(usize) -> u64,
+    target: &'static str,
+) -> Vec<PlatformEvent> {
+    (0..n)
+        .map(|i| PlatformEvent {
+            id: format!("gh:{tag}{i}"),
+            platform: Platform::Github,
+            action,
+            ts: start + i as i64 * gap,
+            actor: actor_key(Platform::Github, &format!("{tag}-acct{i}")),
+            actor_rank: Some(rank(i)),
+            target: target.into(),
+            link: format!("https://github.com/{target}"),
+            ..Default::default()
+        })
+        .collect()
+}
+
+#[test]
+fn a_star_burst_from_fresh_accounts_on_one_repository_is_found() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 300);
+    // A popular repository starred all day by established accounts ...
+    evs.extend(textless(
+        "pop",
+        Action::Starred,
+        40,
+        T0 + 200,
+        500,
+        |i| 20_000 + 3_000 * i as u64,
+        "famous/framework",
+    ));
+    // ... and a fresh repository starred by fifteen new accounts in ten minutes.
+    evs.extend(textless(
+        "farm",
+        Action::Starred,
+        15,
+        T0 + 3 * HOUR + 1500,
+        40,
+        |i| 160_300 + i as u64,
+        "fresh/tool",
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    let s = &rep.swarms[0];
+    assert_eq!(s.basis, [Basis::Target]);
+    assert_eq!(s.actions, [(Action::Starred, 15)]);
+    assert_eq!(s.template, "stars on fresh/tool");
+    assert!(
+        s.caveats
+            .iter()
+            .any(|c| c.contains("one target they acted on"))
+    );
+    // Only the farm, whose accounts are new, is carried.
+    assert!(s.members.iter().all(|m| rep.carry.contains(m)));
+    assert!(!rep.carry.iter().any(|m| m.starts_with("gh:pop")));
+}
+
+#[test]
+fn text_less_pull_requests_group_by_repository_but_need_a_burst() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 300);
+    // New accounts opening pull requests on one repository over six hours:
+    // no burst, so no candidate however new the accounts are.
+    evs.extend(textless(
+        "slow",
+        Action::PullOpened,
+        8,
+        T0 + 100,
+        45 * 60,
+        |i| 160_200 + i as u64,
+        "busy/project",
+    ));
+    // The same within minutes is one.
+    evs.extend(textless(
+        "fast",
+        Action::PullOpened,
+        8,
+        T0 + 4 * HOUR + 1500,
+        30,
+        |i| 160_250 + i as u64,
+        "target/lib",
+    ));
+    // And on a practice repository it is suppressed.
+    evs.extend(textless(
+        "fc",
+        Action::PullOpened,
+        8,
+        T0 + 2 * HOUR + 300,
+        30,
+        |i| 160_270 + i as u64,
+        "firstcontributions/first-contributions",
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    assert_eq!(rep.swarms[0].targets[0].0, "target/lib");
+    assert!(
+        rep.suppressed
+            .iter()
+            .any(|s| s.why == "practice repository")
+    );
+}
+
+#[test]
+fn self_identification_is_reported_but_does_not_make_a_group_residue_heavy() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 300);
+    // Established accounts spread over the day, each PR text naming its
+    // harness: below the chance threshold, footer or not.
+    evs.extend(wave(
+        &rules,
+        "cc",
+        6,
+        T0 + 300,
+        50 * 60,
+        |i| Some(20_000 + 9_000 * i as u64),
+        |i| VICTIMS[i],
+        |i| format!("Refactor the config loader for module {i} and add tests for the new parser.\n\nGenerated with [Claude Code](https://claude.com/claude-code)"),
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    // A burst from new accounts is reported, with the self-id as context.
+    evs.extend(wave(
+        &rules,
+        "ccb",
+        5,
+        T0 + 5 * HOUR,
+        30,
+        |i| Some(160_700 + i as u64),
+        |i| VICTIMS[i],
+        |i| format!("Add a security policy file for package {i} as requested by the audit team today.\n\nCo-Authored-By: Claude <noreply@anthropic.com>"),
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    let s = &rep.swarms[0];
+    assert_eq!(s.self_id, [("selfid.claude_code".to_string(), 5)]);
+    assert!(s.residue.is_empty());
+    assert!(s.reason.contains("5 name a coding harness"), "{}", s.reason);
+}
+
+#[test]
+fn wiki_sandbox_edits_need_a_burst_not_only_new_accounts() {
+    let wiki = |tag: &str, n: usize, start: i64, gap: i64| -> Vec<PlatformEvent> {
+        (0..n)
+            .map(|i| {
+                let user = format!("{tag}user{i}");
+                let title = format!("User:{user}/sandbox");
+                PlatformEvent {
+                    id: format!("wm:{tag}{i}"),
+                    platform: Platform::Wikimedia,
+                    action: Action::WikiEdited,
+                    ts: start + i as i64 * gap,
+                    actor: actor_key(Platform::Wikimedia, &user),
+                    actor_rank: Some(1_000_000 + i as u64),
+                    first_timer: Some(true),
+                    target: format!("en.wikipedia.org/{title}"),
+                    link: String::new(),
+                    name_template: wiki_title_template(&title, &user),
+                    ..Default::default()
+                }
+            })
+            .collect()
+    };
+    // New editors trying their sandbox all day, and a few old hands.
+    let mut evs = wiki("new", 60, T0, 360);
+    for (i, e) in wiki("old", 30, T0 + 100, 700).iter_mut().enumerate() {
+        e.actor_rank = Some(100_000 + i as u64);
+        e.first_timer = None;
+        e.name_template = None;
+        evs.push(e.clone());
+    }
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    // Twelve fresh accounts editing their sandboxes in four minutes.
+    evs.extend(wiki("burst", 12, T0 + 3 * HOUR + 500, 20));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    assert_eq!(rep.swarms[0].template, "user:<user>/sandbox");
+}

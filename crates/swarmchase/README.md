@@ -59,10 +59,10 @@ Collectors read indexes and public records only. They never open a capture or a 
 
 | Option | Source | Does |
 |---|---|---|
-| `--filter <f>` | Wayback, Arquivo.pt | A CDX filter the index server applies, repeatable; `collection:SAWP.*` keeps Arquivo.pt's on-demand saves. |
+| `--filter <f>` | Wayback, Arquivo.pt, Wikimedia | A CDX filter the index server applies, repeatable; `collection:SAWP.*` keeps Arquivo.pt's on-demand saves. For Wikimedia, `domain:<wiki>`, `!domain:<wiki>` or `ns:<n>`. |
 | `--slice-days <n>` | Wayback | Reads the time range in windows of `n` days; a sliced pull resumes by window. |
 | `--canary <query>` | npm | A query known to match, run once first, so an empty result is told apart from a broken search. |
-| `--max-mb <n>` | GH Archive | The most compressed megabytes streamed per run. |
+| `--max-mb <n>` | GH Archive, Wikimedia | The most megabytes streamed per run (compressed, for GH Archive). |
 
 | Command | What it does |
 |---|---|
@@ -73,6 +73,7 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect urlscan <query>` | urlscan.io public search, per case. `URLSCAN_APIKEY` optional. |
 | `collect memento <url>` | One URL's captures across archives, from a Memento timemap. |
 | `collect gharchive <substrings>` | Public GitHub events matching repo names or payload URLs. |
+| `collect wikimedia <substrings>` | External links added to Wikimedia wiki pages in the last hour, matching the link or page title; `--scan` minutes. The links are never fetched. |
 | `collect npm <text>`, `collect pypi <substrings>` | Package names, versions and publish times; never code. |
 | `collect ctlog <substrings> --endpoint <log>` | Certificates in a CT log's newest entries whose names match. |
 | `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |

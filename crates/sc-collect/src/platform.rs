@@ -1,8 +1,15 @@
 //! Platform events for the coordinated-account detector
 //! (`sc_core::platform`): GitHub events from GH Archive, npm search results,
-//! PyPI's feeds and the Hugging Face Hub's newest Spaces, models and
-//! datasets. Metadata and event text only: repositories, packages, Spaces
-//! and every URL inside the text are never fetched.
+//! PyPI's feeds, the Hugging Face Hub's newest Spaces, models and datasets,
+//! and Wikimedia's revision stream ([`crate::wikimedia`]). Metadata and
+//! event text only: repositories, packages, Spaces, wiki pages and every
+//! URL inside the text are never fetched.
+//!
+//! GitHub's event payloads are trimmed: a pull request opened carries its
+//! number and refs but no title, body or author association, and a push no
+//! commits. A pull request opened is kept text-less, with its repository as
+//! the target, so many accounts opening pull requests on one repository at
+//! once still group; stars and forks are kept the same way.
 //!
 //! What is kept is what grouping needs, reduced at parse time: logins become
 //! a keyed hash ([`sc_core::platform::actor_key`]), a GitHub account id a
@@ -10,7 +17,10 @@
 //! and identifiers as slots. Automation accounts are dropped by login before
 //! anything is kept ([`sc_core::platform::automation`]).
 //!
-//! Terms: GH Archive, npm and PyPI as in their record collectors. The
+//! Terms: GH Archive, npm and PyPI as in their record collectors. The Go
+//! module index (<https://index.golang.org/>) is public and states no terms
+//! or rate limits; a few paced requests a run, each up to its documented
+//! maximum of 2000 entries, keep within ordinary use. The
 //! Hugging Face Hub API (<https://huggingface.co/docs/hub/api>) is public and
 //! documented; its rate limits (<https://huggingface.co/docs/hub/rate-limits>)
 //! allow anonymous callers hundreds of API requests per five minutes, and
@@ -19,21 +29,25 @@
 //! listing request per Hub source per run, keeping ids, owners and times,
 //! stays well inside that; a Space's page and app are never opened.
 
-use crate::gharchive::{LAG_HOURS, MAX_FILE, MAX_LINE, hour_name};
+use crate::gharchive::{LAG_HOURS, MAX_FILE, for_each_event, hour_name};
 use crate::pager::Coverage;
 use crate::{CdxQuery, Client, Needles, parse_date};
 use anyhow::{Context, Result, bail};
 use sc_core::Rules;
-use sc_core::platform::automation::is_automation;
+use sc_core::platform::automation::{LoginClass, classify_login, is_automation};
 use sc_core::platform::{Action, Platform, PlatformEvent, RANK_UNIT, actor_key, name_template};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::{BufRead, BufReader, Read};
+use std::collections::BTreeMap;
+use std::io::Read;
 
 /// Events one GH Archive pull keeps at most, so memory stays bounded.
 const DEFAULT_MAX_EVENTS: usize = 500_000;
 /// Hours one GH Archive pull reads unless `scan` says otherwise.
 const DEFAULT_HOURS: usize = 1;
+/// Compressed megabytes one GH Archive pull reads unless `max_mb` says
+/// otherwise: room for six of the largest hours.
+const DEFAULT_MAX_MB: u64 = 1024;
 /// A checkpoint further back than this is skipped to the newest hours.
 const MAX_BACKLOG_HOURS: i64 = 24;
 
@@ -41,7 +55,7 @@ const MAX_BACKLOG_HOURS: i64 = 24;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlatformSource {
     pub name: String,
-    /// `gharchive`, `npm`, `pypi` or `huggingface`.
+    /// `gharchive`, `npm`, `pypi`, `huggingface`, `wikimedia` or `golang`.
     pub kind: String,
     /// Events one pull keeps at most.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,6 +73,25 @@ pub struct PlatformPull {
     pub automation: usize,
     /// Events dropped at the cap.
     pub capped: usize,
+    /// Events from declared coding-agent Apps, by product: tallied, not grouped.
+    pub declared: BTreeMap<String, usize>,
+    /// Events from undeclared App logins that claim a declared product's
+    /// name: login to (the product claimed, events). Spoofing leads.
+    pub lookalikes: BTreeMap<String, (String, usize)>,
+}
+
+impl PlatformPull {
+    fn add_tally(&mut self, t: GhTally) {
+        self.events.extend(t.events);
+        self.automation += t.automation;
+        self.capped += t.capped;
+        for (k, n) in t.declared {
+            *self.declared.entry(k).or_default() += n;
+        }
+        for (k, (claim, n)) in t.lookalikes {
+            self.lookalikes.entry(k).or_insert((claim, 0)).1 += n;
+        }
+    }
 }
 
 /// Pull one platform source. `mark` is a GH Archive source's checkpoint
@@ -103,8 +136,10 @@ pub fn pull_platform(
             let (events, items) = hf_events(&body, what)?;
             Ok(feed_pull(events, items, "items"))
         }
+        "wikimedia" => crate::wikimedia::pull_platform(client, &src.query, mark, rules, max),
+        "golang" => pull_golang(client, &src.query, mark, max),
         k => bail!(
-            "unknown platform source kind `{k}` (expected gharchive, npm, pypi or huggingface)"
+            "unknown platform source kind `{k}` (expected gharchive, npm, pypi, huggingface, wikimedia or golang)"
         ),
     }
 }
@@ -122,7 +157,7 @@ fn feed_pull(mut events: Vec<PlatformEvent>, read: usize, unit: &'static str) ->
             ..Default::default()
         },
         automation,
-        capped: 0,
+        ..Default::default()
     }
 }
 
@@ -135,7 +170,7 @@ fn pull_gharchive(
 ) -> Result<PlatformPull> {
     let latest = crate::client::now_secs() / 3600 - LAG_HOURS;
     let hours = q.scan.unwrap_or(DEFAULT_HOURS).clamp(1, 24) as i64;
-    let budget = q.max_mb.unwrap_or(512).max(1) << 20;
+    let budget = q.max_mb.unwrap_or(DEFAULT_MAX_MB).max(1) << 20;
     let newest = latest - hours + 1;
     let start = match mark.map(|m| m as i64) {
         Some(h) if h > latest - MAX_BACKLOG_HOURS => h,
@@ -163,14 +198,22 @@ fn pull_gharchive(
                 let counted = CountRead { inner: r, n: 0 };
                 let mut gz = flate2::read::MultiGzDecoder::new(counted);
                 let room = max.saturating_sub(out.events.len());
-                let t = gharchive_events(&mut gz, rules, room)
-                    .with_context(|| format!("reading {url}"))?;
+                let (t, err) = read_gharchive(&mut gz, rules, room);
                 bytes += gz.get_ref().n;
-                out.events.extend(t.events);
-                out.automation += t.automation;
-                out.capped += t.capped;
-                out.coverage.read += 1;
-                out.coverage.canary = Some(out.coverage.canary.unwrap_or(true) && t.parsed > 0);
+                let parsed = t.parsed;
+                out.add_tally(t);
+                match err {
+                    // A corrupt or cut-off hour is a gap, not a stall.
+                    Some(e) => {
+                        eprint!("(skipped unreadable {url}: {e}) ");
+                        out.coverage.skipped += 1;
+                    }
+                    None => {
+                        out.coverage.read += 1;
+                        out.coverage.canary =
+                            Some(out.coverage.canary.unwrap_or(true) && parsed > 0);
+                    }
+                }
             }
             None => out.coverage.skipped += 1,
         }
@@ -201,49 +244,47 @@ pub struct GhTally {
     pub parsed: usize,
     pub automation: usize,
     pub capped: usize,
+    /// Events from declared coding-agent Apps, by product.
+    pub declared: BTreeMap<String, usize>,
+    /// Events from lookalike App logins: login to (product claimed, events).
+    pub lookalikes: BTreeMap<String, (String, usize)>,
 }
 
-/// Read GH Archive NDJSON from `r` and keep the events the detector reads:
-/// issues and pull requests opened, issue and review comments, and
-/// repositories created; at most `max`. Overlong lines are skipped.
+/// Read GH Archive NDJSON from `r` and keep the events the detector reads,
+/// at most `max`: issues, pull requests and discussions opened; issue,
+/// review and commit comments and reviews; releases published; wiki pages
+/// edited; repositories created; repositories starred and forked. Overlong
+/// lines are skipped.
 pub fn gharchive_events(r: impl Read, rules: &Rules, max: usize) -> Result<GhTally> {
-    let mut r = BufReader::new(r);
-    let mut buf = Vec::new();
+    let (t, err) = read_gharchive(r, rules, max);
+    match err {
+        Some(e) => Err(e.into()),
+        None => Ok(t),
+    }
+}
+
+/// [`gharchive_events`], keeping what was read before a read error.
+fn read_gharchive(r: impl Read, rules: &Rules, max: usize) -> (GhTally, Option<std::io::Error>) {
     let mut out = GhTally::default();
-    loop {
-        buf.clear();
-        let n = (&mut r).take(MAX_LINE as u64).read_until(b'\n', &mut buf)?;
-        if n == 0 {
-            break;
-        }
-        if !buf.ends_with(b"\n") && n == MAX_LINE {
-            let mut sink = Vec::new();
-            loop {
-                sink.clear();
-                let m = (&mut r)
-                    .take(MAX_LINE as u64)
-                    .read_until(b'\n', &mut sink)?;
-                if m == 0 || sink.ends_with(b"\n") {
-                    break;
-                }
-            }
-            continue;
-        }
-        let Ok(v) = serde_json::from_slice::<Value>(&buf) else {
-            continue;
-        };
+    let err = for_each_event(r, &mut |v| {
         if v.pointer("/repo/name").is_none() {
-            continue;
+            return true;
         }
         out.parsed += 1;
-        match gh_event(&v, rules) {
+        match gh_event(v, rules) {
             GhEvent::Keep(e) if out.events.len() < max => out.events.push(*e),
             GhEvent::Keep(_) => out.capped += 1,
             GhEvent::Automation => out.automation += 1,
+            GhEvent::Declared(p) => *out.declared.entry(p).or_default() += 1,
+            GhEvent::Lookalike(login, claim) => {
+                out.lookalikes.entry(login).or_insert((claim, 0)).1 += 1;
+            }
             GhEvent::Skip => {}
         }
-    }
-    Ok(out)
+        true
+    })
+    .err();
+    (out, err)
 }
 
 /// [`gharchive_events`] over a GH Archive hour file on disk (`.json`, or
@@ -260,6 +301,10 @@ pub fn gharchive_file(path: &std::path::Path, rules: &Rules) -> Result<GhTally> 
 enum GhEvent {
     Keep(Box<PlatformEvent>),
     Automation,
+    /// A declared coding-agent App's event: its product.
+    Declared(String),
+    /// A lookalike App's event: its login and the product it claims.
+    Lookalike(String, String),
     Skip,
 }
 
@@ -269,21 +314,39 @@ fn gh_event(v: &Value, rules: &Rules) -> GhEvent {
         return GhEvent::Skip;
     };
     let action = s("/payload/action").unwrap_or("");
-    // (action, object holding the text and link, title pointer)
+    // (action, object holding the text and link)
     let (act, obj) = match (kind, action) {
         ("IssuesEvent", "opened") => (Action::IssueOpened, "/payload/issue"),
         ("PullRequestEvent", "opened") => (Action::PullOpened, "/payload/pull_request"),
         ("IssueCommentEvent", "created") => (Action::Comment, "/payload/comment"),
         ("PullRequestReviewCommentEvent", "created") => (Action::ReviewComment, "/payload/comment"),
-        ("PullRequestReviewEvent", _) => (Action::ReviewComment, "/payload/review"),
+        ("PullRequestReviewEvent", "created" | "submitted" | "") => {
+            (Action::ReviewComment, "/payload/review")
+        }
+        ("CommitCommentEvent", _) => (Action::CommitComment, "/payload/comment"),
+        ("DiscussionEvent", "created") => (Action::DiscussionOpened, "/payload/discussion"),
+        ("ReleaseEvent", "published") => (Action::ReleasePublished, "/payload/release"),
+        ("GollumEvent", _) => (Action::WikiEdited, "/payload/pages/0"),
+        ("WatchEvent", _) => (Action::Starred, "/payload"),
+        ("ForkEvent", _) => (Action::Forked, "/payload/forkee"),
         ("CreateEvent", _) if s("/payload/ref_type") == Some("repository") => {
             (Action::RepoCreated, "/payload")
         }
         _ => return GhEvent::Skip,
     };
     let login = s("/actor/login").unwrap_or("");
-    if is_automation(login) {
-        return GhEvent::Automation;
+    match classify_login(login) {
+        LoginClass::Declared(a) => {
+            return GhEvent::Declared(format!("{} ({})", a.product, a.provider));
+        }
+        LoginClass::Lookalike(a) => {
+            return GhEvent::Lookalike(
+                login.to_ascii_lowercase(),
+                format!("{} ({})", a.product, a.provider),
+            );
+        }
+        LoginClass::Automation => return GhEvent::Automation,
+        LoginClass::Person => {}
     }
     let actor_id = v.pointer("/actor/id").and_then(Value::as_u64);
     let (owner, name) = repo.split_once('/').unwrap_or(("", repo));
@@ -291,18 +354,49 @@ fn gh_event(v: &Value, rules: &Rules) -> GhEvent {
     let link = field("html_url")
         .filter(|l| l.starts_with("https://github.com/"))
         .map(str::to_string)
-        .unwrap_or_else(|| match (act, v.pointer("/payload/number")) {
-            (Action::PullOpened, Some(n)) => format!("https://github.com/{repo}/pull/{n}"),
-            _ => format!("https://github.com/{repo}"),
+        .unwrap_or_else(|| {
+            let n = v
+                .pointer("/payload/number")
+                .or_else(|| v.pointer("/payload/pull_request/number"))
+                .and_then(Value::as_u64);
+            match (act, n) {
+                (Action::PullOpened, Some(n)) => format!("https://github.com/{repo}/pull/{n}"),
+                _ => format!("https://github.com/{repo}"),
+            }
         });
+    // Gone from GitHub's trimmed payloads; read where an older event has it.
     let first_timer = field("author_association").map(|a| a == "FIRST_TIMER");
     let text = match act {
         Action::RepoCreated => field("description").unwrap_or("").to_string(),
-        _ => [field("title"), field("body")]
+        Action::Starred | Action::Forked => String::new(),
+        Action::WikiEdited => v
+            .pointer("/payload/pages")
+            .and_then(Value::as_array)
+            .map(|pages| {
+                pages
+                    .iter()
+                    .flat_map(|p| {
+                        [p.get("title"), p.get("summary")]
+                            .into_iter()
+                            .flatten()
+                            .filter_map(Value::as_str)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .unwrap_or_default(),
+        _ => [field("title"), field("name"), field("body")]
             .into_iter()
             .flatten()
             .collect::<Vec<_>>()
             .join("\n"),
+    };
+    let name_template = match act {
+        Action::RepoCreated => name_template(name, owner),
+        Action::WikiEdited if field("action") == Some("created") => field("title")
+            .or_else(|| field("page_name"))
+            .and_then(|t| name_template(t, owner)),
+        _ => None,
     };
     let e = PlatformEvent {
         id: format!("gh:{id}"),
@@ -318,18 +412,140 @@ fn gh_event(v: &Value, rules: &Rules) -> GhEvent {
         first_timer,
         target: repo.to_string(),
         link,
-        name_template: (act == Action::RepoCreated)
-            .then(|| name_template(name, owner))
-            .flatten(),
+        name_template,
         text: None,
     }
     .with_text(&text, &[owner, name, login], rules);
     // A text action with no text, or a repository with neither a templated
-    // name nor a description, gives the detector nothing to group.
-    if e.text.is_none() && e.name_template.is_none() {
+    // name nor a description, gives the detector nothing to group; a
+    // text-less star, fork or pull request still groups by its target.
+    if e.text.is_none() && e.name_template.is_none() && !act.by_target() {
         return GhEvent::Skip;
     }
     GhEvent::Keep(Box::new(e))
+}
+
+/// Entries per Go module index request: the documented maximum.
+const GO_PAGE: usize = 2000;
+/// Go index requests one pull makes unless `scan` says otherwise.
+const DEFAULT_GO_PAGES: usize = 6;
+/// Without a checkpoint, or one older than [`MAX_BACKLOG_HOURS`], a Go
+/// index pull starts this many hours back.
+const GO_FRESH_HOURS: i64 = 6;
+
+/// Read the Go module index from the checkpoint `mark` (Unix ms of the
+/// last entry read), up to `scan` pages and `max` events.
+fn pull_golang(
+    client: &Client,
+    q: &CdxQuery,
+    mark: Option<u64>,
+    max: usize,
+) -> Result<PlatformPull> {
+    let now_ms = crate::client::now_secs() * 1000;
+    let fresh = now_ms - GO_FRESH_HOURS * 3_600_000;
+    let (mut since, skipped) = match mark.map(|m| m as i64) {
+        Some(m) if m >= now_ms - MAX_BACKLOG_HOURS * 3_600_000 => (m, 0),
+        Some(m) => (fresh, ((fresh - m).max(0) / 3_600_000) as u64),
+        None => (fresh, 0),
+    };
+    let start = since;
+    let pages = q.scan.unwrap_or(DEFAULT_GO_PAGES).clamp(1, 50);
+    let mut out = PlatformPull::default();
+    let mut entries = 0usize;
+    let mut done = false;
+    for _ in 0..pages {
+        let at = chrono::DateTime::from_timestamp_millis(since)
+            .unwrap_or_default()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ");
+        let body = client.get(&format!(
+            "https://index.golang.org/index?since={at}&limit={GO_PAGE}"
+        ))?;
+        let (events, n, last) = go_events(&body);
+        entries += n;
+        out.events.extend(events);
+        match last {
+            Some(t) if t > since => since = t,
+            // The same instant again: step past it rather than loop.
+            Some(_) => since += 1,
+            None => {}
+        }
+        if n < GO_PAGE || out.events.len() >= max {
+            done = n < GO_PAGE;
+            break;
+        }
+    }
+    out.events.truncate(max);
+    // Coverage in hours of index time read against hours since the checkpoint.
+    let hours = |a: i64, b: i64| ((b - a).max(0) / 3_600_000) as u64;
+    out.coverage = Coverage {
+        unit: "hours",
+        read: if done {
+            hours(start, now_ms)
+        } else {
+            hours(start, since)
+        },
+        available: hours(start, now_ms) + skipped,
+        skipped,
+        next: Some(since as u64),
+        canary: Some(entries > 0),
+    };
+    Ok(out)
+}
+
+/// Platform events from a Go module index response (NDJSON of `Path`,
+/// `Version`, `Timestamp`), the entries it held, and the newest entry's time
+/// (Unix ms). The module path's owner (`github.com/<owner>/...`) stands for
+/// the account, as a keyed hash.
+pub fn go_events(body: &str) -> (Vec<PlatformEvent>, usize, Option<i64>) {
+    let mut out = Vec::new();
+    let (mut n, mut last) = (0, None);
+    for line in body.lines().filter(|l| !l.trim().is_empty()) {
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let s = |k: &str| v.get(k).and_then(Value::as_str);
+        let (Some(path), Some(version), Some(ts)) = (s("Path"), s("Version"), s("Timestamp"))
+        else {
+            continue;
+        };
+        n += 1;
+        let ms = chrono::DateTime::parse_from_rfc3339(ts)
+            .ok()
+            .map(|d| d.timestamp_millis());
+        if let Some(ms) = ms {
+            last = Some(last.map_or(ms, |l: i64| l.max(ms)));
+        }
+        let parts: Vec<&str> = path.split('/').collect();
+        let owner = parts.get(1).copied().unwrap_or("");
+        // `example.com/owner/name/v2`: the name is before the major version.
+        let name = parts
+            .iter()
+            .rev()
+            .find(|p| {
+                !(p.len() >= 2 && p.starts_with('v') && p[1..].chars().all(|c| c.is_ascii_digit()))
+            })
+            .copied()
+            .unwrap_or(path);
+        if is_automation(owner) {
+            continue;
+        }
+        out.push(PlatformEvent {
+            id: format!("go:{path}@{version}"),
+            platform: Platform::Go,
+            action: Action::PackagePublished,
+            ts: ms.map_or(0, |m| m / 1000),
+            actor: if owner.is_empty() || parts.len() < 3 {
+                String::new()
+            } else {
+                actor_key(Platform::Go, &format!("{}/{owner}", parts[0]))
+            },
+            target: path.to_string(),
+            link: format!("https://pkg.go.dev/{path}@{version}"),
+            name_template: name_template(name, owner),
+            ..Default::default()
+        });
+    }
+    (out, n, last)
 }
 
 /// Platform events from an npm search response, and the objects it held.
@@ -480,13 +696,27 @@ pub fn hf_events(body: &str, what: &str) -> Result<(Vec<PlatformEvent>, usize)> 
 mod tests {
     use super::*;
 
-    const EVENTS: [&str; 7] = [
-        r#"{"id":"101","type":"IssuesEvent","created_at":"2026-10-09T07:00:01Z","actor":{"id":250123456,"login":"newacct-1"},"repo":{"name":"libfoo/core"},"payload":{"action":"opened","issue":{"html_url":"https://github.com/libfoo/core/issues/9","title":"Critical vulnerability","body":"Certainly! Here's the report for libfoo. See https://evil.example/x and contact me@mail.example.","author_association":"FIRST_TIMER"}}}"#,
+    /// GH Archive events in the trimmed shape GitHub's Events API serves:
+    /// no author association, a pull request as its number and refs only, a
+    /// push with no commits. Every account, repository and text is invented.
+    const EVENTS: [&str; 16] = [
+        r#"{"id":"101","type":"IssuesEvent","created_at":"2026-10-09T07:00:01Z","actor":{"id":250123456,"login":"newacct-1"},"repo":{"name":"libfoo/core"},"payload":{"action":"opened","issue":{"html_url":"https://github.com/libfoo/core/issues/9","title":"Critical vulnerability","body":"Certainly! Here's the report for libfoo. See https://evil.example/x and contact me@mail.example."}}}"#,
         r#"{"id":"102","type":"IssueCommentEvent","created_at":"2026-10-09T07:00:02Z","actor":{"id":5,"login":"dependabot[bot]"},"repo":{"name":"a/b"},"payload":{"action":"created","comment":{"html_url":"https://github.com/a/b/issues/1#c","body":"Bumps x from 1 to 2"}}}"#,
-        r#"{"id":"103","type":"PushEvent","created_at":"2026-10-09T07:00:03Z","actor":{"id":6,"login":"someone"},"repo":{"name":"a/b"},"payload":{}}"#,
-        r#"{"id":"104","type":"PullRequestEvent","created_at":"2026-10-09T07:00:04Z","actor":{"id":7,"login":"dev"},"repo":{"name":"a/b"},"payload":{"action":"opened","number":12,"pull_request":{"title":"Fix the parser for nested quotes in the config loader"}}}"#,
+        r#"{"id":"103","type":"PushEvent","created_at":"2026-10-09T07:00:03Z","actor":{"id":6,"login":"someone"},"repo":{"name":"a/b"},"payload":{"repository_id":1,"push_id":2,"ref":"refs/heads/main","head":"aa","before":"bb"}}"#,
+        r#"{"id":"104","type":"PullRequestEvent","created_at":"2026-10-09T07:00:04Z","actor":{"id":7,"login":"dev"},"repo":{"name":"a/b"},"payload":{"action":"opened","number":12,"pull_request":{"url":"https://api.github.com/repos/a/b/pulls/12","id":9,"number":12,"head":{"ref":"fix"},"base":{"ref":"main"}}}}"#,
         r#"{"id":"105","type":"CreateEvent","created_at":"2026-10-09T07:00:05Z","actor":{"id":250123999,"login":"newacct-2"},"repo":{"name":"newacct-2/agent-probe-0042"},"payload":{"ref_type":"repository"}}"#,
         r#"{"id":"106","type":"CreateEvent","created_at":"2026-10-09T07:00:06Z","actor":{"id":8,"login":"person"},"repo":{"name":"person/portfolio"},"payload":{"ref_type":"repository"}}"#,
+        r#"{"id":"107","type":"WatchEvent","created_at":"2026-10-09T07:00:07Z","actor":{"id":250124001,"login":"newacct-3"},"repo":{"name":"fresh/tool"},"payload":{"action":"started"}}"#,
+        r#"{"id":"108","type":"ForkEvent","created_at":"2026-10-09T07:00:08Z","actor":{"id":250124002,"login":"newacct-4"},"repo":{"name":"fresh/tool"},"payload":{"action":"forked","forkee":{"html_url":"https://github.com/newacct-4/tool","full_name":"newacct-4/tool"}}}"#,
+        r#"{"id":"109","type":"ReleaseEvent","created_at":"2026-10-09T07:00:09Z","actor":{"id":9,"login":"maint"},"repo":{"name":"c/d"},"payload":{"action":"published","release":{"html_url":"https://github.com/c/d/releases/tag/v1","name":"v1.0.0","body":"First stable release with the new plugin loader and faster startup on large projects."}}}"#,
+        r#"{"id":"110","type":"DiscussionEvent","created_at":"2026-10-09T07:00:10Z","actor":{"id":10,"login":"asker"},"repo":{"name":"c/d"},"payload":{"action":"created","discussion":{"html_url":"https://github.com/c/d/discussions/3","title":"How do I configure the cache directory?","body":"The docs mention a flag that no longer exists in the current release."}}}"#,
+        r#"{"id":"111","type":"CommitCommentEvent","created_at":"2026-10-09T07:00:11Z","actor":{"id":11,"login":"reviewer"},"repo":{"name":"c/d"},"payload":{"action":"created","comment":{"html_url":"https://github.com/c/d/commit/abc#commitcomment-1","body":"This change breaks the Windows build.\n\nGenerated with [Claude Code](https://claude.com/claude-code)"}}}"#,
+        r#"{"id":"112","type":"GollumEvent","created_at":"2026-10-09T07:00:12Z","actor":{"id":250124003,"login":"newacct-5"},"repo":{"name":"e/f"},"payload":{"pages":[{"page_name":"probe-page-0042","title":"probe-page-0042","summary":null,"action":"created","html_url":"https://github.com/e/f/wiki/probe-page-0042"}]}}"#,
+        r#"{"id":"113","type":"PullRequestReviewEvent","created_at":"2026-10-09T07:00:13Z","actor":{"id":175728472,"login":"Copilot"},"repo":{"name":"c/d"},"payload":{"action":"created","review":{"html_url":"https://github.com/c/d/pull/4#pullrequestreview-1","body":"Copilot reviewed 3 out of 3 changed files in this pull request and generated 2 comments."}}}"#,
+        r#"{"id":"114","type":"IssueCommentEvent","created_at":"2026-10-09T07:00:14Z","actor":{"id":12,"login":"claude-fleet[bot]"},"repo":{"name":"c/d"},"payload":{"action":"created","comment":{"html_url":"https://github.com/c/d/issues/5#c","body":"Automated report from the fleet, please review the attached findings."}}}"#,
+        // The shape before GitHub trimmed the payloads: title, body and
+        // author association on the pull request.
+        r#"{"id":"115","type":"PullRequestEvent","created_at":"2026-10-09T07:00:15Z","actor":{"id":250124004,"login":"newacct-6"},"repo":{"name":"a/b"},"payload":{"action":"opened","number":13,"pull_request":{"html_url":"https://github.com/a/b/pull/13","title":"Fix the parser for nested quotes in the config loader","body":"Handles escaped quotes inside nested sections.","author_association":"FIRST_TIMER"}}}"#,
         "not json",
     ];
 
@@ -494,13 +724,20 @@ mod tests {
     fn keeps_what_grouping_needs_and_no_more() {
         let rules = Rules::default_rules();
         let t = gharchive_events(EVENTS.join("\n").as_bytes(), &rules, 100).unwrap();
-        assert_eq!((t.parsed, t.automation), (6, 1));
+        assert_eq!((t.parsed, t.automation), (15, 1));
         let ids: Vec<&str> = t.events.iter().map(|e| e.id.as_str()).collect();
-        assert_eq!(ids, ["gh:101", "gh:104", "gh:105"]);
-        let e = &t.events[0];
+        assert_eq!(
+            ids,
+            [
+                "gh:101", "gh:104", "gh:105", "gh:107", "gh:108", "gh:109", "gh:110", "gh:111",
+                "gh:112", "gh:115"
+            ]
+        );
+        let by = |id: &str| t.events.iter().find(|e| e.id == id).unwrap();
+        let e = by("gh:101");
         assert_eq!(e.action, Action::IssueOpened);
         assert_eq!(e.actor_rank, Some(250_123));
-        assert_eq!(e.first_timer, Some(true));
+        assert_eq!(e.first_timer, None);
         assert_eq!(e.link, "https://github.com/libfoo/core/issues/9");
         let json = serde_json::to_string(e).unwrap();
         for leak in ["newacct-1", "evil.example", "mail.example", "250123456"] {
@@ -513,13 +750,63 @@ mod tests {
                 .residue
                 .contains(&"text.chat_opener".to_string())
         );
-        assert_eq!(t.events[1].link, "https://github.com/a/b/pull/12");
+        // A trimmed pull request: text-less, kept for its target, linked by number.
+        let pr = by("gh:104");
+        assert_eq!(pr.action, Action::PullOpened);
+        assert!(pr.text.is_none());
+        assert_eq!(pr.target, "a/b");
+        assert_eq!(pr.link, "https://github.com/a/b/pull/12");
+        // The legacy shape still gives its text and first-timer flag.
+        let legacy = by("gh:115");
+        assert!(legacy.text.is_some());
+        assert_eq!(legacy.first_timer, Some(true));
         assert_eq!(
-            t.events[2].name_template.as_deref(),
+            by("gh:105").name_template.as_deref(),
             Some("agent-probe-<num>")
         );
+        assert_eq!(by("gh:107").action, Action::Starred);
+        assert_eq!(by("gh:107").target, "fresh/tool");
+        assert_eq!(by("gh:108").action, Action::Forked);
+        assert_eq!(by("gh:108").target, "fresh/tool");
+        assert_eq!(by("gh:109").action, Action::ReleasePublished);
+        assert_eq!(by("gh:110").action, Action::DiscussionOpened);
+        let cc = by("gh:111");
+        assert_eq!(cc.action, Action::CommitComment);
+        assert_eq!(cc.text.as_ref().unwrap().self_id, ["selfid.claude_code"]);
+        let wiki = by("gh:112");
+        assert_eq!(wiki.action, Action::WikiEdited);
+        assert_eq!(wiki.name_template.as_deref(), Some("probe-page-<num>"));
+        assert_eq!(wiki.link, "https://github.com/e/f/wiki/probe-page-0042");
+        // Declared coding agents are tallied by product, lookalikes by login.
+        assert_eq!(
+            t.declared
+                .get("Copilot cloud agent and code review (GitHub)"),
+            Some(&1)
+        );
+        let (claim, n) = &t.lookalikes["claude-fleet[bot]"];
+        assert!(claim.contains("Anthropic"), "{claim}");
+        assert_eq!(*n, 1);
         let capped = gharchive_events(EVENTS.join("\n").as_bytes(), &rules, 1).unwrap();
-        assert_eq!((capped.events.len(), capped.capped), (1, 2));
+        assert_eq!((capped.events.len(), capped.capped), (1, 9));
+    }
+
+    #[test]
+    fn a_cut_off_hour_keeps_what_parsed() {
+        let rules = Rules::default_rules();
+        let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        for i in 0..3000 {
+            std::io::Write::write_all(
+                &mut e,
+                format!("{}\n", EVENTS[4].replace("\"105\"", &format!("\"{i}\""))).as_bytes(),
+            )
+            .unwrap();
+        }
+        let data = e.finish().unwrap();
+        let cut = &data[..data.len() / 2];
+        let (t, err) = read_gharchive(flate2::read::MultiGzDecoder::new(cut), &rules, usize::MAX);
+        assert!(err.is_some());
+        assert!(t.parsed > 0 && t.events.len() == t.parsed, "{}", t.parsed);
+        assert!(gharchive_events(flate2::read::MultiGzDecoder::new(cut), &rules, 10).is_err());
     }
 
     #[test]
@@ -554,5 +841,31 @@ mod tests {
         );
         assert_eq!(v[0].name_template.as_deref(), Some("demo-space-<num>"));
         assert!(hf_events("{}", "spaces").is_err());
+
+        let go = concat!(
+            r#"{"Path":"github.com/probe-owner/agent-probe-0042","Version":"v0.0.1","Timestamp":"2026-10-10T10:00:00.123456Z"}"#,
+            "\n",
+            r#"{"Path":"github.com/probe-owner/agent-probe-0043/v2","Version":"v2.0.0","Timestamp":"2026-10-10T10:00:01Z"}"#,
+            "\n",
+            r#"{"Path":"golang.org/x/text","Version":"v0.30.0","Timestamp":"2026-10-10T10:00:02Z"}"#,
+            "\nnot json\n"
+        );
+        let (v, n, last) = go_events(go);
+        assert_eq!((v.len(), n), (3, 3));
+        assert_eq!(v[0].id, "go:github.com/probe-owner/agent-probe-0042@v0.0.1");
+        assert_eq!(v[0].name_template.as_deref(), Some("agent-probe-<num>"));
+        assert_eq!(v[1].name_template.as_deref(), Some("agent-probe-<num>"));
+        assert_eq!(v[0].actor, v[1].actor);
+        assert!(v[0].actor.starts_with("acct:"));
+        assert!(
+            !serde_json::to_string(&v[0])
+                .unwrap()
+                .contains("\"actor\":\"probe-owner")
+        );
+        assert_eq!(v[2].name_template, None);
+        assert_eq!(
+            last,
+            crate::parse_date("2026-10-10T10:00:02Z").map(|t| t * 1000)
+        );
     }
 }

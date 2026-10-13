@@ -23,6 +23,12 @@
 #                   purpose (user_fetch | agent | search | training),
 #                   ranges (range_file ids), directory (directory id, when the
 #                   product signs), source.
+#   [[github_app]]  login (the actor login GitHub events carry, matched
+#                   case-insensitively and whole), provider, product, names
+#                   (words that claim the product in another App's login),
+#                   source. Read by the platform pass: these Apps' events are
+#                   tallied, not grouped, and an undeclared `[bot]` login
+#                   carrying one of the names is a spoofing lead.
 
 [meta]
 version = "2026-10-12"
@@ -182,3 +188,57 @@ purpose = "agent"
 ranges = ["google.user-triggered-agents"]
 directory = "google.agent"
 source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+
+# ── Coding agents on GitHub ───────────────────────────────────────────────
+# Coding agents act on GitHub through their provider's GitHub App, so their
+# events carry the App's login. An App acts only where a repository owner
+# installed it. Each source is the provider's page for the integration.
+
+[[github_app]]
+login = "chatgpt-codex-connector[bot]"
+provider = "OpenAI"
+product = "Codex"
+names = ["codex", "chatgpt", "openai"]
+source = "https://developers.openai.com/codex/integrations/github"
+
+[[github_app]]
+login = "claude[bot]"
+provider = "Anthropic"
+product = "Claude GitHub App"
+names = ["claude", "anthropic"]
+source = "https://code.claude.com/docs/en/github-actions"
+
+[[github_app]]
+login = "Copilot"
+provider = "GitHub"
+product = "Copilot cloud agent and code review"
+names = ["copilot"]
+source = "https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent"
+
+[[github_app]]
+login = "copilot-swe-agent[bot]"
+provider = "GitHub"
+product = "Copilot cloud agent"
+names = ["copilot"]
+source = "https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent"
+
+[[github_app]]
+login = "cursor[bot]"
+provider = "Cursor"
+product = "Cursor Bugbot and background agents"
+names = ["cursor"]
+source = "https://cursor.com/docs/bugbot"
+
+[[github_app]]
+login = "devin-ai-integration[bot]"
+provider = "Cognition"
+product = "Devin"
+names = ["devin"]
+source = "https://docs.devin.ai/integrations/gh"
+
+[[github_app]]
+login = "google-labs-jules[bot]"
+provider = "Google"
+product = "Jules"
+names = ["jules"]
+source = "https://jules.google/docs"
