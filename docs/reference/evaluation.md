@@ -148,7 +148,13 @@ The index is sorted by URL within a year, so a year's share is the first capture
 
 Records labelled with `swarm` measure the interaction edges ([SC-FM 5.12](../manual/05-linking.md#fm-512-interaction-edges)). The value names the interacting group a record's run belongs to, or `none` for runs known not to interact. `eval` prints the edges found by kind, how many labelled groups have an edge inside them, and how many edges touch a `none` run, by kind. Each side of an edge is placed by its first labelled record. The numbers are reported, never gated, and the committed groups are synthetic ([evaluation set](../../samples/eval/README.md#swarm-interactionndjson)). A disjoint partition on a `none` run is expected: a sharded scheduler draws one.
 
-### Swarm and fleet measurement
+## Fleet proposals
+
+Records labelled with `fleet` measure the soft links and candidate fleets as proposals of cluster pairs that one operator runs ([SC-FM 5.8](../manual/05-linking.md#fm-58-candidate-fleets-merge-and-split)). A cluster takes the most common `fleet` among its labelled members; `none` marks a cluster known to be its operator's only one, so any pair touching it is wrong.
+
+`eval` prints, per soft-link kind, over all soft links and over the pairs inside candidate fleets: the pairs proposed between two labelled clusters, how many are in one fleet (precision, with its Wilson interval), the share of true pairs found (recall), and a few wrong pairs. Pairs touching an unlabelled cluster are not counted. The numbers are reported, never gated: the committed fleets are synthetic and few ([evaluation set](../../samples/eval/README.md#scaffold-fleetsndjson)).
+
+## Swarm and fleet measurement
 
 `swarmchase sim score <files>` measures the interaction edges, soft links, candidate fleets and agent grades against records labelled with `run`, `swarm` and `fleet` ([`sc-sim`](../../crates/sc-sim/README.md)). `fleet` names the operator group a run belongs to (one scheduler, one scaffold deployment); a swarm's runs share one. A run with neither is its own operator. Each file is analysed on its own and the counts are summed; `--json` writes them.
 

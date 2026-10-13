@@ -10,7 +10,7 @@ mod link;
 mod pipeline;
 
 pub use hints::is_context_kind;
-pub(crate) use hints::{relay_stack, target_text};
+pub(crate) use hints::{payload_variants, relay_stack, target_text};
 
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::Layer;
@@ -240,10 +240,20 @@ pub struct Analysis {
     /// remote browser) within a window: a hint on the clusters they touch.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub escalations: Vec<crate::escalation::Escalation>,
+    /// Pairs of clusters whose requests share a structure (relay route,
+    /// parameter slots, encoding, payloads) beyond chance: a link to check,
+    /// never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scaffold_pairs: Vec<crate::scaffold::ScaffoldPair>,
+    /// Pairs of clusters active in the same minutes, or one trailing the
+    /// other, beyond a circular-shift chance model: a link to check, never a
+    /// merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coactive_pairs: Vec<crate::coactivity::CoActivePair>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
     /// lengths, header sets, escalations, common features, captured
-    /// secrets), strongest
+    /// secrets, scaffolds, co-activity), strongest
     /// first. They never merge clusters or change a score.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub soft_links: Vec<crate::fleets::SoftLink>,

@@ -51,6 +51,12 @@ pub enum SoftLinkKind {
     /// Inboxes on the same callback service (different inboxes; one inbox
     /// links outright).
     CallbackService,
+    /// Requests of one structure, values aside, beyond chance
+    /// ([`crate::scaffold`]).
+    Scaffold,
+    /// Active in the same minutes, or one trailing the other, beyond chance
+    /// ([`crate::coactivity`]).
+    CoActivity,
 }
 
 impl SoftLinkKind {
@@ -70,6 +76,8 @@ impl SoftLinkKind {
             SoftLinkKind::SharedSecret => "shared captured secret",
             SoftLinkKind::RelayStack => "relay stack",
             SoftLinkKind::CallbackService => "callback service",
+            SoftLinkKind::Scaffold => "shared scaffold",
+            SoftLinkKind::CoActivity => "co-activity",
         }
     }
 }
@@ -100,6 +108,12 @@ pub struct SoftLinkOptions {
     pub shared_secret: f64,
     pub relay_stack: f64,
     pub callback_service: f64,
+    /// Times the pair's template similarity ([`crate::scaffold`]).
+    pub scaffold: f64,
+    /// Times the share of the quieter cluster's active bins that coincide
+    /// ([`crate::coactivity`]). A pair already tied by shared pauses gets
+    /// no co-activity link: both read one timeline.
+    pub co_activity: f64,
 }
 
 impl Default for SoftLinkOptions {
@@ -121,6 +135,8 @@ impl Default for SoftLinkOptions {
             shared_secret: 0.8,
             relay_stack: 0.3,
             callback_service: 0.3,
+            scaffold: 0.6,
+            co_activity: 0.6,
         }
     }
 }
@@ -161,6 +177,8 @@ pub(crate) struct Signals<'a> {
     pub dialect_pairs: &'a [DialectPair],
     pub escalations: &'a [Escalation],
     pub common_features: &'a [CommonFeature],
+    pub scaffold_pairs: &'a [crate::scaffold::ScaffoldPair],
+    pub coactive_pairs: &'a [crate::coactivity::CoActivePair],
 }
 
 /// Soft links between clusters above noise, strongest first.
@@ -225,6 +243,31 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
                 m.weighted_jaccard
             ),
         );
+    }
+    for p in s.scaffold_pairs {
+        push(
+            &p.a,
+            &p.b,
+            SoftLinkKind::Scaffold,
+            opts.scaffold * p.similarity,
+            p.detail(),
+        );
+    }
+    for p in s.coactive_pairs {
+        let paused = s
+            .shared_pauses
+            .iter()
+            .any(|q| (q.a == p.a && q.b == p.b) || (q.a == p.b && q.b == p.a));
+        if !paused {
+            let quieter = p.active_a.min(p.active_b).max(1) as f64;
+            push(
+                &p.a,
+                &p.b,
+                SoftLinkKind::CoActivity,
+                opts.co_activity * (p.coincidences / quieter).min(1.0),
+                p.detail(),
+            );
+        }
     }
     for e in s.escalations {
         for (i, x) in e.clusters.iter().enumerate() {

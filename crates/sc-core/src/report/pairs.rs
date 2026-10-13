@@ -92,7 +92,7 @@ impl Report<'_> {
         }
         let _ = writeln!(
             s,
-            "\n## Candidate fleets\n\nClusters tied by soft links (shared pauses, reruns, recon openings, encoding and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.\n"
+            "\n## Candidate fleets\n\nClusters tied by soft links (shared pauses, reruns, recon openings, encoding, shared scaffolds, co-activity and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.\n"
         );
         for f in fleets {
             let kinds: Vec<&str> = f.kinds.iter().map(|k| k.label()).collect();

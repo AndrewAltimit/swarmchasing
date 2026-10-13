@@ -67,6 +67,8 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`dialect`](src/dialect.rs) | Payload dialect, shared dialects between clusters, repeated cut lengths. |
 | [`fanout`](src/fanout.rs) | Parallel fan-out width. |
 | [`fleets`](src/fleets.rs) | Soft links between clusters and the candidate fleets they suggest; never merges. |
+| [`scaffold`](src/scaffold.rs) | Request templates with values as slot types, and cluster pairs sharing them beyond chance. |
+| [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |
 | [`bursts`](src/bursts.rs) | Bursts of archive captures of a host the archives rarely capture. |
 | [`endpoints`](src/endpoints.rs) | Flagged activity grouped by target host. |
