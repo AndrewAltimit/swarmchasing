@@ -1,10 +1,10 @@
 //! The data directory's files: the watch record store, retention, and the
 //! JSON and NDJSON helpers the watch, cases and review share.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use sc_core::Observation;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
 use std::path::Path;
 
@@ -37,27 +37,72 @@ pub fn hint_if_empty(data: &Path) {
     }
 }
 
+/// The non-blank lines of `bytes`, split on `\n` and decoded one by one:
+/// `Err` for a line that is not UTF-8, so one bad line never hides the rest.
+pub fn byte_lines(bytes: &[u8]) -> impl Iterator<Item = std::result::Result<&str, &[u8]>> {
+    bytes
+        .split(|&b| b == b'\n')
+        .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
+        .filter(|l| !l.iter().all(u8::is_ascii_whitespace))
+        .map(|l| std::str::from_utf8(l).map_err(|_| l))
+}
+
+/// The records of an NDJSON file, and how many of its lines could not be
+/// read (not UTF-8, or not a record): a torn last line from a crash, or a
+/// damaged file.
+pub fn read_ndjson<T: for<'de> Deserialize<'de>>(p: &Path) -> Result<(Vec<T>, usize)> {
+    let bytes = std::fs::read(p).with_context(|| format!("reading {}", p.display()))?;
+    let mut out = Vec::new();
+    let mut bad = 0;
+    for line in byte_lines(&bytes) {
+        match line.ok().and_then(|l| serde_json::from_str(l).ok()) {
+            Some(v) => out.push(v),
+            None => bad += 1,
+        }
+    }
+    Ok((out, bad))
+}
+
 /// Stored records captured at or after `since`, deduplicated by ID (the
 /// first copy wins). Records with no timestamp count as captured at 0.
+/// Unreadable lines are skipped with a warning; see [`load_store_counted`].
 pub fn load_store(dir: &Path, since: i64) -> Result<Vec<Observation>> {
+    let (out, bad) = load_store_counted(dir, since)?;
+    for (file, n) in bad {
+        eprintln!("warning: {file}: {n} unreadable line(s) skipped");
+    }
+    Ok(out)
+}
+
+/// [`load_store`], with the number of unreadable lines in each store file
+/// that has any.
+pub fn load_store_counted(
+    dir: &Path,
+    since: i64,
+) -> Result<(Vec<Observation>, BTreeMap<String, usize>)> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
-    for entry in std::fs::read_dir(dir)? {
-        let p = entry?.path();
+    let mut bad = BTreeMap::new();
+    let mut files: Vec<_> = std::fs::read_dir(dir)?
+        .map(|e| e.map(|e| e.path()))
+        .collect::<std::io::Result<_>>()?;
+    files.sort();
+    for p in files {
         if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
             continue;
         }
-        let text = std::fs::read_to_string(&p)?;
-        for line in text.lines().filter(|l| !l.trim().is_empty()) {
-            let Ok(o) = serde_json::from_str::<Observation>(line) else {
-                continue;
-            };
+        let (records, n) = read_ndjson::<Observation>(&p)?;
+        if n > 0 {
+            let name = p.file_name().unwrap_or_default().to_string_lossy();
+            bad.insert(format!("store/{name}"), n);
+        }
+        for o in records {
             if o.ts >= since && seen.insert(o.id.clone()) {
                 out.push(o);
             }
         }
     }
-    Ok(out)
+    Ok((out, bad))
 }
 
 /// Delete run directories stamped before `cutoff` and stored records captured
@@ -85,22 +130,27 @@ pub fn prune(out: &Path, cutoff: i64) -> Result<(usize, usize)> {
             if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
                 continue;
             }
-            let text = std::fs::read_to_string(&p)?;
-            let mut kept = String::with_capacity(text.len());
+            let bytes = std::fs::read(&p).with_context(|| format!("reading {}", p.display()))?;
+            let mut kept: Vec<u8> = Vec::with_capacity(bytes.len());
             let mut dropped = 0;
-            for line in text.lines().filter(|l| !l.trim().is_empty()) {
-                let ts = serde_json::from_str::<Observation>(line).map_or(0, |o| o.ts);
+            // An unreadable line has no known age, so it is kept as it is.
+            for line in byte_lines(&bytes) {
+                let ts = line
+                    .ok()
+                    .and_then(|l| serde_json::from_str::<Observation>(l).ok())
+                    .map_or(0, |o| o.ts);
                 if ts > 0 && ts < cutoff {
                     dropped += 1;
                 } else {
-                    kept.push_str(line);
-                    kept.push('\n');
+                    kept.extend_from_slice(match line {
+                        Ok(l) => l.as_bytes(),
+                        Err(b) => b,
+                    });
+                    kept.push(b'\n');
                 }
             }
             if dropped > 0 {
-                let tmp = p.with_extension("ndjson.tmp");
-                std::fs::write(&tmp, kept)?;
-                std::fs::rename(&tmp, &p)?;
+                write_atomic(&p, &kept)?;
                 records += dropped;
             }
         }
@@ -117,13 +167,49 @@ pub fn to_ndjson(obs: &[Observation]) -> Result<String> {
     Ok(s)
 }
 
+/// Append `text` to the NDJSON file `p`. A last line left without its
+/// newline (a write cut short) is ended first, so it stays one unreadable
+/// line instead of swallowing the first line appended after it.
 pub fn append(p: &Path, text: &str) -> Result<()> {
+    use std::io::{Read as _, Seek as _, SeekFrom};
     let mut f = std::fs::OpenOptions::new()
         .create(true)
+        .read(true)
         .append(true)
         .open(p)
         .with_context(|| format!("opening {}", p.display()))?;
-    f.write_all(text.as_bytes())?;
+    if f.metadata()?.len() > 0 {
+        let mut last = [0u8; 1];
+        f.seek(SeekFrom::End(-1))?;
+        f.read_exact(&mut last)?;
+        if last[0] != b'\n' {
+            f.write_all(b"\n")?;
+        }
+    }
+    f.write_all(text.as_bytes())
+        .with_context(|| format!("writing {}", p.display()))?;
+    Ok(())
+}
+
+/// A temporary path beside `p` that no other writer uses: the process id
+/// and a counter, so two writers never share one.
+pub fn temp_path(p: &Path) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let name = p.file_name().unwrap_or_default().to_string_lossy();
+    p.with_file_name(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
+/// Write `bytes` to `p` via a temporary file and a rename, so a crash never
+/// leaves half a file.
+pub fn write_atomic(p: &Path, bytes: &[u8]) -> Result<()> {
+    let tmp = temp_path(p);
+    std::fs::write(&tmp, bytes).with_context(|| format!("writing {}", tmp.display()))?;
+    std::fs::rename(&tmp, p).with_context(|| format!("writing {}", p.display()))?;
     Ok(())
 }
 
@@ -139,15 +225,177 @@ pub fn read_json<T: for<'de> Deserialize<'de>>(p: &Path) -> Result<Option<T>> {
 
 /// Write via a temporary file and rename, so a crash never leaves half a file.
 pub fn write_json<T: Serialize>(p: &Path, v: &T) -> Result<()> {
-    let tmp = p.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_string_pretty(v)?)?;
-    std::fs::rename(&tmp, p).with_context(|| format!("writing {}", p.display()))?;
-    Ok(())
+    write_atomic(p, serde_json::to_string_pretty(v)?.as_bytes())
+}
+
+/// `<p>.bak`: the copy [`write_json_kept`] keeps of the file it replaces.
+fn backup_path(p: &Path) -> std::path::PathBuf {
+    let name = p.file_name().unwrap_or_default().to_string_lossy();
+    p.with_file_name(format!("{name}.bak"))
+}
+
+/// [`write_json`], first copying the file it replaces to `<p>.bak`, the
+/// copy [`read_json_kept`] falls back to.
+pub fn write_json_kept<T: Serialize>(p: &Path, v: &T) -> Result<()> {
+    if p.is_file() {
+        let bak = backup_path(p);
+        let tmp = temp_path(&bak);
+        std::fs::copy(p, &tmp).with_context(|| format!("copying {}", p.display()))?;
+        std::fs::rename(&tmp, &bak).with_context(|| format!("writing {}", bak.display()))?;
+    }
+    write_json(p, v)
+}
+
+/// [`read_json`], falling back to `<p>.bak` with a warning when `p` cannot
+/// be read or parsed (and to the error when the backup cannot either).
+pub fn read_json_kept<T: for<'de> Deserialize<'de>>(p: &Path) -> Result<Option<T>> {
+    match read_json(p) {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            let bak = backup_path(p);
+            match read_json(&bak) {
+                Ok(Some(v)) => {
+                    eprintln!(
+                        "warning: {e:#}; read the previous copy {} instead",
+                        bak.display()
+                    );
+                    Ok(Some(v))
+                }
+                _ => Err(e),
+            }
+        }
+    }
+}
+
+/// The name of a data directory's lock file.
+pub const LOCK_FILE: &str = ".lock";
+
+/// An exclusive advisory lock on a data directory, held until dropped.
+/// Every command that writes the store or `state.json` takes it, so two
+/// never write at once.
+#[derive(Debug)]
+pub struct DataLock {
+    _file: std::fs::File,
+}
+
+/// Take `<data>/.lock` for `what`, or fail at once, naming the holder, when
+/// another command holds it. The holder is written to `<data>/.lock.owner`,
+/// beside the lock, because a locked file cannot be read on every platform.
+pub fn lock_data(data: &Path, what: &str) -> Result<DataLock> {
+    std::fs::create_dir_all(data).with_context(|| format!("creating {}", data.display()))?;
+    let p = data.join(LOCK_FILE);
+    let owner = data.join(format!("{LOCK_FILE}.owner"));
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&p)
+        .with_context(|| format!("opening {}", p.display()))?;
+    match f.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => {
+            let holder = std::fs::read_to_string(&owner).unwrap_or_default();
+            let holder = holder.trim();
+            bail!(
+                "{} is in use by another swarmchase command{}; try again when it has finished",
+                data.display(),
+                if holder.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({holder})")
+                }
+            );
+        }
+        Err(std::fs::TryLockError::Error(e)) => {
+            return Err(e).with_context(|| format!("locking {}", p.display()));
+        }
+    }
+    // Who holds it is only a hint for the message above.
+    let _ = std::fs::write(
+        &owner,
+        format!(
+            "{what}, pid {}
+",
+            std::process::id()
+        ),
+    );
+    Ok(DataLock { _file: f })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_torn_line_stays_alone_and_bad_bytes_do_not_stop_a_read() {
+        let dir = std::env::temp_dir().join(format!("swarmchase-torn-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("store")).unwrap();
+        let p = dir.join("store").join("s.ndjson");
+        let rec = |id: &str| Observation {
+            id: id.into(),
+            ts: 100,
+            url: "https://a.example/".into(),
+            ..Default::default()
+        };
+        append(&p, &to_ndjson(&[rec("a")]).unwrap()).unwrap();
+        // A write cut short: half a line, no newline, then bytes that are
+        // not UTF-8 on a line of their own.
+        let mut torn = to_ndjson(&[rec("b")]).unwrap();
+        torn.truncate(torn.len() / 2);
+        append(&p, &torn).unwrap();
+        append(&p, &to_ndjson(&[rec("c")]).unwrap()).unwrap();
+        {
+            use std::io::Write as _;
+            let mut f = std::fs::OpenOptions::new().append(true).open(&p).unwrap();
+            f.write_all(b"\xff\xfe{\n").unwrap();
+        }
+        append(&p, &to_ndjson(&[rec("d")]).unwrap()).unwrap();
+        let (got, bad) = load_store_counted(&dir.join("store"), 0).unwrap();
+        let ids: Vec<&str> = got.iter().map(|o| o.id.as_str()).collect();
+        assert_eq!(ids, ["a", "c", "d"]);
+        assert_eq!(bad.get("store/s.ndjson"), Some(&2), "{bad:?}");
+        // Pruning keeps what it cannot date, byte for byte.
+        let before = std::fs::read(&p).unwrap();
+        prune(&dir, 50).unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), before);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_second_writer_is_refused_until_the_first_is_done() {
+        let d = std::env::temp_dir().join(format!("swarmchase-lock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let first = lock_data(&d, "watch").unwrap();
+        let err = lock_data(&d, "case rename").unwrap_err().to_string();
+        assert!(err.contains("in use") && err.contains("watch"), "{err}");
+        drop(first);
+        lock_data(&d, "case rename").unwrap();
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_damaged_state_falls_back_to_its_previous_copy() {
+        let d = std::env::temp_dir().join(format!("swarmchase-bak-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.join("state.json");
+        write_json_kept(&p, &1).unwrap();
+        write_json_kept(&p, &2).unwrap();
+        assert_eq!(read_json_kept::<i32>(&p).unwrap(), Some(2));
+        std::fs::write(&p, "{ torn").unwrap();
+        assert_eq!(read_json_kept::<i32>(&p).unwrap(), Some(1));
+        std::fs::remove_file(d.join("state.json.bak")).unwrap();
+        assert!(read_json_kept::<i32>(&p).is_err());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn temporary_names_are_unique() {
+        let p = Path::new("d/state.json");
+        assert_ne!(temp_path(p), temp_path(p));
+    }
 
     #[test]
     fn prune_deletes_old_runs_and_records() {

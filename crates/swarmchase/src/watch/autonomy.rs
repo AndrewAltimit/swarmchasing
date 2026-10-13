@@ -172,11 +172,9 @@ impl Decision {
 
 /// Read the log; a line that does not parse is skipped.
 pub fn load(data: &Path) -> Vec<Decision> {
-    std::fs::read_to_string(data.join(FILE))
+    crate::store::read_ndjson(&data.join(FILE))
+        .map(|(ds, _)| ds)
         .unwrap_or_default()
-        .lines()
-        .filter_map(|l| serde_json::from_str(l).ok())
-        .collect()
 }
 
 /// Append `ds` to the log.
@@ -207,7 +205,7 @@ pub fn prune(data: &Path, cutoff: i64) -> Result<usize> {
             text.push_str(&serde_json::to_string(d)?);
             text.push('\n');
         }
-        std::fs::write(&p, text)?;
+        crate::store::write_atomic(&p, text.as_bytes())?;
     }
     Ok(gone)
 }

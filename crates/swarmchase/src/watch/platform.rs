@@ -11,7 +11,7 @@
 //! model may see archive and urlquery records only (docs/policies.md).
 
 use crate::store::{read_json, write_json};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use sc_collect::Client;
 use sc_collect::platform::{PlatformSource, pull_platform};
 use sc_core::platform::{PlatformEvent, PlatformOptions, PlatformReport, PlatformSwarm, detect};
@@ -150,7 +150,7 @@ pub fn run(
             carry.push('\n');
         }
     }
-    std::fs::write(&carry_path, carry)?;
+    crate::store::write_atomic(&carry_path, carry.as_bytes())?;
 
     for s in &report.swarms {
         match state.reported.get(&s.id) {
@@ -173,16 +173,10 @@ pub fn run(
 
 /// Platform events from NDJSON; blank and unreadable lines are skipped.
 pub fn load_events(p: &Path) -> Result<Vec<PlatformEvent>> {
-    let text = match std::fs::read_to_string(p) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(e).with_context(|| format!("reading {}", p.display())),
-    };
-    Ok(text
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .filter_map(|l| serde_json::from_str(l).ok())
-        .collect())
+    if !p.exists() {
+        return Ok(Vec::new());
+    }
+    Ok(crate::store::read_ndjson(p)?.0)
 }
 
 /// The digest section.
