@@ -145,13 +145,26 @@ fn kind_class(k: UpdateKind) -> &'static str {
     }
 }
 
-/// The notices index: a filterable table, or the empty state.
+/// How notices work, in plain words for the public and the press: what a
+/// notice is, why names come later, what it never carries, and how to
+/// follow them. Ends the index page (`#how-notices-work`).
+const HOW_NOTICES_WORK: &str = "<section class=\"plain card\" id=\"how-notices-work\" aria-labelledby=\"how-h\"><h2 id=\"how-h\">How notices work, in plain words</h2>\
+<dl class=\"plain-list\">\
+<dt>What a notice is</dt><dd>When the project finds AI agents that harmed or endangered people or organisations other than the ones running them, it first tells the AI company responsible and the organisations affected, privately. A notice is the public record that follows.</dd>\
+<dt>Why names come later</dt><dd>The first notice lists only the technical traces, so other sites can check their own logs. The organisations affected are named in a later update, at least 3 working days after their report (10 if their systems were compromised), so they can check, fix and prepare first. Only their own written consent brings it sooner, and the date never depends on anyone keeping quiet.</dd>\
+<dt>What a notice never shows</dt><dd>Anything that would let a reader take over or reuse what the agents set up, such as passwords, keys or the addresses they sent data to, and weaknesses that are still open. Web addresses are written so they cannot be clicked (<code>example[.]org</code>).</dd>\
+<dt>Who decides</dt><dd>A person reviews every case and publishes every notice. Automated tools only draft; unreviewed findings are never published.</dd>\
+<dt>How to follow</dt><dd>Add the <a href=\"feed.xml\">Atom feed</a> to any feed reader: it gets one entry per notice and per update. Software can read <a href=\"index.json\">index.json</a>, the list of notices, and <code>&lt;id&gt;.json</code> for each one.</dd>\
+</dl><p class=\"hint\">The full rules: <a href=\"../docs/policies/#two-stages\">publication policy</a> and the <a href=\"../docs/reference/notices/\">notices reference</a>.</p></section>\n";
+
+/// The notices index: a filterable table, or the empty state, then how
+/// notices work.
 pub fn index_body(notices: &[NoticeFile]) -> String {
     let mut s = String::new();
     s.push_str(
         "<header class=\"page-head\"><h1>Notices</h1>\
-<p class=\"lede\">One public notice per confirmed incident, in two stages: first the indicators, which name and locate no affected organisation, then the names in dated updates once each operator's naming clock has run. Notices withhold callback channels, credentials and open weaknesses, and hosts are defanged (<code>a[.]b</code>). <a href=\"../docs/policies/#two-stages\">How notices work</a>.</p>\
-<p><a class=\"button\" href=\"feed.xml\">Atom feed</a></p></header>\n",
+<p class=\"lede\">One public notice per confirmed incident, in two stages: first the indicators, which name and locate no affected organisation, then the names in dated updates once each operator's naming clock has run. Notices withhold callback channels, credentials and open weaknesses, and hosts are defanged (<code>a[.]b</code>). <a href=\"#how-notices-work\">How notices work</a>.</p>\
+<p class=\"row\"><a class=\"button\" href=\"feed.xml\">Atom feed</a> <a class=\"button\" href=\"index.json\">JSON index</a></p></header>\n",
     );
     if notices.is_empty() {
         s.push_str(
@@ -159,6 +172,7 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
 <p>Notices appear here only when reports go out: after a lead has been reviewed, linked into a case, and reported to the AI provider and the affected operators. Unreviewed leads are never published.</p>\
 <p>Subscribe to the <a href=\"feed.xml\">Atom feed</a> to hear about the first one. To see what one looks like, read the <a href=\"../#example-notice\">synthetic example notice</a> on the home page, drafted by the engine from the showcase records. How a lead becomes a notice is in the <a href=\"../methodology/\">methodology</a> and the <a href=\"../docs/policies/\">policies</a>.</p></section>\n",
         );
+        s.push_str(HOW_NOTICES_WORK);
         return s;
     }
     let providers: BTreeSet<&str> = notices
@@ -246,6 +260,7 @@ pub fn index_body(notices: &[NoticeFile]) -> String {
         );
     }
     s.push_str("</tbody></table></div>\n<p class=\"hint\" data-notice-none hidden>No notices match these filters.</p>\n");
+    s.push_str(HOW_NOTICES_WORK);
     s
 }
 

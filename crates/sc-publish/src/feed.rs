@@ -19,9 +19,14 @@ fn xml(s: &str) -> String {
     o
 }
 
+/// What the feed says about itself, under its title.
+pub const FEED_SUBTITLE: &str = "Public notices of AI agent incidents that harmed or endangered others: indicators first, affected parties named in a later update. One entry per update.";
+
 /// An Atom feed with one entry per notice update, newest first. `base` is
-/// the site's URL, ending in `/`.
-pub fn atom_feed(notices: &[NoticeFile], base: &str) -> String {
+/// the site's URL, ending in `/`. The feed's `updated` is its newest
+/// entry's date, or `fallback` (`YYYY-MM-DD`, the build's commit date)
+/// while there is no entry.
+pub fn atom_feed(notices: &[NoticeFile], base: &str, fallback: &str) -> String {
     let mut entries: Vec<(&NoticeFile, usize, &NoticeUpdate)> = notices
         .iter()
         .flat_map(|n| {
@@ -41,11 +46,12 @@ pub fn atom_feed(notices: &[NoticeFile], base: &str) -> String {
     let newest = entries
         .first()
         .map(|e| e.2.date.as_str())
-        .unwrap_or("1970-01-01");
+        .unwrap_or(fallback);
     let mut s = String::new();
     let _ = writeln!(s, r#"<?xml version="1.0" encoding="utf-8"?>"#);
     let _ = writeln!(s, r#"<feed xmlns="http://www.w3.org/2005/Atom">"#);
     let _ = writeln!(s, "  <title>Swarmchasing notices</title>");
+    let _ = writeln!(s, "  <subtitle>{}</subtitle>", xml(FEED_SUBTITLE));
     let _ = writeln!(s, "  <id>{}notices/feed.xml</id>", xml(base));
     let _ = writeln!(
         s,
@@ -53,7 +59,7 @@ pub fn atom_feed(notices: &[NoticeFile], base: &str) -> String {
         xml(base)
     );
     let _ = writeln!(s, r#"  <link href="{}"/>"#, xml(base));
-    let _ = writeln!(s, "  <updated>{newest}T00:00:00Z</updated>");
+    let _ = writeln!(s, "  <updated>{}T00:00:00Z</updated>", xml(newest));
     let _ = writeln!(s, "  <author><name>swarmchasing</name></author>");
     for (n, i, u) in entries {
         let link = format!("{base}notices/{}/", n.meta.id);
@@ -82,4 +88,18 @@ pub fn atom_feed(notices: &[NoticeFile], base: &str) -> String {
     }
     let _ = writeln!(s, "</feed>");
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_feed_is_dated_by_its_fallback_and_says_what_it_carries() {
+        let f = atom_feed(&[], "https://example.github.io/swarmchasing/", "2026-10-01");
+        assert!(f.contains("<updated>2026-10-01T00:00:00Z</updated>"), "{f}");
+        assert!(!f.contains("1970"));
+        assert!(f.contains("<subtitle>Public notices"));
+        assert!(!f.contains("<entry>"));
+    }
 }

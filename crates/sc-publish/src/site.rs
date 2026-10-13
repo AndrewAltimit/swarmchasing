@@ -49,11 +49,13 @@ pub struct NoticePage<'a> {
 /// The site's notice files, as (path relative to the output directory,
 /// contents): `index.json`, `<id>.json` per notice, and `feed.xml`. Newest
 /// update first. Refuses when any notice fails its check. `base_url` is the
-/// site's URL; a trailing `/` is added when missing.
+/// site's URL; a trailing `/` is added when missing. `dated`
+/// (`YYYY-MM-DD`) dates the feed while it has no entry.
 pub fn build_site(
     notices: &mut [NoticeFile],
     base_url: &str,
     rules: &Rules,
+    dated: &str,
 ) -> Result<Vec<(String, String)>, String> {
     for n in notices.iter() {
         let problems = check_notice(n, rules);
@@ -88,6 +90,6 @@ pub fn build_site(
     } else {
         format!("{base_url}/")
     };
-    out.push(("feed.xml".to_string(), atom_feed(notices, &base)));
+    out.push(("feed.xml".to_string(), atom_feed(notices, &base, dated)));
     Ok(out)
 }
