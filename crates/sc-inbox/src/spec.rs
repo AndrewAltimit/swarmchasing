@@ -325,6 +325,9 @@ pub struct Caps {
     pub max_lines: usize,
     /// Characters in one string (a line, a value, a summary).
     pub max_chars: usize,
+    /// Nesting depth of a converted document (STIX, X-ARF, IODEF): JSON
+    /// arrays and objects, or XML elements.
+    pub max_depth: usize,
 }
 
 impl Default for Caps {
@@ -334,6 +337,7 @@ impl Default for Caps {
             max_items: 200,
             max_lines: 5000,
             max_chars: 8192,
+            max_depth: 32,
         }
     }
 }

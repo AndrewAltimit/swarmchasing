@@ -2,9 +2,12 @@
 //! anti-abuse checks (duplicates and rate limits per submitter).
 //!
 //! What is kept is the redacted document only; the bytes as received are
-//! hashed for duplicate detection and dropped.
+//! hashed for duplicate detection and dropped. A report in another format
+//! ([`crate::import`]) is converted first; its original is kept redacted
+//! beside the converted document, and the conversion is recorded.
 
 use crate::evidence::item_key;
+use crate::import::{ConvertedFrom, Format, convert, detect, redact_original};
 use crate::inert::{InjectionFlag, injection_flags};
 use crate::spec::{Caps, Evidence, Submission, parse};
 use sc_core::redact::{redact_decoded, redact_url};
@@ -38,6 +41,14 @@ pub struct Intake {
     /// An earlier submission most of whose evidence this one repeats.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicate_of: Option<String>,
+    /// The format the report arrived in, when it was not an SC-Submission,
+    /// and what its conversion did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub converted_from: Option<ConvertedFrom>,
+    /// The original of a converted report, redacted, for the caller to
+    /// store beside the converted document. Not serialized.
+    #[serde(skip)]
+    pub original: Option<String>,
     pub submission: Submission,
 }
 
@@ -133,7 +144,8 @@ impl Default for IntakeSettings {
     }
 }
 
-/// Take `text` in, received at `received` by `via` from `from`.
+/// Take `text` in, received at `received` by `via` from `from`, its format
+/// told from its content ([`detect`]).
 pub fn intake(
     text: &str,
     received: i64,
@@ -142,7 +154,42 @@ pub fn intake(
     prior: &[Prior],
     settings: &IntakeSettings,
 ) -> Result<Intake, Refused> {
-    let mut s = parse(text, &settings.caps).map_err(Refused::Invalid)?;
+    intake_as(text, None, received, via, from, prior, settings)
+}
+
+/// [`intake`] in `format`, or the detected format when `None`.
+pub fn intake_as(
+    text: &str,
+    format: Option<Format>,
+    received: i64,
+    via: &str,
+    from: Option<&str>,
+    prior: &[Prior],
+    settings: &IntakeSettings,
+) -> Result<Intake, Refused> {
+    // The byte cap comes before detection, which reads the document.
+    if text.len() > settings.caps.max_bytes {
+        return Err(Refused::Invalid(vec![format!(
+            "document is {} bytes; the cap is {}",
+            text.len(),
+            settings.caps.max_bytes
+        )]));
+    }
+    let format = format.unwrap_or_else(|| detect(text));
+    let (mut s, converted_from, original) = match format {
+        Format::Submission => (
+            parse(text, &settings.caps).map_err(Refused::Invalid)?,
+            None,
+            None,
+        ),
+        f => {
+            let c = convert(text, f, &settings.caps).map_err(Refused::Invalid)?;
+            let (original, n) = redact_original(text, f);
+            let mut from = c.from;
+            from.original_redacted = n;
+            (c.submission, Some(from), Some(original))
+        }
+    };
     let sha256 = hex(&Sha256::digest(text.as_bytes()));
     let key = submitter_key(from, &s);
     let recent = prior
@@ -191,6 +238,8 @@ pub fn intake(
         redacted,
         injection: flags,
         duplicate_of,
+        converted_from,
+        original,
         submission: s,
     })
 }

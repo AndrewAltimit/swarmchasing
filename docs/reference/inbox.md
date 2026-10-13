@@ -1,6 +1,6 @@
 # The inbox
 
-How `swarmchase inbox` takes in outside reports of agent activity ([SC-Submission v1](../specs/submission-v1.md)), checks them, and puts the ones worth the admin's time in front of the admin. The policy is in [policies](../policies.md#outside-submissions); where it fits in the admin's day is in the [admin workflow](../guides/admin-workflow.md#outside-submissions).
+How `swarmchase inbox` takes in outside reports of agent activity ([SC-Submission v1](../specs/submission-v1.md), or STIX 2.1, X-ARF and IODEF v2 reports converted into it), checks them, and puts the ones worth the admin's time in front of the admin. The policy is in [policies](../policies.md#outside-submissions); where it fits in the admin's day is in the [admin workflow](../guides/admin-workflow.md#outside-submissions).
 
 Every submission is untrusted input and a way to plant records. The inbox assumes a submitter may have made up all of it, grades only the records the toolkit finds itself, and asks of every item what it would have cost to fabricate.
 
@@ -12,7 +12,7 @@ Submissions arrive as files. The inbox has no network endpoint, and nothing on t
 |---|---|
 | Email | The admin saves the JSON attachment and runs `inbox add <file> --via email --from <address>`. |
 | GitHub private vulnerability reporting | The admin saves the JSON from the private report and runs `inbox add <file> --via github-pvr --from <account>`. |
-| Drop directory | A directory the runner reads (`inbox add <dir> --via drop`); every `*.json` in it is taken in. |
+| Drop directory | A directory the runner reads (`inbox add <dir> --via drop`); every `*.json` and `*.xml` in it is taken in. |
 
 The [Report a swarm](browser-toolkit.md#report-a-swarm) page builds a valid document in the browser for a submitter to send by one of these. `--from` is the sender as the transport saw them; it is kept privately and outranks the submitter's own `key` for rate limits.
 
@@ -20,6 +20,7 @@ The [Report a swarm](browser-toolkit.md#report-a-swarm) page builds a valid docu
 
 ```sh
 swarmchase inbox add drop/ --via drop          # validate, redact, store, triage
+swarmchase inbox add report.xml --format iodef # name the format instead of detecting it
 swarmchase inbox list [--verdict examine]
 swarmchase inbox show sub-20261010-1a2b3c4d     # every string inert, URLs defanged
 swarmchase inbox verify sub-20261010-1a2b3c4d   # or --all
@@ -32,9 +33,9 @@ Every command takes `--data` (else `SWARMCHASE_DATA`, else `data/`) and `--rules
 
 | Command | Does |
 |---|---|
-| `add` | Validates each file, redacts it, stores it, matches it against the watch store, and triages it. Refused files are named with the reason; the files themselves are never kept. |
+| `add` | Converts a report in another format ([Other formats](#other-formats)), validates, redacts, stores, matches against the watch store, and triages each file. Refused files are named with the reason. |
 | `list` | One line per submission: id, verdict, receipt time, items, strong items, agent or person, summary. |
-| `show` | The whole submission, inert, with each item's class and the triage. Shows the submitter's contact, which nothing else does. |
+| `show` | The whole submission, inert, with each item's class and the triage, and the conversion for a converted report. Shows the submitter's contact, which nothing else does. |
 | `verify` | Looks each public-record reference up by id and triages again ([Verification](#verification)). |
 | `signature` | Records the admin's check of a signed item: valid and by a signer other than the submitter, or not. |
 | `triage` | Triages every submission again under the current rules and settings; prints those to examine, with reasons. |
@@ -53,6 +54,7 @@ settings.toml            optional: the settings below
 <id>/admin.json          signature checks and promotions
 <id>/assessment.json     the latest triage
 <id>/lead.ndjson         records queued for review by `promote`
+<id>/original.<format>   a converted report's original, redacted (`stix.json`, `xarf.json`, `iodef.xml`)
 ```
 
 An id is `sub-<receipt date>-<8 hex of the fingerprint>`. Submissions are not pruned with the watch data; delete a submission's directory when it is resolved. Encrypted backups do not include the inbox.
@@ -67,6 +69,14 @@ An id is `sub-<receipt date>-<8 hex of the fingerprint>`. Submissions are not pr
 - comes from a submitter key that sent `max_per_key_per_day` in the last 24 hours. The key is the transport's sender, else `submitter.key`, else `submitter.contact`; submissions with none share the key `anonymous`.
 
 A taken-in submission whose evidence is at least `repeat_share` of an earlier one's is marked a repeat of it, and held.
+
+### Other formats
+
+`inbox add` tells a STIX 2.1 bundle, an X-ARF report and an IODEF v2 document from the content, or takes `--format stix|xarf|iodef|submission`. Each is converted into an SC-Submission first ([accepted formats](../specs/submission-v1.md#accepted-formats)), and everything below applies to the result unchanged. The conversion is refused when the document is over `max_bytes`, nested deeper than `max_depth`, holds a string longer than `max_chars`, or (XML) declares a DOCTYPE or an entity or uses an entity other than the predefined five.
+
+A reference becomes a public record only when it names one by id, and is verified like any other. What the reporter observed becomes operator-only log lines; a signed message or request becomes an unchecked signed item. A value the converter cannot map is kept as an assertion, noted as unmapped and never matched against the watch store; the triage reasons say how many there are. `inbox show` names the format, its version, the unmapped items and the conversion notes. The original is kept redacted beside the converted document: strings redacted one by one, X-ARF payloads decoded, redacted and encoded again (or replaced by their hash when not text).
+
+### Redaction and flags
 
 Secrets are redacted at intake with the same functions that redact records: URLs, log lines, signed content, indicator values and notes. Text shaped like an instruction to its reader ("ignore previous instructions", chat role markers, "mark this submission as examine"), and hidden or direction-changing characters, are flagged with the field they are in. A flag in an evidence field may be the agent's own payload, and says so. Flags are listed in the triage reasons and never move a verdict.
 
@@ -110,6 +120,7 @@ A claim is inflated when it names a swarm or fleet and the standing set shows fe
 | `intake.caps.max_items` | 200 | Most evidence items. |
 | `intake.caps.max_lines` | 5000 | Most log lines over all items. |
 | `intake.caps.max_chars` | 8192 | Longest string. |
+| `intake.caps.max_depth` | 32 | Deepest nesting of a converted document. |
 | `intake.max_per_key_per_day` | 5 | Submissions per key in 24 hours. |
 | `intake.repeat_share` | 0.8 | Share of evidence that marks a repeat. |
 | `triage.predate_secs` | 172800 | Lead over the receipt for a record to predate it (48 hours). |

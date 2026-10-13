@@ -412,3 +412,41 @@ fn a_repeat_is_held() {
     let a = triage(&i, &world, &[]);
     assert_eq!(a.verdict, Verdict::Hold, "{:?}", a.reasons);
 }
+
+#[test]
+fn a_stix_bundle_of_fresh_submit_anywhere_records_is_held() {
+    // A STIX bundle whose only checkable evidence is three scan-service
+    // records, each made minutes before the report: converted, verified, and
+    // still not worth the admin's time.
+    let mut refs = Vec::new();
+    let mut world = Vec::new();
+    for n in 0..3 {
+        let uuid = format!("0000001{n}-aaaa-4bbb-8ccc-dddddddddddd");
+        refs.push(json!({"source_name": "urlscan.io", "external_id": uuid,
+                         "url": format!("https://urlscan.io/result/{uuid}/")}));
+        world.push(found(
+            "urlscan",
+            format!("urlscan:{uuid}"),
+            RECEIVED - 600 + n as i64,
+            &probe(n),
+        ));
+    }
+    let bundle = json!({"type": "bundle", "id": "bundle--1", "objects": [
+        {"type": "report", "spec_version": "2.1", "id": "report--1",
+         "name": "a swarm of agents probing portals", "external_references": refs}
+    ]});
+    let i = intake(
+        &bundle.to_string(),
+        RECEIVED,
+        "drop",
+        None,
+        &[],
+        &IntakeSettings::default(),
+    )
+    .unwrap();
+    assert!(i.converted_from.is_some());
+    let a = triage(&i, &world, &[]);
+    assert_eq!(a.verdict, Verdict::Hold, "{:?}", a.reasons);
+    assert_eq!(a.counts.get(&EvidenceClass::VerifiedRecent), Some(&3));
+    assert!(a.cost.starts_with("low"), "{}", a.cost);
+}

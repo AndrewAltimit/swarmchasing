@@ -1,0 +1,38 @@
+{
+  "xarf_version": "4.0.0",
+  "report_id": "8d6f5f6e-1111-4c2a-9a55-3f2e1d0c9b8a",
+  "timestamp": "2026-10-08T12:00:00Z",
+  "reporter": {
+    "org": "Example Hosting Abuse Desk",
+    "contact": "abuse@hosting.example",
+    "domain": "hosting.example"
+  },
+  "sender": {
+    "org": "Example Hosting Abuse Desk",
+    "contact": "abuse@hosting.example",
+    "domain": "hosting.example"
+  },
+  "source_identifier": "192.0.2.44",
+  "source_port": 51234,
+  "category": "connection",
+  "type": "login_attack",
+  "description": "Synthetic example. An agent tried the portal's admin login from a hosted address, and sent one signed request.",
+  "evidence_source": "honeypot",
+  "evidence": [
+    {
+      "content_type": "text/plain",
+      "description": "web server log excerpt",
+      "payload": "MjAyNi0xMC0wOFQxMTo1ODowMFogaHR0cHM6Ly9wb3J0YWwudW5pdmVyc2l0eS5leGFtcGxlL2xvZ2luP25leHQ9L2FkbWluCjIwMjYtMTAtMDhUMTE6NTg6MDJaIGh0dHBzOi8vcG9ydGFsLnVuaXZlcnNpdHkuZXhhbXBsZS9sb2dpbj9uZXh0PS9hZG1pbiZ1c2VyPWFkbWluCg==",
+      "hash": "sha256:33a1174bdb19bc043628646ba8533195b10efc3dd06ad3a0cd053a62a9e4fd18"
+    },
+    {
+      "content_type": "message/http",
+      "description": "a request carrying an HTTP message signature",
+      "payload": "R0VUIC8/Yz1kb2N1bWVudC5jb29raWUgSFRUUC8xLjENCkhvc3Q6IHBvcnRhbC51bml2ZXJzaXR5LmV4YW1wbGUNClVzZXItQWdlbnQ6IGV4YW1wbGUtYWdlbnQvMS4wDQpTaWduYXR1cmUtSW5wdXQ6IHNpZzE9KCJAbWV0aG9kIiAiQGF1dGhvcml0eSIgIkBwYXRoIik7Y3JlYXRlZD0xNzkxNDYwNjgwO2tleWlkPSJhZ2VudC1rZXktMS5leGFtcGxlIjt0YWc9IndlYi1ib3QtYXV0aCINClNpZ25hdHVyZTogc2lnMT06QUFBQWV4YW1wbGVleGFtcGxlZXhhbXBsZWV4YW1wbGVleGFtcGxlZXhhbXBsZWV4YW1wbGU9Og0KDQo=",
+      "hash": "sha256:f968dce59167a23bd25132d73481818a220575a171854f0dca33eb4f03c5326e"
+    }
+  ],
+  "tags": [
+    "ai-agent"
+  ]
+}
