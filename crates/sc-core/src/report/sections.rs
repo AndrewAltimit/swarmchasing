@@ -4,7 +4,7 @@
 use super::{Audience, ReportOptions};
 use crate::analyze::Analysis;
 use crate::attribution::{Claim, Evidence, Role, Tag};
-use crate::endpoints::{EndpointOptions, EndpointView, endpoints};
+use crate::endpoints::{Activity, EndpointOptions, EndpointView, endpoints};
 use crate::extract::defang_host;
 use crate::model::fmt_ts;
 use crate::notice::PublicView;
@@ -240,31 +240,64 @@ pub(super) fn endpoint_table(
             }
         );
     }
-    for v in &views {
-        let exposed = view.as_deref().is_some_and(|p| p.exposed(&v.host));
-        if exposed && let Some(p) = view.as_deref_mut() {
-            p.note_exposed(&v.host);
+    // Described hosts sharing a description are one row with a host count:
+    // identical rows would only repeat the class. Named hosts keep a row each.
+    let mut i = 0;
+    while i < views.len() {
+        let mut j = i + 1;
+        if described.is_some() {
+            while j < views.len() && label(&views[j].host) == label(&views[i].host) {
+                j += 1;
+            }
         }
+        let group = &views[i..j];
+        let mut exposed = false;
+        for v in group {
+            if view.as_deref().is_some_and(|p| p.exposed(&v.host)) {
+                exposed = true;
+                if let Some(p) = view.as_deref_mut() {
+                    p.note_exposed(&v.host);
+                }
+            }
+        }
+        let rules: std::collections::BTreeSet<&str> = group
+            .iter()
+            .flat_map(|v| v.payload_rules.keys().map(String::as_str))
+            .collect();
         let payloads = if exposed {
             "withheld (endpoint compromised)".into()
-        } else if v.payloads {
-            v.payload_rules
-                .keys()
+        } else if group.iter().any(|v| v.payloads) {
+            rules
+                .iter()
                 .map(|r| format!("`{r}`"))
                 .collect::<Vec<_>>()
                 .join(", ")
         } else {
             "none seen".into()
         };
+        let activity = group
+            .iter()
+            .map(|v| v.activity)
+            .min_by_key(|a| match a {
+                Activity::Ongoing => 0,
+                Activity::Historical => 1,
+                Activity::Unknown => 2,
+            })
+            .unwrap_or(Activity::Unknown);
+        let target = if group.len() > 1 {
+            format!("{} ({} hosts)", label(&group[0].host), group.len())
+        } else {
+            label(&group[0].host)
+        };
         let _ = writeln!(
             s,
-            "| {} | {} | {} | {} | {} | {payloads} |",
-            label(&v.host),
-            v.hits,
-            fmt_ts(v.first_seen),
-            fmt_ts(v.last_seen),
-            v.activity.label()
+            "| {target} | {} | {} | {} | {} | {payloads} |",
+            group.iter().map(|v| v.hits).sum::<usize>(),
+            fmt_ts(group.iter().map(|v| v.first_seen).min().unwrap_or(0)),
+            fmt_ts(group.iter().map(|v| v.last_seen).max().unwrap_or(0)),
+            activity.label()
         );
+        i = j;
     }
     if unnamed > 0 {
         let _ = writeln!(

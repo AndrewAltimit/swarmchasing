@@ -12,7 +12,7 @@
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
   --text-muted: #6d6c66;
-  --axis: #898781;
+  --axis: #76746e;
   --grid: #e7e6e1;
   --accent: #2a78d6;
   --accent-ink: #1c5cab;
@@ -121,7 +121,9 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 p { margin: 0 0 12px; }
 a { color: var(--accent-ink); text-underline-offset: 2px; }
 a:hover { text-decoration-thickness: 2px; }
-code, pre, textarea, input, select { font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace; font-size: 13px; }
+/* Monospace for code and for fields that hold records, logs or JSON
+   (`.mono`); prose fields and controls use the page's font. */
+code, pre, .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace; font-size: 13px; }
 code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: break-word; }
 @media (min-width: 701px) { td code { white-space: nowrap; } }
 pre { overflow-x: auto; }
@@ -150,6 +152,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
 .site-nav a { display: block; padding: 16px 10px 14px; color: var(--text-secondary); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; font-size: 14px; }
 .site-nav a:hover { color: var(--text-primary); }
 .site-nav a[aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--accent); font-weight: 600; }
+/* Report a swarm: the one action in the nav, set apart from the menus. */
+.site-nav .nav-report { margin-left: auto; }
+.site-nav .nav-report a { color: var(--accent-ink); font-weight: 600; }
 .theme-toggle { flex: none; position: relative; width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; color: var(--text-secondary); }
 /* The icon shows the look now: a sun for light, a moon for dark (site.js
    sets data-look). Before site.js runs it is a half-filled disc. A small
@@ -195,14 +200,22 @@ button.primary, .button.primary { background: var(--accent-strong); border-color
 textarea, input, select {
   width: 100%; background: var(--surface-0); color: var(--text-primary);
   border: 1px solid var(--border); border-radius: 7px; padding: 8px;
+  font-family: inherit; font-size: 14px;
 }
+textarea.mono, input.mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace; font-size: 13px; }
+input[type="checkbox"], input[type="radio"] { width: auto; padding: 0; margin: 0; accent-color: var(--accent); }
 textarea { resize: vertical; }
 label { font-weight: 600; font-size: 13px; color: var(--text-secondary); }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.row[hidden] { display: none; }
 .row > select, .row > input { width: auto; flex: 0 1 auto; }
 .row > .grow, .row label.grow { flex: 1 1 200px; }
 .row label { display: flex; flex-direction: column; gap: 3px; }
 .row label select, .row label input { width: 100%; }
+/* A checkbox and its text on one line, the box centred on the text. */
+label.check, .row label.check { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; font-size: 14px; }
+.row label.check input { width: auto; flex: none; }
+button.small { font-size: 12px; padding: 3px 9px; }
 .file { position: relative; overflow: hidden; }
 .file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 .file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -479,6 +492,11 @@ svg.chart.key-line { display: inline-block; width: 26px; height: 10px; margin-ri
 .key.k-band { background: var(--band); border: 1px dashed var(--band-line); }
 .chart-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 .chart-tools button { font-size: 12px; padding: 3px 9px; }
+.chart-buttons { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+/* Runs fitted to activity: an idle stretch is a narrow hatched gap. */
+.chart .idle-gap { fill: var(--surface-2); stroke: var(--grid); stroke-dasharray: 2 3; }
+.chart .gap-mark { fill: none; stroke: var(--axis); stroke-width: 1.4; }
+.zoom-tools button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .tip {
   position: fixed; pointer-events: none; z-index: 30; max-width: 320px; background: var(--surface-1); color: var(--text-primary);
   border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18); overflow-wrap: anywhere;
@@ -901,6 +919,17 @@ details.on-this-page { display: none; }
   background: var(--surface-0); border: 1px dashed var(--axis); border-radius: 8px; padding: 8px 10px; font-size: 13.5px;
 }
 .input-collapsed[hidden] { display: none; }
+/* The empty workbench: one dashed area to paste into, drop a file on, or
+   start from the example. */
+.dropzone { border: 1.5px dashed var(--axis); border-radius: 10px; padding: 10px; background: var(--surface-0); }
+.dropzone.over { border-color: var(--accent); background: var(--surface-2); }
+.dropzone .drop-lead { margin: 0 0 2px; font-size: 13.5px; color: var(--text-secondary); }
+.dropzone .drop-actions { margin: 0 0 8px; }
+.dropzone textarea { background: var(--surface-1); }
+.dropzone #drop-status { margin: 6px 0 0; }
+.sub-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sub-head .pane-sub { margin-bottom: 6px; }
+table.endpoints td.hits { white-space: nowrap; }
 .input-collapsed button { font-size: 13px; padding: 4px 10px; }
 .tile { padding: 8px; min-width: 0; }
 .tile .k { line-height: 1.25; font-size: 11.5px; overflow-wrap: break-word; hyphens: auto; }
@@ -1012,4 +1041,30 @@ details.filters-fold[open] > summary { margin-bottom: 10px; }
 @media (hover: none) {
   :is(.as-table, .rule-test, .claims, .more, .internal-review, .editor details) > summary { min-height: 32px; padding: 6px 0; box-sizing: border-box; }
   input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+}
+
+/* Print: the page's text, not its controls. The operators' guide and the
+   notices print on plain paper with their links spelled out. */
+@media print {
+  :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
+    --surface-0: #ffffff; --surface-1: #ffffff; --surface-2: #f4f4f4; --border: #bbbbbb;
+    --text-primary: #000000; --text-secondary: #222222; --text-muted: #444444;
+    --accent-ink: #000000; --code-bg: #f1f1f1; --shadow: none;
+  }
+  body { background: #fff; color: #000; font-size: 11pt; line-height: 1.45; display: block; }
+  .site-head, .site-foot, .skip, .doc-nav, .toc, .on-this-page, .theme-toggle, .tip, .page-ref, .doc-src,
+  .filters-fold, details.filters-fold, button, .button, .ctas, .live-box, .steps, [data-notice-none] { display: none !important; }
+  main, main.wrap, .wrap, .wrap.wide { max-width: none; padding: 0; margin: 0; }
+  .doc-layout { display: block; }
+  .card, .callout-card, .pane, .notice-aside, .alert { box-shadow: none; border-color: #bbb; background: #fff !important; break-inside: avoid; }
+  /* Folded sections print open. */
+  details::details-content { content-visibility: visible; display: contents; }
+  details > summary { list-style: none; font-weight: 600; }
+  h1, h2, h3 { break-after: avoid; }
+  tr, figure, pre, blockquote { break-inside: avoid; }
+  .scroll, .scroll-x, .walk-fig { overflow: visible !important; background: none !important; }
+  table { width: 100%; }
+  a { color: #000; text-decoration: underline; }
+  .prose a[href^="http"]::after, .notice-body a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9pt; overflow-wrap: anywhere; }
+  .pill, .chip, .badge { border: 1px solid #888; background: none !important; color: #000 !important; }
 }

@@ -71,6 +71,10 @@ pub struct SiteInputs {
     /// The identity page's providers' files ([`crate::identity`]); `None`
     /// embeds the catalog alone.
     pub identity: Option<crate::identity::Snapshot>,
+    /// The date (`YYYY-MM-DD`) of the last commit to each input, by
+    /// repository path, for the sitemap. Empty when git cannot say (a
+    /// shallow clone, no checkout): pages then carry no date.
+    pub lastmod: std::collections::BTreeMap<String, String>,
 }
 
 /// Values every page's shell shows.
@@ -83,6 +87,8 @@ pub struct Ctx {
     pub engine_size: String,
     /// The same for the tools module.
     pub tools_size: String,
+    /// The site's public URL, ending in `/`.
+    pub base: String,
 }
 
 /// The example records for the workbench: the example file without its
@@ -150,7 +156,27 @@ fn page(path: &str, nav: &'static str, title: &str, description: &str, body: Str
         scripts: Vec::new(),
         wide: false,
         engine: false,
+        lastmod: None,
+        ld: None,
+        article: false,
     }
+}
+
+/// Docs for the people who run the project, grouped last in the sidebar.
+const MAINTAINER_DOCS: [&str; 3] = [
+    "docs/guides/admin-workflow.md",
+    "docs/guides/ai-assistance.md",
+    "docs/guides/evaluating-leads.md",
+];
+
+/// The sidebar group a doc sits in: its directory under `docs/`, or
+/// `maintainers` for the internal guides.
+fn doc_group(src: &str) -> &str {
+    if MAINTAINER_DOCS.contains(&src) {
+        return "maintainers";
+    }
+    let rel = src.strip_prefix("docs/").unwrap_or(src);
+    rel.split_once('/').map_or("", |(g, _)| g)
 }
 
 fn docs_sidebar(all: &[docs::Doc], current: &str) -> String {
@@ -158,14 +184,20 @@ fn docs_sidebar(all: &[docs::Doc], current: &str) -> String {
         String::from("<nav class=\"doc-nav\" aria-label=\"Docs\"><p class=\"nav-h\">Docs</p><ul>");
     let mut groups: Vec<(&str, Vec<&docs::Doc>)> = Vec::new();
     for d in all {
-        let rel = d.src.strip_prefix("docs/").unwrap_or(&d.src);
-        let group = rel.split_once('/').map_or("", |(g, _)| g);
+        let group = doc_group(&d.src);
         match groups.iter_mut().find(|(g, _)| *g == group) {
             Some((_, v)) => v.push(d),
             None => groups.push((group, vec![d])),
         }
     }
-    groups.sort_by_key(|(g, _)| (!g.is_empty(), *g));
+    groups.sort_by_key(|(g, _)| {
+        let rank = match *g {
+            "" => 0,
+            "maintainers" => 2,
+            _ => 1,
+        };
+        (rank, *g)
+    });
     for (g, ds) in groups {
         if !g.is_empty() {
             let _ = write!(
@@ -290,6 +322,69 @@ fn manual_terms(first: &[docs::Doc], sources: &[(String, String)]) -> docs::Term
     t
 }
 
+/// A plain `YYYY-MM-DD` date, as the sitemap's `lastmod` takes it.
+fn is_date(d: &str) -> bool {
+    let b = d.as_bytes();
+    b.len() == 10
+        && b.iter().enumerate().all(|(i, c)| match i {
+            4 | 7 => *c == b'-',
+            _ => c.is_ascii_digit(),
+        })
+}
+
+/// A Field Manual section page: a numbered chapter, not the index, the
+/// glossary or the references.
+fn is_manual_section(src: &str) -> bool {
+    src.strip_prefix("docs/manual/")
+        .is_some_and(|f| f.as_bytes().first().is_some_and(u8::is_ascii_digit))
+}
+
+/// The home page's structured data: the site and the project behind it.
+fn site_ld(base: &str, repo: &str) -> serde_json::Value {
+    serde_json::json!({
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebSite",
+                "@id": format!("{base}#website"),
+                "name": "Swarmchasing",
+                "url": base,
+                "description": "Passive detection of AI agent activity in public records, coordinated disclosure, and an open method.",
+                "publisher": { "@id": format!("{base}#organization") },
+            },
+            {
+                "@type": "Organization",
+                "@id": format!("{base}#organization"),
+                "name": "Swarmchasing",
+                "url": base,
+                "logo": format!("{base}{}", layout::OG_IMAGE),
+                "sameAs": [repo],
+            },
+        ],
+    })
+}
+
+/// A Field Manual section as a technical article, part of the manual.
+fn tech_article(d: &docs::Doc, base: &str, modified: Option<&str>) -> serde_json::Value {
+    let mut v = serde_json::json!({
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": d.title,
+        "description": d.summary.chars().take(200).collect::<String>(),
+        "url": format!("{base}{}", d.url),
+        "isPartOf": {
+            "@type": "CreativeWork",
+            "name": "Swarmchasing Field Manual",
+            "url": format!("{base}docs/manual/"),
+        },
+        "publisher": { "@type": "Organization", "name": "Swarmchasing", "url": base },
+    });
+    if let (Some(m), Some(d)) = (v.as_object_mut(), modified.filter(|d| is_date(d))) {
+        m.insert("dateModified".into(), d.into());
+    }
+    v
+}
+
 /// Every file of the site except the static assets (`site/` is copied as
 /// it is) and the WASM package: (path under the site root, contents).
 /// Refuses when a notice fails its check or an input does not parse.
@@ -306,6 +401,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         repo: inp.repo.clone(),
         engine_size: module_size(inp.engine_bytes),
         tools_size: module_size(inp.tools_bytes),
+        base: base.clone(),
     };
     let mut out: Vec<(String, String)> = Vec::new();
     // Notice data (newest first) as the CLI's `notice build` writes it.
@@ -402,6 +498,10 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
             ),
             notices::page_body(n),
         ));
+        if let Some(p) = pages.last_mut() {
+            p.lastmod = Some(n.meta.updated.clone());
+            p.article = true;
+        }
     }
 
     // Docs, twice: the first pass finds the Field Manual's sections and
@@ -476,6 +576,11 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
             doc_body(d, &rendered, &inp.repo, before, &after),
         );
         p.wide = true;
+        p.article = true;
+        p.lastmod = inp.lastmod.get(&d.src).cloned();
+        if is_manual_section(&d.src) {
+            p.ld = Some(tech_article(d, &base, p.lastmod.as_deref()));
+        }
         pages.push(p);
     }
     if !sections.is_empty() {
@@ -511,6 +616,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     );
     home.title = String::new();
     home.scripts.push("js/pages/home.js");
+    home.ld = Some(site_ld(&base, &inp.repo));
     pages.push(home);
 
     // Rules, evaluation, and the tools.
@@ -521,6 +627,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "The indicator rules every analysis runs, with their weights, patterns and scores on the labelled set.",
         rules::body(&inp.rules_toml, &report.rules, &fm_links)?,
     );
+    p.lastmod = inp.lastmod.get("rules/default.toml").cloned();
     p.scripts.push("js/pages/rules.js");
     pages.push(p);
     let mut p = page(
@@ -535,7 +642,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     let mut p = page(
         "analyze/index.html",
         "analyze",
-        "Analyze",
+        "Workbench",
         "Grade, link and time records in the browser with the same rules as the CLI.",
         shells::ANALYZE.to_string(),
     );
@@ -582,15 +689,28 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     );
     p.scripts.push("js/pages/submit.js");
     pages.push(p);
+    pages.push(page(
+        "contact/index.html",
+        "",
+        "Contact",
+        "How to reach the Swarmchasing maintainers privately, whoever you are: an operator, an AI provider, a researcher or an AI agent.",
+        shells::CONTACT.to_string(),
+    ));
 
     let mut sitemap = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
     );
     for p in &pages {
         let loc = p.path.strip_suffix("index.html").unwrap_or(&p.path);
+        let lastmod = p
+            .lastmod
+            .as_deref()
+            .filter(|d| is_date(d))
+            .map(|d| format!("<lastmod>{d}</lastmod>"))
+            .unwrap_or_default();
         let _ = writeln!(
             sitemap,
-            "  <url><loc>{}{}</loc></url>",
+            "  <url><loc>{}{}</loc>{lastmod}</url>",
             html::esc(&base),
             html::esc(loc)
         );
@@ -619,7 +739,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
             "{}<p><a class=\"button primary\" href=\"{root}notices/\">Notices</a> <a class=\"button\" href=\"{root}\">Home</a></p>\
 <ul><li>Received a report about your site? <a href=\"{root}operators/\">For operators</a> says what becomes public and when.</li>\
 <li>Received a report at an AI provider? <a href=\"{root}providers/\">For providers</a> covers checking it and replying.</li>\
-<li>To ask about a notice that is not here yet, reply to the report, or use the <a href=\"{root}operators/#contact\">private contact</a>.</li></ul>",
+<li>To ask about a notice that is not here yet, reply to the report, or use the <a href=\"{root}contact/\">private contact</a>.</li></ul>",
             shells::NOT_FOUND,
             root = html::esc(&root_path)
         ),
@@ -706,6 +826,9 @@ mod tests {
             engine_bytes: Some(1_300_000),
             tools_bytes: Some(1_500_000),
             identity: None,
+            lastmod: [("docs/methodology.md".to_string(), "2026-10-01".to_string())]
+                .into_iter()
+                .collect(),
         }
     }
 
@@ -748,10 +871,72 @@ mod tests {
         assert!(notice.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
         assert!(notice.contains("a[.]example&quot;"));
         let sitemap = &files.iter().find(|(p, _)| p == "sitemap.xml").unwrap().1;
-        assert!(sitemap.contains("https://example.github.io/swarmchasing/notices/n-xss/"));
+        assert!(sitemap.contains(
+            "<loc>https://example.github.io/swarmchasing/notices/n-xss/</loc><lastmod>2026-10-17</lastmod>"
+        ));
+        assert!(sitemap.contains(
+            "<loc>https://example.github.io/swarmchasing/methodology/</loc><lastmod>2026-10-01</lastmod>"
+        ));
+        assert!(sitemap.contains("<loc>https://example.github.io/swarmchasing/eval/</loc></url>"));
+        // Link cards and the canonical address, from the https base.
+        let get = |p: &str| &files.iter().find(|(f, _)| f == p).unwrap().1;
+        let home = get("index.html");
+        assert!(
+            home.contains(
+                "<link rel=\"canonical\" href=\"https://example.github.io/swarmchasing/\">"
+            )
+        );
+        assert!(home.contains(
+            "<meta property=\"og:image\" content=\"https://example.github.io/swarmchasing/og-image.png\">"
+        ));
+        assert!(home.contains("<script type=\"application/ld+json\">{\"@context\""));
+        assert!(home.contains("\"@type\":\"WebSite\""));
+        assert!(
+            get("methodology/index.html")
+                .contains("<meta property=\"og:type\" content=\"article\">")
+        );
+        assert!(!nf_has_canonical(get("404.html")));
+        let wb = get("analyze/index.html");
+        assert!(
+            wb.contains("<title>Workbench · Swarmchasing</title>")
+                && wb.contains("<h1>Workbench</h1>")
+        );
+        assert!(get("contact/index.html").contains("security/advisories/new"));
         let nf = &files.iter().find(|(p, _)| p == "404.html").unwrap().1;
         assert!(nf.contains("href=\"/swarmchasing/css/site.css\""));
         assert!(files.iter().any(|(p, _)| p == "assets/eval-summary.json"));
+    }
+
+    fn nf_has_canonical(html: &str) -> bool {
+        html.contains("rel=\"canonical\"")
+    }
+
+    #[test]
+    fn manual_sections_are_articles_and_maintainer_docs_group_last() {
+        let mut inp = inputs();
+        inp.docs.push((
+            "docs/manual/04-indicators.md".into(),
+            "# 4. Indicators\n\nWhat a record shows.\n".into(),
+        ));
+        inp.docs.push((
+            "docs/guides/admin-workflow.md".into(),
+            "# Admin workflow\n\nFor the admin.\n".into(),
+        ));
+        inp.docs.push((
+            "docs/guides/for-operators.md".into(),
+            "# For operators\n\nFor operators.\n".into(),
+        ));
+        let files = build_pages(&mut inp).unwrap();
+        let get = |p: &str| &files.iter().find(|(f, _)| f == p).unwrap().1;
+        let fm = get("docs/manual/04-indicators/index.html");
+        assert!(fm.contains("\"@type\":\"TechArticle\""), "{fm}");
+        assert!(fm.contains("\"headline\":\"4. Indicators\""));
+        assert!(!get("methodology/index.html").contains("application/ld+json"));
+        let docs = get("docs/index.html");
+        let m = docs.find("<p class=\"nav-h\">Maintainers</p>").unwrap();
+        let g = docs.find("<p class=\"nav-h\">Guides</p>").unwrap();
+        assert!(g < m && docs[m..].contains("Admin workflow"));
+        assert!(!docs[g..m].contains("Admin workflow") && docs[g..m].contains("For operators"));
     }
 
     /// The synthetic notices in `tests/fixtures/notices/` (never under

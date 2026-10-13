@@ -54,6 +54,9 @@ pub struct AgentInputs<'a> {
     pub now: i64,
     /// (repository path, text) of every doc.
     pub docs: &'a [(String, String)],
+    /// Repository paths of the schemas the build publishes under
+    /// `schemas/` on the site.
+    pub schemas: &'a [String],
 }
 
 impl AgentInputs<'_> {
@@ -74,11 +77,13 @@ impl AgentInputs<'_> {
         }
     }
 
-    /// The schema as raw JSON.
+    /// The schema as JSON on this site when the build publishes it, else
+    /// on GitHub.
     fn schema(&self) -> String {
-        match self.repo.strip_prefix("https://github.com/") {
-            Some(r) => format!("https://raw.githubusercontent.com/{r}/main/{SUBMISSION_SCHEMA}"),
-            None => self.blob(SUBMISSION_SCHEMA),
+        if self.schemas.iter().any(|p| p == SUBMISSION_SCHEMA) {
+            format!("{}{SUBMISSION_SCHEMA}", self.base)
+        } else {
+            self.blob(SUBMISSION_SCHEMA)
         }
     }
 }
@@ -211,16 +216,25 @@ pub fn files(i: &AgentInputs) -> Vec<(String, String)> {
 
 /// Fill in a file's canary token, or drop it. `token` is the token for
 /// this file (its path under the site root is the surface). In JSON the
-/// quoted placeholder becomes the token or `null`; elsewhere a line holding
-/// it gets the token, or is removed with no token.
+/// quoted placeholder becomes the token, or with no token the member
+/// holding it is left out; elsewhere a line holding it gets the token, or is
+/// removed with no token.
 pub fn apply_canary(path: &str, text: &str, token: Option<&str>) -> String {
     if !text.contains(canary::PLACEHOLDER) {
         return text.to_string();
     }
     if path.ends_with(".json") {
         let quoted = format!("\"{}\"", canary::PLACEHOLDER);
-        let with = token.map_or_else(|| "null".to_string(), |t| format!("\"{t}\""));
-        return text.replace(&quoted, &with);
+        if let Some(t) = token {
+            return text.replace(&quoted, &format!("\"{t}\""));
+        }
+        if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(text)
+            && let Some(m) = v.as_object_mut()
+        {
+            m.retain(|_, x| x.as_str() != Some(canary::PLACEHOLDER));
+            return serde_json::to_string_pretty(&v).unwrap_or_default() + "\n";
+        }
+        return text.replace(&quoted, "null");
     }
     let mut out = String::with_capacity(text.len());
     for line in text.split_inclusive('\n') {
@@ -259,6 +273,7 @@ mod tests {
             repo: "https://github.com/owner/swarmchasing",
             now: 1_791_763_200,
             docs,
+            schemas: &[],
         }
     }
 
@@ -281,6 +296,17 @@ mod tests {
         // With the spec in the checkout, it links the site page.
         let docs = vec![(SUBMISSION_SPEC.to_string(), "# Spec\n".to_string())];
         assert!(llms_txt(&inputs(&docs)).contains("/docs/specs/submission-v1/"));
+        // A published schema is linked on the site, never on raw GitHub.
+        assert!(t.contains("/blob/main/schemas/sc-submission-v1.json"));
+        let schemas = [SUBMISSION_SCHEMA.to_string()];
+        let i = AgentInputs {
+            schemas: &schemas,
+            ..inputs(&docs)
+        };
+        let want = "https://example.github.io/swarmchasing/schemas/sc-submission-v1.json";
+        assert!(llms_txt(&i).contains(want));
+        assert!(swarm_report_json(&i).contains(want));
+        assert!(!llms_txt(&i).contains("raw.githubusercontent"));
     }
 
     #[test]
@@ -310,7 +336,8 @@ mod tests {
             assert!(!dropped.contains("\n\n\n"), "{path}");
             if path.ends_with(".json") {
                 let v: serde_json::Value = serde_json::from_str(&dropped).unwrap();
-                assert!(v["reference"].is_null());
+                assert!(v.get("reference").is_none(), "{dropped}");
+                assert!(v.get("report").is_some());
                 let v: serde_json::Value = serde_json::from_str(&filled).unwrap();
                 assert_eq!(v["reference"], "swc-2610-abcdefghijkl");
             }
