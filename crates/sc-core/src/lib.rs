@@ -65,8 +65,8 @@ pub use fleets::{CandidateFleet, SoftLink, SoftLinkKind};
 pub use identity::{Catalog, ClusterIdentity, IdentityClass, IdentityData, RecordIdentity};
 pub use ingest::{FieldMap, Format, Parsed, parse_input};
 pub use model::{
-    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SourceKind, Tactic,
-    Tier, TsKind, fmt_ts, parse_ts, top_counts,
+    Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SUBMISSION_SOURCE,
+    SourceKind, Tactic, Tier, TsKind, fmt_ts, parse_ts, top_counts,
 };
 pub use paths::{FabricatedId, PathStats, fabricated_ids};
 pub use plant::{Corroboration, PlantSignal, PlantSignalKind};

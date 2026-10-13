@@ -2,7 +2,7 @@
 //!
 //! The library behind the `swarmchase` binary. [`run`] parses the arguments
 //! and dispatches; each command lives in its own module ([`commands`],
-//! [`watch`], [`review`], [`case`], [`notice`]). What a case is, and every
+//! [`watch`], [`review`], [`case`], [`inbox`], [`notice`]). What a case is, and every
 //! decision on one, is the `sc-case` crate; the STIX and MISP builders are
 //! `sc-stix`. This crate reads and writes the files and talks to the
 //! network.
@@ -23,6 +23,7 @@ pub mod dashboard;
 pub mod eval;
 pub mod evidence;
 pub mod health;
+pub mod inbox;
 pub mod input;
 pub mod localui;
 pub mod notice;
@@ -108,6 +109,9 @@ pub enum Cmd {
     /// Case files: open, classify endpoints, record attribution, draft reports
     /// and notices, record the second review and the naming decisions.
     Case(case::CaseArgs),
+    /// Outside swarm reports (SC-Submission v1): take in, verify by id,
+    /// triage, and promote to review or a case. Nothing is published.
+    Inbox(inbox::InboxArgs),
     /// Public notices: add a reviewed draft, append updates, lint, build the site files.
     Notice(notice::NoticeArgs),
     /// Encrypted backups of cases, labels, pinned rules and state.json:
@@ -159,6 +163,7 @@ pub fn run() -> Result<()> {
         Cmd::Review(a) => review::run(a),
         Cmd::Dashboard(a) => dashboard::run(a),
         Cmd::Case(a) => case::run(a),
+        Cmd::Inbox(a) => inbox::run(a),
         Cmd::Notice(a) => notice::run(a),
         Cmd::Backup(a) => backup::run(a),
         Cmd::Site(a) => commands::site::run(a),

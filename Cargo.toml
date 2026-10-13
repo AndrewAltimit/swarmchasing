@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/sc-core", "crates/sc-collect", "crates/sc-case", "crates/sc-stix", "crates/sc-publish", "crates/swarmchase", "crates/sc-wasm", "crates/sc-rules-wasm", "crates/sc-sim"]
+members = ["crates/sc-core", "crates/sc-collect", "crates/sc-case", "crates/sc-stix", "crates/sc-publish", "crates/swarmchase", "crates/sc-wasm", "crates/sc-rules-wasm", "crates/sc-sim", "crates/sc-inbox"]
 
 [workspace.package]
 version = "0.1.0"
@@ -20,6 +20,7 @@ sc-publish = { path = "crates/sc-publish" }
 sc-case = { path = "crates/sc-case" }
 sc-stix = { path = "crates/sc-stix" }
 sc-sim = { path = "crates/sc-sim" }
+sc-inbox = { path = "crates/sc-inbox" }
 
 # External crates.
 serde = { version = "1", features = ["derive"] }

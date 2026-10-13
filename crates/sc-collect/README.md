@@ -56,6 +56,7 @@ let records = client.wayback_cdx(&q)?;
 | `security_txt`, `security_txt_checked` | A domain's security.txt; the checked form says whether it has expired. |
 | `rdap_domain` | A domain's RDAP record, for the registrar's abuse contact. |
 | `download` | A large file streamed to disk (the ASN table). |
+| `urlscan_by_id`, `gharchive_event`, `npm_release`, `pypi_release`, `crtsh_entry` | One record by id, for checking a reference a submission names ([`lookup.rs`](src/lookup.rs)). |
 
 Every source has a `parse_*` function that reads a saved response without the network.
 
@@ -142,6 +143,7 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`platform.rs`](src/platform.rs) | Platform events for the coordinated-account detector: GH Archive, npm, PyPI and Hugging Face Hub listings, sketched at parse time. |
 | [`wellknown.rs`](src/wellknown.rs) | Agent protocol footprints in the Wayback index. |
 | [`ctlog.rs`](src/ctlog.rs) | The CT log source and its SAN parser. |
+| [`lookup.rs`](src/lookup.rs) | Single records by id, for `swarmchase inbox verify`. |
 | [`crtsh.rs`](src/crtsh.rs), [`securitytxt.rs`](src/securitytxt.rs), [`rdap.rs`](src/rdap.rs) | Lookups: certificates, security.txt, RDAP. |
 | [`psl.rs`](src/psl.rs), [`asn.rs`](src/asn.rs) | Registrable domains; the IP-to-ASN table download. |
 | [`identity.rs`](src/identity.rs) | Providers' published range files and key directories, from the catalog's URLs only ([identity](../../docs/reference/identity.md)). |

@@ -19,6 +19,7 @@ sc-publish.workspace = true
 sc-case.workspace = true
 sc-stix.workspace = true
 sc-sim.workspace = true
+sc-inbox.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true

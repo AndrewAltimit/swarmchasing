@@ -1780,6 +1780,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-inbox"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "sc-core",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "sc-publish"
 version = "0.1.0"
 dependencies = [
@@ -2043,6 +2054,7 @@ dependencies = [
  "sc-case",
  "sc-collect",
  "sc-core",
+ "sc-inbox",
  "sc-publish",
  "sc-sim",
  "sc-stix",

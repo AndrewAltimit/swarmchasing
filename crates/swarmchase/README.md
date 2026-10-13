@@ -137,6 +137,19 @@ swarmchase sightings export access.log --map host=www.example.org -o sightings.j
 swarmchase sightings match a.json b.json --vouch a.json=2026-10-portal --store       # clusters more than one party saw
 ```
 
+### Inbox
+
+`inbox` takes in outside swarm reports ([SC-Submission v1](../../docs/specs/submission-v1.md)) as files, keeps them redacted under `<data>/inbox/`, looks their public-record references up by id, and triages them so only hard-to-fabricate evidence reaches the admin. Details: [The inbox](../../docs/reference/inbox.md).
+
+```sh
+swarmchase inbox add drop/ --via drop
+swarmchase inbox verify --all
+swarmchase inbox triage
+swarmchase inbox promote sub-20261010-1a2b3c4d --case 2026-10-portal
+```
+
+Other subcommands: `list`, `show`, `signature`.
+
 ### Notices
 
 | Command | What it does |
@@ -199,4 +212,5 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`bundle.rs`](src/bundle.rs) | Evidence bundles, `case verify` and `.eml` drafts. |
 | [`evidence.rs`](src/evidence.rs) | Logs operators send back, `case evidence`. |
 | [`stix/`](src/stix/mod.rs) | `case export --format stix\|misp`: the case scoped to an audience, built by [`sc-stix`](../sc-stix/README.md). |
+| [`inbox/`](src/inbox/mod.rs) | `swarmchase inbox`: the files under `<data>/inbox/` ([`files.rs`](src/inbox/files.rs)) and lookups by id ([`verify.rs`](src/inbox/verify.rs)). What a submission is and how it is judged is [`sc-inbox`](../sc-inbox/README.md). |
 | [`notice.rs`](src/notice.rs) | The notice draft (`case notice`); adding, updating, linting and building notices. |

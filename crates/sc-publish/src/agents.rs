@@ -26,7 +26,7 @@ use sc_core::canary;
 use std::fmt::Write;
 
 /// Where the submission page is published, under the site root.
-pub const REPORT_PAGE: &str = "report/";
+pub const REPORT_PAGE: &str = "submit/";
 
 /// The submission spec and schema, as repository paths.
 pub const SUBMISSION_SPEC: &str = "docs/specs/submission-v1.md";
@@ -272,7 +272,7 @@ mod tests {
         let t = llms_txt(&i);
         assert!(t.starts_with("# Swarmchasing\n\n> "));
         assert!(t.contains("## Optional\n"));
-        assert!(t.contains("https://example.github.io/swarmchasing/report/"));
+        assert!(t.contains("https://example.github.io/swarmchasing/submit/"));
         assert!(t.contains(SUBMISSION_SCHEMA) && t.contains("submission-v1.md"));
         assert!(t.contains("Nothing is published unreviewed"));
         assert!(t.contains("independent public records"));

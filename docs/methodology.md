@@ -236,11 +236,12 @@ Most sources take records from anyone. A record shows that someone submitted or 
 | `observed` | Access logs; logs an affected operator sent |
 | `submit-anywhere` | urlquery, urlscan, Wayback, Arquivo.pt, Memento timemaps |
 | `publish-anywhere` | GH Archive, npm, PyPI, CT logs, Common Crawl |
+| `reported` | Records an outside submission states: its own logs and references as written ([inbox](reference/inbox.md)) |
 | `unknown` | Anything else: manual imports, fixtures |
 
 Archive rows count as submitted. A CDX row does not say whether a capture came from an on-demand save (Save Page Now, which anyone can trigger for any URL) or from a crawl, and telling them apart would mean opening the capture, which collection never does. Common Crawl counts as published: it crawls what pages link to, and anyone can publish a link.
 
-**Corroboration.** Each cluster counts its members by provenance (`provenance`) and says how many kinds of source stand behind it (`corroboration`): `single_source` (one kind at most, unknown not counted), `multi_source` (two or more), or `operator_confirmed` (an operator's logs hold a member). Two scan services count as one kind: whoever submits to one can submit to the other. Internal and provider reports carry both on each cluster's timeline. The tier does not read them, so a single-source cluster is graded like any other; the line says that such records show someone submitted them, not who.
+**Corroboration.** Each cluster counts its members by provenance (`provenance`) and says how many kinds of source stand behind it (`corroboration`): `single_source` (one kind at most, unknown not counted), `multi_source` (two or more), or `operator_confirmed` (an operator's logs hold a member). Reported records count as no kind, so a submission alone never makes a cluster multi-source. Two scan services count as one kind: whoever submits to one can submit to the other. Internal and provider reports carry both on each cluster's timeline. The tier does not read them, so a single-source cluster is graded like any other; the line says that such records show someone submitted them, not who.
 
 **Plant signals.** Each cluster lists signs that it was planted (`plant_signals`), with the records each rests on. They appear under *Plant review* in case notes and as one line per cluster in `case status`, never in a report to a provider or an operator, and never in a notice:
 

@@ -24,6 +24,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (archive CDX, scan services, GH Archive, registries, CT logs, security.txt), HTTP cache, PSL, ASN table. |
 | [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README): [`watch/`](crates/swarmchase/src/watch/mod.rs) watch and digest, [`review/`](crates/swarmchase/src/review/mod.rs) lead labelling, [`case/`](crates/swarmchase/src/case/mod.rs) case files (subcommands in `case/cli/`), [`contacts/`](crates/swarmchase/src/contacts/mod.rs) contact discovery, [`notice.rs`](crates/swarmchase/src/notice.rs) notices, [`canary.rs`](crates/swarmchase/src/canary.rs) canary tokens. |
 | [`crates/sc-case`](crates/sc-case/README.md) | What a case is and may do, without I/O: case model, admin actions, pinning, lead clock, bundles, notice format and linter. |
+| [`crates/sc-inbox`](crates/sc-inbox/README.md) | Outside swarm reports without I/O: SC-Submission parsing, redaction, evidence classes, triage. |
 | [`crates/sc-stix`](crates/sc-stix/README.md) | A case as a STIX 2.1 bundle or MISP event, with the SC-T cross-walk. No I/O. |
 | [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site pages, `llms.txt` and `.well-known/` files. Text in, text out. |
 | [`crates/sc-sim`](crates/sc-sim/README.md) | Swarm edges, soft links, candidate fleets and agent grades against labelled true runs, swarms and fleets. No I/O. |
@@ -53,6 +54,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`guides/writing-rules.md`](docs/guides/writing-rules.md) | A rule change step by step: fields, weights, hard negatives, eval and coverage. |
 | [`reference/watch.md`](docs/reference/watch.md) | Data directory, incremental collection, digest, retention, review. |
 | [`reference/cases.md`](docs/reference/cases.md) | `case.toml`, every `case` subcommand, drafts, bundles, pinned rules. |
+| [`reference/inbox.md`](docs/reference/inbox.md) | Outside submissions: intake, verification by id, triage, promotion. |
 | [`reference/notices.md`](docs/reference/notices.md) | Notice lifecycle, what notices withhold, lint and build. |
 | [`reference/identity.md`](docs/reference/identity.md) | Declared agent identity: range files, key directories, verified and spoofed agents. |
 | [`reference/evaluation.md`](docs/reference/evaluation.md) | `eval`, the eval gate's floors, held-out measurement. |

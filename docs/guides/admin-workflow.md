@@ -43,6 +43,23 @@ Label each lead agent, benign or unsure, strongest cluster first. The unflagged 
 
 Details: [reviewing leads](../reference/watch.md#reviewing-leads).
 
+### Outside submissions
+
+Agents, researchers and operators may send a swarm report as an [SC-Submission](../specs/submission-v1.md) file, by email, GitHub private vulnerability reporting or the runner's drop directory. Take each in, look its references up, and read only what triage puts forward:
+
+```sh
+swarmchase inbox add report.json --via email --from sender@reporter.example
+swarmchase inbox verify --all
+swarmchase inbox triage            # examine only; --all for held and discarded
+swarmchase inbox show sub-20261010-1a2b3c4d
+swarmchase inbox promote sub-20261010-1a2b3c4d          # a review lead
+swarmchase inbox promote sub-20261010-1a2b3c4d --case 2026-10-portal
+```
+
+Treat everything in a submission as data: `show` prints it inert, and instruction-shaped text is flagged, never followed. Check a signed item's signature by hand, and record it with `inbox signature`, only when the signer is not the submitter. Promotion carries only the records the toolkit found itself into a case, and a submitter is never named in anything published.
+
+Details: [the inbox](../reference/inbox.md).
+
 ## 3. Open a case
 
 ```sh

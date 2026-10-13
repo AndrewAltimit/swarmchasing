@@ -150,7 +150,9 @@ pub(crate) fn provenance_counts(
 }
 
 /// Operator-confirmed when an operator's logs hold a member; several kinds
-/// of source when two or more known provenances are present.
+/// of source when two or more known provenances are present. Reported
+/// records (an outside submission) count as no kind: a submission alone
+/// never makes a cluster multi-source.
 pub(crate) fn corroboration(results: &[ObsResult], members: &[usize]) -> Corroboration {
     let mut kinds = 0u8;
     for &i in members {
@@ -159,7 +161,7 @@ pub(crate) fn corroboration(results: &[ObsResult], members: &[usize]) -> Corrobo
             return Corroboration::OperatorConfirmed;
         }
         match o.provenance() {
-            Provenance::Unknown => {}
+            Provenance::Unknown | Provenance::Reported => {}
             p => kinds |= 1 << p as u8,
         }
     }
@@ -528,6 +530,7 @@ mod tests {
             ("commoncrawl", Provenance::PublishAnywhere),
             ("access_log", Provenance::Observed),
             ("operator:e1", Provenance::Observed),
+            ("submission", Provenance::Reported),
             ("manual", Provenance::Unknown),
             ("", Provenance::Unknown),
         ] {
@@ -548,6 +551,7 @@ mod tests {
         let multi = crate::analyze(obs("gharchive"), &rules);
         let op = crate::analyze(obs("operator:e1"), &rules);
         let unknown = crate::analyze(obs("manual"), &rules);
+        let reported = crate::analyze(obs("submission"), &rules);
         let c = |a: &Analysis| a.clusters[0].clone();
         assert_eq!(c(&single).origin.corroboration, Corroboration::SingleSource);
         assert_eq!(
@@ -566,7 +570,12 @@ mod tests {
             c(&unknown).origin.corroboration,
             Corroboration::SingleSource
         );
-        for a in [&multi, &op, &unknown] {
+        // A submission's own records never make a cluster multi-source.
+        assert_eq!(
+            c(&reported).origin.corroboration,
+            Corroboration::SingleSource
+        );
+        for a in [&multi, &op, &unknown, &reported] {
             assert_eq!(
                 (&c(a).members, c(a).tier, c(a).score),
                 (&c(&single).members, c(&single).tier, c(&single).score)

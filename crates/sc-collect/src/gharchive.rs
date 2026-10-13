@@ -30,7 +30,7 @@ use std::cell::Cell;
 use std::io::{BufRead, BufReader, Read};
 use std::rc::Rc;
 
-const BASE: &str = "https://data.gharchive.org/";
+pub(crate) const BASE: &str = "https://data.gharchive.org/";
 /// Hours one pull reads unless `query.scan` says otherwise.
 const DEFAULT_HOURS: usize = 1;
 /// Compressed megabytes one pull reads unless `query.max_mb` says otherwise.
@@ -251,7 +251,7 @@ pub fn filter_events_counted(
     Ok((out, parsed))
 }
 
-fn event_to_obs(v: &Value, needles: &Needles) -> Option<Observation> {
+pub(crate) fn event_to_obs(v: &Value, needles: &Needles) -> Option<Observation> {
     let repo = v.pointer("/repo/name").and_then(Value::as_str)?;
     let payload = v.get("payload");
     let hit = needles.matches(repo)

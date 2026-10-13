@@ -114,6 +114,7 @@ export const PROVENANCE = {
   observed: "observed (a server recorded it)",
   "submit-anywhere": "submit-anywhere (anyone can submit the URL)",
   "publish-anywhere": "publish-anywhere (anyone can publish it)",
+  reported: "reported (an outside submission states it)",
   unknown: "unknown source",
 };
 export const provenanceLabel = (k) => PROVENANCE[k] ?? trunc(String(k ?? "?"), 40);
