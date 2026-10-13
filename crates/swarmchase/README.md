@@ -104,6 +104,7 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 | `eval repro`, `eval check-results`, `eval export-bench` | Measure a saved result again; check the committed results; write an SC-Bench file (`eval --bench` scores one). |
 | `sim write <scenarios> -o <dir>` | Simulated labelled records, one NDJSON file per scenario and seed ([simulated scenarios](../../docs/reference/evaluation.md#simulated-scenarios)). |
 | `sim bench <scenarios>` | Generate, analyse and measure every scenario; per scenario and summed, `--total` for the sum only, `--json` to save. Report only. |
+| `sim calibrate <scenarios>` | Each soft-link kind's likelihood ratio from simulated truth, beside the ratio the rules set. Report only. |
 | `sim score <input>…` | Interaction edges, soft links, candidate fleets and agent grades against labelled true runs, swarms and fleets ([swarm and fleet measurement](../../docs/reference/evaluation.md#swarm-and-fleet-measurement)). Report only. |
 
 ```sh

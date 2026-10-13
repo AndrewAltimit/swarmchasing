@@ -4,6 +4,7 @@
 
 ```sh
 cargo run -p swarmchase -- sim bench samples/sim/scenarios.toml
+cargo run -p swarmchase -- sim calibrate samples/sim/scenarios.toml       # soft-link likelihood ratios
 cargo run -p swarmchase -- sim write samples/sim/scenarios.toml -o data/sim   # the records, for eval or sim score
 ```
 

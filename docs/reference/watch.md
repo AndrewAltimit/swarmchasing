@@ -138,12 +138,16 @@ Both are leads to review; neither merges clusters.
 
 Over the whole window, up to ten lines each:
 
-- **Candidate fleets.** Clusters tied by soft links, with the kinds and the weakest pair's strength. Merging one is a case decision ([fleets](cases.md#fleets)).
+- **Candidate fleets.** Clusters tied by soft links, with the kinds and the weakest pair's strength. Merging one is a case decision ([fleets](cases.md#fleets)). The same fleets by their keys across runs are under [fleet threads](#fleet-threads).
 - **Escalations.** Requests for one page whose route climbed (direct, relay, program, remote browser), with the clusters they touch.
 - **Common features.** Linking values shared too widely to link on, so they were demoted: records, hosts, span and the limit they passed.
 - **Noise-tier clusters.** Clusters at noise tier, listed but not counted in the headline.
 
 Clusters are named by number and stable key throughout (`C3 k-3f9a2c1b`), and hosts and values are defanged. These sections alone never make a run count as changed.
+
+### Fleet threads
+
+Each candidate fleet of the run by its key (`FK-...`, its number, `new` or the runs seen since its first), its member threads by cluster and key, its weakest edge ratio and density. Then the persistent pairs no current candidate fleet holds together: the two threads, the accumulated log ratio, the windows that counted on their own, the runs that linked them and the latest link kinds. Up to ten lines each; keys and kinds only, no host or value. Proposals only, like candidate fleets; the section never makes a run count as changed.
 
 ### Model triage
 
@@ -243,8 +247,10 @@ Each run analyses its window afresh: cluster numbers change, and a cluster's key
 - **Events.** A new key, a merge (another thread's records joined it), a split, a rise in tier or grade, and a return.
 - **Returns.** Linking features join records only within days, so an operator using the same inbox or tag weeks later starts a new cluster. A new thread carrying an earlier thread's linking feature names it in `recurs`, and after a quiet week or more the run records a return. Event text names the feature, never its value. Nothing is merged.
 - **Trajectory.** On the latest run a thread is `new`, `back after a quiet spell`, `growing` (at least twice its records of a day before, and three more), `active` (records collected in the last day), `quiet`, or `dormant` (not in the analysis).
+- **Fleets.** Each candidate fleet's member threads are matched to the earlier fleets' (Jaccard at least 0.5, one to one, largest overlap first). A match keeps its key; a new fleet takes `FK-` and 8 hex digits of a hash of its earliest member thread, with a suffix if taken. A key is never given to another fleet. Each keeps its members, first and latest run, runs seen, its largest size, and on its latest run its number, link kinds, weakest edge ratio and density ([SC-FM 5.18](../manual/05-linking.md#fm-518-fleets-across-windows)). Code: [`fleet_track.rs`](../../crates/sc-core/src/fleet_track.rs).
+- **Pair evidence.** Each pair of threads a run links keeps the log of its combined soft-link ratio across runs. Overlapping windows count once: a run adds only when every record of the pair's two clusters comes after the records of the run counted last, and otherwise replaces that run's count when stronger. The total halves every 14 days. A pair is **persistent** at a total of `ln(1000)` (about 6.9), the conservative upper threshold of a sequential test at error rate 0.001.
 
-The ledger is descriptive. It changes no score, tier, grade or link.
+Fleets and pair tracks are pruned with the threads, under the watch's retention. The ledger is descriptive. It changes no score, tier, grade or link.
 
 ## The attention queue
 
