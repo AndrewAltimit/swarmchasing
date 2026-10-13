@@ -16,13 +16,15 @@
 //! common default and ties nothing; each shared template has a base rate
 //! among the comparable clusters (those sending a specific template at
 //! all), its other holders counted with any outside records carrying it,
-//! and a pair's chance is that two unrelated clusters both hold it at that
-//! rate; and the pairs are cut at a false discovery rate over the pairs
-//! compared. Records outside the clusters only ever make a template more
+//! and a pair's chance is that two unrelated clusters both hold the rarest
+//! template they share at its rate, corrected for the number of usable
+//! templates they share; and the pairs are cut at a false discovery rate
+//! over the pairs compared. Records outside the clusters only ever make a template more
 //! common, so appending unrelated traffic cannot make a shape look rare.
 //! Pairs are soft links: they never score, link or merge.
 
 use crate::analyze::{Cluster, ObsResult, payload_variants, relay_stack};
+use crate::chance::TestFamily;
 use crate::model::Tier;
 use crate::weburl::WebUrl;
 use serde::{Deserialize, Serialize};
@@ -98,8 +100,11 @@ pub struct ScaffoldPair {
     /// clusters.
     #[serde(default)]
     pub base_rate: f64,
-    /// Chance that two unrelated clusters both hold that template: the base
-    /// rate squared.
+    /// Usable templates the two share (the rarest is the one read).
+    #[serde(default)]
+    pub templates: usize,
+    /// Chance that two unrelated clusters share a template this rare among
+    /// that many: `1 - (1 - base_rate²)^templates`.
     pub chance: f64,
     /// Pairs compared, and pairs this unlikely expected among them.
     #[serde(default)]
@@ -110,9 +115,9 @@ pub struct ScaffoldPair {
 impl ScaffoldPair {
     pub fn detail(&self) -> String {
         format!(
-            "similarity {:.2}, {} shared template(s), the rarest in {} of {} comparable clusters and {} record(s) outside them, a base rate of {:.1e} (chance {:.1e}; {:.2} such pairs expected among {} compared): {}",
+            "similarity {:.2}, {} shared template(s), the rarest in {} of {} comparable clusters and {} record(s) outside them, a base rate of {:.1e} (chance {:.1e} for the rarest of that many; {:.2} such pairs expected among {} compared): {}",
             self.similarity,
-            self.shared.len(),
+            self.templates.max(self.shared.len()),
             self.holders,
             self.clusters,
             self.outside,
@@ -295,17 +300,18 @@ fn value_class(v: &str) -> String {
 }
 
 /// Pairs of clusters above noise whose template mixes are alike beyond
-/// chance, most unlikely first. `max_shared` is `soft_links.max_shared`.
+/// chance, most unlikely first, and the family's multiplicity budget.
+/// `max_shared` is `soft_links.max_shared`.
 pub(crate) fn scaffold_pairs(
     clusters: &[Cluster],
     results: &[ObsResult],
     max_shared: usize,
     opts: &ScaffoldOptions,
-) -> Vec<ScaffoldPair> {
+) -> (Vec<ScaffoldPair>, TestFamily) {
     let shown: Vec<&Cluster> = clusters.iter().filter(|c| c.tier > Tier::Noise).collect();
     let n = shown.len();
     if n < 3 {
-        return Vec::new();
+        return (Vec::new(), TestFamily::cut("scaffold", &[], 0, opts.fdr));
     }
     let mut specific: BTreeMap<String, bool> = BTreeMap::new();
     let profiles: Vec<BTreeMap<String, f64>> = shown
@@ -407,7 +413,10 @@ pub(crate) fn scaffold_pairs(
         else {
             continue;
         };
-        let chance = rate * rate;
+        // The rarest of `templates` shared ones is read, so its chance is
+        // that of the smallest of that many.
+        let templates = shared.len();
+        let chance = crate::chance::sidak(rate * rate, templates);
         if chance > opts.max_chance {
             continue;
         }
@@ -421,23 +430,22 @@ pub(crate) fn scaffold_pairs(
             clusters: comparable,
             outside: outside_t,
             base_rate: rate,
+            templates,
             chance,
             tested,
             expected_pairs: chance * tested as f64,
         });
     }
     let ps: Vec<f64> = out.iter().map(|p| p.chance).collect();
-    match crate::chance::bh_cut(&ps, tested, opts.fdr) {
-        Some(cut) => out.retain(|p| p.chance <= cut),
-        None => out.clear(),
-    }
+    let family = TestFamily::cut("scaffold", &ps, tested, opts.fdr);
+    out.retain(|p| family.keeps(p.chance));
     crate::sort::by(&mut out, |p, q| {
         p.chance
             .total_cmp(&q.chance)
             .then(q.similarity.total_cmp(&p.similarity))
     });
     out.truncate(MAX_PAIRS);
-    out
+    (out, family)
 }
 
 #[cfg(test)]
@@ -567,6 +575,51 @@ mod tests {
             "{:?}",
             a.candidate_fleets
         );
+    }
+
+    #[test]
+    fn the_rarest_of_several_shared_templates_is_corrected_for_their_number() {
+        // The same harness with a second request shape on alternate records:
+        // two shared templates, so the rarest is the least of two.
+        let two = |c: usize, k: usize| {
+            if k == 1 {
+                format!(
+                    "https://h{k}.c{c}.example/api/v2/{}?cmd=%3Bid&uqtag=fx{c}{c}q{c}&step={k}",
+                    300 + k
+                )
+            } else {
+                harness(c, k)
+            }
+        };
+        let mut obs = fleet(3, two);
+        for (i, mut x) in fleet(40, other).into_iter().enumerate() {
+            x.id = format!("bg{i}");
+            x.ts += 86_400 * 200;
+            obs.push(x);
+        }
+        let a = analyze(obs.clone(), &Rules::default_rules());
+        let p = &a.scaffold_pairs;
+        assert_eq!(p.len(), 3, "{p:?}");
+        let r2 = (2.0f64 / 42.0).powi(2);
+        for x in p {
+            assert_eq!(x.templates, 2, "{x:?}");
+            assert!(
+                (x.chance - (1.0 - (1.0 - r2).powi(2))).abs() < 1e-12,
+                "{x:?}"
+            );
+            assert!(
+                x.detail().contains("2 shared template(s)"),
+                "{}",
+                x.detail()
+            );
+        }
+        let f = a.multiplicity.iter().find(|f| f.family == "scaffold");
+        assert_eq!(f.map(|f| (f.kept, f.tested)), Some((3, 3)), "{f:?}");
+        // Among twenty others, one shared template would pass at (2 / 22)^2;
+        // the least of two does not.
+        obs.retain(|o| !o.id.starts_with("bg") || o.id[2..].parse::<usize>().unwrap() < 60);
+        let b = analyze(obs, &Rules::default_rules());
+        assert!(b.scaffold_pairs.is_empty(), "{:?}", b.scaffold_pairs);
     }
 
     #[test]

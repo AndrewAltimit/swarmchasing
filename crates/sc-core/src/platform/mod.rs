@@ -17,8 +17,10 @@
 //! text-less events (stars, forks, pull requests opened), the one target
 //! they act on. It then weighs each group by a chance model: how likely its
 //! densest burst is if the same posts fell at random over the window, and
-//! how likely so many of its accounts are new given how many accounts in
-//! the window are. A text-less group, and a group of wiki edits, needs its
+//! how likely so many of its accounts are new given how many accounts first
+//! seen in the same hours are, the two combined as one test; the groups kept
+//! are cut at a false discovery rate over every group weighed. A text-less
+//! group, and a group of wiki edits, needs its
 //! own burst: account age alone is a property of what such groups are (new
 //! editors' sandboxes, a new project's first stars). Model-output residue,
 //! coding-harness self-identification and target overlap are reported
@@ -266,6 +268,9 @@ pub struct PlatformOptions {
     pub new_account_ranks: u64,
     /// A group is reported when its chance is at most this ...
     pub max_chance: f64,
+    /// ... and it survives a Benjamini-Hochberg cut at this false discovery
+    /// rate over every group weighed on the platform ...
+    pub fdr: f64,
     /// ... and rated moderate at or below this with two signals.
     pub moderate_chance: f64,
     /// Share of members carrying model-output residue that reports a group
@@ -285,6 +290,7 @@ impl Default for PlatformOptions {
             clock_weight: 0.25,
             new_account_ranks: 1000,
             max_chance: 0.01,
+            fdr: 0.05,
             moderate_chance: 1e-4,
             residue_share: 0.5,
         }
@@ -335,7 +341,8 @@ pub struct Burst {
     pub on_the_hour: bool,
 }
 
-/// New accounts among a group's accounts against the window's base rate.
+/// New accounts among a group's accounts against the accounts first seen in
+/// the same hours.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NewAccounts {
     pub new: usize,
@@ -343,6 +350,11 @@ pub struct NewAccounts {
     pub of: usize,
     /// Share of all accounts in the window that are new.
     pub base_rate: f64,
+    /// Mean over the group's accounts of the new-account share among the
+    /// other accounts first seen in the same hour, shrunk toward
+    /// `base_rate`: the rates the chance reads.
+    #[serde(default)]
+    pub hour_rate: f64,
     pub p_chance: f64,
 }
 
@@ -377,8 +389,15 @@ pub struct PlatformSwarm {
     /// Targets by accounts that acted on them, most first (at most ten).
     pub targets: Vec<(String, usize)>,
     pub distinct_targets: usize,
-    /// Timing and account-age chances multiplied, as if independent.
+    /// The burst chance, combined with the account-age chance where there is
+    /// one: the age chance is read in the group's own hours, so given its
+    /// timing the two are independent, and their product `x` is weighed as
+    /// `x (1 - ln x)`.
     pub p_chance: f64,
+    /// Groups weighed on the platform: the candidate survived a
+    /// false-discovery cut over them.
+    #[serde(default)]
+    pub tested: usize,
     pub strength: HintStrength,
     /// What could make this benign, for the admin to rule out.
     pub caveats: Vec<String>,
@@ -414,4 +433,8 @@ pub struct PlatformReport {
     /// group or carrying residue. Not serialised.
     #[serde(skip)]
     pub carry: Vec<String>,
+    /// The multiplicity budget per platform: groups weighed, kept, and
+    /// expected by chance.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub families: Vec<crate::chance::TestFamily>,
 }

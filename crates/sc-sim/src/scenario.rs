@@ -62,6 +62,11 @@ pub struct Scenario {
     /// The span background actors spread over, in hours.
     #[serde(default = "default_span")]
     pub span_hours: u32,
+    /// A null scenario: background and single agents only, no two runs
+    /// related, so every edge, soft link and candidate fleet drawn between
+    /// different runs is false. The gate holds a ceiling on them.
+    #[serde(default)]
+    pub null: bool,
     #[serde(default)]
     pub actor: Vec<Actor>,
 }
@@ -86,6 +91,14 @@ impl Scenario {
         }
         if self.actor.is_empty() {
             return Err(format!("{}: no actor", self.name));
+        }
+        if self.null
+            && let Some(a) = self.actor.iter().find(|a| a.kind.relates())
+        {
+            return Err(format!(
+                "{}: a null scenario relates no runs, but has a {:?} actor",
+                self.name, a.kind
+            ));
         }
         Ok(())
     }
@@ -164,8 +177,30 @@ pub enum Kind {
     /// Benign crawlers.
     Crawler,
     /// Records copying another actor's identifiers from a different client,
-    /// as someone planting records would.
+    /// as someone planting records would; with `copy_timing`, its request
+    /// times as well.
     Planter,
+    /// Agents of another operator whose requests copy the scaffolds of the
+    /// fleets named in `bridges`, with their own tags: one run that looks
+    /// like two fleets at once.
+    Mimic,
+    /// Agents that change route after each request goes unanswered: the
+    /// target directly, then the same request through a relay 11 to 25
+    /// minutes later (past the linking window, within the escalation
+    /// window), each route a separate tool with its own run tag, so the
+    /// steps fall in separate clusters of one run.
+    Escalator,
+}
+
+impl Kind {
+    /// Its runs share a swarm, an operator or copied identifiers with
+    /// other runs.
+    pub fn relates(self) -> bool {
+        matches!(
+            self,
+            Self::Swarm | Self::Fleet | Self::Scheduler | Self::Planter | Self::Mimic
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,6 +243,36 @@ pub struct Actor {
     /// For a planter: the actor (by index) whose identifiers it copies.
     #[serde(default)]
     pub copies: Option<usize>,
+    /// For a planter: replay the copied actor's first run's request times,
+    /// a few seconds later, as well as its tags and inbox.
+    #[serde(default)]
+    pub copy_timing: bool,
+    /// For a mimic: the fleets (by actor index) whose scaffolds it sends.
+    #[serde(default)]
+    pub bridges: Vec<usize>,
+    /// For a fleet: hours between one agent's start and the next (26 by
+    /// default), so a fleet can be spread over weeks.
+    #[serde(default)]
+    pub interval_hours: Option<f64>,
+    /// For a fleet: agents from this index on run an upgraded harness,
+    /// another parameter set and one template changed.
+    #[serde(default)]
+    pub upgrade_at: Option<usize>,
+    /// For a synchronised swarm: each agent's request leaves up to this many
+    /// seconds after its dispatch (2 by default). Beyond the lockstep
+    /// tolerance it is a loose swarm.
+    #[serde(default)]
+    pub jitter_secs: Option<i64>,
+    /// For single agents and background actors: their runs start within
+    /// this many hours of the actor's start instead of over the scenario's
+    /// span, as when news sends many unrelated clients to one target.
+    #[serde(default)]
+    pub window_hours: Option<f64>,
+    /// For single agents: every agent draws its hosts from one shared host
+    /// family of three times `hosts`, as unrelated clients on one popular
+    /// target do.
+    #[serde(default)]
+    pub same_family: bool,
 }
 
 fn default_records() -> usize {

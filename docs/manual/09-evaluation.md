@@ -31,6 +31,8 @@ A held-out split is frozen before any rule is tuned against it, and is split two
 
 A frozen split is used for measurement only. Looking at its errors to change a rule spends it: the next measurement needs a new split.
 
+A split is frozen by its membership, not its file: a hash over its record ids, sorted, is recorded when it is made and with every result measured on it, so a later measurement shows whether it read the same records. The ids themselves can stay private with the records.
+
 Labels from an external release are used with documented overrides, each with its reason. The [Transluce release](references.md#incident-reports) is such a source: it labels scan reports and ships report ids, not contents, so a practitioner fetches the reports under their own access and measures record by record ([held-out steps](../../samples/eval/README.md#held-out-evaluation-on-the-transluce-release)). Its labels draw on context a single record cannot show, so the per-class table matters more than the total.
 
 Toolkit: the Transluce measurement runs record by record, and `eval --split time|cluster` freezes a split of any labelled set ([frozen splits](../reference/evaluation.md#frozen-splits)). Results are saved as numbers and hashes ([saved results](../reference/evaluation.md#saved-results)). `eval repro <result>` finds the inputs by hash, measures again and diffs every number ([reproducing a result](../reference/evaluation.md#reproducing-a-result)); `eval check-results`, run by the gate, checks that every saved result names committed rules and code, has a benign record when held out or prospective, and holds no URL ([checking saved results](../reference/evaluation.md#checking-saved-results)).

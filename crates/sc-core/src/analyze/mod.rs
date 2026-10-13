@@ -274,6 +274,11 @@ pub struct Analysis {
     /// hints for the admin, never scored, never a link or a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub swarm_edges: Vec<crate::swarm::SwarmEdge>,
+    /// The multiplicity budget of each family of pairwise tests (shared
+    /// pauses, scaffolds, co-activity, the S3 to S5 edges): pairs tested,
+    /// kept under a false-discovery cut, and expected by chance.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub multiplicity: Vec<crate::chance::TestFamily>,
 }
 
 /// A linking feature whose carriers were not joined because it is common:

@@ -8,12 +8,14 @@
 //! together that barely overlap, against hosts drawn at random from the
 //! family's hosts in the analysis. The host set is built from the runs, so
 //! the random draw can never find a complete sharding of a family; the
-//! structured test can.
+//! structured test can. Each group of runs the structured test splits and
+//! each pair the random draw reads is a test, and the edges kept are cut at
+//! a false discovery rate over them all.
 
-use super::{Ctx, MAX_CHANCE, MIN_HOSTS};
+use super::{Ctx, MAX_CHANCE, MIN_HOSTS, Tests};
 use crate::extract::defang_host;
 use crate::swarm::runs::{Keyed, differ, family, find, sort_keyed};
-use crate::swarm::{EdgeStrength, SwarmEdge, SwarmEdgeKind};
+use crate::swarm::{EdgeStrength, SwarmEdgeKind};
 use crate::timing::poisson_at_least;
 use std::cmp::Ordering;
 
@@ -102,7 +104,8 @@ fn regular_chance(sizes: &[usize]) -> f64 {
 
 impl Ctx<'_> {
     /// S5: runs started together that split one host family.
-    pub(super) fn partitions(&self, out: &mut Vec<SwarmEdge>) {
+    pub(super) fn partitions(&self) -> Tests {
+        let mut tests = Tests::default();
         // Hosts as `family host`, so a sort groups them by family.
         let by_family = |hosts: &Keyed| -> Keyed {
             let mut v: Keyed = hosts
@@ -115,8 +118,9 @@ impl Ctx<'_> {
         let per: Vec<Keyed> = self.runs.iter().map(|r| by_family(&r.hosts)).collect();
         let order = self.by_start(&|r| r.hosts.len() >= MIN_HOSTS);
         let mut done: Vec<(usize, usize)> = Vec::new();
-        self.structured(&per, &order, &mut done, out);
-        self.drawn(&per, &order, &done, out);
+        self.structured(&per, &order, &mut done, &mut tests);
+        self.drawn(&per, &order, &done, &mut tests);
+        tests
     }
 
     /// Structured splits: from each run, the later runs within the window
@@ -126,7 +130,7 @@ impl Ctx<'_> {
         per: &[Keyed],
         order: &[usize],
         done: &mut Vec<(usize, usize)>,
-        out: &mut Vec<SwarmEdge>,
+        tests: &mut Tests,
     ) {
         let fam = |k: &str| k.split(' ').next().unwrap_or("").to_string();
         let host = |k: &str| k.split_once(' ').map_or("", |x| x.1).to_string();
@@ -159,6 +163,7 @@ impl Ctx<'_> {
                 if group.len() < 2 {
                     continue;
                 }
+                tests.tested += 1;
                 let mut all: Vec<(String, usize)> = group
                     .iter()
                     .enumerate()
@@ -186,6 +191,7 @@ impl Ctx<'_> {
                     continue;
                 }
                 let list: Vec<String> = sizes.iter().map(usize::to_string).collect();
+                let mut edges = Vec::new();
                 for (a, (x, _)) in group.iter().enumerate() {
                     for (y, _) in &group[a + 1..] {
                         let pair = ((*x).min(*y), (*x).max(*y));
@@ -200,8 +206,7 @@ impl Ctx<'_> {
                         } else {
                             format!("clients differing in {}", d.join(", "))
                         };
-                        self.push(
-                            out,
+                        edges.push(self.edge(
                             SwarmEdgeKind::DisjointPartition,
                             ((rx, None, &rx.members), (ry, None, &ry.members)),
                             if d.is_empty() {
@@ -217,22 +222,17 @@ impl Ctx<'_> {
                                 defang_host(&f),
                                 list.join(" + ")
                             ),
-                        );
+                        ));
                     }
                 }
+                tests.found.push((p, edges));
             }
         }
     }
 
     /// Two runs started together that barely overlap in a family, against
     /// hosts drawn at random from the family's hosts in the analysis.
-    fn drawn(
-        &self,
-        per: &[Keyed],
-        order: &[usize],
-        done: &[(usize, usize)],
-        out: &mut Vec<SwarmEdge>,
-    ) {
+    fn drawn(&self, per: &[Keyed], order: &[usize], done: &[(usize, usize)], tests: &mut Tests) {
         let fam = |k: &str| k.split(' ').next().unwrap_or("").to_string();
         let all = {
             let mut v: Keyed = self
@@ -252,6 +252,7 @@ impl Ctx<'_> {
                 if done.contains(&(i.min(k), i.max(k))) {
                     continue;
                 }
+                tests.tested += 1;
                 let mut best: Option<(f64, String, usize, usize, usize)> = None;
                 for gx in per[i].chunk_by(|a, b| fam(&a.0) == fam(&b.0)) {
                     let f = fam(&gx[0].0);
@@ -270,8 +271,7 @@ impl Ctx<'_> {
                 let Some((p, f, nx, ny, m)) = best else {
                     continue;
                 };
-                self.push(
-                    out,
+                let edge = self.edge(
                     SwarmEdgeKind::DisjointPartition,
                     ((x, None, &x.members), (y, None, &y.members)),
                     EdgeStrength::Weak,
@@ -282,6 +282,7 @@ impl Ctx<'_> {
                         defang_host(&f)
                     ),
                 );
+                tests.found.push((p, vec![edge]));
             }
         }
     }

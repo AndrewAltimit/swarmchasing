@@ -134,7 +134,9 @@
         "lockstep_min_share": { "$ref": "#/$defs/share" },
         "lockstep_max_offset_secs": { "$ref": "#/$defs/secs" },
         "lockstep_permutations": { "type": "integer", "minimum": 1 },
-        "lockstep_max_chance": { "$ref": "#/$defs/share" }
+        "lockstep_max_permutations": { "type": "integer", "minimum": 1 },
+        "lockstep_max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" }
       }
     },
     "cut_lengths": {

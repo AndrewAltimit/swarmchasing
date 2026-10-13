@@ -4,7 +4,12 @@
 //! address), a start, a pace and a list of target hosts. Each record copies
 //! a [`Template`] from the palette and changes only its target host, its
 //! linking identifiers (per run, or per swarm for a shared inbox) and, for a
-//! retry, a cache-busting parameter. The ground truth goes on each record as
+//! retry, a cache-busting parameter. A fleet's harness adds its own
+//! parameters (a step counter and a per-request trace) to every request, as
+//! one request builder does; that, not the palette records, is what sets its
+//! scaffold apart from unrelated agents copying the same records. An
+//! escalating agent sends a relay record's target directly first, then the
+//! record as written. The ground truth goes on each record as
 //! the evaluation set's label fields, so the output is also an ordinary
 //! labelled file for `swarmchase eval` and `swarmchase sim score`.
 
@@ -40,6 +45,24 @@ const ACCESS_ASNS: &[u32] = &[7922, 3320, 2856, 701, 3215, 6830];
 /// Documentation address blocks (RFC 5737), so no generated address is real.
 const NETS: &[&str] = &["192.0.2", "198.51.100", "203.0.113"];
 
+/// Parameter names a harness's request builder adds: none is a linking
+/// parameter, and no palette record carries one.
+const HARNESS_PARAMS: &[&str] = &[
+    "step", "trace", "attempt", "hop", "turn", "plan", "ctx", "via", "fmt", "lane", "stage",
+    "phase",
+];
+
+/// The relay prefix an escalating agent drops for its first, direct try.
+const RELAY_PREFIX: &str = "https://r.jina.ai/";
+
+/// A fleet's request shape: the palette records it sends and the
+/// parameters its harness adds.
+#[derive(Debug, Clone, Default)]
+struct Shape {
+    templates: Vec<Template>,
+    harness: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 struct Client {
     ua: String,
@@ -73,6 +96,12 @@ struct RunSpec {
     uses: Vec<Use>,
     /// Templates to draw from instead of the whole palette (a scaffold).
     fixed: Option<Vec<Template>>,
+    /// Parameters a harness adds to every request: a step counter first,
+    /// then per-request trace values.
+    harness: Vec<String>,
+    /// Shapes taken in turn, record by record, instead of `fixed` and
+    /// `harness` (a mimic of several fleets).
+    shapes: Vec<Shape>,
     /// Identifier scope for this run's tags and inboxes.
     scope: String,
     /// Identifier scope for callback inboxes, when shared.
@@ -103,6 +132,10 @@ struct Gen<'a> {
     rng: Rng,
     t0: i64,
     out: Vec<Value>,
+    /// Each fleet's shapes (before and after an upgrade), by actor index.
+    shapes: BTreeMap<usize, Vec<Shape>>,
+    /// Request times by true run, for planters copying timing.
+    times: BTreeMap<String, Vec<i64>>,
 }
 
 /// The labelled records of one scenario under one seed, in time order.
@@ -114,6 +147,8 @@ pub fn generate(s: &Scenario, seed: u64, palette: &Palette) -> Vec<Value> {
         rng: Rng::new(seed).fork(&s.name),
         t0: sc_core::parse_ts(&s.start).unwrap_or(0),
         out: Vec::new(),
+        shapes: BTreeMap::new(),
+        times: BTreeMap::new(),
     };
     for (i, a) in s.actor.iter().enumerate() {
         g.actor(i, a);
@@ -156,6 +191,8 @@ impl Gen<'_> {
                     .range(7 * 60, 53 * 60);
         }
         let span = i64::from(self.scenario.span_hours) * 3600;
+        // Where runs of single agents and background actors start.
+        let window = a.window_hours.map_or(span, |h| (h * 3600.0) as i64).max(1);
         let id = |k: usize| format!("{}-a{i}-{k}", self.scenario.name);
         let agent_truth =
             |run: String, swarm: Option<String>, fleet: Option<String>, class: &str| Truth {
@@ -168,17 +205,31 @@ impl Gen<'_> {
             };
         match a.kind {
             Kind::Agent => {
+                let pool = self.hosts(&format!("a{i}"), a.hosts * 3);
                 for k in 0..a.agents {
-                    let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+                    let hosts = if a.same_family {
+                        let mut mine = Vec::new();
+                        while mine.len() < a.hosts.min(pool.len()) {
+                            let h = pool[rng.below(pool.len())].clone();
+                            if !mine.contains(&h) {
+                                mine.push(h);
+                            }
+                        }
+                        mine
+                    } else {
+                        self.hosts(&format!("a{i}x{k}"), a.hosts)
+                    };
                     let spec = RunSpec {
                         truth: agent_truth(id(k), Some("none".into()), None, "single_agent"),
                         client: agent_client(&mut rng),
-                        start: start + rng.range(0, span),
+                        start: start + rng.range(0, window),
                         pace: a.pace.unwrap_or(Pace::Model),
                         gaps: None,
                         hosts: spread(&hosts, a.records),
                         uses: read_then_attack(a.records, a.hosts),
                         fixed: None,
+                        harness: Vec::new(),
+                        shapes: Vec::new(),
                         scope: format!("{i}:{k}"),
                         sink_scope: None,
                         tag: a.tag,
@@ -192,11 +243,33 @@ impl Gen<'_> {
                 }
             }
             Kind::Swarm => self.swarm(i, a, start, &mut rng),
+            Kind::Escalator => self.escalator(i, a, start, window, &mut rng),
             Kind::Fleet => {
                 let fleet = format!("{}-f{i}", self.scenario.name);
                 let scaffold = self.scaffold(&mut rng);
                 let ua = rng.pick(AGENT_UAS).copied().unwrap_or_default().to_string();
+                // The harness's parameters, from their own stream so the
+                // rest of the actor draws as before.
+                let mut hrng = self.rng.fork(&format!("actor{i}:harness"));
+                let names = harness_names(&mut hrng, 3);
+                let first = Shape {
+                    templates: scaffold.clone(),
+                    harness: names[..2].to_vec(),
+                };
+                // An upgrade changes one parameter and one template.
+                let mut upgraded = first.clone();
+                upgraded.harness[1].clone_from(&names[2]);
+                if let Some(t) = hrng.pick(self.palette.get(Use::Attack)) {
+                    upgraded.templates[0] = t.clone();
+                }
+                let interval = (a.interval_hours.unwrap_or(26.0) * 3600.0) as i64;
+                self.shapes.insert(i, vec![first.clone(), upgraded.clone()]);
                 for k in 0..a.agents {
+                    let shape = if a.upgrade_at.is_some_and(|u| k >= u) {
+                        &upgraded
+                    } else {
+                        &first
+                    };
                     let mut client = agent_client(&mut rng);
                     client.ua.clone_from(&ua);
                     let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
@@ -208,12 +281,14 @@ impl Gen<'_> {
                             "scaffold_fleet",
                         ),
                         client,
-                        start: start + k as i64 * 26 * 3600 + rng.range(0, 3 * 3600),
+                        start: start + k as i64 * interval + rng.range(0, 3 * 3600),
                         pace: a.pace.unwrap_or(Pace::Model),
                         gaps: None,
                         hosts: spread(&hosts, a.records),
                         uses: vec![Use::Attack; a.records],
-                        fixed: Some(scaffold.clone()),
+                        fixed: Some(shape.templates.clone()),
+                        harness: shape.harness.clone(),
+                        shapes: Vec::new(),
                         scope: format!("{i}:{k}"),
                         sink_scope: None,
                         tag: a.tag,
@@ -251,6 +326,8 @@ impl Gen<'_> {
                         hosts: spread(&mine, a.records),
                         uses: read_then_attack(a.records, mine.len()),
                         fixed: None,
+                        harness: Vec::new(),
+                        shapes: Vec::new(),
                         scope: format!("{i}:{k}"),
                         sink_scope: None,
                         tag: a.tag,
@@ -265,8 +342,29 @@ impl Gen<'_> {
             }
             Kind::Planter => {
                 let Some(victim) = a.copies else { return };
+                // The copied actor's first run's request times, when timing
+                // is copied too.
+                let copied: Option<Vec<i64>> = a
+                    .copy_timing
+                    .then(|| {
+                        self.times
+                            .get(&format!("{}-a{victim}-0", self.scenario.name))
+                            .cloned()
+                    })
+                    .flatten()
+                    .filter(|t| !t.is_empty());
                 for k in 0..a.agents {
                     let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+                    let (begin, gaps, records) = match &copied {
+                        Some(t) => {
+                            let n = a.records.min(t.len());
+                            let gaps: Vec<i64> = (0..n)
+                                .map(|r| if r == 0 { 0 } else { t[r] - t[r - 1] })
+                                .collect();
+                            (t[0] + rng.range(2, 20), Some(gaps), n)
+                        }
+                        None => (start + rng.range(0, 24 * 3600), None, a.records),
+                    };
                     let spec = RunSpec {
                         truth: Truth {
                             label: None,
@@ -277,12 +375,14 @@ impl Gen<'_> {
                             fleet: None,
                         },
                         client: browser_client(&mut rng),
-                        start: start + rng.range(0, 24 * 3600),
+                        start: begin,
                         pace: a.pace.unwrap_or(Pace::Human),
-                        gaps: None,
-                        hosts: spread(&hosts, a.records),
-                        uses: vec![Use::Sink; a.records],
+                        gaps,
+                        hosts: spread(&hosts, records),
+                        uses: vec![Use::Sink; records],
                         fixed: None,
+                        harness: Vec::new(),
+                        shapes: Vec::new(),
                         scope: format!("{victim}:0"),
                         sink_scope: Some(format!("{victim}:sink")),
                         tag: a.tag,
@@ -295,7 +395,121 @@ impl Gen<'_> {
                     self.run(spec, &mut rng);
                 }
             }
-            _ => self.background(i, a, start, span, &mut rng),
+            Kind::Mimic => {
+                let shapes: Vec<Shape> = a
+                    .bridges
+                    .iter()
+                    .filter_map(|b| self.shapes.get(b).and_then(|s| s.first()).cloned())
+                    .collect();
+                if shapes.is_empty() {
+                    return;
+                }
+                for k in 0..a.agents {
+                    let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+                    let spec = RunSpec {
+                        truth: agent_truth(id(k), Some("none".into()), None, "mimic"),
+                        client: agent_client(&mut rng),
+                        start: start + rng.range(0, window),
+                        pace: a.pace.unwrap_or(Pace::Model),
+                        gaps: None,
+                        hosts: spread(&hosts, a.records),
+                        uses: vec![Use::Attack; a.records],
+                        fixed: None,
+                        harness: Vec::new(),
+                        shapes: shapes.clone(),
+                        scope: format!("{i}:{k}"),
+                        sink_scope: None,
+                        tag: a.tag,
+                        retry: a.retry,
+                        writes: None,
+                        fetches: None,
+                        adapt: true,
+                        habits: None,
+                    };
+                    self.run(spec, &mut rng);
+                }
+            }
+            _ => self.background(i, a, start, window, &mut rng),
+        }
+    }
+
+    /// Agents trying each request directly, then through a relay: each
+    /// route a separate tool with its own run tag.
+    fn escalator(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let pool: Vec<Template> = self
+            .palette
+            .get(Use::Attack)
+            .iter()
+            .filter(|t| {
+                t.obs.url.len() > RELAY_PREFIX.len()
+                    && t.obs.url[..RELAY_PREFIX.len()].eq_ignore_ascii_case(RELAY_PREFIX)
+            })
+            .cloned()
+            .collect();
+        if pool.is_empty() {
+            return;
+        }
+        let basis = self.scenario.basis;
+        for k in 0..a.agents {
+            let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+            let run = format!("{}-a{i}-{k}", self.scenario.name);
+            let base = RunSpec {
+                truth: Truth {
+                    label: Some("agent"),
+                    actor: "agent",
+                    class: "escalating_agent".into(),
+                    run: run.clone(),
+                    swarm: Some("none".into()),
+                    fleet: None,
+                },
+                client: agent_client(rng),
+                start: start + rng.range(0, window),
+                pace: a.pace.unwrap_or(Pace::Model),
+                gaps: None,
+                hosts: Vec::new(),
+                uses: Vec::new(),
+                fixed: None,
+                harness: Vec::new(),
+                shapes: Vec::new(),
+                scope: String::new(),
+                sink_scope: None,
+                tag: a.tag,
+                retry: 0.0,
+                writes: None,
+                fetches: None,
+                adapt: true,
+                habits: None,
+            };
+            let mut ids = Ids::new(self.seed);
+            let mut t = base.start;
+            for r in 0..a.records {
+                let host = &hosts[r % hosts.len()];
+                let Some(relayed) = rng.pick(&pool).cloned() else {
+                    continue;
+                };
+                let mut direct = relayed.clone();
+                direct.obs.url = relayed.obs.url[RELAY_PREFIX.len()..].to_string();
+                for (step, (tpl, route)) in [(&direct, "direct"), (&relayed, "relay")]
+                    .into_iter()
+                    .enumerate()
+                {
+                    if step > 0 {
+                        t += rng.range(11 * 60, 25 * 60);
+                    }
+                    let mut spec = base.clone();
+                    spec.scope = format!("{i}:{k}:{route}");
+                    let mut url = rewrite(tpl, host, &spec, &mut ids, None);
+                    if spec.tag {
+                        let tag = ids.token(&spec.scope, "uqtag", 10);
+                        url = add_param(&url, "uqtag", &format!("r{tag}"));
+                    }
+                    // The direct try goes unanswered.
+                    let status =
+                        (basis == Basis::Request).then_some(if step == 0 { 403 } else { 200 });
+                    self.emit(&spec, &tpl.origin, url, t, status, basis);
+                }
+                t += gap(rng, base.pace);
+            }
         }
     }
 
@@ -403,7 +617,9 @@ impl Gen<'_> {
                     )
                 } else {
                     has(Mode::Sync).then(|| {
-                        let late: Vec<i64> = sync_gaps.iter().map(|_| rng.range(0, 2)).collect();
+                        let jitter = a.jitter_secs.unwrap_or(2).max(0);
+                        let late: Vec<i64> =
+                            sync_gaps.iter().map(|_| rng.range(0, jitter)).collect();
                         (0..sync_gaps.len())
                             .map(|r| {
                                 let prev = late[r.saturating_sub(1)];
@@ -420,6 +636,8 @@ impl Gen<'_> {
                 },
                 uses,
                 fixed: None,
+                harness: Vec::new(),
+                shapes: Vec::new(),
                 scope: format!("{i}:{k}"),
                 sink_scope: has(Mode::Sink).then(|| format!("{i}:sink")),
                 tag: a.tag,
@@ -436,7 +654,7 @@ impl Gen<'_> {
         }
     }
 
-    fn background(&mut self, i: usize, a: &Actor, start: i64, span: i64, rng: &mut Rng) {
+    fn background(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
         let (class, actor, label, uses, pace, adapt) = match a.kind {
             Kind::RelayReaders => (
                 "relay_reading",
@@ -514,7 +732,7 @@ impl Gen<'_> {
                 }
                 continue;
             } else {
-                start + rng.range(0, span)
+                start + rng.range(0, window)
             };
             let spec = self.bg_spec(
                 i, k, a, class, actor, label, uses, pace, adapt, &client, &hosts, begin, a.records,
@@ -557,6 +775,8 @@ impl Gen<'_> {
             uses: vec![u; records],
             fixed: (u == Use::Benign)
                 .then(|| self.palette.benign(class).into_iter().cloned().collect()),
+            harness: Vec::new(),
+            shapes: Vec::new(),
             scope: format!("{i}:{k}"),
             sink_scope: None,
             tag: false,
@@ -610,7 +830,10 @@ impl Gen<'_> {
             t += gap(rng, spec.pace);
         }
         for (r, (host, u)) in spec.hosts.iter().zip(&spec.uses).enumerate() {
-            let pool: Vec<&Template> = match &spec.fixed {
+            let shape = (!spec.shapes.is_empty()).then(|| &spec.shapes[r % spec.shapes.len()]);
+            let fixed = shape.map(|s| &s.templates).or(spec.fixed.as_ref());
+            let harness = shape.map_or(&spec.harness, |s| &s.harness);
+            let pool: Vec<&Template> = match fixed {
                 Some(f) if !f.is_empty() => f.iter().collect(),
                 _ => {
                     let p = self.palette.get(*u);
@@ -625,7 +848,14 @@ impl Gen<'_> {
                     }
                 }
             };
-            let Some(tpl) = rng.pick(&pool).copied() else {
+            // A harness runs one task script: its records in a fixed
+            // rotation, so its agents send one mix of them.
+            let tpl = if harness.is_empty() {
+                rng.pick(&pool).copied()
+            } else {
+                pool.get(r % pool.len().max(1)).copied()
+            };
+            let Some(tpl) = tpl else {
                 continue;
             };
             if r > 0 {
@@ -647,6 +877,16 @@ impl Gen<'_> {
                 }
                 let buster = (error && (spec.adapt || k == 0)).then_some(k + 1);
                 let mut url = rewrite(tpl, host, &spec, &mut ids, buster);
+                // The harness's own parameters: a step counter, then a
+                // trace value per request.
+                for (j, name) in harness.iter().enumerate() {
+                    let value = if j == 0 {
+                        r.to_string()
+                    } else {
+                        ids.token(&format!("{}:{step}", spec.scope), name, 8)
+                    };
+                    url = add_param(&url, name, &value);
+                }
                 if spec.tag && u != &Use::Benign {
                     let tag = ids.token(&spec.scope, "uqtag", 10);
                     url = add_param(&url, "uqtag", &format!("r{tag}"));
@@ -663,7 +903,6 @@ impl Gen<'_> {
                 step += 1;
             }
         }
-        let _ = step;
         t
     }
 
@@ -695,6 +934,10 @@ impl Gen<'_> {
         };
         let mut v = serde_json::to_value(&obs).unwrap_or(Value::Null);
         v["ts"] = json!(rfc3339(ts));
+        self.times
+            .entry(spec.truth.run.clone())
+            .or_default()
+            .push(ts);
         let t = &spec.truth;
         if let Some(l) = t.label {
             v["label"] = json!(l);
@@ -924,6 +1167,22 @@ fn subset<'a>(pool: &'a [Template], seed: u64, key: &str, share: f64) -> Vec<&'a
     ranked.sort_by_key(|x| x.0);
     let n = ((pool.len() as f64 * share).ceil() as usize).clamp(2.min(pool.len()), pool.len());
     ranked.into_iter().take(n).map(|x| x.1).collect()
+}
+
+/// Whether `name` is one a harness adds.
+#[cfg(test)]
+pub(crate) fn is_harness_param(name: &str) -> bool {
+    HARNESS_PARAMS.contains(&name)
+}
+
+/// `n` distinct harness parameter names, in a seeded order.
+fn harness_names(rng: &mut Rng, n: usize) -> Vec<String> {
+    let mut left: Vec<&str> = HARNESS_PARAMS.to_vec();
+    let mut out = Vec::new();
+    while out.len() < n && !left.is_empty() {
+        out.push(left.remove(rng.below(left.len())).to_string());
+    }
+    out
 }
 
 /// `n` hosts drawn round-robin from `hosts`, so each host gets a share.

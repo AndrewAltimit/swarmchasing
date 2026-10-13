@@ -3,6 +3,7 @@
 
 use super::Span;
 use super::cadence::{pause_spans, quantile};
+use crate::chance::TestFamily;
 use crate::rules::Linking;
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +19,9 @@ pub const SHARED_PAUSE_MAX_CHANCE: f64 = 0.01;
 /// A matching pause that starts or ends on a clock hour counts for this much
 /// of a match: unrelated scheduled jobs stop and start on the hour together.
 pub const SHARED_PAUSE_CLOCK_WEIGHT: f64 = 0.25;
+/// Benjamini-Hochberg false discovery rate over every pair of clusters
+/// compared.
+pub const SHARED_PAUSE_FDR: f64 = 0.05;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -30,6 +34,7 @@ pub struct SharedPauseOptions {
     pub long_pause_secs: i64,
     pub max_chance: f64,
     pub clock_weight: f64,
+    pub fdr: f64,
 }
 
 impl SharedPauseOptions {
@@ -41,6 +46,7 @@ impl SharedPauseOptions {
             long_pause_secs: SHARED_PAUSE_LONG_SECS,
             max_chance: SHARED_PAUSE_MAX_CHANCE,
             clock_weight: SHARED_PAUSE_CLOCK_WEIGHT,
+            fdr: SHARED_PAUSE_FDR,
         }
     }
 }
@@ -68,6 +74,12 @@ pub struct SharedPause {
     pub expected: f64,
     /// Chance of at least this many matches under that model (Poisson).
     pub p_chance: f64,
+    /// Pairs of clusters compared, and pairs this unlikely expected among
+    /// them.
+    #[serde(default)]
+    pub tested: usize,
+    #[serde(default)]
+    pub expected_pairs: f64,
     pub reason: String,
 }
 
@@ -85,11 +97,20 @@ pub struct SharedPause {
 /// shared clock boundary (both crons stopping at midnight) are not random
 /// under this model, so a match that starts or ends within the tolerance of a
 /// clock hour counts as `clock_weight` of a match, and never qualifies alone
-/// as a long pause.
+/// as a long pause. Every pair of clusters active together is a test, and the
+/// pairs kept are cut at a false discovery rate of `fdr` over them.
 pub fn shared_pauses(
     clusters: &[(String, Vec<i64>)],
     opts: &SharedPauseOptions,
 ) -> Vec<SharedPause> {
+    shared_pauses_family(clusters, opts).0
+}
+
+/// [`shared_pauses`] and the family's multiplicity budget.
+pub fn shared_pauses_family(
+    clusters: &[(String, Vec<i64>)],
+    opts: &SharedPauseOptions,
+) -> (Vec<SharedPause>, TestFamily) {
     let tol = opts.tolerance_secs.max(0);
     struct C<'a> {
         id: &'a str,
@@ -116,7 +137,9 @@ pub fn shared_pauses(
 
     let mut out = Vec::new();
     let spans: Vec<(i64, i64)> = cs.iter().map(|c| (c.start, c.end)).collect();
-    for (i, k) in overlapping(&spans) {
+    let active_together = overlapping(&spans);
+    let tested = active_together.len();
+    for (i, k) in active_together {
         let (a, b) = (&cs[i], &cs[k]);
         let (lo, hi) = (a.start.max(b.start), a.end.min(b.end));
         let inside = |p: &&Span| p.start >= lo - tol && p.end <= hi + tol;
@@ -182,8 +205,9 @@ pub fn shared_pauses(
             String::new()
         };
         let reason = format!(
-            "{m} pause(s) start and end within {tol} s of each other (longest {} min{clock_note}) with {expected:.2} expected by chance (p {p_chance:.1e}): one scheduler, quota or operator may sit behind both",
-            longest / 60
+            "{m} pause(s) start and end within {tol} s of each other (longest {} min{clock_note}) with {expected:.2} expected by chance (p {p_chance:.1e}; {:.2} such pairs expected among {tested} compared): one scheduler, quota or operator may sit behind both",
+            longest / 60,
+            p_chance * tested as f64
         );
         out.push(SharedPause {
             a: a.id.to_string(),
@@ -192,10 +216,15 @@ pub fn shared_pauses(
             on_the_hour,
             expected,
             p_chance,
+            tested,
+            expected_pairs: p_chance * tested as f64,
             reason,
         });
     }
-    out
+    let ps: Vec<f64> = out.iter().map(|p| p.p_chance).collect();
+    let family = TestFamily::cut("shared_pause", &ps, tested, opts.fdr);
+    out.retain(|p| family.keeps(p.p_chance));
+    (out, family)
 }
 
 /// Every pair `(i, k)`, `i < k`, of `spans` (start, end) that overlap for

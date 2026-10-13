@@ -64793,6 +64793,7 @@
       "clusters": 46,
       "outside": 0,
       "base_rate": 0.022222222222222223,
+      "templates": 1,
       "chance": 0.0004938271604938272,
       "tested": 6,
       "expected_pairs": 0.0029629629629629632
@@ -64808,6 +64809,7 @@
       "clusters": 46,
       "outside": 0,
       "base_rate": 0.044444444444444446,
+      "templates": 1,
       "chance": 0.0019753086419753087,
       "tested": 6,
       "expected_pairs": 0.011851851851851853
@@ -64823,6 +64825,7 @@
       "clusters": 46,
       "outside": 0,
       "base_rate": 0.044444444444444446,
+      "templates": 1,
       "chance": 0.0019753086419753087,
       "tested": 6,
       "expected_pairs": 0.011851851851851853
@@ -64838,6 +64841,7 @@
       "clusters": 46,
       "outside": 0,
       "base_rate": 0.044444444444444446,
+      "templates": 1,
       "chance": 0.0019753086419753087,
       "tested": 6,
       "expected_pairs": 0.011851851851851853
@@ -64852,13 +64856,13 @@
       "active_a": 10,
       "active_b": 10,
       "expected": 0.6493506493506495,
-      "chance": 2.125952118872989e-9,
+      "chance": 0.005,
       "analytic": 2.125952118872989e-9,
-      "shifted": 0.0,
+      "shifted": 0.005,
       "shifts": 199,
       "on_the_hour": 1,
       "tested": 2,
-      "expected_pairs": 4.251904237745978e-9,
+      "expected_pairs": 0.01,
       "bin_secs": 60
     }
   ],
@@ -64868,35 +64872,35 @@
       "b": "C18",
       "kind": "scaffold",
       "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C17",
       "b": "C19",
       "kind": "scaffold",
       "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C18",
       "b": "C19",
       "kind": "scaffold",
       "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C42",
       "b": "C43",
       "kind": "scaffold",
       "strength": 0.6,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 2 of 46 comparable clusters and 0 record(s) outside them, a base rate of 2.2e-2 (chance 4.9e-4; 0.00 such pairs expected among 6 compared): relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 2 of 46 comparable clusters and 0 record(s) outside them, a base rate of 2.2e-2 (chance 4.9e-4 for the rarest of that many; 0.00 such pairs expected among 6 compared): relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
     },
     {
       "a": "C1",
       "b": "C2",
       "kind": "co_activity",
       "strength": 0.49499999999999994,
-      "detail": "8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 2.1e-9: 2.1e-9 analytic, a share of 0.000 of 199 circular shifts; 0.00 such pairs expected among 2 tested), 1 on a clock hour: one dispatcher or scheduler may drive both"
+      "detail": "8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 5.0e-3: 2.1e-9 analytic, a share of 0.005 of 199 circular shifts; 0.01 such pairs expected among 2 tested), 1 on a clock hour: one dispatcher or scheduler may drive both"
     },
     {
       "a": "C7",
@@ -65315,7 +65319,8 @@
       },
       "strength": "moderate",
       "chance": 0.000014366742309146474,
-      "detail": "the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.4e-5)"
+      "tested": 1,
+      "detail": "the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.4e-5); 0.00 such pairs expected among 1 tested"
     },
     {
       "kind": "disjoint_partition",
@@ -65341,7 +65346,62 @@
       },
       "strength": "weak",
       "chance": 0.0006216006216006207,
-      "detail": "2 runs started within 600 s split `*.county-records[.]example` (8 + 8 hosts) with no host shared, in a block split of the sorted hosts; a split that regular 6.2e-4 of the time at random; one client, or clients not told apart. One scheduler sharding a list does the same: a fleet signal unless other edges join these runs"
+      "tested": 1,
+      "detail": "2 runs started within 600 s split `*.county-records[.]example` (8 + 8 hosts) with no host shared, in a block split of the sorted hosts; a split that regular 6.2e-4 of the time at random; one client, or clients not told apart. One scheduler sharding a list does the same: a fleet signal unless other edges join these runs; 0.00 such pairs expected among 1 tested"
+    }
+  ],
+  "multiplicity": [
+    {
+      "family": "shared_pause",
+      "tested": 0,
+      "passed": 0,
+      "kept": 0,
+      "fdr": 0.05,
+      "expected": 0.0
+    },
+    {
+      "family": "scaffold",
+      "tested": 6,
+      "passed": 4,
+      "kept": 4,
+      "fdr": 0.05,
+      "cut": 0.0019753086419753087,
+      "expected": 0.011851851851851853
+    },
+    {
+      "family": "co_activity",
+      "tested": 2,
+      "passed": 1,
+      "kept": 1,
+      "fdr": 0.05,
+      "cut": 0.005,
+      "expected": 0.01
+    },
+    {
+      "family": "synchronized_start",
+      "tested": 0,
+      "passed": 0,
+      "kept": 0,
+      "fdr": 0.05,
+      "expected": 0.0
+    },
+    {
+      "family": "role_sequence",
+      "tested": 1,
+      "passed": 1,
+      "kept": 1,
+      "fdr": 0.05,
+      "cut": 0.000014366742309146474,
+      "expected": 0.000014366742309146474
+    },
+    {
+      "family": "disjoint_partition",
+      "tested": 1,
+      "passed": 1,
+      "kept": 1,
+      "fdr": 0.05,
+      "cut": 0.0006216006216006207,
+      "expected": 0.0006216006216006207
     }
   ]
 }

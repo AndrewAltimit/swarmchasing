@@ -707,14 +707,14 @@ For each cluster, the window to search, what its times measure, and the strings 
 Clusters tied by soft links (shared pauses, reruns, recon openings, encoding, shared scaffolds, co-activity and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.
 
 - **F1**: C17, C18, C19, 6 soft link(s): encoding style, shared scaffold (weakest pair 0.68)
-  - C17 ↔ C18: shared scaffold (0.60): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3; 0.01 such p…
-  - C17 ↔ C19: shared scaffold (0.60): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3; 0.01 such p…
-  - C18 ↔ C19: shared scaffold (0.60): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3; 0.01 such p…
+  - C17 ↔ C18: shared scaffold (0.60): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
+  - C17 ↔ C19: shared scaffold (0.60): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
+  - C18 ↔ C19: shared scaffold (0.60): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
   - C17 ↔ C18: encoding style (0.20): encoding style: sp20.hexU.unsorted.noslash
   - C17 ↔ C19: encoding style (0.20): encoding style: sp20.hexU.unsorted.noslash
   - C18 ↔ C19: encoding style (0.20): encoding style: sp20.hexU.unsorted.noslash
 - **F2**: C42, C43, 1 soft link(s): shared scaffold (weakest pair 0.60)
-  - C42 ↔ C43: shared scaffold (0.60): similarity 1.00, 1 shared template(s), the rarest in 2 of 46 comparable clusters and 0 record(s) outside them, a base rate of 2.2e-2 (chance 4.9e-4; 0.00 such p…
+  - C42 ↔ C43: shared scaffold (0.60): similarity 1.00, 1 shared template(s), the rarest in 2 of 46 comparable clusters and 0 record(s) outside them, a base rate of 2.2e-2 (chance 4.9e-4 for the rare…
 
 ## Possible interaction (SC-T9)
 
@@ -722,8 +722,17 @@ Pairs of runs whose records suggest agents acting on each other's output. Each i
 
 - S1 shared sink (moderate): C7#1 (direct · Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/124.0 · AS16509) ↔ C7#1 (relay.jina → target · python-httpx/0.27.0 · AS14061): both write to `webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`; their requests differ in relay route, user agent, network: two agents on one sink, or one agent changing route. Records: eval:swarm-sink-d0, eval:swarm-sink-d1, eval:swarm-sink-d2, eval:swarm-sink-r0, eval:swarm-sink-r1, eval:swarm-sink-r2
 - S2 hand-off (strong): C45#1 → C16#1: `gist/3f9a2c1b7d4e5f60718293a4b5c6d7e8` written by the first and fetched by the second 25 min later; they differ in user agent, network. Records: eval:swarm-handoff-w0, eval:swarm-handoff-f0
-- S4 role sequence (moderate): C44#1 ↔ C10#1: the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.4e-5). Records: eval:swarm-role-x0, eval:swarm-role-x1, eval:swarm-role-x2, eval:swarm-role-y0, eval:swarm-role-y1, eval:swarm-role-y2
+- S4 role sequence (moderate): C44#1 ↔ C10#1: the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.4e-5); 0.00 such pairs expected among 1 tested. Records: eval:swarm-role-x0, eval:swarm-role-x1, eval:swarm-role-x2, eval:swarm-role-y0, eval:swarm-role-y1, eval:swarm-role-y2
 - S5 disjoint partition (weak): C42#1 ↔ C43#1: 2 runs started within 600 s split `*.county-records[.]example` (8 + 8 hosts) with no host shared, in a block split of the sorted hosts; a split that regular 6.2e-4 of the time at random; one client, or clients not told apart. One scheduler …. Records: eval:swarm-shard-00, eval:swarm-shard-01, eval:swarm-shard-02, eval:swarm-shard-10, eval:swarm-shard-11, eval:swarm-shard-12
+
+## Pairwise tests
+
+Every pair test over the whole analysis, by family: the pairs tested, those kept under the family's false-discovery cut, and how many that unlikely chance alone would give among them.
+
+- scaffold: 4 kept of 6 tested (4 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
+- co_activity: 1 kept of 2 tested (1 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
+- role_sequence: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
+- disjoint_partition: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 
 ## Plant review
 

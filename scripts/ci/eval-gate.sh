@@ -32,6 +32,15 @@
 # held out or prospective (or say it was saved without one), come from
 # committed code and hold no URL (`swarmchase eval check-results`).
 #
+# Simulator: `swarmchase sim bench` on samples/sim/scenarios.toml, with
+# floors on interaction-edge, soft-link and candidate-fleet precision summed
+# over every scenario, and ceilings on the edges, soft links and
+# candidate-fleet pairs the null scenarios (no two runs related) draw. The
+# simulator is seeded, so the numbers only move when the analysis, the rules,
+# the generator or the scenarios do. Floors only go up and ceilings only go
+# down, as above; a new scenario that lowers a pooled number is argued in its
+# commit, never landed by moving a bound.
+#
 # Usage:
 #     scripts/ci/eval-gate.sh [extra cargo args, e.g. --profile release-test]
 
@@ -56,3 +65,13 @@ cargo run --quiet "$@" -p swarmchase -- eval samples/eval/*.ndjson \
     --require-coverage
 
 cargo run --quiet "$@" -p swarmchase -- eval check-results samples/eval/results
+
+cargo run --quiet "$@" -p swarmchase -- sim bench samples/sim/scenarios.toml \
+    --total \
+    --min-edge-precision 0.88 \
+    --min-link-precision 0.06 \
+    --min-fleet-precision 0.35 \
+    --max-null-edges 0 \
+    --max-null-links 280 \
+    --max-null-fleet-pairs 38 \
+    | sed -n '/^Null scenarios/,$p'

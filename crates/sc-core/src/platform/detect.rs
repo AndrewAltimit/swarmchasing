@@ -6,6 +6,7 @@ use super::{
     Action, Basis, Burst, HintStrength, NewAccounts, Platform, PlatformEvent, PlatformOptions,
     PlatformReport, PlatformSwarm, Suppressed,
 };
+use crate::chance::TestFamily;
 use crate::timing::poisson_at_least;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -17,6 +18,10 @@ const HOUR: i64 = 3600;
 /// An hour holding at least this share of the busiest hour's events was
 /// read in full; sparser hours hold only events carried from earlier runs.
 const DENSE_SHARE: usize = 10;
+/// Accounts' worth of the window's base rate an hour's own new-account
+/// share is shrunk toward, so an hour with few other accounts reads near the
+/// window's rate.
+const HOUR_PRIOR: f64 = 5.0;
 
 /// Grouped by its target ([`Action::by_target`]): no text, no name.
 fn textless(e: &PlatformEvent) -> bool {
@@ -41,6 +46,7 @@ pub fn detect(events: &[PlatformEvent], opts: &PlatformOptions) -> PlatformRepor
         out.suppressed.extend(r.suppressed);
         out.below_threshold += r.below_threshold;
         out.carry.extend(r.carry);
+        out.families.extend(r.families);
     }
     out.swarms.sort_by(|a, b| {
         b.strength
@@ -174,6 +180,27 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
         .filter(|e| !e.actor.is_empty())
         .map(|e| e.actor.as_str())
         .collect();
+    // Each account's first hour in the window (events are in time order),
+    // and per hour the accounts with age data first seen in it and how many
+    // of them are new: the new-account rate is read in the same hours as a
+    // group's accounts, so a wave of new accounts that lifts every group in
+    // those hours does not count twice.
+    let mut first_hour: BTreeMap<&str, i64> = BTreeMap::new();
+    for e in &ev {
+        if !e.actor.is_empty() {
+            first_hour
+                .entry(e.actor.as_str())
+                .or_insert(e.ts.div_euclid(HOUR));
+        }
+    }
+    let mut hour_age: BTreeMap<i64, (usize, usize)> = BTreeMap::new();
+    for (a, new) in &account_age {
+        if let Some(h) = first_hour.get(a) {
+            let c = hour_age.entry(*h).or_default();
+            c.0 += 1;
+            c.1 += usize::from(*new);
+        }
+    }
     out.accounts = all_accounts.len();
     let with_age = account_age.len();
     let base_rate = if with_age > 0 {
@@ -194,6 +221,9 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             carry.insert(i);
         }
     }
+    // Groups weighed against chance: (swarm, chance, residue-heavy).
+    let mut weighed: Vec<(super::PlatformSwarm, f64, bool)> = Vec::new();
+    let mut tested = 0usize;
     for members in groups.values().filter(|m| m.len() >= 2) {
         let accounts: BTreeSet<&str> = members
             .iter()
@@ -252,8 +282,9 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
         let mut hours = dense.clone();
         hours.extend(members.iter().map(|&i| ev[i].ts.div_euclid(HOUR)));
         let span = (hours.len() as i64 * HOUR).max(MIN_SPAN_SECS);
+        tested += 1;
         let burst = g.burst(span);
-        let new_accounts = g.new_accounts(&account_age, base_rate);
+        let new_accounts = g.new_accounts(&account_age, base_rate, &first_hour, &hour_age);
         let residue = g.residue();
         let texts = members.iter().filter(|&&i| ev[i].text.is_some()).count();
         let with_residue = members
@@ -264,7 +295,13 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             && with_residue as f64 / texts as f64 >= opts.residue_share
             && accounts.len() >= opts.min_accounts;
         let p_age = new_accounts.as_ref().map_or(1.0, |a| a.p_chance);
-        let p = (burst.p_chance * p_age).clamp(0.0, 1.0);
+        // The new-account chance is read in the group's own hours, so given
+        // its timing it is independent of the burst chance; the product of
+        // two such chances is weighed as one (`x (1 - ln x)`).
+        let p = match &new_accounts {
+            Some(a) => crate::chance::product_chance(burst.p_chance, a.p_chance),
+            None => burst.p_chance,
+        };
         // A burst on one owner's repositories by established accounts is
         // what an outage, a release or a linked discussion looks like.
         let owners: BTreeSet<&str> = members.iter().map(|&i| ev[i].owner()).collect();
@@ -282,7 +319,7 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             out.below_threshold += 1;
             continue;
         }
-        out.swarms.push(g.swarm(
+        let swarm = g.swarm(
             platform,
             template,
             burst,
@@ -290,8 +327,36 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             residue,
             p,
             residue_heavy,
-        ));
+        );
+        weighed.push((swarm, p, residue_heavy));
     }
+    // Every group weighed is a test: those kept on their chance are cut at a
+    // false discovery rate over them all. Residue-heavy groups stand on their
+    // residue.
+    let ps: Vec<f64> = weighed
+        .iter()
+        .filter(|w| w.1 <= opts.max_chance)
+        .map(|w| w.1)
+        .collect();
+    let family = TestFamily::cut(
+        &format!("platform:{}", platform.name()),
+        &ps,
+        tested,
+        opts.fdr,
+    );
+    for (mut swarm, p, residue_heavy) in weighed {
+        if residue_heavy || family.keeps(p) {
+            swarm.tested = tested;
+            swarm.reason.push_str(&format!(
+                "; {:.2} such groups expected among {tested} weighed",
+                p * tested as f64
+            ));
+            out.swarms.push(swarm);
+        } else {
+            out.below_threshold += 1;
+        }
+    }
+    out.families.push(family);
     out.carry = carry.into_iter().map(|i| ev[i].id.clone()).collect();
     out
 }
@@ -448,26 +513,57 @@ impl Group<'_> {
         }
     }
 
-    /// New accounts in the group against the window's base rate (Poisson).
-    fn new_accounts(&self, age: &BTreeMap<&str, bool>, base_rate: f64) -> Option<NewAccounts> {
-        let known: Vec<bool> = self
+    /// New accounts in the group, each account against the new-account
+    /// share of the other accounts first seen in its hour, shrunk toward the
+    /// window's base rate (a Poisson-binomial tail).
+    fn new_accounts(
+        &self,
+        age: &BTreeMap<&str, bool>,
+        base_rate: f64,
+        first_hour: &BTreeMap<&str, i64>,
+        hour_age: &BTreeMap<i64, (usize, usize)>,
+    ) -> Option<NewAccounts> {
+        let known: Vec<(&str, bool)> = self
             .accounts
             .iter()
-            .filter_map(|a| age.get(a).copied())
+            .filter_map(|a| age.get(a).map(|&v| (*a, v)))
             .collect();
         if known.is_empty() || base_rate <= 0.0 {
             return None;
         }
-        let new = known.iter().filter(|&&v| v).count();
+        // The group's own accounts per hour, left out of that hour's share.
+        let mut own: BTreeMap<i64, (usize, usize)> = BTreeMap::new();
+        for (a, v) in &known {
+            if let Some(h) = first_hour.get(a) {
+                let c = own.entry(*h).or_default();
+                c.0 += 1;
+                c.1 += usize::from(*v);
+            }
+        }
+        let rates: Vec<f64> = known
+            .iter()
+            .map(|(a, _)| {
+                let Some(h) = first_hour.get(a) else {
+                    return base_rate;
+                };
+                let (all, new) = hour_age.get(h).copied().unwrap_or_default();
+                let (mine, mine_new) = own.get(h).copied().unwrap_or_default();
+                let (others, others_new) = (all.saturating_sub(mine), new.saturating_sub(mine_new));
+                ((others_new as f64 + HOUR_PRIOR * base_rate) / (others as f64 + HOUR_PRIOR))
+                    .clamp(base_rate.min(1.0), 1.0)
+            })
+            .collect();
+        let new = known.iter().filter(|(_, v)| *v).count();
         let p_chance = if new < 2 {
             1.0
         } else {
-            poisson_at_least(known.len() as f64 * base_rate, new)
+            crate::chance::at_least(&rates, new)
         };
         Some(NewAccounts {
             new,
             of: known.len(),
             base_rate,
+            hour_rate: rates.iter().sum::<f64>() / rates.len() as f64,
             p_chance,
         })
     }
@@ -618,9 +714,10 @@ impl Group<'_> {
             let _ = std::fmt::Write::write_fmt(
                 &mut reason,
                 format_args!(
-                    "; {} of {} accounts new against a base rate of {:.0}% (p {:.1e})",
+                    "; {} of {} accounts new against {:.0}% in the same hours and {:.0}% over the window (p {:.1e})",
                     a.new,
                     a.of,
+                    a.hour_rate * 100.0,
                     a.base_rate * 100.0,
                     a.p_chance
                 ),
@@ -671,6 +768,7 @@ impl Group<'_> {
             targets: tl,
             distinct_targets,
             p_chance: p,
+            tested: 0,
             strength,
             caveats,
             links: m.iter().take(10).map(|&i| ev[i].link.clone()).collect(),

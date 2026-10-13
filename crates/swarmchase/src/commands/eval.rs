@@ -83,6 +83,11 @@ pub struct EvalArgs {
     /// Do not score the listed ids (score the tuning side of a split).
     #[arg(long)]
     exclude_ids: Option<PathBuf>,
+    /// Fail unless the labelled records scored hash to this (`sha256:` and
+    /// hex, as `eval ids-hash` and `--split` print): a frozen split's
+    /// membership, checked before anything is measured.
+    #[arg(long)]
+    expect_ids_sha256: Option<String>,
     /// Negative control: analyse only records timestamped before this date
     /// (YYYY-MM-DD), print label-free false-alarm rates per tier, agent
     /// grade and plant signal, and exit. Labels are not needed and no floor
@@ -116,6 +121,13 @@ enum EvalCmd {
     /// Write an SC-Bench file from labelled records: ids, labels, splits,
     /// provenance, defanged hosts and what these rules said. No URLs.
     ExportBench(BenchArgs),
+    /// Print the membership hash of each file's ids: an id list (`--split`
+    /// writes one) or NDJSON records. SHA-256 over the distinct ids,
+    /// sorted, one per line, so it does not change with content or order.
+    IdsHash {
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+    },
     /// The negative control on real data: sample pre-2022 Wayback index rows
     /// for the watchlist's relay and carrier sources into
     /// `<data>/controls/pre-era/`, analyse them, and print aggregate
@@ -232,6 +244,16 @@ pub fn run(args: EvalArgs) -> Result<()> {
         Some(EvalCmd::CheckResults { dir }) => return eval::repro::check_results(dir),
         Some(EvalCmd::ExportBench(b)) => return eval::bench::export(b),
         Some(EvalCmd::PreEra(p)) => return eval::control::run(p),
+        Some(EvalCmd::IdsHash { files }) => {
+            for f in files {
+                let text = std::fs::read_to_string(f)
+                    .with_context(|| format!("reading {}", f.display()))?;
+                let ids = eval::ids_in(&text);
+                let h = eval::ids_hash(ids.iter().map(String::as_str));
+                println!("sha256:{}  {} ids  {}", h.sha256, h.count, f.display());
+            }
+            return Ok(());
+        }
         None => {}
     }
     if let Some(d) = args.before {
@@ -253,15 +275,32 @@ pub fn run(args: EvalArgs) -> Result<()> {
         read_with_stores(&args, false)?,
         &load_rules(args.rules.as_deref())?,
     );
+    let scored = eval::scored_ids(&a, &l);
+    if let Some(want) = &args.expect_ids_sha256 {
+        let want = want.trim().trim_start_matches("sha256:");
+        if !want.eq_ignore_ascii_case(&scored.sha256) {
+            bail!(
+                "the {} labelled records scored hash to sha256:{}, not sha256:{want}: the split changed",
+                scored.count,
+                scored.sha256
+            );
+        }
+    }
 
     if let Some(kind) = args.split {
         let Some(out) = &args.split_out else {
             bail!("--split needs --split-out <file>");
         };
         let s = split(&a, &l, kind, args.seed, args.fraction);
+        let frozen = eval::ids_hash(s.held_out.iter().map(String::as_str));
+        eprintln!(
+            "held-out ids sha256:{} ({} ids): record it to check the split with --expect-ids-sha256",
+            frozen.sha256, frozen.count
+        );
         let mut text = format!(
             "# held-out ids · split {} · seed {} · fraction {} · rules {}\n\
              # {} held out · {} tuning · {} excluded (groups straddling the cut){}\n\
+             # ids sha256:{} (eval ids-hash; --expect-ids-sha256 checks the side measured)\n\
              # Frozen: measure with --only-ids, tune with --exclude-ids; never edit.\n",
             match kind {
                 SplitKind::Time => "time",
@@ -275,7 +314,8 @@ pub fn run(args: EvalArgs) -> Result<()> {
             s.excluded.len(),
             s.cutoff_ts
                 .map(|t| format!(" · cutoff {}", sc_core::fmt_ts(t)))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            frozen.sha256
         );
         for id in s.held_out.iter() {
             text.push_str(id);
@@ -366,6 +406,7 @@ pub fn run(args: EvalArgs) -> Result<()> {
                 .as_deref()
                 .map(eval::hash_file)
                 .transpose()?,
+            scored_ids: Some(scored.clone()),
             counts: eval::Counts::of(&summary),
             allow_no_benign: args.allow_no_benign && summary.benign == 0,
             summary: &summary,

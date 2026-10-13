@@ -21,7 +21,7 @@ Each record is an ordinary record plus label fields:
 | `labeller` | optional | Who labelled the record, for [SC-Bench](../../docs/reference/evaluation.md#sc-bench) exports. |
 | `tuned` | reviewed records | `true`: looked at while changing a rule, so left out of the [benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline). |
 
-Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), `ai_referral` (a person following an AI assistant's link, `utm_source=chatgpt.com` and the like), `mail_gateway` (links a mail gateway or security product submits on its own), and `scanner` (security scanners). False positives are reported per benign class.
+Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), `mail_gateway` (links a mail gateway or security product submits on its own), and `scanner` (security scanners). False positives are reported per benign class.
 
 Records get a `run` only where the grouping is clear: the published reconstructions of one incident share one, and each other incident has its own. The `llm-residue.ndjson` records are independent synthetic examples and carry none.
 
@@ -38,7 +38,7 @@ No urlquery content is copied here. urlquery's terms forbid redistributing it, a
 
 Synthetic records for the language-model output residue rules (`marker.md_link`, `marker.placeholder`, `marker.tool_call_json` and the rest). Each is marked `"synthetic": true`, uses reserved `.example` hosts for targets, and was written by hand, not copied from any report.
 
-- **Agent records**, class `llm_residue`: Markdown links and code spans around URLs, unfilled placeholders (`YOUR_API_KEY`, `{{target}}`), function-call markup and tool-call JSON in parameters, JSON string tails, escaped newlines, and output cut off mid escape or with an ellipsis. Also chat reply openers in front of a URL (`Sure, here is the page: https://...`, `As an AI, I cannot open ...`), doubled, colon-less and defanged schemes (`https://https://`, `?url=https//`, `hxxps://` sent to a relay), impossible dates in date parameters (February 30, June 31, month 13), and stock example identities (`john.doe@example.com`, `test123`, `555-0142`). Most pair the residue with a relay, carrier, tag or probe, as agents do. Two show a generation loop: one word, and one two-word phrase, repeated five or more times in a search.
+- **Agent records**, class `llm_residue`: Markdown links and code spans around URLs, unfilled placeholders (`YOUR_API_KEY`, `{{target}}`), function-call markup and tool-call JSON in parameters, JSON string tails, escaped newlines, and output cut off mid escape or with an ellipsis. Also chat reply openers in front of a URL (`Sure, here is the page: https://...`, `As an AI, I cannot open ...`), doubled, colon-less and defanged schemes (`https://https://`, `?url=https//`, `hxxps://` sent to a relay), impossible dates in date parameters (February 30, June 31, month 13), and stock example identities (`john.doe@example.com`, `test123`, `555-0142`). Most pair the residue with a relay, carrier, tag or probe, as agents do. Generation loops repeat one word, or one two-word phrase, five or more times in a search.
 - **Benign records** are hard negatives: JSON in the query string of ordinary GET APIs (Elasticsearch query DSL, GraphQL variables, REST filters), parentheses in page titles, backticks and Markdown in searches, `example.com` in search text and OAuth documentation links, unrendered front-end templates captured by crawlers, Windows paths, and an encoded `%` at the end of a URL. Further hard negatives cover the newer rules: searches that start like a chat reply (`here is the news`, `I'll be there for you`, `as an AI language model`), a blog slug read through a relay, a redirect parameter carrying an encoded URL, a host named `https-portal`, an analyst searching for a defanged indicator, a crawled `href` missing its colon, version and build strings shaped like impossible dates, real leap-day and month-end dates in both day/month orders, and an example address in a documentation link, a QA test login and a `123 Main St` map search. The last three match `marker.placeholder_identity` on purpose; at weight 1 they stay noise.
 - **Generation-loop hard negatives** guard `marker.repeated_token`: a song search of one short syllable (`na na na ...`), a search box tested with one long run of a letter, a title repeating a word four times, and repeated numbers in an API parameter.
 
@@ -49,8 +49,6 @@ The rules were tuned on this set, so it is a **regression floor, not a precision
 ## `rule-coverage.ndjson`
 
 Synthetic records that give every rule at least one labelled positive, and the significant and link rules hard negatives: benign records that look alike and must not fire. Each is marked `"synthetic": true`, uses reserved `.example` hosts (or the public service the rule names), and was written by hand. Payloads are the canonical textbook test strings. Benign records name the rule they guard in `hard_negative_for`, and records from one synthetic run share a `run` id.
-
-Among them: hosted-browser and sandbox routes (scrape APIs, a CDP connect program, a sandbox call-back, a public tunnel beacon), MCP residue and agent-discovery paths, a `Sec-CH-UA-Platform` mismatch, and testing-tool user agents, each with the benign look-alike it must stay below: a scrape API reading a public page, a developer's own tunnel or sandbox preview, an AI-assistant referral click (`utm_source=chatgpt.com`), a CI headless browser, an uptime monitor, a link unfurler, and a signed declared agent.
 
 ## `carrier-negatives.ndjson`
 
@@ -149,7 +147,10 @@ To freeze a split of your own labelled data, write the held-out ids to the data 
 swarmchase eval data/eval/labelled.ndjson --split cluster --seed 1 --split-out data/eval/holdout-ids.txt
 swarmchase eval data/eval/labelled.ndjson --exclude-ids data/eval/holdout-ids.txt   # tune on this
 swarmchase eval data/eval/labelled.ndjson --only-ids data/eval/holdout-ids.txt \
+    --expect-ids-sha256 sha256:<the hash --split printed> \
     --save-result data/eval/holdout-result.json --result-kind held_out --describe "..."
 ```
+
+`--split` prints the split's membership hash and writes it into the id list's header; `swarmchase eval ids-hash <file>` prints it again for an id list or a record file, such as the fetched Transluce sample. The ids stay in `data/`; the hash names the split without them, so it can be committed beside a held-out result, and every saved result carries the hash of the records it scored ([frozen splits](../../docs/reference/evaluation.md#frozen-splits)).
 
 Read the per-class table, not just the overall recall. Transluce labelled many `source_request` reports suggestive because of context, such as a request to a data source tied to a known task. A rule cannot see that from one record. 79 controls are too few to estimate precision on their own, so add a sample of unflagged reports from a generic urlquery search, labelled `benign`, as a baseline.
