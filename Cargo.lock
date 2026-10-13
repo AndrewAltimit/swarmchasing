@@ -1781,6 +1781,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-sim"
+version = "0.1.0"
+dependencies = [
+ "sc-core",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+]
+
+[[package]]
 name = "sc-stix"
 version = "0.1.0"
 dependencies = [
@@ -2004,6 +2014,7 @@ dependencies = [
  "sc-collect",
  "sc-core",
  "sc-publish",
+ "sc-sim",
  "sc-stix",
  "serde",
  "serde_json",

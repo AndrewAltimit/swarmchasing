@@ -85,6 +85,9 @@ pub enum Cmd {
     /// it, from a `label` field on each input record. With floors set, exits
     /// non-zero when a floor is not met.
     Eval(Box<commands::eval::EvalArgs>),
+    /// Interaction edges, soft links, candidate fleets and agent grades
+    /// against labelled true runs, swarms and fleets.
+    Sim(commands::sim::SimArgs),
     /// Label watch leads as agent, benign or unsure, one record at a time.
     /// Labels go to `<data>/labels/reviewed.ndjson` (`reviewed-<name>.ndjson`
     /// with `--labeller`), which `swarmchase eval`
@@ -135,6 +138,7 @@ pub fn run() -> Result<()> {
         Cmd::Contacts { cmd } => contacts::run_contacts(cmd),
         Cmd::Watch(a) => watch::run(a),
         Cmd::Eval(a) => commands::eval::run(*a),
+        Cmd::Sim(a) => commands::sim::run(a),
         Cmd::Review(a) => review::run(a),
         Cmd::Dashboard(a) => dashboard::run(a),
         Cmd::Case(a) => case::run(a),

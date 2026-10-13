@@ -13,5 +13,6 @@ pub mod eval;
 pub mod report;
 pub mod rules;
 pub mod scan;
+pub mod sim;
 pub mod site;
 pub mod unwrap;
