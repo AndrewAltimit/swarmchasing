@@ -4,13 +4,13 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-05-20 19:01:00 UTC → 2026-08-12 02:14:00 UTC
-- **Records:** 12 linked public records in 5 cluster(s) (of 57 records reviewed, 43 flagged)
+- **Records:** 13 linked public records in 5 cluster(s) (of 60 records reviewed, 47 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.2
 
 ## Summary
 
-Public scan and archive records show automated agents sending requests to systems we believe you operate (`recherche-collection-search[.]bac-lac[.]canada[.]ca` (4), `api[.]datausa[.]io` (2), `civilrightsdata[.]ed[.]gov` (2), `nmdigital[.]unm[.]edu` (2), `vizprod[.]aihw[.]gov[.]au` (2)). We are sharing this so you can check your own logs. We have not confirmed whether any request succeeded.
+Public scan and archive records show automated agents sending requests to systems we believe you operate (`recherche-collection-search[.]bac-lac[.]canada[.]ca` (4), `api[.]datausa[.]io` (3), `civilrightsdata[.]ed[.]gov` (2), `nmdigital[.]unm[.]edu` (2), `vizprod[.]aihw[.]gov[.]au` (2)). We are sharing this so you can check your own logs. We have not confirmed whether any request succeeded.
 
 **Attack payloads were present** (see Indicators). We did not test whether they succeeded.
 
@@ -24,6 +24,7 @@ Public scan and archive records show automated agents sending requests to system
 | Carrier services and inline programs | `carrier.inline_fetch_program` | 1 |
 | Attack payloads | `exploit.boundary_ids` | 1 |
 | Attack payloads | `exploit.double_encoded_meta` | 1 |
+| Attack payloads | `exploit.open_redirect_probe` | 1 |
 | Attack payloads | `exploit.sqli_boolean` | 2 |
 | Attack payloads | `exploit.sqli_quote` | 1 |
 | Attack payloads | `exploit.ssti` | 1 |
@@ -31,7 +32,7 @@ Public scan and archive records show automated agents sending requests to system
 | Attack payloads | `exploit.traversal_single` | 1 |
 | Attack payloads | `exploit.xss` | 1 |
 | Agent tags and markers | `marker.oai_tag` | 1 |
-| Agent tags and markers | `marker.test_tag` | 2 |
+| Agent tags and markers | `marker.probe_tag` | 2 |
 | Agent tags and markers | `marker.title_write` | 1 |
 
 ## Endpoints
@@ -40,22 +41,22 @@ Every flagged request to each host, including requests outside the linked cluste
 
 | Host | Hits | First seen | Last seen | Status | Attack payloads |
 |---|---|---|---|---|---|
-| `api[.]datausa[.]io` | 3 | 2026-08-03 15:31:00 UTC | 2026-08-20 07:00:00 UTC | ongoing | `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single` |
+| `api[.]datausa[.]io` | 4 | 2026-08-03 15:30:00 UTC | 2026-08-20 07:00:00 UTC | ongoing | `exploit.open_redirect_probe`, `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single` |
+| `civilrightsdata[.]ed[.]gov` | 3 | 2026-06-02 14:00:05 UTC | 2026-06-17 11:26:00 UTC | historical | `exploit.sqli_boolean` |
+| `nmdigital[.]unm[.]edu` | 3 | 2026-05-20 19:01:00 UTC | 2026-05-25 20:00:00 UTC | historical | `exploit.cmd_param` |
 | `recherche-collection-search[.]bac-lac[.]canada[.]ca` | 3 | 2026-06-10 09:12:00 UTC | 2026-06-10 09:14:30 UTC | historical | `exploit.double_encoded_meta`, `exploit.sqli_boolean`, `exploit.sqli_quote` |
-| `civilrightsdata[.]ed[.]gov` | 2 | 2026-06-02 14:00:05 UTC | 2026-06-02 14:03:10 UTC | historical | `exploit.sqli_boolean` |
 | `vizprod[.]aihw[.]gov[.]au` | 2 | 2026-08-12 02:10:00 UTC | 2026-08-12 02:14:00 UTC | historical | `exploit.xss` |
-| `nmdigital[.]unm[.]edu` | 2 | 2026-05-20 19:01:00 UTC | 2026-05-20 19:04:00 UTC | historical | none seen |
 
 ## Timeline
 
 - **C1** (significant): 4 records, 1 run(s), 2026-06-10 09:12:00 UTC → 2026-06-10 09:14:30 UTC, median gap 50s
   - iterative probing: 4 variants of `IdNumber` on `recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record` over 2m (median gap 50s, model pace)
   - payload dialect `341cb867` over 2 records: sqli (numeric_or ×1); xss (script_alert ×1); first seen sqli.numeric_or → xss.script_alert. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C2** (significant): 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
-  - iterative probing: 3 variants of `Measure_Id`, `State_Id`, `State_Id[]`, `survey_Year_Key` on `civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation` over 4m (median gap 3m, slow pace); 1 of its requests matched no rule
-- **C3** (significant): 2 records, 1 run(s), 2026-08-03 15:31:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
-  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace); 1 of its requests matched no rule
+- **C2** (significant): 3 records, 1 run(s), 2026-08-03 15:30:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
+  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace)
   - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C3** (significant): 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
+  - iterative probing: 3 variants of `Measure_Id`, `State_Id`, `State_Id[]`, `survey_Year_Key` on `civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation` over 4m (median gap 3m, slow pace); 1 of its requests matched no rule
 - **C4** (significant): 2 records, 1 run(s), 2026-08-12 02:10:00 UTC → 2026-08-12 02:14:00 UTC, median gap 4m
   - relay stack `carrier.httpbin → carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
 - **C5** (suggestive): 2 records, 1 run(s), 2026-05-20 19:01:00 UTC → 2026-05-20 19:04:00 UTC, median gap 3m
@@ -67,7 +68,7 @@ URLs are defanged. Records are listed by evidence strength.
 1. 2026-08-12 02:10:00 UTC: `hxxps://vizprod[.]aihw[.]gov[.]au/views/Dashboard/Overview?:embed=y&:showVizHome=no&:apiID=%3Cscript%3Ealert(document.domain)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-20 19:04:00 UTC: `hxxps://markdown[.]new/hxxps://nmdigital[.]unm[.]edu/digital/collection/abqmuseum/id/1234?tok=expt4`
-   - rules: relay.markdown_new, marker.test_tag
+   - rules: relay.markdown_new, marker.probe_tag
 1. 2026-08-03 15:32:00 UTC: `hxxps://api[.]datausa[.]io/tesseract/data.jsonrecords?cube=../../etc/passwd`
    - rules: exploit.traversal, exploit.traversal_single
 1. 2026-06-02 14:00:05 UTC: `hxxps://civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation?survey_Year_Key=9&Measure_Id=1&State_Id=1%20OR%201=1`
@@ -79,7 +80,7 @@ URLs are defanged. Records are listed by evidence strength.
 1. 2026-08-03 15:31:00 UTC: `hxxps://api[.]datausa[.]io/tesseract/data.jsonrecords?cube=ipeds_completions&include=University:%7B%7B7*7%7D%7D`
    - rules: exploit.ssti
 1. 2026-05-20 19:01:00 UTC: `hxxps://nmdigital[.]unm[.]edu/digital/api/singleitem/image/pdf/abqmuseum/1234/default.jpg?tok=expt3`
-   - rules: marker.test_tag
+   - rules: marker.probe_tag
 1. 2026-06-02 14:03:10 UTC: `hxxps://civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation?survey_Year_Key=10&Measure_Id=1&State_Id=11&zz=oai17816834089056622`
    - rules: marker.oai_tag
 1. 2026-06-10 09:12:40 UTC: `hxxps://recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record?app=divincan&IdNumber=%27`

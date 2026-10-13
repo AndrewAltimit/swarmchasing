@@ -67,7 +67,11 @@ impl Default for EscalationOptions {
                 "carrier.form_post_program",
                 "carrier.html_program",
             ]),
-            remote_browser: own(&["carrier.livecodes", "carrier.codesandbox"]),
+            remote_browser: own(&[
+                "carrier.livecodes",
+                "carrier.codesandbox",
+                "carrier.browserless",
+            ]),
         }
     }
 }

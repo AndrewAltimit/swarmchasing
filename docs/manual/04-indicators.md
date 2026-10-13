@@ -162,7 +162,7 @@ A group is a statement about correlation, so it is set from evidence: two rules 
 |---|---|---|
 | `program` | `carrier.httpbin`, `carrier.data_url_script`, `carrier.inline_fetch_program`, `carrier.form_post_program`, `carrier.html_program`, `marker.title_write` | One program's text, and the echo service that serves it. |
 | `relay` | every `relay.*` rule | One fetch route. |
-| `run_tag` | `marker.uq_tags`, `marker.test_tag`, `marker.oai_tag` | One tag and its parameter. |
+| `run_tag` | `marker.uq_tags`, `marker.test_tag`, `marker.probe_tag`, `marker.oai_tag` | One tag and its parameter. |
 | `sqli` | `exploit.sqli_union`, `exploit.sqli_boolean`, `exploit.sqli_quote` | One injection payload. |
 | `traversal` | `exploit.traversal`, `exploit.traversal_single` | One traversal payload. |
 | `oast` | `exfil.requestbin`, `exfil.oast_service` | One out-of-band host. |
