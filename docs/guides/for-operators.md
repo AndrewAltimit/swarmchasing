@@ -161,8 +161,9 @@ A report sent by email carries an evidence bundle as attachments:
 | `analysis.json` | The analysis of those records |
 | `stamp.json` | The rules version, the toolkit version and commit, and the tier of every flagged record and cluster when the report was made |
 | `MANIFEST.sha256` | The SHA-256 of each file above |
+| `MANIFEST.sha256.sig` | The Ed25519 signature of the manifest, once a signing key is published |
 
-Save the four files into one directory. Then check them in either of two ways.
+Save the files into one directory. Then check them in either of two ways.
 
 **With the CLI.** From a checkout of this repository:
 
@@ -170,13 +171,13 @@ Save the four files into one directory. Then check them in either of two ways.
 swarmchase case verify path/to/bundle
 ```
 
-It checks each file against the manifest, re-runs the analysis on `records.ndjson`, and fails if any record's tier or any cluster differs from the stamp. On success it prints `verified (manifest, tiers and clusters match)`.
+It checks the signature against the published key (`keys/bundle-signing.pub` in the checkout, or `--key path`), checks each file against the manifest, re-runs the analysis on `records.ndjson`, and fails if the signature is invalid or any record's tier or any cluster differs from the stamp. It says whether the bundle is `signed by key <key id>` or `unsigned`. On success it prints `verified (signature, manifest, tiers and clusters match)`, or without `signature, ` for an unsigned bundle.
 
 The check must use the rules the bundle was made with. If the rules version in `stamp.json` differs from your checkout's, the check says so. Check out the commit named in `stamp.json` (`toolkit_commit`, when present), or pass that commit's rules file with `--rules path/to/default.toml`.
 
-**In the browser.** The site's [Tools page](../reference/browser-toolkit.md#evidence-bundles) loads a bundle and re-runs the check locally.
+**In the browser.** The site's [Tools page](../reference/browser-toolkit.md#evidence-bundles) loads a bundle and re-runs the check locally, the signature against the key the site publishes.
 
-**What verifying shows, and what it does not.** A bundle that verifies shows that the tiers and clusters in the report follow from the records under the stated rules, and that the files are the ones the manifest lists. It does not show that the records are genuine. For that, follow each record's `reference` link to the public record it was taken from: an archive capture or a scan report. The manifest is not signed, so it proves the files agree with each other, not who produced them.
+**What verifying shows, and what it does not.** A bundle that verifies shows that the tiers and clusters in the report follow from the records under the stated rules, and that the files are the ones the manifest lists. It does not show that the records are genuine. For that, follow each record's `reference` link to the public record it was taken from: an archive capture or a scan report. A valid signature shows who produced the bundle: the holder of the published key. Without one, the manifest proves the files agree with each other, not who produced them. The key id, what it means and where to compare it are in [for-providers.md](for-providers.md#check-who-sent-it).
 
 ## Contact
 

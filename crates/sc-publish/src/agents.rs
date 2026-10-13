@@ -12,6 +12,12 @@
 //!   exists, so it is a plain document under a well-known path (RFC 8615)
 //!   whose `descriptor` field names its own version.
 //!
+//! When the checkout commits a bundle signing key
+//! ([`sc_case::signing::PUBLIC_KEY_PATH`]), the build publishes it at the
+//! same path, and `security.txt`, `swarm-report.json` and the providers
+//! page say which key signs evidence bundles; without one they say bundles
+//! are not signed yet.
+//!
 //! The text is written for an agent reader: plain statements of fact. It
 //! never addresses the reader as a system prompt would, never tells an agent
 //! to do anything beyond the optional report itself, and never asks it to
@@ -22,6 +28,7 @@
 //! token goes; [`apply_canary`] fills it in when the build has a seed, and
 //! drops it when it has none ([`crate::build`]). Text in, text out.
 
+use sc_case::signing::{PUBLIC_KEY_PATH, PublicKey, SIGNATURE};
 use sc_core::canary;
 use std::fmt::Write;
 
@@ -54,6 +61,8 @@ pub struct AgentInputs<'a> {
     pub now: i64,
     /// (repository path, text) of every doc.
     pub docs: &'a [(String, String)],
+    /// The committed bundle signing keys; empty when none is published.
+    pub signing_keys: &'a [PublicKey],
 }
 
 impl AgentInputs<'_> {
@@ -141,6 +150,38 @@ pub fn llms_full_txt(i: &AgentInputs) -> String {
     s
 }
 
+/// What `security.txt` says of bundle signing, as comment lines. RFC 9116
+/// has no field for it: `Encryption` names a key to encrypt reports to us,
+/// not one that checks what we send, and an unregistered field would read as
+/// a contact method. A comment carries it to a person reading the file.
+fn signing_comment(i: &AgentInputs) -> String {
+    let ids: Vec<String> = i.signing_keys.iter().map(PublicKey::key_id).collect();
+    if ids.is_empty() {
+        return "# Evidence bundles sent with our reports are not signed yet.\n".into();
+    }
+    format!(
+        "# Evidence bundles sent with our reports are signed (Ed25519, {SIGNATURE})\n\
+# with key {}: {}{PUBLIC_KEY_PATH}\n",
+        ids.join(", "),
+        i.base
+    )
+}
+
+/// The providers page's paragraph on the signing key, in Markdown: the key
+/// id and where the key file is, or that bundles are not signed yet. It
+/// replaces a marker in `docs/guides/for-providers.md`, so its link is
+/// relative to that doc: the committed file in the repository.
+pub fn signing_key_md(keys: &[PublicKey]) -> String {
+    if keys.is_empty() {
+        return "**This site publishes no signing key yet**, so the bundles we send are unsigned and a check reports them as unsigned. Until a key is published here, a bundle carrying a signature cannot be checked against one.".into();
+    }
+    let ids: Vec<String> = keys.iter().map(|k| format!("`{}`", k.key_id())).collect();
+    format!(
+        "**The signing key this site publishes** has key id {}. The site serves the key file at `{PUBLIC_KEY_PATH}` under its root; the repository commits the same file as [{PUBLIC_KEY_PATH}](../../{PUBLIC_KEY_PATH}).",
+        ids.join(", ")
+    )
+}
+
 /// `.well-known/security.txt` (RFC 9116).
 pub fn security_txt(i: &AgentInputs) -> String {
     let expires = chrono::DateTime::<chrono::Utc>::from_timestamp(i.now + EXPIRES_DAYS * 86_400, 0)
@@ -150,6 +191,7 @@ pub fn security_txt(i: &AgentInputs) -> String {
         "# Security contact for the swarmchasing project and this site.\n\
 # To report AI agent activity (a swarm, or an agent's own harmful action),\n\
 # use the submission page: {b}{REPORT_PAGE}\n\
+{signing}\
 # Reference: {ph}\n\
 Contact: {contact}\n\
 Expires: {expires}\n\
@@ -159,6 +201,7 @@ Canonical: {b}.well-known/security.txt\n",
         b = i.base,
         ph = canary::PLACEHOLDER,
         contact = i.private_contact(),
+        signing = signing_comment(i),
     )
 }
 
@@ -178,6 +221,21 @@ pub fn swarm_report_json(i: &AgentInputs) -> String {
             "schema": i.schema(),
             "accepts": ["swarm", "self_report"],
             "private_contact": i.private_contact(),
+        },
+        "bundle_signing": if i.signing_keys.is_empty() {
+            serde_json::json!({ "signed": false })
+        } else {
+            serde_json::json!({
+                "signed": true,
+                "algorithm": "ed25519",
+                "signature_file": SIGNATURE,
+                "signs": "MANIFEST.sha256",
+                "key_file": format!("{b}{PUBLIC_KEY_PATH}"),
+                "keys": i.signing_keys.iter().map(|k| serde_json::json!({
+                    "key_id": k.key_id(),
+                    "public_key": k.base64(),
+                })).collect::<Vec<_>>(),
+            })
         },
         "handling": {
             "reviewed_by_a_person": true,
@@ -259,6 +317,7 @@ mod tests {
             repo: "https://github.com/owner/swarmchasing",
             now: 1_791_763_200,
             docs,
+            signing_keys: &[],
         }
     }
 
@@ -293,6 +352,32 @@ mod tests {
         assert_eq!(s.expires.as_deref(), Some("2027-04-10T00:00:00Z"));
         assert_eq!(s.canonical.len(), 1);
         assert!(s.other.is_empty(), "{:?}", s.other);
+    }
+
+    #[test]
+    fn a_published_signing_key_is_named_everywhere() {
+        let i = inputs(&[]);
+        assert!(security_txt(&i).contains("are not signed yet"));
+        let v: serde_json::Value = serde_json::from_str(&swarm_report_json(&i)).unwrap();
+        assert_eq!(v["bundle_signing"]["signed"], false);
+        assert!(signing_key_md(&[]).contains("no signing key"));
+        let keys = [sc_case::signing::SecretKey::from_seed(&[2; 32]).public()];
+        let id = keys[0].key_id();
+        let i = AgentInputs {
+            signing_keys: &keys,
+            ..inputs(&[])
+        };
+        let t = security_txt(&i);
+        assert!(t.contains(&id) && t.contains("swarmchasing/keys/bundle-signing.pub"));
+        let s = sc_core::parse_security_txt(&t);
+        assert!(s.other.is_empty() && s.encryption.is_empty(), "{s:?}");
+        let v: serde_json::Value = serde_json::from_str(&swarm_report_json(&i)).unwrap();
+        assert_eq!(v["bundle_signing"]["keys"][0]["key_id"], id.as_str());
+        assert_eq!(
+            v["bundle_signing"]["keys"][0]["public_key"],
+            keys[0].base64()
+        );
+        assert!(signing_key_md(&keys).contains(&id));
     }
 
     #[test]

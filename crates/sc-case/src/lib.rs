@@ -20,6 +20,8 @@
 //! - [`checklist`]: the self-review checklists `notice add` and `notice
 //!   update --naming` run.
 //! - [`bundle`]: evidence bundle contents, the manifest and the stamp check.
+//! - [`signing`] (feature `signatures`): the Ed25519 signature over a
+//!   bundle's manifest, and its check against the published keys.
 //! - [`incident`]: drafts for AI incident databases and reporting frameworks.
 //! - [`notice`]: the notice file format and the one notice linter.
 //! - [`providers`]: the provider directory (`contacts/providers.toml`).
@@ -42,6 +44,8 @@ pub mod pinning;
 pub mod providers;
 pub mod report;
 pub mod review;
+#[cfg(feature = "signatures")]
+pub mod signing;
 pub mod text;
 
 pub use evidence::{OperatorEvidence, Scope};

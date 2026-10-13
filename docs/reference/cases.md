@@ -49,8 +49,8 @@ Each change is logged with its date.
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
 | `case report <id> --audience …` | Drafts a report into `reports/`, applying the case's claims and naming threshold. |
 | `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
-| `case bundle <id>` | Writes an evidence bundle without drafting a report. |
-| `case verify <bundle>` | Checks the manifest, re-runs the analysis and fails if any tier or cluster differs. |
+| `case bundle <id>` | Writes an evidence bundle without drafting a report, signed when there is a signing key ([signing](#signed-bundles)). |
+| `case verify <bundle> [--key <file>]` | Checks the signature, the manifest, re-runs the analysis and fails if the signature is invalid or any tier or cluster differs. |
 | `case sent <id> --to … --channel … [--at <time>]` | Records a send the admin made, with its time, and moves an open case to reported ([lead times](#lead-times)). |
 | `case no-contact <id> <host\|org\|provider> --searched …` | Records that no contact was found for a party ([lead times](#lead-times)). |
 | `case consent <id> --party <p> --note "…"` | Records an operator's written consent to be named before its naming lead runs ([lead times](#lead-times)). |
@@ -227,9 +227,31 @@ An evidence bundle holds:
 - the records;
 - their analysis;
 - a stamp with the rules version, the toolkit version and commit, the method version it follows (SC-FM), the rules' precision and recall on the committed evaluation set at stamp time, and the tier of every flagged record and cluster;
-- a SHA-256 manifest of those files.
+- a SHA-256 manifest of those files;
+- with a signing key, `MANIFEST.sha256.sig`, the manifest's Ed25519 signature ([signed bundles](#signed-bundles)).
 
-`case verify` checks the manifest, re-runs the analysis and compares both it and the bundle's own `analysis.json` with the stamp. It prints the method version and evaluation figures the stamp carries; bundles stamped before those fields existed verify the same way. The evaluation set is found at `SWARMCHASE_EVAL_DIR`, else `samples/eval/` in the working directory or the checkout the CLI was built from; without it the stamp has no figures. A recipient can run the same check without installing anything, in the browser toolkit's Case tab ([for operators](../guides/for-operators.md#verify-an-evidence-bundle)).
+`case verify` checks the signature, the manifest, re-runs the analysis and compares both it and the bundle's own `analysis.json` with the stamp. It prints the method version and evaluation figures the stamp carries; bundles stamped before those fields existed verify the same way. The evaluation set is found at `SWARMCHASE_EVAL_DIR`, else `samples/eval/` in the working directory or the checkout the CLI was built from; without it the stamp has no figures. A recipient can run the same check without installing anything, in the browser toolkit's Case tab ([for operators](../guides/for-operators.md#verify-an-evidence-bundle)).
+
+### Signed bundles
+
+Signing is off until `SWARMCHASE_SIGNING_KEY` holds the secret seed ([configuration](configuration.md#bundle-signing)). With it set, `case bundle` and `case draft` write `MANIFEST.sha256.sig` beside the manifest, and the draft attaches it. A value that is not a key fails the bundle rather than leaving it unsigned.
+
+```text
+algorithm: ed25519
+key-id: <first 16 hex digits of the SHA-256 of the public key>
+signature: <Ed25519 signature of the manifest's bytes, base64>
+```
+
+`case verify` reads the published keys from `--key`, else `SWARMCHASE_SIGNING_PUBLIC`, else `keys/bundle-signing.pub` in the working directory or the checkout the CLI was built from. That file holds one `ed25519 <base64 key> <key id>` line per key; a retired key stays listed so its bundles keep verifying. The outcome is one of:
+
+| Outcome | Meaning | Check |
+|---|---|---|
+| `signed by key <id>` | Valid under a published key | Passes |
+| `signature invalid` | Altered, malformed, or by a key not published | Fails |
+| `unsigned` | No signature file | Passes, and says so |
+| `not checked` | Signed, but no published key file | Passes, and says so |
+
+The signature covers every file through the manifest, and the case id through `stamp.json`; it does not cover the email body. The site's showcase bundle is synthetic and never signed.
 
 ## Pinned rules
 

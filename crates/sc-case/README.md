@@ -31,6 +31,7 @@ let text = c.to_toml()?; // the caller writes it back
 | [`pinning`](src/pinning.rs) | Names for pinned rule sets, and the records whose tier differs between two rule sets. |
 | [`checklist`](src/checklist.rs) | The self-review checklist `notice add` and `notice update --naming` run, from inputs the caller gathers. |
 | [`bundle`](src/bundle.rs) | Evidence bundle contents, the manifest, and the stamp check (with a lean reader of `analysis.json`). |
+| [`signing`](src/signing.rs) | Feature `signatures`: the Ed25519 signature over a bundle's manifest, the key id, the public key file, and the check against published keys. |
 | [`incident`](src/incident.rs) | Drafts for the AI Incident Database and the OECD framework, with an EU AI Act Article 73 section. |
 | [`notice`](src/notice/mod.rs) | The notice file format and the one notice linter (front matter, leaks, wording, "misaligned" against the front matter's scope finding and agent grade). |
 | [`providers`](src/providers.rs) | The provider directory, `contacts/providers.toml`, built in. |

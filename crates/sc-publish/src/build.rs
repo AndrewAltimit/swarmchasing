@@ -3,7 +3,8 @@
 //!
 //! Reads only `notices/*.md`, `docs/**/*.md`, `rules/default.toml`,
 //! `samples/eval/*.ndjson`, `samples/eval/coverage-allow.txt`,
-//! `samples/showcase/*.ndjson` and the static files in `site/` (with the
+//! `samples/showcase/*.ndjson`, `keys/bundle-signing.pub` when it is
+//! committed, and the static files in `site/` (with the
 //! WASM modules `scripts/ci/build-site.sh` builds into `site/pkg`). It refuses any path under `data/` or
 //! `$SWARMCHASE_DATA`: watch data and case files never reach the site.
 //! Unlike the rest of this crate it reads and writes files; it never touches
@@ -21,6 +22,10 @@
 //! file carries its own canary token for the build's month
 //! ([`sc_core::canary`]); unset or empty, none does. The seed is read from
 //! the environment and never written anywhere.
+//!
+//! A committed bundle signing key is published at its own path, and the
+//! providers page, `security.txt` and `swarm-report.json` name it
+//! ([`crate::agents::signing_key_md`]). The build never reads the secret.
 
 use crate::{SiteInputs, build_pages, check_notice, parse_notice};
 use std::collections::{BTreeMap, HashSet};
@@ -112,8 +117,12 @@ const INPUTS: &[(&str, &str)] = &[
     ("samples/eval/", ".ndjson"),
     ("samples/eval/coverage-allow.txt", ".txt"),
     ("samples/showcase/", ".ndjson"),
+    ("keys/bundle-signing.pub", ".pub"),
     ("site/", ""),
 ];
+
+/// Where the providers guide marks the paragraph on the signing key.
+const SIGNING_MARK: &str = "<!-- bundle-signing-key -->";
 
 struct Reader {
     root: PathBuf,
@@ -284,9 +293,18 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
             }
         }
     }
+    let base = if o.base_url.ends_with('/') {
+        o.base_url.clone()
+    } else {
+        format!("{}/", o.base_url)
+    };
+    let signing_keys = read_signing_keys(&mut r)?;
     let mut docs = Vec::new();
     for rel in r.list("docs", ".md", true, true) {
-        let text = r.read(&rel)?;
+        let mut text = r.read(&rel)?;
+        if rel == "docs/guides/for-providers.md" {
+            text = text.replace(SIGNING_MARK, &crate::agents::signing_key_md(&signing_keys));
+        }
         docs.push((rel, text));
     }
     let mut eval_set = Vec::new();
@@ -335,15 +353,18 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
     let mut files = build_pages(&mut inputs)?;
     let now = build_time();
     files.extend(crate::agents::files(&crate::agents::AgentInputs {
-        base: &if o.base_url.ends_with('/') {
-            o.base_url.clone()
-        } else {
-            format!("{}/", o.base_url)
-        },
+        base: &base,
         repo: &inputs.repo,
         now,
         docs: &inputs.docs,
+        signing_keys: &signing_keys,
     }));
+    if !signing_keys.is_empty() {
+        files.push((
+            sc_case::signing::PUBLIC_KEY_PATH.to_string(),
+            sc_case::signing::public_key_file(&signing_keys),
+        ));
+    }
     let canary = canary_setting(now)?;
     for (path, text) in files.iter_mut() {
         if crate::agents::is_surface(path) {
@@ -416,6 +437,19 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         canary_period: canary.map(|(_, p)| p),
         identity_files,
     })
+}
+
+/// The committed bundle signing keys: none when `keys/bundle-signing.pub`
+/// is absent or not tracked by git (a key on disk only is never published).
+/// A file that does not parse fails the build.
+fn read_signing_keys(r: &mut Reader) -> Result<Vec<sc_case::signing::PublicKey>, String> {
+    let rel = sc_case::signing::PUBLIC_KEY_PATH;
+    let tracked = r.tracked.as_ref().is_none_or(|t| t.contains(rel));
+    if !tracked || !r.root.join(rel).is_file() {
+        return Ok(Vec::new());
+    }
+    let text = r.read(rel)?;
+    sc_case::signing::parse_public_keys(&text).map_err(|e| format!("{rel}: {e}"))
 }
 
 /// The providers' files in `dir` (as `identity refresh` writes them), for
@@ -507,6 +541,21 @@ mod tests {
             let text = fs::read_to_string(out.join(f)).unwrap();
             assert!(!text.contains(sc_core::canary::PLACEHOLDER), "{f}");
         }
+        // The providers page says what the checkout says of signing.
+        let providers = fs::read_to_string(out.join("providers/index.html")).unwrap();
+        let committed = repo().join(sc_case::signing::PUBLIC_KEY_PATH).is_file();
+        assert_eq!(
+            out.join(sc_case::signing::PUBLIC_KEY_PATH).is_file(),
+            committed
+        );
+        assert!(
+            providers.contains(if committed {
+                "The signing key this site publishes"
+            } else {
+                "This site publishes no signing key yet"
+            }),
+            "providers page"
+        );
         // A rebuild replaces its own earlier output.
         build_site_dir(&o).unwrap();
         // Never into the inputs, never over a directory it did not write.
