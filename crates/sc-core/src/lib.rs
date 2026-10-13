@@ -76,5 +76,5 @@ pub use report::{Audience, Notice, ReportOptions, Reported, render_markdown, ren
 pub use rules::{DEFAULT_RULES, RuleSet, Rules};
 pub use securitytxt::{SecurityTxt, parse_security_txt};
 pub use stamp::{EvalSnapshot, Stamp, StampCluster};
-pub use swarm::{EdgeStrength, RunRef, SwarmEdge, SwarmEdgeKind};
+pub use swarm::{EdgeStrength, RunRef, SwarmEdge, SwarmEdgeKind, SwarmOptions};
 pub use timing::{SharedPause, SharedPauseOptions, StaleDates, shared_pauses, stale_dates};

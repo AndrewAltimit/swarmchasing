@@ -2,6 +2,7 @@
 
 use crate::analyze::{Cluster, ObsResult, relay_stack};
 use crate::model::{IndicatorKind, Tier, truncate};
+use crate::timing::request_like;
 
 /// How a record was sent: relay route, user agent, network, header set,
 /// encoding style. The first four also split a run into strands.
@@ -24,6 +25,19 @@ fn dims(r: &ObsResult) -> [Option<String>; 5] {
         crate::fingerprint::header_set(&r.obs.headers).map(|h| h.hash),
         enc.informative().then_some(enc.style),
     ]
+}
+
+/// Who sent a record: its user agent, network and header set, whatever
+/// relay it went through. `None` when neither the user agent nor the network
+/// is known, so no client can be told apart.
+fn client_key(r: &ObsResult) -> Option<String> {
+    let d = dims(r);
+    let mut key = String::new();
+    for x in &d[1..4] {
+        key += x.as_deref().unwrap_or("");
+        key.push('|');
+    }
+    (d[1].is_some() || d[2].is_some()).then_some(key)
 }
 
 pub(super) fn fp_of(results: &[ObsResult], members: &[usize]) -> Fp {
@@ -102,10 +116,21 @@ pub(super) struct Run {
     /// (target host, first time), by host: every member, and attacks only.
     pub(super) hosts: Keyed,
     pub(super) attacks: Keyed,
+    /// Distinct request and submit times of its members and of the
+    /// unflagged records its clients sent within its span, earliest first.
+    /// Capture times never count.
+    pub(super) events: Vec<i64>,
 }
 
 pub(super) fn runs(clusters: &[Cluster], results: &[ObsResult]) -> Vec<Run> {
     let mut out = Vec::new();
+    // Unflagged records with a known client, by client key then time.
+    let mut loose: Vec<(String, i64)> = results
+        .iter()
+        .filter(|r| r.cluster.is_none() && r.obs.ts > 0 && request_like(r.obs.ts_kind))
+        .filter_map(|r| client_key(r).map(|k| (k, r.obs.ts)))
+        .collect();
+    crate::sort::sort(&mut loose);
     for (ci, c) in clusters.iter().enumerate() {
         if c.tier == Tier::Noise {
             continue;
@@ -134,6 +159,30 @@ pub(super) fn runs(clusters: &[Cluster], results: &[ObsResult]) -> Vec<Run> {
                 }
             }
             sort_keyed(&mut keyed);
+            let mut events: Vec<i64> = members
+                .iter()
+                .map(|&m| &results[m].obs)
+                .filter(|o| o.ts > 0 && request_like(o.ts_kind))
+                .map(|o| o.ts)
+                .collect();
+            let mut clients: Vec<String> = members
+                .iter()
+                .filter_map(|&m| client_key(&results[m]))
+                .collect();
+            crate::sort::sort(&mut clients);
+            clients.dedup();
+            for k in &clients {
+                let from =
+                    loose.partition_point(|x| (x.0.as_str(), x.1) < (k.as_str(), span.start));
+                events.extend(
+                    loose[from..]
+                        .iter()
+                        .take_while(|x| x.0 == *k && x.1 <= span.end)
+                        .map(|x| x.1),
+                );
+            }
+            crate::sort::sort(&mut events);
+            events.dedup();
             let multi = keyed.first().map(|f| &f.0) != keyed.last().map(|l| &l.0);
             let mut strands = Vec::new();
             for g in keyed.chunk_by(|a, b| a.0 == b.0) {
@@ -158,6 +207,7 @@ pub(super) fn runs(clusters: &[Cluster], results: &[ObsResult]) -> Vec<Run> {
                 strands,
                 hosts: first_by_key(hosts),
                 attacks: first_by_key(attacks),
+                events,
             });
         }
     }

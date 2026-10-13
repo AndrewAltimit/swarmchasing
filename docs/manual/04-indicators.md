@@ -141,7 +141,7 @@ Interaction between agents rarely leaves a direct trace in public records. A rec
 |---|---|---|---|
 | S1 | Shared sink | Runs, or strands of one run, writing to the same inbox or artifact while sending requests differently. | One agent changing route or tool mid-task. |
 | S2 | Hand-off | One run writes to an artifact (an inbox, a gist, a paste, a hosted Space, a static-site subdomain) that a later run fetches. | One operator reading their own notes with another tool. |
-| S3 | Synchronized start | Runs of differently fingerprinted clusters starting and stopping together beyond chance. | One scheduler driving unrelated jobs; clock-hour crons. |
+| S3 | Synchronized start | Runs of different clients whose requests line up step by step at one offset, beyond chance under random placement and under their own gaps reordered. | One dispatcher driving both runs for one operator. |
 | S4 | Role sequence | One run only reads a set of hosts; a differently fingerprinted run then attacks the same hosts in the same order. | A scanner fed from a public list both runs read. |
 | S5 | Disjoint partition | Runs started together split one target family with almost no overlap. | One scheduler sharding a list: a fleet signal unless others join it. |
 

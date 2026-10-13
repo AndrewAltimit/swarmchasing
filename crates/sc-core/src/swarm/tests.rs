@@ -1,7 +1,6 @@
 //! Interaction edges end to end.
 
 use super::artifacts::site_artifact;
-use super::edges::MAX_CHANCE;
 use super::*;
 use crate::analyze::Analysis;
 use crate::analyze::analyze;
@@ -247,36 +246,159 @@ fn a_sharded_list_is_a_partition_and_nothing_else() {
     assert!(a.swarm_edges[0].detail.contains("fleet signal"));
 }
 
-#[test]
-fn runs_starting_and_stopping_together_beyond_chance() {
-    // Two clients, two runs each, started and stopped within a minute of
-    // each other, off the clock hour, two days apart.
-    let mut obs = Vec::new();
-    for (c, (ua, asn)) in [("SyncA/1", 16509), ("SyncB/1", 14061)].iter().enumerate() {
-        for (k, day) in [0, 2].iter().enumerate() {
-            let t = T0 + day * 86_400 + 1234 + c as i64 * 30;
-            for i in 0..5 {
-                obs.push(with(
-                    o(
-                        &format!("c{c}k{k}i{i}"),
-                        t + i * 300,
-                        &format!("https://r.jina.ai/https://p{c}{i}.example{c}/?uqtag=sync{c}"),
-                    ),
-                    ua,
-                    *asn,
-                ));
-            }
-        }
+/// Uneven gaps one dispatcher hands every worker.
+const STEPS: [i64; 9] = [40, 7, 65, 12, 30, 88, 5, 51, 19];
+
+/// One client's run: a tagged, flagged request at each time in `times`,
+/// unless `loose(i)`, which sends an unflagged page fetch instead.
+fn client_run(
+    c: usize,
+    (ua, asn): (&str, u32),
+    times: &[i64],
+    loose: &dyn Fn(usize) -> bool,
+) -> Vec<Observation> {
+    times
+        .iter()
+        .enumerate()
+        .map(|(i, &t)| {
+            let url = if loose(i) {
+                format!("https://p{c}{i}.example{c}/page/{i}")
+            } else {
+                format!("https://r.jina.ai/https://p{c}{i}.example{c}/?uqtag=sync{c}")
+            };
+            with(o(&format!("c{c}i{i}"), t, &url), ua, asn)
+        })
+        .collect()
+}
+
+/// Times from `start` through `gaps`, each moved by `late(i)`.
+fn schedule(start: i64, gaps: &[i64], late: &dyn Fn(usize) -> i64) -> Vec<i64> {
+    let mut t = start;
+    let mut out = vec![t + late(0)];
+    for (i, g) in gaps.iter().enumerate() {
+        t += g;
+        out.push(t + late(i + 1));
     }
+    out
+}
+
+/// Background runs spread over two days, so the analysis has a span.
+fn background() -> Vec<Observation> {
+    (0..6)
+        .flat_map(|c| {
+            let start = T0 - 86_400 + c as i64 * 29_000;
+            client_run(
+                10 + c,
+                ("BgAgent/2", 63949),
+                &schedule(start, &[60, 60, 60], &|_| 0),
+                &|_| false,
+            )
+        })
+        .collect()
+}
+
+const A: (&str, u32) = ("SyncA/1", 16509);
+const B: (&str, u32) = ("SyncB/1", 14061);
+
+#[test]
+fn runs_in_lockstep_beyond_both_chances() {
+    // Two clients sent each step within 2 s of each other, 9 s apart, off
+    // the clock hour.
+    let start = T0 + 1234;
+    let mut obs = background();
+    obs.extend(client_run(0, A, &schedule(start, &STEPS, &|_| 0), &|_| {
+        false
+    }));
+    obs.extend(client_run(
+        1,
+        B,
+        &schedule(start + 9, &STEPS, &|i| (i % 3) as i64),
+        &|_| false,
+    ));
     let (a, e) = edges(obs.clone(), SwarmEdgeKind::SynchronizedStart);
     assert_eq!(e.len(), 1, "{:?}", a.swarm_edges);
-    assert!(e[0].chance.unwrap() <= MAX_CHANCE);
-    assert!(e[0].detail.contains("2 run(s)"), "{}", e[0].detail);
-    // On the clock hour, the same alignment is what crons do.
-    for x in obs.iter_mut() {
+    let p = e[0].chance.unwrap();
+    assert!(
+        p <= Rules::default_rules().set.swarm.lockstep_max_chance,
+        "{p}"
+    );
+    assert!(e[0].detail.contains("10 of 10 requests"), "{}", e[0].detail);
+    assert!(e[0].detail.contains("(10 s"), "{}", e[0].detail);
+    assert!(e[0].detail.contains("user agent"), "{}", e[0].detail);
+    assert_eq!(e[0].strength, EdgeStrength::Moderate);
+    // On the clock hour the same lockstep is no less unlikely: no pass for
+    // the hour, no discount either.
+    for x in obs
+        .iter_mut()
+        .filter(|x| x.id.starts_with("c0") || x.id.starts_with("c1"))
+    {
         x.ts -= 1234;
     }
-    assert!(edges(obs, SwarmEdgeKind::SynchronizedStart).1.is_empty());
+    let (a, e) = edges(obs, SwarmEdgeKind::SynchronizedStart);
+    assert_eq!(e.len(), 1, "{:?}", a.swarm_edges);
+}
+
+#[test]
+fn jobs_starting_together_at_a_steady_rate_are_not_in_lockstep() {
+    // Two jobs on one clock, a request a minute: every permutation of their
+    // own gaps lines up as well.
+    let hour = (T0 / 3600 + 2) * 3600;
+    let steady = [60; 9];
+    let mut obs = background();
+    obs.extend(client_run(0, A, &schedule(hour, &steady, &|_| 0), &|_| {
+        false
+    }));
+    obs.extend(client_run(
+        1,
+        B,
+        &schedule(hour + 2, &steady, &|_| 0),
+        &|_| false,
+    ));
+    let (a, e) = edges(obs, SwarmEdgeKind::SynchronizedStart);
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
+}
+
+#[test]
+fn independent_runs_overlapping_are_not_in_lockstep() {
+    let start = T0 + 1234;
+    let other = [22, 71, 9, 44, 16, 60, 33, 8, 70];
+    let mut obs = background();
+    obs.extend(client_run(0, A, &schedule(start, &STEPS, &|_| 0), &|_| {
+        false
+    }));
+    obs.extend(client_run(
+        1,
+        B,
+        &schedule(start + 9, &other, &|_| 0),
+        &|_| false,
+    ));
+    let (a, e) = edges(obs, SwarmEdgeKind::SynchronizedStart);
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
+}
+
+#[test]
+fn unflagged_requests_of_a_run_count_and_capture_times_never_do() {
+    // The second client's run is flagged at only three steps; its other
+    // requests, unflagged, still line up.
+    let start = T0 + 1234;
+    let mut obs = background();
+    obs.extend(client_run(0, A, &schedule(start, &STEPS, &|_| 0), &|_| {
+        false
+    }));
+    obs.extend(client_run(
+        1,
+        B,
+        &schedule(start + 9, &STEPS, &|_| 1),
+        &|i| !matches!(i, 0 | 4 | 9),
+    ));
+    let (a, e) = edges(obs.clone(), SwarmEdgeKind::SynchronizedStart);
+    assert_eq!(e.len(), 1, "{:?}", a.swarm_edges);
+    assert!(e[0].detail.contains("10 of 10"), "{}", e[0].detail);
+    for x in obs.iter_mut() {
+        x.ts_kind = crate::model::TsKind::Capture;
+    }
+    let (a, e) = edges(obs, SwarmEdgeKind::SynchronizedStart);
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
 }
 
 #[test]

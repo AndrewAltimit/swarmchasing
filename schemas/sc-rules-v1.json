@@ -122,6 +122,18 @@
         "clock_weight": { "$ref": "#/$defs/share" }
       }
     },
+    "swarm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lockstep_tolerance_secs": { "$ref": "#/$defs/secs" },
+        "lockstep_min_events": { "$ref": "#/$defs/count" },
+        "lockstep_min_share": { "$ref": "#/$defs/share" },
+        "lockstep_max_offset_secs": { "$ref": "#/$defs/secs" },
+        "lockstep_permutations": { "type": "integer", "minimum": 1 },
+        "lockstep_max_chance": { "$ref": "#/$defs/share" }
+      }
+    },
     "cut_lengths": {
       "type": "object",
       "additionalProperties": false,

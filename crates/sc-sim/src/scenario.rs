@@ -121,7 +121,8 @@ impl Pace {
 pub enum Mode {
     /// Every agent writes to one callback inbox (S1).
     Sink,
-    /// Agents start and stop together (S3).
+    /// One dispatcher sends each step to every agent: their requests line up
+    /// step by step at one offset (S3).
     Sync,
     /// The first agent reads hosts, the rest attack the same hosts after (S4).
     Roles,

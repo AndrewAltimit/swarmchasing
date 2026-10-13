@@ -369,8 +369,17 @@ impl Gen<'_> {
                 },
                 start: begin,
                 pace,
-                gaps: has(Mode::Sync)
-                    .then(|| sync_gaps.iter().map(|g| g + rng.range(-1, 1)).collect()),
+                // One dispatcher sends each step to every agent; each
+                // request leaves 0 to 2 s after its dispatch.
+                gaps: has(Mode::Sync).then(|| {
+                    let late: Vec<i64> = sync_gaps.iter().map(|_| rng.range(0, 2)).collect();
+                    (0..sync_gaps.len())
+                        .map(|r| {
+                            let prev = late[r.saturating_sub(1)];
+                            (sync_gaps[r] + late[r] - prev).max(0)
+                        })
+                        .collect()
+                }),
                 // A reader and an attacker go through the hosts in one order.
                 hosts: if has(Mode::Roles) {
                     in_order(&hosts, a.records)

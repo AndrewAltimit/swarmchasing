@@ -192,6 +192,22 @@ max_chance = 0.01
 clock_tolerance_secs = 120
 clock_weight = 0.25
 
+# Interaction edges (SC-T9). S3 synchronized start: two runs of different
+# clients whose requests, unflagged ones of the same client included, line up
+# within `lockstep_tolerance_secs` at one offset up to
+# `lockstep_max_offset_secs` either way, for at least `lockstep_min_events`
+# requests and `lockstep_min_share` of the shorter run. Kept when the larger
+# of two chances is at most `lockstep_max_chance`: the shorter run placed at
+# random over the analysis span, and its own gaps permuted
+# `lockstep_permutations` times with its start kept. Capture times never count.
+[swarm]
+lockstep_tolerance_secs = 3
+lockstep_min_events = 4
+lockstep_min_share = 0.6
+lockstep_max_offset_secs = 120
+lockstep_permutations = 199
+lockstep_max_chance = 0.01
+
 # Repeated cut lengths: at least `min_records` truncated URLs within
 # `tolerance` characters of a common length. `rule` marks a URL as cut off.
 [cut_lengths]

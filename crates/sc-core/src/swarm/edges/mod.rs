@@ -2,10 +2,10 @@
 //! of one analysis.
 
 mod handoff;
+mod lockstep;
 mod partition;
 mod role;
 mod sink;
-mod sync;
 
 use super::artifacts::artifacts;
 use super::runs::{Keyed, Run, first_by_key, indexes, sort_keyed};
@@ -13,7 +13,7 @@ use super::{EdgeStrength, RunRef, SwarmEdge, SwarmEdgeKind};
 use crate::analyze::{Cluster, ObsResult};
 use crate::rules::Rules;
 
-/// Edges kept when their chance is at most this (S3, S4).
+/// Edges kept when their chance is at most this (S4).
 pub(super) const MAX_CHANCE: f64 = 0.01;
 /// Hosts each side needs (S4, S5).
 const MIN_HOSTS: usize = 3;
@@ -50,6 +50,7 @@ pub(super) fn detect(
         runs,
         cl: clusters,
         res: results,
+        opts: &rules.set.swarm,
     };
     let mut out = Vec::new();
     let groups: Vec<(&str, Vec<Meta>)> = named
@@ -67,7 +68,7 @@ pub(super) fn detect(
     for (id, g) in &groups {
         cx.handoff(id, g, &mut out);
     }
-    cx.synchronized(&mut out);
+    cx.lockstep(&mut out);
     cx.role_sequences(&mut out);
     cx.partitions(&mut out);
     out
@@ -80,6 +81,7 @@ struct Ctx<'a> {
     runs: &'a [Run],
     cl: &'a [Cluster],
     res: &'a [ObsResult],
+    opts: &'a super::SwarmOptions,
 }
 
 /// One side of an edge: the run, its strand label, the records.
