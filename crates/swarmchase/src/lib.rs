@@ -108,8 +108,7 @@ pub enum Cmd {
     /// committed inputs, as `sc-site` does.
     Site(commands::site::SiteArgs),
     /// Canary tokens on our own published pages: register a built site's
-    /// tokens, list them, derive one, or find copies in records. Off unless
-    /// the site build turns them on.
+    /// tokens, list them, derive one, or find copies in records.
     Canary(canary::CanaryArgs),
     /// The offline IP-to-ASN table: fetch it into the data directory, look up addresses.
     Asn(commands::asn::AsnArgs),

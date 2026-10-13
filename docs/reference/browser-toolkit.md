@@ -146,13 +146,13 @@ No convention for a "where to report agent activity" descriptor exists. Agent ca
 
 ## Page references
 
-Every page and agent-facing file has a place for a canary token: a reference distinct per file and per month (`swc-<YYMM>-<12 characters>`). They are leak detection for our own published material: a copy found in a public record shows which file our text was copied from and that it was copied no earlier than that month.
+Every page and agent-facing file carries a canary token: a reference distinct per file and per month (`swc-<YYMM>-<12 characters>`). A token found in a public record shows that something read that surface and repeated the token, no earlier than that month. That may be an agent; the token never says who.
 
-Tokens are **off by default**: the build drops the reference line unless `SWARMCHASE_CANARY=on` and `SWARMCHASE_CANARY_SEED` holds the secret seed ([configuration](configuration.md#canary-tokens)). Turning them on for the public site is a maintainer decision under the passivity test ([FM-3.2](../manual/03-sources.md#fm-32-passivity-test)).
+The build embeds tokens when `SWARMCHASE_CANARY_SEED` holds the secret seed, and drops the reference line when it is unset, so a fork or a CI run without the secret builds cleanly ([configuration](configuration.md#canary-tokens)). Tokens are inert, the narrow exception in the passivity test ([FM-3.2](../manual/03-sources.md#fm-32-passivity-test)): no instruction, nothing asked of the reader, no third party, and only on hosts the project controls.
 
 A token is an HMAC of the file's path and the month under the seed. The month is in clear, the path is not, and neither the seed nor any other token can be worked out from published ones, so a copy cannot be backdated. Code: [`canary.rs`](../../crates/sc-core/src/canary.rs).
 
-After a build with tokens on, `swarmchase canary register _site` checks each token against the seed and records it in `<data>/canary/registry.json`. `canary scan <records>` and every watch run look for registered tokens in records ([watch](watch.md#canary-sightings)). A copy says that our text was repeated, never who repeated it: anyone can copy a token from the page, so a token never links records ([methodology](../methodology.md#linking-into-clusters)).
+After a build with a seed, `swarmchase canary register _site` checks each token against the seed and records it in `<data>/canary/registry.json`. `canary scan <records>` and every watch run look for registered tokens in records ([watch](watch.md#canary-sightings)). A sighting says that a surface was read and the token repeated, never who: anyone can copy a token from the page, so a token never links or merges records ([methodology](../methodology.md#linking-into-clusters)).
 
 ## Accessibility
 

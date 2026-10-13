@@ -1,11 +1,10 @@
 //! `swarmchase canary`: the registry of canary tokens the site has
 //! published, and finding copies of them in records ([`sc_core::canary`]).
 //!
-//! Tokens are leak detection for our own published material: each page and
-//! agent-facing file carries one, distinct per file and month, when the
-//! site build turns them on (`SWARMCHASE_CANARY=on`, off by default). A
-//! copy in a public record shows that our text was copied and repeated, from
-//! which file and no earlier than which month; never who copied it.
+//! Each page and agent-facing file carries a token, distinct per file and
+//! month, when the site is built with `SWARMCHASE_CANARY_SEED` set. A copy
+//! in a public record shows that something, possibly an agent, read that
+//! file and repeated the token, no earlier than its month; never who.
 //!
 //! ```text
 //! <data>/canary/registry.json   every token registered from a built site
@@ -208,7 +207,7 @@ pub fn digest_section(found: &[Sighting]) -> String {
         return String::new();
     }
     let mut s = format!(
-        "\n## Canary sightings\n\nTokens from our own published pages and files, found in {} new record(s). A copy shows our text was repeated from that file no earlier than its month, not who repeated it; a token never links records. Details in `{RUN_FILE}`.\n\n",
+        "\n## Canary sightings\n\nTokens from our own published pages and files, found in {} new record(s). A copy shows that something read that file and repeated the token, no earlier than its month, never who; a token never links records. Details in `{RUN_FILE}`.\n\n",
         found.len()
     );
     for x in found {

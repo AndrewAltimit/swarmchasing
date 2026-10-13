@@ -34,8 +34,7 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | `SWARMCHASE_BACKUP_DIR` | `swarmchase backup` | Where encrypted backups go, one subdirectory per host ([backups](#backups)). |
 | `SWARMCHASE_BACKUP_RECIPIENT` | `swarmchase backup create` | The age public key backups are encrypted to. |
 | `SWARMCHASE_BACKUP_PASSPHRASE` | `swarmchase backup` | A passphrase instead of a recipient; also what `verify --passphrase` and `restore --passphrase` read. |
-| `SWARMCHASE_CANARY` | `sc-site`, `swarmchase site build` | `on` embeds [canary tokens](#canary-tokens) in the site; off by default. |
-| `SWARMCHASE_CANARY_SEED` | `sc-site`, `site build`, `swarmchase canary` | The secret seed canary tokens derive from. |
+| `SWARMCHASE_CANARY_SEED` | `sc-site`, `site build`, `swarmchase canary` | The secret seed [canary tokens](#canary-tokens) derive from; set, the build embeds them. |
 | `SOURCE_DATE_EPOCH` | `sc-site`, `site build` | The build's time, for the canary month and `security.txt` `Expires`; else the clock. |
 | `SWARMCHASE_EVAL_DIR` | `swarmchase case bundle`, `case draft` | The evaluation set whose figures go into bundle stamps. Unset, `samples/eval/` ([evidence bundles](cases.md#evidence-bundles)). |
 | `SMTP_URL`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `MAIL_TO` | [`send-mail.sh`](../../scripts/ci/send-mail.sh) | Digest and alert email to the admin. |
@@ -84,9 +83,10 @@ swarmchase backup restore <file> --identity swarmchase-backup.key --to restored/
 
 ## Canary tokens
 
-The site can carry a reference token per page and per month ([page references](browser-toolkit.md#page-references)). It is off unless `SWARMCHASE_CANARY=on`; with it on, the build needs `SWARMCHASE_CANARY_SEED` and fails without a usable one.
+The site carries a reference token per page and per month ([page references](browser-toolkit.md#page-references)) when `SWARMCHASE_CANARY_SEED` is set, and none when it is unset or empty. A seed shorter than 16 bytes fails the build.
 
 - The seed is a secret of at least 16 bytes (for example 32 random bytes as hex). It lives in `env.list` and, for a deploy, in a repository secret; it is never committed, printed or written to a file.
+- The Pages deploy embeds tokens only when the repository secret `SWARMCHASE_CANARY_SEED` is set ([runner](runner.md#secrets-and-variables)); after a deploy it registers them in `$SWARMCHASE_DATA` on the runner.
 - Whoever holds the seed can make tokens for any page and month, so a leaked seed voids every sighting; rotate it, and tokens made under the old seed stop matching new builds.
-- `swarmchase canary register _site` records a built site's tokens in `<data>/canary/registry.json` after checking each against the seed. Run it on the machine that keeps the watch data, after each deploy with tokens on.
+- `swarmchase canary register _site` records a built site's tokens in `<data>/canary/registry.json` after checking each against the seed. The deploy runs it on the runner; run it by hand only for a site deployed some other way.
 - `swarmchase canary token <path> [--period YYMM]` prints one token; `canary list` the registry; `canary scan <records>` the copies in record files.

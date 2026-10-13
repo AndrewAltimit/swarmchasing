@@ -9,11 +9,11 @@
 //! Unlike the rest of this crate it reads and writes files; it never touches
 //! the network.
 //!
-//! It adds the agent-facing files ([`crate::agents`]). Canary tokens are off
-//! unless `SWARMCHASE_CANARY=on` and `SWARMCHASE_CANARY_SEED` holds the
-//! secret seed; then every page and agent file carries its own token for
-//! the build's month ([`sc_core::canary`]). The seed is read from the
-//! environment and never written anywhere.
+//! It adds the agent-facing files ([`crate::agents`]). When
+//! `SWARMCHASE_CANARY_SEED` holds the secret seed, every page and agent
+//! file carries its own canary token for the build's month
+//! ([`sc_core::canary`]); unset or empty, none does. The seed is read from
+//! the environment and never written anywhere.
 
 use crate::{SiteInputs, build_pages, check_notice, parse_notice};
 use std::collections::{BTreeMap, HashSet};
@@ -73,21 +73,15 @@ fn build_time() -> i64 {
         })
 }
 
-/// The seed and period when canary tokens are on: `SWARMCHASE_CANARY` set
-/// to `on` (or `1`, `true`) and a seed in `SWARMCHASE_CANARY_SEED`. Off by
-/// default; on without a usable seed is an error.
+/// The seed and period when canary tokens are on: whenever
+/// `SWARMCHASE_CANARY_SEED` is set and not empty. A seed too short to use
+/// is an error.
 fn canary_setting(now: i64) -> Result<Option<(String, String)>, String> {
-    let on = std::env::var("SWARMCHASE_CANARY").is_ok_and(|v| {
-        matches!(
-            v.trim().to_ascii_lowercase().as_str(),
-            "on" | "1" | "true" | "yes"
-        )
-    });
-    if !on {
+    let seed = std::env::var("SWARMCHASE_CANARY_SEED").unwrap_or_default();
+    if seed.trim().is_empty() {
         return Ok(None);
     }
-    let seed = std::env::var("SWARMCHASE_CANARY_SEED").unwrap_or_default();
-    sc_core::canary::check_seed(&seed).map_err(|e| format!("SWARMCHASE_CANARY is on, but {e}"))?;
+    sc_core::canary::check_seed(&seed).map_err(|e| format!("SWARMCHASE_CANARY_SEED: {e}"))?;
     Ok(Some((
         seed.trim().to_string(),
         sc_core::canary::period_of(now),

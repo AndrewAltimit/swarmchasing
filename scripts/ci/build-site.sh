@@ -9,8 +9,8 @@
 #     SITE_OUT                output directory (default _site)
 #     SITE_BASE_URL           the site's public URL, for the feed and the sitemap
 #                             (default http://localhost:8080/)
-#     SWARMCHASE_CANARY       `on` embeds canary tokens (off by default; needs
-#                             SWARMCHASE_CANARY_SEED; docs/reference/configuration.md)
+#     SWARMCHASE_CANARY_SEED  set: embed canary tokens; unset: none
+#                             (docs/reference/configuration.md#canary-tokens)
 #     WASM_OPT                path to a wasm-opt binary
 #     SWARMCHASE_WASM_OPT_CACHE  wasm-opt cache directory
 #                             (default ${XDG_CACHE_HOME:-$HOME/.cache}/swarmchase-wasm-opt)

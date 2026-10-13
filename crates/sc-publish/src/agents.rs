@@ -19,9 +19,8 @@
 //! site's own pages and the repository.
 //!
 //! Each file carries a [`sc_core::canary::PLACEHOLDER`] where its canary
-//! token goes; [`apply_canary`] fills it in, or drops it, which is the
-//! default: tokens are embedded only when the build turns them on
-//! ([`crate::build`]). Text in, text out.
+//! token goes; [`apply_canary`] fills it in when the build has a seed, and
+//! drops it when it has none ([`crate::build`]). Text in, text out.
 
 use sc_core::canary;
 use std::fmt::Write;

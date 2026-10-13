@@ -1,8 +1,9 @@
-//! Canary tokens on the project's own published material, and finding
-//! copies of them in records: leak detection for our own text.
+//! Canary tokens on the project's own published pages and files, and
+//! finding copies of them in records.
 //!
-//! When the site build turns them on (they are off by default), each page
-//! and agent-facing file carries a reference token, distinct per surface
+//! When the site build has a seed, each page and agent-facing file carries
+//! an inert reference token (no instruction, nothing asked of the reader,
+//! no third party; FM-3.2), distinct per surface
 //! (the file's path under the site root) and per period (a calendar month,
 //! UTC). A token is derived from a secret seed that is never committed:
 //!
@@ -16,8 +17,8 @@
 //! earlier than its period began: a reader cannot backdate it.
 //!
 //! What a sighting shows is limited. Anyone can copy a token from the page,
-//! so it says that our text from that surface was copied and repeated,
-//! never who copied it. A token-shaped value is therefore never a linking feature
+//! so it says that something (possibly an agent) read that surface and
+//! repeated the token, never who. A token-shaped value is therefore never a linking feature
 //! (see [`crate::plant`]): it is treated like `linking.published_tags`,
 //! so planting one cannot merge clusters. Redaction leaves it in place
 //! ([`crate::redact`]), because it is public by construction.
