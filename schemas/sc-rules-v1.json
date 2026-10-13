@@ -217,7 +217,7 @@
           "description": "T8 and T9 are cluster-level judgments and never a rule's tactic."
         },
         "artifact": { "type": "boolean", "default": false },
-        "check": { "enum": ["repeated_token"] },
+        "check": { "enum": ["repeated_token", "ua_platform_mismatch"] },
         "group": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]*$",
@@ -227,8 +227,12 @@
       },
       "allOf": [
         {
-          "if": { "required": ["check"] },
+          "if": { "properties": { "check": { "const": "repeated_token" } }, "required": ["check"] },
           "then": { "properties": { "target": { "const": "param_value" } } }
+        },
+        {
+          "if": { "properties": { "check": { "const": "ua_platform_mismatch" } }, "required": ["check"] },
+          "then": { "properties": { "target": { "const": "header" } } }
         },
         {
           "anyOf": [

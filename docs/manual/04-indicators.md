@@ -20,16 +20,16 @@ Indicators are rules kept as data, versioned, and shared by every tool that grad
 | `kind` | The family of thing matched: relay, carrier, exploit, agent marker, callback channel, header, outcome, anti-bot, infrastructure, self-identification, cache-buster. | yes |
 | `target` | What the rule reads: a layer's host, a layer's decoded text, parameter names or values, headers, user agent, final URL. | yes |
 | `pattern` | Host suffix, or a case-insensitive regular expression. | yes |
-| `check` | A named test a parameter-value match must also pass, for what a regular expression cannot say. | `repeated_token` |
+| `check` | A named test a match must also pass, for what a regular expression cannot say. | `repeated_token`, `ua_platform_mismatch` |
 | `weight` | Contribution to the score. Low for anything ordinary clients also do. | yes |
 | `significant` | A single match puts the record in the top tier. Reserved for unambiguous payloads and fingerprints. | yes |
 | `link` | The matched text becomes a link feature. Only for values one operator would hold. | yes |
 | `tactic` | The SC-T tactic the match is evidence of ([FM-4.3](#fm-43-the-sc-t-tactic-taxonomy)). | one of `tactic` or `artifact` |
 | `artifact` | The match only shows a model wrote the request ([FM-4.5](#fm-45-artifact-families)). | one of `tactic` or `artifact` |
 
-A check exists because some shapes need counting or comparing. `repeated_token` wants one word of three characters or more, or a phrase of two or three words, repeated five or more times in a row ([FM-4.5](#fm-45-artifact-families)); short refrains and one long run of a letter fail it.
+A check exists because some shapes need counting or comparing. `repeated_token` (on a parameter value) wants one word of three characters or more, or a phrase of two or three words, repeated five or more times in a row ([FM-4.5](#fm-45-artifact-families)); short refrains and one long run of a letter fail it. `ua_platform_mismatch` (on a `Sec-CH-UA-Platform` header) passes when the header's platform hint names another desktop system than the request's user agent, the mark of a browser presenting a borrowed user agent; mobile systems are never compared.
 
-Toolkit: each rule in the rules file names its tactic (`T1` to `T7`) or is marked `artifact`, and a file naming an unknown tactic, or the cluster-level `T8` or `T9`, fails to load. A check on a rule that does not read parameter values, or an unknown check, also stops the file loading. Evaluation groups recall by the tactics of the rules that fired ([statistics](../reference/evaluation.md#statistics)). The STIX run object derives its `tactics` from each rule's kind, using the defaults in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
+Toolkit: each rule in the rules file names its tactic (`T1` to `T7`) or is marked `artifact`, and a file naming an unknown tactic, or the cluster-level `T8` or `T9`, fails to load. A check on a rule whose target is not the one the check reads, or an unknown check, also stops the file loading. Evaluation groups recall by the tactics of the rules that fired ([statistics](../reference/evaluation.md#statistics)). The STIX run object derives its `tactics` from each rule's kind, using the defaults in [FM-4.4](#fm-44-default-tactics-by-rule-kind).
 
 ## FM-4.3 The SC-T tactic taxonomy
 

@@ -51,7 +51,7 @@ The version is an opaque string. This project uses a date. Two files with the sa
 | `group` | string | no | An independence group ([Independence groups](#independence-groups)). |
 | `description` | string | no | One line for people. |
 
-A rule **must** carry a `tactic`, or `artifact = true`, or both. `T8` and `T9` are cluster-level judgments and **must not** be a rule's tactic ([FM-4.3](../manual/04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)). A `check` **must** sit on a `param_value` rule. The only check in v1 is `repeated_token`: one word of three characters or more with a letter, or a phrase of two or three words, repeated five or more times in a row.
+A rule **must** carry a `tactic`, or `artifact = true`, or both. `T8` and `T9` are cluster-level judgments and **must not** be a rule's tactic ([FM-4.3](../manual/04-indicators.md#fm-43-the-sc-t-tactic-taxonomy)). A `check` **must** sit on a rule whose `target` is the one the check reads. The checks in v1 are `repeated_token` (a `param_value` rule: one word of three characters or more with a letter, or a phrase of two or three words, repeated five or more times in a row) and `ua_platform_mismatch` (a `header` rule, matching `Sec-CH-UA-Platform`: the hint names a different desktop system than the request's user agent, with mobile systems never compared).
 
 A rule carries no framework ids of its own: its MITRE ATLAS techniques and OWASP Top 10 for Agentic Applications risks are derived from its `tactic` through the FM-12.4 crosswalk, so the verified ids live in one table rather than on every rule.
 

@@ -352,6 +352,12 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         }
     };
 
+    let ua = obs.user_agent.as_deref().or_else(|| {
+        obs.headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("user-agent"))
+            .map(|(_, v)| v.as_str())
+    });
     for (i, layer) in layers.iter().enumerate() {
         if let Some(host) = &layer.host {
             for r in rules.of_target(Target::Host) {
@@ -387,7 +393,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             for r in rules.matching(Target::ParamValue, v) {
                 if let Matcher::Re(re) = &r.matcher
                     && let Some(m) = re.find(v)
-                    && r.def.check.is_none_or(|c| c.passes(v))
+                    && r.def.check.is_none_or(|c| c.passes(v, ua))
                 {
                     push(
                         &mut hits,
@@ -418,17 +424,13 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         .collect();
     for r in rules.of_target(Target::Header) {
         if let Matcher::Re(re) = &r.matcher
-            && let Some(line) = header_lines.iter().find(|l| re.is_match(l))
+            && let Some(line) = header_lines
+                .iter()
+                .find(|l| re.is_match(l) && r.def.check.is_none_or(|c| c.passes(l, ua)))
         {
             push(&mut hits, &mut features, r, line, 0);
         }
     }
-    let ua = obs.user_agent.as_deref().or_else(|| {
-        obs.headers
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case("user-agent"))
-            .map(|(_, v)| v.as_str())
-    });
     if let Some(ua) = ua {
         for r in rules.matching(Target::UserAgent, ua) {
             if let Matcher::Re(re) = &r.matcher
@@ -597,6 +599,96 @@ mod tests {
         assert!(is_intermediary_host(&rules, "abc.requestcatcher.com"));
         assert!(is_intermediary_host(&rules, "r.jina.ai"));
         assert!(!is_intermediary_host(&rules, "shop.a.example"));
+    }
+
+    /// A scraping API carries its target in `url`: the target is the inner
+    /// URL, the API key is redacted, and the API host is never the target.
+    /// Tunnels, sandboxes and hosted-browser connect hosts are the agent's
+    /// own channels, so never the target either.
+    #[test]
+    fn scrape_apis_tunnels_and_sandboxes_are_not_targets() {
+        let rules = Rules::default_rules();
+        for (url, target, via) in [
+            (
+                "https://app.scrapingbee.com/api/v1/?api_key=9f8e7d6c5b4a3f2e1d0c&url=https%3A%2F%2Fshop.a.example%2Fitem%3Fid%3D1%2527&premium_proxy=true",
+                Some("shop.a.example"),
+                "app.scrapingbee.com",
+            ),
+            (
+                "https://api.scraperapi.com/?api_key=9f8e7d6c5b4a3f2e1d0c&url=https://records.b.example/q?x=1&ultra_premium=true",
+                Some("records.b.example"),
+                "api.scraperapi.com",
+            ),
+            (
+                "https://api.zenrows.com/v1/?apikey=9f8e7d6c5b4a3f2e1d0c&url=https%3A%2F%2Fc.example%2F&js_render=true",
+                Some("c.example"),
+                "api.zenrows.com",
+            ),
+            (
+                "https://seasonal-deck-organisms-sf.trycloudflare.com/collect?d=1",
+                None,
+                "seasonal-deck-organisms-sf.trycloudflare.com",
+            ),
+            (
+                "https://3000-i62mff4ahtrdfdkyn2esc.e2b.app/",
+                None,
+                "3000-i62mff4ahtrdfdkyn2esc.e2b.app",
+            ),
+            (
+                "https://d.example/form?next=https://ab12-34cd.ngrok-free.app/cb",
+                Some("d.example"),
+                "ab12-34cd.ngrok-free.app",
+            ),
+        ] {
+            let o = obs(url);
+            let x = extract(&o, &rules);
+            assert_eq!(x.target_host.as_deref(), target, "{url}: {:?}", x.layers);
+            let hosts = intermediary_hosts(&o, &rules);
+            assert!(hosts.contains(via), "{url}: {hosts:?}");
+            let json = serde_json::to_string(&x).unwrap();
+            assert!(!json.contains("9f8e7d6c5b4a"), "{json}");
+        }
+        assert!(is_intermediary_host(&rules, "api.zenrows.com"));
+        assert!(is_intermediary_host(&rules, "ab12-34cd.ngrok-free.app"));
+        assert!(!is_intermediary_host(&rules, "docs.zenrows.com"));
+        // The tunnel and sandbox labels link records.
+        let ids = |u: &str| {
+            extract(&obs(u), &rules)
+                .features
+                .iter()
+                .map(|f| f.name().to_string())
+                .collect::<Vec<_>>()
+        };
+        assert!(
+            ids("https://a.example/?cb=https://ab12-34cd.ngrok-free.app/x")
+                .contains(&"exfil.tunnel".to_string())
+        );
+        assert!(
+            ids("https://3000-i62mff4ahtrdfdkyn2esc.e2b.app/")
+                .contains(&"carrier.agent_sandbox".to_string())
+        );
+    }
+
+    #[test]
+    fn platform_hint_against_the_user_agent() {
+        let rules = Rules::default_rules();
+        let fires = |ua: &str, hint: &str| {
+            let mut o = obs("https://a.example/");
+            o.user_agent = Some(ua.into());
+            o.headers.insert("Sec-CH-UA-Platform".into(), hint.into());
+            extract(&o, &rules)
+                .hits
+                .iter()
+                .any(|h| h.rule_id == "header.ua_platform_mismatch")
+        };
+        let mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";
+        assert!(fires(mac, "\"Linux\""));
+        assert!(!fires(mac, "\"macOS\""));
+        // No user agent: nothing to compare.
+        let mut o = obs("https://a.example/");
+        o.headers
+            .insert("sec-ch-ua-platform".into(), "\"Linux\"".into());
+        assert!(extract(&o, &rules).hits.is_empty());
     }
 
     #[test]
