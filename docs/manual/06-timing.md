@@ -77,3 +77,15 @@ A timing claim in a report:
 - gives the numbers it rests on (gaps, counts, the window), not just the reading;
 - is tagged Inference, with the assumption it depends on;
 - uses likelihood words from [chapter 8](08-confidence.md) when it bears on attribution.
+
+## FM-6.9 Co-activity
+
+Agents one dispatcher starts are busy together: a planner hands out tasks and each worker starts seconds later. Two clusters that share no identifier can show this in their request times alone.
+
+1. Each cluster's request and submit times are put into short bins; a bin with any request is active. Capture times never count ([FM-6.1](#fm-61-timestamp-kinds)).
+2. Over the time both clusters were active, count the bins where both are active, at each lag up to a few bins either way. The best lag is the statistic, and its sign says which cluster trails the other.
+3. The chance model is a circular shift: one cluster's activity is rotated within that time, which keeps each cluster's own bursts and gaps and only breaks their alignment. The chance is the share of shifts that align at least as well.
+
+Clock hours need care, as for shared pauses ([FM-6.7](#fm-67-shared-pauses)). A coincidence on a clock hour is down-weighted, and when most of either cluster's activity sits on clock hours the shifts are whole hours, so two jobs on one schedule keep their alignment under the chance model and do not qualify.
+
+Co-activity is a soft link ([FM-5.7](05-linking.md#fm-57-soft-links)), never a merge. One scheduler driving unrelated jobs aligns them too, so a consistent lag suggests one dispatcher, not interaction: interaction needs the signals of [FM-4.10](04-indicators.md#fm-410-interaction-signals). A pair already tied by shared pauses reads the same timeline and gets no second timing link. Toolkit: `coactive_pairs` in the analysis and the `co_activity` soft link, with the settings in `[co_activity]` ([methodology](../methodology.md#timing)).

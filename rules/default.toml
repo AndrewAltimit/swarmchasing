@@ -155,6 +155,42 @@ relay_stack = 0.3
 # ntfy server) in both clusters. The same inbox links outright; a fresh inbox
 # per run on one service is a habit worth a look, shared by many clients.
 callback_service = 0.3
+# Clusters whose requests share a structure with values set aside (relay
+# route, parameter slots in order, encoding, payloads), beyond chance: one
+# harness behind clusters that share no identifier. Times the similarity.
+scaffold = 0.6
+# Clusters active in the same minutes, or one trailing the other, beyond a
+# circular-shift chance model: one dispatcher behind both. Times the share of
+# the quieter cluster's activity that coincides. A pair tied by shared pauses
+# gets no co-activity link.
+co_activity = 0.6
+
+# Scaffold fingerprints: each record reduced to its request template, values
+# replaced by slot types. A template ties clusters only with at least
+# `min_specificity` structural parts (relay hops, parameters, an informative
+# encoding, payloads, a cut) and when held by at most `soft_links.max_shared`
+# clusters. A pair is kept when its IDF-weighted template similarity reaches
+# `min_similarity` and two unrelated clusters would both hold its rarest
+# shared template at most `max_chance` of the time.
+[scaffold]
+min_specificity = 3
+min_similarity = 0.5
+max_chance = 0.01
+
+# Co-activity: request and submit times (never capture times) in `bin_secs`
+# bins; coincidences at lags up to `max_lag_bins` either way, a bin on a clock
+# hour (within `clock_tolerance_secs`) counting `clock_weight`. The chance is
+# the share of `shifts` circular shifts of one cluster's activity that align as
+# well, shifts of whole hours when most activity sits on the hour.
+[co_activity]
+bin_secs = 60
+max_lag_bins = 5
+min_active_bins = 4
+min_coincidences = 4.0
+shifts = 199
+max_chance = 0.01
+clock_tolerance_secs = 120
+clock_weight = 0.25
 
 # Repeated cut lengths: at least `min_records` truncated URLs within
 # `tolerance` characters of a common length. `rule` marks a URL as cut off.

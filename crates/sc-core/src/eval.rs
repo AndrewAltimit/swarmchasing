@@ -20,7 +20,8 @@
 //!   skipped: they are unlabelled.
 //!
 //! Beyond the label, a record may carry `run` (its true run, for the
-//! cluster-level evaluation in [`clusters`]) and, when benign,
+//! cluster-level evaluation in [`clusters`]), `fleet` (its true fleet, for
+//! the fleet proposals in [`fleets`]) and, when benign,
 //! `hard_negative_for` (the rule ids it was written to resemble, for
 //! [`coverage`]). Benign records' `class` says what kind of ordinary traffic
 //! they are (`relay_reading`, `api_client`, `crawler`, ...), so false
@@ -35,7 +36,8 @@
 //! headline number on their own.
 //!
 //! Submodules: [`stats`] (Wilson intervals, Cohen's κ), [`clusters`],
-//! [`coverage`], [`grades`], [`split`] (frozen held-out splits), [`units`]
+//! [`coverage`], [`fleets`] (proposed fleet pairs against `fleet` labels),
+//! [`grades`], [`split`] (frozen held-out splits), [`units`]
 //! (record- and cluster-unit counts over a slice of the set, and the
 //! calibration table), [`control`] (the label-free negative control),
 //! [`baseline`] (the false-positive bound from the reviewed benign sample),
@@ -47,6 +49,7 @@ pub mod bench;
 pub mod clusters;
 pub mod control;
 pub mod coverage;
+pub mod fleets;
 pub mod grades;
 pub mod split;
 pub mod stats;
@@ -88,6 +91,10 @@ pub struct Labelled {
     /// `none` for a run known not to interact; for the swarm-edge summary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub swarm: Option<String>,
+    /// The fleet (one operator's set of runs) the record's run belongs to,
+    /// for measuring fleet proposals ([`fleets`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fleet: Option<String>,
     /// Written by hand to exercise the rules (`"synthetic": true`), not
     /// collected or reconstructed from a published incident.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -229,6 +236,9 @@ pub struct EvalReport {
     /// Swarm edges against `swarm` group labels (report only).
     #[serde(default)]
     pub swarm: crate::swarm::SwarmEval,
+    /// Proposed fleet pairs against `fleet` labels (report only).
+    #[serde(default, skip_serializing_if = "fleets::FleetEval::is_empty")]
+    pub fleets: fleets::FleetEval,
     /// Labeller's tier → our tier → count, for labels that carry a tier.
     pub agreement: BTreeMap<String, BTreeMap<String, usize>>,
     /// Benign records we flagged, strongest first.
@@ -392,6 +402,7 @@ pub fn evaluate(a: &Analysis, labels: &LabelSet) -> EvalReport {
         clusters: clusters::cluster_eval(a, labels),
         grades: grades::grade_table(a, labels, None),
         swarm: crate::swarm::swarm_eval(a, labels),
+        fleets: fleets::fleet_eval(a, labels),
         agreement,
         false_positives: fps,
     }
@@ -488,6 +499,7 @@ fn parse_ndjson_labels(text: &str) -> LabelSet {
                 cite: s("cite"),
                 run: s("run"),
                 swarm: s("swarm"),
+                fleet: s("fleet"),
                 hard_negative_for: strings("hard_negative_for"),
                 synthetic: b("synthetic"),
                 reconstructed: b("reconstructed"),
@@ -562,6 +574,7 @@ fn parse_csv_labels(text: &str) -> LabelSet {
                 run: get(run_col).filter(|s| !s.is_empty()).map(str::to_string),
                 hard_negative_for: Vec::new(),
                 swarm: None,
+                fleet: None,
                 synthetic: false,
                 reconstructed: false,
                 tuned: false,

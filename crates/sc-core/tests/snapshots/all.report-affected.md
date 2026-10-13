@@ -4,7 +4,7 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-20 12:02:03 UTC
-- **Records:** 137 linked public records in 36 cluster(s) (of 282 records reviewed, 215 flagged)
+- **Records:** 182 linked public records in 49 cluster(s) (of 327 records reviewed, 260 flagged)
 - **Evidence tier:** significant
 - **Method:** swarmchasing 0.1.0, rules version 2026-10-11.1
 
@@ -19,7 +19,7 @@ Public scan and archive records show automated agents sending requests to system
 | Category | Rule | Records |
 |---|---|---|
 | Relay / fetch-through services | `relay.corsproxy` | 1 |
-| Relay / fetch-through services | `relay.jina` | 41 |
+| Relay / fetch-through services | `relay.jina` | 60 |
 | Relay / fetch-through services | `relay.markdown_new` | 1 |
 | Carrier services and inline programs | `carrier.html_program` | 8 |
 | Carrier services and inline programs | `carrier.httpbin` | 1 |
@@ -27,13 +27,13 @@ Public scan and archive records show automated agents sending requests to system
 | Attack payloads | `exploit.boundary_ids` | 1 |
 | Attack payloads | `exploit.cmdi` | 2 |
 | Attack payloads | `exploit.double_encoded_meta` | 2 |
-| Attack payloads | `exploit.sqli_boolean` | 39 |
+| Attack payloads | `exploit.sqli_boolean` | 74 |
 | Attack payloads | `exploit.sqli_quote` | 4 |
 | Attack payloads | `exploit.sqli_union` | 11 |
 | Attack payloads | `exploit.ssti` | 4 |
 | Attack payloads | `exploit.traversal` | 5 |
 | Attack payloads | `exploit.traversal_single` | 5 |
-| Attack payloads | `exploit.xss` | 11 |
+| Attack payloads | `exploit.xss` | 21 |
 | Agent tags and markers | `marker.callback_seq` | 1 |
 | Agent tags and markers | `marker.chat_opener` | 2 |
 | Agent tags and markers | `marker.doubled_scheme` | 1 |
@@ -45,8 +45,8 @@ Public scan and archive records show automated agents sending requests to system
 | Agent tags and markers | `marker.title_write` | 1 |
 | Agent tags and markers | `marker.tool_call_markup` | 2 |
 | Agent tags and markers | `marker.truncated_output` | 2 |
-| Agent tags and markers | `marker.uq_tags` | 67 |
-| Cache-busting parameters | `cache.buster` | 31 |
+| Agent tags and markers | `marker.uq_tags` | 102 |
+| Cache-busting parameters | `cache.buster` | 40 |
 | Self-identification strings (unreliable) | `selfid.vendor_name` | 1 |
 | Callback / exfiltration channels | `exfil.cookie` | 1 |
 | Callback / exfiltration channels | `exfil.disposable_mail` | 1 |
@@ -99,7 +99,11 @@ Every flagged request to each host, including requests outside the linked cluste
 | `login[.]coop[.]example` | 4 | 2026-05-13 16:40:00 UTC | 2026-05-13 16:44:00 UTC | historical | `exploit.sqli_boolean` |
 | `shop[.]bakery[.]example` | 4 | 2026-05-12 10:15:00 UTC | 2026-05-12 10:39:30 UTC | historical | `exploit.xss` |
 | `api[.]datausa[.]io` | 3 | 2026-08-03 15:31:00 UTC | 2026-08-20 07:00:00 UTC | historical | `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single` |
+| `node0[.]ledger[.]example` | 3 | 2026-05-14 03:46:09 UTC | 2026-05-14 08:09:29 UTC | historical | `exploit.sqli_boolean` |
+| `node1[.]ledger[.]example` | 3 | 2026-05-14 04:22:49 UTC | 2026-05-14 08:42:49 UTC | historical | `exploit.sqli_boolean` |
 | `recherche-collection-search[.]bac-lac[.]canada[.]ca` | 3 | 2026-06-10 09:12:00 UTC | 2026-06-10 09:14:30 UTC | historical | `exploit.double_encoded_meta`, `exploit.sqli_boolean`, `exploit.sqli_quote` |
+| `wiki0[.]docs-hub[.]example` | 3 | 2026-05-14 03:46:54 UTC | 2026-05-14 08:10:35 UTC | historical | `exploit.xss` |
+| `wiki1[.]docs-hub[.]example` | 3 | 2026-05-14 04:23:51 UTC | 2026-05-14 08:43:38 UTC | historical | `exploit.xss` |
 | `account[.]utility-portal[.]example` | 2 | 2026-03-12 16:03:00 UTC | 2026-03-12 16:33:00 UTC | historical | `exploit.sqli_boolean` |
 | `api[.]plant-b[.]example` | 2 | 2026-09-03 09:00:00 UTC | 2026-09-03 09:02:00 UTC | historical | `exploit.traversal`, `exploit.traversal_single` |
 | `billing[.]utility-portal[.]example` | 2 | 2026-03-12 16:00:00 UTC | 2026-03-12 16:30:00 UTC | historical | `exploit.sqli_boolean` |
@@ -107,12 +111,41 @@ Every flagged request to each host, including requests outside the linked cluste
 | `demo[.]testfire[.]net` | 2 | 2026-08-11 09:00:00 UTC | 2026-08-11 09:00:30 UTC | historical | `exploit.sqli_boolean`, `exploit.xss` |
 | `intranet[.]xsvc-h[.]example` | 2 | 2026-09-20 11:00:00 UTC | 2026-09-20 11:04:00 UTC | ongoing | `exploit.sqli_union` |
 | `meter[.]utility-portal[.]example` | 2 | 2026-03-12 16:02:00 UTC | 2026-03-12 16:32:00 UTC | historical | `exploit.sqli_boolean` |
+| `node2[.]ledger[.]example` | 2 | 2026-05-14 04:37:49 UTC | 2026-05-14 07:02:49 UTC | historical | `exploit.sqli_boolean` |
+| `node3[.]ledger[.]example` | 2 | 2026-05-14 05:29:29 UTC | 2026-05-14 07:51:09 UTC | historical | `exploit.sqli_boolean` |
 | `outage[.]utility-portal[.]example` | 2 | 2026-03-12 16:01:00 UTC | 2026-03-12 16:31:00 UTC | historical | `exploit.sqli_boolean` |
 | `records[.]plant-a[.]example` | 2 | 2026-09-02 14:00:00 UTC | 2026-09-02 14:03:00 UTC | historical | `exploit.sqli_union` |
 | `support[.]utility-portal[.]example` | 2 | 2026-03-12 16:04:00 UTC | 2026-03-12 16:34:00 UTC | historical | `exploit.sqli_boolean` |
 | `vizprod[.]aihw[.]gov[.]au` | 2 | 2026-08-12 02:10:00 UTC | 2026-08-12 02:14:00 UTC | historical | `exploit.xss` |
+| `wiki2[.]docs-hub[.]example` | 2 | 2026-05-14 04:39:09 UTC | 2026-05-14 07:04:14 UTC | historical | `exploit.xss` |
+| `wiki3[.]docs-hub[.]example` | 2 | 2026-05-14 05:30:20 UTC | 2026-05-14 07:52:07 UTC | historical | `exploit.xss` |
+| `app0[.]tenant0[.]example` | 1 | 2026-04-01 06:03:41 UTC | 2026-04-01 06:03:41 UTC | historical | `exploit.sqli_boolean` |
+| `app0[.]tenant1[.]example` | 1 | 2026-04-04 07:03:41 UTC | 2026-04-04 07:03:41 UTC | historical | `exploit.sqli_boolean` |
+| `app0[.]tenant2[.]example` | 1 | 2026-04-07 08:03:41 UTC | 2026-04-07 08:03:41 UTC | historical | `exploit.sqli_boolean` |
+| `app0[.]tenant3[.]example` | 1 | 2026-04-10 09:03:41 UTC | 2026-04-10 09:03:41 UTC | historical | `exploit.sqli_boolean` |
+| `app0[.]tenant4[.]example` | 1 | 2026-04-13 10:03:41 UTC | 2026-04-13 10:03:41 UTC | historical | `exploit.sqli_boolean` |
+| `app0[.]tenant5[.]example` | 1 | 2026-04-16 11:03:41 UTC | 2026-04-16 11:03:41 UTC | historical | `exploit.sqli_boolean` |
+| `app0[.]tenant6[.]example` | 1 | 2026-04-19 12:03:41 UTC | 2026-04-19 12:03:41 UTC | historical | `exploit.sqli_boolean` |
+| `app0[.]tenant7[.]example` | 1 | 2026-04-22 13:03:41 UTC | 2026-04-22 13:03:41 UTC | historical | `exploit.sqli_boolean` |
+| `app1[.]tenant0[.]example` | 1 | 2026-04-01 06:06:01 UTC | 2026-04-01 06:06:01 UTC | historical | `exploit.sqli_boolean` |
+| `app1[.]tenant1[.]example` | 1 | 2026-04-04 07:06:01 UTC | 2026-04-04 07:06:01 UTC | historical | `exploit.sqli_boolean` |
+| `app1[.]tenant2[.]example` | 1 | 2026-04-07 08:06:01 UTC | 2026-04-07 08:06:01 UTC | historical | `exploit.sqli_boolean` |
+| `app1[.]tenant3[.]example` | 1 | 2026-04-10 09:06:01 UTC | 2026-04-10 09:06:01 UTC | historical | `exploit.sqli_boolean` |
+| `app1[.]tenant4[.]example` | 1 | 2026-04-13 10:06:01 UTC | 2026-04-13 10:06:01 UTC | historical | `exploit.sqli_boolean` |
+| `app1[.]tenant5[.]example` | 1 | 2026-04-16 11:06:01 UTC | 2026-04-16 11:06:01 UTC | historical | `exploit.sqli_boolean` |
+| `app1[.]tenant6[.]example` | 1 | 2026-04-19 12:06:01 UTC | 2026-04-19 12:06:01 UTC | historical | `exploit.sqli_boolean` |
+| `app1[.]tenant7[.]example` | 1 | 2026-04-22 13:06:01 UTC | 2026-04-22 13:06:01 UTC | historical | `exploit.sqli_boolean` |
 | `b0[.]permits-office[.]example` | 1 | 2026-03-05 14:26:30 UTC | 2026-03-05 14:26:30 UTC | historical | `exploit.sqli_boolean` |
 | `b1[.]permits-office[.]example` | 1 | 2026-03-05 14:27:30 UTC | 2026-03-05 14:27:30 UTC | historical | `exploit.sqli_boolean` |
+| `shop0[.]retail0[.]example` | 1 | 2026-04-06 09:14:07 UTC | 2026-04-06 09:14:07 UTC | historical | `exploit.sqli_boolean` |
+| `shop0[.]retail1[.]example` | 1 | 2026-04-11 09:14:07 UTC | 2026-04-11 09:14:07 UTC | historical | `exploit.sqli_boolean` |
+| `shop0[.]retail2[.]example` | 1 | 2026-04-16 09:14:07 UTC | 2026-04-16 09:14:07 UTC | historical | `exploit.sqli_boolean` |
+| `shop1[.]retail0[.]example` | 1 | 2026-04-06 09:15:44 UTC | 2026-04-06 09:15:44 UTC | historical | `exploit.sqli_boolean` |
+| `shop1[.]retail1[.]example` | 1 | 2026-04-11 09:15:44 UTC | 2026-04-11 09:15:44 UTC | historical | `exploit.sqli_boolean` |
+| `shop1[.]retail2[.]example` | 1 | 2026-04-16 09:15:44 UTC | 2026-04-16 09:15:44 UTC | historical | `exploit.sqli_boolean` |
+| `shop2[.]retail0[.]example` | 1 | 2026-04-06 09:17:21 UTC | 2026-04-06 09:17:21 UTC | historical | `exploit.sqli_boolean` |
+| `shop2[.]retail1[.]example` | 1 | 2026-04-11 09:17:21 UTC | 2026-04-11 09:17:21 UTC | historical | `exploit.sqli_boolean` |
+| `shop2[.]retail2[.]example` | 1 | 2026-04-16 09:17:21 UTC | 2026-04-16 09:17:21 UTC | historical | `exploit.sqli_boolean` |
 | `portal[.]agency[.]example` | 5 | 2026-08-05 10:00:00 UTC | 2026-08-09 11:00:00 UTC | historical | none seen |
 | `p0[.]transit-authority[.]example` | 1 | 2026-03-09 09:00:00 UTC | 2026-03-09 09:00:00 UTC | historical | none seen |
 | `p1[.]transit-authority[.]example` | 1 | 2026-03-09 09:02:00 UTC | 2026-03-09 09:02:00 UTC | historical | none seen |
@@ -143,105 +176,149 @@ Every flagged request to each host, including requests outside the linked cluste
 
 ## Timeline
 
-- **C1** (significant): 8 records, 1 run(s), 2026-05-15 22:05:07 UTC → 2026-05-15 22:05:16 UTC, median gap 0s
+- **C1** (significant): 10 records, 9 run(s), 2026-05-14 03:46:09 UTC → 2026-05-14 08:42:49 UTC, median gap 33m
+  - linked by: `param:uqtag=orc5pl`
+  - all 10 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+  - payload dialect `466af182` over 10 records: sqli (quote_or_quoted ×10). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C2** (significant): 10 records, 10 run(s), 2026-05-14 03:46:54 UTC → 2026-05-14 08:43:38 UTC, median gap 33m
+  - linked by: `param:run=orc5wk`
+  - all 10 records share one URL encoding style (`hexU.unsorted.noslash`): consistent with one client, not evidence on its own
+  - payload dialect `5ab2b1a0` over 10 records: xss (svg_onload ×10). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C3** (significant): 8 records, 1 run(s), 2026-05-15 22:05:07 UTC → 2026-05-15 22:05:16 UTC, median gap 0s
   - iterative probing: 8 variants of `page` on `files[.]depot[.]example/index.php` over 9s (median gap 0s, tool pace); 7 variants followed an error response
   - route escalation on `files[.]depot[.]example/index.php`: direct → program carrier over 6s. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - payload dialect `66a801d8` over 8 records: sqli (quote_or_quoted ×1, sleep ×1); ssti (dollar_brace ×1, double_brace ×1); traversal (depth4 ×2, etc_passwd ×1, win_ini ×1); xss (attr_breakout ×1, script_alert ×1, svg_onload ×1); first seen traversal.depth4 → traversal.etc_passwd → traversal.win_ini → ssti.double_brace → ssti.dollar_brace → xss.script_alert → xss.attr_breakout → xss.svg_onload. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
   - parallel fan-out: 4 of 4 one-second batches were 2 alike requests wide (width×batches: 2×4), like an agent issuing tool calls in parallel; a scanner submitting a list in bulk looks the same (a hint, not evidence)
-- **C2** (significant): 8 records, 1 run(s), 2026-09-20 10:00:00 UTC → 2026-09-20 10:02:24 UTC, median gap 11s
+- **C4** (significant): 8 records, 1 run(s), 2026-09-20 10:00:00 UTC → 2026-09-20 10:02:24 UTC, median gap 11s
   - iterative probing: 4 variants of `page`, `q` on `permits[.]xsvc-a[.]example/search` over 2m (median gap 11s, model pace, from submit times)
   - linked by: `param:uqtag=xsvA41`
   - all 8 records share one URL encoding style (`sp20.unsorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 8 records: sqli (quote_or_1eq1 ×8). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C3** (significant): 7 records, 1 run(s), 2026-05-14 03:20:00 UTC → 2026-05-14 03:20:04 UTC, median gap 1s
+- **C5** (significant): 7 records, 1 run(s), 2026-05-14 03:20:00 UTC → 2026-05-14 03:20:04 UTC, median gap 1s
   - iterative probing: 8 variants of `id` on `api[.]parts[.]example/v1/item` over 5s (median gap 1s, tool pace); 1 of its requests matched no rule
   - all 7 records share one URL encoding style (`sp20.noslash`): consistent with one client, not evidence on its own
   - payload dialect `9361fd33` over 3 records: sqli (sleep ×1, union_select ×2); first seen sqli.sleep → sqli.union_select. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C4** (significant): 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
+- **C6** (significant): 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
   - linked by: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
-- **C5** (significant): 6 records, 1 run(s), 2026-05-11 14:02:10 UTC → 2026-05-11 14:07:35 UTC, median gap 62s
+- **C7** (significant): 6 records, 1 run(s), 2026-05-11 14:02:10 UTC → 2026-05-11 14:07:35 UTC, median gap 62s
   - iterative probing: 6 variants of `name` on `portal[.]clinic[.]example/patients/search` over 5m (median gap 62s, model pace); 3 variants followed an error response
   - payload dialect `02883d99` over 5 records: sqli (quote_or_quoted ×2, union_select ×3); first seen sqli.quote_or_quoted → sqli.union_select. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
   - prose in parameters: 1 values (language unclear) (a hint, not evidence)
-- **C6** (significant): 6 records, 1 run(s), 2026-09-20 12:00:00 UTC → 2026-09-20 12:02:03 UTC, median gap 3s
+- **C8** (significant): 6 records, 1 run(s), 2026-09-20 12:00:00 UTC → 2026-09-20 12:02:03 UTC, median gap 3s
   - iterative probing: 3 variants of `id`, `step` on `portal[.]xsvc-gw[.]example/lookup` over 2m (median gap 3s, model pace, from submit times)
   - linked by: `param:uqtag=gwP7q2`
   - all 6 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 6 records: sqli (quote_or_1eq1 ×6). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C7** (significant): 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
+- **C9** (significant): 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
   - linked by: `param:uqtag=hit88q`
   - all 5 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3e4414d1` over 5 records: sqli (quote_or_1eq1 ×5). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C8** (significant): 5 records, 1 run(s), 2026-05-16 09:30:00 UTC → 2026-05-16 09:30:04 UTC, median gap 1s
+- **C10** (significant): 5 records, 1 run(s), 2026-05-16 09:30:00 UTC → 2026-05-16 09:30:04 UTC, median gap 1s
   - iterative probing: 7 variants of `name` on `intranet[.]lab[.]example/profile` over 5s (median gap 1s, tool pace); 2 of its requests matched no rule; 1 variant followed an error response
   - route escalation on `intranet[.]lab[.]example/profile`: direct → program carrier over 3s. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - payload dialect `afcb3117` over 2 records: ssti (dollar_brace ×1); xss (script_alert ×1); first seen xss.script_alert → ssti.dollar_brace. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C9** (significant): 5 records, 1 run(s), 2026-07-02 10:03:00 UTC → 2026-07-02 10:17:00 UTC, median gap 3m
+- **C11** (significant): 5 records, 1 run(s), 2026-07-02 10:03:00 UTC → 2026-07-02 10:17:00 UTC, median gap 3m
   - linked by: `param:uqtag=r7k2`
-- **C10** (significant): 4 records, 1 run(s), 2026-05-12 10:15:00 UTC → 2026-05-12 10:39:30 UTC, median gap 8m
+- **C12** (significant): 4 records, 1 run(s), 2026-05-12 10:15:00 UTC → 2026-05-12 10:39:30 UTC, median gap 8m
   - payload dialect `c78df6d2` over 4 records: xss (attr_breakout ×1, img_onerror ×1, js_uri ×1, script_alert ×1, svg_onload ×1); first seen xss.script_alert → xss.attr_breakout → xss.img_onerror → xss.svg_onload → xss.js_uri. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C11** (significant): 4 records, 1 run(s), 2026-05-13 16:40:00 UTC → 2026-05-13 16:44:00 UTC, median gap 75s
+- **C13** (significant): 4 records, 1 run(s), 2026-05-13 16:40:00 UTC → 2026-05-13 16:44:00 UTC, median gap 75s
   - iterative probing: 4 variants of `user` on `login[.]coop[.]example/account/login` over 4m (median gap 75s, model pace); 2 variants followed an error response
   - payload dialect `c1f3671f` over 2 records: sqli (quote_or_1eq1 ×1, quote_or_quoted ×1); first seen sqli.quote_or_quoted → sqli.quote_or_1eq1. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C12** (significant): 4 records, 1 run(s), 2026-06-10 09:12:00 UTC → 2026-06-10 09:14:30 UTC, median gap 50s
+- **C14** (significant): 4 records, 1 run(s), 2026-06-10 09:12:00 UTC → 2026-06-10 09:14:30 UTC, median gap 50s
   - iterative probing: 4 variants of `IdNumber` on `recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record` over 2m (median gap 50s, model pace)
   - payload dialect `341cb867` over 2 records: sqli (numeric_or ×1); xss (script_alert ×1); first seen sqli.numeric_or → xss.script_alert. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C13** (significant): 3 records, 1 run(s), 2026-03-05 14:25:00 UTC → 2026-03-05 14:27:30 UTC, median gap 90s
+- **C15** (significant): 3 records, 1 run(s), 2026-03-05 14:25:00 UTC → 2026-03-05 14:27:30 UTC, median gap 90s
   - linked by: `param:uqtag=exec4k`
   - payload dialect `3e4414d1` over 2 records: sqli (quote_or_1eq1 ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C14** (significant): 3 records, 1 run(s), 2026-08-03 09:00:00 UTC → 2026-08-03 09:00:45 UTC, median gap 25s
+- **C16** (significant): 3 records, 1 run(s), 2026-04-06 09:14:07 UTC → 2026-04-06 09:17:21 UTC, median gap 97s
+  - linked by: `param:uqtag=fx3k9q`
+  - all 3 records share one URL encoding style (`sp20.hexU.unsorted.noslash`): consistent with one client, not evidence on its own
+  - payload dialect `3e4414d1` over 3 records: sqli (quote_or_1eq1 ×3). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C17** (significant): 3 records, 1 run(s), 2026-04-11 09:14:07 UTC → 2026-04-11 09:17:21 UTC, median gap 97s
+  - linked by: `param:uqtag=m2v8wd`
+  - all 3 records share one URL encoding style (`sp20.hexU.unsorted.noslash`): consistent with one client, not evidence on its own
+  - payload dialect `3e4414d1` over 3 records: sqli (quote_or_1eq1 ×3). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C18** (significant): 3 records, 1 run(s), 2026-04-16 09:14:07 UTC → 2026-04-16 09:17:21 UTC, median gap 97s
+  - linked by: `param:uqtag=p7tr4z`
+  - all 3 records share one URL encoding style (`sp20.hexU.unsorted.noslash`): consistent with one client, not evidence on its own
+  - payload dialect `3e4414d1` over 3 records: sqli (quote_or_1eq1 ×3). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C19** (significant): 3 records, 1 run(s), 2026-08-03 09:00:00 UTC → 2026-08-03 09:00:45 UTC, median gap 25s
   - iterative probing: 3 variants of `id` on `records[.]agency[.]example/api/items` over 45s (median gap 25s, model pace)
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C15** (significant): 3 records, 2 run(s), 2026-08-05 10:00:00 UTC → 2026-08-07 13:00:00 UTC, median gap 2.1d
+- **C20** (significant): 3 records, 2 run(s), 2026-08-05 10:00:00 UTC → 2026-08-07 13:00:00 UTC, median gap 2.1d
   - linked by: `param:uqtag=covrun7`
-- **C16** (significant): 3 records, 2 run(s), 2026-08-06 16:00:00 UTC → 2026-08-07 12:00:00 UTC, median gap 20.0h
+- **C21** (significant): 3 records, 2 run(s), 2026-08-06 16:00:00 UTC → 2026-08-07 12:00:00 UTC, median gap 20.0h
   - linked by: `exfil.requestbin:c0ve7x9.m.pipedream.net`
   - relay stack `carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
-- **C17** (significant): 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
+- **C22** (significant): 2 records, 1 run(s), 2026-04-01 06:03:41 UTC → 2026-04-01 06:06:01 UTC, median gap 2m
+  - linked by: `param:uqtag=la1q7c`
+  - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+- **C23** (significant): 2 records, 1 run(s), 2026-04-04 07:03:41 UTC → 2026-04-04 07:06:01 UTC, median gap 2m
+  - linked by: `param:uqtag=lb8w2n`
+  - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+- **C24** (significant): 2 records, 1 run(s), 2026-04-07 08:03:41 UTC → 2026-04-07 08:06:01 UTC, median gap 2m
+  - linked by: `param:uqtag=lc4e9r`
+  - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+- **C25** (significant): 2 records, 1 run(s), 2026-04-10 09:03:41 UTC → 2026-04-10 09:06:01 UTC, median gap 2m
+  - linked by: `param:uqtag=ld6t3m`
+  - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+- **C26** (significant): 2 records, 1 run(s), 2026-04-13 10:03:41 UTC → 2026-04-13 10:06:01 UTC, median gap 2m
+  - linked by: `param:uqtag=le2y8k`
+  - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+- **C27** (significant): 2 records, 1 run(s), 2026-04-16 11:03:41 UTC → 2026-04-16 11:06:01 UTC, median gap 2m
+  - linked by: `param:uqtag=lf9u4p`
+  - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+- **C28** (significant): 2 records, 1 run(s), 2026-04-19 12:03:41 UTC → 2026-04-19 12:06:01 UTC, median gap 2m
+  - linked by: `param:uqtag=lg5i1x`
+  - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+- **C29** (significant): 2 records, 1 run(s), 2026-04-22 13:03:41 UTC → 2026-04-22 13:06:01 UTC, median gap 2m
+  - linked by: `param:uqtag=lh3o6v`
+  - all 2 records share one URL encoding style (`sp20.hexU.sorted.noslash`): consistent with one client, not evidence on its own
+- **C30** (significant): 2 records, 1 run(s), 2026-06-02 14:00:05 UTC → 2026-06-02 14:03:10 UTC, median gap 3m
   - iterative probing: 3 variants of `Measure_Id`, `State_Id`, `State_Id[]`, `survey_Year_Key` on `civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation` over 4m (median gap 3m, slow pace); 1 of its requests matched no rule
-- **C18** (significant): 2 records, 1 run(s), 2026-07-02 10:24:00 UTC → 2026-07-02 10:25:00 UTC, median gap 60s
-- **C19** (significant): 2 records, 1 run(s), 2026-08-03 09:01:10 UTC → 2026-08-03 09:01:40 UTC, median gap 30s
+- **C31** (significant): 2 records, 1 run(s), 2026-07-02 10:24:00 UTC → 2026-07-02 10:25:00 UTC, median gap 60s
+- **C32** (significant): 2 records, 1 run(s), 2026-08-03 09:01:10 UTC → 2026-08-03 09:01:40 UTC, median gap 30s
   - payload dialect `c0942b1d` over 2 records: cmd (semicolon ×1, subshell ×1); first seen cmd.semicolon → cmd.subshell. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C20** (significant): 2 records, 1 run(s), 2026-08-03 15:31:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
+- **C33** (significant): 2 records, 1 run(s), 2026-08-03 15:31:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
   - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace); 1 of its requests matched no rule
   - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C21** (significant): 2 records, 1 run(s), 2026-08-10 09:20:00 UTC → 2026-08-10 09:30:00 UTC, median gap 10m
-- **C22** (significant): 2 records, 1 run(s), 2026-08-11 09:00:00 UTC → 2026-08-11 09:00:30 UTC, median gap 30s
+- **C34** (significant): 2 records, 1 run(s), 2026-08-10 09:20:00 UTC → 2026-08-10 09:30:00 UTC, median gap 10m
+- **C35** (significant): 2 records, 1 run(s), 2026-08-11 09:00:00 UTC → 2026-08-11 09:00:30 UTC, median gap 30s
   - linked by: `param:uqtag=covscope`
   - payload dialect `58b48d2f` over 2 records: sqli (quote_or_1eq1 ×1); xss (script_alert ×1); first seen xss.script_alert → sqli.quote_or_1eq1. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
   - benchmark or practice targets: `altoro_mutual` ×2. Evaluation or training activity is likely, not malice (a hint)
-- **C23** (significant): 2 records, 1 run(s), 2026-08-12 02:10:00 UTC → 2026-08-12 02:14:00 UTC, median gap 4m
+- **C36** (significant): 2 records, 1 run(s), 2026-08-12 02:10:00 UTC → 2026-08-12 02:14:00 UTC, median gap 4m
   - relay stack `carrier.httpbin → carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
-- **C24** (significant): 2 records, 1 run(s), 2026-09-02 14:00:00 UTC → 2026-09-02 14:03:00 UTC, median gap 3m
+- **C37** (significant): 2 records, 1 run(s), 2026-09-02 14:00:00 UTC → 2026-09-02 14:03:00 UTC, median gap 3m
   - linked by: `param:uqtag=pl4nt1`
   - all 2 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C25** (significant): 2 records, 1 run(s), 2026-09-03 09:00:00 UTC → 2026-09-03 09:02:00 UTC, median gap 2m
+- **C38** (significant): 2 records, 1 run(s), 2026-09-03 09:00:00 UTC → 2026-09-03 09:02:00 UTC, median gap 2m
   - linked by: `param:run=pb7781`
   - all 2 records share one URL encoding style (`hexU.unsorted.noslash`): consistent with one client, not evidence on its own
   - payload dialect `804cd67a` over 2 records: traversal (depth4 ×2, etc_passwd ×1); first seen traversal.depth4 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C26** (significant): 2 records, 1 run(s), 2026-09-20 11:00:00 UTC → 2026-09-20 11:04:00 UTC, median gap 4m
+- **C39** (significant): 2 records, 1 run(s), 2026-09-20 11:00:00 UTC → 2026-09-20 11:04:00 UTC, median gap 4m
   - all 2 records share one URL encoding style (`sp20.noslash`): consistent with one client, not evidence on its own
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
-- **C27** (suggestive): 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
+- **C40** (suggestive): 8 records, 1 run(s), 2026-03-02 10:00:00 UTC → 2026-03-02 10:05:50 UTC, median gap 50s
   - linked by: `param:uqtag=shardA7`
-- **C28** (suggestive): 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
+- **C41** (suggestive): 8 records, 1 run(s), 2026-03-02 10:00:40 UTC → 2026-03-02 10:06:30 UTC, median gap 50s
   - linked by: `param:uqtag=shardB7`
-- **C29** (suggestive): 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
+- **C42** (suggestive): 5 records, 1 run(s), 2026-03-12 16:00:00 UTC → 2026-03-12 16:04:00 UTC, median gap 60s
   - linked by: `param:uqtag=map31z`
-- **C30** (suggestive): 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
+- **C43** (suggestive): 3 records, 1 run(s), 2026-03-05 14:00:00 UTC → 2026-03-05 14:02:00 UTC, median gap 60s
   - linked by: `param:uqtag=scout7f`
-- **C31** (suggestive): 3 records, 2 run(s), 2026-08-09 09:10:00 UTC → 2026-08-09 11:05:00 UTC, median gap 110m
+- **C44** (suggestive): 3 records, 2 run(s), 2026-08-09 09:10:00 UTC → 2026-08-09 11:05:00 UTC, median gap 110m
   - route escalation on `records[.]agency[.]example/api/items`: direct → relay over 10m. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
   - linked by: `param:uqtag=covrun9`
-- **C32** (suggestive): 2 records, 1 run(s), 2026-05-20 19:01:00 UTC → 2026-05-20 19:04:00 UTC, median gap 3m
-- **C33** (suggestive): 2 records, 1 run(s), 2026-07-02 10:07:00 UTC → 2026-07-02 10:10:00 UTC, median gap 3m
+- **C45** (suggestive): 2 records, 1 run(s), 2026-05-20 19:01:00 UTC → 2026-05-20 19:04:00 UTC, median gap 3m
+- **C46** (suggestive): 2 records, 1 run(s), 2026-07-02 10:07:00 UTC → 2026-07-02 10:10:00 UTC, median gap 3m
   - prose in parameters: 1 values (language unclear) (a hint, not evidence)
-- **C34** (suggestive): 2 records, 1 run(s), 2026-07-02 10:21:00 UTC → 2026-07-02 10:23:00 UTC, median gap 2m
+- **C47** (suggestive): 2 records, 1 run(s), 2026-07-02 10:21:00 UTC → 2026-07-02 10:23:00 UTC, median gap 2m
   - route escalation on `data[.]portal[.]example/api/v1/records`: direct → relay over 16m. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)
-- **C35** (suggestive): 2 records, 1 run(s), 2026-08-06 14:00:00 UTC → 2026-08-06 14:00:30 UTC, median gap 30s
+- **C48** (suggestive): 2 records, 1 run(s), 2026-08-06 14:00:00 UTC → 2026-08-06 14:00:30 UTC, median gap 30s
   - linked by: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
-- **C36** (suggestive): 2 records, 1 run(s), 2026-08-07 09:00:00 UTC → 2026-08-07 09:01:00 UTC, median gap 60s
+- **C49** (suggestive): 2 records, 1 run(s), 2026-08-07 09:00:00 UTC → 2026-08-07 09:01:00 UTC, median gap 60s
   - linked by: `exfil.ntfy:/ntfy.sh/covrun7results`
 
 ## Representative records
@@ -254,20 +331,20 @@ URLs are defanged. Records are listed by evidence strength.
    - rules: relay.jina, exploit.sqli_union, marker.uq_tags
 1. 2026-09-02 14:03:00 UTC: `hxxps://r[.]jina[.]ai/hxxps://records[.]plant-a[.]example/item?id=2%20UNION%20SELECT%20null,version()--&uqtag=pl4nt1`
    - rules: relay.jina, exploit.sqli_union, marker.uq_tags
-1. 2026-08-11 09:00:00 UTC: `hxxps://demo[.]testfire[.]net/search?query=%3Cscript%3Ealert(1)%3C/script%3E&uqtag=covscope`
-   - rules: carrier.html_program, exploit.xss, marker.uq_tags
-1. 2026-09-20 10:00:00 UTC: `hxxps://permits[.]xsvc-a[.]example/search?q=1%27%20OR%201=1--%20YOUR_API_KEY&page=1&uqtag=xsvA41`
-   - rules: marker.placeholder, exploit.sqli_boolean, marker.uq_tags
-1. 2026-09-20 10:00:07 UTC: `hxxps://permits[.]xsvc-a[.]example/search?q=1%27%20OR%201=1--%20YOUR_API_KEY&page=1&uqtag=xsvA41`
-   - rules: marker.placeholder, exploit.sqli_boolean, marker.uq_tags
-1. 2026-09-20 10:00:45 UTC: `hxxps://permits[.]xsvc-a[.]example/search?q=2%27%20OR%201=1--%20YOUR_API_KEY&page=2&uqtag=xsvA41`
-   - rules: marker.placeholder, exploit.sqli_boolean, marker.uq_tags
-1. 2026-09-20 10:00:56 UTC: `hxxps://permits[.]xsvc-a[.]example/search?q=2%27%20OR%201=1--%20YOUR_API_KEY&page=2&uqtag=xsvA41`
-   - rules: marker.placeholder, exploit.sqli_boolean, marker.uq_tags
-1. 2026-09-20 10:01:30 UTC: `hxxps://permits[.]xsvc-a[.]example/search?q=3%27%20OR%201=1--%20YOUR_API_KEY&page=3&uqtag=xsvA41`
-   - rules: marker.placeholder, exploit.sqli_boolean, marker.uq_tags
-1. 2026-09-20 10:01:36 UTC: `hxxps://permits[.]xsvc-a[.]example/search?q=3%27%20OR%201=1--%20YOUR_API_KEY&page=3&uqtag=xsvA41`
-   - rules: marker.placeholder, exploit.sqli_boolean, marker.uq_tags
+1. 2026-04-06 09:14:07 UTC: `hxxps://r[.]jina[.]ai/hxxps://shop0[.]retail0[.]example/catalog/item/4100/view?q=%27%20OR%201%3D1--&uqtag=fx3k9q&step=1&ts=1775466847`
+   - rules: relay.jina, exploit.sqli_boolean, marker.uq_tags, cache.buster
+1. 2026-04-06 09:15:44 UTC: `hxxps://r[.]jina[.]ai/hxxps://shop1[.]retail0[.]example/catalog/item/4137/view?q=%27%20OR%201%3D1--&uqtag=fx3k9q&step=2&ts=1775466944`
+   - rules: relay.jina, exploit.sqli_boolean, marker.uq_tags, cache.buster
+1. 2026-04-06 09:17:21 UTC: `hxxps://r[.]jina[.]ai/hxxps://shop2[.]retail0[.]example/catalog/item/4174/view?q=%27%20OR%201%3D1--&uqtag=fx3k9q&step=3&ts=1775467041`
+   - rules: relay.jina, exploit.sqli_boolean, marker.uq_tags, cache.buster
+1. 2026-04-11 09:14:07 UTC: `hxxps://r[.]jina[.]ai/hxxps://shop0[.]retail1[.]example/catalog/item/4101/view?q=%27%20OR%201%3D1--&uqtag=m2v8wd&step=1&ts=1775898847`
+   - rules: relay.jina, exploit.sqli_boolean, marker.uq_tags, cache.buster
+1. 2026-04-11 09:15:44 UTC: `hxxps://r[.]jina[.]ai/hxxps://shop1[.]retail1[.]example/catalog/item/4138/view?q=%27%20OR%201%3D1--&uqtag=m2v8wd&step=2&ts=1775898944`
+   - rules: relay.jina, exploit.sqli_boolean, marker.uq_tags, cache.buster
+1. 2026-04-11 09:17:21 UTC: `hxxps://r[.]jina[.]ai/hxxps://shop2[.]retail1[.]example/catalog/item/4175/view?q=%27%20OR%201%3D1--&uqtag=m2v8wd&step=3&ts=1775899041`
+   - rules: relay.jina, exploit.sqli_boolean, marker.uq_tags, cache.buster
+1. 2026-04-16 09:14:07 UTC: `hxxps://r[.]jina[.]ai/hxxps://shop0[.]retail2[.]example/catalog/item/4102/view?q=%27%20OR%201%3D1--&uqtag=p7tr4z&step=1&ts=1776330847`
+   - rules: relay.jina, exploit.sqli_boolean, marker.uq_tags, cache.buster
 
 ## Method and limitations
 
