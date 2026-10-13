@@ -3,6 +3,10 @@
 //! without a request; an older one is revalidated with `If-None-Match` /
 //! `If-Modified-Since`, and a `304` refreshes it. The cache sits in the data
 //! directory (`<data>/cache/http/`), outside git, and is safe to delete.
+//!
+//! Both files are written through a temporary file and a rename, and the
+//! metadata holds the body's SHA-256: a body that does not match (a write
+//! cut short, a body from another response) is a miss, never served.
 
 use crate::client::{Fetched, now_secs};
 use serde::{Deserialize, Serialize};
@@ -26,6 +30,10 @@ pub(crate) struct Meta {
     pub content_type: Option<String>,
     /// When the response was stored or last revalidated (Unix seconds).
     pub stored: i64,
+    /// SHA-256 of the body file, hex. An entry without one (written before
+    /// it was kept) is a miss.
+    #[serde(default)]
+    pub sha256: String,
 }
 
 pub(crate) struct Cached {
@@ -56,6 +64,9 @@ impl HttpCache {
             return None;
         }
         let body = std::fs::read_to_string(b).ok()?;
+        if meta.sha256.is_empty() || hex(&Sha256::digest(body.as_bytes())) != meta.sha256 {
+            return None;
+        }
         Some(Cached { meta, body })
     }
 
@@ -71,6 +82,7 @@ impl HttpCache {
             last_modified: last_modified.map(str::to_string),
             content_type: f.content_type.clone(),
             stored: now_secs(),
+            sha256: hex(&Sha256::digest(f.body.as_bytes())),
         };
         self.write(&meta, &f.body);
     }
@@ -83,7 +95,7 @@ impl HttpCache {
         };
         let (m, _) = self.paths(url);
         if let Ok(s) = serde_json::to_string(&meta) {
-            let _ = std::fs::write(m, s);
+            let _ = write_atomic(&m, s.as_bytes());
         }
     }
 
@@ -92,12 +104,29 @@ impl HttpCache {
             return;
         }
         let (m, b) = self.paths(&meta.url);
-        if std::fs::write(&b, body).is_ok()
+        if write_atomic(&b, body.as_bytes()).is_ok()
             && let Ok(s) = serde_json::to_string(meta)
         {
-            let _ = std::fs::write(m, s);
+            let _ = write_atomic(&m, s.as_bytes());
         }
     }
+}
+
+/// Write via a temporary file beside `p`, unique to this process and call,
+/// and a rename.
+fn write_atomic(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let name = p.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = p.with_file_name(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, p).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 fn hex(b: &[u8]) -> String {
@@ -128,6 +157,24 @@ mod tests {
         assert!(c.load("https://example.org/other").is_none());
         let stale = HttpCache::new(&dir, Duration::ZERO);
         assert!(!stale.fresh(&stale.load(url).unwrap()));
+
+        // A body that does not match its metadata is a miss.
+        let (_, body) = c.paths(url);
+        std::fs::write(&body, "hel").unwrap();
+        assert!(c.load(url).is_none());
+        c.store(url, &f, None, None);
+        assert_eq!(c.load(url).unwrap().body, "hello");
+        let leftovers = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .is_some_and(|x| x == "tmp")
+            })
+            .count();
+        assert_eq!(leftovers, 0);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

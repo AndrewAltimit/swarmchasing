@@ -115,8 +115,10 @@ impl Pull {
 /// Fetch pages from `start` until `limit` records or the end. `fetch` gets the
 /// page size to ask for and the cursor to continue from; `on_page` sees each
 /// page as it arrives (to write progress), and an error from it ends the pull.
-/// A fetch error on the first page is returned; after that the pull stops and
-/// keeps what it has (see [`Pull::stopped`]).
+/// A fetch error on the first page is returned; after any page has been
+/// read, even one with no records (a stream hour with no match), the pull
+/// stops and keeps its progress (see [`Pull::stopped`]), so the next pull
+/// continues after the last good page instead of starting over.
 pub fn pull(
     limit: usize,
     page_size: usize,
@@ -126,17 +128,19 @@ pub fn pull(
 ) -> Result<Pull> {
     let mut out = Pull::default();
     let mut cursor = start;
+    let mut pages = 0usize;
     while out.observations.len() < limit {
         let size = (limit - out.observations.len()).min(page_size.max(1));
         let page = match fetch(size, cursor.as_ref()) {
             Ok(p) => p,
-            Err(e) if !out.observations.is_empty() => {
+            Err(e) if pages > 0 => {
                 out.stopped = Some(e);
                 break;
             }
             Err(e) => return Err(e),
         };
         on_page(&page)?;
+        pages += 1;
         out.truncated |= page.truncated;
         if let Some(c) = &page.coverage {
             out.coverage.get_or_insert_with(Coverage::default).merge(c);
@@ -235,6 +239,18 @@ mod tests {
         assert!(!p.complete);
         assert!(p.stopped.is_some());
         assert!(p.strict().is_err());
+
+        // Pages with no records are progress too: a stream's matchless
+        // hours are not read again after a later page fails.
+        let mut asked = Vec::new();
+        let pages = vec![
+            page(&[], Some("h1")),
+            page(&[], Some("h2")),
+            Err(anyhow::anyhow!("HTTP 503")),
+        ];
+        let p = pull(10, 1, None, canned(pages, &mut asked), &mut |_| Ok(())).unwrap();
+        assert!(p.observations.is_empty() && p.stopped.is_some());
+        assert_eq!(p.next_cursor, Some(Cursor::Key("h2".into())));
 
         // On the first page there is nothing to keep.
         let mut asked = Vec::new();

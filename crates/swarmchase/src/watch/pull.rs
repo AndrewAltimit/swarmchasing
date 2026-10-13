@@ -76,7 +76,10 @@ pub fn pull(
     let configured_from = q.from.as_deref().and_then(sc_core::parse_ts).unwrap_or(0);
     let from = match &st.pending {
         Some(p) => p.from.clone(),
-        None => cdx_ts(configured_from.max(st.cursor - overlap).max(0)),
+        None => {
+            let cursor = st.cursor.min(chrono::Utc::now().timestamp());
+            cdx_ts(configured_from.max(cursor - overlap).max(0))
+        }
     };
     // The pull's `since` replaces the configured `from`.
     q.from = None;
@@ -125,7 +128,8 @@ pub fn pull(
         _ => None,
     };
     let finished = (finished && st.pending.is_none()).then_some(started);
-    if !resumable && res.observations.len() >= limit {
+    let hit_limit = !resumable && res.observations.len() >= limit;
+    if hit_limit {
         eprint!("(hit limit {limit}; raise it or narrow the pattern) ");
     } else if res.truncated {
         eprint!("(a page was cut short and the source cannot page; narrow the pattern) ");
@@ -133,12 +137,21 @@ pub fn pull(
     if let Some(t) = asn {
         t.enrich(&mut res.observations);
     }
+    let now = chrono::Utc::now().timestamp();
+    let cap = (hit_limit && !checkpointed)
+        .then(|| oldest(&res.observations))
+        .flatten();
     Ok(Pulled {
         pulled: res.observations.len(),
         coverage: res.coverage.take(),
-        new: keep_fresh(st, res.observations, overlap, finished),
+        new: keep_fresh(st, res.observations, overlap, finished, now, cap),
         stopped,
     })
+}
+
+/// The oldest dated capture among `records`.
+fn oldest(records: &[Observation]) -> Option<i64> {
+    records.iter().map(|o| o.ts).filter(|&t| t > 0).min()
 }
 
 /// The records not seen before, recorded as seen; IDs the next pull cannot
@@ -146,20 +159,35 @@ pub fn pull(
 /// several runs began, once it is done: the next pull starts from then, not
 /// from the newest capture it saw (0, a pull saved before that was kept,
 /// leaves the cursor alone).
+///
+/// The cursor never passes `now`, so a record stamped in the future cannot
+/// move a source's next pull past everything still to come. `cap` is the
+/// oldest capture of a pull that hit its limit on a source that cannot page:
+/// what lies between the cursor and the newest capture may be missing, so
+/// the cursor moves no further than the cap. Records with no time are kept
+/// as seen for good: no window would ever drop them from a later pull.
 fn keep_fresh(
     st: &mut SourceState,
     records: Vec<Observation>,
     overlap: i64,
     finished: Option<i64>,
+    now: i64,
+    cap: Option<i64>,
 ) -> Vec<Observation> {
     let mut fresh = Vec::new();
+    // A cursor saved in the future (by an earlier version) heals too.
+    st.cursor = st.cursor.min(now);
+    let before = st.cursor;
     for o in records {
         if st.seen.contains_key(&o.id) {
             continue;
         }
         st.seen.insert(o.id.clone(), o.ts);
-        st.cursor = st.cursor.max(o.ts);
+        st.cursor = st.cursor.max(o.ts.min(now));
         fresh.push(o);
+    }
+    if let Some(cap) = cap {
+        st.cursor = st.cursor.min(cap.max(before));
     }
     if let Some(started) = finished.filter(|&t| t > 0) {
         st.cursor = st.cursor.min(started);
@@ -171,13 +199,105 @@ fn keep_fresh(
     // From the start of that UTC day: some sources (urlquery) take whole
     // days only, so the next pull returns the whole day again.
     let keep_from = keep_from - keep_from.rem_euclid(86_400);
-    st.seen.retain(|_, ts| *ts >= keep_from);
+    st.seen.retain(|_, ts| *ts <= 0 || *ts >= keep_from);
     fresh
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [`keep_fresh`] at a far-future now, with no limit cap.
+    fn kf(
+        st: &mut SourceState,
+        records: Vec<Observation>,
+        overlap: i64,
+        finished: Option<i64>,
+    ) -> Vec<Observation> {
+        keep_fresh(st, records, overlap, finished, i64::MAX, None)
+    }
+
+    fn rec(id: &str, ts: i64) -> Observation {
+        Observation {
+            id: id.into(),
+            ts,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_future_capture_does_not_move_the_cursor_past_now() {
+        let day = 86_400;
+        let mut st = SourceState::default();
+        let now = 10 * day;
+        keep_fresh(
+            &mut st,
+            vec![rec("a", 9 * day), rec("z", 400 * day)],
+            day,
+            None,
+            now,
+            None,
+        );
+        assert_eq!(st.cursor, now);
+        // The next pull still reaches back from now and sees new records.
+        let fresh = keep_fresh(
+            &mut st,
+            vec![rec("b", 10 * day + 60)],
+            day,
+            None,
+            now + day,
+            None,
+        );
+        assert_eq!(fresh.len(), 1);
+        // A cursor already saved in the future comes back to now.
+        let mut st = SourceState {
+            cursor: 400 * day,
+            ..Default::default()
+        };
+        keep_fresh(&mut st, vec![], day, None, now, None);
+        assert_eq!(st.cursor, now);
+    }
+
+    #[test]
+    fn a_pull_cut_at_its_limit_keeps_the_cursor_at_its_oldest_capture() {
+        let day = 86_400;
+        let mut st = SourceState {
+            cursor: 5 * day,
+            ..Default::default()
+        };
+        let got = vec![
+            rec("n1", 20 * day),
+            rec("n2", 18 * day),
+            rec("n3", 12 * day),
+        ];
+        let cap = oldest(&got);
+        keep_fresh(&mut st, got, day, None, 30 * day, cap);
+        // What lies between day 5 and day 12 may be missing; the next pull
+        // reaches back to day 12, not day 20.
+        assert_eq!(st.cursor, 12 * day);
+        // A cap never moves the cursor backwards.
+        keep_fresh(
+            &mut st,
+            vec![rec("o", 2 * day)],
+            day,
+            None,
+            30 * day,
+            Some(2 * day),
+        );
+        assert_eq!(st.cursor, 12 * day);
+    }
+
+    #[test]
+    fn undated_records_stay_seen() {
+        let day = 86_400;
+        let mut st = SourceState::default();
+        let fresh = kf(&mut st, vec![rec("u", 0), rec("a", 20 * day)], day, None);
+        assert_eq!(fresh.len(), 2);
+        let fresh = kf(&mut st, vec![rec("u", 0), rec("b", 40 * day)], day, None);
+        let ids: Vec<&str> = fresh.iter().map(|o| o.id.as_str()).collect();
+        assert_eq!(ids, ["b"]);
+        assert!(st.seen.contains_key("u") && !st.seen.contains_key("a"));
+    }
 
     #[test]
     fn the_committed_watchlist_names_valid_sources() {
@@ -202,7 +322,7 @@ mod tests {
         };
         let day = 86_400;
         let mut st = SourceState::default();
-        let fresh = keep_fresh(
+        let fresh = kf(
             &mut st,
             vec![rec("a", 9 * day), rec("b", 12 * day)],
             3 * day,
@@ -211,7 +331,7 @@ mod tests {
         assert_eq!(fresh.len(), 2);
         assert_eq!(st.cursor, 12 * day);
         // The next pull reaches back three days and returns `b` again.
-        let fresh = keep_fresh(
+        let fresh = kf(
             &mut st,
             vec![rec("b", 12 * day), rec("c", 13 * day)],
             3 * day,
@@ -233,14 +353,14 @@ mod tests {
         let (day, hour) = (86_400, 3_600);
         let mut st = SourceState::default();
         let early = rec("early", 9 * day + hour);
-        keep_fresh(
+        kf(
             &mut st,
             vec![early.clone(), rec("late", 12 * day + 17 * hour)],
             3 * day,
             None,
         );
         // The next pull asks from day 9 17:00 but gets all of day 9.
-        let fresh = keep_fresh(&mut st, vec![early], 3 * day, None);
+        let fresh = kf(&mut st, vec![early], 3 * day, None);
         assert!(fresh.is_empty());
     }
 
@@ -253,7 +373,7 @@ mod tests {
             ..Default::default()
         };
         let mut st = SourceState::default();
-        keep_fresh(
+        kf(
             &mut st,
             vec![rec("a", 16 * day), rec("b", 20 * day)],
             day,
@@ -264,8 +384,8 @@ mod tests {
         assert!(st.seen.contains_key("a") && st.seen.contains_key("b"));
         // A pull that began after its newest capture leaves the cursor, and
         // so does one saved without `started`.
-        keep_fresh(&mut st, vec![], day, Some(18 * day));
-        keep_fresh(&mut st, vec![], day, Some(0));
+        kf(&mut st, vec![], day, Some(18 * day));
+        kf(&mut st, vec![], day, Some(0));
         assert_eq!(st.cursor, 15 * day);
         let p: Pending = serde_json::from_str(r#"{"resume_key":"k","from":"20260901"}"#).unwrap();
         assert_eq!(p.started, 0);

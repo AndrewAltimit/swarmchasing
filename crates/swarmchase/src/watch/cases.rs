@@ -153,14 +153,22 @@ impl CaseCheck<'_> {
         watched: &mut BTreeMap<String, CaseWatch>,
     ) -> CaseReport {
         let mut report = CaseReport::default();
-        let cases = match case::all(self.root) {
+        let (cases, broken) = match case::all_readable(self.root) {
             Ok(c) => c,
             Err(e) => {
                 report.lines.push(format!("cases not checked: {e:#}"));
                 return report;
             }
         };
-        watched.retain(|id, _| cases.iter().any(|c| &c.id == id));
+        for (id, why) in &broken {
+            report.lines.push(format!(
+                "`{id}`: not checked: case.toml does not load: {why}"
+            ));
+        }
+        // A case that does not load keeps what the watch holds for it.
+        watched.retain(|id, _| {
+            cases.iter().any(|c| &c.id == id) || broken.iter().any(|(b, _)| b == id)
+        });
         for c in &cases {
             let cw = watched.entry(c.id.clone()).or_default();
             let (mut lines, mut keys) = match self.check(c, fresh, cw) {

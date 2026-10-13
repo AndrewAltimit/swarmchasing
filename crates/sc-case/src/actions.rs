@@ -246,9 +246,11 @@ pub fn alternative(
     Ok(())
 }
 
-/// Record a send. `at` (RFC 3339) or `date` say when; default now. A send
-/// time in the future is refused: the lead time runs from the real send.
-/// Returns a line for the admin.
+/// Record a send. `at` (RFC 3339) or `date` (`YYYY-MM-DD`) say when;
+/// default now. A send time or date in the future, or a date that does not
+/// parse, is refused: the lead time runs from the real send. Returns a line
+/// for the admin, with a warning when `to` is none of the case's contacts
+/// (such a send counts for no party).
 pub fn sent(
     c: &mut Case,
     to: &str,
@@ -263,12 +265,25 @@ pub fn sent(
             Some(t) => Some(t),
             None => bail!("--at `{a}`: give an RFC 3339 time, e.g. 2026-10-12T14:05:00Z"),
         },
-        (None, Some(_)) => None,
+        (None, Some(d)) => {
+            if chrono::NaiveDate::parse_from_str(d.trim(), "%Y-%m-%d").is_err() {
+                bail!("--date `{d}`: give a date as YYYY-MM-DD, e.g. 2026-10-12");
+            }
+            if d.trim() > crate::text::date_of(now).as_str() {
+                bail!("a send cannot be recorded in the future");
+            }
+            None
+        }
         (None, None) => Some(now),
     };
     if at.is_some_and(|t| t > now + 300) {
         bail!("a send cannot be recorded in the future");
     }
+    let date = date.map(str::trim);
+    let known = c
+        .contacts
+        .iter()
+        .any(|x| x.address.trim().eq_ignore_ascii_case(to.trim()));
     let date = at
         .map(crate::text::date_of)
         .or(date.map(str::to_string))
@@ -286,7 +301,13 @@ pub fn sent(
         c.status = CaseStatus::Reported;
         c.log(&date, "status: reported");
     }
-    Ok(format!("send to {to} at {when}"))
+    let mut line = format!("send to {to} at {when}");
+    if !known {
+        line.push_str(&format!(
+            " (warning: {to} is not one of this case's contacts, so the send counts for no party; add it with `case contact add` if it is one)"
+        ));
+    }
+    Ok(line)
 }
 
 /// A claim from case work, as `case claim` takes it.
@@ -588,6 +609,44 @@ mod tests {
         .unwrap();
         assert_eq!(c.status, CaseStatus::Reported);
         assert_eq!(c.sent[0].at, None);
+        // A date that does not parse, or is after today, is refused.
+        for bad in ["2026-13-40", "last week", "2026-10-30"] {
+            assert!(
+                sent(&mut c, "a@b.example", "email", None, None, Some(bad), now).is_err(),
+                "{bad}"
+            );
+        }
+        assert_eq!(c.sent.len(), 1);
+    }
+
+    #[test]
+    fn a_send_to_no_known_contact_is_flagged() {
+        let mut c = case();
+        let now = 1_791_000_000;
+        let line = sent(&mut c, "who@else.example", "email", None, None, None, now).unwrap();
+        assert!(line.contains("warning"), "{line}");
+        c.contacts.push(Contact {
+            org: "Portal".into(),
+            role: ContactRole::Affected,
+            endpoint: Some("portal.example.gov".into()),
+            channel: "email".into(),
+            address: "Security@Portal.example.gov".into(),
+            source: "https://portal.example.gov/.well-known/security.txt".into(),
+            confidence: "high".into(),
+            found_on: "d".into(),
+            purpose: None,
+        });
+        let line = sent(
+            &mut c,
+            "security@portal.example.gov",
+            "email",
+            None,
+            None,
+            None,
+            now,
+        )
+        .unwrap();
+        assert!(!line.contains("warning"), "{line}");
     }
 
     #[test]

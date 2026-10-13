@@ -10,7 +10,7 @@ The CLI reads and writes the files; what a case holds and every decision on it a
 swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] [files…]
 ```
 
-`case new` copies the selected records into `raw/records.ndjson`, so watch retention cannot delete them, and writes `case.toml`. Records come from the watch store, or from files given as arguments. `--host-hits` also takes every flagged record on the same hosts, including other clusters. `review` can open a case from a lead too ([review](watch.md#reviewing-leads)).
+`case new` copies the selected records into `raw/records.ndjson`, so watch retention cannot delete them, and writes `case.toml`. Records come from the watch store, or from files given as arguments. From the store it analyses the last `--days` days, by default the `analysis_window_days` of `--watchlist` (`watchlist.toml`, else 30), the window the digest analyses, so a cluster number from the digest names the same cluster; a stable key (`k-3f9a2c1b`) names it whatever the window. A line of `raw/records.ndjson` that cannot be read is skipped with a warning. `--host-hits` also takes every flagged record on the same hosts, including other clusters. `review` can open a case from a lead too ([review](watch.md#reviewing-leads)).
 
 ## What `case.toml` holds
 
@@ -34,9 +34,9 @@ Each change is logged with its date.
 
 | Command | What it does |
 |---|---|
-| `case status [<id>]` | Lists cases, or shows one case and what it still needs. |
+| `case status [<id>]` | Lists cases (a case.toml that does not load is skipped with a warning), or shows one case and what it still needs. |
 | `case endpoint <id> <host>... <state> [--note …] [--basis …] [--single-source-reason …] [--sector "…"]` | Classifies one or more endpoints; `compromised` needs `--basis`. A host not in the case changes nothing. |
-| `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits. Refused once its notice is published. |
+| `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits, under the data directory's lock. Refused once its notice is published, or while a watch runs. |
 | `case claim <id> --party … [--layer …] --evidence … [--tag …] --detail …` | Records an attribution claim ([attribution claims](#attribution-claims)). |
 | `case set <id> --status … --notice … --min-named … --naming-days N --admin "…"` | Changes the status, the developer naming threshold, the naming lead (3 to 20 working days) or the admin's name. |
 | `case grade <id> [<L0..L5> --note … \| --clear]` | Shows each cluster's agent grade, or records the admin's ([agent grade](#agent-grade)). |
@@ -45,7 +45,7 @@ Each change is logged with its date.
 | `case fleet merge\|split\|show <id> …` | Groups soft-linked clusters into one fleet, splits one off, or lists fleets and candidates ([fleets](#fleets)). |
 | `case fleet interaction\|withdraw <id> <fleet> …` | Records reviewed interaction between a fleet's runs, or withdraws it ([swarms](#swarms)). |
 | `case add <id> …` | Adds new records. |
-| `case contacts <id> [--providers-only] [--country CC]` | Adds provider contacts from the directory, proposes national CSIRTs, then finds a contact for each endpoint not marked not-affected ([contacts](#contacts)). |
+| `case contacts <id> [--providers-only] [--country CC]` | Adds provider contacts from the directory, proposes national CSIRTs, then finds a contact for each compromised, targeted or historical endpoint, never reading a relay, carrier or callback host ([contacts](#contacts)). |
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
 | `case report <id> --audience …` | Drafts a report into `reports/`, applying the case's claims and naming threshold. |
 | `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
@@ -128,7 +128,9 @@ While a fleet has an entry, reports call it a swarm and list each entry as an In
 
 ## Contacts
 
-`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint not marked not-affected: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each domain is read once a run, whether the read succeeds or not, so endpoints under one registered domain (by the Public Suffix List) share its security.txt and RDAP reads. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
+`case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint classified compromised, targeted or historical: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each domain is read once a run, whether the read succeeds or not, so endpoints under one registered domain (by the Public Suffix List) share its security.txt and RDAP reads. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
+
+Unreviewed endpoints are counted and left until classified with `case endpoint`. A host that a relay, carrier or callback rule matches is never read, nor is a parent domain that such a rule matches: an inbox's security.txt would be on the agent's own callback channel. The rules are the case's pinned rules and the current ones, against the host alone and against every host in the case's records (an inbox id on a request catcher matches only in a record).
 
 Each contact has a role: `provider`, `affected` (an operator), `registrar`, `host`, `csirt` or `declared_owner`. A role this toolkit version does not know reads as `other`.
 
@@ -163,7 +165,7 @@ The notice follows the reports in two stages, on the fixed clocks in [policies](
 | Operator of a compromised endpoint | 24 hours | The longer of 10 working days and `--naming-days` |
 
 - **Parties.** Each provider organisation among the case's contacts (or one unnamed provider when there is none), and the operator of each endpoint classified compromised, targeted or historical. A send counts for an operator when its recipient is a contact listed for that endpoint.
-- **Send times.** `case sent` records the time of the send: now, or `--at` (RFC 3339, such as `2026-10-12T14:05:00Z`) for a send recorded afterwards. A time in the future is refused. A send recorded with `--date` only counts from the end of that day.
+- **Send times.** `case sent` records the time of the send: now, or `--at` (RFC 3339, such as `2026-10-12T14:05:00Z`) for a send recorded afterwards. A time in the future is refused. A send recorded with `--date` (`YYYY-MM-DD`; a date that does not parse or is after today is refused) only counts from the end of that day. A `--to` that is none of the case's contacts is recorded with a warning: the send counts for no party until the address is a listed contact.
 - **Working days.** The naming clock counts Monday to Friday in UTC. A send on a Saturday or Sunday counts from the following Monday 00:00 UTC; the clock ends at the same UTC time of day once the working days have passed.
 - **Lengthening.** `case set <id> --naming-days N`, N from 3 to 20, lengthens the naming lead for the case. Nothing shortens it below the bounds, and nothing changes the indicator clock.
 - **Consent.** `case consent <id> --party <p> --note "…"` records an operator's written consent to earlier naming, with how it was given. Its name may then go in the next naming update with no wait.

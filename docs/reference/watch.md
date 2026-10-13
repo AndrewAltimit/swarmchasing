@@ -9,6 +9,8 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | Path | Holds |
 |---|---|
 | `state.json` | Each source's time cursor, resume key or stream checkpoint, and health history. |
+| `state.json.bak` | The previous `state.json`, read when the current one does not parse. |
+| `.lock`, `.lock.owner` | The data directory's writer lock and the command holding it ([one writer at a time](#one-writer-at-a-time)). |
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
 | `runs/<stamp>/digest.md` | One directory per run, with its digest. |
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
@@ -32,14 +34,15 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 
 `watch` is incremental. It pulls the sources in [`watchlist.toml`](../../watchlist.toml), each of which carries a rationale: the agent behaviour it catches, the rule it feeds and what its noise looks like.
 
-- **Cursors.** Each source keeps a time cursor in `state.json`. New records are deduplicated by ID and appended to the source's store file.
+- **Cursors.** Each source keeps a time cursor in `state.json`. New records are deduplicated by ID and appended to the source's store file. A record stamped in the future moves the cursor no further than the run's own time. A source that cannot page and returns `limit` records moves its cursor no further than the oldest of them, since what lies before may be missing. IDs of records with no time stay in the seen list, so they are never added twice.
 - **Wayback paging.** Wayback's index is sorted by URL rather than time, so a pull cut short by `limit`, or by a failed page, resumes from its resume key on the next run. A host too big for one index query is read by path prefix, and `slice_days` reads the time range in windows.
-- **Checkpoints.** GH Archive and CT logs read on from where the last run stopped (`mark` in `state.json`), within a per-run budget.
+- **Checkpoints.** GH Archive and CT logs read on from where the last run stopped (`mark` in `state.json`), within a per-run budget. Every page read counts as progress, matches or not, so a failure after matchless hours resumes after them.
 - **Unavailable hosts.** A host answering HTTP 503 gets ten minutes of retries; if it stays down, later requests to it in the same run are not sent, and its sources continue next run.
 - **Overlap.** Each pull overlaps the last by `overlap_days` to catch late-indexed captures.
-- **Analysis window.** Every run analyses the last `analysis_window_days` of stored records together, so clusters can span runs. It reads only that window plus the overlap from the store, and this run's new records whatever their capture time.
+- **Analysis window.** Every run analyses the stored records captured in the last `analysis_window_days` together, so clusters can span runs. The overlap before the window is read for the archive burst baseline only. `case new` defaults to the same window, so a cluster number from the digest names the same cluster there.
 - **urlquery.** urlquery sources need `URLQUERY_APIKEY`. Without it they are skipped and the digest says so ([configuration](configuration.md#urlquerynet)).
-- **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached.
+- **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss.
+- **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is skipped and counted in a `store_damaged` health alert; the other lines are read. Before an append, a last line without its newline is ended, so it never swallows the next record.
 - **ASN.** Once `swarmchase asn fetch` has put the IP-to-ASN table in `asn/`, records that carry an IP but no network get one ([configuration](configuration.md#ip-to-asn-table)).
 
 ### Source kinds
@@ -65,6 +68,10 @@ Substrings are `|`-separated and case-insensitive. Archive kinds date records by
 
 Streamed and feed kinds read a bounded amount each run and report their coverage, and their records are leads for review: the record's URL is the event, package, certificate, footprint or tool server, so the URL rules rarely fire on it. The `wellknown` kind reads only Wayback index rows for agent cards, agent registration files and signature key directories, never the files. The `mcp` kind keeps a server's name, version, publish time and declared hosts as reference data for linking. Every kind's terms of use are summarised in the [watchlist](../../watchlist.toml) and in its [collector](../../crates/sc-collect/README.md#record-sources).
 
+### One writer at a time
+
+A watch run holds an exclusive lock on the data directory (`.lock`) from start to finish; `case rename` and `backup restore` take it too. A second command that needs it fails at once, naming the holder from `.lock.owner`, instead of writing beside the first. The lock is advisory and released when the command exits, however it exits. `state.json` and every other rewritten file are written to a temporary file of their own and renamed into place; the previous `state.json` is kept as `state.json.bak`, read with a warning when the current one does not parse.
+
 ## The digest
 
 Each run writes `runs/<stamp>/digest.md`. It opens with the run's priority and source health, then covers new clusters, tier changes and endpoints hit for the first time. When something changed, the scheduled workflow emails it to the admin, with the priority in the subject (`[swarmchase] [HIGH] watch digest <stamp>`); nothing else leaves the runner.
@@ -79,7 +86,7 @@ The first block gives the run a priority, `high`, `medium` or `low`, and lists t
 | `medium` | Any health alert (a source failed, skipped, collapsed or failed its canary, a host down, rule drift); a significant lead below L2; a suggestive lead at L2 or higher. |
 | `low` | None of these. |
 
-A lead is a cluster above noise that is new since the last run or rose a tier, or a new significant record that joined no cluster. A case clock has run when reports were sent and the indicator notice's lead time has passed with the notice not yet added, or when the notice is added and an operator may now be named. Each due clock is also a *Case status* line with the command that starts the step; the watch takes no step itself.
+A lead is a cluster above noise that is new since the last run or rose a tier, or a new significant record that joined no cluster. New and risen are judged against the cluster's [ledger](#the-ledger) thread: a cluster whose key changed because its earliest record left the window is compared with its own previous run, not reported as new. A case clock has run when reports were sent and the indicator notice's lead time has passed with the notice not yet added, or when the notice is added and an operator may now be named. Each due clock is also a *Case status* line with the command that starts the step; the watch takes no step itself.
 
 A model's suggestion never sets the priority: the same facts give the same priority whatever a model said. A new significant record outside any cluster at L2 or higher makes the run count as changed, like a new cluster.
 
@@ -96,7 +103,8 @@ The health block comes first, because a source that did not run hides whatever i
 - a source whose canary failed: it answered, but nothing came back in the shape the parser expects;
 - a source skipped for the first time (no API key);
 - a source whose pull falls below a fifth of its median over recent runs, which usually means an API change, an expired key or a spent quota. A source's first pull and a pull spread over several runs are catching up, so they do not count towards the median;
-- a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it.
+- a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it;
+- a store file with lines that cannot be read, with their count. They are skipped; the other records are read.
 
 Under *Capability lost this run* it lists each skipped, failed or stopped source with what its absence costs, and the part of a stream it skipped. When no submit-time source ran (urlquery is the only one scheduled), it says so first: without submission times, timing links, pace, agent grades above L2 and interaction edges are unavailable. *Quiet sources* notes a source that has pulled nothing for several runs, and whether its canary passed.
 
@@ -201,7 +209,7 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `autonomy` | Each level's mode under `modes`, and this run's `decisions` (the lines of `autonomy.ndjson`). |
 | `digest` | The digest's file name in the same directory. |
 
-A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
+A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
 
 ### Lead fields
 

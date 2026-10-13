@@ -1,8 +1,9 @@
 //! `swarmchase backup`: encrypted backups of what cannot be collected again.
 //!
-//! An archive is a tar of `<data>/cases`, `<data>/labels`, `<data>/rules` and
-//! `<data>/state.json` (never the bulk record store, which the sources can
-//! refill), encrypted with age to an X25519 recipient
+//! An archive is a tar of `<data>/cases`, `<data>/labels`, `<data>/rules`,
+//! `<data>/state.json`, the cross-run history (`ledger.json`, `summary.json`,
+//! `autonomy.ndjson`) and the canary registry (never the bulk record store,
+//! which the sources can refill), encrypted with age to an X25519 recipient
 //! (`SWARMCHASE_BACKUP_RECIPIENT`, a public key, so the machine that makes
 //! backups holds no secret) or to a passphrase
 //! (`SWARMCHASE_BACKUP_PASSPHRASE`). It is written to
@@ -11,7 +12,10 @@
 //!
 //! `verify` checks the hash, and decrypts and reads the archive through when
 //! given the identity. `restore` decrypts into a directory and never
-//! overwrites one that is not empty unless forced. `keygen` writes an
+//! overwrites one that is not empty unless forced. Restored without a record
+//! store, every source's cursor and seen list in `state.json` are reset, so
+//! the next watch fetches the analysis window again instead of continuing
+//! from where the lost store left off. `keygen` writes an
 //! identity file, which belongs neither on the runner nor beside the backups.
 
 use anyhow::{Context, Result, bail};
@@ -20,7 +24,16 @@ use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// What a backup holds, relative to the data directory.
-pub const PARTS: [&str; 4] = ["cases", "labels", "rules", "state.json"];
+pub const PARTS: [&str; 8] = [
+    "cases",
+    "labels",
+    "rules",
+    "state.json",
+    "ledger.json",
+    "summary.json",
+    "autonomy.ndjson",
+    crate::canary::REGISTRY,
+];
 const RECIPIENT_ENV: &str = "SWARMCHASE_BACKUP_RECIPIENT";
 const PASSPHRASE_ENV: &str = "SWARMCHASE_BACKUP_PASSPHRASE";
 
@@ -32,7 +45,8 @@ pub struct BackupArgs {
 
 #[derive(Subcommand)]
 enum BackupCmd {
-    /// Archive and encrypt cases, labels, pinned rules and state.json.
+    /// Archive and encrypt cases, labels, pinned rules, state.json, the
+    /// cross-run ledger, summary and autonomy log, and the canary registry.
     Create {
         #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
         data: PathBuf,
@@ -144,7 +158,12 @@ pub fn run(args: BackupArgs) -> Result<()> {
                 bail!("restore needs --identity <file> or --passphrase");
             };
             check_hash(&file)?;
-            restore(&file, &key, &to, force)?;
+            if restore(&file, &key, &to, force)? {
+                println!(
+                    "no record store in {}: source cursors and seen lists reset, so the next watch fetches the window again",
+                    to.display()
+                );
+            }
             println!(
                 "restored {} into {}; point SWARMCHASE_DATA there or copy what you need",
                 file.display(),
@@ -281,7 +300,7 @@ fn archive(data: &Path) -> Result<Vec<u8>> {
     }
     if !any {
         bail!(
-            "nothing to back up in {} (no cases, labels, rules or state.json)",
+            "nothing to back up in {} (no cases, labels, rules, state or history)",
             data.display()
         );
     }
@@ -400,8 +419,10 @@ pub fn read_through(file: &Path, key: &Key) -> Result<usize> {
 }
 
 /// Decrypt into `to`. A directory that is not empty is refused unless
-/// `force`; entries that would land outside `to` are refused by `tar`.
-pub fn restore(file: &Path, key: &Key, to: &Path, force: bool) -> Result<()> {
+/// `force`; entries that would land outside `to` are refused by `tar`. The
+/// data directory's lock is held throughout. Returns whether the cursors
+/// were reset because `to` holds no record store ([`reset_cursors`]).
+pub fn restore(file: &Path, key: &Key, to: &Path, force: bool) -> Result<bool> {
     let busy = std::fs::read_dir(to).is_ok_and(|mut d| d.next().is_some());
     if busy && !force {
         bail!(
@@ -410,6 +431,7 @@ pub fn restore(file: &Path, key: &Key, to: &Path, force: bool) -> Result<()> {
         );
     }
     std::fs::create_dir_all(to)?;
+    let _lock = crate::store::lock_data(to, "backup restore")?;
     let mut a = tar::Archive::new(decrypt(file, key)?);
     a.set_overwrite(force);
     for e in a.entries()? {
@@ -418,7 +440,33 @@ pub fn restore(file: &Path, key: &Key, to: &Path, force: bool) -> Result<()> {
             bail!("refused an entry outside {}", to.display());
         }
     }
-    Ok(())
+    let has_store = std::fs::read_dir(to.join("store")).is_ok_and(|mut d| d.next().is_some());
+    if has_store {
+        return Ok(false);
+    }
+    reset_cursors(&to.join("state.json"))
+}
+
+/// Forget where each source's pulls had reached (cursor, seen IDs, a
+/// pending resume key, a stream checkpoint), keeping its health history,
+/// so the next watch fetches the analysis window again. Returns whether
+/// `state` existed.
+fn reset_cursors(state: &Path) -> Result<bool> {
+    let Some(mut s) = crate::store::read_json::<serde_json::Value>(state)? else {
+        return Ok(false);
+    };
+    if let Some(sources) = s.get_mut("sources").and_then(|v| v.as_object_mut()) {
+        for src in sources.values_mut() {
+            if let Some(o) = src.as_object_mut() {
+                o.insert("cursor".into(), 0.into());
+                o.insert("seen".into(), serde_json::json!({}));
+                o.remove("pending");
+                o.remove("mark");
+            }
+        }
+    }
+    crate::store::write_json(state, &s)?;
+    Ok(true)
 }
 
 /// Write a new identity file at `out` (never over an existing file) and
@@ -463,7 +511,16 @@ mod tests {
         std::fs::write(d.join("cases/c-1/raw/records.ndjson"), "{}\n").unwrap();
         std::fs::create_dir_all(d.join("labels")).unwrap();
         std::fs::write(d.join("labels/reviewed.ndjson"), "{}\n").unwrap();
-        std::fs::write(d.join("state.json"), "{}").unwrap();
+        std::fs::write(
+            d.join("state.json"),
+            r#"{"sources":{"uq":{"cursor":1791000000,"seen":{"a":1791000000},"mark":7,"health":{"ever_pulled":3}}}}"#,
+        )
+        .unwrap();
+        std::fs::write(d.join("ledger.json"), "{}").unwrap();
+        std::fs::write(d.join("summary.json"), "{}").unwrap();
+        std::fs::write(d.join("autonomy.ndjson"), "{}\n").unwrap();
+        std::fs::create_dir_all(d.join("canary")).unwrap();
+        std::fs::write(d.join(crate::canary::REGISTRY), "{}").unwrap();
         // The bulk store is not backed up.
         std::fs::create_dir_all(d.join("store")).unwrap();
         std::fs::write(d.join("store/uq.ndjson"), "{\"bulk\":1}\n").unwrap();
@@ -490,13 +547,32 @@ mod tests {
         assert!(read_through(&p, &id).unwrap() > 3);
 
         let to = root.join("restored");
-        restore(&p, &id, &to, false).unwrap();
+        assert!(
+            restore(&p, &id, &to, false).unwrap(),
+            "no store: cursors reset"
+        );
         assert_eq!(
             std::fs::read_to_string(to.join("cases/c-1/case.toml")).unwrap(),
             "id = \"c-1\"\n"
         );
         assert!(to.join("state.json").is_file());
         assert!(to.join("labels/reviewed.ndjson").is_file());
+        for part in [
+            "ledger.json",
+            "summary.json",
+            "autonomy.ndjson",
+            crate::canary::REGISTRY,
+        ] {
+            assert!(to.join(part).is_file(), "{part}");
+        }
+        // With no store, every source starts over; its health history stays.
+        let st: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(to.join("state.json")).unwrap()).unwrap();
+        let uq = &st["sources"]["uq"];
+        assert_eq!(uq["cursor"], 0);
+        assert_eq!(uq["seen"], serde_json::json!({}));
+        assert!(uq.get("mark").is_none());
+        assert_eq!(uq["health"]["ever_pulled"], 3);
         assert!(!to.join("store").exists(), "the bulk store stays out");
         // A second restore into the same place needs --force.
         assert!(restore(&p, &id, &to, false).is_err());
