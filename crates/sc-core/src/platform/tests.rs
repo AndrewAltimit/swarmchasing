@@ -1,0 +1,470 @@
+//! Synthetic swarms against benign floods. Every account, repository and
+//! text here is invented.
+
+use super::*;
+use crate::rules::Rules;
+
+const T0: i64 = 1_791_500_000;
+const HOUR: i64 = 3600;
+
+/// Deterministic pseudo-random words, so background texts differ.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        self.0 >> 33
+    }
+    fn sentence(&mut self, words: usize) -> String {
+        const V: [&str; 40] = [
+            "build",
+            "fails",
+            "when",
+            "the",
+            "cache",
+            "is",
+            "cold",
+            "and",
+            "tests",
+            "time",
+            "out",
+            "on",
+            "linux",
+            "docs",
+            "mention",
+            "flag",
+            "that",
+            "no",
+            "longer",
+            "exists",
+            "please",
+            "add",
+            "support",
+            "for",
+            "arm",
+            "wheels",
+            "crash",
+            "after",
+            "upgrade",
+            "memory",
+            "grows",
+            "until",
+            "killed",
+            "typo",
+            "readme",
+            "example",
+            "returns",
+            "wrong",
+            "value",
+            "sometimes",
+        ];
+        (0..words)
+            .map(|_| V[(self.next() % V.len() as u64) as usize])
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+struct Ev {
+    id: String,
+    ts: i64,
+    actor: String,
+    rank: Option<u64>,
+    target: &'static str,
+    action: Action,
+    platform: Platform,
+}
+
+fn ev(e: Ev, text: Option<&str>, rules: &Rules) -> PlatformEvent {
+    let p = PlatformEvent {
+        id: e.id.clone(),
+        platform: e.platform,
+        action: e.action,
+        ts: e.ts,
+        actor: if e.actor.is_empty() {
+            String::new()
+        } else {
+            actor_key(e.platform, &e.actor)
+        },
+        actor_rank: e.rank,
+        first_timer: None,
+        target: e.target.into(),
+        link: format!("https://github.com/{}/issues/{}", e.target, e.id),
+        ..Default::default()
+    };
+    match text {
+        Some(t) => p.with_text(t, &[e.target], rules),
+        None => p,
+    }
+}
+
+/// Six hours of ordinary issues and comments from established accounts.
+fn background(rules: &Rules, n: usize) -> Vec<PlatformEvent> {
+    let mut r = Lcg(7);
+    const REPOS: [&str; 6] = [
+        "alpha/one",
+        "beta/two",
+        "gamma/three",
+        "delta/four",
+        "eps/five",
+        "zeta/six",
+    ];
+    (0..n)
+        .map(|i| {
+            let words = 10 + (r.next() % 20) as usize;
+            let text = r.sentence(words);
+            ev(
+                Ev {
+                    id: format!("bg{i}"),
+                    ts: T0 + (r.next() % (6 * HOUR) as u64) as i64,
+                    actor: format!("person{i}"),
+                    rank: Some(10_000 + r.next() % 150_000),
+                    target: REPOS[i % REPOS.len()],
+                    action: Action::Comment,
+                    platform: Platform::Github,
+                },
+                Some(&text),
+                rules,
+            )
+        })
+        .collect()
+}
+
+/// `n` accounts posting `text(i)` to `target(i)` from `start`, `gap` apart.
+#[allow(clippy::too_many_arguments)]
+fn wave(
+    rules: &Rules,
+    tag: &str,
+    n: usize,
+    start: i64,
+    gap: i64,
+    rank: impl Fn(usize) -> Option<u64>,
+    target: impl Fn(usize) -> &'static str,
+    text: impl Fn(usize) -> String,
+) -> Vec<PlatformEvent> {
+    (0..n)
+        .map(|i| {
+            ev(
+                Ev {
+                    id: format!("{tag}{i}"),
+                    ts: start + i as i64 * gap,
+                    actor: format!("{tag}-acct{i}"),
+                    rank: rank(i),
+                    target: target(i),
+                    action: Action::IssueOpened,
+                    platform: Platform::Github,
+                },
+                Some(&text(i)),
+                rules,
+            )
+        })
+        .collect()
+}
+
+const VICTIMS: [&str; 6] = [
+    "libfoo/core",
+    "barcorp/api",
+    "quux/server",
+    "acme/widgets",
+    "nimbus/cli",
+    "orbit/web",
+];
+
+fn agent_report(i: usize) -> String {
+    format!(
+        "Certainly! Here's the security report. I identified a critical remote code execution vulnerability in {} at src/handler{i}.py line {}. An attacker can exploit this to gain full control. Please patch immediately and credit [Insert GitHub username].",
+        VICTIMS[i % VICTIMS.len()],
+        40 + i
+    )
+}
+
+#[test]
+fn a_new_account_swarm_filing_templated_reports_is_found() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 400);
+    evs.extend(wave(
+        &rules,
+        "sw",
+        6,
+        T0 + 2 * HOUR + 17 * 60,
+        70,
+        |i| Some(160_400 + i as u64),
+        |i| VICTIMS[i],
+        agent_report,
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    let s = &rep.swarms[0];
+    assert_eq!((s.events, s.accounts, s.distinct_targets), (6, 6, 6));
+    assert_eq!(s.strength, HintStrength::Moderate, "{}", s.reason);
+    assert!(s.basis.contains(&Basis::Template), "{:?}", s.basis);
+    assert_eq!(s.burst.in_window, 6);
+    assert!(s.burst.p_chance < 1e-4, "{}", s.reason);
+    let a = s.new_accounts.as_ref().unwrap();
+    assert_eq!(a.new, 6);
+    assert!(a.p_chance < 1e-3);
+    assert!(
+        s.residue
+            .iter()
+            .any(|(r, n)| r == "text.chat_opener" && *n == 6),
+        "{:?}",
+        s.residue
+    );
+    assert!(s.id.starts_with("PS-") && s.id.len() == 11);
+    assert!(!s.template.contains("libfoo"), "{}", s.template);
+    // Every member is worth carrying to the next run.
+    assert!(s.members.iter().all(|m| rep.carry.contains(m)));
+    assert_eq!(rep.events, 406);
+}
+
+#[test]
+fn near_duplicates_with_reworded_lines_still_group() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 200);
+    let variants = [
+        "I found a serious security issue in this project where user input reaches the shell without escaping and could allow command injection by a remote attacker",
+        "I found a serious security issue in this project where user input reaches the shell without escaping and could allow command injection by any remote attacker",
+        "Hello I found a serious security issue in this project where user input reaches the shell without escaping and could allow command injection by a remote attacker",
+        "I found a serious security issue in this project where user input reaches the shell without escaping and could allow command injection by a remote attacker thanks",
+    ];
+    evs.extend(wave(
+        &rules,
+        "nd",
+        4,
+        T0 + HOUR + 600,
+        45,
+        |i| Some(160_500 + i as u64),
+        |i| VICTIMS[i],
+        |i| variants[i].to_string(),
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    assert!(rep.swarms[0].basis.contains(&Basis::NearDuplicate));
+    assert!(rep.swarms[0].similarity.unwrap() > 0.6);
+}
+
+#[test]
+fn dependency_bumps_and_contribution_drives_are_suppressed() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 200);
+    evs.extend(wave(
+        &rules,
+        "dep",
+        12,
+        T0 + HOUR,
+        20,
+        |i| Some(50_000 + i as u64),
+        |i| VICTIMS[i % 6],
+        |i| {
+            format!(
+                "Bumps lodash from 4.17.{i} to 4.17.21. Release notes and commits are listed below for review."
+            )
+        },
+    ));
+    evs.extend(wave(
+        &rules,
+        "hf",
+        15,
+        T0 + 3 * HOUR,
+        30,
+        |i| Some(160_600 + i as u64),
+        |_| "alpha/one",
+        |_| "Hi, I would like to work on this issue as part of Hacktoberfest. Please assign it to me, thank you!".into(),
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    let why: Vec<&str> = rep.suppressed.iter().map(|s| s.why.as_str()).collect();
+    assert!(why.contains(&"dependency update"), "{why:?}");
+    assert!(why.contains(&"contribution drive"), "{why:?}");
+}
+
+#[test]
+fn templates_spread_over_the_window_by_established_accounts_are_not_reported() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 300);
+    // An issue template many people fill in over the day, across projects.
+    evs.extend(wave(
+        &rules,
+        "tpl",
+        8,
+        T0 + 300,
+        40 * 60,
+        |i| Some(20_000 + 9_000 * i as u64),
+        |i| VICTIMS[i % 6],
+        |_| "Describe the bug: the app crashes on start. Steps to reproduce: open it. Expected behaviour: it starts. Environment: latest release.".into(),
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    assert!(rep.below_threshold >= 1);
+}
+
+#[test]
+fn an_outage_burst_on_one_project_by_established_accounts_is_not_reported() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 300);
+    evs.extend(wave(
+        &rules,
+        "out",
+        10,
+        T0 + 4 * HOUR + 900,
+        30,
+        |i| Some(30_000 + 7_000 * i as u64),
+        |_| "acme/widgets",
+        |_| "The hosted service returns error 502 for every request since a few minutes ago, is there an outage right now?".into(),
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+}
+
+#[test]
+fn a_scheduled_job_on_the_hour_counts_down() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 300);
+    // Four organisations' nightly jobs posting the same status at 02:00.
+    let on_hour = (T0 / HOUR + 3) * HOUR;
+    evs.extend(wave(
+        &rules,
+        "cron",
+        4,
+        on_hour + 5,
+        10,
+        |i| Some(40_000 + 11_000 * i as u64),
+        |i| VICTIMS[i],
+        |_| "Nightly link check finished with no broken links found in the documentation site today.".into(),
+    ));
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+}
+
+#[test]
+fn an_anonymous_package_flood_with_templated_names_is_a_weak_hint() {
+    let mut evs: Vec<PlatformEvent> = (0..60)
+        .map(|i| PlatformEvent {
+            id: format!("pypi:ordinary-{i}@1.0"),
+            platform: Platform::Pypi,
+            action: Action::PackagePublished,
+            ts: T0 + i * 360,
+            target: format!("ordinary-{}", ["alpha", "beta", "gamma"][i as usize % 3]),
+            link: String::new(),
+            name_template: None,
+            ..Default::default()
+        })
+        .collect();
+    for i in 0..8 {
+        let name = format!("agent-probe-{:04}", 17 + i);
+        evs.push(PlatformEvent {
+            id: format!("pypi:{name}@0.0.1"),
+            platform: Platform::Pypi,
+            action: Action::PackagePublished,
+            ts: T0 + 2 * HOUR + 600 + i * 40,
+            target: name.clone(),
+            link: format!("https://pypi.org/project/{name}/0.0.1/"),
+            name_template: name_template(&name, ""),
+            ..Default::default()
+        });
+    }
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    let s = &rep.swarms[0];
+    assert_eq!(s.template, "agent-probe-<num>");
+    assert_eq!(s.basis, [Basis::NameTemplate]);
+    assert_eq!(s.accounts, 0);
+    assert_eq!(s.strength, HintStrength::Weak);
+    assert!(s.caveats.iter().any(|c| c.contains("names no accounts")));
+}
+
+#[test]
+fn two_accounts_are_not_a_swarm_and_ids_are_stable() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 100);
+    evs.extend(wave(
+        &rules,
+        "pair",
+        2,
+        T0 + HOUR,
+        30,
+        |i| Some(160_000 + i as u64),
+        |i| VICTIMS[i],
+        agent_report,
+    ));
+    assert!(detect(&evs, &PlatformOptions::default()).swarms.is_empty());
+
+    let mut evs = background(&rules, 100);
+    let w = wave(
+        &rules,
+        "st",
+        5,
+        T0 + HOUR,
+        30,
+        |i| Some(160_000 + i as u64),
+        |i| VICTIMS[i],
+        agent_report,
+    );
+    evs.extend(w.clone());
+    let a = detect(&evs, &PlatformOptions::default());
+    // A later member joins; the id stays with the earliest member.
+    evs.extend(wave(
+        &rules,
+        "st-late",
+        1,
+        T0 + HOUR + 400,
+        0,
+        |_| Some(160_100),
+        |_| VICTIMS[5],
+        agent_report,
+    ));
+    let b = detect(&evs, &PlatformOptions::default());
+    assert_eq!(a.swarms[0].id, b.swarms[0].id);
+    assert_eq!(b.swarms[0].events, 6);
+}
+
+#[test]
+fn events_round_trip_as_json() {
+    let rules = Rules::default_rules();
+    let e = wave(&rules, "rt", 1, T0, 0, |_| Some(1), |_| "a/b", agent_report).remove(0);
+    let s = serde_json::to_string(&e).unwrap();
+    assert!(!s.contains("rt-acct0"), "the login is not stored: {s}");
+    let back: PlatformEvent = serde_json::from_str(&s).unwrap();
+    assert_eq!(back, e);
+}
+
+#[test]
+fn a_small_group_in_one_fresh_hour_is_not_weighed_against_carried_days() {
+    let rules = Rules::default_rules();
+    // One hour read in full ...
+    let fresh = T0 + 72 * HOUR;
+    let mut evs: Vec<PlatformEvent> = background(&rules, 120)
+        .into_iter()
+        .map(|mut e| {
+            e.ts = fresh + (e.ts - T0) / 6;
+            e
+        })
+        .collect();
+    // ... plus sparse events carried from the three days before.
+    for (i, e) in background(&rules, 12).into_iter().enumerate() {
+        evs.push(PlatformEvent {
+            id: format!("carried{i}"),
+            ts: T0 + i as i64 * 6 * HOUR,
+            ..e
+        });
+    }
+    // Three established accounts post one template within ten minutes.
+    let text = "Could you publish wheels for the new interpreter release, the source build fails without a compiler on our machines.";
+    let small = wave(
+        &rules,
+        "small",
+        3,
+        fresh + 1200,
+        300,
+        |i| Some(30_000 + 20_000 * i as u64),
+        |i| VICTIMS[i],
+        |_| text.into(),
+    );
+    evs.extend(small);
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    assert_eq!(rep.below_threshold, 1);
+}

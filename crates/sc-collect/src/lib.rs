@@ -32,6 +32,7 @@ mod mcp;
 mod memento;
 mod npm;
 pub mod pager;
+pub mod platform;
 pub mod psl;
 mod pypi;
 mod rdap;

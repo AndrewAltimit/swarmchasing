@@ -49,6 +49,7 @@ Each term links to the section that defines it.
 | Passivity test | The conditions every source must pass. | [FM-3.2](03-sources.md#fm-32-passivity-test) |
 | Pause | A gap long in absolute terms and against the median gap. | [FM-6.2](06-timing.md#fm-62-cadence-bursts-and-pauses) |
 | Plant signal | A sign a cluster's records were placed to be found. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
+| Platform swarm candidate | Accounts acting alike on a public platform beyond chance; a hint, never a swarm. | [FM-5.14](05-linking.md#fm-514-coordinated-accounts-on-public-platforms) |
 | Probe chain | One client trying variants of one request. | [FM-5.4](05-linking.md#fm-54-probe-chains) |
 | Provenance | Who can create a record: observed, submit- or publish-anywhere. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Provider | The organisation whose agents are attributed. | [FM-1.4](01-scope.md#fm-14-casework-terms) |

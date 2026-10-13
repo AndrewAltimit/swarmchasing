@@ -10,6 +10,7 @@ pub mod collect;
 pub mod contact;
 pub mod endpoints;
 pub mod eval;
+pub mod platform;
 pub mod report;
 pub mod rules;
 pub mod scan;
