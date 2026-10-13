@@ -175,7 +175,13 @@ fn visit(
 pub fn rewrite_page(html: &str, names: &BTreeMap<String, String>) -> String {
     let mut s = html.to_string();
     for (old, new) in names {
-        s = s.replace(&format!("/{old}\""), &format!("/{new}\""));
+        // A doc's link to the source file on GitHub keeps its name.
+        let source = format!("/blob/main/site/{old}\"");
+        let kept = "\u{0}source-link\u{0}";
+        s = s
+            .replace(&source, kept)
+            .replace(&format!("/{old}\""), &format!("/{new}\""))
+            .replace(kept, &source);
     }
     s
 }

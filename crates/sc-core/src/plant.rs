@@ -115,11 +115,26 @@ impl PlantSignal {
 const MAX_SIGNALS: usize = 8;
 
 /// A value quoted in a public report (`linking.published_tags`, ignoring
-/// case).
+/// case), or one carrying a canary token from our own site
+/// ([`crate::canary`]): anyone who read either can copy it.
 pub(crate) fn burned(cfg: &Linking, value: &str) -> bool {
-    cfg.published_tags
+    burned_why(cfg, value).is_some()
+}
+
+/// Why a value is burned, for the common-feature reason and the plant
+/// signal; `None` when it is not.
+pub(crate) fn burned_why(cfg: &Linking, value: &str) -> Option<&'static str> {
+    if cfg
+        .published_tags
         .iter()
         .any(|t| t.eq_ignore_ascii_case(value))
+    {
+        Some("quoted in a public report (linking.published_tags)")
+    } else if crate::canary::contains_token(value) {
+        Some("carries a canary token published on our own site")
+    } else {
+        None
+    }
 }
 
 /// Members by provenance.
@@ -247,11 +262,17 @@ fn burned_in(results: &[ObsResult], c: &Cluster, cfg: &Linking, out: &mut Vec<Pl
     crate::sort::sort(&mut found);
     found.dedup();
     for g in found.chunk_by(|a, b| a.0 == b.0) {
+        let why = burned_why(cfg, g[0].0.value()).unwrap_or_default();
+        let why = if why.starts_with("quoted") {
+            format!("is {why}")
+        } else {
+            why.to_string()
+        };
         out.push(PlantSignal {
             kind: PlantSignalKind::BurnedIdentifier,
             records: g.iter().map(|x| x.1).collect(),
             detail: format!(
-                "`{}` on {} record(s) is quoted in a public report (linking.published_tags): anyone who read it can copy it",
+                "`{}` on {} record(s) {why}: anyone who read it can copy it",
                 defang(&truncate(&g[0].0.to_string(), 90)),
                 g.len()
             ),

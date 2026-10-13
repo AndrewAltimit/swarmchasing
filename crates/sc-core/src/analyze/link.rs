@@ -176,9 +176,10 @@ fn common_feature(
     let ts = group.iter().map(|&i| results[i].obs.ts).filter(|&t| t > 0);
     let (start, end) = (ts.clone().min().unwrap_or(0), ts.max().unwrap_or(0));
     let records = group.len();
-    let published = crate::plant::burned(cfg, f.value());
-    let reason = if published {
-        "quoted in a public report (linking.published_tags)".to_string()
+    let burned = crate::plant::burned_why(cfg, f.value());
+    let published = burned.is_some();
+    let reason = if let Some(why) = burned {
+        why.to_string()
     } else if cfg.feature_max_hosts > 0 && hosts.len() > cfg.feature_max_hosts {
         format!(
             "on {} target hosts, more than linking.feature_max_hosts ({})",

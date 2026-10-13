@@ -271,8 +271,9 @@ pub struct CommonFeature {
     pub end: i64,
     /// Which limit it passed.
     pub reason: String,
-    /// Its value is quoted in a public report (`linking.published_tags`): a
-    /// burned identifier, which is no soft link either.
+    /// Its value is quoted in a public report (`linking.published_tags`) or
+    /// carries one of our canary tokens ([`crate::canary`]): a burned
+    /// identifier, which is no soft link either.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub published: bool,
 }

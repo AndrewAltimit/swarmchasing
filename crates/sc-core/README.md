@@ -68,6 +68,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`fanout`](src/fanout.rs) | Parallel fan-out width. |
 | [`fleets`](src/fleets.rs) | Soft links between clusters and the candidate fleets they suggest; never merges. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |
+| [`canary`](src/canary.rs) | Canary tokens for our own published pages: derivation from a seed, the registry, and copies found in records. |
 | [`bursts`](src/bursts.rs) | Bursts of archive captures of a host the archives rarely capture. |
 | [`endpoints`](src/endpoints.rs) | Flagged activity grouped by target host. |
 | [`escalation`](src/escalation.rs) | Route escalation: one target requested directly, then through a relay, a program carrier, a remote browser. |

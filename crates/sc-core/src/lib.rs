@@ -8,6 +8,7 @@ pub mod analyze;
 pub mod asn;
 pub mod attribution;
 pub mod bursts;
+pub mod canary;
 pub mod capture;
 pub mod chains;
 pub mod crossservice;

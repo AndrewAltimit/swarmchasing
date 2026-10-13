@@ -134,6 +134,7 @@ Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, 
 | `notice update <id> --naming` | Appends the case's reviewed `naming.md`, naming the operators whose lead has run or who consented. |
 | `notice lint [files]` | Checks front matter, update order, attribution wording and that nothing withheld got through. CI and the pre-commit hook run it. |
 | `notice build --out <dir> --base-url <url>` | Writes the site's notice index, pages and Atom feed. |
+| `canary register [_site]`, `list`, `token`, `scan` | Canary tokens on our own pages: register a built site's tokens, list them, derive one, find copies in records ([page references](../../docs/reference/browser-toolkit.md#page-references)). |
 | `site build [--out _site] [--base-url <url>]` | Builds the whole public site from the checkout, as `sc-site` does ([how the site is built](../../docs/reference/browser-toolkit.md#how-the-site-is-built)). |
 
 Details: [Notices](../../docs/reference/notices.md).
@@ -148,6 +149,7 @@ Details: [Notices](../../docs/reference/notices.md).
 | `URLSCAN_APIKEY` | Optional key for `collect urlscan`. |
 | `SWARMCHASE_SITE_URL` | `notice build --base-url`. |
 | `SWARMCHASE_UA` | Overrides the collectors' user agent. |
+| `SWARMCHASE_CANARY_SEED` | The secret seed of `canary`; never committed. |
 
 Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../../scripts/with-env.sh); see [Local secrets](../../docs/reference/configuration.md#local-secrets).
 

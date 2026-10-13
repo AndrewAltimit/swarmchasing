@@ -272,7 +272,13 @@ fn redact_run(run: &str, n: &mut usize) -> Option<String> {
 /// when the same query carries an Azure SAS version (`sv`), whose `sig` is
 /// always a signature.
 fn secret_pair(name: &str, value: &str, sas: bool) -> bool {
-    if value.is_empty() || value.starts_with(MARK) || placeholder().is_match(value) {
+    // One of our canary tokens is public by construction, and hashing it
+    // would hide the sighting (crate::canary).
+    if value.is_empty()
+        || value.starts_with(MARK)
+        || placeholder().is_match(value)
+        || crate::canary::is_token(value)
+    {
         return false;
     }
     secret_param().is_match(name)

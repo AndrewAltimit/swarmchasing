@@ -30,6 +30,7 @@ for (path, contents) in files {
 | [`feed`](src/feed.rs) | The Atom feed, one entry per update, newest first. |
 | [`site`](src/site.rs) | The notice index and per-notice JSON, and the feed, as files to write (`notice build`). |
 | [`pages`](src/pages/mod.rs) | Every page of the public site, from notices, docs, the rules, the labelled set and the showcase: layout, the landing walk and its figures, Markdown docs with Field Manual links, the manual's section index, notices, rules explorer, evaluation, charts. |
+| [`agents`](src/agents.rs) | `llms.txt`, `llms-full.txt`, `.well-known/security.txt` and `swarm-report.json`, and filling in or dropping canary tokens. |
 | [`build`](src/build.rs) | Reads the committed inputs and writes the site into a directory (`build_site_dir`). |
 | [`sc-site`](src/bin/sc-site.rs) | The binary around `build`; `swarmchase site build` calls the same entry. |
 

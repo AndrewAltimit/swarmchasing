@@ -22,10 +22,10 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 |---|---|
 | [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, reports. No I/O (compiles to WASM). |
 | [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (archive CDX, scan services, GH Archive, registries, CT logs, security.txt), HTTP cache, PSL, ASN table. |
-| [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README): [`watch/`](crates/swarmchase/src/watch/mod.rs) watch and digest, [`review/`](crates/swarmchase/src/review/mod.rs) lead labelling, [`case/`](crates/swarmchase/src/case/mod.rs) case files (subcommands in `case/cli/`), [`contacts/`](crates/swarmchase/src/contacts/mod.rs) contact discovery, [`notice.rs`](crates/swarmchase/src/notice.rs) notices. |
+| [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README): [`watch/`](crates/swarmchase/src/watch/mod.rs) watch and digest, [`review/`](crates/swarmchase/src/review/mod.rs) lead labelling, [`case/`](crates/swarmchase/src/case/mod.rs) case files (subcommands in `case/cli/`), [`contacts/`](crates/swarmchase/src/contacts/mod.rs) contact discovery, [`notice.rs`](crates/swarmchase/src/notice.rs) notices, [`canary.rs`](crates/swarmchase/src/canary.rs) canary tokens. |
 | [`crates/sc-case`](crates/sc-case/README.md) | What a case is and may do, without I/O: case model, admin actions, pinning, lead clock, bundles, notice format and linter. |
 | [`crates/sc-stix`](crates/sc-stix/README.md) | A case as a STIX 2.1 bundle or MISP event, with the SC-T cross-walk. No I/O. |
-| [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site page generation. Text in, text out. |
+| [`crates/sc-publish`](crates/sc-publish/README.md) | Notice files, Markdown blocks, Atom feed, site pages, `llms.txt` and `.well-known/` files. Text in, text out. |
 | [`crates/sc-wasm`](crates/sc-wasm/README.md) | wasm-bindgen bindings for the browser toolkit; [`sc-rules-wasm`](crates/sc-rules-wasm/README.md) converts edited rules. |
 | [`site/`](site/js/site.js) | The site's styles and page scripts; `sc-site` (sc-publish) generates the pages into `_site/`. |
 | `notices/` | Published notices (`<id>.md`, front matter + dated updates). Committing one publishes it ([notices](docs/reference/notices.md)). |

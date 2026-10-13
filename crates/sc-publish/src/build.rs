@@ -8,6 +8,12 @@
 //! `$SWARMCHASE_DATA`: watch data and case files never reach the site.
 //! Unlike the rest of this crate it reads and writes files; it never touches
 //! the network.
+//!
+//! It adds the agent-facing files ([`crate::agents`]). Canary tokens are off
+//! unless `SWARMCHASE_CANARY=on` and `SWARMCHASE_CANARY_SEED` holds the
+//! secret seed; then every page and agent file carries its own token for
+//! the build's month ([`sc_core::canary`]). The seed is read from the
+//! environment and never written anywhere.
 
 use crate::{SiteInputs, build_pages, check_notice, parse_notice};
 use std::collections::{BTreeMap, HashSet};
@@ -50,6 +56,42 @@ pub struct Built {
     pub notices: usize,
     pub out: PathBuf,
     pub warnings: Vec<String>,
+    /// The canary period (`YYMM`) when tokens were embedded.
+    pub canary_period: Option<String>,
+}
+
+/// The build's time: `SOURCE_DATE_EPOCH` when set (reproducible builds),
+/// else the clock.
+fn build_time() -> i64 {
+    std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs() as i64)
+        })
+}
+
+/// The seed and period when canary tokens are on: `SWARMCHASE_CANARY` set
+/// to `on` (or `1`, `true`) and a seed in `SWARMCHASE_CANARY_SEED`. Off by
+/// default; on without a usable seed is an error.
+fn canary_setting(now: i64) -> Result<Option<(String, String)>, String> {
+    let on = std::env::var("SWARMCHASE_CANARY").is_ok_and(|v| {
+        matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "on" | "1" | "true" | "yes"
+        )
+    });
+    if !on {
+        return Ok(None);
+    }
+    let seed = std::env::var("SWARMCHASE_CANARY_SEED").unwrap_or_default();
+    sc_core::canary::check_seed(&seed).map_err(|e| format!("SWARMCHASE_CANARY is on, but {e}"))?;
+    Ok(Some((
+        seed.trim().to_string(),
+        sc_core::canary::period_of(now),
+    )))
 }
 
 /// Repository paths the build may read: a prefix and the extension its
@@ -266,7 +308,27 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         engine_bytes,
         tools_bytes,
     };
-    let files = build_pages(&mut inputs)?;
+    let mut files = build_pages(&mut inputs)?;
+    let now = build_time();
+    files.extend(crate::agents::files(&crate::agents::AgentInputs {
+        base: &if o.base_url.ends_with('/') {
+            o.base_url.clone()
+        } else {
+            format!("{}/", o.base_url)
+        },
+        repo: &inputs.repo,
+        now,
+        docs: &inputs.docs,
+    }));
+    let canary = canary_setting(now)?;
+    for (path, text) in files.iter_mut() {
+        if crate::agents::is_surface(path) {
+            let token = canary
+                .as_ref()
+                .map(|(seed, period)| sc_core::canary::derive(seed.as_bytes(), path, period));
+            *text = crate::agents::apply_canary(path, text, token.as_deref());
+        }
+    }
 
     // Start from an empty output directory, but never delete one this tool
     // did not write.
@@ -328,6 +390,7 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         notices: inputs.notices.len(),
         out,
         warnings,
+        canary_period: canary.map(|(_, p)| p),
     })
 }
 
@@ -358,6 +421,17 @@ mod tests {
         };
         let built = build_site_dir(&o).unwrap();
         assert!(built.generated > 0 && out.join("sitemap.xml").is_file());
+        // The agent files, with no canary placeholder left behind.
+        for f in [
+            "llms.txt",
+            "llms-full.txt",
+            ".well-known/security.txt",
+            ".well-known/swarm-report.json",
+            "index.html",
+        ] {
+            let text = fs::read_to_string(out.join(f)).unwrap();
+            assert!(!text.contains(sc_core::canary::PLACEHOLDER), "{f}");
+        }
         // A rebuild replaces its own earlier output.
         build_site_dir(&o).unwrap();
         // Never into the inputs, never over a directory it did not write.

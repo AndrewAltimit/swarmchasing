@@ -20,6 +20,8 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `labels/suggestions-claude-watch.ndjson` | Claude's suggestions on new leads from hosted sources ([model triage](#model-triage)). |
 | `cases/<id>/` | Case files ([cases](cases.md)). |
 | `rules/<version>.toml` | Rules versions that cases pin. |
+| `canary/registry.json` | Canary tokens registered from built sites ([canary sightings](#canary-sightings)). |
+| `runs/<stamp>/canary.json` | The run's canary sightings, when it has any. |
 | `cache/http/` | Cached collector responses; safe to delete. |
 | `asn/ip2asn-v4.tsv.gz` | The IP-to-ASN table, once fetched. |
 
@@ -140,6 +142,10 @@ The rest is common to both:
 - **Shown.** *Model suggestions* names the backend and lists each lead's suggestion with its tier and agent grade. An `agent` suggestion on a lead below L2 is marked as against the labelling rule, under which `unsure` is the most that grade allows.
 
 A suggestion is never a label: review saves it beside the admin's label as `suggested`, and eval reads only the admin's.
+
+### Canary sightings
+
+When the registry holds tokens ([page references](browser-toolkit.md#page-references)), each run searches its new records for them: the URL and every layer unwrapped from it, the final URL, the user agent and the header values. Each copy is a line under **Canary sightings** with the token, the field, the record id and source, the file it was issued on and its month, and a medium priority reason of kind `canary`. A token-shaped value the registry does not hold is listed as unverified. A record dated before its token's month is marked: the seed has leaked, the value was made up, or the record's time is wrong. Sightings never link records and never become leads in the attention queue. With an empty registry the check does nothing.
 
 ### Case status
 
