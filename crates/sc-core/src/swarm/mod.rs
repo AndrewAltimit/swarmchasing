@@ -20,8 +20,9 @@
 //! - **S4 role sequence**: a run that only reads a set of hosts, then a
 //!   differently fingerprinted run attacking the same hosts in the same order.
 //! - **S5 disjoint partition**: runs started together that split one target
-//!   family with almost no overlap. One scheduler sharding a list does the
-//!   same, so alone it is a fleet signal.
+//!   family with almost no overlap, or in a stride or blocks of its sorted
+//!   hosts. One scheduler sharding a list does the same, so alone it is a
+//!   fleet signal.
 //!
 //! Only identifier strings already in the records are matched; nothing here
 //! reads an artifact, an inbox or a callback channel.

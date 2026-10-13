@@ -61900,8 +61900,8 @@
         ]
       },
       "strength": "weak",
-      "chance": 0.01831563888873422,
-      "detail": "started 40 s apart, they split `*.county-records[.]example` (8 and 8 hosts, 0 shared; p 1.8e-2). One scheduler sharding a list does the same: a fleet signal unless other edges join these runs"
+      "chance": 0.0006216006216006207,
+      "detail": "2 runs started within 600 s split `*.county-records[.]example` (8 + 8 hosts) with no host shared, in a block split of the sorted hosts; a split that regular 6.2e-4 of the time at random; one client, or clients not told apart. One scheduler sharding a list does the same: a fleet signal unless other edges join these runs"
     }
   ]
 }

@@ -244,6 +244,47 @@ fn a_sharded_list_is_a_partition_and_nothing_else() {
     );
     assert_eq!(a.swarm_edges[0].strength, EdgeStrength::Weak);
     assert!(a.swarm_edges[0].detail.contains("fleet signal"));
+    // The two shards are the list's two halves: a regular split.
+    assert!(
+        a.swarm_edges[0].detail.contains("block split"),
+        "{}",
+        a.swarm_edges[0].detail
+    );
+}
+
+#[test]
+fn three_clients_striding_one_whole_family_are_a_structured_partition() {
+    // Every host of the family is read, so the hosts drawn at random from
+    // the family can never show the split; its regularity does.
+    let clients = [
+        ("AgentA/1", 16509),
+        ("AgentB/2", 14061),
+        ("AgentC/3", 24940),
+    ];
+    let mut obs = Vec::new();
+    for (c, (ua, asn)) in clients.iter().enumerate() {
+        for i in 0..4 {
+            let h = i * 3 + c;
+            obs.push(with(
+                o(
+                    &format!("c{c}h{h}"),
+                    T0 + c as i64 * 20 + i as i64 * 70,
+                    &format!("https://h{h}.permits.example/view?uqtag=part{c}q&_=1"),
+                ),
+                ua,
+                *asn,
+            ));
+        }
+    }
+    let (a, e) = edges(obs, SwarmEdgeKind::DisjointPartition);
+    assert_eq!(a.clusters.len(), 3, "{:?}", a.clusters);
+    assert_eq!(e.len(), 3, "{:?}", a.swarm_edges);
+    for x in &e {
+        assert_eq!(x.strength, EdgeStrength::Moderate, "{}", x.detail);
+        assert!((x.chance.unwrap() - 24.0 / 34650.0).abs() < 1e-9, "{x:?}");
+        assert!(x.detail.contains("stride split"), "{}", x.detail);
+        assert!(x.detail.contains("4 + 4 + 4"), "{}", x.detail);
+    }
 }
 
 /// Uneven gaps one dispatcher hands every worker.
