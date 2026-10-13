@@ -176,6 +176,8 @@ A scenario lists actors: single agents, swarms (`modes`: `sink` for one shared c
 
 The generator writes no request content. Each record copies a committed evaluation record and changes its target host to a reserved `.example` name, its linking identifiers and captured secrets to values of its own run (or of its swarm, for a shared inbox), and for a retry a cache-busting parameter. A hand-off adds the gist's address to the writer's requests and one fetch of it through a reader relay to each reader's run. What is simulated is the senders, their clients, the times and the order.
 
+`fleet-traffic` puts a scaffold fleet among a day of benign crawler traffic: the unflagged records a shared request shape is rare against ([methodology](../methodology.md#descriptive-hints)), which the other scenarios lack.
+
 What this does not model: the variety of real request content (every actor draws from one small set of records, so habit soft links such as relay stacks and payload dialects join unrelated agents more often than they would on real traffic; `palette_share` narrows this without removing it), hand-offs through anything but a gist, headers, real address and network structure, and archive or scan-service behaviour beyond the timestamp kind. Simulator numbers say how the detectors behave on the modelled situations, not how often they are right on real records.
 
 

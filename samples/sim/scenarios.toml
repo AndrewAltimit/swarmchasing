@@ -216,3 +216,22 @@ kind = "agent"
 agents = 10
 retry = 0.2
 palette_share = 0.3
+# A scaffold fleet in a day's worth of benign traffic, the base rate a
+# shared request shape is rare against.
+[[scenario]]
+name = "fleet-traffic"
+seed = 111
+seeds = 4
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+[[scenario.actor]]
+kind = "crawler"
+agents = 40
+records = 60

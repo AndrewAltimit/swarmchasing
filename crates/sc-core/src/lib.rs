@@ -11,6 +11,7 @@ pub mod bursts;
 pub mod canary;
 pub mod capture;
 pub mod chains;
+pub(crate) mod chance;
 pub mod coactivity;
 pub mod crossservice;
 pub mod crosswalk;
