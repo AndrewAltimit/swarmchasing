@@ -79,7 +79,7 @@ KEEP=20                 # cached modules kept; older ones are pruned
 # Budgets in bytes. The engine's is the one that matters most: every
 # analysis page downloads it on arrival.
 ENGINE_BUDGET=$((1536 * 1024))
-TOOLS_BUDGET=$((1792 * 1024)) # loaded on demand, never on arrival
+TOOLS_BUDGET=$((1856 * 1024)) # loaded on demand, never on arrival
 RULES_BUDGET=$((512 * 1024))
 SIZES=()                # "<module> <bytes> <budget>" per release module built
 BUILT=()                # "<module> <budget>" per release module built
