@@ -32,7 +32,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`rules/default.toml`](rules/default.toml) | Indicator rules, compiled into the CLI and the browser. Every change passes the eval gate. |
 | [`samples/eval/`](samples/eval/README.md) | Labelled evaluation set behind the CI eval gate; the held-out Transluce steps. |
 | [`samples/showcase/`](samples/showcase/README.md) | Synthetic records the landing page walks through and the workbench loads. |
-| [`schemas/`](schemas/sc-rules-v1.json) | JSON Schemas for the specs (rules, incident, SC-Bench) and the STIX extension. |
+| [`schemas/`](schemas/sc-rules-v1.json) | JSON Schemas for the specs (rules, incident, sightings, SC-Bench) and the STIX extension. |
 | [`watchlist.toml`](watchlist.toml) | Sources the scheduled watch pulls, each with its rationale. |
 | [`contacts/providers.toml`](contacts/providers.toml) | Providers' security and abuse channels, each with its source and verified date; `swarmchase contacts verify` re-checks them. |
 | [`scripts/`](scripts/README.md) | CI gates, helpers and the pre-commit hook; the README says what runs where. |
@@ -59,7 +59,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 | [`methodology.md`](docs/methodology.md) | Tiers, clusters, hints, attribution levels, known limits. |
 | [`policies.md`](docs/policies.md) | Collection, attribution, reporting and publication. |
 | [`manual/README.md`](docs/manual/README.md) | Field Manual (SC-FM): the method as a citable standard, section ids `FM-n.m`. |
-| [`specs/README.md`](docs/specs/README.md) | Formats other groups implement (SC-Rules, SC-Incident), conformance vectors, adopting the method. |
+| [`specs/README.md`](docs/specs/README.md) | Formats other groups implement (SC-Rules, SC-Incident, SC-Sightings), conformance vectors, adopting the method. |
 
 ## Scripts and gates
 

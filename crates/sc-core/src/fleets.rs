@@ -399,7 +399,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
 }
 
 /// Every `REDACTED-<12 hex>` replacement in `text`.
-fn redacted_in<'t>(text: &'t str, out: &mut BTreeSet<&'t str>) {
+pub(crate) fn redacted_in<'t>(text: &'t str, out: &mut BTreeSet<&'t str>) {
     use crate::redact::MARK;
     let mut rest = text;
     while let Some(i) = rest.find(MARK) {
@@ -415,7 +415,7 @@ fn redacted_in<'t>(text: &'t str, out: &mut BTreeSet<&'t str>) {
 
 /// Hashes of stock passwords and test values that unrelated clients send
 /// alike: a match on one of these is no tie.
-fn stock_secrets() -> BTreeSet<String> {
+pub(crate) fn stock_secrets() -> BTreeSet<String> {
     [
         "password", "admin", "123456", "12345678", "test", "secret", "changeme", "root", "guest",
         "demo", "letmein", "qwerty",

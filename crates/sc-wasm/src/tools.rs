@@ -62,6 +62,26 @@ pub fn report(opts_json: &str) -> Result<String, JsError> {
     })
 }
 
+/// The sightings document (SC-Sightings v1) of the analysis `prepare` made,
+/// pretty-printed, so the page shows exactly the bytes it would download.
+/// `opts` is ExportOptions JSON: `{"include_hosts":false,"operator":null,
+/// "cluster":null,"generated":"2026-10-12"}`. Nothing is sent anywhere.
+#[wasm_bindgen]
+pub fn sightings(opts_json: &str) -> Result<String, JsError> {
+    let opts: sc_core::sightings::ExportOptions = if opts_json.trim().is_empty() {
+        Default::default()
+    } else {
+        serde_json::from_str(opts_json).map_err(|e| JsError::new(&format!("options: {e}")))?
+    };
+    PREPARED.with(|p| match p.borrow().as_ref() {
+        Some(a) => {
+            let doc = sc_core::sightings::export(a, &opts, &Default::default());
+            serde_json::to_string_pretty(&doc).map_err(|e| JsError::new(&e.to_string()))
+        }
+        None => Err(JsError::new("nothing prepared yet")),
+    })
+}
+
 /// What `attribution` reads: a cluster id or key, the claims from case work
 /// (as `report --claims` reads them) and the naming level.
 #[derive(serde::Deserialize)]
@@ -235,6 +255,27 @@ mod tests {
             panic!("report failed");
         };
         md
+    }
+
+    #[test]
+    fn sightings_of_the_showcase_hold_no_host_unless_asked() {
+        let input = include_str!("../../../samples/showcase/showcase.ndjson");
+        assert!(prepare(input, "ndjson", "", "").is_ok());
+        let Ok(doc) = sightings(r#"{"generated":"2026-10-12"}"#) else {
+            panic!("sightings failed");
+        };
+        let s = sc_core::sightings::parse(&doc).unwrap();
+        assert!(!s.sightings.is_empty());
+        assert!(
+            !doc.contains("county-records") && !doc.contains("jina.ai"),
+            "{doc}"
+        );
+        let Ok(doc) = sightings(r#"{"include_hosts":true}"#) else {
+            panic!("sightings failed");
+        };
+        assert!(
+            doc.contains("county-records[.]example") && !doc.contains("county-records.example")
+        );
     }
 
     #[test]

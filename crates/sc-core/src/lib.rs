@@ -34,6 +34,7 @@ pub mod report;
 pub mod rules;
 pub mod scope;
 pub mod securitytxt;
+pub mod sightings;
 pub mod sort;
 pub mod stamp;
 pub mod swarm;

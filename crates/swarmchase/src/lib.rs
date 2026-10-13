@@ -27,6 +27,7 @@ pub mod localui;
 pub mod notice;
 pub mod pinning;
 pub mod review;
+pub mod sightings;
 pub mod stix;
 pub mod store;
 pub mod suggest;
@@ -108,6 +109,9 @@ pub enum Cmd {
     Site(commands::site::SiteArgs),
     /// The offline IP-to-ASN table: fetch it into the data directory, look up addresses.
     Asn(commands::asn::AsnArgs),
+    /// Sightings (SC-Sightings v1): `export` makes one from your own logs,
+    /// `match` finds clusters several operators saw. Never merges clusters.
+    Sightings(sightings::SightingsArgs),
     /// Validate a rules file, or print the bundled rules.
     Rules {
         file: Option<PathBuf>,
@@ -142,6 +146,7 @@ pub fn run() -> Result<()> {
         Cmd::Backup(a) => backup::run(a),
         Cmd::Site(a) => commands::site::run(a),
         Cmd::Asn(a) => commands::asn::run(a),
+        Cmd::Sightings(a) => sightings::run(a),
         Cmd::Rules { file, dump } => commands::rules::run(file.as_deref(), dump),
     }
 }

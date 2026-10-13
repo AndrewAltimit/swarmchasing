@@ -13,6 +13,7 @@ import {
 import { layersTable } from "../lib/layers.js";
 import { agentLadder as ladderOf } from "../lib/agent.js";
 import { scopePanel } from "../lib/scope.js";
+import { sightingsPanel, resetSightings } from "../lib/sightings.js";
 
 const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
@@ -164,6 +165,7 @@ function clearAnalysis() {
   $("links").replaceChildren(hint("None yet."));
   $("report").textContent = "Analyse records to draft a report.";
   for (const b of ["copy-report", "dl-report", "dl-json"]) $(b).disabled = true;
+  resetSightings();
   writeHash();
 }
 
@@ -210,6 +212,7 @@ function runAnalysis() {
   const h = readHash();
   sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
   $("dl-json").disabled = false;
+  resetSightings();
   renderAll();
   collapseInput(a.total);
   if (mobile()) goStep("explore");
@@ -992,6 +995,9 @@ function startReport() {
   renderReport();
 }
 $("draft-report").addEventListener("click", startReport);
+// Sightings to share: built by the tools module from this analysis, shown in
+// full, saved only on Download.
+sightingsPanel(async () => (a ? prepared() : null));
 // Reaching the report section starts the draft (and the module download).
 if ("IntersectionObserver" in window) {
   new IntersectionObserver((entries) => {

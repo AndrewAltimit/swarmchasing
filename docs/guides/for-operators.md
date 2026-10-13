@@ -112,6 +112,26 @@ A report to another affected operator never carries your logs.
 
 **The public notice uses your logs only with your agreement.** Until you agree, nothing from them appears in the notice. When you agree, the admin records how and when (`swarmchase case evidence consent`), and records used in the notice are marked as provided by the operator. You can withdraw your agreement. The admin records that with `case evidence withdraw`, and drafts made afterwards no longer use your logs. A notice already published changes only through a dated update, so ask us if you want one.
 
+## Share sightings
+
+A swarm that reaches many sites is invisible to any one of them. If you found one in your logs, you can share what it left without sharing your logs or your visitors, so that we can tell whether other operators, or the public records, saw the same swarm. This is optional, and separate from [sending logs back](#send-logs-back).
+
+**Make the file.** In the workbench, after **Analyze**, go to **Share sightings** and press **Prepare sightings**. The page shows the whole file before you save it; **Download** saves exactly that text. Or, with the CLI:
+
+```sh
+swarmchase sightings export access.log --map host=www.example.org -o sightings.json
+```
+
+**What it holds.** For each flagged cluster: keyed hashes of the run tags, inbox ids and captured secrets that linked it; how its requests were made (relays, payload variants, rule ids, tactics, a fingerprint of header names); the hours it was active, in UTC; its client networks as AS numbers; its tier and agent grade. Your host names go in only if you tick **Include my host names**, and then defanged.
+
+**What it never holds.** URLs, paths, query values, IP addresses, user agents, cookies, or any request from an ordinary visitor.
+
+**What the hashes hide, and what they do not.** The hashes use a key published for each quarter, so every operator's hashes of the same tag match. That keeps tags out of reach of a lookup table, but anyone with the key can test a guess, and short run tags are easy to guess. Long values such as inbox ids and captured secrets stay out of reach. Send the file only to us, privately. The details are in [SC-Sightings v1](../specs/sightings-v1.md#what-the-keyed-hash-protects-and-what-it-does-not).
+
+**Sending it.** If you received a report, reply to it with the file attached and keep the case id in the subject: a file that comes back on the channel we reported to counts as yours. A file from anywhere else is welcome, but is treated as unverified until we can tie it to you.
+
+**How we use it.** We match it against other operators' sightings and our own clusters from public records. A match is a lead for case work: it never merges clusters or changes a finding on its own, and an unverified file corroborates nothing. Your file is never published, and a report to another party never carries it or says it came from you. How long we keep it is in [policies](../policies.md#collection).
+
 ## Right of reply and corrections
 
 Published notices are append-only. Each change is a dated entry; earlier entries are never rewritten. The notice also appears in the site's Atom feed, one entry per update.

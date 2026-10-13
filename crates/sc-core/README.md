@@ -79,6 +79,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |
 | [`eval`](src/eval.rs) | Precision and recall against labelled records, per record and per cluster (`units`); agent grades by actor (`grades`); the negative control (`control`); SC-Bench (`bench`). |
 | [`securitytxt`](src/securitytxt.rs) | RFC 9116 `security.txt` parsing. |
+| [`sightings`](src/sightings/mod.rs) | SC-Sightings v1: an analysis as a shareable sightings file (keyed per-epoch hashes, scaffold, hours), and the matcher across parties. |
 | [`sort`](src/sort.rs) | Stable sorts that share one compiled routine, so each call site does not add a copy of the standard sort to the browser module. Same order as `slice::sort_by`. |
 
 ## Rules
