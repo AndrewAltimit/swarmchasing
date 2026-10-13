@@ -10,12 +10,15 @@
 //! and [`scaffold_pairs`] compares clusters' template mixes.
 //!
 //! Popular libraries and agent frameworks give unrelated operators one shape
-//! too. Two guards answer that: a template held by many clusters weighs
+//! too. Three guards answer that: a template held by many clusters weighs
 //! little (IDF, as reruns weigh hosts) and one held by more than
-//! `soft_links.max_shared` ties nothing; and each pair carries the chance
-//! that two unrelated clusters of this analysis would both hold the rarest
-//! template they share. Pairs are soft links: they never score, link or
-//! merge.
+//! `soft_links.max_shared` ties nothing; each shared template has a base
+//! rate, the share of the analysis's senders holding it (each cluster once,
+//! and every record outside the clusters, unflagged ones included, as a
+//! sender of its own), and a pair's chance is that two unrelated clusters
+//! both hold it at that rate; and the pairs are cut at a false discovery
+//! rate over every cluster pair. Pairs are soft links: they never score,
+//! link or merge.
 
 use crate::analyze::{Cluster, ObsResult, payload_variants, relay_stack};
 use crate::model::Tier;
@@ -33,9 +36,10 @@ pub struct ScaffoldOptions {
     pub min_specificity: usize,
     /// IDF-weighted similarity of the two clusters' template mixes, 0 to 1.
     pub min_similarity: f64,
-    /// Kept only when two unrelated clusters would share the rarest common
-    /// template at most this often.
+    /// Kept only when the pair's chance is at most this.
     pub max_chance: f64,
+    /// Benjamini-Hochberg false discovery rate over every cluster pair.
+    pub fdr: f64,
 }
 
 impl Default for ScaffoldOptions {
@@ -43,7 +47,8 @@ impl Default for ScaffoldOptions {
         Self {
             min_specificity: 3,
             min_similarity: 0.5,
-            max_chance: 0.01,
+            max_chance: 0.001,
+            fdr: 0.05,
         }
     }
 }
@@ -74,27 +79,38 @@ pub struct ScaffoldPair {
     pub similarity: f64,
     /// Shared templates, most distinctive first (a few).
     pub shared: Vec<String>,
-    /// Clusters above noise holding the rarest shared template, and all
-    /// clusters above noise with a template.
+    /// Clusters above noise holding the least likely shared template, and
+    /// all clusters above noise with a template.
     pub holders: usize,
     pub clusters: usize,
-    /// Chance that two unrelated clusters both hold that template:
-    /// `((holders - 1) / (clusters - 1))^2`, the pair itself left out.
+    /// That template's base rate: the share of the analysis's other senders
+    /// holding it, each cluster above noise one sender and each record
+    /// outside them (unclustered, unflagged) one more, one holder of the
+    /// pair left out.
+    #[serde(default)]
+    pub base_rate: f64,
+    /// Chance that two unrelated clusters both hold that template: the base
+    /// rate squared.
     pub chance: f64,
-    /// Pairs this unlikely expected among all the analysis's cluster pairs.
+    /// Cluster pairs tested (all of them), and pairs this unlikely expected
+    /// among them.
+    #[serde(default)]
+    pub tested: usize,
     pub expected_pairs: f64,
 }
 
 impl ScaffoldPair {
     pub fn detail(&self) -> String {
         format!(
-            "similarity {:.2}, {} shared template(s), rarest in {} of {} clusters (chance {:.1e}, {:.1} such pairs expected): {}",
+            "similarity {:.2}, {} shared template(s), the rarest in {} of {} clusters, a base rate of {:.1e} of senders (chance {:.1e}; {:.2} such pairs expected among {} cluster pairs): {}",
             self.similarity,
             self.shared.len(),
             self.holders,
             self.clusters,
+            self.base_rate,
             self.chance,
             self.expected_pairs,
+            self.tested,
             self.shared.first().map_or("", String::as_str)
         )
     }
@@ -303,6 +319,32 @@ pub(crate) fn scaffold_pairs(
             holders.entry(t.as_str()).or_default().push(ci);
         }
     }
+    // Senders: each cluster above noise once, and each record outside them
+    // (unclustered, unflagged, in a noise cluster) as one of its own.
+    let mut inside = vec![false; results.len()];
+    for c in &shown {
+        for &m in &c.members {
+            inside[m] = true;
+        }
+    }
+    let mut outside_with: BTreeMap<String, usize> = BTreeMap::new();
+    let mut outside = 0usize;
+    for (i, r) in results.iter().enumerate() {
+        if inside[i] {
+            continue;
+        }
+        outside += 1;
+        let t = template(r);
+        if holders.contains_key(t.key.as_str()) {
+            *outside_with.entry(t.key).or_default() += 1;
+        }
+    }
+    // A template's base rate: the share of the other senders holding it,
+    // one holder of the pair left out.
+    let rate = |t: &str| -> f64 {
+        let o = outside_with.get(t).copied().unwrap_or(0);
+        (holders[t].len() - 1 + o) as f64 / (n - 1 + outside) as f64
+    };
     let df = |t: &str| holders.get(t).map_or(1, Vec::len);
     let weight = |t: &str| (1.0 + n as f64 / df(t) as f64).ln();
     // Candidate pairs: those sharing a specific template held by few
@@ -320,7 +362,9 @@ pub(crate) fn scaffold_pairs(
             }
         }
     }
-    let all_pairs = (n * (n - 1) / 2) as f64;
+    // Every cluster pair is tested: picking the pairs that share a template
+    // already reads the statistic.
+    let tested = n * (n - 1) / 2;
     let mut out = Vec::new();
     for (x, y) in candidates {
         let (px, py) = (&profiles[x], &profiles[y]);
@@ -342,11 +386,14 @@ pub(crate) fn scaffold_pairs(
             .filter(|(t, _)| py.contains_key(*t) && usable(t, &holders[t.as_str()]))
             .map(|(t, a)| (t.as_str(), weight(t) * a.min(py[t])))
             .collect();
-        let Some(rarest) = shared.iter().map(|(t, _)| df(t)).min() else {
+        let Some((rate, rarest)) = shared
+            .iter()
+            .map(|(t, _)| (rate(t), df(t)))
+            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+        else {
             continue;
         };
-        let q = (rarest - 1) as f64 / (n - 1) as f64;
-        let chance = q * q;
+        let chance = rate * rate;
         if chance > opts.max_chance {
             continue;
         }
@@ -358,9 +405,16 @@ pub(crate) fn scaffold_pairs(
             shared: shared.iter().take(3).map(|(t, _)| t.to_string()).collect(),
             holders: rarest,
             clusters: n,
+            base_rate: rate,
             chance,
-            expected_pairs: chance * all_pairs,
+            tested,
+            expected_pairs: chance * tested as f64,
         });
+    }
+    let ps: Vec<f64> = out.iter().map(|p| p.chance).collect();
+    match crate::chance::bh_cut(&ps, tested, opts.fdr) {
+        Some(cut) => out.retain(|p| p.chance <= cut),
+        None => out.clear(),
     }
     crate::sort::by(&mut out, |p, q| {
         p.chance
@@ -442,22 +496,46 @@ mod tests {
         assert_eq!(value_class("REDACTED-0123456789ab"), "secret");
     }
 
-    #[test]
-    fn one_scaffold_across_clusters_is_a_pair_with_its_chance() {
-        // Three clusters on one harness, distinct tags, among twenty others.
+    /// `n` unflagged page fetches: the traffic a base rate is read against.
+    fn unflagged(n: usize) -> Vec<Observation> {
+        (0..n)
+            .map(|i| {
+                o(
+                    &format!("u{i}"),
+                    T0 + 86_400 * 50 + i as i64 * 37,
+                    &format!("https://www.site{}.example/page/{}", i % 97, i % 13),
+                )
+            })
+            .collect()
+    }
+
+    /// Three clusters on one harness, distinct tags, among twenty others,
+    /// and `background` unflagged records.
+    fn harness_fleet(background: usize) -> Vec<Observation> {
         let mut obs = fleet(3, harness);
         for (i, mut x) in fleet(20, other).into_iter().enumerate() {
             x.id = format!("bg{i}");
             x.ts += 86_400 * 100;
             obs.push(x);
         }
-        let a = analyze(obs, &Rules::default_rules());
+        obs.extend(unflagged(background));
+        obs
+    }
+
+    #[test]
+    fn one_scaffold_across_clusters_is_a_pair_with_its_chance() {
+        let a = analyze(harness_fleet(3000), &Rules::default_rules());
         assert_eq!(a.clusters.len(), 23, "{:?}", a.clusters.len());
         let p = &a.scaffold_pairs;
         assert_eq!(p.len(), 3, "{p:?}");
+        // Senders: 23 clusters and 3000 records outside them. The other two
+        // holders of the harness shape among the 3022 other senders.
+        let rate = 2.0 / 3022.0;
         for x in p {
-            assert_eq!((x.holders, x.clusters), (3, 23));
-            assert!((x.chance - (2.0f64 / 22.0).powi(2)).abs() < 1e-12);
+            assert_eq!((x.holders, x.clusters, x.tested), (3, 23, 253));
+            assert!((x.base_rate - rate).abs() < 1e-12, "{x:?}");
+            assert!((x.chance - rate * rate).abs() < 1e-15, "{x:?}");
+            assert!((x.expected_pairs - 253.0 * rate * rate).abs() < 1e-12);
             assert!(x.similarity > 0.99);
         }
         let links: Vec<_> = a
@@ -474,6 +552,33 @@ mod tests {
             "{:?}",
             a.candidate_fleets
         );
+    }
+
+    #[test]
+    fn a_shape_with_no_traffic_to_be_rare_against_ties_nothing() {
+        // The same fleet with no records outside the clusters: two of the 22
+        // other clusters hold the shape, too common to be rare against.
+        let a = analyze(harness_fleet(0), &Rules::default_rules());
+        assert!(a.scaffold_pairs.is_empty(), "{:?}", a.scaffold_pairs);
+        // Small analyses reach the limit too, given traffic: two harness
+        // clusters among three.
+        let mut obs = fleet(2, harness);
+        for (i, mut x) in fleet(1, other).into_iter().enumerate() {
+            x.id = format!("bg{i}");
+            x.ts += 86_400 * 30;
+            obs.push(x);
+        }
+        obs.extend(unflagged(3000));
+        let a = analyze(obs, &Rules::default_rules());
+        assert_eq!(a.scaffold_pairs.len(), 1, "{:?}", a.scaffold_pairs);
+    }
+
+    #[test]
+    fn pairs_are_cut_at_the_false_discovery_rate() {
+        let mut rules = Rules::default_rules();
+        rules.set.scaffold.fdr = 1e-9;
+        let a = analyze(harness_fleet(3000), &rules);
+        assert!(a.scaffold_pairs.is_empty(), "{:?}", a.scaffold_pairs);
     }
 
     #[test]

@@ -6,7 +6,7 @@
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-20 12:02:03 UTC
 - **Records:** 187 linked public records in 51 cluster(s) (of 359 records reviewed, 281 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.2
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-12.3
 
 ## Summary
 
@@ -583,7 +583,7 @@ Pairs of runs whose records suggest agents acting on each other's output. Each i
 - S1 shared sink (moderate): C6#1 (direct · Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/124.0 · AS16509) ↔ C6#1 (relay.jina → target · python-httpx/0.27.0 · AS14061): both write to `webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`; their requests differ in relay route, user agent, network: two agents on one sink, or one agent changing route. Records: eval:swarm-sink-d0, eval:swarm-sink-d1, eval:swarm-sink-d2, eval:swarm-sink-r0, eval:swarm-sink-r1, eval:swarm-sink-r2
 - S2 hand-off (strong): C43#1 → C15#1: `gist/3f9a2c1b7d4e5f60718293a4b5c6d7e8` written by the first and fetched by the second 25 min later; they differ in user agent, network. Records: eval:swarm-handoff-w0, eval:swarm-handoff-f0
 - S4 role sequence (moderate): C42#1 ↔ C9#1: the first only reads 5 hosts; the second attacks 5 of them (Jaccard 1.00), 5 after the first read them; they differ in relay route, user agent, network (p 1.4e-5). Records: eval:swarm-role-x0, eval:swarm-role-x1, eval:swarm-role-x2, eval:swarm-role-y0, eval:swarm-role-y1, eval:swarm-role-y2
-- S5 disjoint partition (weak): C40#1 ↔ C41#1: started 40 s apart, they split `*.county-records[.]example` (8 and 8 hosts, 0 shared; p 1.8e-2). One scheduler sharding a list does the same: a fleet signal unless other edges join these runs. Records: eval:swarm-shard-00, eval:swarm-shard-01, eval:swarm-shard-02, eval:swarm-shard-10, eval:swarm-shard-11, eval:swarm-shard-12
+- S5 disjoint partition (weak): C40#1 ↔ C41#1: 2 runs started within 600 s split `*.county-records[.]example` (8 + 8 hosts) with no host shared, in a block split of the sorted hosts; a split that regular 6.2e-4 of the time at random; one client, or clients not told apart. One scheduler …. Records: eval:swarm-shard-00, eval:swarm-shard-01, eval:swarm-shard-02, eval:swarm-shard-10, eval:swarm-shard-11, eval:swarm-shard-12
 
 ## Representative records
 

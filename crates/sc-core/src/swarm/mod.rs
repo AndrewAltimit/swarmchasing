@@ -14,13 +14,15 @@
 //!   every writer into one cluster, so this also looks inside a cluster.
 //! - **S2 hand-off**: an artifact (an inbox, a gist, a paste, a Space, a
 //!   static-site subdomain) that one run writes to and a later run fetches.
-//! - **S3 synchronized start**: runs of differently fingerprinted clusters
-//!   that start and stop together, against a chance model.
+//! - **S3 synchronized start**: runs of different clients in lockstep,
+//!   their requests lined up step by step at one offset, against random
+//!   placement and against their own gaps reordered.
 //! - **S4 role sequence**: a run that only reads a set of hosts, then a
 //!   differently fingerprinted run attacking the same hosts in the same order.
 //! - **S5 disjoint partition**: runs started together that split one target
-//!   family with almost no overlap. One scheduler sharding a list does the
-//!   same, so alone it is a fleet signal.
+//!   family with almost no overlap, or in a stride or blocks of its sorted
+//!   hosts. One scheduler sharding a list does the same, so alone it is a
+//!   fleet signal.
 //!
 //! Only identifier strings already in the records are matched; nothing here
 //! reads an artifact, an inbox or a callback channel.
@@ -159,6 +161,38 @@ pub struct SwarmEdge {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chance: Option<f64>,
     pub detail: String,
+}
+
+/// Interaction edge settings (`[swarm]` in the rules file).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SwarmOptions {
+    /// S3: two requests line up when this close at the pair's offset.
+    pub lockstep_tolerance_secs: i64,
+    /// S3: requests of the shorter run that must line up.
+    pub lockstep_min_events: usize,
+    /// S3: share of the shorter run's requests that must line up.
+    pub lockstep_min_share: f64,
+    /// S3: the offset between the runs is searched up to this either way.
+    pub lockstep_max_offset_secs: i64,
+    /// S3: permutations of the shorter run's own gaps in the second chance
+    /// model. Its smallest chance is `1 / (permutations + 1)`.
+    pub lockstep_permutations: usize,
+    /// S3: kept when the larger of the two chances is at most this.
+    pub lockstep_max_chance: f64,
+}
+
+impl Default for SwarmOptions {
+    fn default() -> Self {
+        Self {
+            lockstep_tolerance_secs: 3,
+            lockstep_min_events: 4,
+            lockstep_min_share: 0.6,
+            lockstep_max_offset_secs: 120,
+            lockstep_permutations: 199,
+            lockstep_max_chance: 0.01,
+        }
+    }
 }
 
 /// Edges kept, strongest first.

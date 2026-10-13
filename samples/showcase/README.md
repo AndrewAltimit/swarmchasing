@@ -6,7 +6,7 @@ The records are taken from the labelled sets in [`samples/eval/`](../eval/README
 
 What each group of records shows:
 
-- **Disjoint partition and synchronized start (S5, S3):** two clients split one host list between them and start together.
+- **Disjoint partition (S5):** two clients split one host list between them and start together. They send at one steady rate, so their lockstep is what any two steady jobs show and draws no synchronized start (S3).
 - **Shared sink (S1):** two strands of one run, sent different ways, write to one inbox.
 - **Hand-off (S2):** one run writes an artifact that a later run fetches.
 - **Role sequence (S4):** a reader maps a set of hosts from archive captures, then a striker attacks them in the same order; its timestamps are capture times, so its grade is capped.

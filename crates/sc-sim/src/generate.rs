@@ -86,6 +86,14 @@ struct RunSpec {
     /// Change the request after an error (models and people do; a scanner
     /// working through its list does not).
     adapt: bool,
+    /// The scope of the palette subset this run draws from, and its share.
+    habits: Option<(String, f64)>,
+}
+
+/// The palette subset an actor's runs draw from under `key`, when it does
+/// not use the whole palette.
+fn habits(a: &Actor, key: String) -> Option<(String, f64)> {
+    (a.palette_share < 1.0).then(|| (key, a.palette_share.max(0.0)))
 }
 
 struct Gen<'a> {
@@ -138,7 +146,15 @@ pub fn to_ndjson(records: &[Value]) -> String {
 impl Gen<'_> {
     fn actor(&mut self, i: usize, a: &Actor) {
         let mut rng = self.rng.fork(&format!("actor{i}"));
-        let start = self.t0 + (a.offset_hours * 3600.0) as i64;
+        let mut start = self.t0 + (a.offset_hours * 3600.0) as i64;
+        if a.off_hour {
+            // Its own stream, so actors without it draw as before.
+            start = start - start.rem_euclid(3600)
+                + self
+                    .rng
+                    .fork(&format!("actor{i}:off_hour"))
+                    .range(7 * 60, 53 * 60);
+        }
         let span = i64::from(self.scenario.span_hours) * 3600;
         let id = |k: usize| format!("{}-a{i}-{k}", self.scenario.name);
         let agent_truth =
@@ -170,6 +186,7 @@ impl Gen<'_> {
                         writes: None,
                         fetches: None,
                         adapt: true,
+                        habits: habits(a, format!("{i}:{k}")),
                     };
                     self.run(spec, &mut rng);
                 }
@@ -204,6 +221,7 @@ impl Gen<'_> {
                         writes: None,
                         fetches: None,
                         adapt: true,
+                        habits: None,
                     };
                     self.run(spec, &mut rng);
                 }
@@ -240,6 +258,7 @@ impl Gen<'_> {
                         writes: None,
                         fetches: None,
                         adapt: true,
+                        habits: habits(a, format!("{i}")),
                     };
                     self.run(spec, &mut rng);
                 }
@@ -271,6 +290,7 @@ impl Gen<'_> {
                         writes: None,
                         fetches: None,
                         adapt: true,
+                        habits: None,
                     };
                     self.run(spec, &mut rng);
                 }
@@ -303,6 +323,18 @@ impl Gen<'_> {
         let note = format!("https://gist.github.com/{user}/{gist}");
         let raw = format!("https://r.jina.ai/https://gist.githubusercontent.com/{user}/{gist}/raw");
         let handoff = has(Mode::Handoff);
+        // Dispatch times, from their own stream so other modes draw as before.
+        let dispatch = has(Mode::Dispatch);
+        let mut drng = rng.fork("dispatch");
+        let dispatch_gaps: Vec<i64> = (0..a.records)
+            .map(|_| {
+                if dispatch {
+                    drng.range(10 * 60, 50 * 60)
+                } else {
+                    0
+                }
+            })
+            .collect();
         let mut t = start;
         for k in 0..n {
             let reader = (has(Mode::Roles) || handoff) && k == 0;
@@ -324,7 +356,19 @@ impl Gen<'_> {
             } else {
                 read_then_attack(a.records, hosts.len())
             };
-            let begin = if handoff && k > 0 {
+            // A worker's delay after each dispatch.
+            let late: Vec<i64> = (0..a.records)
+                .map(|_| {
+                    if dispatch && k > 0 {
+                        drng.range(40, 85)
+                    } else {
+                        0
+                    }
+                })
+                .collect();
+            let begin = if dispatch {
+                start + late.first().copied().unwrap_or(0)
+            } else if handoff && k > 0 {
                 t + rng.range(5 * 60, 45 * 60)
             } else if has(Mode::Roles) && k > 0 {
                 t + rng.range(15 * 60, 90 * 60)
@@ -349,8 +393,25 @@ impl Gen<'_> {
                 },
                 start: begin,
                 pace,
-                gaps: has(Mode::Sync)
-                    .then(|| sync_gaps.iter().map(|g| g + rng.range(-1, 1)).collect()),
+                // One dispatcher sends each step to every agent; each
+                // request leaves 0 to 2 s after its dispatch.
+                gaps: if dispatch {
+                    Some(
+                        (0..a.records)
+                            .map(|r| dispatch_gaps[r] + late[r] - late[r.saturating_sub(1)])
+                            .collect(),
+                    )
+                } else {
+                    has(Mode::Sync).then(|| {
+                        let late: Vec<i64> = sync_gaps.iter().map(|_| rng.range(0, 2)).collect();
+                        (0..sync_gaps.len())
+                            .map(|r| {
+                                let prev = late[r.saturating_sub(1)];
+                                (sync_gaps[r] + late[r] - prev).max(0)
+                            })
+                            .collect()
+                    })
+                },
                 // A reader and an attacker go through the hosts in one order.
                 hosts: if has(Mode::Roles) {
                     in_order(&hosts, a.records)
@@ -366,6 +427,7 @@ impl Gen<'_> {
                 writes: (handoff && k == 0).then(|| note.clone()),
                 fetches: (handoff && k > 0).then(|| raw.clone()),
                 adapt: true,
+                habits: habits(a, format!("{i}")),
             };
             let end = self.run(spec, rng);
             if reader {
@@ -502,6 +564,7 @@ impl Gen<'_> {
             writes: None,
             fetches: None,
             adapt,
+            habits: habits(a, format!("{i}:{k}")),
         }
     }
 
@@ -551,10 +614,14 @@ impl Gen<'_> {
                 Some(f) if !f.is_empty() => f.iter().collect(),
                 _ => {
                     let p = self.palette.get(*u);
-                    if p.is_empty() {
-                        self.palette.get(Use::Read).iter().collect()
+                    let p = if p.is_empty() {
+                        self.palette.get(Use::Read)
                     } else {
-                        p.iter().collect()
+                        p
+                    };
+                    match &spec.habits {
+                        Some((key, share)) => subset(p, self.seed, key, *share),
+                        None => p.iter().collect(),
                     }
                 }
             };
@@ -846,6 +913,19 @@ fn address(rng: &mut Rng) -> String {
     )
 }
 
+/// A seeded share of `pool` (at least two templates) for one scope: the
+/// templates ranked by a draw keyed on the scope and their origin.
+fn subset<'a>(pool: &'a [Template], seed: u64, key: &str, share: f64) -> Vec<&'a Template> {
+    let rng = Rng::new(seed).fork("habits").fork(key);
+    let mut ranked: Vec<(u64, &Template)> = pool
+        .iter()
+        .map(|t| (rng.fork(&t.origin).next_u64(), t))
+        .collect();
+    ranked.sort_by_key(|x| x.0);
+    let n = ((pool.len() as f64 * share).ceil() as usize).clamp(2.min(pool.len()), pool.len());
+    ranked.into_iter().take(n).map(|x| x.1).collect()
+}
+
 /// `n` hosts drawn round-robin from `hosts`, so each host gets a share.
 fn spread(hosts: &[String], n: usize) -> Vec<String> {
     (0..n)
@@ -888,6 +968,20 @@ mod tests {
         assert!(a.starts_with("webhook.site/"));
         assert_ne!(a, b);
         assert_eq!(a, ids.swap("s1", orig));
+    }
+
+    #[test]
+    fn a_palette_share_is_a_seeded_subset_per_scope() {
+        let rules = sc_core::Rules::default_rules();
+        let p = Palette::default_palette(&rules);
+        let pool = p.get(Use::Attack);
+        assert!(pool.len() >= 10);
+        let ids = |v: Vec<&Template>| v.iter().map(|t| t.origin.clone()).collect::<Vec<_>>();
+        let a = ids(subset(pool, 7, "0:1", 0.3));
+        assert_eq!(a.len(), (pool.len() as f64 * 0.3).ceil() as usize);
+        assert_eq!(a, ids(subset(pool, 7, "0:1", 0.3)));
+        assert_ne!(a, ids(subset(pool, 7, "0:2", 0.3)));
+        assert_eq!(subset(pool, 7, "0:1", 0.0).len(), 2);
     }
 
     #[test]

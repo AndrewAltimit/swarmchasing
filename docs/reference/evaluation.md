@@ -164,17 +164,23 @@ The unit is a pair of true runs. An edge side is placed on the run most of its r
 - **Soft links and candidate fleets**, per kind: precision is the share of linked cluster pairs with one operator. Recall is over operator pairs in different clusters above noise; pairs already in one cluster are counted apart.
 - **Agent grades**: records by actor and class against the grade columns, as in [agent grades by actor](#agent-grades-by-actor).
 
-Every proportion has its Wilson interval. Kinds are read from the analysis, so a new edge or soft-link kind appears without a change to the command. The numbers are reported, never gated. The committed labelled groups are hand-written and few, so the intervals are wide and the numbers say whether a detector fires on its designed case, not how often it would on real traffic.
+Every proportion has its Wilson interval. Every kind is listed with its recall denominator in every file and seed, fired or not, so summed recall counts the true pairs a kind missed where it drew nothing. The numbers are reported, never gated. The committed labelled groups are hand-written and few, so the intervals are wide and the numbers say whether a detector fires on its designed case, not how often it would on real traffic.
 
 ### Simulated scenarios
 
 `swarmchase sim bench samples/sim/scenarios.toml` generates labelled records for each scenario in the file, under each of its seeds, analyses each set on its own and prints the measurement above per scenario and summed. `sim write` saves the records instead, as ordinary labelled files that `eval` and `sim score` also read.
 
-A scenario lists actors: single agents, swarms (`modes`: `sink` for one shared callback inbox, `sync` for runs that start and stop together, `roles` for a reader followed by attackers on the same hosts, `shard` for one host family split between agents, `handoff` for a gist one agent names and the others fetch within the hour), fleets on one scaffold with separate inboxes, schedulers sharding a list from one client, planters copying another actor's identifiers from a different client, and background: people reading through relays, mail gateways, on-the-hour jobs, crawlers, people running scanners and people pasting a chatbot's payloads. Each actor has a pace, a retry rate and a time basis (request, submit or capture).
+A scenario lists actors: single agents, swarms (`modes`: `sink` for one shared callback inbox, `sync` for runs one dispatcher drives step by step, each request 0 to 2 seconds after its dispatch, `roles` for a reader followed by attackers on the same hosts, `shard` for one host family split between agents, `handoff` for a gist one agent names and the others fetch within the hour, `dispatch` for a planner whose workers each send a request 40 to 85 seconds after each of its irregular dispatches).
+
+Other actors: fleets on one scaffold with separate inboxes, schedulers sharding a list from one client, planters copying another actor's identifiers from a different client, and background: people reading through relays, mail gateways, on-the-hour jobs, crawlers, people running scanners and people pasting a chatbot's payloads. Each actor has a pace, a retry rate and a time basis (request, submit or capture).
+
+`off_hour` moves an actor's start to a seeded 7 to 53 minutes past its hour, so a synchronized swarm does not begin on a clock hour. `palette_share` below 1 has each swarm, scheduler or single agent draw from its own seeded share of the palette.
 
 The generator writes no request content. Each record copies a committed evaluation record and changes its target host to a reserved `.example` name, its linking identifiers and captured secrets to values of its own run (or of its swarm, for a shared inbox), and for a retry a cache-busting parameter. A hand-off adds the gist's address to the writer's requests and one fetch of it through a reader relay to each reader's run. What is simulated is the senders, their clients, the times and the order.
 
-What this does not model: the variety of real request content (every actor draws from one small set of records, so habit soft links such as relay stacks and payload dialects join unrelated agents more often than they would on real traffic), hand-offs through anything but a gist, headers, real address and network structure, and archive or scan-service behaviour beyond the timestamp kind. Simulator numbers say how the detectors behave on the modelled situations, not how often they are right on real records.
+`fleet-traffic` puts a scaffold fleet among a day of benign crawler traffic: the unflagged records a shared request shape is rare against ([methodology](../methodology.md#descriptive-hints)), which the other scenarios lack.
+
+What this does not model: the variety of real request content (every actor draws from one small set of records, so habit soft links such as relay stacks and payload dialects join unrelated agents more often than they would on real traffic; `palette_share` narrows this without removing it), hand-offs through anything but a gist, headers, real address and network structure, and archive or scan-service behaviour beyond the timestamp kind. Simulator numbers say how the detectors behave on the modelled situations, not how often they are right on real records.
 
 
 ## Frozen splits

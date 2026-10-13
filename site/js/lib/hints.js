@@ -103,7 +103,7 @@ export const capLabel = (k) => AGENT_CAPS[k]?.[1] ?? trunc(String(k ?? "?").repl
 export const SWARM_KINDS = {
   shared_sink: { id: "S1", label: "shared sink", what: "runs, or strands of one run, writing to one inbox or artifact while sending requests differently" },
   handoff: { id: "S2", label: "hand-off", what: "an artifact one run writes and a later run fetches" },
-  synchronized_start: { id: "S3", label: "synchronized start", what: "differently fingerprinted runs that start and stop together, against a chance model" },
+  synchronized_start: { id: "S3", label: "synchronized start", what: "runs of different clients whose requests line up step by step at one offset, against two chance models" },
   role_sequence: { id: "S4", label: "role sequence", what: "a run that only reads a set of hosts, then another attacking them in the same order" },
   disjoint_partition: { id: "S5", label: "disjoint partition", what: "runs started together splitting one target family with almost no overlap (alone, a fleet signal)" },
 };

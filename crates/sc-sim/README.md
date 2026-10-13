@@ -18,7 +18,7 @@ print!("{}", render(&m));
 
 | Module | Covers |
 |---|---|
-| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, single agents, background and planters), pace, retries, time basis, seeds. |
+| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, single agents, background and planters), pace, retries, start offsets, palette shares, time basis, seeds. |
 | [`palette`](src/palette.rs) | The committed records the generator copies, sorted by use (attack, read, callback inbox, benign, person, tool). |
 | [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers. |
 | [`rng`](src/rng.rs) | A small seeded generator, the same on every platform. |
@@ -28,7 +28,7 @@ print!("{}", render(&m));
 
 `bench` generates each scenario under its seeds, analyses each run on its own and sums the measurements.
 
-Kinds are keyed by their serialised names, so a kind added to `SwarmEdgeKind` or `SoftLinkKind` is measured without a change here.
+Kinds are keyed by their serialised names. Every edge kind, soft-link kind, `any` and `candidate_fleet` is listed in every measurement with its recall denominator, fired or not, so a sum over seeds and scenarios counts the true pairs a kind missed where it drew nothing. A soft-link kind added to `SoftLinkKind` fails to compile in `measure` until it is listed there.
 
 ## Tests
 
