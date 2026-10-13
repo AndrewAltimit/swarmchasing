@@ -69,6 +69,6 @@ if (form) {
   const fold = form.closest("details.filters-fold");
   if (fold) {
     fold.hidden = false;
-    if (window.matchMedia?.("(max-width: 600px)").matches && location.hash.length < 2) fold.open = false;
+    if (window.matchMedia?.("(max-width: 720px)").matches && location.hash.length < 2) fold.open = false;
   }
 }
