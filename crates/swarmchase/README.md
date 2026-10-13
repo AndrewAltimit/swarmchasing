@@ -126,6 +126,15 @@ swarmchase case status
 
 Other subcommands: `add`, `claim`, `set`, `note`, `rename`, `bundle`, `report`, `rules`, `notice`, `export` (`--format stix`, `misp`, `oecd` with its EU AI Act Article 73 section, or `aiid`), `no-contact`, `scope`, `consent`, `naming`, `alternative`, `plant-review` and `checklist` for the self-review, `review-packet` and `review` for the second review, and `evidence add|consent|withdraw|list` for logs an operator sends back.
 
+### Sightings
+
+An operator's sightings file ([SC-Sightings v1](../../docs/specs/sightings-v1.md)) carries what a swarm left in its logs without the logs. `match` is read-only: it writes nothing into the watch data or a case, and the scheduled watch never runs it.
+
+```sh
+swarmchase sightings export access.log --map host=www.example.org -o sightings.json   # --include-hosts to add your hosts
+swarmchase sightings match a.json b.json --vouch a.json=2026-10-portal --store       # clusters more than one party saw
+```
+
 ### Notices
 
 | Command | What it does |

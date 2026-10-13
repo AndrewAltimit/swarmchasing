@@ -47,6 +47,7 @@ Formats other groups can implement, each with a JSON Schema under `schemas/`.
 | [`specs/README.md`](specs/README.md) | Index of the specs and their versions. |
 | [`specs/rules-v1.md`](specs/rules-v1.md) | SC-Rules v1: the indicator rules file, scoring semantics and conformance vectors. |
 | [`specs/incident-v1.md`](specs/incident-v1.md) | SC-Incident v1: one JSON document per published incident. |
+| [`specs/sightings-v1.md`](specs/sightings-v1.md) | SC-Sightings v1: an operator's sightings of a swarm, shared without its logs, and matching across operators. |
 | [`specs/adopting.md`](specs/adopting.md) | How another group adopts the method and states conformance. |
 | [`schemas/sc-bench-v1.json`](../schemas/sc-bench-v1.json) | SC-Bench v1: a labelled set, by record id, that other detectors are scored against ([evaluation](reference/evaluation.md#sc-bench)). |
 

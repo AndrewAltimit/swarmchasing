@@ -6,6 +6,7 @@ Formats other groups can implement to exchange rules and incidents with this pro
 |---|---|---|
 | [SC-Rules v1](rules-v1.md) | The indicator rules file: fields, targets, matching, scoring, conformance vectors. | [`schemas/sc-rules-v1.json`](../../schemas/sc-rules-v1.json) |
 | [SC-Incident v1](incident-v1.md) | One JSON document per published incident, public profile only. | [`schemas/sc-incident-v1.json`](../../schemas/sc-incident-v1.json) |
+| [SC-Sightings v1](sightings-v1.md) | What a swarm left in one operator's logs, as keyed hashes and scaffold, for matching across operators. | [`schemas/sc-sightings-v1.json`](../../schemas/sc-sightings-v1.json) |
 | [Adopting the method](adopting.md) | What to take, the steps, stating conformance, sharing rules and results. | none |
 
 The STIX 2.1 extension for agent runs is specified in [FM-12.2](../manual/12-interoperability.md#fm-122-the-x-sc-agent-run-extension), with its schema at [`schemas/stix/x-sc-agent-run.json`](../../schemas/stix/x-sc-agent-run.json).

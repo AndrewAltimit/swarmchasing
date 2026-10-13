@@ -78,6 +78,17 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Analyze</h1>
 <p id="claims-status" class="warn" role="status" hidden></p></details>
 <div class="row"><button type="button" id="draft-report" class="primary">Draft the report</button><button type="button" id="copy-report" disabled>Copy</button><button type="button" id="dl-report" disabled>Download .md</button><button type="button" id="dl-json" disabled>Download analysis .json</button></div>
 <pre id="report" class="report" tabindex="0" aria-label="Report draft">Analyse records to draft a report.</pre>
+</section>
+<section class="card pane-report" data-pane="report" aria-labelledby="h-sightings">
+<h2 id="h-sightings">Share sightings</h2>
+<p class="hint">A swarm that hits many sites is invisible to any one of them. A sightings file lets you share what it left in your log without sharing the log: keyed hashes of its run tags, inbox ids and captured secrets, how its requests were made, the hours it was active and its grade. No URL, path, query value, IP address, user agent or cookie goes in, and your host names only if you tick the box. The page shows the whole file before you save it and sends nothing; you choose whether to send it, and to whom. See <a href="../operators/#share-sightings">sharing sightings</a>.</p>
+<div class="row">
+<label><input type="checkbox" id="sight-hosts"> Include my host names (defanged)</label>
+<label class="grow">Describe yourself (optional) <input id="sight-operator" placeholder="e.g. the case id from our report" maxlength="120"></label>
+</div>
+<div class="row"><button type="button" id="sight-prepare" class="primary">Prepare sightings</button><button type="button" id="sight-dl" disabled>Download sightings .json</button></div>
+<div id="sight-summary" aria-live="polite"></div>
+<pre id="sight-preview" class="report" tabindex="0" aria-label="Sightings file to be saved">Analyse records, then press Prepare to see exactly what a sightings file would hold.</pre>
 </section>"#;
 
 pub const UNWRAP: &str = r#"<header class="page-head compact"><h1>Unwrap a URL</h1>

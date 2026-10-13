@@ -83,6 +83,12 @@ Every view has a table view. Every mark that selects something is a keyboard but
 
 The last step drafts a disclosure, loading the tools module on *Draft the report* or when the section scrolls into view. It follows the CLI's naming gate: pick the weakest evidence that may name a developer, and paste claims from case work (the JSON `swarmchase report --claims` reads). Outside case notes, a developer below that level is not named ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
 
+## Sharing sightings
+
+Under the report, *Share sightings* turns the analysis into an [SC-Sightings v1](../specs/sightings-v1.md) file, so an operator who checked its own log can let the same swarm be matched across operators without sending the log. *Prepare sightings* loads the tools module and shows the whole file, with a list of what it holds and what it never holds; *Download* saves exactly the text shown. Ticking *Include my host names* or editing the optional description redraws the preview first.
+
+The file carries keyed hashes of each flagged cluster's linking features and captured secrets, its scaffold, its hour buckets, client ASNs and its grade; never a URL, path, query value, address, user agent or cookie. The page sends nothing; the operator chooses whether to send the file, and to whom ([for operators](../guides/for-operators.md#share-sightings)).
+
 ## The Field Manual
 
 The manual's pages link `FM-n.m` section ids and `SC-Tn` tactic ids in running text to their sections, and the first use on a page of each multi-word glossary term to its definition, with the short definition as a tooltip. Each page ends with previous and next; the hand-written index, previous and next line each chapter opens with, for reading on GitHub, is dropped. The section index lists every section; its search runs in the page over `assets/fm-index.json` (ids, titles, chapters and the start of each section's text), so no module loads.
