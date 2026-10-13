@@ -137,6 +137,7 @@ pub fn pull(
     if let Some(t) = asn {
         t.enrich(&mut res.observations);
     }
+    seal(&mut res.observations);
     let now = chrono::Utc::now().timestamp();
     let cap = (hit_limit && !checkpointed)
         .then(|| oldest(&res.observations))
@@ -147,6 +148,16 @@ pub fn pull(
         new: keep_fresh(st, res.observations, overlap, finished, now, cap),
         stopped,
     })
+}
+
+/// Redact every record again before it is stored, whatever its collector
+/// did. Redaction is idempotent, so a record its collector already redacted
+/// comes through unchanged; one a collector missed is caught here, the one
+/// place every pulled record passes before the run directory and the store.
+pub(crate) fn seal(records: &mut [Observation]) {
+    for o in records {
+        sc_core::redact_observation(o);
+    }
 }
 
 /// The oldest dated capture among `records`.
@@ -310,6 +321,126 @@ mod tests {
             let kind: Kind = s.kind.parse().unwrap();
             // Builds the source, which checks e.g. a CT log's endpoint.
             sc_collect::source(kind, s.query.clone(), Some("k".into())).unwrap();
+        }
+    }
+
+    /// Secrets as collectors meet them, each in a different place.
+    const GH: &str = "ghp_0123456789abcdefghijABCDEFGHIJ0123456789"; // secret-scan: fixture
+    const JWT: &str = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlMTIzNDU2"; // secret-scan: fixture
+    const AWS: &str = "AKIAABCDEFGHIJKLMNOP"; // secret-scan: fixture
+    const OPAQUE: &str = "s3cr3tvalue12345"; // secret-scan: fixture
+
+    /// What each collector kind turns its source's answer into, plus records
+    /// shaped as a collector that skipped redaction would leave them.
+    fn collector_outputs() -> Vec<Observation> {
+        use base64::Engine as _;
+        let mut v = Vec::new();
+        v.extend(
+            sc_collect::parse_wayback_cdx(&format!(
+                r#"[["timestamp","original","statuscode","mimetype","digest"],
+                ["20261004081000","https://r.jina.ai/https://a.example/?api_key={OPAQUE}&q=1","200","text/html","AAA"],
+                ["20261004081500","https://r.jina.ai/https://b.example/{JWT}","200","text/html","BBB"]]"#
+            ))
+            .unwrap()
+            .records,
+        );
+        v.extend(sc_collect::parse_arquivo_cdx(&format!(
+            "{{\"timestamp\":\"20261004081000\",\"url\":\"https://a.example/?access_token={OPAQUE}\",\"status\":\"200\",\"digest\":\"D\"}}\n"
+        )));
+        v.extend(sc_collect::parse_cc_cdx(
+            &format!(
+                r#"{{"timestamp":"20260910120000","url":"https://relay.example/https://t.example/?key={OPAQUE}","status":"200","digest":"ABC"}}"#
+            ),
+            "CC-MAIN-2099-40",
+        ));
+        v.extend(sc_collect::parse_timemap(&format!(
+            r#"<https://endpoint.example/api?token={OPAQUE}>; rel="original",
+<https://archive.example/20260902120000/https://endpoint.example/api?token={OPAQUE}>; rel="memento"; datetime="Wed, 02 Sep 2026 12:00:00 GMT"
+"#
+        )));
+        v.extend(
+            sc_collect::parse_urlscan_search(&format!(
+                r#"{{"results":[{{"task":{{"visibility":"public","time":"2026-10-04T08:10:00.000Z","uuid":"0000aaaa-0000-0000-0000-000000000001","url":"https://relay.example/https://t.example/?session_token={OPAQUE}"}},"page":{{"ip":"203.0.113.9","status":"200","url":"https://t.example/#access_token={OPAQUE}"}}}}],"has_more":false}}"#
+            ))
+            .unwrap()
+            .0,
+        );
+        v.extend(
+            sc_collect::parse_urlquery_search(&format!(
+                r#"{{"query":"q","total_hits":1,"limit":1,"offset":0,"reports":[{{"report_id":"a1","date":"2026-10-04T08:10:00Z","url":{{"schema":"https","addr":"https://r.jina.ai/https://x.example/?password={OPAQUE}&t={AWS}"}},"ip":{{"addr":"203.0.113.7","asn":64500}}}}]}}"#
+            ))
+            .unwrap()
+            .records,
+        );
+        // As a collector that forgot to redact would leave a record: the
+        // secret in headers, the final URL, the reference, and base64.
+        let program = format!(
+            "fetch('https://x.example/?t=1', {{headers: {{Authorization: 'token {GH}'}}}})"
+        );
+        let b64 = base64::engine::general_purpose::STANDARD.encode(program);
+        v.push(Observation {
+            id: "raw:1".into(),
+            source: "raw".into(),
+            ts: 1_791_101_400,
+            url: format!("https://httpbin.example/base64/{b64}?jwt={JWT}"),
+            headers: [
+                ("Authorization".to_string(), format!("Bearer {JWT}")),
+                ("Cookie".to_string(), format!("sid={OPAQUE}; theme=dark")),
+                ("X-Note".to_string(), format!("leaked {GH} and {AWS}")),
+            ]
+            .into(),
+            final_url: Some(format!("https://t.example/cb#id_token={JWT}&state=1")),
+            reference: Some(format!("https://scan.example/r/1?apikey={OPAQUE}")),
+            ..Default::default()
+        });
+        v
+    }
+
+    #[test]
+    fn no_secret_survives_the_store_chokepoint() {
+        let mut v = collector_outputs();
+        assert!(
+            v.len() >= 8,
+            "a parser stopped returning records: {}",
+            v.len()
+        );
+        seal(&mut v);
+        let text = serde_json::to_string(&v).unwrap();
+        for secret in [GH, JWT, AWS, OPAQUE] {
+            assert!(!text.contains(secret), "{secret} survived in {text}");
+        }
+        // Nor inside the base64 a URL carries.
+        use base64::Engine as _;
+        let raw = v.iter().find(|o| o.id == "raw:1").unwrap();
+        let run = raw.url["https://httpbin.example/base64/".len()..]
+            .split('?')
+            .next()
+            .unwrap();
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(run)
+            .unwrap();
+        let decoded = String::from_utf8(decoded).unwrap();
+        assert!(
+            decoded.starts_with("fetch('https://x.example/"),
+            "{decoded}"
+        );
+        assert!(!decoded.contains(GH), "{decoded}");
+        assert!(text.contains("REDACTED-"), "{text}");
+    }
+
+    #[test]
+    fn redaction_is_idempotent() {
+        let mut once = collector_outputs();
+        seal(&mut once);
+        let mut twice = once.clone();
+        seal(&mut twice);
+        assert_eq!(
+            serde_json::to_string(&once).unwrap(),
+            serde_json::to_string(&twice).unwrap()
+        );
+        // And a second pass replaces nothing.
+        for o in &mut twice {
+            assert_eq!(sc_core::redact_observation(o), 0, "{o:?}");
         }
     }
 
