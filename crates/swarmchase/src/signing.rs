@@ -163,6 +163,12 @@ pub fn generate(out: &Path) -> Result<SecretKey> {
 /// Write `text` to a new file at `path`, never over one. A `secret` file is
 /// readable by its owner only where the system has Unix permissions.
 fn write_new(path: &Path, text: &str, secret: bool) -> Result<()> {
+    // A public key file may go in a directory not made yet (`keys/` in a
+    // fresh checkout); a secret's directory is the admin's to make.
+    if !secret && let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)
+            .with_context(|| format!("creating the directory {}", dir.display()))?;
+    }
     let mut o = std::fs::OpenOptions::new();
     o.write(true).create_new(true);
     #[cfg(unix)]
@@ -261,6 +267,20 @@ mod tests {
         std::fs::write(&p, public_key_file(std::slice::from_ref(&k))).unwrap();
         let (path, keys) = published(Some(&p)).unwrap();
         assert_eq!((path.as_deref(), keys), (Some(p.as_path()), vec![k]));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_public_key_file_gets_its_directory_and_a_secret_does_not() {
+        let dir = std::env::temp_dir().join(format!("swarmchase-dirs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let public = dir.join("keys").join("bundle-signing.pub");
+        write_new(&public, "ed25519 x\n", false).unwrap();
+        assert!(public.is_file());
+        assert!(write_new(&public, "ed25519 y\n", false).is_err());
+        let secret = dir.join("missing").join("signing.key");
+        assert!(write_new(&secret, "seed\n", true).is_err());
+        assert!(!secret.parent().unwrap().exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
