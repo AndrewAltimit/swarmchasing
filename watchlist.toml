@@ -569,6 +569,32 @@ kind = "crates"
 pattern = "*"
 scan = 6                  # listing pages per run
 
+# Rationale: agents told to find vulnerabilities file reports in bulk,
+# and CVE records have been fabricated in bursts against one project with
+# near-identical, model-written descriptions. The GitHub Advisory
+# Database's unreviewed advisories mirror the CVE records the NVD
+# publishes, with descriptions and references; each becomes an event whose
+# text is sketched and whose target is the first source repository its
+# references name, so many reports against one repository at once group.
+# The credited finder, where a record credits one, is the account (keyed
+# hash); most credit no one, so groups are floods. Reference URLs are
+# matched as text, never fetched. Reads oldest first from the last
+# advisory read, up to `scan` requests of 100. Noise: a CNA publishing a
+# vendor's batch of advisories with templated descriptions. Terms: the
+# REST API (https://docs.github.com/en/rest/security-advisories/global-advisories)
+# allows 60 unauthenticated requests an hour; the database is CC-BY 4.0
+# (https://github.com/github/advisory-database). The CVE Program's own
+# list (`endpoint = "cvelist"`, records new in its delta log, one request
+# each, terms at https://www.cve.org/Legal/TermsOfUse) also sees records
+# the NVD never publishes, but costs a request per record; it is for case
+# work, not scheduled.
+[[platform.source]]
+name = "cve-advisories"
+kind = "cve"
+endpoint = "unreviewed"
+pattern = "*"
+scan = 6                  # requests of 100 advisories per run
+
 # Rationale: agents told to test or prove they can edit open wikis make
 # sandbox and draft edits from new accounts, many at once, with templated
 # titles and summaries. Wikimedia's revision stream carries the editor, the

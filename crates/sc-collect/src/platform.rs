@@ -64,6 +64,7 @@ pub const PLATFORM_KINDS: &[&str] = &[
     "packagist",
     "rubygems",
     "crates",
+    "cve",
 ];
 
 /// A platform source in the watchlist (`[[platform.source]]`).
@@ -156,6 +157,7 @@ pub fn pull_platform(
         }
         "wikimedia" => crate::wikimedia::pull_platform(client, &src.query, mark, rules, max),
         "golang" => pull_golang(client, &src.query, mark, max),
+        "cve" => crate::cve::pull_platform(client, &src.query, mark, rules, max),
         "hackernews" => crate::hackernews::pull_platform(
             client,
             &src.query,

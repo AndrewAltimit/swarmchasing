@@ -31,6 +31,7 @@ mod client;
 mod commoncrawl;
 mod crtsh;
 mod ctlog;
+pub mod cve;
 mod gharchive;
 pub mod hackernews;
 pub mod identity;

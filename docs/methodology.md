@@ -24,7 +24,7 @@ The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read
 | npm, PyPI | Package names, versions and publish times matching run tags | Scheduled watch, as leads for review |
 | Wikimedia EventStreams | External links added to wiki pages, matching relay hosts and run tags or added to configuration pages | Scheduled watch, as leads for review |
 | Hacker News search index | Links in stories and comments matching relay hosts and run tags | Scheduled watch, as leads for review |
-| GH Archive, npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Hugging Face Hub, Go module index, Wikimedia EventStreams, Hacker News | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
+| GH Archive, npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Hugging Face Hub, Go module index, Wikimedia EventStreams, Hacker News, GitHub Advisory Database, CVE List | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
 | CT logs, crt.sh | Certificate Transparency entries | Watch sample of one log (relay look-alikes); case work (`swarmchase certs`) |
 | security.txt, RDAP | The affected organisation's published security contact, or its registrar's abuse address | Finding who to report to |
 
@@ -299,7 +299,8 @@ Agent swarms also act through accounts: near-identical issues, comments and vuln
 - package registries: npm search results, PyPI's newest-projects feed, the Go module index, NuGet's catalog, Packagist's change feed, and RubyGems' and crates.io's newest listings ([`registries.rs`](../crates/sc-collect/src/registries.rs));
 - the Hugging Face Hub's newest Spaces, models or datasets;
 - edits on Wikimedia wikis from EventStreams ([`wikimedia.rs`](../crates/sc-collect/src/wikimedia.rs));
-- Hacker News stories and comments ([`hackernews.rs`](../crates/sc-collect/src/hackernews.rs)).
+- Hacker News stories and comments ([`hackernews.rs`](../crates/sc-collect/src/hackernews.rs));
+- CVE records and security advisories from the GitHub Advisory Database or the CVE List ([`cve.rs`](../crates/sc-collect/src/cve.rs)), each targeting the first source repository its references name (`owner/repo`), else the vendor's host; the account is the credited finder where one is credited. Reference URLs are matched as text, never fetched.
 
 Each event keeps its id, time, target and public link, plus:
 
