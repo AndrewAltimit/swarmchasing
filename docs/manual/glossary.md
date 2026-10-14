@@ -29,6 +29,7 @@ Each term links to the section that defines it.
 | Co-target | Two clusters on the same rare targets in the same hours beyond chance; a soft link. | [FM-5.16](05-linking.md#fm-516-co-targets) |
 | Corroboration | One kind of source, several, or confirmed in operator logs. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Declared testing | Request text announcing a test; checked, never believed. | [FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing), [FM-10.6](10-disclosure.md#fm-106-authorised-testing) |
+| Dispatch tree | Interaction stars chained leader to follower: who set off whom; a hint. | [FM-5.12](05-linking.md#fm-512-interaction-edges) |
 | Escalation sequence | The order in which tactics appear in a run or fleet. | [FM-5.9](05-linking.md#fm-59-escalation-sequences) |
 | Evidence level | A rung of the developer ladder, `self_id` to `provider_confirmed`. | [FM-7.2](07-attribution.md#fm-72-developer-and-operator-ladder) |
 | False-merge rate | Share of predicted clusters spanning more than one true group. | [FM-9.6](09-evaluation.md#fm-96-cluster-metrics) |
@@ -50,11 +51,13 @@ Each term links to the section that defines it.
 | Naming lead | Working days before an affected operator is named: 3, or 10 if compromised. | [FM-10.2](10-disclosure.md#fm-102-lead-times) |
 | Naming update | A dated update that names affected operators. | [FM-10.2](10-disclosure.md#fm-102-lead-times), [FM-11.2](11-notices.md#fm-112-structure) |
 | Notice | The public page for one incident. | [FM-1.4](01-scope.md#fm-14-casework-terms), [chapter 11](11-notices.md) |
+| Onset group | Clusters of different clients all starting within minutes beyond chance; a hint. | [FM-6.10](06-timing.md#fm-610-onset-groups) |
 | Ordered co-target | Two concurrent clusters first touching shared rare hosts in one order beyond chance; a soft link. | [FM-5.19](05-linking.md#fm-519-ordered-co-targets) |
 | Passivity test | The conditions every source must pass. | [FM-3.2](03-sources.md#fm-32-passivity-test) |
 | Pause | A gap long in absolute terms and against the median gap. | [FM-6.2](06-timing.md#fm-62-cadence-bursts-and-pauses) |
 | Plant signal | A sign a cluster's records were placed to be found. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Platform swarm candidate | Accounts acting alike on a public platform beyond chance; a hint, never a swarm. | [FM-5.15](05-linking.md#fm-515-coordinated-accounts-on-public-platforms) |
+| Playbook | Two clusters sending one harness's steps in one order on their hosts beyond chance; a soft link. | [FM-5.24](05-linking.md#fm-524-playbook-alignment) |
 | Probe chain | One client trying variants of one request. | [FM-5.4](05-linking.md#fm-54-probe-chains) |
 | Prompt echo | Two clusters writing prose from one template beyond chance; a soft link. | [FM-5.21](05-linking.md#fm-521-prompt-echo) |
 | Provenance | Who can create a record: observed, submit- or publish-anywhere. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
@@ -70,6 +73,7 @@ Each term links to the section that defines it.
 | Scaffold lineage | Two clusters whose request templates are one part apart beyond chance; a soft link. | [FM-5.20](05-linking.md#fm-520-scaffold-lineage) |
 | Scope finding | In scope, scope exceeded or not assessable. | [FM-15.4](15-misalignment.md#fm-154-stating-a-scope-finding) |
 | Scope test | One of S1 to S7, each a way activity can exceed its task. | [FM-15.3](15-misalignment.md#fm-153-scope-tests) |
+| Seam | One record or client a cluster hangs on, joining two sides with nothing else in common; a plant signal. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Second review | Approval of the exact draft by a person other than the admin. | [FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review) |
 | Shared pause | Two clusters going quiet together beyond chance. | [FM-6.7](06-timing.md#fm-67-shared-pauses) |
 | Signed request | A request carrying a Web Bot Auth signature and `Signature-Agent`. | [FM-7.11](07-attribution.md#fm-711-declared-agent-identity) |

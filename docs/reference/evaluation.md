@@ -62,7 +62,7 @@ The **cluster unit** counts every predicted group once: a cluster (over its labe
 - All benign: a false positive when flagged, a true negative when not.
 - Mixed agent and benign: wrong either way. Flagged, it is a false positive, since reporting it would misattribute the benign members; unflagged, a false negative.
 
-Both units are printed and both are in the summary JSON. Floors read the record unit.
+Both units are printed and both are in the summary JSON. The gate holds floors on both: the point, interval and non-synthetic floors read the record unit, and the cluster floors read the cluster unit ([the eval gate](#the-eval-gate)).
 
 ### Synthetic and non-synthetic records
 
