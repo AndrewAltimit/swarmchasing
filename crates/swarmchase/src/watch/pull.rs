@@ -38,12 +38,19 @@ pub struct SourceState {
     /// saved without one is taken to match, and gets one on its next run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<String>,
+    /// The position was reset (`watch reset`, a changed query, a restored
+    /// backup) and no pull has stored since: the next one drops the records
+    /// the store already holds, since its seen IDs no longer know them.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub restart: bool,
 }
 
 impl SourceState {
     /// Forget where the pulls had reached: the cursor, seen IDs, a pending
-    /// resume key and a stream checkpoint. Health history stays.
+    /// resume key and a stream checkpoint, and mark the source restarted.
+    /// Health history stays.
     pub fn reset_position(&mut self) {
+        self.restart = true;
         self.cursor = 0;
         self.seen.clear();
         self.pending = None;

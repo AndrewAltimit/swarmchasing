@@ -175,6 +175,12 @@ $("cl-example").addEventListener("click", () => {
 
 async function loadFile(f) {
   const status = $("cl-drop-status");
+  // This page reads access logs only; records go to the workbench.
+  if (/\.(ndjson|jsonl|json)$/i.test(String(f.name))) {
+    status.textContent = `${trunc(String(f.name), 80)} looks like records, not an access log; load it in the workbench instead.`;
+    status.hidden = false;
+    return;
+  }
   try {
     $("cl-input").value = await f.text();
   } catch (err) {
