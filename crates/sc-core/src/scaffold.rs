@@ -609,6 +609,49 @@ pub(crate) fn handover_chance(span: i64, a: i64, b: i64, gap: i64) -> f64 {
     ((2.0 * g * gg - gg * gg) / ((s - a) * (s - b))).clamp(0.0, 1.0)
 }
 
+/// The chance that an unrelated cluster meets cluster `me` in as many of
+/// its families (`(holders, base rate)`, each holder set including `me`) as
+/// `other` does: a Poisson-binomial tail over the families' rates. Families
+/// whose holder sets share a cluster besides `me` are one family, at the
+/// highest rate: one template or prompt seen by overlapping sets of clusters
+/// (a fourth user of a framework sending only some of its shapes, say) is
+/// one piece of evidence, not several. Families met by `other` then all share
+/// it, so they are one, and the chance is that of meeting any of them.
+pub(crate) fn family_chance<'a>(
+    families: impl Iterator<Item = (&'a [usize], f64)>,
+    me: usize,
+    other: usize,
+) -> f64 {
+    let fams: Vec<(BTreeSet<usize>, f64)> = families
+        .map(|(ids, r)| (ids.iter().copied().filter(|&i| i != me).collect(), r))
+        .collect();
+    let mut parent: Vec<usize> = (0..fams.len()).collect();
+    fn root(p: &mut [usize], mut x: usize) -> usize {
+        while p[x] != x {
+            p[x] = p[p[x]];
+            x = p[x];
+        }
+        x
+    }
+    for i in 0..fams.len() {
+        for j in i + 1..fams.len() {
+            if !fams[i].0.is_disjoint(&fams[j].0) {
+                let (a, b) = (root(&mut parent, i), root(&mut parent, j));
+                parent[a.max(b)] = a.min(b);
+            }
+        }
+    }
+    let mut groups: BTreeMap<usize, (f64, bool)> = BTreeMap::new();
+    for (i, (ids, r)) in fams.iter().enumerate() {
+        let g = groups.entry(root(&mut parent, i)).or_insert((0.0, false));
+        g.0 = g.0.max(*r);
+        g.1 |= ids.contains(&other);
+    }
+    let rates: Vec<f64> = groups.values().map(|g| g.0).collect();
+    let met = groups.values().filter(|g| g.1).count();
+    crate::chance::at_least(&rates, met.max(1))
+}
+
 /// Pairs of clusters above noise that share a lineage key ([`lineage_keys`])
 /// but no specific template, beyond chance, most unlikely first, and the
 /// family's multiplicity budget. Only pairs where one cluster ended before
@@ -765,13 +808,10 @@ pub(crate) fn lineage_pairs(
             continue;
         };
         // Conditioned on one side's key families, the chance that an
-        // unrelated cluster holds as many of them as the other does, each at
-        // its base rate; the larger of the two sides is read.
-        let both = |c: usize, o: usize| {
-            let rates: Vec<f64> = families[c].values().copied().collect();
-            let met = families[c].keys().filter(|ids| ids.contains(&o)).count();
-            crate::chance::at_least(&rates, met.max(1))
-        };
+        // unrelated cluster meets it in as many of them as the other does,
+        // each at its base rate; the larger of the two sides is read.
+        let both =
+            |c: usize, o: usize| family_chance(families[c].iter().map(|(ids, r)| (*ids, *r)), c, o);
         let scaffold_chance = both(x, y).max(both(y, x));
         // The templates must stand on their own; the handover only adds.
         if scaffold_chance > opts.max_chance {

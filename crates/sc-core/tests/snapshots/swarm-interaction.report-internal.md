@@ -6,7 +6,7 @@
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-03-12 16:34:00 UTC
 - **Records:** 38 linked public records in 7 cluster(s) (of 38 records reviewed, 38 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-13.3
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
 
 ## Summary
 
@@ -159,6 +159,13 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C7**: 2026-03-05 14:00:00 UTC to 2026-03-05 14:02:00 UTC, times of unknown kind
   - identifiers: `param:uqtag=scout7f`
 
+
+## Candidate fleets
+
+Clusters tied by soft links (shared pauses, reruns, recon openings, encoding, shared scaffolds, co-activity and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.
+
+- **F1**: C2, C6, 1 soft link(s): ordered co-target (weakest pair 0.97)
+  - C2 ↔ C6: ordered co-target (0.97): 5 of 5 shared rare hosts first touched in the same order, in the same hours (chance 8.3e-3 for a random order, 0.01 such pairs expected among 1 tested): one ord…
 
 ## Possible interaction (SC-T9)
 

@@ -18,9 +18,9 @@ print!("{}", render(&m));
 
 | Module | Covers |
 |---|---|
-| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, target lists, news spikes, hubs, single agents, background, benign look-alikes, planters, mimics, escalators), pace, retries, offsets, windows, palette shares, time basis, seeds, null scenarios, expectations. |
+| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, target lists, news spikes, hubs, single agents, background, benign look-alikes, planters, mimics, escalators, prompt fleets, framework users), ordered and sorted lists, prose, pace, retries, offsets, windows, palette shares, time basis, seeds, null scenarios, expectations. |
 | [`palette`](src/palette.rs) | The committed records the generator copies, sorted by use (attack, read, callback inbox, benign, person, tool). |
-| [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers, a fleet harness's own parameters. |
+| [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers, a fleet harness's own parameters, synthetic prose from prompt templates. |
 | [`rng`](src/rng.rs) | A small seeded generator, the same on every platform. |
 | [`truth`](src/truth.rs) | `TruthRow` per record id from `label`, `actor`, `class`, `run`, `swarm` and `fleet`; the operator a run belongs to. |
 | [`measure`](src/measure.rs) | Pair-level precision and recall per edge kind, soft-link kind and candidate fleet; split runs rejoined; the grade table by actor and class. |

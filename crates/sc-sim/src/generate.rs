@@ -15,7 +15,7 @@
 
 use crate::palette::{Palette, Template, Use};
 use crate::rng::Rng;
-use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Scenario};
+use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Prose, Scenario};
 use sc_core::{LinkFeature, Observation, TsKind};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -137,12 +137,27 @@ struct RunSpec {
     adapt: bool,
     /// The scope of the palette subset this run draws from, and its share.
     habits: Option<(String, f64)>,
+    /// The scope of the prompt templates the run writes its prose from,
+    /// when it writes prose.
+    prose: Option<String>,
 }
 
 /// The palette subset an actor's runs draw from under `key`, when it does
 /// not use the whole palette.
 fn habits(a: &Actor, key: String) -> Option<(String, f64)> {
     (a.palette_share < 1.0).then(|| (key, a.palette_share.max(0.0)))
+}
+
+/// The scope of the prompt templates run `k` of actor `i` writes from, when
+/// it writes prose: its own, its operator's (`operator`, when it has one) or
+/// the actor's.
+fn prose_scope(a: &Actor, i: usize, k: usize, operator: Option<&str>) -> Option<String> {
+    let own = || format!("{i}:{k}");
+    a.prose.map(|p| match p {
+        Prose::Own => own(),
+        Prose::Operator => operator.map_or_else(own, str::to_string),
+        Prose::Shared => format!("{i}"),
+    })
 }
 
 struct Gen<'a> {
@@ -258,10 +273,13 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: habits(a, format!("{i}:{k}")),
+                        prose: prose_scope(a, i, k, None),
                     };
                     self.run(spec, &mut rng);
                 }
             }
+            Kind::PromptFleet => self.prompt_fleet(i, a, start, window, &mut rng),
+            Kind::Framework => self.framework(i, a, start, window, &mut rng),
             Kind::Swarm => self.swarm(i, a, start, &mut rng),
             Kind::Escalator => self.escalator(i, a, start, window, &mut rng),
             Kind::Fleet => {
@@ -317,6 +335,7 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: None,
+                        prose: prose_scope(a, i, k, Some(&fleet)),
                     };
                     self.run(spec, &mut rng);
                 }
@@ -356,6 +375,7 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: habits(a, format!("{i}")),
+                        prose: None,
                     };
                     self.run(spec, &mut rng);
                 }
@@ -411,6 +431,7 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: None,
+                        prose: None,
                     };
                     self.run(spec, &mut rng);
                 }
@@ -445,6 +466,7 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: None,
+                        prose: None,
                     };
                     self.run(spec, &mut rng);
                 }
@@ -505,6 +527,7 @@ impl Gen<'_> {
                 fetches: None,
                 adapt: true,
                 habits: None,
+                prose: None,
             };
             let mut ids = Ids::new(self.seed);
             let mut t = base.start;
@@ -559,6 +582,17 @@ impl Gen<'_> {
             Kind::NewsSpike => "news_spike",
             _ => "hub",
         };
+        // One order for every agent: the list's sorted order, or one seeded
+        // order from its own stream, so actors without it draw as before.
+        let order: Option<Vec<String>> = if a.sorted {
+            Some(shared.clone())
+        } else if a.in_order {
+            let mut o = shared.clone();
+            shuffle(&mut o, &mut self.rng.fork(&format!("actor{i}:order")));
+            Some(o)
+        } else {
+            None
+        };
         let mut t = start;
         for k in 0..a.agents.max(1) {
             let begin = match a.kind {
@@ -573,8 +607,14 @@ impl Gen<'_> {
                 Kind::NewsSpike => start + rng.range(0, span.min(6 * 3600)),
                 _ => start,
             };
-            let mut hosts = shared.clone();
-            shuffle(&mut hosts, rng);
+            let hosts = match &order {
+                Some(o) => o.clone(),
+                None => {
+                    let mut h = shared.clone();
+                    shuffle(&mut h, rng);
+                    h
+                }
+            };
             let records = a.records.max(hosts.len());
             let spec = RunSpec {
                 truth: Truth {
@@ -602,7 +642,75 @@ impl Gen<'_> {
                 fetches: None,
                 adapt: true,
                 habits: habits(a, format!("{i}:{k}")),
+                prose: prose_scope(a, i, k, fleet.as_deref()),
             };
+            self.run(spec, rng);
+        }
+    }
+
+    /// Agents of one operator writing prose from its prompt templates, each
+    /// otherwise its own: client, inbox, tags, hosts, habits and start.
+    fn prompt_fleet(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let fleet = format!("{}-f{i}", self.scenario.name);
+        for k in 0..a.agents {
+            let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+            let client = agent_client(rng);
+            let begin = start + rng.range(0, window);
+            let mut spec = self.bg_spec(
+                i,
+                k,
+                a,
+                "prompt_fleet",
+                "agent",
+                Some("agent"),
+                Use::Attack,
+                Pace::Model,
+                true,
+                &client,
+                &hosts,
+                begin,
+                a.records,
+            );
+            spec.truth.fleet = Some(fleet.clone());
+            spec.uses = read_then_attack(a.records, a.hosts);
+            spec.tag = a.tag;
+            spec.prose = prose_scope(a, i, k, Some(&fleet)).or_else(|| Some(fleet.clone()));
+            self.run(spec, rng);
+        }
+    }
+
+    /// Agents of unrelated operators on one framework: its templates in a
+    /// fixed rotation and its step counter, and one parameter per operator.
+    fn framework(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let templates = self.scaffold(rng);
+        let mut hrng = self.rng.fork(&format!("actor{i}:harness"));
+        let names = harness_names(&mut hrng, a.agents + 1);
+        for k in 0..a.agents {
+            let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+            let client = agent_client(rng);
+            let begin = start + rng.range(0, window);
+            let mut spec = self.bg_spec(
+                i,
+                k,
+                a,
+                "framework_user",
+                "agent",
+                Some("agent"),
+                Use::Attack,
+                Pace::Model,
+                true,
+                &client,
+                &hosts,
+                begin,
+                a.records,
+            );
+            spec.fixed = Some(templates.clone());
+            // The framework's step counter, then the operator's own
+            // parameter (another name for each, while names last).
+            let own = 1 + k % (names.len() - 1).max(1);
+            spec.harness = vec![names[0].clone(), names[own].clone()];
+            spec.tag = a.tag;
+            spec.prose = prose_scope(a, i, k, None);
             self.run(spec, rng);
         }
     }
@@ -741,6 +849,7 @@ impl Gen<'_> {
                 fetches: (handoff && k > 0).then(|| raw.clone()),
                 adapt: true,
                 habits: habits(a, format!("{i}")),
+                prose: prose_scope(a, i, k, Some(&swarm)),
             };
             let end = self.run(spec, rng);
             if reader {
@@ -1035,6 +1144,7 @@ impl Gen<'_> {
             fetches: None,
             adapt,
             habits: habits(a, format!("{i}:{k}")),
+            prose: None,
         }
     }
 
@@ -1147,6 +1257,10 @@ impl Gen<'_> {
                         ids.token(&format!("{}:{step}", spec.scope), name, 8)
                     };
                     url = add_param(&url, name, &value);
+                }
+                if let Some(p) = &spec.prose {
+                    let text = prompt_text(self.seed, p, r, host);
+                    url = add_param(&url, "query", &text.replace(' ', "%20"));
                 }
                 if spec.tag && u != &Use::Benign {
                     let tag = ids.token(&spec.scope, "uqtag", 10);
@@ -1454,6 +1568,162 @@ pub(crate) fn is_harness_param(name: &str) -> bool {
     HARNESS_PARAMS.contains(&name)
 }
 
+/// Words a synthetic prompt template is built from, slot by slot: a verb, an
+/// adjective and a thing, a preposition before the target, then another
+/// verb, a determiner, a preposition, an adjective and a thing. Two
+/// operators' templates share few word triples, as unrelated prompts do.
+const PROMPT_SLOTS: &[&[&str]] = &[
+    &[
+        "find",
+        "list",
+        "check",
+        "locate",
+        "collect",
+        "compare",
+        "describe",
+        "review",
+        "map",
+        "note",
+        "record",
+        "summarize",
+        "verify",
+        "inspect",
+        "gather",
+        "outline",
+        "rank",
+        "trace",
+        "count",
+        "flag",
+    ],
+    &[
+        "public",
+        "older",
+        "hidden",
+        "main",
+        "default",
+        "latest",
+        "shared",
+        "internal",
+        "external",
+        "unused",
+        "slow",
+        "legacy",
+        "mobile",
+        "archived",
+        "primary",
+        "secondary",
+        "nested",
+        "signed",
+        "cached",
+        "empty",
+    ],
+    &[
+        "login page",
+        "contact form",
+        "search box",
+        "upload form",
+        "status page",
+        "sitemap",
+        "help center",
+        "price list",
+        "api route",
+        "error page",
+        "staff list",
+        "news feed",
+        "docs index",
+        "release notes",
+        "comment form",
+        "account page",
+        "cookie banner",
+        "download area",
+        "partner list",
+        "privacy page",
+    ],
+    &[
+        "on", "for", "at", "across", "within", "behind", "under", "near",
+    ],
+    &[
+        "explain",
+        "report",
+        "write down",
+        "tell me",
+        "show",
+        "quote",
+        "estimate",
+        "decide",
+        "confirm",
+        "check again",
+        "measure",
+        "repeat",
+        "extract",
+        "save",
+        "test",
+        "read",
+        "group",
+        "sort",
+        "score",
+        "mark",
+    ],
+    &[
+        "every",
+        "each",
+        "any",
+        "all",
+        "the first",
+        "the last",
+        "both",
+        "some",
+    ],
+    &[
+        "from", "about", "inside", "beside", "after", "before", "under", "through",
+    ],
+    &[
+        "visible", "broken", "recent", "odd", "large", "small", "plain", "careful", "strange",
+        "dated", "quiet", "loud", "early", "late", "short", "long", "clear", "rough", "steady",
+        "rare",
+    ],
+    &[
+        "field",
+        "header",
+        "button",
+        "link",
+        "message",
+        "answer",
+        "form",
+        "redirect",
+        "cookie",
+        "token name",
+        "status code",
+        "title",
+        "footer",
+        "banner",
+        "menu",
+        "image",
+        "script name",
+        "version string",
+        "date",
+        "label",
+    ],
+];
+
+/// The prose request `r` of a run writing from the prompt templates of
+/// `scope` carries for `host`: one of three seeded templates, in turn, with
+/// the host as its target. Synthetic words only.
+fn prompt_text(seed: u64, scope: &str, r: usize, host: &str) -> String {
+    let mut rng = Rng::new(seed)
+        .fork("prompt")
+        .fork(scope)
+        .fork(&(r % 3).to_string());
+    let w: Vec<&str> = PROMPT_SLOTS
+        .iter()
+        .map(|slot| slot[rng.below(slot.len())])
+        .collect();
+    format!(
+        "{} the {} {} {} {host} and {} {} {} {} the {} {}",
+        w[0], w[1], w[2], w[3], w[4], w[5], w[8], w[6], w[7], w[2]
+    )
+}
+
 /// `n` distinct harness parameter names, in a seeded order.
 fn harness_names(rng: &mut Rng, n: usize) -> Vec<String> {
     let mut left: Vec<&str> = HARNESS_PARAMS.to_vec();
@@ -1588,6 +1858,7 @@ mod tests {
             fetches: None,
             adapt: true,
             habits: None,
+            prose: None,
         };
         // Every request fails twice and is retried, each retry at most a
         // model's pace later: well inside ten minutes.

@@ -160,11 +160,17 @@ kind = "relay_readers"
 agents = 8
 records = 3
 
+# A swarm seen only through a scan service's submit times, which carry no
+# client: its agents share one inbox, so they fall in one cluster, and with
+# no user agent or network its runs cannot be split into clients, so no
+# interaction edge is drawn. The cluster already holds every true pair.
 [[scenario]]
 name = "submit-basis"
 seed = 71
 seeds = 4
 basis = "submit"
+expect.S1 = { max_pairs = 0 }
+expect.S3 = { max_pairs = 0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -203,10 +209,14 @@ agents = 10
 retry = 0.2
 palette_share = 0.3
 
+# A synchronised swarm at tool pace, gaps of a second or two: the lockstep
+# test's permutations of a run's own gaps line up as well as its real order
+# within the tolerance, so S3 does not fire, by design.
 [[scenario]]
 name = "sync-tool"
 seed = 101
 seeds = 4
+expect.S3 = { max_pairs = 0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -251,6 +261,7 @@ seed = 121
 seeds = 4
 expect.co_activity = { min_precision = 1.0, min_recall = 1.0 }
 expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
+expect.S6 = { min_precision = 1.0, min_recall = 0.66 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -665,3 +676,78 @@ kind = "agent"
 agents = 10
 retry = 0.2
 palette_share = 0.3
+
+# One operator handing one ordered target list to three agents, who walk it
+# in that order at their own loose paces, 15 to 20 minutes apart. A
+# popularity-ranked list walked by many unrelated agents is news-spike-list:
+# its hosts are held by too many senders to be rare for either co-target
+# test.
+[[scenario]]
+name = "ordered-list"
+seed = 341
+seeds = 4
+expect.ordered_co_target = { min_precision = 1.0, min_recall = 1.0 }
+expect.co_target = { min_precision = 1.0, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 8
+in_order = true
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# The harness-family fleet methods in one crowd of agents writing prose from
+# prompts of their own, over three weeks: a two-agent fleet whose harness is
+# upgraded for its second agent a few hours after the first (one parameter
+# renamed, one template changed: scaffold lineage), beside four unrelated
+# operators on one agent framework whose templates are one parameter apart;
+# and two agents of one operator writing from its prompt templates (prompt
+# echo), beside three unrelated agents copying one viral prompt and twelve
+# copying one published query list. Both tests read a key or template two
+# clusters hold at a base rate of one over the other comparable clusters, so
+# a pair passes only among a hundred or more; three unrelated copies of one
+# prompt pass among a few hundred, the method's limit. The prose is synthetic.
+[[scenario]]
+name = "harness-crowd"
+seed = 361
+seeds = 4
+span_hours = 480
+expect.scaffold_lineage = { min_precision = 1.0, min_recall = 0.25 }
+expect.prompt_echo = { min_precision = 1.0, min_recall = 0.37 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 0.62 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 2
+records = 8
+upgrade_at = 1
+interval_hours = 2
+[[scenario.actor]]
+kind = "framework"
+agents = 4
+records = 8
+[[scenario.actor]]
+kind = "prompt_fleet"
+agents = 2
+records = 8
+palette_share = 0.1
+[[scenario.actor]]
+kind = "agent"
+agents = 3
+palette_share = 0.1
+prose = "shared"
+[[scenario.actor]]
+kind = "agent"
+agents = 12
+palette_share = 0.1
+prose = "shared"
+[[scenario.actor]]
+kind = "agent"
+agents = 150
+retry = 0.2
+palette_share = 0.05
+prose = "own"

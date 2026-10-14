@@ -6,7 +6,7 @@
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-20 12:02:03 UTC
 - **Records:** 200 linked public records in 53 cluster(s) (of 452 records reviewed, 345 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-13.3
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
 
 ## Summary
 
@@ -708,11 +708,13 @@ Clusters tied by soft links (shared pauses, reruns, recon openings, encoding, sh
 
 - **F1**: C1, C2, 1 soft link(s): co-activity (weakest pair 0.96)
   - C1 ↔ C2: co-activity (0.96): 8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 5.0e-3: 2.1e-9 analytic, a share of 0.005 of 199 circular shifts; …
-- **F2**: C17, C18, C19, 3 soft link(s): shared scaffold (weakest pair 0.95)
+- **F2**: C10, C44, 1 soft link(s): ordered co-target (weakest pair 0.97)
+  - C10 ↔ C44: ordered co-target (0.97): 5 of 5 shared rare hosts first touched in the same order, in the same hours (chance 8.3e-3 for a random order, 0.01 such pairs expected among 1 tested): one ord…
+- **F3**: C17, C18, C19, 3 soft link(s): shared scaffold (weakest pair 0.95)
   - C17 ↔ C18: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
   - C17 ↔ C19: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
   - C18 ↔ C19: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
-- **F3**: C42, C43, 1 soft link(s): shared scaffold (weakest pair 0.95)
+- **F4**: C42, C43, 1 soft link(s): shared scaffold (weakest pair 0.95)
   - C42 ↔ C43: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 2 of 46 comparable clusters and 0 record(s) outside them, a base rate of 2.2e-2 (chance 4.9e-4 for the rare…
 
 ## Possible interaction (SC-T9)

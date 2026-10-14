@@ -40,8 +40,12 @@
 # runs related) draw, ceilings on benign and tool records graded L2 or above
 # and on people's records graded L3 or above, and each scenario's `expect`
 # table (`--expect`: every kind a scenario is built to produce must draw pairs
-# and meet its bounds there). The simulator is seeded, so the numbers only move
-# when the analysis, the rules, the generator or the scenarios do. Floors only
+# and meet its bounds there, or draw at most `max_pairs` where it is built not
+# to fire). Then `swarmchase sim calibrate --check`: every soft-link ratio in
+# the bundled rules at or below the lower bound of that kind's ratio
+# stratified by scenario, where the simulation measures it. The simulator is
+# seeded, so the numbers only move when the analysis, the rules, the generator
+# or the scenarios do. Floors only
 # go up and ceilings only go down, as above; a new scenario that lowers a
 # pooled number is argued in its commit, never landed by moving a bound.
 #
@@ -84,3 +88,7 @@ cargo run --quiet "$@" -p swarmchase -- sim bench samples/sim/scenarios.toml \
     --max-human-high 10 \
     --expect \
     | sed -n '/^Null scenarios/,$p'
+
+cargo run --quiet "$@" -p swarmchase -- sim calibrate samples/sim/scenarios.toml \
+    --check \
+    | sed -n '/^ok\|^FAIL/p'

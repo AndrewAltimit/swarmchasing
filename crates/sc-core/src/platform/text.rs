@@ -136,7 +136,7 @@ pub fn slot_tokens(text: &str, context: &[&str]) -> Vec<String> {
         out.push(t);
     };
     for raw in text.split_whitespace() {
-        let lower = raw.to_lowercase();
+        let lower = raw.to_lowercase().replace('\u{2019}', "'");
         let trimmed = lower.trim_matches(|c: char| !c.is_alphanumeric() && c != '@' && c != '/');
         if trimmed.is_empty() {
             continue;
@@ -160,7 +160,10 @@ pub fn slot_tokens(text: &str, context: &[&str]) -> Vec<String> {
             push("<path>".into(), &mut out);
             continue;
         }
-        if ctx.iter().any(|c| c == trimmed) {
+        if ctx
+            .iter()
+            .any(|c| c == trimmed || c == possessive_base(trimmed))
+        {
             push("<user>".into(), &mut out);
             continue;
         }
@@ -175,9 +178,17 @@ pub fn slot_tokens(text: &str, context: &[&str]) -> Vec<String> {
     out
 }
 
-/// A word, or the slot it stands for.
+/// `w` without a possessive ending (`'s`, or `'` after an `s`).
+fn possessive_base(w: &str) -> &str {
+    w.strip_suffix("'s")
+        .or_else(|| w.strip_suffix('\'').filter(|b| b.ends_with('s')))
+        .unwrap_or(w)
+}
+
+/// A word, or the slot it stands for. A context word slots in its
+/// possessive too (`acmecorp's`).
 fn word_slot(w: &str, ctx: &[String]) -> String {
-    if ctx.iter().any(|c| c == w) {
+    if ctx.iter().any(|c| c == w || c == possessive_base(w)) {
         return "<user>".into();
     }
     let digits = w.chars().filter(char::is_ascii_digit).count();

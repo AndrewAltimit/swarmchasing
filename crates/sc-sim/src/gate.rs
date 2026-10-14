@@ -222,7 +222,19 @@ impl Gate {
                         m.links.get(&key)
                     }
                 });
+                if let Some(most) = e.max_pairs {
+                    let drawn = stat.map_or(0, |st| st.pairs);
+                    out.push(Check {
+                        name: name("pairs drawn"),
+                        value: drawn.to_string(),
+                        bound: format!("<= {most}"),
+                        ok: drawn <= most,
+                    });
+                }
                 let Some(st) = stat.filter(|st| st.pairs > 0) else {
+                    if e.max_pairs.is_some() {
+                        continue;
+                    }
                     out.push(Check {
                         name: name("drawn"),
                         value: "nothing drawn".into(),
@@ -374,6 +386,25 @@ mod tests {
         assert!(!c[0].ok && c[0].line().contains("nothing drawn"));
         // Not held unless asked for.
         assert!(Gate::default().check_scenarios(&results, &file).is_empty());
+        // A kind built not to fire: drawing nothing passes, drawing fails.
+        let none = ScenarioFile::parse(
+            "[[scenario]]\nname = \"s\"\nexpect.S3 = { max_pairs = 0 }\n\
+             [[scenario.actor]]\nkind = \"agent\"\n",
+        )
+        .unwrap();
+        let mut quiet = Measurement::default();
+        quiet
+            .edges
+            .insert("synchronized_start".into(), KindStat::default());
+        let c = g.check_scenarios(&[("s".to_string(), quiet)], &none);
+        assert_eq!(c.len(), 1);
+        assert!(c[0].ok, "{}", c[0].line());
+        let c = g.check_scenarios(&results, &none);
+        assert!(
+            !c[0].ok && c[0].line().contains("pairs drawn"),
+            "{}",
+            c[0].line()
+        );
         // An expectation names a kind the measurement keys.
         assert!(
             ScenarioFile::parse(
