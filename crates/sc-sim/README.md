@@ -23,7 +23,7 @@ print!("{}", render(&m));
 | [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers, a fleet harness's own parameters, synthetic prose from prompt templates, tags from a node id, clock or counter. |
 | [`rng`](src/rng.rs) | A small seeded generator, the same on every platform. |
 | [`truth`](src/truth.rs) | `TruthRow` per record id from `label`, `actor`, `class`, `run`, `swarm` and `fleet`; the operator a run belongs to. |
-| [`measure`](src/measure.rs) | Pair-level precision and recall per edge kind, soft-link kind and candidate fleet; onset groups against swarm pairs and seams against false merges; split runs rejoined; the grade table by actor and class; B-cubed and adjusted Rand index of clusters against runs; time to detect, and by prefix re-analysis time to L2 or a candidate fleet. |
+| [`measure`](src/measure.rs) | Pair-level precision and recall per edge kind, soft-link kind and candidate fleet; onset groups against swarm pairs and seams against false merges; split runs rejoined; the grade table by actor and class; B-cubed and mean per-analysis adjusted Rand index of clusters against runs; time to detect, and by prefix re-analysis time to L2 or a candidate fleet. |
 | [`render`](src/render.rs) | The measurement as text tables, with Wilson intervals. |
 | [`gate`](src/gate.rs) | Precision floors over every scenario, grade ceilings, ceilings on what the null scenarios draw, per-scenario expectations. |
 | [`calibrate`](src/calibrate.rs) | Each soft-link kind's and family pair's likelihood ratio from simulated truth, pooled and stratified by scenario, and the check of the bundled ratios and joint caps. |

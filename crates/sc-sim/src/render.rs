@@ -122,7 +122,7 @@ pub fn render(m: &Measurement) -> String {
     if let Some((p, r, f)) = c.bcubed() {
         let _ = writeln!(
             s,
-            "\nClusters against true runs ({} agent records): B-cubed precision {p:.3} recall {r:.3} F1 {f:.3} · adjusted Rand index {}",
+            "\nClusters against true runs ({} agent records): B-cubed precision {p:.3} recall {r:.3} F1 {f:.3} · adjusted Rand index (mean per analysis) {}",
             c.records,
             c.ari()
                 .map_or_else(|| "-".to_string(), |x| format!("{x:.3}"))

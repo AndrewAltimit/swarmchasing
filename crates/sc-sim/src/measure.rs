@@ -138,23 +138,60 @@ pub struct Measurement {
 /// predicted group is its cluster, or the record alone when it is in none.
 /// B-cubed precision counts a member of another run of the record's swarm
 /// as right (a swarm's agents share an inbox or a tag by design); recall
-/// and the adjusted Rand index read runs only. Sums, so seeds and scenarios
-/// add; the ratios are read off the sums.
+/// and the adjusted Rand index read runs only. B-cubed sums add over seeds
+/// and scenarios and the ratios are read off the sums. The adjusted Rand
+/// index is computed per analysis and averaged: pair counts summed over
+/// analyses mix records no analysis compared, and the index read off them
+/// is not an adjusted Rand index.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Clustering {
     pub records: usize,
     /// B-cubed precision and recall, summed over records.
     pub bcubed_precision_sum: f64,
     pub bcubed_recall_sum: f64,
-    /// Pair counts for the adjusted Rand index: pairs of records, pairs in
-    /// one group and one run, pairs in one group, pairs in one run.
-    pub pairs: f64,
-    pub pairs_both: f64,
-    pub pairs_group: f64,
-    pub pairs_run: f64,
+    /// Each analysis's adjusted Rand index, summed over the analyses where
+    /// it is defined (`ari_analyses`).
+    #[serde(default)]
+    pub ari_sum: f64,
+    #[serde(default)]
+    pub ari_analyses: usize,
+}
+
+/// The adjusted Rand index (Hubert and Arabie) of one analysis from its
+/// pair counts: pairs of records, pairs in one group and one run, pairs in
+/// one group, pairs in one run. 1 for groups that are the runs, about 0 for
+/// chance; `None` with fewer than two records.
+pub fn ari_of_pairs(pairs: f64, both: f64, group: f64, run: f64) -> Option<f64> {
+    if pairs <= 0.0 {
+        return None;
+    }
+    let expected = group * run / pairs;
+    let max = (group + run) / 2.0;
+    if (max - expected).abs() < 1e-12 {
+        return Some(1.0);
+    }
+    Some((both - expected) / (max - expected))
 }
 
 impl Clustering {
+    /// One analysis's measurement from its B-cubed sums and its pair counts
+    /// (pairs, in one group and one run, in one group, in one run).
+    pub fn of_analysis(
+        records: usize,
+        bcubed_precision_sum: f64,
+        bcubed_recall_sum: f64,
+        (pairs, both, group, run): (f64, f64, f64, f64),
+    ) -> Self {
+        let ari = ari_of_pairs(pairs, both, group, run);
+        Clustering {
+            records,
+            bcubed_precision_sum,
+            bcubed_recall_sum,
+            ari_sum: ari.unwrap_or(0.0),
+            ari_analyses: usize::from(ari.is_some()),
+        }
+    }
+
     pub fn bcubed(&self) -> Option<(f64, f64, f64)> {
         if self.records == 0 {
             return None;
@@ -169,28 +206,17 @@ impl Clustering {
         Some((p, r, f))
     }
 
-    /// The adjusted Rand index (Hubert and Arabie) from the summed pair
-    /// counts: 1 for groups that are the runs, about 0 for chance.
+    /// The mean adjusted Rand index over the analyses where it is defined.
     pub fn ari(&self) -> Option<f64> {
-        if self.pairs <= 0.0 {
-            return None;
-        }
-        let expected = self.pairs_group * self.pairs_run / self.pairs;
-        let max = (self.pairs_group + self.pairs_run) / 2.0;
-        if (max - expected).abs() < 1e-12 {
-            return Some(1.0);
-        }
-        Some((self.pairs_both - expected) / (max - expected))
+        (self.ari_analyses > 0).then(|| self.ari_sum / self.ari_analyses as f64)
     }
 
-    fn add(&mut self, o: &Self) {
+    pub(crate) fn add(&mut self, o: &Self) {
         self.records += o.records;
         self.bcubed_precision_sum += o.bcubed_precision_sum;
         self.bcubed_recall_sum += o.bcubed_recall_sum;
-        self.pairs += o.pairs;
-        self.pairs_both += o.pairs_both;
-        self.pairs_group += o.pairs_group;
-        self.pairs_run += o.pairs_run;
+        self.ari_sum += o.ari_sum;
+        self.ari_analyses += o.ari_analyses;
     }
 }
 
@@ -261,11 +287,7 @@ fn clustering(a: &Analysis, truth: &Truth) -> Clustering {
             swarm_of.insert(t.run.as_str(), sw);
         }
     }
-    let mut out = Clustering {
-        records: recs.len(),
-        pairs: choose2(recs.len()),
-        ..Clustering::default()
-    };
+    let (mut bp, mut br) = (0.0, 0.0);
     let mut group: BTreeMap<(bool, usize), usize> = BTreeMap::new();
     let mut run: BTreeMap<&str, usize> = BTreeMap::new();
     let mut both: BTreeMap<((bool, usize), &str), usize> = BTreeMap::new();
@@ -289,13 +311,16 @@ fn clustering(a: &Analysis, truth: &Truth) -> Clustering {
             .filter(|(x, _)| one_swarm(x, r))
             .map(|x| x.1)
             .sum();
-        out.bcubed_precision_sum += swarm as f64 / group[&g] as f64;
-        out.bcubed_recall_sum += same / run[r] as f64;
+        bp += swarm as f64 / group[&g] as f64;
+        br += same / run[r] as f64;
     }
-    out.pairs_both = both.values().map(|&n| choose2(n)).sum();
-    out.pairs_group = group.values().map(|&n| choose2(n)).sum();
-    out.pairs_run = run.values().map(|&n| choose2(n)).sum();
-    out
+    let pairs = (
+        choose2(recs.len()),
+        both.values().map(|&n| choose2(n)).sum(),
+        group.values().map(|&n| choose2(n)).sum(),
+        run.values().map(|&n| choose2(n)).sum(),
+    );
+    Clustering::of_analysis(recs.len(), bp, br, pairs)
 }
 
 /// Records and minutes to each agent run's first flagged record.
