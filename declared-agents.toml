@@ -391,8 +391,10 @@ source = "https://developer.amazon.com/amazonbot"
 
 # ── Moonshot AI (Kimi) ──────────────────────────────────────────────────────
 # https://www.kimi.ai/policies/kimi-crawlers lists each user agent with its
-# range file, linked relative to the page. The page does not claim the files
-# are complete, so they are not taken as exhaustive.
+# range file, linked relative to the page. The user agents cite
+# www.kimi.com/policies/kimi-crawlers, which redirects to that page, so the
+# files are fetched from www.kimi.ai, where they are served. The page does
+# not claim the files are complete, so they are not taken as exhaustive.
 
 [[range_file]]
 id = "kimi.kimibot"
