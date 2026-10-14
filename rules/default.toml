@@ -245,6 +245,9 @@ co_group = 20.0
 # bound: generated identifiers decoding to one node id, Snowflake worker, clock
 # skew or counter beyond the generator chance model.
 generator = 20.0
+# Simulation (fleet-playbook), held at the scaffold's ratio, below its bound:
+# one playbook's steps in one order beyond the playbook chance model.
+playbook = 20.0
 
 # Joint caps: the combined ratio of two families, at most the cap and never
 # less than the stronger family alone. Families multiply as if independent,
@@ -404,6 +407,42 @@ counter_max_gap = 3
 max_holders = 10
 max_chance = 0.01
 fdr = 0.05
+
+# Playbook alignment: a record's step is its request template less the
+# parameters carrying linking values, kept with at least `min_specificity`
+# structural parts. A cluster's steps on each host, by request or submit time
+# (never capture times), repeats in a row dropped, are one sequence; its
+# profile is its most common sequence, a playbook when it has `min_steps` steps
+# and is seen on `min_hosts` hosts. Two playbooks sharing a step carried by at
+# most `max_holders` senders (clusters, and records outside them) are aligned
+# locally, a matched step scoring its IDF weight and a gap `gap_penalty`; the
+# statistic sums each host sequence of one aligned with the other's profile,
+# both ways, against `permutations` shuffles of each cluster's steps within
+# host. That order chance must be at most `max_order_chance`; combined with the
+# rarest aligned step's base rate (as a scaffold template's) it is kept at
+# `max_chance` and cut at false discovery rate `fdr` over the pairs compared.
+# A pair whose aligned steps' payload classes follow one of `common_orders`
+# ties none.
+[playbook]
+min_specificity = 3
+min_steps = 3
+min_hosts = 2
+max_holders = 10
+gap_penalty = 1.0
+permutations = 199
+max_order_chance = 0.05
+max_chance = 0.01
+fdr = 0.05
+common_orders = [
+  # OWASP Web Security Testing Guide v4.2, its test ids in order: information
+  # gathering (WSTG-INFO), directory traversal (WSTG-ATHZ-01), reflected XSS
+  # (WSTG-INPV-01), SQL injection (WSTG-INPV-05), command injection
+  # (WSTG-INPV-12), server-side template injection (WSTG-INPV-18).
+  ["recon", "traversal", "xss", "sqli", "cmd", "ssti"],
+  # The payload classes in name order, as a tool walking a payload collection
+  # sorted by name sends them.
+  ["recon", "cmd", "sqli", "ssti", "traversal", "xss"],
+]
 
 # Interaction edges (SC-T9). S3 synchronized start: two runs of different
 # clients whose requests, unflagged ones of the same client included, line up

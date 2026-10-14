@@ -38,6 +38,7 @@ pub mod notice;
 pub mod paths;
 pub mod plant;
 pub mod platform;
+pub mod playbook;
 pub mod prose;
 pub mod recurrence;
 pub mod redact;

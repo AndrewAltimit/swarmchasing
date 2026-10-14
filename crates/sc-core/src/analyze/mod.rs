@@ -298,6 +298,10 @@ pub struct Analysis {
     /// counter), beyond chance: a link to check, never a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub generator_pairs: Vec<crate::generator::GeneratorPair>,
+    /// Pairs of clusters sending one playbook's steps on their hosts in
+    /// one order beyond chance: a link to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub playbook_pairs: Vec<crate::playbook::PlaybookPair>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
     /// lengths, header sets, escalations, common features, captured
@@ -313,6 +317,11 @@ pub struct Analysis {
     /// hints for the admin, never scored, never a link or a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub swarm_edges: Vec<crate::swarm::SwarmEdge>,
+    /// Dispatch stars chained where a follower leads a star of its own
+    /// (two or more generations): a description of who set off whom,
+    /// never scored, never a link or a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dispatch_trees: Vec<crate::swarm::DispatchTree>,
     /// Clusters of different clients that began within minutes of each
     /// other beyond chance ([`crate::swarm::OnsetGroup`]), and those read
     /// as one common trigger: hints, never a link or a merge.

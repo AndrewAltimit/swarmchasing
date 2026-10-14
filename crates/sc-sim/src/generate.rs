@@ -329,19 +329,29 @@ impl Gen<'_> {
             Kind::PromptFleet => self.prompt_fleet(i, a, start, window, &mut rng),
             Kind::Framework => self.framework(i, a, start, window, &mut rng),
             Kind::Swarm => self.swarm(i, a, start, &mut rng),
+            Kind::Trigger => self.trigger(i, a, start, &mut rng),
             Kind::Escalator => self.escalator(i, a, start, window, &mut rng),
             Kind::Fleet => {
                 let fleet = format!("{}-f{i}", self.scenario.name);
-                let scaffold = self.scaffold(&mut rng);
                 let ua = rng.pick(AGENT_UAS).copied().unwrap_or_default().to_string();
                 // The harness's parameters, from their own stream so the
                 // rest of the actor draws as before.
                 let mut hrng = self.rng.fork(&format!("actor{i}:harness"));
                 let names = harness_names(&mut hrng, 3);
-                let first = Shape {
-                    templates: scaffold.clone(),
-                    harness: names[..2].to_vec(),
+                // A fleet on another's harness copies its first shape (same
+                // templates and parameters, a different operator).
+                let mut first = match a.shape_of.and_then(|s| self.shapes.get(&s)) {
+                    Some(s) => s[0].clone(),
+                    None => Shape {
+                        templates: self.scaffold_of(&mut rng, a.steps.unwrap_or(3)),
+                        harness: names[..2].to_vec(),
+                    },
                 };
+                // A reordered playbook keeps the templates and walks them in
+                // the reverse order on each host.
+                if a.reverse_steps {
+                    first.templates.reverse();
+                }
                 // An upgrade changes one parameter and one template.
                 let mut upgraded = first.clone();
                 upgraded.harness[1].clone_from(&names[2]);
@@ -377,6 +387,20 @@ impl Gen<'_> {
                     let mut client = agent_client(&mut rng);
                     client.ua.clone_from(&ua);
                     let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+                    // A playbook fleet walks its hosts one at a time, its
+                    // templates in one order on each (`run` picks template
+                    // `r % steps`, so in-order hosts send them in order).
+                    let host_list = if a.playbook {
+                        in_order(&hosts, a.records)
+                    } else {
+                        spread(&hosts, a.records)
+                    };
+                    // The agent's own tag style, when the fleet varies it.
+                    self.tag_style = if a.tag_styles.is_empty() {
+                        a.tag_style
+                    } else {
+                        a.tag_styles[k % a.tag_styles.len()]
+                    };
                     let spec = RunSpec {
                         truth: agent_truth(
                             id(k),
@@ -388,7 +412,7 @@ impl Gen<'_> {
                         start: start + k as i64 * interval + rng.range(0, jitter),
                         pace: a.pace.unwrap_or(Pace::Model),
                         gaps: None,
-                        hosts: spread(&hosts, a.records),
+                        hosts: host_list,
                         uses: vec![Use::Attack; a.records],
                         fixed: Some(shape.templates.clone()),
                         harness: shape.harness.clone(),
@@ -842,6 +866,51 @@ impl Gen<'_> {
         }
     }
 
+    /// Unrelated agents watching one feed, each reacting to every item at a
+    /// lag of its own: each its own operator, client, hosts and habits.
+    fn trigger(&mut self, i: usize, a: &Actor, start: i64, rng: &mut Rng) {
+        // Item times, from their own stream.
+        let mut irng = self.rng.fork(&format!("actor{i}:items"));
+        let items: Vec<i64> = (0..a.records)
+            .map(|r| {
+                if r == 0 {
+                    0
+                } else {
+                    irng.range(10 * 60, 50 * 60)
+                }
+            })
+            .collect();
+        for k in 0..a.agents {
+            let lag = irng.range(30, 240);
+            let late: Vec<i64> = (0..a.records).map(|_| lag + irng.range(0, 15)).collect();
+            let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+            let client = agent_client(rng);
+            let mut spec = self.bg_spec(
+                i,
+                k,
+                a,
+                "single_agent",
+                "agent",
+                Some("agent"),
+                Use::Attack,
+                Pace::Model,
+                true,
+                &client,
+                &hosts,
+                start + late[0],
+                a.records,
+            );
+            spec.uses = read_then_attack(a.records, a.hosts);
+            spec.tag = a.tag;
+            spec.gaps = Some(
+                (0..a.records)
+                    .map(|r| items[r] + late[r] - late[r.saturating_sub(1)])
+                    .collect(),
+            );
+            self.run(spec, rng);
+        }
+    }
+
     fn swarm(&mut self, i: usize, a: &Actor, start: i64, rng: &mut Rng) {
         let swarm = format!("{}-s{i}", self.scenario.name);
         let n = a.agents.max(2);
@@ -867,8 +936,12 @@ impl Gen<'_> {
         let raw = format!("https://r.jina.ai/https://gist.githubusercontent.com/{user}/{gist}/raw");
         let handoff = has(Mode::Handoff);
         // Dispatch times, from their own stream so other modes draw as before.
-        let dispatch = has(Mode::Dispatch);
+        let tree = has(Mode::TreeDispatch);
+        let dispatch = has(Mode::Dispatch) || tree;
         let mut drng = rng.fork("dispatch");
+        // In a tree, each agent's delay after the dispatch at each step: its
+        // parent's, plus its own.
+        let mut offsets: Vec<Vec<i64>> = Vec::new();
         let dispatch_gaps: Vec<i64> = (0..a.records)
             .map(|_| {
                 if dispatch {
@@ -900,7 +973,7 @@ impl Gen<'_> {
                 read_then_attack(a.records, hosts.len())
             };
             // A worker's delay after each dispatch.
-            let late: Vec<i64> = (0..a.records)
+            let mut late: Vec<i64> = (0..a.records)
                 .map(|_| {
                     if dispatch && k > 0 {
                         drng.range(40, 85)
@@ -909,6 +982,14 @@ impl Gen<'_> {
                     }
                 })
                 .collect();
+            if tree {
+                if let Some(parent) = k.checked_sub(1).map(|p| p / 2) {
+                    for (r, l) in late.iter_mut().enumerate() {
+                        *l += offsets[parent][r];
+                    }
+                }
+                offsets.push(late.clone());
+            }
             let mut begin = if dispatch {
                 start + late.first().copied().unwrap_or(0)
             } else if handoff && k > 0 {
@@ -1350,10 +1431,21 @@ impl Gen<'_> {
 
     /// A handful of attack templates one scaffold sends again and again.
     fn scaffold(&self, rng: &mut Rng) -> Vec<Template> {
+        self.scaffold_of(rng, 3)
+    }
+
+    /// `n` attack templates one scaffold sends again and again. Distinct
+    /// where the palette has enough, so a playbook's steps differ.
+    fn scaffold_of(&self, rng: &mut Rng, n: usize) -> Vec<Template> {
         let all = self.palette.get(Use::Attack);
-        let mut out = Vec::new();
-        for _ in 0..3 {
+        let mut out: Vec<Template> = Vec::new();
+        let mut tries = 0;
+        while out.len() < n && tries < n * 8 {
+            tries += 1;
             if let Some(t) = rng.pick(all) {
+                if out.len() < all.len() && out.iter().any(|x| x.origin == t.origin) {
+                    continue;
+                }
                 out.push(t.clone());
             }
         }

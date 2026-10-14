@@ -14,7 +14,7 @@
 //! much likelier the link is between two clusters of one operator than
 //! between unrelated ones. A pair that passed a chance test (shared pauses,
 //! scaffolds, scaffold lineage, prompt echoes, co-activity, co-targets,
-//! ordered co-targets, co-groups, generators) carries its kind's ratio in
+//! ordered co-targets, co-groups, generators, playbooks) carries its kind's ratio in
 //! full.
 //! Any other link's ratio is the kind's raised to its similarity (where it
 //! has one) times its rarity: a shared value held by
@@ -108,6 +108,9 @@ pub enum SoftLinkKind {
     /// Generated identifiers decoding to one generator: a UUID node id, a
     /// Snowflake worker, a clock skew, a counter ([`crate::generator`]).
     Generator,
+    /// One playbook's steps sent in one order on their hosts, beyond
+    /// chance ([`crate::playbook`]).
+    Playbook,
 }
 
 /// Kinds that read one underlying habit: a pair counts only its strongest
@@ -117,7 +120,7 @@ pub enum SoftLinkKind {
 pub enum Family {
     /// How requests are built: encoding, header set, relay stack,
     /// scaffold, scaffold lineage, prompt echo, payload dialect, cut
-    /// length, fan-out width, co-groups on templates.
+    /// length, fan-out width, playbook order, co-groups on templates.
     Harness,
     /// When clusters are active: shared pauses, co-activity.
     Timeline,
@@ -142,7 +145,7 @@ impl Family {
 
 impl SoftLinkKind {
     /// Every kind.
-    pub const ALL: [SoftLinkKind; 22] = {
+    pub const ALL: [SoftLinkKind; 23] = {
         use SoftLinkKind::*;
         [
             SharedPause,
@@ -167,6 +170,7 @@ impl SoftLinkKind {
             PromptEcho,
             CoGroup,
             Generator,
+            Playbook,
         ]
     };
 
@@ -194,6 +198,7 @@ impl SoftLinkKind {
             SoftLinkKind::PromptEcho => "prompt echo",
             SoftLinkKind::CoGroup => "co-group",
             SoftLinkKind::Generator => "identifier generator",
+            SoftLinkKind::Playbook => "playbook order",
         }
     }
 
@@ -204,7 +209,7 @@ impl SoftLinkKind {
         use SoftLinkKind::*;
         match self {
             Encoding | HeaderSet | RelayStack | Scaffold | ScaffoldLineage | PromptEcho
-            | Dialect | CutLength | FanOut => Family::Harness,
+            | Dialect | CutLength | FanOut | Playbook => Family::Harness,
             SharedPause | CoActivity => Family::Timeline,
             Rerun | PathSet | Preamble | CoTarget | OrderedCoTarget | Escalation | CoGroup => {
                 Family::Targets
@@ -271,6 +276,8 @@ pub struct SoftLinkOptions {
     pub co_group: f64,
     /// A pair kept by the generator chance model ([`crate::generator`]).
     pub generator: f64,
+    /// A pair kept by the playbook chance model ([`crate::playbook`]).
+    pub playbook: f64,
     /// Caps on two families' combined ratio (`[soft_links.joint]`).
     pub joint: JointCaps,
 }
@@ -388,6 +395,7 @@ impl Default for SoftLinkOptions {
                 timeline_targets: Some(34.0),
                 ..JointCaps::default()
             },
+            playbook: 20.0,
         }
     }
 }
@@ -419,6 +427,7 @@ impl SoftLinkOptions {
             PromptEcho => self.prompt_echo,
             CoGroup => self.co_group,
             Generator => self.generator,
+            Playbook => self.playbook,
         }
     }
 
@@ -448,6 +457,7 @@ impl SoftLinkOptions {
             PromptEcho => &mut self.prompt_echo,
             CoGroup => &mut self.co_group,
             Generator => &mut self.generator,
+            Playbook => &mut self.playbook,
         };
         *f = lr;
     }
@@ -619,6 +629,7 @@ pub(crate) struct Signals<'a> {
     pub prompt_echo_pairs: &'a [crate::prose::PromptEchoPair],
     pub co_groups: &'a [crate::biclique::CoGroup],
     pub generator_pairs: &'a [crate::generator::GeneratorPair],
+    pub playbook_pairs: &'a [crate::playbook::PlaybookPair],
 }
 
 /// How much of its kind a value held by `n` of `total` clusters counts:
@@ -740,6 +751,9 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
     }
     for p in s.generator_pairs {
         push(&p.a, &p.b, SoftLinkKind::Generator, 1.0, p.detail());
+    }
+    for p in s.playbook_pairs {
+        push(&p.a, &p.b, SoftLinkKind::Playbook, 1.0, p.detail());
     }
     // A group ties each pair of its clusters, in its own family.
     for g in s.co_groups {
@@ -1141,11 +1155,12 @@ mod tests {
             ]
         );
         // Every kind has a family, and the kinds list is complete.
-        assert_eq!(SoftLinkKind::ALL.len(), 22);
+        assert_eq!(SoftLinkKind::ALL.len(), 23);
         assert_eq!(SoftLinkKind::CoTarget.family(), Family::Targets);
         assert_eq!(SoftLinkKind::OrderedCoTarget.family(), Family::Targets);
         assert_eq!(SoftLinkKind::ScaffoldLineage.family(), Family::Harness);
         assert_eq!(SoftLinkKind::PromptEcho.family(), Family::Harness);
+        assert_eq!(SoftLinkKind::Playbook.family(), Family::Harness);
         let mut o = SoftLinkOptions::default();
         for k in SoftLinkKind::ALL {
             o.set_lr(k, 7.0);

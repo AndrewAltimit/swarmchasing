@@ -108,6 +108,7 @@
         "prompt_echo": { "$ref": "#/$defs/ratio" },
         "co_group": { "$ref": "#/$defs/ratio" },
         "generator": { "$ref": "#/$defs/ratio" },
+        "playbook": { "$ref": "#/$defs/ratio" },
         "joint": {
           "type": "object",
           "description": "Caps on two families' combined likelihood ratio, at most the measured joint ratio's conservative value; never below the stronger family alone. Keys name the families in the order harness, timeline, targets, identifiers.",
@@ -198,6 +199,25 @@
         "max_holders": { "$ref": "#/$defs/count" },
         "max_chance": { "$ref": "#/$defs/share" },
         "fdr": { "$ref": "#/$defs/share" }
+      }
+    },
+    "playbook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_specificity": { "$ref": "#/$defs/count" },
+        "min_steps": { "$ref": "#/$defs/count" },
+        "min_hosts": { "$ref": "#/$defs/count" },
+        "max_holders": { "$ref": "#/$defs/count" },
+        "gap_penalty": { "type": "number", "minimum": 0 },
+        "permutations": { "type": "integer", "minimum": 1 },
+        "max_order_chance": { "$ref": "#/$defs/share" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" },
+        "common_orders": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        }
       }
     },
     "swarm": {
