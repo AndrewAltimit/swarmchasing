@@ -81,6 +81,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`bursts`](src/bursts.rs) | Bursts of archive captures of a host the archives rarely capture. |
 | [`endpoints`](src/endpoints.rs) | Flagged activity grouped by target host. |
 | [`escalation`](src/escalation.rs) | Route escalation: one target requested directly, then through a relay, a program carrier, a remote browser. |
+| [`netranges`](src/netranges.rs) | Published cloud and Tor exit ranges: a client address's provider, region, service and Tor exit status. Context only. |
 | [`attribution`](src/attribution.rs) | The evidence ladder and who a report may name. |
 | [`identity`](src/identity/mod.rs) | Declared agent identity: product claims, published ranges (`ranges`), Web Bot Auth signatures (`httpsig`, `sfv`); verified, spoofed or claimed; direct or intermediary signers; the declared-then-undeclared hint (`fallback`). Ed25519 checks need the `signatures` feature. |
 | [`agentness`](src/agentness.rs) | Each cluster's agent grade (L0 payloads only to L4 agent likely) with its signals, counter-signals and caps; L5 only from a case decision. |
