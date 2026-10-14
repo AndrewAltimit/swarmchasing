@@ -8,7 +8,9 @@
 //! backups holds no secret) or to a passphrase
 //! (`SWARMCHASE_BACKUP_PASSPHRASE`). It is written to
 //! `<backup dir>/<hostname>/swarmchase-<UTC stamp>.tar.age` with a
-//! `.sha256` sidecar.
+//! `.sha256` sidecar, each written through a temporary file and a rename.
+//! `create` holds the data directory's lock while it reads, so no watch or
+//! case command writes into the archive's sources meanwhile.
 //!
 //! `verify` checks the hash, and decrypts and reads the archive through when
 //! given the identity. `restore` decrypts into a directory and never
@@ -343,6 +345,9 @@ fn decrypt(file: &Path, key: &Key) -> Result<impl Read> {
 /// Write an encrypted backup of `data` into `dir` as
 /// `swarmchase-<stamp>.tar.age`, with its `.sha256` sidecar.
 pub fn create(data: &Path, dir: &Path, stamp: &str, key: &Key) -> Result<PathBuf> {
+    // A watch or case command writing meanwhile would leave a backup that
+    // mixes two states, so the archive is read under the data lock.
+    let _lock = crate::store::lock_data(data, "backup create")?;
     let plain = archive(data)?;
     std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     let name = format!("swarmchase-{stamp}.tar.age");
@@ -352,12 +357,10 @@ pub fn create(data: &Path, dir: &Path, stamp: &str, key: &Key) -> Result<PathBuf
     }
     let mut sealed = Vec::new();
     encrypt(&plain, key, &mut sealed)?;
-    let tmp = dir.join(format!(".{name}.tmp"));
-    std::fs::write(&tmp, &sealed)?;
-    std::fs::rename(&tmp, &path)?;
-    std::fs::write(
-        sidecar(&path),
-        format!("{}  {name}\n", crate::bundle::sha256_hex(&sealed)),
+    crate::store::write_atomic(&path, &sealed)?;
+    crate::store::write_atomic(
+        &sidecar(&path),
+        format!("{}  {name}\n", crate::bundle::sha256_hex(&sealed)).as_bytes(),
     )?;
     Ok(path)
 }
@@ -599,6 +602,11 @@ mod tests {
         for s in ["20261011T000000Z", "20261012T000000Z"] {
             create(&d, &dir, s, &key).unwrap();
         }
+        // Not while another command holds the data directory.
+        let held = crate::store::lock_data(&d, "watch").unwrap();
+        let e = create(&d, &dir, "20261013T000000Z", &key).unwrap_err();
+        assert!(e.to_string().contains("in use"), "{e:#}");
+        drop(held);
         let gone = rotate(&dir, 2).unwrap();
         assert_eq!(gone, std::slice::from_ref(&p));
         assert!(!sidecar(&p).exists());

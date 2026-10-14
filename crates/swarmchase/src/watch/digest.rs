@@ -279,6 +279,9 @@ pub enum AlertKind {
     /// A store file has lines that cannot be read (a write cut short, bytes
     /// that are not UTF-8); they are skipped.
     StoreDamaged,
+    /// A step after collection failed (a file not written, a history not
+    /// read); the run went on without it.
+    StepFailed,
     Other,
 }
 
@@ -292,6 +295,7 @@ impl AlertKind {
             AlertKind::HostDown => "host_down",
             AlertKind::RuleDrift => "rule_drift",
             AlertKind::StoreDamaged => "store_damaged",
+            AlertKind::StepFailed => "step_failed",
             AlertKind::Other => "other",
         }
     }

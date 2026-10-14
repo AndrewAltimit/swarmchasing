@@ -15,4 +15,5 @@ mod inbox;
 mod notices;
 mod platform;
 mod watch;
+mod watch_e2e;
 mod workflow;
