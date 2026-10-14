@@ -246,6 +246,26 @@ co_group = 20.0
 # skew or counter beyond the generator chance model.
 generator = 20.0
 
+# Joint caps: the combined ratio of two families, at most the cap and never
+# less than the stronger family alone. Families multiply as if independent,
+# and one fact can draw links in two. A cap is at or below the lower bound of
+# the pair's joint ratio, stratified by scenario, that `sim calibrate`
+# measures; `sim calibrate --check` fails a cap above it, and a family pair
+# that co-fires without a cap where the families' product on a pair they link
+# together exceeds it. Keys name the families in the order harness, timeline,
+# targets, identifiers.
+[soft_links.joint]
+# Simulation (rerun), below its bound: template co-groups and co-activity on
+# one operator's runs, measured on one small scenario.
+harness_timeline = 20.0
+# Simulation (fleet-randomtags), below its bound: template co-groups and
+# shared generators.
+harness_identifiers = 90.0
+# Judgment, at co-target's ratio: co-activity and co-targets both read
+# clusters running at the same time, so together they count as one. No
+# scenario links a pair of one operator in both.
+timeline_targets = 34.0
+
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least
 # `min_specificity` structural parts (relay hops, parameters, an informative

@@ -107,7 +107,20 @@
         "scaffold_lineage": { "$ref": "#/$defs/ratio" },
         "prompt_echo": { "$ref": "#/$defs/ratio" },
         "co_group": { "$ref": "#/$defs/ratio" },
-        "generator": { "$ref": "#/$defs/ratio" }
+        "generator": { "$ref": "#/$defs/ratio" },
+        "joint": {
+          "type": "object",
+          "description": "Caps on two families' combined likelihood ratio, at most the measured joint ratio's conservative value; never below the stronger family alone. Keys name the families in the order harness, timeline, targets, identifiers.",
+          "additionalProperties": false,
+          "properties": {
+            "harness_timeline": { "$ref": "#/$defs/ratio" },
+            "harness_targets": { "$ref": "#/$defs/ratio" },
+            "harness_identifiers": { "$ref": "#/$defs/ratio" },
+            "timeline_targets": { "$ref": "#/$defs/ratio" },
+            "timeline_identifiers": { "$ref": "#/$defs/ratio" },
+            "targets_identifiers": { "$ref": "#/$defs/ratio" }
+          }
+        }
       }
     },
     "scaffold": {

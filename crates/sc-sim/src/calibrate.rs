@@ -17,15 +17,31 @@
 //! stratum: [`stratified`] is a Mantel-Haenszel ratio over the scenarios
 //! where the kind fired and both kinds of pair exist, with a
 //! Greenland-Robins interval, and its lower bound is the conservative value
-//! the bundled ratios must not exceed ([`check_rules`]).
+//! the bundled ratios must not exceed ([`check_rules`]). A kind that links
+//! unrelated pairs but no pair of one operator, where both exist, is
+//! measured against: its bundled ratio may not exceed 1.
+//!
+//! Families multiply as if independent, which they are not where one fact
+//! (running at the same time) draws links in two. So each pair's set of
+//! linking kinds is kept too ([`Calibration::combos`]), and for each pair of
+//! families [`stratified_joint`] is the Mantel-Haenszel ratio of both
+//! firing together, counting only the kinds the rules switch on. Its lower
+//! bound is the most a `[soft_links.joint]` cap may be ([`check_joint`]).
 
 use crate::measure::majority;
 use crate::{Palette, ScenarioFile, Truth, generate, to_ndjson};
 use sc_core::eval::stats::wilson;
-use sc_core::{Analysis, FieldMap, Format, Rules, SoftLinkKind, Tier, analyze, parse_input};
+use sc_core::fleets::JointCaps;
+use sc_core::{
+    Analysis, Family, FieldMap, Format, Rules, SoftLinkKind, Tier, analyze, parse_input,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+
+/// The kinds linking one pair of clusters, each with the family it counts
+/// in.
+pub type Combo = BTreeSet<(Family, SoftLinkKind)>;
 
 /// Pairs one kind linked.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -45,6 +61,10 @@ pub struct Calibration {
     pub other_pairs: usize,
     /// By kind.
     pub kinds: BTreeMap<SoftLinkKind, KindPairs>,
+    /// By the set of kinds (each with the family it counts in) that link a
+    /// pair: what the joint ratios are read from.
+    #[serde(skip)]
+    pub combos: BTreeMap<Combo, KindPairs>,
 }
 
 impl Calibration {
@@ -56,6 +76,45 @@ impl Calibration {
             e.same += v.same;
             e.other += v.other;
         }
+        for (k, v) in &o.combos {
+            let e = self.combos.entry(k.clone()).or_default();
+            e.same += v.same;
+            e.other += v.other;
+        }
+    }
+
+    /// Pairs linked in both families `f` and `g` by kinds `on` accepts.
+    pub fn joint(&self, f: Family, g: Family, on: &dyn Fn(SoftLinkKind) -> bool) -> KindPairs {
+        let mut out = KindPairs::default();
+        for (set, n) in &self.combos {
+            let fired = |x: Family| set.iter().any(|&(fam, k)| fam == x && on(k));
+            if fired(f) && fired(g) {
+                out.same += n.same;
+                out.other += n.other;
+            }
+        }
+        out
+    }
+
+    /// The most families `f` and `g` multiply to on any pair they link
+    /// together: on each such pair, each family's largest ratio among its
+    /// kinds `lr` switches on (above 1), multiplied. 1 when they never
+    /// fire together.
+    pub fn joint_product(&self, f: Family, g: Family, lr: &dyn Fn(SoftLinkKind) -> f64) -> f64 {
+        let mut most: f64 = 1.0;
+        for set in self.combos.keys() {
+            let best = |x: Family| {
+                set.iter()
+                    .filter(|&&(fam, _)| fam == x)
+                    .map(|&(_, k)| lr(k))
+                    .fold(1.0, f64::max)
+            };
+            let (a, b) = (best(f), best(g));
+            if a > 1.0 && b > 1.0 {
+                most = most.max(a * b);
+            }
+        }
+        most
     }
 
     /// The kind's likelihood ratio, `None` when it linked no pair of one
@@ -131,6 +190,7 @@ pub fn count(a: &Analysis, truth: &Truth) -> Calibration {
         }
     }
     let mut seen: BTreeMap<SoftLinkKind, BTreeSet<(usize, usize)>> = BTreeMap::new();
+    let mut sets: BTreeMap<(usize, usize), (bool, Combo)> = BTreeMap::new();
     for l in &a.soft_links {
         let (Some(x), Some(y)) = (a.cluster_index(&l.a), a.cluster_index(&l.b)) else {
             continue;
@@ -138,10 +198,22 @@ pub fn count(a: &Analysis, truth: &Truth) -> Calibration {
         let Some(same) = side(x, y) else {
             continue;
         };
+        sets.entry((x.min(y), x.max(y)))
+            .or_insert_with(|| (same, BTreeSet::new()))
+            .1
+            .insert((l.family(), l.kind));
         if !seen.entry(l.kind).or_default().insert((x.min(y), x.max(y))) {
             continue;
         }
         let e = out.kinds.entry(l.kind).or_default();
+        if same {
+            e.same += 1;
+        } else {
+            e.other += 1;
+        }
+    }
+    for (same, set) in sets.into_values() {
+        let e = out.combos.entry(set).or_default();
         if same {
             e.same += 1;
         } else {
@@ -204,16 +276,56 @@ pub struct Stratified {
 /// those where it linked a pair, with pairs of one operator and unrelated
 /// pairs. `None` when it linked no pair of one operator in any of them.
 pub fn stratified(strata: &[(String, Calibration)], kind: SoftLinkKind) -> Option<Stratified> {
-    let (mut r, mut s, mut v, mut n, mut hits) = (0.0, 0.0, 0.0, 0, 0);
-    for (_, c) in strata {
+    mantel_haenszel(strata.iter().map(|(_, c)| {
         let k = c.kinds.get(&kind).cloned().unwrap_or_default();
-        if k.same + k.other == 0 || c.same_pairs == 0 || c.other_pairs == 0 {
+        (k, c.same_pairs, c.other_pairs)
+    }))
+}
+
+/// Families `f` and `g` firing together on a pair, by kinds the rules
+/// switch on (ratio above 1), stratified as [`stratified`] is.
+pub fn stratified_joint(
+    strata: &[(String, Calibration)],
+    f: Family,
+    g: Family,
+    rules: &Rules,
+) -> Option<Stratified> {
+    let on = |k: SoftLinkKind| rules.set.soft_links.lr(k) > 1.0;
+    mantel_haenszel(
+        strata
+            .iter()
+            .map(|(_, c)| (c.joint(f, g, &on), c.same_pairs, c.other_pairs)),
+    )
+}
+
+/// Unrelated pairs linked in strata where no pair of one operator was,
+/// though both kinds of pair exist: evidence a ratio is at or below 1.
+/// Zero when any stratum links a pair of one operator.
+pub fn against(strata: &[(String, Calibration)], kind: SoftLinkKind) -> usize {
+    let usable = |c: &Calibration| c.same_pairs > 0 && c.other_pairs > 0;
+    let k = |c: &Calibration| c.kinds.get(&kind).cloned().unwrap_or_default();
+    if strata.iter().any(|(_, c)| usable(c) && k(c).same > 0) {
+        return 0;
+    }
+    strata
+        .iter()
+        .filter(|(_, c)| usable(c))
+        .map(|(_, c)| k(c).other)
+        .sum()
+}
+
+/// The Mantel-Haenszel ratio over strata of (pairs linked, pairs of one
+/// operator, unrelated pairs).
+fn mantel_haenszel(rows: impl Iterator<Item = (KindPairs, usize, usize)>) -> Option<Stratified> {
+    let (mut r, mut s, mut v, mut n, mut hits) = (0.0, 0.0, 0.0, 0, 0);
+    for (k, same_pairs, other_pairs) in rows {
+        if k.same + k.other == 0 || same_pairs == 0 || other_pairs == 0 {
             continue;
         }
         n += 1;
         hits += k.same;
         let (a, b) = (k.same as f64 + 0.5, k.other as f64 + 0.5);
-        let (n1, n0) = (c.same_pairs as f64 + 1.0, c.other_pairs as f64 + 1.0);
+        let (n1, n0) = (same_pairs as f64 + 1.0, other_pairs as f64 + 1.0);
         let t = n1 + n0;
         r += a * n0 / t;
         s += b * n1 / t;
@@ -242,6 +354,9 @@ pub struct RuleCheck {
     /// The reason the calibration config gives for a ratio above 1 that no
     /// scenario measures.
     pub allowed: Option<String>,
+    /// Unrelated pairs it linked where it linked no pair of one operator
+    /// ([`against`]): measured, and against any ratio above 1.
+    pub against: usize,
     pub ok: bool,
 }
 
@@ -249,13 +364,21 @@ impl RuleCheck {
     /// Unmeasured, with a ratio above 1 and no reason given: a ratio the
     /// rules claim that nothing supports.
     pub fn unmeasured(&self) -> bool {
-        self.low.is_none() && self.allowed.is_none()
+        self.low.is_none() && self.against == 0 && self.allowed.is_none()
     }
 
     /// The check as one line: `ok`, `FAIL` (above the bound), `UNMEASURED`
     /// or `allowed` (unmeasured, with its reason).
     pub fn line(&self) -> String {
         let name = kind_name(self.kind);
+        if self.low.is_none() && self.against > 0 {
+            return format!(
+                "{} {name}: rules {:.2}, links {} unrelated pair(s) and no pair of one operator, so its ratio may not exceed 1",
+                if self.ok { "ok  " } else { "FAIL" },
+                self.bundled,
+                self.against
+            );
+        }
         match (self.low, &self.allowed) {
             (Some(low), allowed) => format!(
                 "{} {name}: rules {:.2}, stratified lower bound {low:.2}{}",
@@ -283,7 +406,9 @@ impl RuleCheck {
 /// the stratified lower bound, so no bundled ratio claims more than the
 /// simulation shows. Every kind with a ratio above 1 that no stratum
 /// measures fails as unmeasured, unless `allowed` (the calibration config's
-/// `unmeasured` table, kind name to reason) names it.
+/// `unmeasured` table, kind name to reason) names it. A kind that links only
+/// unrelated pairs ([`against`]) is measured: a ratio above 1 fails whatever
+/// `allowed` says.
 pub fn check_rules(
     strata: &[(String, Calibration)],
     rules: &Rules,
@@ -300,19 +425,109 @@ pub fn check_rules(
                     bundled,
                     low: Some(st.low),
                     allowed,
+                    against: 0,
                     ok: bundled <= st.low + 1e-9,
                 }),
-                None if bundled > 1.0 => Some(RuleCheck {
-                    kind: k,
-                    bundled,
-                    low: None,
-                    ok: allowed.is_some(),
-                    allowed,
-                }),
+                None if bundled > 1.0 => {
+                    let against = against(strata, k);
+                    Some(RuleCheck {
+                        kind: k,
+                        bundled,
+                        low: None,
+                        ok: against == 0 && allowed.is_some(),
+                        allowed,
+                        against,
+                    })
+                }
                 None => None,
             }
         })
         .collect()
+}
+
+/// One family pair's joint cap against the measured joint ratio.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JointCheck {
+    pub f: Family,
+    pub g: Family,
+    /// The cap `[soft_links.joint]` sets, if any.
+    pub cap: Option<f64>,
+    /// The most the two families multiply to without a cap on a pair the
+    /// simulation links in both ([`Calibration::joint_product`]).
+    pub product: f64,
+    /// The stratified joint ratio; `None` when no scenario links a pair of
+    /// one operator in both families.
+    pub measured: Option<Stratified>,
+    pub ok: bool,
+}
+
+impl JointCheck {
+    /// The check as one line: `ok`, `FAIL` (a cap above the bound, or no
+    /// cap where the product exceeds it), `note` (co-fires, no cap, the
+    /// product within the bound) or `allowed` (a cap no scenario measures:
+    /// it only lowers ratios).
+    pub fn line(&self) -> String {
+        let key = JointCaps::key(self.f, self.g);
+        match (self.cap, self.measured) {
+            (Some(cap), Some(st)) => format!(
+                "{} joint {key}: cap {cap:.2}, stratified joint lower bound {:.2} ({} strata)",
+                if self.ok { "ok  " } else { "FAIL" },
+                st.low,
+                st.strata
+            ),
+            (Some(cap), None) => format!(
+                "allowed joint {key}: cap {cap:.2}, no scenario links a pair of one operator in both (a cap only lowers ratios)"
+            ),
+            (None, Some(st)) if self.ok => format!(
+                "note joint {key}: co-fires with no cap; the independent product {:.2} is within the stratified joint lower bound {:.2}",
+                self.product, st.low
+            ),
+            (None, Some(st)) => format!(
+                "FAIL joint {key}: co-fires with no cap; the independent product {:.2} is above the stratified joint lower bound {:.2}: set [soft_links.joint] {key} at or below it",
+                self.product, st.low
+            ),
+            (None, None) => format!("ok   joint {key}: no cap, never co-fires"),
+        }
+    }
+}
+
+/// Every family pair that co-fires on a pair of one operator, or has a cap:
+/// a cap above the stratified joint lower bound fails, and so does a missing
+/// cap where the two families' independent product on a pair they link
+/// together ([`Calibration::joint_product`]) exceeds that bound,
+/// since then the rules claim more than the simulation shows, as a kind's
+/// ratio above its bound would. A missing cap the product stays within is
+/// noted: a cap there would change nothing. A cap no scenario measures
+/// passes, since a cap only lowers ratios.
+pub fn check_joint(strata: &[(String, Calibration)], rules: &Rules) -> Vec<JointCheck> {
+    let caps = &rules.set.soft_links.joint;
+    let all = pool(strata);
+    let lr = |k: SoftLinkKind| rules.set.soft_links.lr(k);
+    let mut out = Vec::new();
+    for (i, &f) in Family::ALL.iter().enumerate() {
+        for &g in &Family::ALL[i + 1..] {
+            let cap = caps.get(f, g);
+            let measured = stratified_joint(strata, f, g, rules);
+            if cap.is_none() && measured.is_none() {
+                continue;
+            }
+            let product = all.joint_product(f, g, &lr);
+            let ok = match (cap, measured) {
+                (Some(c), Some(st)) => c <= st.low + 1e-9,
+                (None, Some(st)) => product <= st.low + 1e-9,
+                _ => true,
+            };
+            out.push(JointCheck {
+                f,
+                g,
+                cap,
+                product,
+                measured,
+                ok,
+            });
+        }
+    }
+    out
 }
 
 /// The serialised name of a kind (`co_target`).
@@ -351,6 +566,58 @@ pub fn render_stratified(strata: &[(String, Calibration)], rules: &Rules) -> Str
             st.low,
             rules.set.soft_links.lr(k)
         );
+    }
+    let _ = writeln!(
+        s,
+        "\nFamily pairs firing together, by kinds the rules switch on (stratified as above; cap: [soft_links.joint]; product: the most the two multiply to on a pair they link together, under the rules' ratios; then each scenario's one operator's pairs linked / pairs, unrelated linked / pairs):\n"
+    );
+    let _ = writeln!(
+        s,
+        "  {:<22} {:>6} {:>7} {:>7} {:>10} {:>8} {:>8} {:>9}",
+        "families", "same", "other", "strata", "ratio", "low", "cap", "product"
+    );
+    let on = |k: SoftLinkKind| rules.set.soft_links.lr(k) > 1.0;
+    let all = pool(strata);
+    for (i, &f) in Family::ALL.iter().enumerate() {
+        for &g in &Family::ALL[i + 1..] {
+            let p = all.joint(f, g, &on);
+            if p.same + p.other == 0 {
+                continue;
+            }
+            let st = stratified_joint(strata, f, g, rules);
+            let num = |x: Option<f64>| x.map_or_else(|| "-".to_string(), |x| format!("{x:.1}"));
+            let _ = writeln!(
+                s,
+                "  {:<22} {:>6} {:>7} {:>7} {:>10} {:>8} {:>8} {:>9.1}",
+                JointCaps::key(f, g),
+                p.same,
+                p.other,
+                st.map_or(0, |x| x.strata),
+                num(st.map(|x| x.lr)),
+                num(st.map(|x| x.low)),
+                num(rules.set.soft_links.joint.get(f, g)),
+                all.joint_product(f, g, &|k| rules.set.soft_links.lr(k)),
+            );
+        }
+    }
+    for (i, &f) in Family::ALL.iter().enumerate() {
+        for &g in &Family::ALL[i + 1..] {
+            let rows: Vec<String> = strata
+                .iter()
+                .filter_map(|(name, c)| {
+                    let p = c.joint(f, g, &on);
+                    (p.same + p.other > 0).then(|| {
+                        format!(
+                            "{name} {}/{} {}/{}",
+                            p.same, c.same_pairs, p.other, c.other_pairs
+                        )
+                    })
+                })
+                .collect();
+            if !rows.is_empty() {
+                let _ = writeln!(s, "  {}: {}", JointCaps::key(f, g), rows.join("; "));
+            }
+        }
     }
     let _ = writeln!(
         s,
@@ -492,6 +759,111 @@ mod tests {
         let c = check_rules(&strata, &Rules::compile(set).unwrap(), &none);
         assert!(!c[0].ok, "{c:?}");
         assert!(c[0].line().starts_with("FAIL dialect"), "{}", c[0].line());
+    }
+
+    #[test]
+    fn a_kind_linking_only_unrelated_pairs_is_measured_against() {
+        // Fires on unrelated pairs only, where pairs of one operator exist.
+        let strata = vec![
+            ("s".to_string(), stratum(30, 300, 0, 12)),
+            // No pairs of one operator here: says nothing.
+            ("t".to_string(), stratum(0, 300, 0, 5)),
+        ];
+        assert_eq!(stratified(&strata, SoftLinkKind::Dialect), None);
+        assert_eq!(against(&strata, SoftLinkKind::Dialect), 12);
+        let mut set = Rules::default_rules().set.clone();
+        for k in SoftLinkKind::ALL {
+            set.soft_links.set_lr(k, 1.0);
+        }
+        set.soft_links.set_lr(SoftLinkKind::Dialect, 3.0);
+        let mut allowed = BTreeMap::new();
+        allowed.insert("dialect".to_string(), "a stale reason".to_string());
+        let rules = Rules::compile(set.clone()).unwrap();
+        let c = check_rules(&strata, &rules, &allowed);
+        assert_eq!(c.len(), 1, "{c:?}");
+        assert!(!c[0].ok && !c[0].unmeasured(), "{c:?}");
+        assert!(c[0].line().starts_with("FAIL dialect"), "{}", c[0].line());
+        assert!(c[0].line().contains("may not exceed 1"), "{}", c[0].line());
+        // At 1 it is off and passes.
+        set.soft_links.set_lr(SoftLinkKind::Dialect, 1.0);
+        let c = check_rules(&strata, &Rules::compile(set).unwrap(), &allowed);
+        assert!(c.iter().all(|c| c.ok), "{c:?}");
+        // One pair of one operator anywhere makes it a measured ratio again.
+        let mixed = vec![
+            ("s".to_string(), stratum(30, 300, 0, 12)),
+            ("u".to_string(), stratum(30, 300, 1, 0)),
+        ];
+        assert_eq!(against(&mixed, SoftLinkKind::Dialect), 0);
+    }
+
+    /// A stratum where `same` pairs of one operator and `other` unrelated
+    /// pairs are linked by co-activity and co-targets together.
+    fn joint_stratum(same: usize, other: usize) -> Calibration {
+        let mut c = Calibration {
+            same_pairs: 30,
+            other_pairs: 3000,
+            ..Default::default()
+        };
+        let set: BTreeSet<(Family, SoftLinkKind)> = [
+            (Family::Timeline, SoftLinkKind::CoActivity),
+            (Family::Targets, SoftLinkKind::CoTarget),
+        ]
+        .into();
+        c.combos.insert(set, KindPairs { same, other });
+        // A pair linked by co-targets alone does not count jointly.
+        let one: BTreeSet<_> = [(Family::Targets, SoftLinkKind::CoTarget)].into();
+        c.combos.insert(one, KindPairs { same: 5, other: 5 });
+        c
+    }
+
+    #[test]
+    fn joint_caps_are_checked_against_the_stratified_joint_ratio() {
+        let strata = vec![("s".to_string(), joint_stratum(10, 3))];
+        let mut set = Rules::default_rules().set.clone();
+        set.soft_links.joint = JointCaps::default();
+        let rules = Rules::compile(set.clone()).unwrap();
+        let on = |k: SoftLinkKind| rules.set.soft_links.lr(k) > 1.0;
+        let p = strata[0].1.joint(Family::Timeline, Family::Targets, &on);
+        assert_eq!((p.same, p.other), (10, 3));
+        let st = stratified_joint(&strata, Family::Targets, Family::Timeline, &rules).unwrap();
+        assert!(st.low > 1.0 && st.low < 25.0 * 34.0, "{st:?}");
+        // No cap, and the independent product is above the bound: fails.
+        let c = check_joint(&strata, &rules);
+        assert_eq!(c.len(), 1, "{c:?}");
+        assert!((c[0].product - 25.0 * 34.0).abs() < 1e-9);
+        assert!(!c[0].ok, "{c:?}");
+        assert!(c[0].line().starts_with("FAIL joint timeline_targets"));
+        // A cap at the bound passes; above it fails.
+        set.soft_links
+            .joint
+            .set(Family::Timeline, Family::Targets, Some(st.low.floor()));
+        let c = check_joint(&strata, &Rules::compile(set.clone()).unwrap());
+        assert!(c[0].ok && c[0].line().starts_with("ok"), "{c:?}");
+        set.soft_links
+            .joint
+            .set(Family::Timeline, Family::Targets, Some(st.low * 2.0));
+        let c = check_joint(&strata, &Rules::compile(set.clone()).unwrap());
+        assert!(!c[0].ok, "{c:?}");
+        // With a kind switched off, the families never fire together: only
+        // the cap is listed, and a cap nothing measures passes.
+        set.soft_links.set_lr(SoftLinkKind::CoActivity, 1.0);
+        let c = check_joint(&strata, &Rules::compile(set.clone()).unwrap());
+        assert_eq!(c.len(), 1, "{c:?}");
+        assert!(c[0].ok && c[0].measured.is_none(), "{c:?}");
+        assert!(c[0].line().starts_with("allowed"), "{}", c[0].line());
+        // Co-firing within the product: noted, not failed.
+        let mut set = Rules::default_rules().set.clone();
+        set.soft_links.joint = JointCaps::default();
+        set.soft_links.co_activity = 2.0;
+        set.soft_links.co_target = 2.0;
+        let strata = vec![("s".to_string(), joint_stratum(20, 0))];
+        let c = check_joint(&strata, &Rules::compile(set).unwrap());
+        assert!(c[0].ok && c[0].line().starts_with("note"), "{c:?}");
+        // The counts add across scenarios.
+        let mut a = joint_stratum(1, 1);
+        a.add(&joint_stratum(2, 3));
+        let p = a.joint(Family::Timeline, Family::Targets, &|_| true);
+        assert_eq!((p.same, p.other), (3, 4));
     }
 
     #[test]

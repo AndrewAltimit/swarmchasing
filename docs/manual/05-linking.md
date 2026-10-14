@@ -224,8 +224,9 @@ Each kind of soft link is weighed as a likelihood ratio: how much likelier it is
 
 - **Rarity.** A value many clusters share says less than one two clusters share, and its weight falls with the share of clusters holding it.
 - **Dependence.** Kinds that read one habit are not independent evidence. Encoding, header set, relay stack, scaffold, scaffold lineage, prompt echo, payload dialect, cut length, fan-out and co-groups on templates all describe one harness; shared pauses and co-activity one timeline; reruns, path sets, recon openings, co-targets, ordered co-targets, escalations and co-groups on sites one target list; captured secrets, common features, callback services and identifier generators what an operator holds. A pair **should** count only its strongest tie within each such family, and combine across families.
+- **Joint dependence.** Families are not independent either: clusters running at the same time draw co-activity (timeline) and co-targets (targets) from that one fact. Where two families can fire together for one reason, their combined ratio **should** be capped at the measured ratio of the two firing together, and never fall below the stronger family alone.
 
-The ratios **should** come from measurement: labelled fleets where they exist, and a simulator with ground truth otherwise, with a conservative bound taken rather than the point value. A kind with no measured evidence is off or weighed by stated judgment. Toolkit: `swarmchase sim calibrate` prints each kind's ratio from the simulator; the rules file says which ratios come from it ([methodology](../methodology.md#descriptive-hints)).
+The ratios **should** come from measurement: labelled fleets where they exist, and a simulator with ground truth otherwise, with a conservative bound taken rather than the point value. A kind with no measured evidence is off or weighed by stated judgment. Toolkit: `swarmchase sim calibrate` prints each kind's ratio from the simulator, and each family pair's joint ratio; the rules file says which ratios and joint caps come from it ([methodology](../methodology.md#descriptive-hints)).
 
 ## FM-5.18 Fleets across windows
 
