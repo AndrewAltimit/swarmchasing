@@ -13,7 +13,7 @@
 //! nothing fails: nothing drawn is no evidence of precision.
 
 use crate::measure::{KindStat, Measurement};
-use crate::scenario::{Scenario, ScenarioFile, expect_key};
+use crate::scenario::{GRADE_KEYS, Scenario, ScenarioFile, expect_key};
 use serde::{Deserialize, Serialize};
 
 /// What the null scenarios drew between different runs, summed over their
@@ -214,6 +214,20 @@ impl Gate {
             let m = results.iter().find(|r| r.0 == s.name).map(|r| &r.1);
             for (kind, e) in &s.expect {
                 let name = |what: &str| format!("{} {kind} {what}", s.name);
+                if GRADE_KEYS.contains(&kind.as_str()) {
+                    let value = m.map_or(0, |m| match kind.as_str() {
+                        "human_high" => m.human_high,
+                        _ => m.benign_high,
+                    });
+                    let most = e.max_records.unwrap_or(0);
+                    out.push(Check {
+                        name: name("records"),
+                        value: value.to_string(),
+                        bound: format!("<= {most}"),
+                        ok: value <= most,
+                    });
+                    continue;
+                }
                 let stat = m.and_then(|m| {
                     let (key, edge) = expect_key(kind)?;
                     if edge {

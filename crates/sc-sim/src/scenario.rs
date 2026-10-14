@@ -11,12 +11,49 @@ use std::collections::BTreeMap;
 pub struct ScenarioFile {
     #[serde(default)]
     pub scenario: Vec<Scenario>,
+    /// What every scenario inherits unless it sets its own.
+    #[serde(default)]
+    pub defaults: Defaults,
+    /// Settings of `sim calibrate --check`.
+    #[serde(default)]
+    pub calibration: CalibrationConfig,
+}
+
+/// Settings every scenario inherits.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Defaults {
+    /// Expectations each scenario holds unless its own `expect` names the
+    /// same key (`human_high = { max_records = 0 }`).
+    #[serde(default)]
+    pub expect: BTreeMap<String, Expect>,
+}
+
+/// Settings of the calibration check.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CalibrationConfig {
+    /// Soft-link kinds the rules give a ratio above 1 that no scenario
+    /// measures, each with the reason the ratio stands without a
+    /// measurement. Any other such kind fails the check as unmeasured.
+    #[serde(default)]
+    pub unmeasured: BTreeMap<String, String>,
 }
 
 impl ScenarioFile {
     pub fn parse(text: &str) -> Result<Self, String> {
-        let f: Self = toml::from_str(text).map_err(|e| e.to_string())?;
-        for s in &f.scenario {
+        let mut f: Self = toml::from_str(text).map_err(|e| e.to_string())?;
+        for k in f.calibration.unmeasured.keys() {
+            if serde_json::from_value::<sc_core::SoftLinkKind>(serde_json::json!(k)).is_err() {
+                return Err(format!(
+                    "calibration.unmeasured.{k} names no soft-link kind"
+                ));
+            }
+        }
+        for s in &mut f.scenario {
+            for (k, e) in &f.defaults.expect {
+                s.expect.entry(k.clone()).or_insert_with(|| e.clone());
+            }
             s.check()?;
         }
         Ok(f)
@@ -98,7 +135,16 @@ pub struct Expect {
     /// show does not fire. With it set, drawing nothing passes.
     #[serde(default)]
     pub max_pairs: Option<usize>,
+    /// For a grade ceiling (`human_high`, `benign_high`): records it may
+    /// count at most.
+    #[serde(default)]
+    pub max_records: Option<usize>,
 }
+
+/// Grade ceilings an `expect` table may name: people's records in
+/// clusters graded L3 or above, and benign or tool records graded L2 or
+/// above.
+pub const GRADE_KEYS: [&str; 2] = ["human_high", "benign_high"];
 
 /// The measurement key an `expect` names (an edge kind's serialised name,
 /// a soft-link kind's, or `candidate_fleet`) and whether it is an edge;
@@ -144,9 +190,23 @@ impl Scenario {
                 self.name, a.kind
             ));
         }
-        if let Some(k) = self.expect.keys().find(|k| expect_key(k).is_none()) {
+        if let Some(k) = self
+            .expect
+            .keys()
+            .find(|k| expect_key(k).is_none() && !GRADE_KEYS.contains(&k.as_str()))
+        {
             return Err(format!(
-                "{}: expect.{k} names no edge kind, soft-link kind or candidate_fleet",
+                "{}: expect.{k} names no edge kind, soft-link kind, candidate_fleet or grade ceiling",
+                self.name
+            ));
+        }
+        if let Some((k, _)) = self
+            .expect
+            .iter()
+            .find(|(k, e)| GRADE_KEYS.contains(&k.as_str()) && e.max_records.is_none())
+        {
+            return Err(format!(
+                "{}: expect.{k} is a grade ceiling and needs max_records",
                 self.name
             ));
         }
@@ -282,6 +342,18 @@ pub enum Kind {
     /// parameter of its own, so any two are one structural part apart; each
     /// agent its own operator, over the scenario's span.
     Framework,
+    /// `agents` repositories running one link checker from cloud runners
+    /// on a cron at the top of the hour, each checking the same published
+    /// list of `hosts` in sorted order (`records` checks), with one scripted
+    /// user agent: benign, and a look-alike of a synchronised swarm (S3), of
+    /// co-targeting and of one operator's fleet.
+    CiLinkChecker,
+    /// `agents` SEO audit vendors, each walking one site's sitemap (`hosts`
+    /// subdomains of one family, in sitemap order) sharded over four
+    /// consecutive addresses of its own network: benign, and a look-alike
+    /// of a sharded swarm (S5) and of ordered co-targeting. Each vendor is
+    /// one run.
+    SeoCrawler,
 }
 
 impl Kind {
@@ -326,6 +398,39 @@ pub struct Actor {
     /// Agents put a run tag (`uqtag`) on every request, as many do.
     #[serde(default = "yes")]
     pub tag: bool,
+    /// What a run tag stands for, when set: one per run (as `tag = true`),
+    /// a new one on every request (an agent randomising its tags), or none.
+    /// Overrides `tag`.
+    #[serde(default)]
+    pub tag_scope: Option<TagScope>,
+    /// Every request leaves from a new client (address, network and user
+    /// agent), as a run behind rotating proxies does.
+    #[serde(default)]
+    pub rotate_clients: bool,
+    /// For single agents: each request this many hours after the last (a
+    /// tenth either way), instead of at the run's pace: a low and slow run.
+    #[serde(default)]
+    pub gap_hours: Option<f64>,
+    /// For a fleet: each agent walks its host list again, in the same
+    /// order, this many hours (up to one more) after its run starts, from
+    /// a new client with new tags: one operator rerunning a task.
+    #[serde(default)]
+    pub rerun_after_hours: Option<f64>,
+    /// For a fleet: the operator's quota runs out four minutes after the
+    /// actor's start, and again four minutes after it comes back, and every
+    /// run of the fleet active then goes quiet for this many minutes at
+    /// once. With `window_hours`, the fleet's agents start within that many
+    /// hours of the actor's start.
+    #[serde(default)]
+    pub stall_minutes: Option<f64>,
+    /// For a fleet: every request carries one captured token (redacted, as
+    /// ingest writes it), the same in every run of the fleet.
+    #[serde(default)]
+    pub shared_secret: bool,
+    /// Every request carries one documented demo key (a stock value, as
+    /// ingest redacts it), the same for every client that copies the docs.
+    #[serde(default)]
+    pub stock_secret: bool,
     /// Hours after the scenario start the actor begins.
     #[serde(default)]
     pub offset_hours: f64,
@@ -385,6 +490,30 @@ pub struct Actor {
     /// the actor's.
     #[serde(default)]
     pub prose: Option<Prose>,
+}
+
+/// What a run tag stands for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TagScope {
+    /// One tag per run.
+    Run,
+    /// A new tag on every request.
+    PerRequest,
+    /// No tag.
+    None,
+}
+
+impl Actor {
+    /// The tag scope in force: `tag_scope`, else one per run or none as
+    /// `tag` says.
+    pub fn tags(&self) -> TagScope {
+        self.tag_scope.unwrap_or(if self.tag {
+            TagScope::Run
+        } else {
+            TagScope::None
+        })
+    }
 }
 
 /// Whose prompt templates a run's prose comes from.

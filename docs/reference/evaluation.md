@@ -12,7 +12,8 @@ How the rules are measured, and how CI stops a rules change that costs precision
 - the false-positive rate per benign class;
 - the reviewed benign baseline: progress toward its target and the false-positive bound per tier ([benign baseline](#a-reviewed-benign-baseline));
 - a calibration table: the share of labelled records that are agents, per tier and per agent grade ([calibration](#calibration));
-- precision per rule, with its hard negatives;
+- precision per rule, with its hard negatives and the benign records it alone lifted to suggestive or above;
+- margins: how close the benign records sit to the suggestive threshold, and recall without each rule ([margins](#margins));
 - linking against labelled runs ([cluster-level evaluation](#cluster-level-evaluation));
 - agent grades against each record's actor ([agent grades by actor](#agent-grades-by-actor));
 - rule coverage, in one line, or per rule with `--coverage`;
@@ -75,10 +76,11 @@ The calibration table gives, for the records at each tier (`noise`, `suggestive`
 
 ## The eval gate
 
-With `--min-*` floors, `eval` exits non-zero when a floor is not met. [`eval-gate.sh`](../../scripts/ci/eval-gate.sh) runs it on [`samples/eval/`](../../samples/eval/README.md) with the floors written in the script, in CI on every pull request and push and in the pre-commit hook when `rules/`, `crates/sc-core/`, `crates/sc-sim/`, `samples/eval/` or `samples/sim/` is staged. It then runs [`eval check-results`](#checking-saved-results) on the saved results, the [simulator bounds](#simulator-bounds), and `sim calibrate --check` ([simulated scenarios](#simulated-scenarios)).
+With `--min-*` floors, `eval` exits non-zero when a floor is not met. [`eval-gate.sh`](../../scripts/ci/eval-gate.sh) runs it on [`samples/eval/`](../../samples/eval/README.md) with the floors written in the script, in CI on every pull request and push and in the pre-commit hook when `rules/`, `crates/sc-core/`, `crates/sc-sim/`, `samples/eval/` or `samples/sim/` is staged. It then runs [`eval check-results`](#checking-saved-results) on the saved results, and the [simulator bounds](#simulator-bounds) with the calibration check in the same pass (`sim bench --calibrate-check`, [simulated scenarios](#simulated-scenarios)). The hook runs it optimised (`--profile release-test`), as CI does.
 
 - **Point floors**: `--min-{significant,suggestive}-{precision,recall}` on the point estimates.
 - **Interval floors**: `--min-{significant,suggestive}-precision-lower` on the lower end of the precision interval. They were set at the bounds the set gave when they were added, rounded down.
+- **Cluster floors**: `--min-cluster-{suggestive,significant}-recall` on recall counted per cluster ([units](#record-and-cluster-units)), `--min-nonsynthetic-cluster-…` the same two over the records not marked synthetic, and `--min-bcubed-f1` on B-cubed F1 ([cluster-level evaluation](#cluster-level-evaluation)). They were set at the values the set gave when they were added, rounded down.
 - **Non-synthetic floors**: `--min-nonsynthetic-…` takes the same six floors over the records not marked synthetic. The gate sets both sets, so hand-written fixtures cannot hold a number up on their own. The non-synthetic recall and interval floors were set at the values the set gave when they were added, rounded down; the precision floors are the same 90% as the others.
 - **The floors are a ratchet.** Raise one when a change improves the numbers; never lower one to land a change. Fix the rule, or argue the label in `samples/eval/` instead.
 - **A rules change gives its numbers.** The commit message carries the before and after `eval` output: precision and recall at both tiers, for all and for non-synthetic records, and the changed rule's own precision ([contributing a rule](../../CONTRIBUTING.md#contributing-a-rule)).
@@ -91,11 +93,20 @@ With `--require-coverage`, `eval` fails when a rule has no positive and is not o
 
 ## Cluster-level evaluation
 
-Records labelled with `run` measure linking. The numbers are reported, never gated.
+Records labelled with `run` measure linking. The eval gate holds a floor on B-cubed F1; the rest is reported.
 
-- **B-cubed precision, recall and F1**, over run-labelled records only. A record's predicted group is its cluster, or the record alone when it is in none.
-- **False merges**: clusters whose labelled members span two or more runs, or mix agent and benign records. Each is listed by cluster key with the runs it joins.
+- **B-cubed precision, recall and F1**, over run-labelled records only. A record's predicted group is its cluster, or the record alone when it is in none. For precision, a member of another run of the record's labelled `swarm` counts as right: one swarm's agents share an inbox or a tag by design, and linking them is the analysis working. The strict precision, counting only the record's own run, is printed beside it. Recall reads runs only.
+- **False merges**: clusters whose labelled members span two or more runs, or mix agent and benign records. Each is listed by cluster key with the runs it joins. A cluster whose runs all belong to one labelled swarm is a **swarm merge**, listed apart and not counted in the false-merge rate.
 - **Split runs**: runs whose records sit in more than one predicted group. An agent record no rule fired on is never clustered, so a run with a missed record always shows as split.
+
+### Margins
+
+The margin report reads each labelled record's own hits against the rules the analysis ran with. Nothing is analysed again, so it is cheap and approximate where a record's tier depends on more than its hits. It is reported, never gated.
+
+- **Benign records one point below suggestive**: one more weak hit flags each of them.
+- **Hard-negative margins**: per rule with hard negatives, the highest score among them and the points from it to the suggestive threshold. A margin of 1 is a trap one weak rule away from firing.
+- **Lifted**: per rule, the benign records at suggestive or above that would fall below it without the rule: the false positives the rule causes on its own. It is the column beside any-tier precision in the rule table, which counts every benign record the rule fired on.
+- **Leave one rule out**: per rule, the agent records at suggestive or above that would fall below it without the rule, and the recall left. The rules a large share of recall rests on alone are the ones a rules change must not weaken.
 
 ## Agent grades by actor
 
@@ -164,6 +175,8 @@ The unit is a pair of true runs. An edge side is placed on the run most of its r
 - **Soft links and candidate fleets**, per kind: precision is the share of linked cluster pairs with one operator. Recall is over operator pairs in different clusters above noise; pairs already in one cluster are counted apart.
 - **Distinct runs and split runs**: a soft link between two clusters of one run counts as right in the precision above. It is also printed between distinct runs only, with same-run pairs left out of both counts, and the pairs of clusters above noise on one run (a split run) are counted with how many each kind rejoins.
 - **Agent grades**: records by actor and class against the grade columns, as in [agent grades by actor](#agent-grades-by-actor). A benign record that names no actor is left out, as in `eval`. Benign and tool records in clusters graded L2 or above, and people's records at L3 or above, are counted on their own.
+- **Clusters against true runs**: over agent records, B-cubed precision, recall and F1 (a swarm's other runs right for precision, as in `eval`) and the adjusted Rand index (runs only, from pair counts summed over seeds), so a merge of one swarm's runs lowers the index and not the precision.
+- **Time to detect**: per true agent run, the records and minutes from its first record to its first record at suggestive or above. With `sim bench --detect-checkpoints N`, each generated file is also cut into `N` prefixes by time and each prefix analysed afresh, for the minutes until the run's cluster is graded L2 or above or joins a candidate fleet; a checkpoint's time is its last record's, so those minutes are an upper bound at the checkpoints' spacing. Medians and 90th percentiles are printed.
 
 Every proportion has its Wilson interval. Every kind is listed with its recall denominator in every file and seed, fired or not, so summed recall counts the true pairs a kind missed where it drew nothing. `sim score` numbers are reported, never gated. The committed labelled groups are hand-written and few, so the intervals are wide and the numbers say whether a detector fires on its designed case, not how often it would on real traffic. The simulated scenarios below are gated.
 
@@ -183,7 +196,10 @@ Two actors exercise the harness-family fleet tests: prompt fleets (`prompt_fleet
 - **Escalators** send each relay record's target directly first (unanswered), then the record as written through the relay 11 to 25 minutes later, past the linking window and within the escalation window. Each route is a separate tool with its own run tag, so the steps fall in two clusters of one run and draw escalation links.
 - **Timing options.** `jitter_secs` sets how late a synchronised worker leaves after each dispatch (2 seconds by default; beyond the lockstep tolerance it is a loose swarm). `window_hours` starts single agents and background runs within that many hours instead of over the scenario's span, and `same_family` has single agents draw their hosts from one shared family: together, a news spike sending unrelated agents to one target at once.
 - **Lists and prose.** `in_order` has every agent of a target list, news spike or hub walk the hosts in one seeded order, `sorted` in the hosts' sorted order, as a published sorted list gives it. `prose` has an actor's requests carry their intent as synthetic prose in a `query` parameter, written from prompt templates of the run's own (`own`), its operator's (`operator`) or the whole actor's (`shared`: a viral prompt or a published query list copied by unrelated operators); the prose is built from a fixed list of plain words, never from records.
+- **Reruns, stalls and secrets.** On a fleet, `rerun_after_hours` has each agent walk its host list again in the same order that many hours (up to one more) after it started, from a new client with new tags; `stall_minutes` stops every run of the fleet active four minutes after the actor's start for that many minutes, and again four minutes after it comes back, as an operator's quota does (`window_hours` then starts the fleet's agents within that many hours); `shared_secret` has every request carry one captured token, the same in every run. `stock_secret` has an actor's requests carry one documented demo key, a stock value that must tie nothing.
+- **Evasion.** `tag_scope` says what a run tag stands for: `run` (as `tag = true`), `per_request` (a new tag on every request) or `none`. `rotate_clients` sends every request from a new client. `gap_hours` spaces a single agent's requests that many hours apart, a tenth either way: a low and slow run.
 - **Benign look-alikes**, each client its own run and operator: an uptime service (`uptime_monitor`) checking the same URLs every minute from several regions within a second of each other (a lockstep look-alike), an internet-wide scanner (`internet_scanner`) sharding one host family over consecutive addresses of one network (a partition and scaffold look-alike), link-preview bots (`link_preview`) fetching each posted link within seconds (a co-activity look-alike), and feed readers (`feed_poller`) polling the same feeds in one order through one outage (a rerun and shared-pause look-alike). Their content is the benign records of their kind that a rule fires on, so the timing and linking detectors see them.
+- **More look-alikes**: CI link checkers (`ci_link_checker`) in many repositories starting on the hour from cloud runners over one published list in sorted order with one scripted user agent (a lockstep, co-target and fleet look-alike), and SEO audit vendors (`seo_crawler`) each walking one site's sitemap in order, sharded over four consecutive addresses of its own network (a partition and ordered co-target look-alike; each vendor is one run).
 
 `off_hour` moves an actor's start to a seeded 7 to 53 minutes past its hour, so a synchronized swarm does not begin on a clock hour. `palette_share` below 1 has each swarm, scheduler or single agent draw from its own seeded share of the palette.
 
@@ -193,11 +209,19 @@ The generator writes no request content. Each record copies a committed evaluati
 
 `ordered-list` measures ordered co-targets. `harness-crowd` measures scaffold lineage (a two-agent fleet upgraded mid-way, beside framework users one parameter apart) and prompt echo (a two-agent prompt fleet, beside a viral prompt three unrelated agents copy and a query list twelve copy) among a crowd of agents writing prose of their own: both tests read a key two clusters hold at a base rate of one over the other comparable clusters, so a true pair passes only among a hundred or more. `sync-tool` and `submit-basis` show what is built not to fire: no lockstep at tool pace, and no client-split edges where the records carry no client.
 
+`rerun` measures reruns and shared pauses: a fleet whose three agents run together, stall together twice and rerun their lists the next day, beside feed readers, an uptime service and unrelated agents walking one published list in one order over two days, which draw rerun links as one operator would. `shared-secret` measures captured secrets beside unrelated agents sending one demo key.
+
+`ci-link-checker` (null) and `seo-crawler` are benign look-alikes built not to draw lockstep, co-target, ordered co-target, partition or fleet pairs. `evasive-swarm` is the sink swarm with per-request tags and rotating clients, and `low-and-slow` one run spaced past the feature link window over about two weeks: both measure how linking degrades, reported by their clustering numbers and split runs, with no expectation of their own.
+
 `swarmchase sim calibrate samples/sim/scenarios.toml` switches every soft-link kind on and prints each kind's likelihood ratio over the pairs of clusters on distinct true runs: the pairs of one operator and the unrelated pairs it links, the point ratio and a conservative one (the lower Wilson bound of the first share over the upper bound of the second), beside the ratio the rules set. The bundled ratios start from the conservative values ([methodology](../methodology.md#descriptive-hints)).
 
-It then prints the ratios stratified by scenario: a Mantel-Haenszel ratio over the scenarios where the kind fired and both kinds of pair exist, the lower bound of its Greenland-Robins interval, and each scenario's own ratio, so the unrelated pairs of a few crowded scenarios do not inflate a pooled ratio. `--check` exits non-zero when a ratio the rules set is above that stratified lower bound; the [eval gate](#the-eval-gate) runs it on the committed scenarios, so a scenario that lowers a kind's bound lowers the bundled ratio with it. A scenario of only unrelated pairs is no stratum, so a hard negative counts toward a kind's bound only beside a true case of it.
+It then prints the ratios stratified by scenario: a Mantel-Haenszel ratio over the scenarios where the kind fired and both kinds of pair exist, the lower bound of its Greenland-Robins interval, and each scenario's own ratio, so the unrelated pairs of a few crowded scenarios do not inflate a pooled ratio. `--check` exits non-zero when a ratio the rules set is above that stratified lower bound, and prints `UNMEASURED` and fails for a kind the rules give a ratio above 1 that no scenario measures, unless the scenario file's `[calibration.unmeasured]` table names it with the reason (printed as `allowed`).
 
-A scenario's `expect` table names the kinds it is built to produce, each with bounds on that scenario's own measurement: `expect.S3 = { min_precision = 1.0, min_recall = 0.8 }` for an edge kind (by id or name), and the same for a soft-link kind or `candidate_fleet`, which also take `min_rejoined` (the share of split-run pairs the kind rejoins). `max_pairs` caps what a kind draws, `expect.S3 = { max_pairs = 0 }` for a kind the scenario is built to show does not fire; with it, drawing nothing passes. The bounds are set at or just below what the scenario measures and only tighten.
+`sim bench --calibrate-check` runs the same check on the records the bench generated, so each is generated once; the [eval gate](#the-eval-gate) runs it on the committed scenarios, so a scenario that lowers a kind's bound lowers the bundled ratio with it. A scenario of only unrelated pairs is no stratum, so a hard negative counts toward a kind's bound only beside a true case of it.
+
+A scenario's `expect` table names the kinds it is built to produce, each with bounds on that scenario's own measurement: `expect.S3 = { min_precision = 1.0, min_recall = 0.8 }` for an edge kind (by id or name), and the same for a soft-link kind or `candidate_fleet`, which also take `min_rejoined` (the share of split-run pairs the kind rejoins). `max_pairs` caps what a kind draws, `expect.S3 = { max_pairs = 0 }` for a kind the scenario is built to show does not fire; with it, drawing nothing passes.
+
+`human_high` and `benign_high` are grade ceilings, `expect.human_high = { max_records = 0 }`: people's records graded L3 or above, and benign or tool records graded L2 or above, in that scenario. The file's `[defaults]` table gives expectations every scenario holds unless it sets the same key; the committed file sets both ceilings to 0 there, and the scenarios with people pasting payloads or planting records set their own. The bounds are set at or just below what the scenario measures and only tighten.
 
 A scenario marked `null = true` has only background actors and single agents, and the file checks it: no two of its runs are related, so every edge, soft link and candidate fleet it draws between different runs is false. The null scenarios run under many seeds, and `sim bench` prints what they drew.
 
@@ -280,7 +304,8 @@ A proportion is `{"k", "n", "value", "lo", "hi"}`: `k` of `n`, the point estimat
 | `non_synthetic` | A slice over the records not marked synthetic. |
 | `by_provenance[]`, `by_source[]`, `by_file[]` | Slices per provenance, record source and label file. `by_file` is empty when the caller did not say which file each label came from. |
 | `calibration` | `by_tier[]` and `by_agent_level[]`, rows of `name` and `precision` (a proportion: agents of labelled records in the row). |
-| `rules[]` | Every rule in the file: `rule_id`, `tactics`, `artifact` (when set), `tp`, `fp`, `precision`, `hard_negatives`, `hard_negatives_fired`, `covered`, `allowed` (the allow-list reason, when listed). |
+| `rules[]` | Every rule in the file: `rule_id`, `tactics`, `artifact` (when set), `tp`, `fp`, `precision`, `hard_negatives`, `hard_negatives_fired`, `benign_lifted`, `covered`, `allowed` (the allow-list reason, when listed). |
+| `margins` | The [margins](#margins), described below. |
 | `coverage` | `rules`, `covered`, `allowed`, `uncovered` (rule ids), `with_hard_negatives`, `unknown_hard_negative_ids`. |
 | `agent_classes[]`, `tactics[]` | `name`, `n`, and recall as `suggestive` and `significant` proportions. |
 | `benign_classes[]` | `name`, `n`, and the false-positive rate as `suggestive` and `significant` proportions. |
@@ -289,7 +314,9 @@ A proportion is `{"k", "n", "value", "lo", "hi"}`: `k` of `n`, the point estimat
 
 A slice is `name`, `labelled`, `agents`, `benign`, `tiers[]` (record unit) and `cluster_tiers[]` (cluster unit).
 
-`clusters` holds `run_labelled`, `runs`, `bcubed_precision`, `bcubed_recall`, `bcubed_f1` and `false_merge_rate` (numbers or `null`). It also holds `clusters_checked`, `false_splits` (run ids) and `false_merges[]`, each with `cluster` (key), `members`, `runs` and `mixes_labels`.
+`clusters` holds `run_labelled`, `runs`, `bcubed_precision`, `bcubed_recall`, `bcubed_f1`, `bcubed_precision_strict` and `false_merge_rate` (numbers or `null`). It also holds `clusters_checked`, `false_splits` (run ids), and `false_merges[]` and `swarm_merges[]`, each with `cluster` (key), `members`, `runs` and `mixes_labels`.
+
+`margins` holds `suggestive` (the threshold), `benign_one_below`, `hard_negatives[]` (`rule_id`, `records`, `max_score`, `margin`), `lifted` (rule id to benign records), `agents`, `agents_flagged` and `leave_one_out[]` (`rule_id`, `dropped`, `recall_without`).
 
 `baseline` holds `target`, `reviewed`, `benign`, `agents`, `excluded` (tuned or synthetic) and `tiers[]`, each with `tier`, `fp_rate` (a proportion), `upper` (the 95% upper bound) and `method` (`rule_of_three` or `wilson`).
 

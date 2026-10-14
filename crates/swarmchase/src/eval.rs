@@ -65,6 +65,21 @@ pub struct Floors {
     pub min_nonsynthetic_significant_precision_lower: Option<f64>,
     #[arg(long)]
     pub min_nonsynthetic_suggestive_precision_lower: Option<f64>,
+    /// Fail if recall at suggestive-or-above, counted per cluster (a
+    /// cluster, or an unclustered record, counts once), is below this.
+    #[arg(long)]
+    pub min_cluster_suggestive_recall: Option<f64>,
+    /// Fail if per-cluster recall at the significant tier is below this.
+    #[arg(long)]
+    pub min_cluster_significant_recall: Option<f64>,
+    /// The same two cluster floors over the records not marked `synthetic`.
+    #[arg(long)]
+    pub min_nonsynthetic_cluster_suggestive_recall: Option<f64>,
+    #[arg(long)]
+    pub min_nonsynthetic_cluster_significant_recall: Option<f64>,
+    /// Fail if B-cubed F1 of clusters against labelled runs is below this.
+    #[arg(long)]
+    pub min_bcubed_f1: Option<f64>,
 }
 
 /// Labels from `--labels` files, or, when none are given, from the inputs
@@ -208,9 +223,11 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
             println!("  {theirs:<12} {}", row.join(" · "));
         }
     }
+    // Precision counts every benign record a rule fired on, at any tier;
+    // `lifted` the benign records it alone took to suggestive or above.
     println!(
-        "\n{:<32} {:>6} {:>7} {:>9} {:>6}",
-        "rule", "agent", "benign", "precision", "hardneg"
+        "\n{:<32} {:>6} {:>7} {:>9} {:>7} {:>6}",
+        "rule", "agent", "benign", "precision", "lifted", "hardneg"
     );
     for x in &r.rules {
         let hn = r
@@ -219,11 +236,12 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
             .copied()
             .unwrap_or_default();
         println!(
-            "{:<32} {:>6} {:>7} {:>9} {:>6}",
+            "{:<32} {:>6} {:>7} {:>9} {:>7} {:>6}",
             x.rule_id,
             x.on_agent,
             x.on_benign,
             pct(x.precision),
+            s.margins.lifted.get(&x.rule_id).copied().unwrap_or(0),
             if hn.records > 0 {
                 format!("{}/{}", hn.fired, hn.records)
             } else {
@@ -231,6 +249,7 @@ pub fn print(r: &EvalReport, s: &Summary, labels: &LabelSet, show_fp: usize) {
             }
         );
     }
+    print_margins(&s.margins);
     print_clusters(s);
     print_grades(&r.grades, "actor");
     print_swarm(&r.swarm);
@@ -529,6 +548,68 @@ fn print_swarm(w: &sc_core::swarm::SwarmEval) {
     }
 }
 
+/// How close the benign records sit to the suggestive threshold, and what
+/// recall loses without each rule. Report only.
+fn print_margins(m: &sc_core::eval::coverage::Margins) {
+    if m.agents == 0 && m.hard_negatives.is_empty() {
+        return;
+    }
+    println!(
+        "\nmargins (report only): suggestive at score {} · benign records one point below it {}",
+        m.suggestive, m.benign_one_below
+    );
+    // Hard-negative rules by how close their nearest benign record sits.
+    let mut by_margin: std::collections::BTreeMap<i32, Vec<&str>> = Default::default();
+    for h in &m.hard_negatives {
+        by_margin.entry(h.margin).or_default().push(&h.rule_id);
+    }
+    for (margin, rules) in by_margin.iter().take(3) {
+        let shown: Vec<&str> = rules.iter().take(8).copied().collect();
+        println!(
+            "  hard-negative rules whose highest benign score is {margin} point(s) below it: {}{}",
+            rules.len(),
+            if shown.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " ({}{})",
+                    shown.join(", "),
+                    if rules.len() > shown.len() {
+                        ", ..."
+                    } else {
+                        ""
+                    }
+                )
+            }
+        );
+    }
+    if m.leave_one_out.is_empty() {
+        println!("  leave one rule out: no single rule holds an agent record at suggestive");
+        return;
+    }
+    let base = m.agents_flagged as f64 / m.agents.max(1) as f64;
+    println!(
+        "  leave one rule out (recall at suggestive or above {:.1}% with every rule; rules whose removal drops a record, most first):",
+        base * 100.0
+    );
+    const SHOWN: usize = 12;
+    for d in m.leave_one_out.iter().take(SHOWN) {
+        println!(
+            "    {:<32} {:>4} record(s) drop · recall {:.1}%",
+            d.rule_id,
+            d.dropped,
+            d.recall_without * 100.0
+        );
+    }
+    if m.leave_one_out.len() > SHOWN {
+        println!(
+            "    and {} more rule(s), each holding at most {} record(s)",
+            m.leave_one_out.len() - SHOWN,
+            m.leave_one_out[SHOWN].dropped
+        );
+    }
+}
+
 fn print_clusters(s: &Summary) {
     let c = &s.clusters;
     if c.run_labelled == 0 && c.false_merges.is_empty() {
@@ -536,18 +617,20 @@ fn print_clusters(s: &Summary) {
     }
     let f = |x: Option<f64>| x.map_or("n/a".into(), |v| format!("{v:.3}"));
     println!(
-        "\nlinking (report only): {} run-labelled records in {} runs · B-cubed precision {} recall {} F1 {}",
+        "\nlinking: {} run-labelled records in {} runs · B-cubed precision {} recall {} F1 {} · strict precision {} (a swarm's other runs counted wrong)",
         c.run_labelled,
         c.runs,
         f(c.bcubed_precision),
         f(c.bcubed_recall),
-        f(c.bcubed_f1)
+        f(c.bcubed_f1),
+        f(c.bcubed_precision_strict)
     );
     println!(
-        "  false merges {}/{} clusters ({}) · runs split over several groups {}",
+        "  false merges {}/{} clusters ({}) · merges inside one swarm {} · runs split over several groups {}",
         c.false_merges.len(),
         c.clusters_checked,
         pct(c.false_merge_rate),
+        c.swarm_merges.len(),
         c.false_splits.len()
     );
     for m in &c.false_merges {
@@ -561,6 +644,14 @@ fn print_clusters(s: &Summary) {
             } else {
                 ""
             }
+        );
+    }
+    for m in &c.swarm_merges {
+        println!(
+            "  swarm merge {} ({} records): runs [{}]",
+            m.cluster,
+            m.members,
+            m.runs.join(", ")
         );
     }
     if !c.false_splits.is_empty() {
@@ -692,6 +783,36 @@ pub fn check(s: &Summary, f: &Floors) -> Vec<String> {
         need(set, tiers, sug, "recall", floors[3], rec);
         need(set, tiers, sig, lower, floors[4], lo);
         need(set, tiers, sug, lower, floors[5], lo);
+    }
+    for (set, tiers, floors) in [
+        (
+            "cluster unit ",
+            &s.cluster_tiers,
+            [
+                f.min_cluster_significant_recall,
+                f.min_cluster_suggestive_recall,
+            ],
+        ),
+        (
+            "non-synthetic cluster unit ",
+            &s.non_synthetic.cluster_tiers,
+            [
+                f.min_nonsynthetic_cluster_significant_recall,
+                f.min_nonsynthetic_cluster_suggestive_recall,
+            ],
+        ),
+    ] {
+        need(set, tiers, sig, "recall", floors[0], rec);
+        need(set, tiers, sug, "recall", floors[1], rec);
+    }
+    if let Some(floor) = f.min_bcubed_f1 {
+        match s.clusters.bcubed_f1 {
+            Some(v) if v + 1e-9 >= floor => {}
+            Some(v) => out.push(format!("B-cubed F1 {v:.3} < floor {floor:.3}")),
+            None => out.push(format!(
+                "B-cubed F1 undefined (no run-labelled record) - floor {floor:.3} not met"
+            )),
+        }
     }
     out
 }
@@ -1179,5 +1300,20 @@ mod tests {
             "{fails:?}"
         );
         assert_eq!(Counts::of(&s).non_synthetic_labelled, 1);
+        // Cluster-unit recall and B-cubed F1: the second record is missed,
+        // and no record carries a run.
+        let f = Floors {
+            min_cluster_suggestive_recall: Some(0.5),
+            min_nonsynthetic_cluster_significant_recall: Some(0.5),
+            min_bcubed_f1: Some(0.5),
+            ..Default::default()
+        };
+        let fails = check(&s, &f);
+        assert_eq!(fails.len(), 2, "{fails:?}");
+        assert!(
+            fails[0].starts_with("non-synthetic cluster unit significant recall 0.0%"),
+            "{fails:?}"
+        );
+        assert!(fails[1].starts_with("B-cubed F1 undefined"), "{fails:?}");
     }
 }

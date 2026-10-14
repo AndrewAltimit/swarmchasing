@@ -110,6 +110,269 @@ pub struct Measurement {
     /// People's records in clusters graded L3 or above.
     #[serde(default)]
     pub human_high: usize,
+    /// Agents' records grouped by cluster against their true runs.
+    #[serde(default)]
+    pub clustering: Clustering,
+    /// How soon each true agent run is flagged.
+    #[serde(default)]
+    pub detection: Detection,
+}
+
+/// Clusters against true runs, over records labelled agent: each record's
+/// predicted group is its cluster, or the record alone when it is in none.
+/// B-cubed precision counts a member of another run of the record's swarm
+/// as right (a swarm's agents share an inbox or a tag by design); recall
+/// and the adjusted Rand index read runs only. Sums, so seeds and scenarios
+/// add; the ratios are read off the sums.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Clustering {
+    pub records: usize,
+    /// B-cubed precision and recall, summed over records.
+    pub bcubed_precision_sum: f64,
+    pub bcubed_recall_sum: f64,
+    /// Pair counts for the adjusted Rand index: pairs of records, pairs in
+    /// one group and one run, pairs in one group, pairs in one run.
+    pub pairs: f64,
+    pub pairs_both: f64,
+    pub pairs_group: f64,
+    pub pairs_run: f64,
+}
+
+impl Clustering {
+    pub fn bcubed(&self) -> Option<(f64, f64, f64)> {
+        if self.records == 0 {
+            return None;
+        }
+        let n = self.records as f64;
+        let (p, r) = (self.bcubed_precision_sum / n, self.bcubed_recall_sum / n);
+        let f = if p + r > 0.0 {
+            2.0 * p * r / (p + r)
+        } else {
+            0.0
+        };
+        Some((p, r, f))
+    }
+
+    /// The adjusted Rand index (Hubert and Arabie) from the summed pair
+    /// counts: 1 for groups that are the runs, about 0 for chance.
+    pub fn ari(&self) -> Option<f64> {
+        if self.pairs <= 0.0 {
+            return None;
+        }
+        let expected = self.pairs_group * self.pairs_run / self.pairs;
+        let max = (self.pairs_group + self.pairs_run) / 2.0;
+        if (max - expected).abs() < 1e-12 {
+            return Some(1.0);
+        }
+        Some((self.pairs_both - expected) / (max - expected))
+    }
+
+    fn add(&mut self, o: &Self) {
+        self.records += o.records;
+        self.bcubed_precision_sum += o.bcubed_precision_sum;
+        self.bcubed_recall_sum += o.bcubed_recall_sum;
+        self.pairs += o.pairs;
+        self.pairs_both += o.pairs_both;
+        self.pairs_group += o.pairs_group;
+        self.pairs_run += o.pairs_run;
+    }
+}
+
+/// How soon true agent runs are flagged: from the whole analysis, records
+/// and minutes from each run's first record to its first record at
+/// suggestive or above; with checkpoints, minutes to the first prefix of
+/// the records (cut at evenly spaced record counts, sorted by time) whose
+/// analysis grades the run's cluster L2 or above or puts it in a candidate
+/// fleet. A checkpoint's time is its last record's, so those minutes are
+/// an upper bound at the checkpoints' spacing.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Detection {
+    /// True agent runs.
+    pub runs: usize,
+    /// Per flagged run: its records up to and including the first flagged.
+    pub records_to_flag: Vec<usize>,
+    pub minutes_to_flag: Vec<f64>,
+    /// Checkpoints each analysis was cut at; 0 when none was run.
+    #[serde(default)]
+    pub checkpoints: usize,
+    /// Per run that reached L2 or a candidate fleet at a checkpoint.
+    #[serde(default)]
+    pub minutes_to_escalate: Vec<f64>,
+}
+
+impl Detection {
+    fn add(&mut self, o: &Self) {
+        self.runs += o.runs;
+        self.records_to_flag.extend(&o.records_to_flag);
+        self.minutes_to_flag.extend(&o.minutes_to_flag);
+        self.checkpoints = self.checkpoints.max(o.checkpoints);
+        self.minutes_to_escalate.extend(&o.minutes_to_escalate);
+    }
+}
+
+/// The `q` quantile (nearest rank) of `xs`, `None` when empty.
+pub fn quantile(xs: &[f64], q: f64) -> Option<f64> {
+    if xs.is_empty() {
+        return None;
+    }
+    let mut v = xs.to_vec();
+    v.sort_by(f64::total_cmp);
+    let k = ((q * v.len() as f64).ceil() as usize).clamp(1, v.len());
+    Some(v[k - 1])
+}
+
+fn choose2(n: usize) -> f64 {
+    let n = n as f64;
+    n * (n - 1.0) / 2.0
+}
+
+/// Agent records' clusters against their runs.
+fn clustering(a: &Analysis, truth: &Truth) -> Clustering {
+    let mut seen = BTreeSet::new();
+    // (group, run) per agent record; a record in no cluster is its own group.
+    let mut recs: Vec<((bool, usize), &str)> = Vec::new();
+    let mut swarm_of: BTreeMap<&str, &str> = BTreeMap::new();
+    for (i, r) in a.results.iter().enumerate() {
+        let Some(t) = truth.get(&r.obs.id) else {
+            continue;
+        };
+        if t.label != Some(Label::Agent) || !seen.insert(r.obs.id.as_str()) {
+            continue;
+        }
+        let g = r.cluster.map_or((false, i), |c| (true, c));
+        recs.push((g, t.run.as_str()));
+        if let Some(sw) = t.swarm_id() {
+            swarm_of.insert(t.run.as_str(), sw);
+        }
+    }
+    let mut out = Clustering {
+        records: recs.len(),
+        pairs: choose2(recs.len()),
+        ..Clustering::default()
+    };
+    let mut group: BTreeMap<(bool, usize), usize> = BTreeMap::new();
+    let mut run: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut both: BTreeMap<((bool, usize), &str), usize> = BTreeMap::new();
+    for &(g, r) in &recs {
+        *group.entry(g).or_default() += 1;
+        *run.entry(r).or_default() += 1;
+        *both.entry((g, r)).or_default() += 1;
+    }
+    // Precision counts members of the record's swarm's other runs as right,
+    // as `eval` does: one swarm's agents share an inbox or a tag by design.
+    let mut group_runs: BTreeMap<(bool, usize), Vec<(&str, usize)>> = BTreeMap::new();
+    for (&(g, r), &n) in &both {
+        group_runs.entry(g).or_default().push((r, n));
+    }
+    let one_swarm =
+        |x: &str, y: &str| x == y || swarm_of.get(x).is_some_and(|s| swarm_of.get(y) == Some(s));
+    for &(g, r) in &recs {
+        let same = both[&(g, r)] as f64;
+        let swarm: usize = group_runs[&g]
+            .iter()
+            .filter(|(x, _)| one_swarm(x, r))
+            .map(|x| x.1)
+            .sum();
+        out.bcubed_precision_sum += swarm as f64 / group[&g] as f64;
+        out.bcubed_recall_sum += same / run[r] as f64;
+    }
+    out.pairs_both = both.values().map(|&n| choose2(n)).sum();
+    out.pairs_group = group.values().map(|&n| choose2(n)).sum();
+    out.pairs_run = run.values().map(|&n| choose2(n)).sum();
+    out
+}
+
+/// Records and minutes to each agent run's first flagged record.
+fn detection(a: &Analysis, truth: &Truth) -> Detection {
+    let mut seen = BTreeSet::new();
+    let mut by_run: BTreeMap<&str, Vec<(i64, bool)>> = BTreeMap::new();
+    for r in &a.results {
+        let Some(t) = truth.get(&r.obs.id) else {
+            continue;
+        };
+        if t.label != Some(Label::Agent) || !seen.insert(r.obs.id.as_str()) {
+            continue;
+        }
+        by_run
+            .entry(t.run.as_str())
+            .or_default()
+            .push((r.obs.ts, r.tier >= Tier::Suggestive));
+    }
+    let mut out = Detection {
+        runs: by_run.len(),
+        ..Detection::default()
+    };
+    for recs in by_run.values_mut() {
+        recs.sort_by_key(|x| (x.0, !x.1));
+        if let Some(k) = recs.iter().position(|x| x.1) {
+            out.records_to_flag.push(k + 1);
+            out.minutes_to_flag
+                .push((recs[k].0 - recs[0].0) as f64 / 60.0);
+        }
+    }
+    out
+}
+
+/// Minutes from each agent run's first record to the first of
+/// `checkpoints` prefixes of `obs` (sorted by time) whose analysis grades
+/// the cluster holding most of the run's records so far L2 or above, or
+/// puts it in a candidate fleet. Each prefix is analysed afresh.
+pub fn escalation_times(
+    obs: &[sc_core::Observation],
+    truth: &Truth,
+    rules: &sc_core::Rules,
+    checkpoints: usize,
+) -> Vec<f64> {
+    let mut sorted: Vec<&sc_core::Observation> = obs.iter().collect();
+    sorted.sort_by_key(|o| o.ts);
+    let n = sorted.len();
+    let mut first: BTreeMap<String, i64> = BTreeMap::new();
+    for o in &sorted {
+        if let Some(t) = truth.get(&o.id)
+            && t.label == Some(Label::Agent)
+        {
+            first.entry(t.run.clone()).or_insert(o.ts);
+        }
+    }
+    let mut done: BTreeMap<String, f64> = BTreeMap::new();
+    for j in 1..=checkpoints.max(1) {
+        let m = (n * j).div_ceil(checkpoints.max(1));
+        if m == 0 {
+            continue;
+        }
+        let cut = sorted[m - 1].ts;
+        let prefix: Vec<sc_core::Observation> = sorted[..m].iter().map(|o| (*o).clone()).collect();
+        let a = sc_core::analyze(prefix, rules);
+        let fleet: BTreeSet<usize> = a
+            .candidate_fleets
+            .iter()
+            .flat_map(|f| f.clusters.iter().filter_map(|c| a.cluster_index(c)))
+            .collect();
+        // Each run's cluster holding most of its records so far.
+        let mut counts: BTreeMap<&str, BTreeMap<usize, usize>> = BTreeMap::new();
+        for r in &a.results {
+            let (Some(t), Some(c)) = (truth.get(&r.obs.id), r.cluster) else {
+                continue;
+            };
+            if t.label == Some(Label::Agent) && !done.contains_key(&t.run) {
+                *counts
+                    .entry(t.run.as_str())
+                    .or_default()
+                    .entry(c)
+                    .or_default() += 1;
+            }
+        }
+        for (run, cs) in counts {
+            let Some((&c, _)) = cs.iter().max_by_key(|x| (*x.1, std::cmp::Reverse(*x.0))) else {
+                continue;
+            };
+            if a.clusters[c].agent.level >= AgentLevel::ModelWritten || fleet.contains(&c) {
+                let start = first.get(run).copied().unwrap_or(cut);
+                done.insert(run.to_string(), (cut - start).max(0) as f64 / 60.0);
+            }
+        }
+    }
+    done.into_values().collect()
 }
 
 impl Measurement {
@@ -133,6 +396,8 @@ impl Measurement {
         self.split_pairs += o.split_pairs;
         self.benign_high += o.benign_high;
         self.human_high += o.human_high;
+        self.clustering.add(&o.clustering);
+        self.detection.add(&o.detection);
         for (row, cols) in &o.grades {
             let r = self.grades.entry(row.clone()).or_default();
             for (c, n) in cols {
@@ -170,7 +435,11 @@ fn pair<'a>(a: &'a str, b: &'a str) -> (&'a str, &'a str) {
 }
 
 pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
-    let mut out = Measurement::default();
+    let mut out = Measurement {
+        clustering: clustering(a, truth),
+        detection: detection(a, truth),
+        ..Measurement::default()
+    };
     // Each run's row (its first record's), clusters above noise, and the
     // cluster holding most of its records.
     let mut run_row = BTreeMap::new();

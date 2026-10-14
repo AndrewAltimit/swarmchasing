@@ -105,8 +105,8 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 | `eval repro`, `eval check-results`, `eval export-bench` | Measure a saved result again; check the committed results; write an SC-Bench file (`eval --bench` scores one). |
 | `eval ids-hash <file>…` | A split's membership hash, for an id list or a record file; `eval --expect-ids-sha256` checks it ([frozen splits](../../docs/reference/evaluation.md#frozen-splits)). |
 | `sim write <scenarios> -o <dir>` | Simulated labelled records, one NDJSON file per scenario and seed ([simulated scenarios](../../docs/reference/evaluation.md#simulated-scenarios)). |
-| `sim bench <scenarios>` | Generate, analyse and measure every scenario; per scenario and summed, `--total` for the sum only, `--json` to save. `--min-*` floors and `--max-null-*` ceilings make it a gate ([simulator bounds](../../docs/reference/evaluation.md#simulator-bounds)). |
-| `sim calibrate <scenarios>` | Each soft-link kind's likelihood ratio from simulated truth, beside the ratio the rules set. Report only. |
+| `sim bench <scenarios>` | Generate, analyse and measure every scenario; per scenario and summed, `--total` for the sum only, `--json` to save. `--min-*` floors and `--max-null-*` ceilings make it a gate ([simulator bounds](../../docs/reference/evaluation.md#simulator-bounds)); `--calibrate-check` adds the calibration check on the same records, `--detect-checkpoints N` the time to L2 or a candidate fleet. |
+| `sim calibrate <scenarios>` | Each soft-link kind's likelihood ratio from simulated truth, beside the ratio the rules set. `--check` fails on a ratio above its bound or unmeasured without a reason. |
 | `sim score <input>…` | Interaction edges, soft links, candidate fleets and agent grades against labelled true runs, swarms and fleets ([swarm and fleet measurement](../../docs/reference/evaluation.md#swarm-and-fleet-measurement)). Report only. |
 
 ```sh

@@ -616,7 +616,7 @@ pub fn assess(
 
 /// Machine fetch-tool habit settings (`[agentness]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct AgentnessOptions {
     /// Per-fetch robots: a page counts as preceded when a `/robots.txt`
     /// request on its host comes at most this long before it.

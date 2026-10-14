@@ -93,6 +93,7 @@ fn a_swarm_sharing_one_inbox_draws_shared_sink_edges() {
     let rules = Rules::default_rules();
     let file = ScenarioFile {
         scenario: vec![scenario("sink")],
+        ..Default::default()
     };
     let r = bench(&file, &Palette::default_palette(&rules), &rules);
     let m = &r[0].1;
@@ -122,6 +123,7 @@ fn a_gist_one_agent_names_and_others_fetch_draws_handoff_edges() {
     let rules = Rules::default_rules();
     let file = ScenarioFile {
         scenario: vec![scenario("handoff")],
+        ..Default::default()
     };
     let r = bench(&file, &Palette::default_palette(&rules), &rules);
     let m = &r[0].1;
@@ -161,6 +163,7 @@ fn every_kind_carries_its_denominator_fired_or_not() {
     let rules = Rules::default_rules();
     let file = ScenarioFile {
         scenario: vec![scenario("fleet"), scenario("submit-basis")],
+        ..Default::default()
     };
     let mut total = Measurement::default();
     for (_, m) in bench(&file, &Palette::default_palette(&rules), &rules) {
@@ -192,7 +195,10 @@ fn bench_one(name: &str) -> Measurement {
     let rules = Rules::default_rules();
     let mut s = scenario(name);
     s.seeds = 1;
-    let file = ScenarioFile { scenario: vec![s] };
+    let file = ScenarioFile {
+        scenario: vec![s],
+        ..Default::default()
+    };
     bench(&file, &Palette::default_palette(&rules), &rules)
         .remove(0)
         .1
@@ -367,7 +373,10 @@ fn null_scenarios_are_counted_apart() {
     assert!(nulls.len() >= 2);
     let mut s = nulls[0].clone();
     s.seeds = 1;
-    let file = ScenarioFile { scenario: vec![s] };
+    let file = ScenarioFile {
+        scenario: vec![s],
+        ..Default::default()
+    };
     let r = bench(&file, &Palette::default_palette(&rules), &rules);
     let n = null_counts(&r, &file);
     assert_eq!((n.scenarios, n.seeds), (1, 1));
@@ -375,4 +384,286 @@ fn null_scenarios_are_counted_apart() {
     let m = &r[0].1;
     assert_eq!((m.swarm_pairs.total, m.operator_pairs.total), (0, 0));
     assert_eq!(n.edges, m.edges["any"].unrelated);
+}
+
+/// Records of one generated scenario under its first seed, with truth.
+fn generated(name: &str) -> (Vec<Observation>, Truth) {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    let s = scenario(name);
+    let text = to_ndjson(&generate(&s, s.seed, &p));
+    let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
+    (obs, Truth::from_ndjson(&text))
+}
+
+/// `obs` grouped by true run, in time order.
+fn by_run<'a>(
+    obs: &'a [Observation],
+    truth: &Truth,
+) -> std::collections::BTreeMap<String, Vec<&'a Observation>> {
+    let mut out: std::collections::BTreeMap<String, Vec<&Observation>> = Default::default();
+    for o in obs {
+        out.entry(truth.get(&o.id).unwrap().run.clone())
+            .or_default()
+            .push(o);
+    }
+    for v in out.values_mut() {
+        v.sort_by_key(|o| o.ts);
+    }
+    out
+}
+
+fn host(o: &Observation) -> String {
+    sc_core::extract(o, &Rules::default_rules())
+        .target_host
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_rerun_walks_the_same_hosts_in_order_from_a_new_client_after_a_shared_stall() {
+    let (obs, truth) = generated("rerun");
+    let runs = by_run(&obs, &truth);
+    let first = "rerun-a0-0";
+    let (a, b) = (&runs[first], &runs[&format!("{first}r")]);
+    let hosts = |r: &[&Observation]| r.iter().map(|o| host(o)).collect::<Vec<_>>();
+    assert_eq!(hosts(a), hosts(b));
+    assert_ne!(a[0].ip, b[0].ip);
+    assert!(b[0].ts - a[0].ts >= 30 * 3600, "{} {}", a[0].ts, b[0].ts);
+    let ta = truth.get(&a[0].id).unwrap();
+    assert_eq!(ta.operator(), truth.get(&b[0].id).unwrap().operator());
+    // The three first-day runs go quiet together, twice, for the stall's
+    // length; their pauses start and end within two minutes of each other.
+    let pauses: Vec<Vec<(i64, i64)>> = (0..3)
+        .map(|k| {
+            let r = &runs[&format!("rerun-a0-{k}")];
+            r.windows(2)
+                .filter(|w| w[1].ts - w[0].ts >= 200 * 60)
+                .map(|w| (w[0].ts, w[1].ts))
+                .collect()
+        })
+        .collect();
+    for p in &pauses {
+        assert_eq!(p.len(), 2, "{pauses:?}");
+    }
+    for k in 1..3 {
+        for (x, y) in pauses[0].iter().zip(&pauses[k]) {
+            assert!(
+                (x.0 - y.0).abs() <= 120 && (x.1 - y.1).abs() <= 120,
+                "{pauses:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_captured_secret_ties_a_fleet_and_a_demo_key_ties_nothing() {
+    let (obs, truth) = generated("shared-secret");
+    let key = |o: &Observation| {
+        o.url
+            .split(['?', '&'])
+            .filter_map(|kv| kv.strip_prefix("api_key="))
+            .find(|v| v.starts_with("REDACTED-"))
+            .map(str::to_string)
+    };
+    let mut fleet = std::collections::BTreeSet::new();
+    let mut stock = std::collections::BTreeSet::new();
+    for o in &obs {
+        let t = truth.get(&o.id).unwrap();
+        match (t.class.as_str(), key(o)) {
+            ("scaffold_fleet", Some(k)) => {
+                fleet.insert(k);
+            }
+            ("single_agent", Some(k)) => {
+                stock.insert(k);
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(fleet.len(), 1, "{fleet:?}");
+    assert_eq!(stock.len(), 1, "{stock:?}");
+    assert!(stock.contains(&sc_core::redact::hash_token("demo")));
+    let m = bench_one("shared-secret");
+    let s = &m.links["shared_secret"];
+    assert!(s.pairs > 0 && s.correct == s.pairs, "{}", render(&m));
+}
+
+#[test]
+fn an_evasive_swarm_tags_every_request_anew_from_a_new_client() {
+    let (obs, truth) = generated("evasive-swarm");
+    let runs = by_run(&obs, &truth);
+    let swarm: Vec<&Vec<&Observation>> = runs
+        .iter()
+        .filter(|(r, _)| r.starts_with("evasive-swarm-a0-"))
+        .map(|x| x.1)
+        .collect();
+    assert_eq!(swarm.len(), 3);
+    for r in swarm {
+        let tags: std::collections::BTreeSet<&str> = r
+            .iter()
+            .filter_map(|o| o.url.split("uqtag=").nth(1))
+            .collect();
+        assert_eq!(tags.len(), r.len(), "one tag per request");
+        let ips: std::collections::BTreeSet<_> = r.iter().map(|o| &o.ip).collect();
+        assert!(ips.len() > r.len() / 2, "{ips:?}");
+    }
+}
+
+#[test]
+fn a_low_and_slow_run_spaces_its_requests_past_the_link_window() {
+    let (obs, truth) = generated("low-and-slow");
+    let runs = by_run(&obs, &truth);
+    let slow = &runs["low-and-slow-a0-0"];
+    assert_eq!(slow.len(), 5);
+    for w in slow.windows(2) {
+        let h = (w[1].ts - w[0].ts) as f64 / 3600.0;
+        assert!((72.0..=88.0).contains(&h), "{h}");
+    }
+}
+
+#[test]
+fn link_checkers_and_seo_crawlers_are_unrelated_tools() {
+    let (obs, truth) = generated("ci-link-checker");
+    let runs = by_run(&obs, &truth);
+    assert_eq!(runs.len(), 30);
+    let urls = |r: &[&Observation]| r.iter().map(|o| host(o)).collect::<Vec<_>>();
+    let one = runs.values().next().unwrap();
+    for r in runs.values() {
+        let t = truth.get(&r[0].id).unwrap();
+        assert_eq!(t.operator(), format!("run:{}", t.run));
+        // On the hour, the runner a few seconds late, one list in one order.
+        assert!(r[0].ts.rem_euclid(3600) <= 20, "{}", r[0].ts);
+        assert_eq!(urls(r), urls(one));
+        assert_eq!(r[0].user_agent, one[0].user_agent);
+    }
+    let (obs, truth) = generated("seo-crawler");
+    let runs = by_run(&obs, &truth);
+    let vendors: Vec<&Vec<&Observation>> = runs
+        .iter()
+        .filter(|(r, _)| r.starts_with("seo-crawler-a0-"))
+        .map(|x| x.1)
+        .collect();
+    assert_eq!(vendors.len(), 4);
+    for v in vendors {
+        // Four consecutive addresses, each with its own share of the sitemap.
+        let mut shard: std::collections::BTreeMap<&str, Vec<String>> = Default::default();
+        for o in v {
+            shard
+                .entry(o.ip.as_deref().unwrap())
+                .or_default()
+                .push(host(o));
+        }
+        assert_eq!(shard.len(), 4);
+        let mut last: Vec<u32> = shard
+            .keys()
+            .map(|ip| ip.rsplit_once('.').unwrap().1.parse().unwrap())
+            .collect();
+        last.sort_unstable();
+        assert!(last.windows(2).all(|w| w[1] == w[0] + 1), "{last:?}");
+        let all: std::collections::BTreeSet<&String> = shard.values().flatten().collect();
+        assert_eq!(all.len(), shard.values().map(Vec::len).sum::<usize>());
+    }
+}
+
+#[test]
+fn clusters_are_scored_against_runs() {
+    let m = measured();
+    let (p, r, f) = m.clustering.bcubed().unwrap();
+    assert!((0.0..=1.0).contains(&r) && f > 0.0);
+    // The sink swarm's agents share one inbox, and so one cluster: right for
+    // precision, a merge of runs for the adjusted Rand index.
+    assert!((p - 1.0).abs() < 1e-9, "{p}");
+    assert!(m.clustering.ari().unwrap() < 1.0);
+    let perfect = Clustering {
+        records: 4,
+        bcubed_precision_sum: 4.0,
+        bcubed_recall_sum: 4.0,
+        pairs: 6.0,
+        pairs_both: 2.0,
+        pairs_group: 2.0,
+        pairs_run: 2.0,
+    };
+    assert_eq!(perfect.ari(), Some(1.0));
+    assert_eq!(perfect.bcubed(), Some((1.0, 1.0, 1.0)));
+    assert_eq!(Clustering::default().ari(), None);
+    // Every agent run is flagged on its first record.
+    assert_eq!(m.detection.records_to_flag.len(), m.detection.runs);
+    assert_eq!(measure::quantile(&[3.0, 1.0, 2.0], 0.5), Some(2.0));
+    assert_eq!(measure::quantile(&[], 0.5), None);
+}
+
+#[test]
+fn prefixes_time_each_run_to_l2_or_a_fleet() {
+    let obs = parse_input(SWARMS, Format::Auto, &FieldMap::default()).observations;
+    let truth = Truth::from_ndjson(SWARMS);
+    let t = measure::escalation_times(&obs, &truth, &Rules::default_rules(), 3);
+    let runs: std::collections::BTreeSet<&str> =
+        truth.rows.values().map(|r| r.run.as_str()).collect();
+    assert!(!t.is_empty() && t.len() <= runs.len(), "{t:?}");
+    assert!(t.iter().all(|m| *m >= 0.0));
+    // One bench pass with checkpoints and the calibration counts.
+    let rules = Rules::default_rules();
+    let mut s = scenario("sink");
+    s.seeds = 1;
+    let file = ScenarioFile {
+        scenario: vec![s],
+        ..Default::default()
+    };
+    let r = bench_with(
+        &file,
+        &Palette::default_palette(&rules),
+        &rules,
+        BenchOptions {
+            calibrate: true,
+            checkpoints: 2,
+        },
+    );
+    assert_eq!(r.calibration.len(), 1);
+    assert_eq!(r.measured[0].1.detection.checkpoints, 2);
+    assert_eq!(
+        r.calibration,
+        calibrate_by_scenario(&file, &Palette::default_palette(&rules), &rules)
+    );
+}
+
+#[test]
+fn defaults_and_the_calibration_allow_list_are_read() {
+    let f = ScenarioFile::parse(
+        "[defaults]\nexpect.human_high = { max_records = 0 }\n\
+         [calibration.unmeasured]\nheader_set = \"no headers\"\n\
+         [[scenario]]\nname = \"a\"\n[[scenario.actor]]\nkind = \"agent\"\n\
+         [[scenario]]\nname = \"b\"\nexpect.human_high = { max_records = 3 }\n\
+         [[scenario.actor]]\nkind = \"agent\"\n",
+    )
+    .unwrap();
+    assert_eq!(f.scenario[0].expect["human_high"].max_records, Some(0));
+    assert_eq!(f.scenario[1].expect["human_high"].max_records, Some(3));
+    assert_eq!(f.calibration.unmeasured["header_set"], "no headers");
+    // A kind that is no soft-link kind, and a ceiling with no bound.
+    assert!(ScenarioFile::parse("[calibration.unmeasured]\nno_such = \"x\"\n").is_err());
+    assert!(
+        ScenarioFile::parse(
+            "[[scenario]]\nname = \"a\"\nexpect.human_high = {}\n[[scenario.actor]]\nkind = \"agent\"\n"
+        )
+        .is_err()
+    );
+    // A grade ceiling is checked against the scenario's own count.
+    let m = Measurement {
+        human_high: 2,
+        ..Default::default()
+    };
+    let g = Gate {
+        expect: true,
+        ..Default::default()
+    };
+    let c = g.check_scenarios(&[("a".to_string(), m.clone()), ("b".to_string(), m)], &f);
+    let lines: Vec<String> = c.iter().map(Check::line).collect();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(
+        lines[0].starts_with("FAIL a human_high records: 2"),
+        "{lines:?}"
+    );
+    assert!(
+        lines[1].starts_with("ok   b human_high records: 2"),
+        "{lines:?}"
+    );
 }

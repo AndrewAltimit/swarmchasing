@@ -194,7 +194,7 @@ impl SoftLinkKind {
 /// likelihood ratio, when a link or a shared value is too weak or too
 /// common to list, and how candidate fleets are drawn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct SoftLinkOptions {
     /// Pairs whose combined likelihood ratio reaches this are edges of the
     /// fleet graph.
@@ -256,7 +256,7 @@ impl Default for SoftLinkOptions {
             max_shared: 10,
             shared_pause: 4.0,
             dialect: 2.0,
-            rerun: 25.0,
+            rerun: 3.0,
             preamble: 3.0,
             path_set: 3.0,
             encoding: 1.0,

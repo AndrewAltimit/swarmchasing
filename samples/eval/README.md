@@ -36,6 +36,8 @@ No urlquery content is copied here. urlquery's terms forbid redistributing it, a
 
 The two `fuzzing` records are missed by design. One turns a scalar parameter into an array (`State_Id[]=1&State_Id[]=2`); the other guesses a path segment (`anything.pdf`). Each is an ordinary request on its own: array parameters are how PHP and Rails forms send lists, and a file name is a file name. What makes them fuzzing is the run around them (the same API called with the parameter's type changed, or a path tried with several names), which one record does not show. A rule for either shape would fire on ordinary form and download traffic far more often than on agents.
 
+Two indirection records are missed by design for the same reason. `oncb-jina` reads a statistics page through a relay, and `max-markdown-uniq` reads a budget report through a Markdown converter with a short `uniq3` suffix. People read pages through relays and converters too (`relay_reading`), so a relay alone is context and stays below the threshold, and the suffix is too short to tell from an ordinary cache key. What marks both as agents is the run around them in the published incident, which one record does not show.
+
 ## `llm-residue.ndjson`
 
 Synthetic records for the language-model output residue rules (`marker.md_link`, `marker.placeholder`, `marker.tool_call_json` and the rest). Each is marked `"synthetic": true`, uses reserved `.example` hosts for targets, and was written by hand, not copied from any report.
@@ -70,7 +72,7 @@ Synthetic benign records, each marked `"synthetic": true`, on reserved `.example
 
 ## `carrier-negatives.ndjson`
 
-Synthetic benign records, class `dev_tool`, each marked `"synthetic": true` and written by hand: pages with an inline or linked script and no request of their own, served from the echo service's base64 endpoint (`httpbin.org/base64/`, and the `httpbun.com` mirror), as developers use it to serve a test page. Script references use reserved `.example` hosts. They guard `carrier.httpbin` and `carrier.html_program`: the echo rule and the script rule read one artifact, so these stay noise. No archive capture was copied.
+Synthetic benign records, class `dev_tool`, each marked `"synthetic": true` and written by hand: pages with an inline or linked script and no request of their own, served from the echo service's base64 endpoint (`httpbin.org/base64/`, and the `httpbun.com` mirror), as developers use it to serve a test page, and carry capture times from an archive index (`source` `wayback`, `ts_kind` `capture`). Script references use reserved `.example` hosts. They guard `carrier.httpbin` and `carrier.html_program`: the echo rule and the script rule read one artifact, so these stay noise. No archive capture was copied.
 
 ## `actor-controls.ndjson`
 
@@ -106,6 +108,8 @@ Synthetic agent records for fleet proposals that rest on no shared identifier ([
 - **`scaffold-1`**: three agents on one harness, days apart, each with its own run tag and hosts, sending one request structure (a relay, a payload, then a tag, a step counter and a timestamp). Each pair should draw a shared-scaffold link.
 - **`lookalike-1` to `lookalike-8`**: eight unrelated operators using one framework's default probe shape. The shape is common in the analysis, so no pair of them should draw a shared-scaffold link.
 - **`orchestra-1`**: a planner and a worker with different tags, hosts and request shapes; each worker request comes 40 to 85 seconds after a planner request, at irregular times over eight hours, with submit times. The pair should draw a co-activity link.
+
+The scaffold and look-alike records carry capture times from an archive index (`source` `wayback`, `ts_kind` `capture`), and the orchestra records submit times from a scan service (`urlscan`), so the per-source rows and the capture basis have records behind them.
 
 Every record is flagged significant on its own, so the file raises recall at both tiers and leaves precision unchanged.
 

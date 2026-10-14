@@ -267,7 +267,7 @@ pub fn body(s: &Summary, set_href: &str) -> String {
     let _ = write!(
         o,
         "<section aria-labelledby=\"linking\"><h2 id=\"linking\">Linking</h2>\
-<p class=\"hint\">Records labelled with the run they belong to measure how well clusters recover runs. Reported, never gated.</p>\
+<p class=\"hint\">Records labelled with the run they belong to measure how well clusters recover runs. A merge of runs inside one labelled swarm counts as right for precision, and is not a false merge. The eval gate holds a floor on B-cubed F1.</p>\
 <dl class=\"stats wide\"><div><dt>B-cubed precision</dt><dd class=\"big\">{}</dd></div><div><dt>B-cubed recall</dt><dd class=\"big\">{}</dd></div><div><dt>B-cubed F1</dt><dd class=\"big\">{}</dd></div><div><dt>False merges</dt><dd class=\"big\">{}</dd><dd class=\"hint\">{} of {} clusters with labelled members</dd></div></dl>\
 <p class=\"hint\">{} run-labelled records in {} runs. Runs split across clusters: {}.</p>",
         opt(cl.bcubed_precision),

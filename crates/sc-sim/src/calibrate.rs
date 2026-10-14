@@ -232,29 +232,85 @@ pub fn stratified(strata: &[(String, Calibration)], kind: SoftLinkKind) -> Optio
 }
 
 /// One kind's bundled ratio against the stratified lower bound.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RuleCheck {
     pub kind: SoftLinkKind,
     pub bundled: f64,
-    pub low: f64,
+    /// The stratified lower bound; `None` when no scenario measures the
+    /// kind.
+    pub low: Option<f64>,
+    /// The reason the calibration config gives for a ratio above 1 that no
+    /// scenario measures.
+    pub allowed: Option<String>,
     pub ok: bool,
+}
+
+impl RuleCheck {
+    /// Unmeasured, with a ratio above 1 and no reason given: a ratio the
+    /// rules claim that nothing supports.
+    pub fn unmeasured(&self) -> bool {
+        self.low.is_none() && self.allowed.is_none()
+    }
+
+    /// The check as one line: `ok`, `FAIL` (above the bound), `UNMEASURED`
+    /// or `allowed` (unmeasured, with its reason).
+    pub fn line(&self) -> String {
+        let name = kind_name(self.kind);
+        match (self.low, &self.allowed) {
+            (Some(low), allowed) => format!(
+                "{} {name}: rules {:.2}, stratified lower bound {low:.2}{}",
+                if self.ok { "ok  " } else { "FAIL" },
+                self.bundled,
+                if allowed.is_some() {
+                    " (measured now: drop it from calibration.unmeasured)"
+                } else {
+                    ""
+                }
+            ),
+            (None, Some(why)) => format!(
+                "allowed {name}: rules {:.2}, no scenario measures it ({why})",
+                self.bundled
+            ),
+            (None, None) => format!(
+                "UNMEASURED {name}: rules {:.2}, no scenario measures it and calibration.unmeasured gives no reason",
+                self.bundled
+            ),
+        }
+    }
 }
 
 /// Every kind the strata measure: its ratio in `rules` must be at or below
 /// the stratified lower bound, so no bundled ratio claims more than the
-/// simulation shows.
-pub fn check_rules(strata: &[(String, Calibration)], rules: &Rules) -> Vec<RuleCheck> {
+/// simulation shows. Every kind with a ratio above 1 that no stratum
+/// measures fails as unmeasured, unless `allowed` (the calibration config's
+/// `unmeasured` table, kind name to reason) names it.
+pub fn check_rules(
+    strata: &[(String, Calibration)],
+    rules: &Rules,
+    allowed: &BTreeMap<String, String>,
+) -> Vec<RuleCheck> {
     SoftLinkKind::ALL
         .into_iter()
         .filter_map(|k| {
-            let st = stratified(strata, k)?;
             let bundled = rules.set.soft_links.lr(k);
-            Some(RuleCheck {
-                kind: k,
-                bundled,
-                low: st.low,
-                ok: bundled <= st.low + 1e-9,
-            })
+            let allowed = allowed.get(&kind_name(k)).cloned();
+            match stratified(strata, k) {
+                Some(st) => Some(RuleCheck {
+                    kind: k,
+                    bundled,
+                    low: Some(st.low),
+                    allowed,
+                    ok: bundled <= st.low + 1e-9,
+                }),
+                None if bundled > 1.0 => Some(RuleCheck {
+                    kind: k,
+                    bundled,
+                    low: None,
+                    ok: allowed.is_some(),
+                    allowed,
+                }),
+                None => None,
+            }
         })
         .collect()
 }
@@ -422,13 +478,49 @@ mod tests {
     fn a_bundled_ratio_above_the_stratified_bound_fails() {
         let strata = vec![("s".to_string(), stratum(30, 300, 10, 100))];
         let mut set = Rules::default_rules().set.clone();
+        // Every other kind off, so only the measured one is checked.
+        for k in SoftLinkKind::ALL {
+            set.soft_links.set_lr(k, 1.0);
+        }
         set.soft_links.set_lr(SoftLinkKind::Dialect, 0.5);
+        let none = BTreeMap::new();
         let low = Rules::compile(set.clone()).unwrap();
-        let c = check_rules(&strata, &low);
+        let c = check_rules(&strata, &low, &none);
         assert_eq!(c.len(), 1);
         assert!(c[0].ok, "{c:?}");
         set.soft_links.set_lr(SoftLinkKind::Dialect, 20.0);
-        let c = check_rules(&strata, &Rules::compile(set).unwrap());
+        let c = check_rules(&strata, &Rules::compile(set).unwrap(), &none);
         assert!(!c[0].ok, "{c:?}");
+        assert!(c[0].line().starts_with("FAIL dialect"), "{}", c[0].line());
+    }
+
+    #[test]
+    fn a_ratio_no_scenario_measures_fails_unless_a_reason_is_given() {
+        let strata = vec![("s".to_string(), stratum(30, 300, 10, 100))];
+        let mut set = Rules::default_rules().set.clone();
+        for k in SoftLinkKind::ALL {
+            set.soft_links.set_lr(k, 1.0);
+        }
+        set.soft_links.set_lr(SoftLinkKind::Dialect, 0.5);
+        set.soft_links.set_lr(SoftLinkKind::Rerun, 25.0);
+        set.soft_links.set_lr(SoftLinkKind::HeaderSet, 2.0);
+        let rules = Rules::compile(set).unwrap();
+        let mut allowed = BTreeMap::new();
+        allowed.insert("header_set".to_string(), "no header sets".to_string());
+        let c = check_rules(&strata, &rules, &allowed);
+        let by = |k| c.iter().find(|c| c.kind == k).unwrap();
+        // A kind at 1 or below is off: nothing to check.
+        assert_eq!(c.len(), 3, "{c:?}");
+        let rerun = by(SoftLinkKind::Rerun);
+        assert!(!rerun.ok && rerun.unmeasured(), "{rerun:?}");
+        assert!(rerun.line().starts_with("UNMEASURED rerun: rules 25.00"));
+        let hs = by(SoftLinkKind::HeaderSet);
+        assert!(hs.ok && !hs.unmeasured(), "{hs:?}");
+        assert!(hs.line().contains("(no header sets)"), "{}", hs.line());
+        // A measured kind is checked whatever the allow-list says.
+        allowed.insert("dialect".to_string(), "stale".to_string());
+        let c = check_rules(&strata, &rules, &allowed);
+        let d = c.iter().find(|c| c.kind == SoftLinkKind::Dialect).unwrap();
+        assert!(d.ok && d.line().contains("drop it"), "{}", d.line());
     }
 }

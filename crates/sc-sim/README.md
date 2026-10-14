@@ -18,17 +18,17 @@ print!("{}", render(&m));
 
 | Module | Covers |
 |---|---|
-| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, target lists, news spikes, hubs, single agents, background, benign look-alikes, planters, mimics, escalators, prompt fleets, framework users), ordered and sorted lists, prose, pace, retries, offsets, windows, palette shares, time basis, seeds, null scenarios, expectations. |
+| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, target lists, news spikes, hubs, single agents, background, benign look-alikes, planters, mimics, escalators, prompt fleets, framework users, link checkers, SEO crawlers) and their options ([simulated scenarios](../../docs/reference/evaluation.md#simulated-scenarios)), seeds, null scenarios, expectations, defaults, the calibration allow-list. |
 | [`palette`](src/palette.rs) | The committed records the generator copies, sorted by use (attack, read, callback inbox, benign, person, tool). |
 | [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers, a fleet harness's own parameters, synthetic prose from prompt templates. |
 | [`rng`](src/rng.rs) | A small seeded generator, the same on every platform. |
 | [`truth`](src/truth.rs) | `TruthRow` per record id from `label`, `actor`, `class`, `run`, `swarm` and `fleet`; the operator a run belongs to. |
-| [`measure`](src/measure.rs) | Pair-level precision and recall per edge kind, soft-link kind and candidate fleet; split runs rejoined; the grade table by actor and class. |
+| [`measure`](src/measure.rs) | Pair-level precision and recall per edge kind, soft-link kind and candidate fleet; split runs rejoined; the grade table by actor and class; B-cubed and adjusted Rand index of clusters against runs; time to detect, and by prefix re-analysis time to L2 or a candidate fleet. |
 | [`render`](src/render.rs) | The measurement as text tables, with Wilson intervals. |
 | [`gate`](src/gate.rs) | Precision floors over every scenario, grade ceilings, ceilings on what the null scenarios draw, per-scenario expectations. |
-| [`calibrate`](src/calibrate.rs) | Each soft-link kind's likelihood ratio from simulated truth, pooled and stratified by scenario, and the check of the bundled ratios. |
+| [`calibrate`](src/calibrate.rs) | Each soft-link kind's likelihood ratio from simulated truth, pooled and stratified by scenario, and the check of the bundled ratios: above the bound, or unmeasured without a reason. |
 
-`bench` generates each scenario under its seeds, analyses each run on its own and sums the measurements.
+`bench` generates each scenario under its seeds, analyses each run on its own and sums the measurements. `bench_with` does the same and, from the same generated records, the calibration counts and the prefix analyses for time to L2.
 
 Kinds are keyed by their serialised names. Every edge kind, soft-link kind, `any` and `candidate_fleet` is listed in every measurement with its recall denominator, fired or not, so a sum over seeds and scenarios counts the true pairs a kind missed where it drew nothing. A soft-link kind added to `SoftLinkKind` fails to compile in `measure` until it is listed there.
 

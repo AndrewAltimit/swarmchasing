@@ -184,7 +184,7 @@ fn is_zero(n: &usize) -> bool {
 
 /// Interaction edge settings (`[swarm]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct SwarmOptions {
     /// S3: two requests line up when this close at the pair's offset.
     pub lockstep_tolerance_secs: i64,
