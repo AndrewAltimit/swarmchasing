@@ -6,7 +6,6 @@
 //! [`sc_case::pinning`]; this module keeps the files.
 
 use crate::case::{Case, Scope, case_records, load, save};
-use crate::input::load_rules;
 use anyhow::{Context, Result, bail};
 use sc_case::pinning::{check_pin, describe_changes, pin_names};
 use sc_core::{Tier, analyze};
@@ -85,7 +84,19 @@ pub fn case_rules(root: &Path, c: &Case) -> Result<sc_core::Rules> {
             p.display()
         )
     })?;
-    sc_core::Rules::from_toml(&text).map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))
+    load_pinned(&p, &text)
+}
+
+/// A pinned rules file: it was valid when it was pinned, so a key the
+/// current code no longer knows is a retired option, dropped with a warning
+/// rather than failing the case.
+fn load_pinned(p: &Path, text: &str) -> Result<sc_core::Rules> {
+    let (rules, warnings) = sc_core::Rules::from_toml_lenient(text)
+        .map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?;
+    for w in warnings {
+        eprintln!("warning: {}: {w}", p.display());
+    }
+    Ok(rules)
 }
 
 /// Run a leak check under the case's pinned rules, and under the current
@@ -114,7 +125,9 @@ pub(crate) fn bundle_rules(root: &Path, bundle: &Path) -> Result<sc_core::Rules>
     let st = crate::bundle::read_stamp(bundle)?;
     let p = rules_dir(root).join(format!("{}.toml", st.rules_version));
     if check_pin(&st.rules_version).is_ok() && p.is_file() {
-        return load_rules(Some(&p));
+        let text =
+            std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
+        return load_pinned(&p, &text);
     }
     Ok(sc_core::Rules::default_rules())
 }
@@ -231,6 +244,34 @@ mod tests {
             1,
             "{lint:?}"
         );
+        cleanup(&root);
+    }
+
+    #[test]
+    fn a_case_pinned_to_released_rules_with_retired_keys_still_renders() {
+        let root = scratch("retired");
+        let current = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        new_case(&root, "t-5", "Old pin", records, &current, "2026-10-12").unwrap();
+        // Released rules holding `soft_links.fleet_min_strength`, since retired.
+        let old = include_str!("../../sc-core/tests/fixtures/rules-history/2026-10-12.3.toml");
+        assert!(sc_core::Rules::from_toml(old).is_err());
+        let dir = root.parent().unwrap().join("rules");
+        std::fs::write(dir.join("2026-10-12.3.toml"), old).unwrap();
+        update(&root, "t-5", |c| {
+            c.rules_version = Some("2026-10-12.3".into());
+            Ok(())
+        })
+        .unwrap();
+        let c = load(&root, "t-5").unwrap();
+        assert_eq!(
+            case_rules(&root, &c).unwrap().set.meta.version,
+            "2026-10-12.3"
+        );
+        let mut out = Vec::new();
+        rules_cmd(&root, "t-5", &current, true, "2026-10-13", &mut out).unwrap();
+        let c = load(&root, "t-5").unwrap();
+        assert_eq!(c.rules_version.as_deref(), Some(current.version()));
         cleanup(&root);
     }
 

@@ -45,9 +45,13 @@
 //! observed matrix, then each sample run forward from there, so the
 //! observed matrix is exchangeable with them), the same groups are mined in
 //! each, and a group's chance is `(ge + 1) / (swaps + 1)` for `ge` the
-//! samples whose strongest group scores at least as high: a familywise
-//! chance over every group of the family. The groups are then cut at false
-//! discovery rate `fdr` over the groups found.
+//! samples whose strongest group scores at least as high. Comparing with
+//! the strongest group of each sample makes the chance familywise over
+//! every group mined from the matrix, however many are found, so no
+//! further correction is taken per group: a group is kept at `max_chance`
+//! and under a Benjamini-Hochberg cut at false discovery rate `fdr` over
+//! the matrices mined (one per family), each counted once at its strongest
+//! group's chance.
 //!
 //! A news spike is many senders on one site: one feature, however many
 //! clusters. A framework default is one or a few templates. A fleet repeats
@@ -64,7 +68,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Co-group settings (`[biclique]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct BicliqueOptions {
     /// Touches of one host family by clusters above noise more than this
     /// far apart are separate features; a cluster active within this of an
@@ -79,8 +83,9 @@ pub struct BicliqueOptions {
     pub max_holders: usize,
     /// Randomised matrices drawn for the null.
     pub swaps: usize,
+    /// A group is kept when its familywise chance is at most this.
     pub max_chance: f64,
-    /// Benjamini-Hochberg false discovery rate over the groups found.
+    /// Benjamini-Hochberg false discovery rate over the matrices mined.
     pub fdr: f64,
 }
 
@@ -91,7 +96,7 @@ impl Default for BicliqueOptions {
             min_clusters: 3,
             min_features: 4,
             max_holders: 30,
-            swaps: 199,
+            swaps: 999,
             max_chance: 0.01,
             fdr: 0.05,
         }
@@ -126,10 +131,11 @@ pub struct CoGroup {
     /// least as high.
     pub swaps: usize,
     pub null_ge: usize,
-    /// `(null_ge + 1) / (swaps + 1)`.
+    /// `(null_ge + 1) / (swaps + 1)`: familywise over every group mined
+    /// from the matrix.
     pub chance: f64,
-    /// Groups found in the family's matrices, and groups this unlikely
-    /// expected among them.
+    /// Matrices mined (one per family with a group), and matrices whose
+    /// strongest group would be this unlikely expected among them.
     pub tested: usize,
     pub expected: f64,
 }
@@ -150,7 +156,7 @@ impl CoGroup {
             parts.push(format!("{} prose templates", self.prompts));
         }
         format!(
-            "{} clusters all hold {} that few others hold (of {} clusters; score {:.1}, beaten or matched by the strongest group in {} of {} degree-preserving randomised matrices, chance {:.1e}; {:.2} such groups expected among {} found): one operator may run them all",
+            "{} clusters all hold {} that few others hold (of {} clusters; score {:.1}, beaten or matched by the strongest group in {} of {} degree-preserving randomised matrices, chance {:.1e} over every group mined; {:.2} expected over {} matrices mined): one operator may run them all",
             self.clusters.len(),
             parts.join(" and "),
             self.population,
@@ -228,33 +234,32 @@ pub(crate) fn co_groups(
     ];
     let lnf = ln_factorials(shown.len() + 1);
     let mut found: Vec<(usize, Found, usize)> = Vec::new();
+    let mut mined = 0;
     for (mi, m) in matrices.iter().enumerate() {
         let holders: Vec<Vec<usize>> = m.feats.iter().map(|f| f.holders.clone()).collect();
         let groups = mine(m, &holders, opts, &lnf);
         if groups.is_empty() {
             continue;
         }
+        mined += 1;
         let maxima = null_maxima(m, &shown, opts, &lnf);
         for g in groups {
             let ge = maxima.iter().filter(|&&s| s >= g.score - 1e-9).count();
             found.push((mi, g, ge));
         }
     }
-    let tested = found.len();
     let swaps = opts.swaps;
     let chance_of = |ge: usize| (ge + 1) as f64 / (swaps + 1) as f64;
-    let passed: Vec<f64> = found
+    let chances: Vec<(usize, f64)> = found
         .iter()
-        .map(|g| chance_of(g.2))
-        .filter(|&p| p <= opts.max_chance)
+        .map(|(mi, _, ge)| (*mi, chance_of(*ge)))
         .collect();
-    let family = TestFamily::cut("co_group", &passed, tested, opts.fdr);
+    let (family, cut) = family_cut(&chances, mined, opts);
+    let tested = family.tested;
+    let kept = |p: f64| p <= opts.max_chance && cut.is_some_and(|c| p <= c);
     let mut out: Vec<CoGroup> = found
         .into_iter()
-        .filter(|(_, _, ge)| {
-            let p = chance_of(*ge);
-            p <= opts.max_chance && family.keeps(p)
-        })
+        .filter(|(_, _, ge)| kept(chance_of(*ge)))
         .map(|(mi, g, ge)| {
             let m = &matrices[mi];
             let count = |k: Kind| g.feats.iter().filter(|&&f| m.feats[f].kind == k).count();
@@ -285,6 +290,38 @@ pub(crate) fn co_groups(
     });
     out.truncate(MAX_GROUPS);
     (out, family)
+}
+
+/// The family's budget over the groups found, as `(matrix, chance)`, of
+/// `mined` matrices, and the largest chance kept. Each chance is already
+/// familywise over its matrix's groups (the strongest null group is the
+/// yardstick), so the cut counts matrices, each once at its strongest
+/// group's chance; a group is kept at or under both the cut and
+/// `max_chance`.
+fn family_cut(
+    chances: &[(usize, f64)],
+    mined: usize,
+    opts: &BicliqueOptions,
+) -> (TestFamily, Option<f64>) {
+    let mut strongest: BTreeMap<usize, f64> = BTreeMap::new();
+    for &(mi, p) in chances {
+        let e = strongest.entry(mi).or_insert(p);
+        *e = e.min(p);
+    }
+    let passed: Vec<f64> = strongest
+        .values()
+        .copied()
+        .filter(|&p| p <= opts.max_chance)
+        .collect();
+    let mut family = TestFamily::cut("co_group", &passed, mined, opts.fdr);
+    let cut = family.cut;
+    let under = |p: f64| p <= opts.max_chance;
+    family.passed = chances.iter().filter(|g| under(g.1)).count();
+    family.kept = chances
+        .iter()
+        .filter(|g| under(g.1) && cut.is_some_and(|c| g.1 <= c))
+        .count();
+    (family, cut)
 }
 
 /// Rows and features from `(row key, feature key)` holdings: each row key
@@ -873,6 +910,26 @@ mod tests {
             seen.insert(h);
         }
         assert!(seen.len() > 1, "{seen:?}");
+    }
+
+    #[test]
+    fn strong_groups_among_many_found_are_kept() {
+        // Two groups no randomised matrix matched, at the null's floor,
+        // among forty found in one matrix: their chance is familywise
+        // already, so the thirty-eight weak ones do not dilute them.
+        let opts = BicliqueOptions {
+            swaps: 199,
+            ..BicliqueOptions::default()
+        };
+        let floor = 1.0 / 200.0;
+        let mut chances = vec![(0, floor), (0, floor)];
+        chances.extend((0..38).map(|_| (0, 0.5)));
+        let (family, cut) = family_cut(&chances, 1, &opts);
+        assert!(cut.is_some_and(|c| floor <= c), "{family:?}");
+        assert_eq!((family.tested, family.passed, family.kept), (1, 2, 2));
+        // A matrix whose strongest group is common keeps nothing.
+        let (family, cut) = family_cut(&[(0, 0.2), (1, 0.3)], 2, &opts);
+        assert_eq!((cut, family.kept), (None, 0));
     }
 
     #[test]

@@ -185,7 +185,14 @@ pub fn pull(
     };
     let finished = (finished && st.pending.is_none()).then_some(started);
     let hit_limit = !resumable && res.observations.len() >= limit;
-    if hit_limit {
+    if checkpointed && (hit_limit || res.truncated) {
+        // The source kept its oldest records and checkpointed there: the
+        // rest is read next run, but a backlog that keeps growing falls
+        // behind.
+        eprint!(
+            "(warning: hit limit {limit}; the checkpoint stops at the last record kept and the rest comes next run; raise the limit if this repeats) "
+        );
+    } else if hit_limit {
         eprint!("(hit limit {limit}; raise it or narrow the pattern) ");
     } else if res.truncated {
         eprint!("(a page was cut short and the source cannot page; narrow the pattern) ");

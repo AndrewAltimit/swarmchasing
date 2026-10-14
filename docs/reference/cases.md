@@ -168,9 +168,9 @@ Provider and affected reports end with a *Publication* section: the time the ind
 
 ### What an operator is sent
 
-A report to an affected operator covers that operator's own endpoints and nothing else: the contact's endpoint and, for an affected contact, the endpoints of the case's other affected contacts at the same organisation. Only the records aimed at those hosts are analysed, rendered and bundled, by the case's pinned rules, with that operator's own logs; the same scope applies to `case export --audience affected --to`. No other operator's host, record or payload reaches it. A contact with no endpoint is refused until it has one.
+A report to an affected operator covers that operator's own endpoints and nothing else: the contact's endpoint and, for an affected contact, the endpoints of the case's other affected contacts at the same organisation under the same registrable domain (an organisation name is free text, so two operators recorded under one name never see each other's hosts or logs). Only the records aimed at those hosts are analysed, rendered and bundled, by the case's pinned rules, with that operator's own logs; the same scope applies to `case export --audience affected --to`. No other operator's host, record or payload reaches it. A contact with no endpoint is refused until it has one.
 
-A *Wider activity* section says how many linked clusters in the case hold the operator's records, how large they are and how many other hosts they reached, counted and never named. It lists the operator's requests that link to the activity only through records elsewhere, so a single request on its host is not lost. Provider reports, case notes and `case bundle` keep the whole case.
+A *Wider activity* section, read from the case's records and only the operator logs agreed for publication (another operator's private logs never move it), says how many linked clusters in the case hold the operator's records, how large they are and how many other hosts they reached, counted and never named. It lists the operator's requests that link to the activity only through records elsewhere, so a single request on its host is not lost. Provider reports, case notes and `case bundle` keep the whole case.
 
 ## Lead times
 
@@ -276,6 +276,8 @@ The signature covers every file through the manifest, and the case id through `s
 ## Pinned rules
 
 Each case keeps the rules it was opened with in `<data>/rules/<version>.toml`. Its reports, notice draft, exports and bundles use those rules rather than the current ones, so a rules change between drafting and sending cannot silently change a tier. `case rules <id>` shows which records would change tier under the current rules; `--update` re-pins and logs the change.
+
+A pinned copy loads leniently. It was valid when it was pinned, so a key the current code no longer knows is a retired option: it is dropped with a warning on stderr, and so is a rule tactic that has since become a cluster-level judgment. Any other error still fails. The bundled rules and a `--rules` file load strictly, refusing an unknown key, so a misspelt setting never falls back to its default unseen. Every released `rules/default.toml` is kept under `crates/sc-core/tests/fixtures/rules-history/`, and a test loads each one as a pin.
 
 ## STIX export
 

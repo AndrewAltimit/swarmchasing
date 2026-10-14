@@ -32,12 +32,18 @@
 //! - **worker**: one Snowflake datacenter and worker under one epoch, chance
 //!   `2^-10`.
 //! - **skew**: each cluster's clock skew, the embedded times minus the time
-//!   each value was first seen, when every value agrees within
-//!   `skew_tolerance_secs`. Skews under `min_skew_secs` are ordinary clocks,
-//!   and skews within the tolerance of a whole quarter hour are time-zone
-//!   errors many machines share; neither ties. Two skews within the
-//!   tolerance tie, at the chance of two offsets spread evenly over the
-//!   widest skew seen, either way, meeting that closely.
+//!   each value was first seen, read from strong-parameter values only (an
+//!   id in a path or an ordinary parameter may be one the target site
+//!   minted, and agents fetching a fresh one would share its skew), when
+//!   every such value of the cluster agrees within `skew_tolerance_secs`
+//!   (a run tag is one value: one reading of its clock, priced by the
+//!   prior below like any other). Skews under `min_skew_secs` are ordinary
+//!   clocks, and skews within the tolerance of a whole quarter hour are
+//!   time-zone errors many machines share; neither ties. Two skews within
+//!   the tolerance tie, at the chance of an unrelated skew landing that
+//!   close under a fixed prior: magnitudes log-uniform between
+//!   `min_skew_secs` and `max_skew_secs`, either sign, so a skew of minutes
+//!   is commoner than one of hours and ties less.
 //! - **counter**: one parameter and stem, the numbers of one cluster within
 //!   `counter_max_gap` of the other's, at the chance of numbers of that many
 //!   digits meeting that closely.
@@ -46,21 +52,24 @@
 //! it shares (Sidak); kept at `max_chance` and cut at false discovery rate
 //! `fdr` over the pairs compared: any two clusters with node ids, with
 //! Snowflake workers or with skews, and any two counters on one stem. A
-//! node id is a
-//! device identifier: the analysis never stores or shows it, only a
-//! truncated hash. Pairs are soft links: they never score, link or merge.
+//! node id is a device identifier: the analysis never stores or shows it,
+//! nor anything computed from it alone (a 48-bit id with a known vendor
+//! prefix is few guesses from any short hash). It is shown as an ordinal
+//! label, `node A`, `node B`, given in order of first appearance among the
+//! analysis's records, so one node reads the same across pairs of one
+//! analysis and means nothing outside it. Pairs are soft links: they never
+//! score, link or merge.
 
 use crate::analyze::{Cluster, ObsResult};
 use crate::chance::TestFamily;
 use crate::model::{LinkFeature, Tier};
 use crate::timing::request_like;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Generator settings (`[generator]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct GeneratorOptions {
     /// An embedded time further than this from its record's is no time.
     pub max_skew_secs: i64,
@@ -117,8 +126,8 @@ pub struct GeneratorPair {
     /// Cluster ids, `a` the stronger.
     pub a: String,
     pub b: String,
-    /// What they share, one line each: a node id's truncated hash, a
-    /// Snowflake worker, a clock skew, a counter's stem.
+    /// What they share, one line each: a node id's label in this analysis,
+    /// a Snowflake worker, a clock skew, a counter's stem.
     pub keys: Vec<String>,
     /// The smallest key chance, corrected for the number shared.
     pub chance: f64,
@@ -319,16 +328,18 @@ fn counter(v: &str) -> Option<(&str, usize, u64)> {
     (n >= COUNTER_MIN).then_some((stem, digits, n))
 }
 
-/// The 24-bit truncated hash a node id is shown as: never the id.
-fn node_hash(node: u64) -> String {
-    let mut h = Sha256::new();
-    h.update(b"sc-core generator node\0");
-    h.update(format!("{node:012x}").as_bytes());
-    h.finalize()
-        .iter()
-        .take(3)
-        .map(|b| format!("{b:02x}"))
-        .collect()
+/// The label of the `k`th node id an analysis shows: `A` to `Z`, then
+/// `AA`, `AB`, ... It carries nothing of the id.
+fn node_label(k: usize) -> String {
+    let mut k = k + 1;
+    let mut out = Vec::new();
+    while k > 0 {
+        k -= 1;
+        out.push(b'A' + (k % 26) as u8);
+        k /= 26;
+    }
+    out.reverse();
+    String::from_utf8(out).unwrap_or_default()
 }
 
 /// A key two clusters can share. Skews are compared within the tolerance,
@@ -427,6 +438,16 @@ pub(crate) fn generator_pairs(
         }
     }
     let one_site = |node: u64| sites.get(&node).is_some_and(|s| s.len() <= 1);
+    // Node ids by first appearance among the records: their labels.
+    let mut labels: BTreeMap<u64, String> = BTreeMap::new();
+    for r in results {
+        for (_, value, _) in identifiers(r) {
+            if let Some(Decoded::Node { node, .. }) = uuid(&value) {
+                let next = labels.len();
+                labels.entry(node).or_insert_with(|| node_label(next));
+            }
+        }
+    }
 
     let mut profiles: Vec<Profile> = (0..shown.len()).map(|_| Profile::default()).collect();
     let mut outside: BTreeMap<Key, usize> = BTreeMap::new();
@@ -460,7 +481,10 @@ pub(crate) fn generator_pairs(
                     }
                     p.keys.insert(k);
                 }
+                // Skews from the agent's own values only: a site's ids
+                // carry the site's clock.
                 if let Some(d) = d
+                    && *strong
                     && *at > 0
                     && (d.ms() - at * 1000).abs() <= opts.max_skew_secs.max(0) * 1000
                 {
@@ -531,8 +555,8 @@ pub(crate) fn generator_pairs(
                     Key::Node(node) => Some((
                         2f64.powi(-47),
                         format!(
-                            "UUID node id {} (a device identifier, shown as a truncated hash) in both",
-                            node_hash(*node)
+                            "one UUID node id in both (node {} of this analysis; a device identifier, never shown)",
+                            labels.get(node).map_or("?", String::as_str)
                         ),
                     )),
                     Key::Worker(e, dc, w) => Some((
@@ -572,17 +596,21 @@ pub(crate) fn generator_pairs(
         .enumerate()
         .filter_map(|(c, p)| p.skew.map(|s| (c, s)))
         .collect();
-    // Unrelated skews spread evenly over the widest seen either way: the
-    // narrower the skews, the likelier two meet.
-    let widest = skewed.iter().map(|(_, s)| s.abs()).max().unwrap_or(0);
-    let range = (2 * widest.max(1000)) as f64;
+    // Unrelated skews under a fixed prior: magnitudes log-uniform between
+    // the smallest skew read and the largest, either sign. The density at
+    // `s` is `1 / (2 |s| ln(max / min))`, so a skew of minutes meets
+    // another far more often than one of hours.
+    let lo = opts.min_skew_secs.max(1) as f64 * 1000.0;
+    let hi = (opts.max_skew_secs.max(0) as f64 * 1000.0).max(lo * std::f64::consts::E);
+    let log_span = (hi / lo).ln();
     for (i, &(x, sx)) in skewed.iter().enumerate() {
         let near = |s: i64| skewed.iter().filter(|(_, t)| (t - s).abs() <= tol).count();
         for &(y, sy) in &skewed[i + 1..] {
             if (sx - sy).abs() > tol || near(sx).max(near(sy)) > opts.max_holders {
                 continue;
             }
-            let p = ((2 * tol + 1000) as f64 / range).min(1.0);
+            let s = (sx.abs().min(sy.abs()) as f64).max(lo);
+            let p = ((2 * tol + 1000) as f64 / (2.0 * s * log_span)).min(1.0);
             shared.entry((x, y)).or_default().push((
                 p,
                 format!(
@@ -732,7 +760,10 @@ mod tests {
         assert_eq!(counter("batch-0417"), Some(("batch-", 4, 417)));
         assert_eq!(counter("run007"), None);
         assert_eq!(counter("4417"), None);
-        assert_eq!(node_hash(1).len(), 6);
+        assert_eq!(node_label(0), "A");
+        assert_eq!(node_label(25), "Z");
+        assert_eq!(node_label(26), "AA");
+        assert_eq!(node_label(27), "AB");
     }
 
     #[test]
@@ -745,8 +776,12 @@ mod tests {
         assert_eq!(a.clusters.len(), 3, "{:?}", a.clusters.len());
         assert_eq!(a.generator_pairs.len(), 3, "{:?}", a.generator_pairs);
         let d = a.generator_pairs[0].detail();
-        assert!(d.contains(&node_hash(node)), "{d}");
+        assert!(d.contains("node A of this analysis"), "{d}");
         assert!(!d.contains("0242ac110002") && !d.contains("ac11"), "{d}");
+        // One node reads the same in every pair of the analysis.
+        for p in &a.generator_pairs {
+            assert!(p.keys[0].contains("node A "), "{:?}", p.keys);
+        }
         assert!(
             a.soft_links
                 .iter()
@@ -778,11 +813,33 @@ mod tests {
         assert!(a.generator_pairs.is_empty(), "{:?}", a.generator_pairs);
     }
 
+    /// Clusters a day apart, each on hosts of its own under one run tag,
+    /// minting a fresh nonce per record with `tag(k, j, t)`.
+    fn runs_fresh(n: usize, tag: impl Fn(usize, i64, i64) -> String) -> Vec<Observation> {
+        let mut obs = Vec::new();
+        for k in 0..n {
+            for j in 0..3 {
+                let t = T0 + k as i64 * 86_400 + j * 40;
+                obs.push(o(
+                    &format!("r{k}-{j}"),
+                    t,
+                    &format!(
+                        "https://h{j}.own{k}.example/q?id=1%27%20OR%201=1--&uqtag=r{k}x{k}x{k}&nonce={}",
+                        tag(k, j, t)
+                    ),
+                ));
+            }
+        }
+        obs
+    }
+
     #[test]
     fn one_skewed_clock_and_one_counter_pair_up() {
-        // A clock 412 s fast behind three ULID tags.
+        // A clock 412 s fast behind ULID tags, three per cluster.
         let a = analyze(
-            runs(3, |k, t| ulid_of((t + 412) * 1000 + 250, k as u64 + 1)),
+            runs_fresh(3, |k, j, t| {
+                ulid_of((t + 412) * 1000 + 250, (k * 3) as u64 + j as u64 + 1)
+            }),
             &Rules::default_rules(),
         );
         assert_eq!(a.generator_pairs.len(), 3, "{:?}", a.generator_pairs);
@@ -791,9 +848,30 @@ mod tests {
             "{:?}",
             a.generator_pairs
         );
+        // One run tag per cluster is one reading of each clock: it still
+        // ties.
+        let one = analyze(
+            runs(3, |k, t| ulid_of((t + 412) * 1000 + 250, k as u64 + 1)),
+            &Rules::default_rules(),
+        );
+        assert_eq!(one.generator_pairs.len(), 3, "{:?}", one.generator_pairs);
+        // Readings of one cluster that disagree are no clock: nothing.
+        let unstable = analyze(
+            runs_fresh(3, |k, j, t| {
+                ulid_of((t + 412 + 30 * j) * 1000, (k * 3) as u64 + j as u64 + 1)
+            }),
+            &Rules::default_rules(),
+        );
+        assert!(
+            unstable.generator_pairs.is_empty(),
+            "{:?}",
+            unstable.generator_pairs
+        );
         // A clock off by a whole hour is a time-zone error: nothing.
         let b = analyze(
-            runs(3, |k, t| ulid_of((t + 3600) * 1000, k as u64 + 1)),
+            runs_fresh(3, |k, j, t| {
+                ulid_of((t + 3600) * 1000, (k * 3) as u64 + j as u64 + 1)
+            }),
             &Rules::default_rules(),
         );
         assert!(b.generator_pairs.is_empty(), "{:?}", b.generator_pairs);
@@ -824,6 +902,31 @@ mod tests {
                     &format!(
                         "https://shop.example/item?id={}&q=1%27%20OR%201=1--&uqtag=r{k}x{k}x{k}",
                         v1(T0 - 1000 * (j + 3 * k), 5, node)
+                    ),
+                ));
+            }
+        }
+        let a = analyze(obs, &Rules::default_rules());
+        assert!(a.generator_pairs.is_empty(), "{:?}", a.generator_pairs);
+    }
+
+    #[test]
+    fn a_sites_fresh_time_ordered_ids_give_its_visitors_no_skew() {
+        // Unrelated agents fetch an article the site minted a UUIDv7 for a
+        // few minutes before, each within a second or two of the others'
+        // skew: the site's clock, not theirs.
+        let minted = T0 - 300;
+        let ms = format!("{:012x}", minted * 1000);
+        let id = |j: i64| format!("{}-{}-7abc-8def-{:012x}", &ms[..8], &ms[8..], j);
+        let mut obs = Vec::new();
+        for k in 0..3 {
+            for j in 0..3 {
+                obs.push(o(
+                    &format!("r{k}-{j}"),
+                    T0 + k + j * 40,
+                    &format!(
+                        "https://news{k}.example/a?article={}&q=1%27%20OR%201=1--&uqtag=r{k}x{k}x{k}",
+                        id(j)
                     ),
                 ));
             }

@@ -24,10 +24,13 @@ pub(crate) fn report(
     let a = analysis(root, &c, &sc)?;
     let md = render_markdown(&a, &report_options(&c, audience, reporter, today));
     let md = sc_case::fleet::with_fleets(md, &sc_case::fleet::report_section(&c, &a, audience));
-    let md = match sc.hosts(&c) {
+    // The wider counts read the case's own records and only the logs their
+    // operators agreed to publish: another operator's private logs never
+    // move what this one is told.
+    let md = match sc.hosts(&c, &sc_collect::psl::registrable_domain) {
         Some(hosts) => before_requested_action(
             md,
-            &wider_activity(&analysis(root, &c, &Scope::All)?, &a, &hosts),
+            &wider_activity(&analysis(root, &c, &Scope::Public)?, &a, &hosts),
         ),
         None => md,
     };
@@ -55,8 +58,9 @@ fn before_requested_action(md: String, section: &str) -> String {
 }
 
 /// For a report to one operator, what the rest of the case says about its
-/// records without naming anyone else: how many linked clusters in the case
-/// hold them, how large those are and how many other hosts they reached
+/// records without naming anyone else, read from the case's records and the
+/// operator logs agreed for publication (`all`): how many linked clusters
+/// in the case hold them, how large those are and how many other hosts they reached
 /// (counted, never named), and the operator's own flagged records that link
 /// to the activity only through records elsewhere, which its scoped
 /// analysis (`own`) therefore puts in no cluster. Empty when its records are
@@ -252,4 +256,100 @@ pub(crate) fn draft(
         .as_bytes(),
     )?;
     Ok(p)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_support::*;
+    use super::super::{analysis, case_dir, load, new_case, update};
+    use super::*;
+    use crate::pinning::RulesText;
+    use sc_case::evidence::OperatorEvidence;
+    use sc_core::Observation;
+
+    #[test]
+    fn another_operators_private_logs_leave_the_wider_counts_alone() {
+        let root = scratch("wider");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        new_case(&root, "w-1", "Wider", records, &rules, "2026-10-12").unwrap();
+        let contact = |org: &str, host: &str| Contact {
+            org: org.into(),
+            role: ContactRole::Affected,
+            endpoint: Some(host.into()),
+            channel: "email".into(),
+            address: format!("security@{host}"),
+            source: String::new(),
+            confidence: "medium".into(),
+            found_on: "d".into(),
+            purpose: None,
+        };
+        update(&root, "w-1", |c| {
+            for e in &mut c.endpoints {
+                e.state = EndpointState::Targeted;
+            }
+            c.contacts = vec![
+                contact("example.gov", "portal.example.gov"),
+                contact("elsewhere.example", "elsewhere.example"),
+            ];
+            Ok(())
+        })
+        .unwrap();
+        let wider = |c: &Case| {
+            let r = report(
+                &root,
+                "w-1",
+                Audience::Affected,
+                None,
+                Some(&c.contacts[0]),
+                "d",
+            )
+            .unwrap();
+            let at = r.find("## Wider activity").expect("a wider section");
+            r[at..].lines().nth(2).unwrap_or_default().to_string()
+        };
+        let before = wider(&load(&root, "w-1").unwrap());
+        // The other operator sends its own logs: more requests of the run,
+        // private to the case.
+        let dir = case_dir(&root, "w-1").unwrap();
+        std::fs::create_dir_all(dir.join("evidence")).unwrap();
+        let lines: Vec<String> = (0..3)
+            .map(|i| {
+                serde_json::to_string(&Observation {
+                    id: format!("ev{i}"),
+                    ts: 1_791_000_010 + i * 40,
+                    url: format!(
+                        "https://elsewhere.example/q?id={i}%20UNION%20SELECT%201&uqtag=zz9&agent=hunyuan"
+                    ),
+                    asn: Some(132203),
+                    ..Default::default()
+                })
+                .unwrap()
+            })
+            .collect();
+        std::fs::write(crate::evidence::file(&dir, "e1"), lines.join("\n")).unwrap();
+        update(&root, "w-1", |c| {
+            c.evidence.push(OperatorEvidence {
+                id: "e1".into(),
+                org: "elsewhere.example".into(),
+                host: "elsewhere.example".into(),
+                received: "d".into(),
+                sha256: String::new(),
+                lines: 3,
+                kept: 3,
+                public: None,
+                note: None,
+            });
+            Ok(())
+        })
+        .unwrap();
+        let c = load(&root, "w-1").unwrap();
+        let all = analysis(&root, &c, &Scope::All).unwrap();
+        assert!(
+            all.results.iter().any(|r| r.obs.id == "ev0"),
+            "case notes see them"
+        );
+        assert_eq!(wider(&c), before);
+        cleanup(&root);
+    }
 }

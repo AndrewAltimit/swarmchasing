@@ -21,7 +21,9 @@ pub struct Page {
     pub records: Vec<Observation>,
     pub next: Option<Cursor>,
     /// The source had more records than it returned and cannot page to them
-    /// (Arquivo.pt's index, a one-page feed). The pull is incomplete.
+    /// (Arquivo.pt's index, a one-page feed). The pull is incomplete. For a
+    /// checkpointed source, it kept its oldest records and checkpointed at
+    /// the newest of those: the rest is read on the next run.
     pub truncated: bool,
     /// How much of the source this page read, for sources that read a
     /// stream or feed and keep only matches.

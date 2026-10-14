@@ -178,7 +178,7 @@ fn records_in_scope(
     rules: Option<&Rules>,
 ) -> Result<Vec<Observation>> {
     let mut all = load_records(root, &c.id)?;
-    if let Some(hosts) = scope.hosts(c) {
+    if let Some(hosts) = scope.hosts(c, &sc_collect::psl::registrable_domain) {
         if hosts.is_empty() {
             bail!(
                 "a report to an operator covers its own endpoints, and this contact has none; give it one (`case contact add --endpoint`)"
@@ -199,7 +199,11 @@ fn records_in_scope(
         });
     }
     let dir = case_dir(root, &c.id)?;
-    for e in c.evidence.iter().filter(|e| e.in_scope(scope)) {
+    for e in c
+        .evidence
+        .iter()
+        .filter(|e| e.in_scope(scope, &sc_collect::psl::registrable_domain))
+    {
         let p = crate::evidence::file(&dir, &e.id);
         let text =
             std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;

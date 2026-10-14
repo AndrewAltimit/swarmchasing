@@ -63,29 +63,44 @@ impl<'a> Scope<'a> {
     }
 }
 
+/// A host's registrable domain (public suffix plus one label), from the
+/// caller's Public Suffix List; this crate has none.
+pub type Registrable<'f> = &'f dyn Fn(&str) -> Option<String>;
+
+/// Whether hosts `a` and `b` are one registrable domain.
+fn same_site(a: &str, b: &str, site: Registrable) -> bool {
+    a.eq_ignore_ascii_case(b) || site(a).is_some_and(|x| site(b).is_some_and(|y| x == y))
+}
+
 impl Scope<'_> {
     /// The target hosts a rendering for this scope may cover, lowercase:
     /// for an operator, the contact's own endpoint and, when the contact is
     /// that endpoint's affected operator, the endpoints of the case's other
-    /// affected contacts at the same organisation. `None` for case notes,
-    /// provider reports and the notice, which cover the whole case. A report
-    /// to one operator never names another one's hosts or carries its
-    /// records.
-    pub fn hosts(&self, c: &Case) -> Option<BTreeSet<String>> {
+    /// affected contacts at the same organisation under the same
+    /// registrable domain (`site`). An organisation name is free text: two
+    /// unrelated operators recorded under one name share no registrable
+    /// domain and never see each other's hosts. `None` for case notes,
+    /// provider reports and the notice, which cover the whole case. A
+    /// report to one operator never names another one's hosts or carries
+    /// its records.
+    pub fn hosts(&self, c: &Case, site: Registrable) -> Option<BTreeSet<String>> {
         let Scope::Operator { org, host } = self else {
             return None;
         };
         let mut out: BTreeSet<String> = host.iter().map(|h| h.to_ascii_lowercase()).collect();
+        let Some(host) = host else {
+            return Some(out);
+        };
         let affected_at =
             |x: &Contact| x.role == ContactRole::Affected && x.org.eq_ignore_ascii_case(org);
-        let operator =
-            host.is_some_and(|h| c.contacts.iter().any(|x| affected_at(x) && x.is_for(h)));
+        let operator = c.contacts.iter().any(|x| affected_at(x) && x.is_for(host));
         if operator && !org.trim().is_empty() {
             out.extend(
                 c.contacts
                     .iter()
                     .filter(|x| affected_at(x))
                     .filter_map(|x| x.endpoint.as_deref())
+                    .filter(|e| same_site(e, host, site))
                     .map(str::to_ascii_lowercase),
             );
         }
@@ -94,13 +109,20 @@ impl Scope<'_> {
 }
 
 impl OperatorEvidence {
-    pub fn in_scope(&self, scope: &Scope) -> bool {
+    /// Whether a rendering for `scope` may use these logs. For an operator:
+    /// logs of its own endpoint, or of its organisation under the same
+    /// registrable domain (`site`); with no endpoint to compare, the
+    /// organisation's name alone.
+    pub fn in_scope(&self, scope: &Scope, site: Registrable) -> bool {
         match scope {
             Scope::All => true,
-            Scope::Operator { org, host } => {
-                self.org.eq_ignore_ascii_case(org)
-                    || host.is_some_and(|h| self.host.eq_ignore_ascii_case(h))
-            }
+            Scope::Operator { org, host } => match host {
+                Some(h) => {
+                    self.host.eq_ignore_ascii_case(h)
+                        || (self.org.eq_ignore_ascii_case(org) && same_site(&self.host, h, site))
+                }
+                None => self.org.eq_ignore_ascii_case(org),
+            },
             Scope::Public => self.public.is_some(),
         }
     }
@@ -123,13 +145,39 @@ mod tests {
             public: None,
             note: None,
         };
-        assert!(e.in_scope(&Scope::for_audience(Audience::Provider, None)));
-        assert!(!e.in_scope(&Scope::for_audience(Audience::Public, None)));
-        assert!(!e.in_scope(&Scope::for_audience(Audience::Affected, None)));
-        assert!(e.in_scope(&Scope::Operator {
-            org: "other",
-            host: Some("PORTAL.example.gov")
-        }));
+        let site = &last_two;
+        assert!(e.in_scope(&Scope::for_audience(Audience::Provider, None), site));
+        assert!(!e.in_scope(&Scope::for_audience(Audience::Public, None), site));
+        assert!(!e.in_scope(&Scope::for_audience(Audience::Affected, None), site));
+        assert!(e.in_scope(
+            &Scope::Operator {
+                org: "other",
+                host: Some("PORTAL.example.gov")
+            },
+            site
+        ));
+        // Same organisation and registrable domain: its other host's logs.
+        assert!(e.in_scope(
+            &Scope::Operator {
+                org: "portal",
+                host: Some("pay.example.gov")
+            },
+            site
+        ));
+        // Same name, another operator's domain: nothing.
+        assert!(!e.in_scope(
+            &Scope::Operator {
+                org: "Portal",
+                host: Some("portal.unrelated.example")
+            },
+            site
+        ));
+    }
+
+    /// The last two labels, standing in for the Public Suffix List.
+    fn last_two(h: &str) -> Option<String> {
+        let labels: Vec<&str> = h.split('.').collect();
+        (labels.len() >= 2).then(|| labels[labels.len() - 2..].join(".").to_ascii_lowercase())
     }
 
     #[test]
@@ -164,25 +212,39 @@ mod tests {
             ),
             // A registrar speaks for many operators; it widens nothing.
             contact("utility.example", ContactRole::Registrar, "other.example"),
+            // An unrelated operator recorded under the same name.
+            contact(
+                "utility.example",
+                ContactRole::Affected,
+                "portal.hosting-ltd.example",
+            ),
         ];
+        let site = &last_two;
         let hosts = Scope::for_audience(Audience::Affected, Some(&c.contacts[0]))
-            .hosts(&c)
+            .hosts(&c, site)
             .unwrap();
         assert_eq!(
             hosts.into_iter().collect::<Vec<_>>(),
             ["billing.utility.example", "pay.utility.example"]
         );
         let hosts = Scope::for_audience(Audience::Affected, Some(&c.contacts[3]))
-            .hosts(&c)
+            .hosts(&c, site)
             .unwrap();
         assert_eq!(hosts.into_iter().collect::<Vec<_>>(), ["other.example"]);
+        let hosts = Scope::for_audience(Audience::Affected, Some(&c.contacts[4]))
+            .hosts(&c, site)
+            .unwrap();
+        assert_eq!(
+            hosts.into_iter().collect::<Vec<_>>(),
+            ["portal.hosting-ltd.example"]
+        );
         assert!(
             Scope::for_audience(Audience::Affected, None)
-                .hosts(&c)
+                .hosts(&c, site)
                 .unwrap()
                 .is_empty()
         );
-        assert!(Scope::All.hosts(&c).is_none());
-        assert!(Scope::Public.hosts(&c).is_none());
+        assert!(Scope::All.hosts(&c, site).is_none());
+        assert!(Scope::Public.hosts(&c, site).is_none());
     }
 }

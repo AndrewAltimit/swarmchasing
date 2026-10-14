@@ -5,6 +5,8 @@ use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
+mod lenient;
+
 pub const DEFAULT_RULES: &str = include_str!("../../../rules/default.toml");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -280,6 +282,14 @@ impl Rules {
         Self::compile(set)
     }
 
+    /// Rules from a pinned or historical file: a key these rules no longer
+    /// know (a retired option) is dropped, with a warning for each, instead
+    /// of failing the load. The shipped rules and a `--rules` file load
+    /// with [`Rules::from_toml`], which refuses unknown keys.
+    pub fn from_toml_lenient(text: &str) -> Result<(Self, Vec<String>), String> {
+        lenient::from_toml_lenient(text)
+    }
+
     pub fn compile(set: RuleSet) -> Result<Self, String> {
         let mut seen = std::collections::HashSet::new();
         let mut compiled = Vec::with_capacity(set.rules.len());
@@ -503,6 +513,9 @@ mod tests {
             "prompt_echo",
             "swarm",
             "agentness",
+            "biclique",
+            "generator",
+            "onset",
         ] {
             let text = format!("[{table}]\nno_such_setting = 1\n");
             let e = Rules::from_toml(&text).err().unwrap_or_default();

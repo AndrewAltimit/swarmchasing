@@ -77,6 +77,8 @@ The **target host** is the host of the innermost layer whose host is not itself 
 
 Regular expressions are case-insensitive and use the syntax of the Rust `regex` crate: no look-around and no back-references, inline flags such as `(?-i:…)`, and `\x{…}` escapes. An engine in another language **must** use a compatible syntax or translate the patterns, and **must** pass the conformance vectors.
 
+A pattern with a capture group named `m` matches as that group: the matched text (what a `link = true` rule links on) is the group, and the rest of the pattern is context it must see but does not keep. With no look-behind, this is how a pattern says what may not come before a match: `(^|[^a-z])(?P<m>agenttest\d*)` matches `uq_agenttest42` as `agenttest42`.
+
 ## Scoring
 
 For one record:
