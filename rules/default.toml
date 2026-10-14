@@ -47,7 +47,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-13.2"
+version = "2026-10-13.3"
 
 [thresholds]
 suggestive = 3
@@ -1095,6 +1095,7 @@ description = "Cache-busting parameter"
 # ── Self identification (weak; agents misreport who built them) ────────────
 [[rule]]
 id = "selfid.vendor_name"
+group = "vendor_self_id"
 kind = "self_id"
 artifact = true
 # Parameter values only: a vendor name in the target host (reading claude.ai
@@ -1222,7 +1223,11 @@ id = "exfil.cookie"
 kind = "exfil"
 tactic = "T6"
 target = "url"
-pattern = "document\\.cookie|[?&](cookie|cookies|ck)=[^&]{20,}"
+# A `cookie` or `cookies` parameter is redacted at ingest whatever it holds
+# (redact.rs SECRET_PARAM), so its length says nothing and a consent choice
+# (`cookies=essential`) would read like a stolen jar; only `ck`, which is not
+# redacted, keeps the length test.
+pattern = "document\\.cookie|[?&]ck=[^&]{20,}"
 weight = 3
 description = "Cookie values sent onward"
 
@@ -1525,6 +1530,46 @@ target = "user_agent"
 pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|meta-externalagent|meta-externalfetcher|ExaSearchBot|FirecrawlAgent|CloudflareBrowserRenderingCrawler"
 weight = 1
 description = "Known agent product in the user agent (FM-7.11 declared identity)"
+
+[[rule]]
+id = "header.coding_agent_ua"
+kind = "header"
+artifact = true
+target = "user_agent"
+# Fetch user agents of coding harnesses, which header.agent_ua does not name.
+# Gemini CLI web_fetch (`Google-Gemini-CLI/1.0`,
+# https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/tools/web-fetch.ts),
+# Qwen Code (`QwenCode/<version> (<platform>; <arch>)`,
+# https://github.com/QwenLM/qwen-code/blob/main/packages/core/src/tools/web-fetch.ts),
+# Aider (`Aider/<version> +https://aider.chat/`, appended to its browser's user
+# agent or inside a `Mozilla./5.0 (...)` one,
+# https://github.com/Aider-AI/aider/blob/main/aider/scrape.py) and Crush
+# (`crush/1.0`, the whole user agent,
+# https://github.com/charmbracelet/crush/blob/main/internal/agent/tools/fetch.go).
+# Claude Code's fetch identifies as Claude-User, which header.agent_ua reads.
+# Developers read documentation through these tools every day, so it says a
+# harness fetched the page, not that anyone was harmed.
+pattern = "Google-Gemini-CLI/\\d|\\bQwenCode/\\S+ \\(|\\bAider/\\d\\S* \\+https://aider\\.chat|^crush/\\d+\\.\\d+$"
+weight = 1
+description = "Coding-agent harness fetch user agent (Gemini CLI, Qwen Code, Aider, Crush)"
+
+[[rule]]
+id = "marker.assistant_citation"
+# One group with selfid.vendor_name: `chatgpt.com` in the tag is also a vendor
+# name in a value, and one tag counts once.
+group = "vendor_self_id"
+kind = "self_id"
+artifact = true
+target = "url"
+# The referral tag ChatGPT adds to the links it cites
+# (https://help.openai.com/en/articles/12627856, "ChatGPT automatically
+# includes the UTM parameter utm_source=chatgpt.com in referral URLs"). A
+# person clicking a cited link sends it too, and so does an agent that copies a
+# cited URL into its own requests; it says the URL came from an assistant's
+# answer, not who sent it.
+pattern = "[?&]utm_source=chatgpt\\.com(&|#|$)"
+weight = 1
+description = "Assistant citation tag on the URL (utm_source=chatgpt.com)"
 
 # ── ASN → organisation hints (attribution context, never proof) ────────────
 [[asn]]

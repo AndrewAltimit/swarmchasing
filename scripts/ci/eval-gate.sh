@@ -51,16 +51,16 @@ cargo run --quiet "$@" -p swarmchase -- eval samples/eval/*.ndjson \
     --show-fp 50 \
     --min-significant-precision 0.90 \
     --min-suggestive-precision 0.90 \
-    --min-suggestive-recall 0.94 \
-    --min-significant-recall 0.39 \
-    --min-significant-precision-lower 0.93 \
-    --min-suggestive-precision-lower 0.96 \
+    --min-suggestive-recall 0.96 \
+    --min-significant-recall 0.52 \
+    --min-significant-precision-lower 0.95 \
+    --min-suggestive-precision-lower 0.97 \
     --min-nonsynthetic-significant-precision 0.90 \
     --min-nonsynthetic-suggestive-precision 0.90 \
-    --min-nonsynthetic-suggestive-recall 0.80 \
-    --min-nonsynthetic-significant-recall 0.38 \
-    --min-nonsynthetic-significant-precision-lower 0.75 \
-    --min-nonsynthetic-suggestive-precision-lower 0.86 \
+    --min-nonsynthetic-suggestive-recall 0.84 \
+    --min-nonsynthetic-significant-recall 0.40 \
+    --min-nonsynthetic-significant-precision-lower 0.78 \
+    --min-nonsynthetic-suggestive-precision-lower 0.87 \
     --coverage-allow samples/eval/coverage-allow.txt \
     --require-coverage
 

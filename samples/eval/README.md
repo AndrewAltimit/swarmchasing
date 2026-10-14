@@ -21,7 +21,7 @@ Each record is an ordinary record plus label fields:
 | `labeller` | optional | Who labelled the record, for [SC-Bench](../../docs/reference/evaluation.md#sc-bench) exports. |
 | `tuned` | reviewed records | `true`: looked at while changing a rule, so left out of the [benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline). |
 
-Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), `mail_gateway` (links a mail gateway or security product submits on its own), and `scanner` (security scanners). False positives are reported per benign class.
+Benign classes: `relay_reading` (a person reading a page through a relay or converter), `api_client` (ordinary API calls), `dev_tool` (developer services used as intended), `crawler` (pages and assets fetched by crawlers), `human_form` (searches, logins and other form input), `human_browse` (ordinary page views), `mail_gateway` (links a mail gateway or security product submits on its own), `scanner` (security scanners), `ai_referral` (a person following a link an assistant cited) and `archive_link` (web-archive captures and the archive's own pages). False positives are reported per benign class.
 
 Records get a `run` only where the grouping is clear: the published reconstructions of one incident share one, and each other incident has its own. The `llm-residue.ndjson` records are independent synthetic examples and carry none.
 
@@ -33,6 +33,8 @@ Each line is a record with three extra fields: `label` (`agent` or `benign`), `c
 - **Benign records** are ordinary uses of the same relays and carriers, and normal requests to the same targets. They include known traps: SQL words in search text, `1=1` in a question, and reading `claude.ai` through a relay.
 
 No urlquery content is copied here. urlquery's terms forbid redistributing it, and the Transluce release links reports rather than reproducing them.
+
+The two `fuzzing` records are missed by design. One turns a scalar parameter into an array (`State_Id[]=1&State_Id[]=2`); the other guesses a path segment (`anything.pdf`). Each is an ordinary request on its own: array parameters are how PHP and Rails forms send lists, and a file name is a file name. What makes them fuzzing is the run around them (the same API called with the parameter's type changed, or a path tried with several names), which one record does not show. A rule for either shape would fire on ordinary form and download traffic far more often than on agents.
 
 ## `llm-residue.ndjson`
 
@@ -49,6 +51,22 @@ The rules were tuned on this set, so it is a **regression floor, not a precision
 ## `rule-coverage.ndjson`
 
 Synthetic records that give every rule at least one labelled positive, and the significant and link rules hard negatives: benign records that look alike and must not fire. Each is marked `"synthetic": true`, uses reserved `.example` hosts (or the public service the rule names), and was written by hand. Payloads are the canonical textbook test strings. Benign records name the rule they guard in `hard_negative_for`, and records from one synthetic run share a `run` id.
+
+## `client-traces.ndjson`
+
+Synthetic records for the client-trace rules, each marked `"synthetic": true`, on reserved `.example` hosts (and the Aider site the rule cites), written by hand:
+
+- **Coding-harness user agents** (`header.coding_agent_ua`): agent runs sending probes through Gemini CLI, Qwen Code, Aider (its browser and its plain HTTP client) and Crush, with the user agents those tools' source code sets. The hard negatives are developers reading documentation, a README and a package registry with the same tools, and a person reading the Aider site in a browser.
+- **Assistant citation tag** (`marker.assistant_citation`): an agent reusing a ChatGPT-cited URL, `utm_source=chatgpt.com` and all, for a probe and with its run tag. The hard negatives, class `ai_referral`, are people clicking cited news, documentation and recipe links; one reads a cited article through a relay (the relay and the tag stay under the context cap), and an analyst filters referral traffic by the tag.
+
+## `hard-negatives.ndjson`
+
+Synthetic benign records, each marked `"synthetic": true`, on reserved `.example` hosts (or the public service the rule names), written by hand. Each names the rule it guards in `hard_negative_for`, for the rules with the most positives and no other hard negative, and for the thin benign classes:
+
+- **Look-alikes that do not fire**: parameter names that start like a run tag (`uqid`, `uq_campus`) and a search for one; searches and documentation pages naming `fetch()`, `XMLHttpRequest`, POST forms and `eval(base64_decode)`; static `data:` pages; a relative asset path and a slug ending in an ellipsis; a router's admin page by IP; a cookie-consent choice; `tok` and `archive` parameters that only start like a probe tag.
+- **Look-alikes that fire and stay noise**: ordinary scripted clients (a feed reader, an install script, a server calling its own API), header fingerprints on ordinary traffic (an Apache Traffic Server cache, a gzip-only mobile client, an owner's own Browser Rendering job, a signed declared agent, the MCP fetch server driven by a person), Markdown relays used to read, a large `limit`, and pages naming disposable mail, a paste app or a `document.title` assignment.
+- **Scanners** (`scanner`): an operator's template scan reading `robots.txt` and `security.txt`, and directory listing and path fuzzing on the operator's own staging host, all with the tools' default user agents and no payload.
+- **Archive links** (`archive_link`): an ordinary capture, an `im_` image capture, the capture calendar, an arquivo.pt capture and an archive.today snapshot, none of them the raw `id_` form.
 
 ## `carrier-negatives.ndjson`
 

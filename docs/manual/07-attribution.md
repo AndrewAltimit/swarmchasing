@@ -39,7 +39,7 @@ The network fields of a scan-service record usually describe the **target**: whe
 
 The harness is the software around the model: the agent framework, the fetch tool, the browser automation, the product. Its traces include tool-call markup dialects, the user agent of a fetch tool, which relays and carriers it reaches for, fixed fan-out widths, and parameter conventions.
 
-Harness traces are reported as ranked candidates with the traces for each, tagged Inference. A harness is never named as the source in public: open-source frameworks are used by many operators, and their traces are easy to imitate. Toolkit: private reports rank one candidate per client product in the records' user agents, by records, with the header fingerprints, header-name sets and URL encoding style they share; public notices leave harness candidates out.
+Harness traces are reported as ranked candidates with the traces for each, tagged Inference. A harness is never named as the source in public: open-source frameworks are used by many operators, and their traces are easy to imitate. Toolkit: private reports rank one candidate per client product in the records' user agents (a coding harness's own token, such as Gemini CLI's or Aider's, names the product even inside a Mozilla-compatible user agent), by records, with the header fingerprints, header-name sets and URL encoding style they share; public notices leave harness candidates out.
 
 ## FM-7.5 Model family layer
 
