@@ -23,6 +23,8 @@ pub(super) struct AnalysisCtx<'r> {
     observations: Vec<Observation>,
     /// Indexes of records with at least one hit (set by `link`).
     flagged: Vec<usize>,
+    /// What linking joined the records by (set by `link`).
+    ties: Vec<link::Tie>,
     a: Analysis,
 }
 
@@ -232,6 +234,10 @@ pub(super) const PASSES: &[Pass] = &[
         cx.a.swarm_edges = edges;
         cx.a.multiplicity.extend(families);
     }),
+    pass("onset", &["number"], |cx| {
+        cx.a.onset_groups =
+            crate::swarm::onset_groups(&cx.a.clusters, &cx.a.results, &cx.rules.set.onset);
+    }),
     pass(
         "scope",
         &["number", "escalations", "knowledge", "agent", "swarm"],
@@ -246,6 +252,7 @@ pub(super) fn run(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         rules,
         observations,
         flagged: Vec::new(),
+        ties: Vec::new(),
         a: Analysis::default(),
     };
     for (i, p) in PASSES.iter().enumerate() {
@@ -315,6 +322,7 @@ fn link_clusters(cx: &mut AnalysisCtx) {
         .map(|members| hints::base(results, members, &links.joined, cx.rules))
         .collect();
     cx.a.chains = links.chains;
+    cx.ties = links.ties;
     cx.a.common_features = links.common;
     cx.a.clusters = clusters;
 }
@@ -360,6 +368,7 @@ fn plant(cx: &mut AnalysisCtx) {
         &a.clusters,
         &a.escalations,
         &a.common_features,
+        &cx.ties,
         &cx.rules.set.linking,
     );
     for (c, p) in cx.a.clusters.iter_mut().zip(plants) {

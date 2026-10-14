@@ -1,6 +1,10 @@
 //! Swarm edges, soft links and candidate fleets against true run pairs, and
 //! the agent grade by actor class.
 //!
+//! Review hints are measured beside them ([`GROUP_KINDS`]): onset groups as
+//! edges are, against true swarm pairs, and seams against false merges, the
+//! clusters above noise whose members span more than one operator.
+//!
 //! The unit is a pair of true runs. An edge side is placed on the run most of
 //! its records belong to; a cluster on the run most of its members belong
 //! to. Kinds are keyed by their serialised name. Every kind is listed with
@@ -12,7 +16,7 @@ use crate::truth::Truth;
 use sc_core::eval::Label;
 use sc_core::eval::grades::Actor;
 use sc_core::eval::stats::Proportion;
-use sc_core::{AgentLevel, Analysis, SoftLinkKind, Tier};
+use sc_core::{AgentLevel, Analysis, PlantSignalKind, SoftLinkKind, Tier};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -110,7 +114,21 @@ pub struct Measurement {
     /// People's records in clusters graded L3 or above.
     #[serde(default)]
     pub human_high: usize,
+    /// Review hints by [`GROUP_KINDS`] name. `seam`: `pairs` are clusters
+    /// above noise with a seam, `correct` and `found` those that are false
+    /// merges, `of` the false merges, `unrelated` the clean ones seamed.
+    /// `onset_group` (kept) and `onset_trigger` (listed as a common
+    /// trigger): pairs of runs in one group, against true swarm pairs, as
+    /// edges are.
+    #[serde(default)]
+    pub groups: BTreeMap<String, KindStat>,
+    /// Clusters above noise whose members are one operator's.
+    #[serde(default)]
+    pub clean_clusters: usize,
 }
+
+/// The review hints measured per scenario, as `expect` names them.
+pub const GROUP_KINDS: [&str; 3] = ["seam", "onset_group", "onset_trigger"];
 
 impl Measurement {
     /// Sum another measurement into this one (seeds, scenarios, files).
@@ -124,7 +142,11 @@ impl Measurement {
             a.reachable += b.reachable;
             a.joined += b.joined;
         }
-        for (mine, theirs) in [(&mut self.edges, &o.edges), (&mut self.links, &o.links)] {
+        for (mine, theirs) in [
+            (&mut self.edges, &o.edges),
+            (&mut self.links, &o.links),
+            (&mut self.groups, &o.groups),
+        ] {
             for (k, v) in theirs {
                 mine.entry(k.clone()).or_default().add(v);
             }
@@ -133,6 +155,7 @@ impl Measurement {
         self.split_pairs += o.split_pairs;
         self.benign_high += o.benign_high;
         self.human_high += o.human_high;
+        self.clean_clusters += o.clean_clusters;
         for (row, cols) in &o.grades {
             let r = self.grades.entry(row.clone()).or_default();
             for (c, n) in cols {
@@ -271,9 +294,9 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
         drawn.entry(kind_name(&e.kind)).or_default().insert(p);
         drawn.entry("any".into()).or_default().insert(p);
     }
-    for (k, ps) in drawn {
+    let swarm_stat = |ps: &BTreeSet<(&str, &str)>| {
         let mut s = KindStat::default();
-        for &(x, y) in &ps {
+        for &(x, y) in ps {
             s.pairs += 1;
             let (tx, ty) = (run_row[x], run_row[y]);
             if x == y {
@@ -289,7 +312,10 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
         }
         s.of = swarm_pairs.len();
         s.found = swarm_pairs.iter().filter(|p| ps.contains(p)).count();
-        out.edges.insert(k, s);
+        s
+    };
+    for (k, ps) in drawn {
+        out.edges.insert(k, swarm_stat(&ps));
     }
 
     // Soft links and candidate fleets, between clusters.
@@ -341,6 +367,71 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
             }
         }
     }
+    // Onset groups: every pair of runs in a group, kept or listed as a
+    // common trigger.
+    let mut onset: BTreeMap<String, BTreeSet<(&str, &str)>> = BTreeMap::new();
+    for k in ["onset_group", "onset_trigger"] {
+        onset.entry(k.into()).or_default();
+    }
+    for g in &a.onset_groups {
+        let kind = if g.common_trigger {
+            "onset_trigger"
+        } else {
+            "onset_group"
+        };
+        let runs: Vec<&str> = g
+            .clusters
+            .iter()
+            .filter_map(|c| a.cluster_index(c))
+            .filter_map(|c| cluster_run.get(&c).copied())
+            .collect();
+        out.unplaced += g.clusters.len() - runs.len();
+        for (i, &x) in runs.iter().enumerate() {
+            for &y in &runs[i + 1..] {
+                onset.entry(kind.into()).or_default().insert(pair(x, y));
+            }
+        }
+    }
+    for (k, ps) in onset {
+        out.groups.insert(k, swarm_stat(&ps));
+    }
+
+    // Seams against false merges.
+    let mut seam = KindStat::default();
+    for c in a.clusters.iter().filter(|c| c.tier > Tier::Noise) {
+        let ops: BTreeSet<String> = c
+            .members
+            .iter()
+            .filter_map(|&m| truth.get(&a.results[m].obs.id))
+            .map(|t| t.operator())
+            .collect();
+        if ops.is_empty() {
+            continue;
+        }
+        let merged = ops.len() > 1;
+        let seamed = c
+            .origin
+            .plant_signals
+            .iter()
+            .any(|p| p.kind == PlantSignalKind::Seam);
+        if merged {
+            seam.of += 1;
+        } else {
+            out.clean_clusters += 1;
+        }
+        if seamed {
+            seam.pairs += 1;
+            if merged {
+                seam.correct += 1;
+                seam.cross_correct += 1;
+                seam.found += 1;
+            } else {
+                seam.unrelated += 1;
+            }
+        }
+    }
+    out.groups.insert("seam".into(), seam);
+
     for (k, ps) in linked {
         let mut s = KindStat::default();
         for &(x, y) in &ps {

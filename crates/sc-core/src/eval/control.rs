@@ -208,7 +208,8 @@ mod tests {
                 "burned identifier",
                 "too perfect",
                 "habit mismatch",
-                "auto-submitted"
+                "auto-submitted",
+                "seam"
             ]
         );
         // Only the payload record is flagged; each rule that fired is listed

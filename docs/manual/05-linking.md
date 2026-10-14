@@ -123,8 +123,11 @@ Someone who wants a false incident found, or a real cluster attributed elsewhere
 - **Too perfect.** Every record significant on several kinds of evidence, with no ordinary requests around it, no escalation and no task retrieval.
 - **Habit mismatch.** An identifier shared with an earlier cluster whose relay routes, URL encodings or payloads share nothing with this one's.
 - **Auto-submitted.** Its targets went to several scan services within seconds, and ordinary links on other hosts were fanned out the same way around it: a mail gateway or security product submitted them, and whoever sent the links made the records.
+- **Seam.** The cluster hangs on one record, or on the records of one client: without it, two groups of at least a few records each fall apart, and their habits (relay routes, URL encodings, payloads) or their clients have nothing in common. Hard links are transitive, so one record carrying two operators' identifiers merges them; the seam names that record and both sides.
 
 A plant signal is informative only against its base rate. Provenance monoculture fires on every cluster built from one scan service, which is most clusters in such a collection; a signal that fires on nearly every cluster of a source tells the reviewer nothing about this one. Each signal **should** be reported with its base rate: the share of the analysis's clusters from the same source kinds that carry it. A signal carried by more than half of them is context, listed but not counted towards the plant review threshold ([FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review)).
+
+A seam is read on the cluster's link graph, where each shared feature, run of close requests and probe chain joins its records at once, so a record is a joint only when nothing else holds the two sides together. A joint is a single record (an articulation point of that graph) or every record of one client taken out together. The seam **must not** split the cluster: the reviewer decides whether the sides are two operators ([FM-5.6](#fm-56-cluster-hygiene)).
 
 Toolkit: each plant signal carries its kind's base rate across the clusters; a kind on more than half (with at least four) is reported with that rate and does not count toward the threshold (`PlantSignal::counts()`).
 

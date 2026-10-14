@@ -97,6 +97,24 @@ pub fn render(m: &Measurement) -> String {
             rejoined.join(", ")
         }
     );
+    let g = |k: &str| m.groups.get(k).cloned().unwrap_or_default();
+    let seam = g("seam");
+    let _ = writeln!(
+        s,
+        "\nSeams (plant review): on {} of the false merges (clusters above noise spanning more than one operator), and on {} of {} clean clusters.",
+        prop(Proportion::new(seam.found, seam.of)),
+        seam.unrelated,
+        m.clean_clusters
+    );
+    let _ = writeln!(
+        s,
+        "\nOnset groups against true swarm pairs (kept, and listed as a common trigger):"
+    );
+    let onset: std::collections::BTreeMap<String, KindStat> = ["onset_group", "onset_trigger"]
+        .into_iter()
+        .map(|k| (k.to_string(), g(k)))
+        .collect();
+    table(&mut s, &onset, true);
     if m.unplaced > 0 {
         let _ = writeln!(s, "\nUnplaced (a side with no truth): {}", m.unplaced);
     }

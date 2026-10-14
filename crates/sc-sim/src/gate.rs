@@ -219,7 +219,7 @@ impl Gate {
                     if edge {
                         m.edges.get(&key)
                     } else {
-                        m.links.get(&key)
+                        m.groups.get(&key).or_else(|| m.links.get(&key))
                     }
                 });
                 if let Some(most) = e.max_pairs {
@@ -411,6 +411,48 @@ mod tests {
                 "[[scenario]]\nname = \"s\"\nexpect.S9 = {}\n[[scenario.actor]]\nkind = \"agent\"\n"
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn review_hints_are_expected_like_kinds() {
+        let file = ScenarioFile::parse(
+            "[[scenario]]
+name = \"s\"
+expect.seam = { min_recall = 0.5 }
+             expect.onset_group = { max_pairs = 0 }
+[[scenario.actor]]
+kind = \"agent\"
+",
+        )
+        .unwrap();
+        let mut m = Measurement::default();
+        m.groups.insert(
+            "seam".into(),
+            KindStat {
+                found: 1,
+                of: 2,
+                ..stat(1, 1)
+            },
+        );
+        m.groups.insert("onset_group".into(), stat(3, 0));
+        let g = Gate {
+            expect: true,
+            ..Default::default()
+        };
+        let lines: Vec<String> = g
+            .check_scenarios(&[("s".to_string(), m)], &file)
+            .iter()
+            .map(Check::line)
+            .collect();
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(
+            lines[0].starts_with("FAIL s onset_group pairs drawn: 3"),
+            "{lines:?}"
+        );
+        assert!(
+            lines[1].starts_with("ok   s seam recall: 50.0%"),
+            "{lines:?}"
         );
     }
 

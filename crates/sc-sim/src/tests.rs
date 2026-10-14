@@ -360,6 +360,46 @@ fn a_planter_copying_timing_replays_its_victims_times() {
 }
 
 #[test]
+fn a_bridging_planter_is_a_seam_between_two_operators() {
+    let m = bench_one("planted-bridge");
+    let seam = &m.groups["seam"];
+    // The planter's client joins both agents' records; the seam names it.
+    assert!(seam.of >= 1 && seam.found >= 1, "{}", render(&m));
+    assert_eq!(seam.unrelated, 0, "{}", render(&m));
+}
+
+#[test]
+fn a_launch_is_an_onset_group_and_a_news_spike_none() {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    // No two agents of a launch share a client.
+    let s = scenario("swarm-short");
+    let text = to_ndjson(&generate(&s, s.seed, &p));
+    let truth = Truth::from_ndjson(&text);
+    let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
+    let mut clients = std::collections::BTreeMap::new();
+    for o in &obs {
+        let t = truth.get(&o.id).unwrap();
+        if t.swarm_id().is_some() {
+            clients.insert(t.run.clone(), (o.user_agent.clone(), o.asn));
+        }
+    }
+    let distinct: std::collections::BTreeSet<_> = clients.values().collect();
+    assert_eq!((clients.len(), distinct.len()), (15, 15));
+    let m = bench_one("swarm-short");
+    let g = &m.groups["onset_group"];
+    assert!(
+        g.found > 0 && g.correct * 10 >= g.pairs * 9,
+        "{}",
+        render(&m)
+    );
+    // Unrelated agents on one site keep no group (the scenario's
+    // expectations hold the trigger over all its seeds).
+    let m = bench_one("news-spike-short");
+    assert_eq!(m.groups["onset_group"].pairs, 0, "{}", render(&m));
+}
+
+#[test]
 fn null_scenarios_are_counted_apart() {
     let rules = Rules::default_rules();
     let f = ScenarioFile::parse(SCENARIOS).unwrap();

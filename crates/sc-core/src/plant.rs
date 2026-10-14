@@ -10,7 +10,7 @@
 //! cluster tends to show. All of it is for the admin's review: none of it
 //! changes a score, a tier or a link, and none of it reaches a public notice.
 
-use crate::analyze::{Analysis, Cluster, CommonFeature, ObsResult};
+use crate::analyze::{Analysis, Cluster, CommonFeature, ObsResult, Tie};
 use crate::escalation::Escalation;
 use crate::extract::defang;
 use crate::model::{LinkFeature, Provenance, Tactic, Tier, truncate};
@@ -62,6 +62,11 @@ pub enum PlantSignalKind {
     /// product that submits every link it sees made the records, on behalf
     /// of whoever sent the links ([`crate::crossservice`]).
     AutoSubmitted,
+    /// The cluster hangs on one record or one client: without it, two
+    /// groups of records that worked differently fall apart. Single-link
+    /// linking merges two operators that way when one record carries both
+    /// one's and the other's identifiers ([`crate::seam`]).
+    Seam,
 }
 
 impl PlantSignalKind {
@@ -72,16 +77,18 @@ impl PlantSignalKind {
             Self::TooPerfect => "too perfect",
             Self::HabitMismatch => "habit mismatch",
             Self::AutoSubmitted => "auto-submitted",
+            Self::Seam => "seam",
         }
     }
 
     /// Every kind, in report order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::ProvenanceMonoculture,
         Self::BurnedIdentifier,
         Self::TooPerfect,
         Self::HabitMismatch,
         Self::AutoSubmitted,
+        Self::Seam,
     ];
 }
 
@@ -173,22 +180,32 @@ pub(crate) fn corroboration(results: &[ObsResult], members: &[usize]) -> Corrobo
 }
 
 /// The plant signals of every cluster, in cluster order. Reads the clusters'
-/// ids, so it runs after numbering.
+/// ids and the records' clusters, so it runs after numbering. `ties` are
+/// what linking joined the records by.
 pub(crate) fn plant_signals(
     results: &[ObsResult],
     clusters: &[Cluster],
     escalations: &[Escalation],
     common: &[CommonFeature],
+    ties: &[Tie],
     cfg: &Linking,
 ) -> Vec<Vec<PlantSignal>> {
+    let mut by_cluster: Vec<Vec<&Tie>> = vec![Vec::new(); clusters.len()];
+    for t in ties {
+        if let Some(c) = t.members.first().and_then(|&m| results[m].cluster) {
+            by_cluster[c].push(t);
+        }
+    }
     let mut out: Vec<Vec<PlantSignal>> = clusters
         .iter()
-        .map(|c| {
+        .zip(&by_cluster)
+        .map(|(c, ties)| {
             let mut v = Vec::new();
             v.extend(monoculture(results, c));
             burned_in(results, c, cfg, &mut v);
             v.extend(too_perfect(results, c, escalations, cfg.window_secs));
             v.extend(auto_submitted(c));
+            seams(results, c, ties, cfg.seam_min_side, &mut v);
             v
         })
         .collect();
@@ -414,20 +431,71 @@ fn habit_mismatches(
 
 /// The habits on which two clusters both have data and share nothing.
 fn habits_differ(a: &Cluster, b: &Cluster) -> Vec<&'static str> {
-    let apart = |x: &BTreeMap<String, usize>, y: &BTreeMap<String, usize>| {
-        !x.is_empty() && !y.is_empty() && x.keys().all(|k| !y.contains_key(k))
+    let keys = |c: &Cluster| -> [BTreeSet<String>; 3] {
+        [
+            c.relay_stacks.keys().cloned().collect(),
+            c.encodings.keys().cloned().collect(),
+            c.dialect.variants.keys().cloned().collect(),
+        ]
     };
-    let mut v = Vec::new();
-    if apart(&a.relay_stacks, &b.relay_stacks) {
-        v.push("relay stacks");
+    habits_apart(&keys(a), &keys(b))
+}
+
+/// The habits a cluster or a group of records is compared on, in the
+/// order [`habits_apart`] takes them.
+pub(crate) const HABITS: [&str; 3] = ["relay stacks", "URL encodings", "payload dialect"];
+
+/// The [`HABITS`] on which two sides both have data and share nothing:
+/// relay stacks, encoding styles and payload variants, in that order.
+pub(crate) fn habits_apart(
+    a: &[BTreeSet<String>; 3],
+    b: &[BTreeSet<String>; 3],
+) -> Vec<&'static str> {
+    (0..3)
+        .filter(|&i| !a[i].is_empty() && !b[i].is_empty() && a[i].is_disjoint(&b[i]))
+        .map(|i| HABITS[i])
+        .collect()
+}
+
+/// A seam in the cluster's link graph ([`crate::seam`]), one signal each.
+fn seams(
+    results: &[ObsResult],
+    c: &Cluster,
+    ties: &[&Tie],
+    min_side: usize,
+    out: &mut Vec<PlantSignal>,
+) {
+    if c.tier == Tier::Noise {
+        return;
     }
-    if apart(&a.encodings, &b.encodings) {
-        v.push("URL encodings");
+    let first = |v: &[usize]| {
+        v.iter()
+            .map(|&i| results[i].obs.id.as_str())
+            .find(|id| !id.is_empty())
+            .map(|id| format!(" from `{}`", defang(&truncate(id, 60))))
+            .unwrap_or_default()
+    };
+    for s in crate::seam::seams(results, &c.members, ties, min_side) {
+        let joint = if s.strand {
+            format!("{} records of one client", s.joint.len())
+        } else {
+            "one record".to_string()
+        };
+        out.push(PlantSignal {
+            kind: PlantSignalKind::Seam,
+            records: s.joint.clone(),
+            detail: format!(
+                "{joint} joins {} records{} and {} records{} whose {} differ, through {}; without it they fall apart: it may carry copied identifiers, or two operators' records may be merged here",
+                s.sides[0].len(),
+                first(&s.sides[0]),
+                s.sides[1].len(),
+                first(&s.sides[1]),
+                s.differs.join(", "),
+                defang(&truncate(&s.via.join(", "), 200))
+            ),
+            base_rate: None,
+        });
     }
-    if apart(&a.dialect.variants, &b.dialect.variants) {
-        v.push("payload dialect");
-    }
-    v
 }
 
 /// One line on a cluster's provenance and corroboration, for internal and

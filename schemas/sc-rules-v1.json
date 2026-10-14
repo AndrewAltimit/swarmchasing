@@ -39,7 +39,8 @@
         "pause_min_secs": { "$ref": "#/$defs/secs" },
         "archive_burst_gap_secs": { "$ref": "#/$defs/secs" },
         "archive_burst_min": { "$ref": "#/$defs/count" },
-        "archive_burst_ratio": { "type": "number", "minimum": 0 }
+        "archive_burst_ratio": { "type": "number", "minimum": 0 },
+        "seam_min_side": { "$ref": "#/$defs/count" }
       }
     },
     "chains": {
@@ -174,6 +175,18 @@
         "dispatch_lag_tolerance_bins": { "$ref": "#/$defs/count" },
         "dispatch_max_chance": { "$ref": "#/$defs/share" },
         "fdr": { "$ref": "#/$defs/share" }
+      }
+    },
+    "onset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "window_secs": { "type": "integer", "minimum": 1 },
+        "min_clusters": { "$ref": "#/$defs/count" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "trigger_max_chance": { "$ref": "#/$defs/share" },
+        "clock_tolerance_secs": { "$ref": "#/$defs/secs" },
+        "clock_weight": { "$ref": "#/$defs/share" }
       }
     },
     "agentness": {

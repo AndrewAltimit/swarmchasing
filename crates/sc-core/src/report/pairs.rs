@@ -32,6 +32,16 @@ impl Report<'_> {
         self.fleets(s);
         if matches!(self.opts.audience, Audience::Internal | Audience::Provider) {
             crate::swarm::report_block(s, &self.a.swarm_edges, &|x, y| self.pair_shown(x, y));
+            // A group names every cluster in it: outside case notes, only
+            // a kept group whose clusters the report covers.
+            let internal = self.opts.audience == Audience::Internal;
+            crate::swarm::onset_block(s, &self.a.onset_groups, &|g| {
+                if internal {
+                    g.clusters.iter().any(|c| self.selected(c))
+                } else {
+                    !g.common_trigger && g.clusters.iter().all(|c| self.selected(c))
+                }
+            });
         }
         self.multiplicity(s);
         self.common_features(s);

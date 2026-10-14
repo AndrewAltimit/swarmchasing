@@ -323,6 +323,7 @@ records = 30
 name = "null-crowd"
 seed = 221
 seeds = 6
+expect.onset_group = { max_pairs = 0 }
 null = true
 span_hours = 24
 [[scenario.actor]]
@@ -498,6 +499,7 @@ palette_share = 0.3
 name = "news-spike"
 seed = 301
 seeds = 4
+expect.onset_group = { max_pairs = 0 }
 [[scenario.actor]]
 kind = "agent"
 agents = 12
@@ -751,3 +753,78 @@ agents = 150
 retry = 0.2
 palette_share = 0.05
 prose = "own"
+
+# An agent of a third operator carrying two other operators' agents' run tags
+# on every record: one client joining two operators' records into one
+# cluster, a seam the plant review names.
+[[scenario]]
+name = "planted-bridge"
+seed = 401
+seeds = 4
+expect.seam = { min_precision = 1.0, min_recall = 0.6 }
+[[scenario.actor]]
+kind = "agent"
+records = 8
+retry = 0.2
+[[scenario.actor]]
+kind = "agent"
+records = 8
+retry = 0.2
+[[scenario.actor]]
+kind = "planter"
+copies = 0
+bridges = [1]
+records = 4
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Fifteen short-lived agents of one operator launched within five minutes,
+# each with its own client, tags and hosts, two or three records each: too
+# few for co-activity or a dispatch star, only their onset ties them.
+[[scenario]]
+name = "swarm-short"
+seed = 411
+seeds = 4
+expect.onset_group = { min_precision = 0.96, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "swarm"
+agents = 15
+modes = ["launch"]
+records = 3
+hosts = 2
+off_hour = true
+offset_hours = 10
+[[scenario.actor]]
+kind = "agent"
+agents = 20
+retry = 0.2
+palette_share = 0.3
+
+# Fifteen unrelated short agents sent to one site within five minutes, as a
+# news story sends them, each working three of its hosts: the hard negative
+# of swarm-short. Their shared site marks one upstream trigger, listed and
+# not kept.
+[[scenario]]
+name = "news-spike-short"
+seed = 421
+seeds = 4
+expect.onset_group = { max_pairs = 0 }
+expect.onset_trigger = {}
+[[scenario.actor]]
+kind = "agent"
+agents = 15
+records = 3
+hosts = 20
+offset_hours = 10
+off_hour = true
+window_hours = 0.08
+same_family = true
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 20
+retry = 0.2
+palette_share = 0.3

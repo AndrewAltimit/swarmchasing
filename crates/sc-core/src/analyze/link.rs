@@ -24,6 +24,29 @@ pub(super) struct Links<'a> {
     pub common: Vec<CommonFeature>,
     /// Probe chains, linked or not.
     pub chains: Vec<Chain>,
+    /// What joined the records: every linking feature group, run of close
+    /// requests on one host and request-timed chain that linked.
+    pub ties: Vec<Tie>,
+}
+
+/// One reason flagged records were joined, with every record it joined.
+/// The union of a cluster's ties is its link graph, which the seam review
+/// reads ([`crate::seam`]).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Tie {
+    pub members: Vec<usize>,
+    pub why: TieWhy,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum TieWhy {
+    /// A shared linking feature.
+    Feature(LinkFeature),
+    /// Close requests on one target host, each within `linking.window_secs`
+    /// of the last with a rule in common.
+    Timing(String),
+    /// A probe chain.
+    Chain,
 }
 
 /// Link the `flagged` records among `results`.
@@ -49,6 +72,7 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
     crate::sort::sort(&mut all_ts);
     let mut joined = HashSet::new();
     let mut common = Vec::new();
+    let mut ties = Vec::new();
     for (&f, idxs) in &carriers {
         if idxs.len() < 2 {
             continue;
@@ -65,6 +89,10 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
                 dsu.union(w[0], w[1]);
             }
             joined.extend(group.iter().map(|&i| (i, f)));
+            ties.push(Tie {
+                members: group,
+                why: TieWhy::Feature(f.clone()),
+            });
         }
     }
     crate::sort::by(&mut common, |a, b| {
@@ -85,8 +113,10 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
             by_host.entry(h).or_default().push(i);
         }
     }
-    for idxs in by_host.values_mut() {
+    for (host, idxs) in by_host.iter_mut() {
         crate::sort::by_key(idxs, |&i| results[i].obs.ts);
+        // Each run of consecutive joined records is one tie.
+        let mut run: Vec<usize> = Vec::new();
         for w in idxs.windows(2) {
             let (a, b) = (&results[w[0]], &results[w[1]]);
             let close = a.obs.ts > 0 && b.obs.ts > 0 && b.obs.ts - a.obs.ts <= cfg.window_secs;
@@ -97,7 +127,22 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
                 .any(|h| b.hits.iter().any(|g| g.rule_id == h.rule_id));
             if close && shared {
                 dsu.union(w[0], w[1]);
+                if run.is_empty() {
+                    run.push(w[0]);
+                }
+                run.push(w[1]);
+            } else if !run.is_empty() {
+                ties.push(Tie {
+                    members: std::mem::take(&mut run),
+                    why: TieWhy::Timing(host.to_string()),
+                });
             }
+        }
+        if !run.is_empty() {
+            ties.push(Tie {
+                members: run,
+                why: TieWhy::Timing(host.to_string()),
+            });
         }
     }
 
@@ -119,6 +164,12 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
         for w in f.windows(2) {
             dsu.union(w[0], w[1]);
         }
+        if f.len() > 1 {
+            ties.push(Tie {
+                members: f,
+                why: TieWhy::Chain,
+            });
+        }
     }
 
     let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
@@ -130,6 +181,7 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
         joined,
         common,
         chains,
+        ties,
     }
 }
 
