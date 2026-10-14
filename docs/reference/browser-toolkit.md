@@ -37,7 +37,7 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 | `/docs/manual/` | The Field Manual, with section and glossary links and a pager. |
 | `/docs/manual/sections/` | Every Field Manual section by id, with search. |
 | `/operators/` | The operators' guide, with links to *Check my logs* and the workbench's access-log preset. |
-| `/check-logs/` | *Check my logs*: one access log, the rules and the identity check, a plain summary ([check my logs](#check-my-logs)). |
+| `/check-logs/` | *Check my logs*: an access log or a set of them, the rules and the identity check, a plain summary ([check my logs](#check-my-logs)). |
 | `/rules/` | The rules grouped by kind, filterable by every SC-T tactic, each with a URL tester; an editor and an in-browser evaluation ([rules explorer](#rules-explorer)). |
 | `/eval/` | The [summary](evaluation.md#summary-json) of the bundled rules on the labelled set: each tier in sentences, then intervals, every slice as a forest plot; tiers recomputed in the page for edited rules ([evaluation page](#evaluation-page)). |
 | `/analyze/` | The workbench. |
@@ -79,7 +79,9 @@ Until there is a real notice, the notices section shows the indicator notice the
 
 The workbench analyses pasted or loaded records, including an operator's own access log (`/analyze/#preset=access-log`; see [for operators](../guides/for-operators.md#check-your-own-logs)). *Try an example* loads the synthetic showcase. A link to `#try=example` or `#preset=access-log` followed while on the page applies it as arrival does. Arriving from *Check my logs* with `#preset=access-log&from=check-logs` takes the log and host checked there ([check my logs](#check-my-logs)) and analyses them.
 
-An empty workbench is one dashed area: paste records, drop a file on it, *Load file* or *Try an example*; the empty views pane says what will show there and offers the example too. A dropped file is read in the page, as a picked one is; a file over 50 MB is read only after the page says how big it is and the visitor presses *Read it anyway*. *Analyse* is offered once there is input, and while an analysis runs it says *Analysing…* and is disabled, so a second press does nothing; drafting the report, preparing sightings and the CSV downloads wait for an analysis.
+An empty workbench is one dashed area: paste records, drop files or folders on it, *Load files*, *Load folder* or *Try an example*; the empty views pane says what will show there and offers the example too. A dropped file is read in the page, as a picked one is; a file over 50 MB is read only after the page says how big it is and the visitor presses *Read it anyway*. *Analyse* is offered once there is input, and while an analysis runs it says *Analysing…* and is disabled, so a second press does nothing; drafting the report, preparing sightings and the CSV downloads wait for an analysis.
+
+Several files, a folder or an archive load as a [set of files](#sets-of-files) in place of the records box; one plain file goes into the box.
 
 An input from which no record is read shows no dashboard: an alert says nothing was read, quotes the first problem the parser met, and lists the formats the workbench reads. After a run the records box folds to a line with the record count and *Edit*, so the clusters sit under the summary.
 
@@ -117,7 +119,26 @@ The last step drafts a disclosure, on *Draft the report* or when the section scr
 
 It ends with what to do next: look closer in the workbench or on the identity page, share sightings, report a swarm, or reach the project privately. The next steps are links in the page's markup; the script only shows them. *Try an example* runs a synthetic log on a reserved host against synthetic range files, labelled as such. Nothing is uploaded or fetched beyond the site's own files.
 
-The workbench link under the flagged requests, and the next steps' link to the access-log preset, carry the log over: the page puts the log and the host's field map in the tab's `sessionStorage` and opens `/analyze/#preset=access-log&from=check-logs`. The workbench reads it once, removes it and the flag, and analyses it. The log is never in the URL; one too large for the browser's session storage is not carried, and the page says to load the file in the workbench. A file over 50 MB is read only after the visitor confirms, and *Check my log* is disabled while it runs.
+It takes a [set of files](#sets-of-files) as the workbench does. A pasted log is read as an access log, or detected when it starts as JSON; so is each file of a set.
+
+The workbench link under the flagged requests, and the next steps' link to the access-log preset, carry the logs over: the page puts the log (or each file's name and text) and the host's field map in the tab's `sessionStorage` (`{v: 1, log, map}` or `{v: 2, files, map}`) and opens `/analyze/#preset=access-log&from=check-logs`. The workbench reads it once, removes it and the flag, and analyses it. The logs are never in the URL; a set past about 4 MB of text, or one too large for the browser's session storage, is not carried, and the page says to load the files in the workbench. A file over 50 MB is read only after the visitor confirms, and *Check my log* is disabled while it runs.
+
+## Sets of files
+
+*Check my logs* and the workbench take several files at once, a folder (*Load folder*, or files and folders dropped on the log area), and archives: `.zip` (stored or deflate, ZIP64 read), `.tar` (ustar, GNU long names, pax paths), `.tar.gz`, `.tgz` and `.gz`. An archive inside an archive is read one level deep. The kind is read from the first bytes, not the name. [`archive.js`](../../site/js/lib/archive.js) unpacks them with the browser's `DecompressionStream`, a stream at a time, and gives the page a turn between entries, with progress (files read, bytes unpacked) under the set; [`fileset.js`](../../site/js/lib/fileset.js) reads them into the module.
+
+Each file is parsed on its own (`inputs_add` in [`sc-wasm`](../../crates/sc-wasm/README.md)), in its own format under auto-detect, with one field map for all of them; then one analysis runs over every record (`inputs_analyze`), so clusters and timing span files. The module numbers each record's id by its file (`f2:log-17`); file names stay in the page. A per-file table follows: file (its path inside the archive), the format it was read as, lines, records, lines skipped and the first problem, then each entry not read with why. In the workbench, the record's context names its file, a *File* filter narrows the flagged records, the text filter matches file names, and the records CSV gains a `file` column.
+
+| Limit | Value |
+|---|---|
+| Unpacked text, whole set | 512 MB; the set stops there |
+| Files and entries | 10,000; the set stops there |
+| One file or entry, unpacked | 256 MB; that entry is skipped |
+| Unpacked to packed ratio | 400, past the first 8 MB of an entry; that entry is skipped |
+
+Entries are skipped, with the reason shown, when they look binary (a NUL or many control bytes in the first 8 KB), are encrypted, use a zip method other than stored or deflate, or are tar links, devices or pipes; directories and macOS metadata (`__MACOSX/`, `._*`) are left out silently. Entry names are labels, shown as text and never used as paths, so a name that climbs out of the archive or carries markup is harmless. Payloads stay inert as everywhere on the site. No outside library and no request is involved, and the CSP is unchanged.
+
+[`check-archive.mjs`](../../scripts/ci/check-archive.mjs) tests the reader in Node on archives built at run time; the XSS check loads a hostile archive on both pages.
 
 A site built without the providers' files (no [snapshot](identity.md#the-snapshot), or one that holds no range file or key directory) shows a notice under the heading of this page and of `/identity/`: spoofing cannot be checked, and a declared agent stays a claim. The identity page hides it while the operator's own files or the example are in use.
 
@@ -242,4 +263,4 @@ Records, notices, claims and edited rules can carry attack payloads, so the site
 
 [`check-site.py`](../../scripts/ci/check-site.py) checks the sources in CI and the pre-commit hook, and every generated page and the build's inputs after a build; on a build it also checks that every link with a `#fragment` to a page of the site names an id on that page (fragments the page scripts read, such as `#rule-`, `#try=` or `#preset=`, aside).
 
-[`site-xss-check.mjs`](../../scripts/site-xss-check.mjs) builds the site with a hostile notice, loads every page in headless Chrome, drives the workbench with XSS probes, hostile claims and hostile edited rules, runs *Check my logs* on a hostile access log, picks a hostile evidence bundle in the bundle viewer, checks the notice filters on synthetic notices (`crates/sc-publish/tests/fixtures/notices/`, never published), and fails if any of them runs; CI runs it at deploy.
+[`site-xss-check.mjs`](../../scripts/site-xss-check.mjs) builds the site with a hostile notice, loads every page in headless Chrome, drives the workbench with XSS probes, hostile claims and hostile edited rules, runs *Check my logs* on a hostile access log, loads an archive with hostile entry names and lines on *Check my logs* and the workbench, picks a hostile evidence bundle in the bundle viewer, checks the notice filters on synthetic notices (`crates/sc-publish/tests/fixtures/notices/`, never published), and fails if any of them runs; CI runs it at deploy.

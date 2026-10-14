@@ -55,13 +55,24 @@ Your access logs see requests the public records cannot. You can run the same ru
 
 The browser toolkit runs the analysis entirely on your machine. Records are parsed and analysed in WebAssembly in the page; nothing is uploaded.
 
-The short path is **Check my logs** (**Investigate**, then **Check my logs**): paste or drop the log once, name your host, and the page runs the rules and the [agent identity](#agents-that-name-themselves) check on it, then says what it found and what to do next. For the full analysis, use the workbench:
+The short path is **Check my logs** (**Investigate**, then **Check my logs**): paste or drop the log once (or [many at once](#many-logs-at-once)), name your host, and the page runs the rules and the [agent identity](#agents-that-name-themselves) check on it, then says what it found and what to do next. For the full analysis, use the workbench:
 
 1. Open the workbench (**Investigate**, then **Workbench**); its access-log preset sets the format for you.
-2. Paste the log, or use **Load file**.
+2. Paste the log, or use **Load files** or **Load folder**.
 3. Pick **Access log** as the format (auto-detect usually finds it).
 4. In the field map, name your host: `host=www.example.org`. Lines that do not name a virtual host are otherwise shown under `log.invalid`.
 5. Press **Analyse**. The page shows flagged records, clusters, an hourly chart and the **Endpoints** table.
+
+### Many logs at once
+
+Both pages take a whole set of logs and run one analysis over all of them, so a run that crosses a log rotation, or reaches several servers, shows as one cluster:
+
+- pick several files with **Load files**, a folder with **Load folder**, or drop files and folders on the log area;
+- archives are unpacked in the page: `.zip` (stored or deflate, ZIP64 included), `.tar`, `.tar.gz`, `.tgz` and `.gz`, and one archive inside another. The page tells an archive from a log by its first bytes, so a rotated `access.log.1` or a log without an extension reads as well.
+
+Each file is read on its own, in its own format (an access log beside a JSON log reads as both), and your host applies to every file. Before the results, a table lists each file with the format it was read as, its lines, the records read and the lines skipped, and below it every entry the page did not read with the reason: binary content, an encrypted zip entry, a link or device in a tar, an archive nested deeper than one level. Each flagged record names its file; in the workbench the **File** filter narrows the records table to one file, and the CSV has a file column.
+
+The page reads at most 512 MB of unpacked text and 10,000 files and entries in one set, 256 MB in one file, and skips an entry that unpacks to over 400 times its packed size past the first 8 MB. When a limit is hit it stops and says so. Above 50 MB of files it asks before it starts. Nothing leaves the browser: archives are unpacked by the browser's own decompressor, file names are only shown, never used as paths, and every line is read as text. **Check my logs** carries a set of up to about 4 MB of text to the workbench; for a larger one, load the same files there.
 
 To run the toolkit locally instead of from the published site, build it with `scripts/ci/build-site.sh` and serve it with `python -m http.server -d _site 8080`.
 

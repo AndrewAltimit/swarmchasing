@@ -11,6 +11,8 @@
 #                     unredacted secrets - the one hard rule)
 #   *.md              check-md-links.py --staged, check-doc-density.py --staged
 #   site/             check-site.py (CSP, no HTML sinks)
+#   site/js/lib/,     check-archive.mjs (archive reader), when node is
+#   archive scripts   installed
 #   notices/          swarmchase notice lint (nothing a notice withholds)
 #   notices/, rules/  check-published-tags.py (shown tags are published tags)
 #   watchlist.toml,   swarmchase watch --check (strict, offline)
@@ -68,6 +70,14 @@ if grep -q '\.md$' <<<"$STAGED"; then
     printf '[pre-commit] doc density check\n'
     if ! "$PY" scripts/ci/check-doc-density.py --staged --quiet; then
         printf '[pre-commit] split the paragraph or move the cell into a section (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
+        exit 1
+    fi
+fi
+
+if grep -qE '^(site/js/lib/|scripts/ci/archive-|scripts/ci/check-archive)' <<<"$STAGED" && command -v node >/dev/null 2>&1; then
+    printf '[pre-commit] archive reader tests\n'
+    if ! node scripts/ci/check-archive.mjs >/dev/null; then
+        printf '[pre-commit] run node scripts/ci/check-archive.mjs (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
         exit 1
     fi
 fi

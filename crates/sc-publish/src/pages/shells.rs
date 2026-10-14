@@ -15,13 +15,14 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 <h2 id="h-input">Records</h2>
 <div id="input-box">
 <div id="drop" class="dropzone">
-<p class="drop-lead">Paste records below, drop a file here, or start from an example.</p>
-<div class="row drop-actions"><button type="button" id="example" class="primary">Try an example</button><label class="file button">Load file<input type="file" id="file" accept=".ndjson,.jsonl,.json,.txt,.csv,.log"></label></div>
+<p class="drop-lead">Paste records below, drop files or a folder here, or start from an example.</p>
+<div class="row drop-actions"><button type="button" id="example" class="primary">Try an example</button><label class="file button">Load files<input type="file" id="file" multiple></label><label class="file button">Load folder<input type="file" id="folder" webkitdirectory></label></div>
 <label for="input" class="sr-only">Records</label>
 <textarea id="input" class="mono" rows="8" spellcheck="false" placeholder='{"ts":"2026-10-04T08:10:00Z","url":"https://..."}' aria-describedby="input-hint"></textarea>
+<div id="set" class="file-set" hidden></div>
 <p id="drop-status" class="hint" role="status" hidden></p>
 </div>
-<p class="hint" id="input-hint">NDJSON, a JSON array, Wayback CDX JSON, one URL per line (optionally after a timestamp), or a web server access log (name your host in the field map: <code>host=www.example.org</code>).</p>
+<p class="hint" id="input-hint">NDJSON, a JSON array, Wayback CDX JSON, one URL per line (optionally after a timestamp), or a web server access log (name your host in the field map: <code>host=www.example.org</code>). Several files, a folder, or .zip, .tar, .tar.gz, .tgz and .gz archives are unpacked here and analysed as one.</p>
 <div class="row">
 <label class="sr-only" for="format">Input format</label>
 <select id="format"><option value="auto">auto-detect</option><option value="ndjson">NDJSON</option><option value="json">JSON</option><option value="lines">URL lines</option><option value="access_log">Access log</option></select>
@@ -36,6 +37,7 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 <p id="preset-note" class="hint note" hidden>Access-log preset: paste your web server's log (Common or Combined Log Format) and put your own host in the field map, e.g. <code>host=www.example.org</code>. The log stays in this page.</p>
 <div id="alert" class="alert" role="alert" hidden></div>
 <p id="warnings" class="warn" role="status" hidden></p>
+<div id="files" hidden></div>
 <div id="summary" hidden></div>
 <h3 class="pane-sub" id="clusters-h">Clusters</h3>
 <div id="cluster-list" class="cluster-list"><p class="hint">Analyse records to see their clusters: records linked by shared inbox IDs, unique tags, or the same target in a short window.</p></div>
@@ -67,9 +69,10 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 <div class="sub-head"><h2 class="pane-sub" id="records-h">Flagged records</h2><button type="button" id="csv-records" class="small" disabled>Download CSV</button></div>
 <div class="row table-tools">
 <label>Sort by <select id="rec-sort"><option value="score">score</option><option value="time">time</option><option value="cluster">cluster</option></select></label>
+<label id="rec-file-wrap" hidden>File <select id="rec-file"><option value="">every file</option></select></label>
 <label class="grow">Filter <input id="rec-filter" type="search" class="mono" spellcheck="false" placeholder="text in the defanged URL, or a rule id" aria-describedby="rec-filter-hint"></label>
 </div>
-<p class="hint" id="rec-filter-hint">The filter matches the defanged URL and the rule ids, ignoring case. The CSV holds the records the table lists, in its order.</p>
+<p class="hint" id="rec-filter-hint">The filter matches the defanged URL, the rule ids and, for a set of files, the file name, ignoring case. The CSV holds the records the table lists, in its order.</p>
 <div id="records"><p class="hint">No records yet.</p></div>
 <div class="sub-head"><h2 class="pane-sub" id="endpoints-h">Endpoints</h2><button type="button" id="csv-endpoints" class="small" disabled>Download CSV</button></div>
 <p class="hint">Flagged requests per target host; times are UTC. Hits counts the suggestive or significant records to the host, out of every record that targets it (hits / all). "Ongoing" means hit within 7 days of the newest record loaded: what an affected operator checks their logs for.</p>
@@ -150,17 +153,18 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 /// then a plain summary and what to do next ([`site/js/pages/checklog.js`]).
 /// The next steps are links in the markup; the script only shows them.
 pub const CHECK_LOGS: &str = r##"<header class="page-head compact"><h1>Check my logs</h1>
-<p class="lede">For a site operator: paste or drop your web server's access log once. The page runs the same rules as the workbench's access-log preset over the requests to your host, and checks every request that says it comes from an AI provider's agent against the ranges the provider publishes, then sums both up in plain words. It runs in this page: your log is never uploaded, and nothing is fetched from anyone.</p></header>
+<p class="lede">For a site operator: paste or drop your web server's access log once, or a set of them (several files, a folder, or .zip, .tar, .tar.gz and .gz archives). The page runs the same rules as the workbench's access-log preset over the requests to your host, and checks every request that says it comes from an AI provider's agent against the ranges the provider publishes, then sums both up in plain words. It runs in this page: your log is never uploaded, and nothing is fetched from anyone.</p></header>
 <section class="card" aria-labelledby="cl-log-h">
 <h2 id="cl-log-h">1. Your log</h2>
 <div id="cl-drop" class="dropzone">
-<p class="drop-lead">Paste your log below, drop the file here, or try the synthetic example.</p>
-<div class="row drop-actions"><label class="file button">Load file<input type="file" id="cl-file" accept=".log,.txt"></label><button type="button" id="cl-example">Try an example</button></div>
+<p class="drop-lead">Paste your log below, drop files or a folder here, or try the synthetic example.</p>
+<div class="row drop-actions"><label class="file button">Load files<input type="file" id="cl-file" multiple></label><label class="file button">Load folder<input type="file" id="cl-folder" webkitdirectory></label><button type="button" id="cl-example">Try an example</button></div>
 <label for="cl-input" class="sr-only">Access log</label>
 <textarea id="cl-input" class="mono" rows="8" spellcheck="false" aria-describedby="cl-input-hint" placeholder='203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET /search?q=... HTTP/1.1" 200 512 "-" "Mozilla/5.0"'></textarea>
+<div id="cl-set" class="file-set" hidden></div>
 <p id="cl-drop-status" class="hint" role="status" hidden></p>
 </div>
-<p class="hint" id="cl-input-hint">Common or Combined Log Format (Combined carries the user agent the identity check reads). Behind a proxy, log the forwarded client address, not the proxy's.</p>
+<p class="hint" id="cl-input-hint">Common or Combined Log Format (Combined carries the user agent the identity check reads). Behind a proxy, log the forwarded client address, not the proxy's. Rotated and compressed logs can go in together: each file is read on its own and all of them are checked as one, in this page.</p>
 <div class="row"><label class="grow">Your host, as visitors type it <input id="cl-host" class="mono" spellcheck="false" placeholder="www.example.org" aria-describedby="cl-host-hint"></label></div>
 <p class="hint" id="cl-host-hint">An access log does not name the site it belongs to; the analysis needs it to read each request as a URL.</p>
 <div class="row"><button type="button" id="cl-run" class="primary" disabled>Check my log</button></div>
