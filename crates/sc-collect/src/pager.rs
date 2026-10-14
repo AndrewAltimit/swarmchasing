@@ -28,6 +28,10 @@ pub struct Page {
     /// How much of the source this page read, for sources that read a
     /// stream or feed and keep only matches.
     pub coverage: Option<Coverage>,
+    /// The source read part of this page's span and then failed: the page
+    /// holds what it read, and the pull stops there as for a failed page
+    /// ([`Pull::stopped`]).
+    pub stopped: Option<String>,
 }
 
 /// How much of a streamed or filtered source a pull read, against what was
@@ -149,6 +153,10 @@ pub fn pull(
         }
         out.observations.extend(page.records);
         cursor = page.next;
+        if let Some(e) = page.stopped {
+            out.stopped = Some(anyhow::anyhow!(e));
+            break;
+        }
         if cursor.is_none() {
             out.complete = true;
             break;
@@ -258,6 +266,19 @@ mod tests {
         let mut asked = Vec::new();
         let pages = vec![Err(anyhow::anyhow!("HTTP 503"))];
         assert!(pull(10, 1, None, canned(pages, &mut asked), &mut |_| Ok(())).is_err());
+
+        // A page that read part of its span and then failed keeps its
+        // records and stops the pull there.
+        let mut asked = Vec::new();
+        let mut part = page(&["a"], None).unwrap();
+        part.stopped = Some("HTTP 503".into());
+        let p = pull(10, 1, None, canned(vec![Ok(part)], &mut asked), &mut |_| {
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(ids(&p), ["a"]);
+        assert!(!p.complete);
+        assert!(p.stopped.is_some_and(|e| e.to_string() == "HTTP 503"));
     }
 
     #[test]

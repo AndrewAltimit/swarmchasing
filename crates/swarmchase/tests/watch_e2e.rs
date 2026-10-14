@@ -327,7 +327,7 @@ fn read_dir_text(dir: &std::path::Path) -> String {
 }
 
 #[test]
-fn a_run_that_finishes_with_alerts_exits_2() {
+fn a_run_that_finishes_with_alerts_exits_4() {
     let s = Scratch::new("watch-e2e-alerts");
     let d = s.path();
     let now = chrono::Utc::now().timestamp();
@@ -357,7 +357,7 @@ pattern = "r.jina.ai"
     )
     .unwrap();
     let r = run(d, &["watch", "watchlist.toml", "--out", "data", "--init"]);
-    assert_eq!(r.code, Some(2), "{}", r.stderr);
+    assert_eq!(r.code, Some(4), "{}", r.stderr);
     assert!(r.stderr.contains("alert(s)"), "{}", r.stderr);
     let digest = std::fs::read_to_string(latest(d).join("digest.md")).unwrap();
     assert!(digest.contains("`uq` was skipped"), "{digest}");
@@ -367,4 +367,25 @@ pattern = "r.jina.ai"
         .format("%Y-%m")
         .to_string();
     assert!(d.join(format!("data/store/tm-a/{month}.ndjson")).is_file());
+}
+
+#[test]
+fn a_usage_error_does_not_exit_as_a_run_with_alerts() {
+    // clap exits 2 on a bad flag or a bad value from the environment; the
+    // watch workflow treats only 4 as a finished run with alerts, so a
+    // usage error must stay a failure.
+    let s = Scratch::new("watch-e2e-usage");
+    let d = s.path();
+    let r = run(d, &["watch", "--no-such-flag"]);
+    assert_eq!(r.code, Some(2), "{}", r.stderr);
+    assert_ne!(r.code, Some(i32::from(swarmchase::exit::ALERTS)));
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_swarmchase"))
+        .args(["watch", "--out", "data"])
+        .current_dir(d)
+        .env_remove("SWARMCHASE_DATA")
+        .env("SWARMCHASE_TRIAGE_MAX", "ten")
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(!d.join("data").exists());
 }

@@ -270,9 +270,9 @@ pub fn run(a: SimArgs) -> Result<()> {
                 println!();
                 let failed = calibration_check(&strata, &rules, &file);
                 if failed > 0 {
-                    bail!(
+                    return Err(crate::Exit::floor(format!(
                         "{failed} soft-link ratio(s) above the simulation's stratified lower bound or unmeasured"
-                    );
+                    )));
                 }
             }
             Ok(())

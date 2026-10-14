@@ -53,6 +53,8 @@ Once files are held, the analysis commands fill each cluster's identity from `<d
 | `<data>/identity/fetched.json` | Per file: URL, fetch date, SHA-256, entry count, and a range file's `creationTime` and `synctoken` when it states them, so a case can cite the version a verdict rests on. |
 | `<data>/identity/reference/robots.json` | The ai.robots.txt list as last fetched by `identity reference`. |
 
+`identity refresh` exits 1 when every fetch failed, and rewrites `fetched.json` only when one succeeded.
+
 The files stay in the data directory and are never committed. Providers change them; refresh before checking a log, and for an old log say how far apart the log and the file are.
 
 ### Range file fields

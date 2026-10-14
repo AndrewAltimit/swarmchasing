@@ -197,10 +197,11 @@ Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../
 |---|---|
 | 0 | The command did what it was asked. |
 | 1 | An error, including `case verify` finding a difference and `notice lint` or `notice add` finding a problem. |
-| 2 | `watch`: the run finished and wrote its digest, and the digest carries alerts. |
-| 3 | `eval` or `sim bench`: the command ran, and a floor, ceiling or bound was not met. |
+| 2 | A usage error: an unknown flag, a missing argument or a bad value, from the command line or the environment. |
+| 3 | `eval`, `sim bench` or `sim calibrate --check`: the command ran, and a floor, ceiling or bound was not met. |
+| 4 | `watch`: the run finished and wrote its digest, and the digest carries alerts. |
 
-A watch run that fails after its digest, or in which no source could run or every source failed, exits 1, not 2. The watch workflow treats 2 as a finished run ([runner](../../docs/reference/runner.md#watchyml)), and [`eval-gate.sh`](../../scripts/ci/eval-gate.sh) passes the code through.
+A watch run that fails after its digest, or in which no source could run or every source failed, exits 1, not 4. The watch workflow treats 4 as a finished run and every other non-zero code as a failure ([runner](../../docs/reference/runner.md#watchyml)), and [`eval-gate.sh`](../../scripts/ci/eval-gate.sh) passes the code through.
 
 ## Tests
 

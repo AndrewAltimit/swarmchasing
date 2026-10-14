@@ -20,7 +20,8 @@ use std::path::Path;
 /// The marker's file name, in the run directory.
 pub const MARKER: &str = "mailed";
 
-/// Runs listed at most; the oldest beyond this are counted only.
+/// Runs listed at most; the oldest beyond this are counted only
+/// ([`Listed::older`]).
 const MAX_RUNS: usize = 12;
 /// Reason and lead lines kept per run.
 const LINES: usize = 6;
@@ -37,6 +38,26 @@ pub struct Unmailed {
     pub leads: Vec<String>,
 }
 
+/// The changed runs never mailed: the newest [`MAX_RUNS`] listed, oldest
+/// first, and how many older ones are counted only.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Listed {
+    pub runs: Vec<Unmailed>,
+    /// Older runs never mailed, beyond the listed ones.
+    pub older: usize,
+}
+
+impl Listed {
+    /// Every run never mailed, listed or not.
+    pub fn total(&self) -> usize {
+        self.runs.len() + self.older
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.total() == 0
+    }
+}
+
 impl Unmailed {
     pub fn level(&self) -> Level {
         match self.priority.as_str() {
@@ -50,12 +71,12 @@ impl Unmailed {
 /// Changed runs before `current` that were never mailed, oldest first.
 /// `last_mailed` is the newest mailed stamp `state.json` remembers, read
 /// when no run directory holds a marker newer than it.
-pub fn unmailed(out: &Path, current: &str, last_mailed: Option<&str>) -> Vec<Unmailed> {
+pub fn unmailed(out: &Path, current: &str, last_mailed: Option<&str>) -> Listed {
     list(out, Some(current), last_mailed)
 }
 
 /// Every changed run never mailed, the newest included (the dashboard).
-pub fn unmailed_all(out: &Path, last_mailed: Option<&str>) -> Vec<Unmailed> {
+pub fn unmailed_all(out: &Path, last_mailed: Option<&str>) -> Listed {
     list(out, None, last_mailed)
 }
 
@@ -86,7 +107,7 @@ fn stamps(runs: &Path, current: Option<&str>) -> Vec<String> {
     stamps
 }
 
-fn list(out: &Path, current: Option<&str>, remembered: Option<&str>) -> Vec<Unmailed> {
+fn list(out: &Path, current: Option<&str>, remembered: Option<&str>) -> Listed {
     let runs = out.join("runs");
     let stamps = stamps(&runs, current);
     let marked = stamps
@@ -94,17 +115,16 @@ fn list(out: &Path, current: Option<&str>, remembered: Option<&str>) -> Vec<Unma
         .rposition(|s| runs.join(s).join(MARKER).exists())
         .map(|i| stamps[i].as_str());
     let Some(last_mailed) = marked.max(remembered) else {
-        return Vec::new();
+        return Listed::default();
     };
     let mut out: Vec<Unmailed> = stamps
         .iter()
         .filter(|s| s.as_str() > last_mailed)
         .filter_map(|s| read(&runs.join(s).join(super::run_summary::FILE), s))
         .collect();
-    if out.len() > MAX_RUNS {
-        out.drain(..out.len() - MAX_RUNS);
-    }
-    out
+    let older = out.len().saturating_sub(MAX_RUNS);
+    out.drain(..older);
+    Listed { runs: out, older }
 }
 
 /// A run's `run.json`, when it says the run changed.
@@ -160,17 +180,24 @@ fn read(p: &Path, stamp: &str) -> Option<Unmailed> {
 
 /// The digest section: each run never mailed, with its reasons and leads.
 /// Empty when there is none.
-pub fn section(runs: &[Unmailed]) -> String {
-    if runs.is_empty() {
+pub fn section(listed: &Listed) -> String {
+    if listed.is_empty() {
         return String::new();
     }
     let mut t = String::new();
-    let _ = writeln!(t, "## Digests not mailed ({})\n", runs.len());
+    let _ = writeln!(t, "## Digests not mailed ({})\n", listed.total());
     let _ = writeln!(
         t,
         "These runs found something, but their digest was never mailed; what they reported is folded in here. Each digest is in `runs/<stamp>/digest.md`.\n"
     );
-    for r in runs {
+    if listed.older > 0 {
+        let _ = writeln!(
+            t,
+            "- and {} older run(s) not listed; their digests are in `runs/` until retention deletes them",
+            listed.older
+        );
+    }
+    for r in &listed.runs {
         let _ = writeln!(t, "- `{}`, priority {}:", r.stamp, r.priority);
         let lines: Vec<&String> = r.reasons.iter().chain(&r.leads).collect();
         if lines.is_empty() {
@@ -221,9 +248,9 @@ mod tests {
         let got = unmailed(&out, "20261013T000000Z", None);
         // The run before the mailed one is not listed again; the unchanged
         // run never needed mail.
-        assert_eq!(got.len(), 1, "{got:?}");
-        assert_eq!(got[0].stamp, "20261011T120000Z");
-        assert_eq!(got[0].level(), Level::High);
+        assert_eq!(got.total(), 1, "{got:?}");
+        assert_eq!(got.runs[0].stamp, "20261011T120000Z");
+        assert_eq!(got.runs[0].level(), Level::High);
         let s = section(&got);
         assert!(s.contains("## Digests not mailed (1)"), "{s}");
         assert!(
@@ -254,11 +281,35 @@ mod tests {
         assert_eq!(newest_marked(&out), None);
         assert!(unmailed(&out, "20261013T000000Z", None).is_empty());
         let got = unmailed(&out, "20261013T000000Z", Some("20261011T000000Z"));
-        assert_eq!(got.len(), 2, "{got:?}");
-        assert_eq!(unmailed_all(&out, Some("20261011T060000Z")).len(), 1);
+        assert_eq!(got.total(), 2, "{got:?}");
+        assert_eq!(unmailed_all(&out, Some("20261011T060000Z")).total(), 1);
         // A newer marker on disk wins over an older remembered stamp.
         run(&out, "20261011T120000Z", true, true);
         assert!(unmailed(&out, "20261013T000000Z", Some("20261011T000000Z")).is_empty());
+        std::fs::remove_dir_all(&out).unwrap();
+    }
+
+    #[test]
+    fn runs_beyond_the_list_are_counted() {
+        let out =
+            std::env::temp_dir().join(format!("swarmchase-mailed-older-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&out);
+        run(&out, "20261001T000000Z", true, true);
+        for h in 0..MAX_RUNS + 3 {
+            run(&out, &format!("20261002T{h:02}0000Z"), true, false);
+        }
+        let got = unmailed(&out, "20261013T000000Z", None);
+        assert_eq!(got.runs.len(), MAX_RUNS);
+        assert_eq!(got.older, 3);
+        assert_eq!(got.total(), MAX_RUNS + 3);
+        // The newest are the ones listed.
+        assert_eq!(got.runs[0].stamp, "20261002T030000Z");
+        let s = section(&got);
+        assert!(
+            s.contains(&format!("## Digests not mailed ({})", MAX_RUNS + 3)),
+            "{s}"
+        );
+        assert!(s.contains("and 3 older run(s) not listed"), "{s}");
         std::fs::remove_dir_all(&out).unwrap();
     }
 }

@@ -115,9 +115,10 @@ jobs:
           else
             echo "no public summary: the run stopped before writing it (exit $rc); the failure alert mails the log's tail"
           fi
-          # Exit 2: the run finished and its digest carries alerts, which
-          # the digest email reports; not a failed run.
-          if [ "$rc" -eq 2 ]; then
+          # Exit 4: the run finished and its digest carries alerts, which
+          # the digest email reports; not a failed run. Exit 2 is a usage
+          # error (a bad flag or environment value) and stays a failure.
+          if [ "$rc" -eq 4 ]; then
             echo "the run finished with alerts; they are in the digest"
             rc=0
           fi
@@ -141,8 +142,10 @@ jobs:
       # (declared-agents.toml), into $SWARMCHASE_DATA/identity, at most once
       # a day. Only the catalog's own URLs are fetched. The Pages deploy
       # embeds what this holds as the identity page's snapshot. It never
-      # blocks the watch: a failure here is a warning, and the previous
-      # copies stay in use.
+      # blocks the watch: a refresh in which every fetch fails exits 1, a
+      # warning here, and the previous copies stay in use. fetched.json is
+      # rewritten only when a fetch succeeded, so a failed attempt is tried
+      # again next run.
       - name: Refresh agent identity files
         if: ${{ !cancelled() }}
         continue-on-error: true

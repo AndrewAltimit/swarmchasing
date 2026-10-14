@@ -81,6 +81,7 @@ impl Source for Urlscan {
         .context("urlscan search")?;
         let (records, next) = parse_urlscan_search(&body)?;
         Ok(Page {
+            stopped: None,
             records,
             next: next.map(Cursor::Key),
             truncated: false,

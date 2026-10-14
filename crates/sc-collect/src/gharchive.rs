@@ -193,6 +193,7 @@ impl Source for GhArchive {
             && self.hours_read.get() < self.hours()
             && self.bytes.get() < self.budget();
         Ok(Page {
+            stopped: None,
             records,
             next: more.then(|| Cursor::Offset((hour + 1) as usize)),
             truncated,

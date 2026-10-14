@@ -66,7 +66,9 @@ pub fn run(a: IdentityArgs) -> Result<()> {
         IdentityCmd::Refresh => {
             let client = Client::new(Duration::from_secs(1))?;
             let mut failed = 0;
-            for r in sc_collect::identity::refresh(&client, &a.data, &catalog, &today()) {
+            let results = sc_collect::identity::refresh(&client, &a.data, &catalog, &today());
+            let total = results.len();
+            for r in results {
                 match r.result {
                     Ok(h) => eprintln!("{}: {} entries ({})", r.id, h.entries, h.url),
                     Err(e) => {
@@ -74,6 +76,11 @@ pub fn run(a: IdentityArgs) -> Result<()> {
                         eprintln!("{}: FAILED: {e:#}", r.id);
                     }
                 }
+            }
+            if failed > 0 && failed == total {
+                anyhow::bail!(
+                    "every file failed to refresh ({failed}); the previous copies, if any, stay in use"
+                );
             }
             if failed > 0 {
                 eprintln!(
