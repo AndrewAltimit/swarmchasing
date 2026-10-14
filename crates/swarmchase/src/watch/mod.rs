@@ -51,9 +51,11 @@
 //!
 //! A run saves `state.json` after each source, with the IDs it stored as
 //! `undigested`; they are cleared once the digest and `run.json` are
-//! written, so the next run reports what a run cut short had stored. Steps
-//! after collection that fail become digest alerts instead of ending the
-//! run. A source whose query changed starts over ([`pull::fingerprint`]).
+//! written, so the next run reports what a run cut short had stored. The
+//! ledger and the autonomy log are saved between those two steps, so a run
+//! cut short before its digest leaves them as they were. Steps after
+//! collection that fail become digest alerts instead of ending the run; a
+//! step after the digest that fails ends it with an error. A source whose query changed starts over ([`pull::fingerprint`]).
 //!
 //! Retention (docs/policies.md): run directories and stored records older than
 //! `retain_days` are deleted at the end of every run. Records needed for a case
@@ -747,12 +749,6 @@ fn watch(
         "attention",
         write_json(&run_dir.join(attention::FILE), &queue),
     );
-    soft(
-        &mut alerts,
-        "ledger",
-        write_json_kept(&ledger_path, &ledger),
-    );
-    soft(&mut alerts, "autonomy", autonomy::append(out, &decisions));
     // Cached responses are raw collector answers: kept no longer than the
     // TTL (and a day), on every run.
     let cache = soft(
@@ -846,10 +842,6 @@ fn watch(
             durations: &phases.summary(),
         }),
     )?;
-    // The digest and run.json report this run's records: they are no
-    // longer undigested.
-    state.undigested.clear();
-    write_json_kept(&state_path, &state)?;
     // What fails from here on loses nothing the digest has not reported;
     // the run still ends with an error so it is noticed.
     let mut late = Vec::new();
@@ -859,6 +851,15 @@ fn watch(
             late.push(format!("{step}: {e:#}"));
         }
     };
+    // Saved only once the digest and run.json report this run: a run that
+    // stops before them leaves the ledger and the autonomy log as they
+    // were, so the next run reports its carried-over records as leads.
+    later("ledger", write_json_kept(&ledger_path, &ledger));
+    later("autonomy", autonomy::append(out, &decisions));
+    // The digest and run.json report this run's records: they are no
+    // longer undigested.
+    state.undigested.clear();
+    write_json_kept(&state_path, &state)?;
     later(
         "summary",
         write_json(&run_dir.join("summary.json"), &next)
@@ -1086,14 +1087,15 @@ fn collect(
                 let pulled = p.pulled;
                 let mut new = p.new;
                 let store_file = x.out.join("store").join(format!("{}.ndjson", s.name));
-                if restarted {
-                    // Seen IDs were reset with the query: what the store
+                if restarted || st.restart {
+                    // Seen IDs were reset with the position: what the store
                     // already holds is not new.
                     let held: BTreeSet<String> =
                         crate::store::read_ndjson::<Observation>(&store_file)
                             .map(|(v, _)| v.into_iter().map(|o| o.id).collect())
                             .unwrap_or_default();
                     new.retain(|o| !held.contains(&o.id));
+                    st.restart = false;
                 }
                 rep.pulled = pulled;
                 rep.new = new.len();

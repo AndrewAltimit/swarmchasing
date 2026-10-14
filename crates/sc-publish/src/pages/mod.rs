@@ -989,6 +989,17 @@ mod tests {
     }
 
     #[test]
+    fn check_logs_offers_only_the_files_it_reads() {
+        // The page reads access logs only; records belong in the workbench.
+        let input = shells::CHECK_LOGS
+            .split("id=\"cl-file\"")
+            .nth(1)
+            .and_then(|t| t.split('>').next())
+            .unwrap();
+        assert_eq!(input.trim(), "accept=\".log,.txt\"");
+    }
+
+    #[test]
     fn manual_sections_are_articles_and_maintainer_docs_group_last() {
         let mut inp = inputs();
         inp.docs.push((

@@ -17,15 +17,20 @@
 //! own pull requests and commits (`Generated with ...`, `Co-Authored-By:`)
 //! are declared, everyday use, and no substring here matches them.
 //!
-//! Coverage: a pull reads from its checkpoint (Unix seconds) to a little
-//! before its own start ([`LAG_SECS`], for indexing), at most `scan`
-//! requests, each query paged by 100 up to the API's 1000 results. A query
-//! the budget or the 1000-result cap cut short, or that GitHub answered
-//! with `incomplete_results`, counts as skipped. Coverage is in queries.
-//! Without a checkpoint a pull starts [`FRESH_SECS`] back; a checkpoint
-//! older than [`MAX_BACKLOG_HOURS`] is skipped to there. The canary is a
-//! response in the shape the parser expects (`total_count` and `items`):
-//! most queries find nothing, so an empty pull says only that.
+//! Coverage: a pull reads from [`OVERLAP_SECS`] before its checkpoint
+//! (Unix seconds), for items indexed late and commits dated before their
+//! push, to a little before its own start ([`LAG_SECS`], for indexing), at
+//! most `scan` requests, each query paged oldest first by 100 up to the
+//! API's 1000 results. The checkpoint moves only as far as every query
+//! read: a query the budget, a failed request or the 1000-result cap cut
+//! short holds it at the newest item that query reached, so the next pull
+//! reads the rest. Seen IDs drop the items read twice. A query GitHub
+//! answered with `incomplete_results` counts as skipped. Coverage is in
+//! queries. Without a checkpoint a pull starts [`FRESH_SECS`] back; a
+//! checkpoint older than [`MAX_BACKLOG_HOURS`] is skipped to there and
+//! every query counts once more as skipped. The canary is a response in
+//! the shape the parser expects (`total_count` and `items`): most queries
+//! find nothing, so an empty pull says only that.
 //!
 //! Needs a token (`GITHUB_TOKEN`), sent as a bearer token and never logged
 //! or cached; without one the watch skips the source.
@@ -59,6 +64,8 @@ pub const LAG_SECS: i64 = 600;
 pub const FRESH_SECS: i64 = 6 * 3600;
 /// A checkpoint further back than this is skipped to [`FRESH_SECS`].
 pub const MAX_BACKLOG_HOURS: i64 = 48;
+/// A pull starts this far before its checkpoint.
+pub const OVERLAP_SECS: i64 = 3 * 3600;
 
 /// What a query searches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,16 +186,45 @@ pub fn hit_records(hit: &Hit, scope: Scope, needles: &Needles) -> Vec<Observatio
 pub struct Window {
     pub start: i64,
     pub until: i64,
+    /// Where the previous pull reached (the checkpoint, or where a fresh or
+    /// skipped-ahead pull begins): the next checkpoint is never before it.
+    pub from: i64,
+    /// Backlog passed over (seconds): a checkpoint older than
+    /// [`MAX_BACKLOG_HOURS`].
+    pub skipped: i64,
 }
 
 impl Window {
     pub fn new(checkpoint: Option<i64>, now: i64) -> Self {
         let until = now - LAG_SECS;
-        let start = match checkpoint {
-            Some(c) if c >= until - MAX_BACKLOG_HOURS * 3600 => c.min(until),
-            _ => until - FRESH_SECS,
-        };
-        Self { start, until }
+        let fresh = until - FRESH_SECS;
+        match checkpoint {
+            Some(c) if c >= until - MAX_BACKLOG_HOURS * 3600 => {
+                let from = c.min(until);
+                Self {
+                    start: from - OVERLAP_SECS,
+                    until,
+                    from,
+                    skipped: 0,
+                }
+            }
+            c => Self {
+                start: fresh,
+                until,
+                from: fresh,
+                skipped: c.map_or(0, |c| (fresh - c).max(0)),
+            },
+        }
+    }
+
+    /// A window from `start` to `until` with no checkpoint before it.
+    pub fn span(start: i64, until: i64) -> Self {
+        Self {
+            start,
+            until,
+            from: start,
+            skipped: 0,
+        }
     }
 }
 
@@ -223,7 +259,7 @@ pub fn search_url(scope: Scope, needle: &str, w: &Window, page: usize) -> String
     u.query_pairs_mut()
         .append_pair("q", &q)
         .append_pair("sort", sort)
-        .append_pair("order", "desc")
+        .append_pair("order", "asc")
         .append_pair("per_page", &PER_PAGE.to_string())
         .append_pair("page", &page.to_string());
     u.to_string()
@@ -238,11 +274,27 @@ pub struct SearchRead {
     pub complete: usize,
     /// Responses in the expected shape.
     pub parsed: usize,
+    /// Queries GitHub answered with `incomplete_results`: read to their
+    /// end, but what the search left out is not read again.
+    pub incomplete: usize,
+    /// How far every query read (Unix seconds): the window's end when all
+    /// were read to their end, else the newest item the least-read query
+    /// reached (the window's start for a query not reached at all).
+    pub reached: i64,
 }
 
-/// Run every query (each needle in each scope), at most `budget` requests.
-/// `fetch` answers one request URL. The first request's failure is an
-/// error; a later one ends the searches with what they have.
+impl SearchRead {
+    /// Where the next pull starts: as far as every query read, and never
+    /// before where this one started.
+    pub fn next(&self, w: &Window) -> i64 {
+        self.reached.max(w.from)
+    }
+}
+
+/// Run every query (each needle in each scope), at most `budget` requests,
+/// each paged oldest first. `fetch` answers one request URL. The first
+/// request's failure is an error; a later one ends the searches with what
+/// they have, and the queries it left unread hold [`SearchRead::reached`].
 pub fn search(
     w: &Window,
     needles: &[String],
@@ -261,34 +313,54 @@ pub fn search(
     }
     let mut out = SearchRead {
         queries: phrases.len() * scopes.len(),
+        reached: w.until,
         ..Default::default()
     };
-    'queries: for &scope in scopes {
+    let mut failed = false;
+    for &scope in scopes {
         for p in &phrases {
+            // The newest item this query read; with results oldest first,
+            // everything before it is read.
+            let mut newest: Option<i64> = None;
+            let mut done = false;
             for page in 1..=MAX_RESULTS / PER_PAGE {
-                if requests >= budget.max(1) {
-                    continue 'queries;
+                if failed || requests >= budget.max(1) {
+                    break;
                 }
                 requests += 1;
                 let body = match fetch(&search_url(scope, p, w, page)) {
                     Ok(b) => b,
                     Err(e) if requests == 1 => return Err(e),
-                    Err(_) => break 'queries,
+                    Err(_) => {
+                        failed = true;
+                        break;
+                    }
                 };
                 let r = parse_results(&body, scope)?;
                 out.parsed += 1;
                 for h in r.hits {
+                    if h.ts > 0 {
+                        newest = Some(newest.map_or(h.ts, |n| n.max(h.ts)));
+                    }
                     if seen.insert(h.link.clone()) {
                         out.hits.push((scope, h));
                     }
                 }
                 let more = r.items >= PER_PAGE && page * PER_PAGE < r.total;
                 if !more {
-                    if !r.incomplete && r.total <= MAX_RESULTS {
+                    done = true;
+                    if r.incomplete {
+                        out.incomplete += 1;
+                    } else {
                         out.complete += 1;
                     }
                     break;
                 }
+            }
+            if !done {
+                // Cut short by the budget, a failed request or the cap.
+                let q = newest.unwrap_or(w.start).max(w.start);
+                out.reached = out.reached.min(q);
             }
         }
     }
@@ -361,6 +433,9 @@ impl Source for GhSearch {
         let read = search(&w, needles.terms(), &scopes, budget, &mut |u| {
             client.get_with(u, &headers)
         })?;
+        let queries = read.queries as u64;
+        // A backlog passed over is a span of every query never read.
+        let backlog = if w.skipped > 0 { queries } else { 0 };
         let mut records: Vec<Observation> = read
             .hits
             .iter()
@@ -374,9 +449,9 @@ impl Source for GhSearch {
             coverage: Some(Coverage {
                 unit: "queries",
                 read: read.complete as u64,
-                available: read.queries as u64,
-                skipped: read.queries.saturating_sub(read.complete) as u64,
-                next: Some(w.until.max(0) as u64),
+                available: queries + backlog,
+                skipped: read.incomplete as u64 + backlog,
+                next: Some(read.next(&w).max(0) as u64),
                 canary: Some(read.parsed > 0),
             }),
         })
@@ -469,10 +544,7 @@ mod tests {
 
     #[test]
     fn searches_page_each_query_within_the_budget() {
-        let w = Window {
-            start: T,
-            until: T + 3600,
-        };
+        let w = Window::span(T, T + 3600);
         let u = search_url(Scope::PullRequests, "uqtag=", &w, 2);
         assert!(
             u.starts_with(
@@ -543,18 +615,104 @@ mod tests {
     }
 
     #[test]
-    fn windows_start_at_the_checkpoint_within_the_backlog() {
+    fn windows_start_an_overlap_before_the_checkpoint_within_the_backlog() {
         let now = T + 100_000;
-        assert_eq!(Window::new(None, now).start, now - LAG_SECS - FRESH_SECS);
-        assert_eq!(Window::new(Some(now - 7200), now).start, now - 7200);
-        assert_eq!(
-            Window::new(Some(now - 72 * 3600), now).start,
-            now - LAG_SECS - FRESH_SECS
-        );
+        let fresh = now - LAG_SECS - FRESH_SECS;
+        let w = Window::new(None, now);
+        assert_eq!((w.start, w.from, w.skipped), (fresh, fresh, 0));
+        let w = Window::new(Some(now - 7200), now);
+        assert_eq!((w.start, w.from), (now - 7200 - OVERLAP_SECS, now - 7200));
+        assert_eq!(w.skipped, 0);
+        // An old checkpoint skips ahead, and the gap is counted.
+        let w = Window::new(Some(now - 72 * 3600), now);
+        assert_eq!((w.start, w.from), (fresh, fresh));
+        assert_eq!(w.skipped, fresh - (now - 72 * 3600));
         let code = CdxQuery {
             endpoint: Some("code".into()),
             ..Default::default()
         };
         assert!(GhSearch::new(code, "t".into()).is_err());
+    }
+
+    /// A pull request created at `ts`.
+    fn pr_at(n: u64, ts: i64) -> String {
+        let at = chrono::DateTime::from_timestamp(ts, 0)
+            .unwrap()
+            .format("%Y-%m-%dT%H:%M:%SZ");
+        format!(
+            r#"{{"html_url":"https://github.com/probe-owner/repo/pull/{n}","title":"t","body":"b","created_at":"{at}"}}"#
+        )
+    }
+
+    /// A page of `n` pull requests, the `page`th of `total`, created a
+    /// minute apart per page from the checkpoint `T` on.
+    fn page_of(page: usize, n: usize, total: usize) -> String {
+        let items: Vec<String> = (0..n)
+            .map(|i| pr_at((page * 1000 + i) as u64, T + (page as i64) * 60))
+            .collect();
+        body(&items, total)
+    }
+
+    fn page_no(u: &str) -> usize {
+        u.rsplit("page=").next().unwrap().parse().unwrap()
+    }
+
+    #[test]
+    fn the_checkpoint_moves_only_as_far_as_every_query_read() {
+        let now = T + 4 * 3600 + LAG_SECS;
+        let w = Window::new(Some(T), now);
+        let needles = vec!["uqtag=".to_string(), "chatgpttest".to_string()];
+        let scopes = [Scope::PullRequests];
+        // Results come oldest first.
+        assert!(search_url(Scope::Commits, "uqtag=", &w, 1).contains("order=asc"));
+
+        // Every query read to its end: the checkpoint moves to the window's end.
+        let read = search(&w, &needles, &scopes, 20, &mut |_| Ok(body(&[], 0))).unwrap();
+        assert_eq!(read.next(&w), w.until);
+
+        // The second query's request fails (a rate limit, say): nothing it
+        // covers is passed over, so the checkpoint stays where it was.
+        let read = search(&w, &needles, &scopes, 20, &mut |u| {
+            if u.contains("uqtag") {
+                Ok(page_of(1, 3, 3))
+            } else {
+                anyhow::bail!("HTTP 403")
+            }
+        })
+        .unwrap();
+        assert_eq!(read.hits.len(), 3);
+        assert_eq!(read.next(&w), T);
+
+        // The 1000-result cap: the next pull starts at the newest item read.
+        let read = search(&w, &needles, &scopes, 20, &mut |u| {
+            Ok(if u.contains("uqtag") {
+                page_of(page_no(u), 100, 5000)
+            } else {
+                body(&[], 0)
+            })
+        })
+        .unwrap();
+        assert_eq!((read.complete, read.parsed), (1, 11));
+        assert_eq!(read.next(&w), T + 10 * 60);
+
+        // Out of budget part way through one query: the same.
+        let one = vec!["uqtag=".to_string()];
+        let read = search(&w, &one, &scopes, 3, &mut |u| {
+            Ok(page_of(page_no(u), 100, 500))
+        })
+        .unwrap();
+        assert_eq!(read.complete, 0);
+        assert_eq!(read.next(&w), T + 3 * 60);
+        // A query the budget never reached holds the checkpoint.
+        let read = search(&w, &needles, &scopes, 1, &mut |_| Ok(body(&[], 0))).unwrap();
+        assert_eq!((read.complete, read.next(&w)), (1, T));
+
+        // `incomplete_results` is read to its end and counted, not held.
+        let read = search(&w, &one, &scopes, 5, &mut |_| {
+            Ok(r#"{"total_count":0,"incomplete_results":true,"items":[]}"#.into())
+        })
+        .unwrap();
+        assert_eq!((read.complete, read.incomplete), (0, 1));
+        assert_eq!(read.next(&w), w.until);
     }
 }

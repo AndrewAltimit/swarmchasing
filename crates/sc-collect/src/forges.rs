@@ -15,9 +15,10 @@
 //!   a wiki. The owner's other fields (name, email, avatar) are not kept.
 //!
 //! Both page back from the newest project to the checkpoint (the newest
-//! creation time read, in ms), at most `scan` pages; what the pages did not
-//! reach is counted as skipped. Without a checkpoint a pull starts
-//! [`FRESH_MS`](crate::registries::FRESH_MS) back; a checkpoint older than
+//! creation time read, in ms), at most `scan` pages and until the event cap;
+//! what the pages did not reach is counted as skipped. Without a checkpoint
+//! a pull starts [`FRESH_MS`](crate::registries::FRESH_MS) back; a
+//! checkpoint older than
 //! [`MAX_BACKLOG_MS`](crate::registries::MAX_BACKLOG_MS) is skipped to
 //! there and the gap counted. Coverage is in minutes of creation time;
 //! projects parsed are the canary. A project with neither a templated name
@@ -226,8 +227,13 @@ fn pull_listing(
                 .filter(|e| e.id.is_empty() || ids.insert(e.id.clone())),
         );
         reached = p.oldest.unwrap_or(start);
-        if p.projects == 0 || reached <= start || out.events.len() >= max {
+        if p.projects == 0 || reached <= start {
             done = true;
+            break;
+        }
+        // At the cap the pages left are not read: what lies between the
+        // checkpoint and `reached` counts as skipped, as when pages run out.
+        if out.events.len() >= max {
             break;
         }
     }
@@ -394,6 +400,27 @@ mod tests {
         )
         .unwrap();
         assert_eq!((out.coverage.read, out.coverage.skipped), (20, 40));
+        // At the event cap before the checkpoint: page two is not read, and
+        // what it would have covered is skipped, not claimed as read.
+        let mut asked = Vec::new();
+        let out = pull_listing(
+            Some(mark),
+            5,
+            2,
+            now,
+            &mut |p| {
+                asked.push(p);
+                Ok(pages[p - 1].to_string())
+            },
+            &parse,
+        )
+        .unwrap();
+        assert_eq!(asked, [1]);
+        assert_eq!((out.coverage.read, out.coverage.skipped), (20, 40));
+        assert_eq!(
+            out.coverage.next,
+            ms_of("2026-10-13T18:50:00Z").map(|m| m as u64)
+        );
         // The first page failing is an error.
         assert!(pull_listing(None, 2, 100, now, &mut |_| anyhow::bail!("down"), &parse).is_err());
     }

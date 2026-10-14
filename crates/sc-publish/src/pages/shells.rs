@@ -155,7 +155,7 @@ pub const CHECK_LOGS: &str = r##"<header class="page-head compact"><h1>Check my 
 <h2 id="cl-log-h">1. Your log</h2>
 <div id="cl-drop" class="dropzone">
 <p class="drop-lead">Paste your log below, drop the file here, or try the synthetic example.</p>
-<div class="row drop-actions"><label class="file button">Load file<input type="file" id="cl-file" accept=".log,.txt,.ndjson,.jsonl,.json"></label><button type="button" id="cl-example">Try an example</button></div>
+<div class="row drop-actions"><label class="file button">Load file<input type="file" id="cl-file" accept=".log,.txt"></label><button type="button" id="cl-example">Try an example</button></div>
 <label for="cl-input" class="sr-only">Access log</label>
 <textarea id="cl-input" class="mono" rows="8" spellcheck="false" aria-describedby="cl-input-hint" placeholder='203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET /search?q=... HTTP/1.1" 200 512 "-" "Mozilla/5.0"'></textarea>
 <p id="cl-drop-status" class="hint" role="status" hidden></p>

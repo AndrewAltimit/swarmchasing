@@ -285,6 +285,19 @@ fn an_interrupted_run_is_reported_by_the_next_and_old_captures_are_analysed() {
     let state = json(&d.join("data/state.json"));
     assert_eq!(state["sources"]["tm-b"]["cursor"], 0, "{state}");
     assert!(state["sources"]["tm-a"]["cursor"].as_i64().unwrap() > 0);
+    assert_eq!(state["sources"]["tm-b"]["restart"], true, "{state}");
+    // The run after a reset pulls tm-b from the start again, but what its
+    // store already holds is neither stored twice nor reported as new.
+    let store_b = d.join("data/store/tm-b.ndjson");
+    let held = std::fs::read_to_string(&store_b).unwrap();
+    ok(d, &["watch", "watchlist.toml", "--out", "data"]);
+    let summary = json(&latest(d).join("run.json"));
+    assert_eq!(summary["counts"]["new_records"], 0, "{summary}");
+    assert_eq!(summary["leads"].as_array().map(Vec::len), Some(0));
+    assert_eq!(std::fs::read_to_string(&store_b).unwrap(), held);
+    let state = json(&d.join("data/state.json"));
+    assert!(state["sources"]["tm-b"]["cursor"].as_i64().unwrap() > 0);
+    assert!(state["sources"]["tm-b"].get("restart").is_none(), "{state}");
     let r = run(d, &["watch", "reset", "nope", "--out", "data"]);
     assert!(
         !r.ok && r.stderr.contains("no source `nope`"),
