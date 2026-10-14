@@ -416,11 +416,7 @@ fn path_stats(
     };
     for &i in members {
         let r = &results[i];
-        let found = if r.layers.is_empty() {
-            fabricated_ids(&r.obs.url)
-        } else {
-            fabricated_in(r.layers.iter().map(|l| l.text.as_str()))
-        };
+        let found = fabricated_of(r);
         if !found.is_empty() {
             stats.fabricated_ids += 1;
         }
@@ -432,6 +428,61 @@ fn path_stats(
         }
     }
     stats
+}
+
+/// Shared inventions listed per cluster.
+const MAX_SHARED_INVENTIONS: usize = 5;
+
+/// A record's fabricated identifiers, each value once.
+fn fabricated_of(r: &ObsResult) -> Vec<crate::paths::FabricatedId> {
+    use crate::paths::{fabricated_ids, fabricated_in};
+    if r.layers.is_empty() {
+        fabricated_ids(&r.obs.url)
+    } else {
+        fabricated_in(r.layers.iter().map(|l| l.text.as_str()))
+    }
+}
+
+/// Fabricated values carried by two or more clusters, listed on each with
+/// the number of clusters carrying them: one model family inventing the
+/// same value, a hint on the model and never a tie between operators.
+pub(super) fn shared_inventions(clusters: &mut [Cluster], results: &[ObsResult]) {
+    let per: Vec<BTreeMap<String, crate::paths::IdShape>> = clusters
+        .iter()
+        .map(|c| {
+            c.members
+                .iter()
+                .flat_map(|&i| fabricated_of(&results[i]))
+                .map(|f| (f.value, f.shape))
+                .collect()
+        })
+        .collect();
+    let mut holders: BTreeMap<&str, usize> = BTreeMap::new();
+    for v in per.iter().flat_map(BTreeMap::keys) {
+        *holders.entry(v.as_str()).or_default() += 1;
+    }
+    let mut lists: Vec<Vec<crate::paths::SharedInvention>> = per
+        .iter()
+        .map(|vals| {
+            let mut l: Vec<crate::paths::SharedInvention> = vals
+                .iter()
+                .filter(|(v, _)| holders[v.as_str()] >= 2)
+                .map(|(v, &shape)| crate::paths::SharedInvention {
+                    value: v.clone(),
+                    shape,
+                    clusters: holders[v.as_str()],
+                })
+                .collect();
+            crate::sort::by(&mut l, |p, q| {
+                q.clusters.cmp(&p.clusters).then(p.value.cmp(&q.value))
+            });
+            l.truncate(MAX_SHARED_INVENTIONS);
+            l
+        })
+        .collect();
+    for (c, l) in clusters.iter_mut().zip(lists.drain(..)) {
+        c.paths.shared_invention = l;
+    }
 }
 
 #[cfg(test)]

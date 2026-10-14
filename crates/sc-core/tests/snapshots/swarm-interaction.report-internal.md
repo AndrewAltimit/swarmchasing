@@ -175,6 +175,7 @@ Every pair test over the whole analysis, by family: the pairs tested, those kept
 
 - scaffold: 0 kept of 2 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 - co_activity: 0 kept of 1 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
+- ordered_co_target: 1 kept of 1 tested (1 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
 - role_sequence: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 - disjoint_partition: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 

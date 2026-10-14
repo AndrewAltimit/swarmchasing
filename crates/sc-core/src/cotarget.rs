@@ -26,8 +26,13 @@
 //! every pair tested. Each pair's similarity weighs shared items by rarity
 //! (the log of clusters over holders). Pairs are soft links: they never
 //! score, link or merge.
+//!
+//! [`ordered_pairs`] reads what this test leaves aside, the order: two
+//! concurrent clusters that first touched the rare hosts they share in the
+//! same order, at their own paces, beyond a random order.
 
 use crate::analyze::{Cluster, ObsResult};
+use crate::chance::TestFamily;
 use crate::model::{IndicatorKind, Tier};
 use crate::timing::request_like;
 use serde::{Deserialize, Serialize};
@@ -49,6 +54,10 @@ pub struct CoTargetOptions {
     pub max_chance: f64,
     /// Benjamini-Hochberg false discovery rate over the pairs tested.
     pub fdr: f64,
+    /// Ordered co-target: rare hosts two concurrent clusters must share
+    /// before the order they first touched them in is read
+    /// ([`ordered_pairs`]). Its chance and cut are `max_chance` and `fdr`.
+    pub order_min_hosts: usize,
 }
 
 impl Default for CoTargetOptions {
@@ -60,6 +69,7 @@ impl Default for CoTargetOptions {
             max_holders: 4,
             max_chance: 0.01,
             fdr: 0.05,
+            order_min_hosts: 5,
         }
     }
 }
@@ -111,6 +121,35 @@ impl CoTargetPair {
     }
 }
 
+/// Senders per target host held by a cluster above noise: those clusters,
+/// and records outside them.
+fn host_holders<'a>(shown: &[&Cluster], results: &'a [ObsResult]) -> BTreeMap<&'a str, usize> {
+    let in_shown: BTreeSet<usize> = shown
+        .iter()
+        .flat_map(|c| c.members.iter().copied())
+        .collect();
+    let mut holders: BTreeMap<&str, usize> = BTreeMap::new();
+    for c in shown {
+        let hosts: BTreeSet<&str> = c
+            .members
+            .iter()
+            .filter_map(|&m| results[m].target_host.as_deref())
+            .collect();
+        for h in hosts {
+            *holders.entry(h).or_default() += 1;
+        }
+    }
+    for (i, r) in results.iter().enumerate() {
+        if !in_shown.contains(&i)
+            && let Some(h) = r.target_host.as_deref()
+            && let Some(n) = holders.get_mut(h)
+        {
+            *n += 1;
+        }
+    }
+    holders
+}
+
 /// What a record did to its target.
 fn action(r: &ObsResult) -> &'static str {
     let has = |k: IndicatorKind| r.hits.iter().any(|h| h.kind == k);
@@ -144,30 +183,7 @@ pub(crate) fn cotarget_pairs(
     let bin = opts.bin_secs.max(1);
     let lag = opts.max_lag_bins.max(0);
     let shown: Vec<&Cluster> = clusters.iter().filter(|c| c.tier > Tier::Noise).collect();
-    let in_shown: BTreeSet<usize> = shown
-        .iter()
-        .flat_map(|c| c.members.iter().copied())
-        .collect();
-    // Senders per host: clusters above noise, and records outside them.
-    let mut holders: BTreeMap<&str, usize> = BTreeMap::new();
-    for c in &shown {
-        let hosts: BTreeSet<&str> = c
-            .members
-            .iter()
-            .filter_map(|&m| results[m].target_host.as_deref())
-            .collect();
-        for h in hosts {
-            *holders.entry(h).or_default() += 1;
-        }
-    }
-    for (i, r) in results.iter().enumerate() {
-        if !in_shown.contains(&i)
-            && let Some(h) = r.target_host.as_deref()
-            && let Some(n) = holders.get_mut(h)
-        {
-            *n += 1;
-        }
-    }
+    let holders = host_holders(&shown, results);
     let cap = opts.max_holders.min(max_shared);
     let rare = |h: &str| holders.get(h).is_some_and(|&n| n <= cap);
 
@@ -272,6 +288,201 @@ pub(crate) fn cotarget_pairs(
     });
     out.truncate(MAX_PAIRS);
     out
+}
+
+/// Two concurrent clusters that first touched their shared rare hosts in
+/// the same order beyond chance.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OrderedCoTargetPair {
+    /// Cluster ids, `a` the stronger.
+    pub a: String,
+    pub b: String,
+    /// Rare hosts both touched.
+    pub shared: usize,
+    /// The longest run of them both touched in the same order.
+    pub in_order: usize,
+    /// Chance of so long a run in a random order of `shared` hosts.
+    pub chance: f64,
+    /// Pairs tested, and pairs this unlikely expected among them.
+    pub tested: usize,
+    pub expected_pairs: f64,
+}
+
+impl OrderedCoTargetPair {
+    pub fn detail(&self) -> String {
+        format!(
+            "{} of {} shared rare hosts first touched in the same order, in the same hours (chance {:.1e} for a random order, {:.2} such pairs expected among {} tested): one ordered target list may drive both",
+            self.in_order, self.shared, self.chance, self.expected_pairs, self.tested
+        )
+    }
+}
+
+/// A host name as a sort key with runs of digits read as numbers, as a
+/// list sorted "naturally" orders them (`h2` before `h10`).
+fn natural_key(h: &str) -> Vec<(u8, usize, String)> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut digits = false;
+    for ch in h.chars() {
+        if !cur.is_empty() && ch.is_ascii_digit() != digits {
+            out.push(natural_part(&cur, digits));
+            cur.clear();
+        }
+        digits = ch.is_ascii_digit();
+        cur.push(ch);
+    }
+    if !cur.is_empty() {
+        out.push(natural_part(&cur, digits));
+    }
+    out
+}
+
+fn natural_part(s: &str, digits: bool) -> (u8, usize, String) {
+    if digits {
+        let t = s.trim_start_matches('0');
+        (0, t.len(), t.to_string())
+    } else {
+        (1, 0, s.to_string())
+    }
+}
+
+/// Whether both clusters' orders follow one sorted order of the hosts (by
+/// text or with numbers read as numbers, either way) at least as far as
+/// they follow each other: a public sorted or ranked list gives that order
+/// without a shared operator.
+fn sorted_explains(hosts: &[&str], tx: &[i64], ty: &[i64], in_order: usize) -> bool {
+    let mut by_text: Vec<usize> = (0..hosts.len()).collect();
+    by_text.sort_by(|&i, &k| hosts[i].cmp(hosts[k]));
+    let mut by_number: Vec<usize> = (0..hosts.len()).collect();
+    by_number.sort_by(|&i, &k| {
+        natural_key(hosts[i])
+            .cmp(&natural_key(hosts[k]))
+            .then(hosts[i].cmp(hosts[k]))
+    });
+    [by_text, by_number].iter().any(|order| {
+        let mut rank = vec![0i64; hosts.len()];
+        for (r, &i) in order.iter().enumerate() {
+            rank[i] = r as i64;
+        }
+        [1i64, -1].iter().any(|&dir| {
+            let follows = |t: &[i64]| {
+                let pts: Vec<(i64, i64)> =
+                    (0..hosts.len()).map(|i| (t[i], dir * rank[i])).collect();
+                crate::chance::longest_chain(&pts) >= in_order
+            };
+            follows(tx) && follows(ty)
+        })
+    })
+}
+
+/// Pairs of concurrent clusters above noise that first touched the rare
+/// hosts they share in the same order beyond chance, most unlikely first,
+/// and the family's multiplicity budget. A pair sharing at least
+/// `order_min_hosts` rare hosts (rare as [`cotarget_pairs`] counts it),
+/// whose first touches of them fall within `bin_secs` of each other's span,
+/// is tested: the longest run of shared hosts both first touched in the
+/// same order, from request and submit times only, against a random order
+/// ([`crate::chance::increasing_at_least`]). Ties in either cluster's times
+/// never count as agreement. A pair whose two orders both follow the
+/// hosts' sorted order as far is explained by a sorted list and kept out.
+pub(crate) fn ordered_pairs(
+    clusters: &[Cluster],
+    results: &[ObsResult],
+    max_shared: usize,
+    opts: &CoTargetOptions,
+) -> (Vec<OrderedCoTargetPair>, TestFamily) {
+    let shown: Vec<&Cluster> = clusters.iter().filter(|c| c.tier > Tier::Noise).collect();
+    let holders = host_holders(&shown, results);
+    let cap = opts.max_holders.min(max_shared);
+    let rare = |h: &str| holders.get(h).is_some_and(|&n| n <= cap);
+    let min_hosts = opts.order_min_hosts.max(2);
+    // Each cluster's first touch of each rare host.
+    let firsts: Vec<(&str, BTreeMap<&str, i64>)> = shown
+        .iter()
+        .filter_map(|c| {
+            let mut m: BTreeMap<&str, i64> = BTreeMap::new();
+            for &i in &c.members {
+                let r = &results[i];
+                let Some(h) = r.target_host.as_deref() else {
+                    continue;
+                };
+                if r.obs.ts <= 0 || !request_like(r.obs.ts_kind) || !rare(h) {
+                    continue;
+                }
+                let t = m.entry(h).or_insert(r.obs.ts);
+                *t = (*t).min(r.obs.ts);
+            }
+            (m.len() >= min_hosts).then_some((c.id.as_str(), m))
+        })
+        .collect();
+    let mut by_host: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for (i, (_, m)) in firsts.iter().enumerate() {
+        for h in m.keys() {
+            by_host.entry(h).or_default().push(i);
+        }
+    }
+    let mut common: BTreeMap<(usize, usize), Vec<&str>> = BTreeMap::new();
+    for (h, ids) in &by_host {
+        for (n, &x) in ids.iter().enumerate() {
+            for &y in &ids[n + 1..] {
+                common.entry((x, y)).or_default().push(h);
+            }
+        }
+    }
+    let widen = opts.bin_secs.max(0);
+    let span = |t: &[i64]| {
+        (
+            t.iter().min().copied().unwrap_or(0),
+            t.iter().max().copied().unwrap_or(0),
+        )
+    };
+    let mut tested = 0usize;
+    let mut out = Vec::new();
+    for ((x, y), hosts) in common {
+        if hosts.len() < min_hosts {
+            continue;
+        }
+        let (mx, my) = (&firsts[x].1, &firsts[y].1);
+        let tx: Vec<i64> = hosts.iter().map(|h| mx[h]).collect();
+        let ty: Vec<i64> = hosts.iter().map(|h| my[h]).collect();
+        let ((sx, ex), (sy, ey)) = (span(&tx), span(&ty));
+        // Concurrent only: a rerun on another day is read by the rerun hint.
+        if sx > ey + widen || sy > ex + widen {
+            continue;
+        }
+        tested += 1;
+        let pts: Vec<(i64, i64)> = tx.iter().copied().zip(ty.iter().copied()).collect();
+        let in_order = crate::chance::longest_chain(&pts);
+        let chance = crate::chance::increasing_at_least(hosts.len(), in_order);
+        if chance > opts.max_chance || sorted_explains(&hosts, &tx, &ty, in_order) {
+            continue;
+        }
+        out.push(OrderedCoTargetPair {
+            a: firsts[x].0.to_string(),
+            b: firsts[y].0.to_string(),
+            shared: hosts.len(),
+            in_order,
+            chance,
+            tested: 0,
+            expected_pairs: 0.0,
+        });
+    }
+    let ps: Vec<f64> = out.iter().map(|p| p.chance).collect();
+    let family = TestFamily::cut("ordered_co_target", &ps, tested, opts.fdr);
+    out.retain(|p| family.keeps(p.chance));
+    for p in &mut out {
+        p.tested = family.tested;
+        p.expected_pairs = p.chance * family.tested as f64;
+    }
+    crate::sort::by(&mut out, |p, q| {
+        p.chance
+            .total_cmp(&q.chance)
+            .then(q.in_order.cmp(&p.in_order))
+            .then(p.a.cmp(&q.a))
+            .then(p.b.cmp(&q.b))
+    });
+    out.truncate(MAX_PAIRS);
+    (out, family)
 }
 
 /// `ln(n!)`.
@@ -418,5 +629,109 @@ mod tests {
             &Rules::default_rules(),
         );
         assert!(a.cotarget_pairs.is_empty(), "{:?}", a.cotarget_pairs);
+    }
+
+    /// Three clusters by inbox, each probing `hosts` in its own order
+    /// (`orders[a]`, indexes into `hosts`) at its own pace, starting twenty
+    /// minutes apart: concurrent, never on one host within the link window.
+    fn ordered(hosts: &[&str], orders: &[Vec<usize>]) -> Vec<Observation> {
+        let t0 = 1_791_000_000;
+        let inbox = |n: usize| format!("{n:08x}-2222-4b3c-8a66-4e3f2a1b0c9d");
+        let mut obs = Vec::new();
+        for (a, order) in orders.iter().enumerate() {
+            let pace = 900 + 400 * a as i64;
+            for (step, &k) in order.iter().enumerate() {
+                obs.push(o(
+                    &format!("a{a}-{k}"),
+                    t0 + a as i64 * 1200 + step as i64 * pace,
+                    &format!(
+                        "https://{}/q?id=1%27%20OR%201=1--&hook=https://webhook.site/{}",
+                        hosts[k],
+                        inbox(a)
+                    ),
+                ));
+            }
+        }
+        obs
+    }
+
+    #[test]
+    fn one_ordered_list_at_differing_paces_is_an_ordered_pair() {
+        // A list in no sorted order, worked in the same order by all three.
+        let hosts = [
+            "kilo.list.example",
+            "alpha.list.example",
+            "mike.list.example",
+            "delta.list.example",
+            "zulu.list.example",
+            "echo.list.example",
+            "bravo.list.example",
+        ];
+        let same: Vec<usize> = (0..7).collect();
+        let a = analyze(
+            ordered(&hosts, &[same.clone(), same.clone(), same.clone()]),
+            &Rules::default_rules(),
+        );
+        assert_eq!(a.clusters.len(), 3, "{:?}", a.clusters.len());
+        let p = &a.ordered_cotarget_pairs;
+        assert_eq!(p.len(), 3, "{p:?}");
+        for x in p {
+            assert_eq!((x.shared, x.in_order, x.tested), (7, 7, 3));
+            assert!((x.chance - 1.0 / 5040.0).abs() < 1e-12, "{}", x.detail());
+            assert!(!x.detail().contains("example"));
+        }
+        assert!(
+            a.soft_links
+                .iter()
+                .any(|l| l.kind == crate::fleets::SoftLinkKind::OrderedCoTarget),
+            "{:?}",
+            a.soft_links
+        );
+        let f = a
+            .multiplicity
+            .iter()
+            .find(|f| f.family == "ordered_co_target");
+        assert_eq!(f.map(|f| (f.kept, f.tested)), Some((3, 3)), "{f:?}");
+
+        // Each in its own order: no run long enough.
+        let own = vec![
+            same.clone(),
+            vec![6, 5, 4, 3, 2, 1, 0],
+            vec![3, 6, 1, 4, 0, 5, 2],
+        ];
+        let b = analyze(ordered(&hosts, &own), &Rules::default_rules());
+        assert!(
+            b.ordered_cotarget_pairs.is_empty(),
+            "{:?}",
+            b.ordered_cotarget_pairs
+        );
+
+        // A sorted list (by number) gives every reader one order: no tie.
+        let sorted = [
+            "h2.list.example",
+            "h3.list.example",
+            "h5.list.example",
+            "h8.list.example",
+            "h13.list.example",
+            "h21.list.example",
+            "h34.list.example",
+        ];
+        let c = analyze(
+            ordered(&sorted, &[same.clone(), same.clone(), same]),
+            &Rules::default_rules(),
+        );
+        assert_eq!(c.clusters.len(), 3);
+        assert!(
+            c.ordered_cotarget_pairs.is_empty(),
+            "{:?}",
+            c.ordered_cotarget_pairs
+        );
+    }
+
+    #[test]
+    fn natural_order_reads_numbers_as_numbers() {
+        let mut v = vec!["h10.x", "h2.x", "h1.x"];
+        v.sort_by_key(|h| natural_key(h));
+        assert_eq!(v, ["h1.x", "h2.x", "h10.x"]);
     }
 }

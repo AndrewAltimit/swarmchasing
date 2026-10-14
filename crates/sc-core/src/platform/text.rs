@@ -66,6 +66,16 @@ impl TextSketch {
 /// name, login) that become a slot. `None` for text with no words.
 pub fn sketch(text: &str, context: &[&str], rules: &Rules) -> Option<TextSketch> {
     let tokens = slot_tokens(text, context);
+    let mut out = token_sketch(&tokens)?;
+    out.residue = super::residue::text_residue(text, rules);
+    out.self_id = super::residue::self_id(text);
+    Some(out)
+}
+
+/// The sketch of slotted `tokens` ([`slot_tokens`]): words, template hash,
+/// MinHash signature and excerpt, with no residue read. `None` when there
+/// are no tokens.
+pub fn token_sketch(tokens: &[String]) -> Option<TextSketch> {
     if tokens.is_empty() {
         return None;
     }
@@ -103,8 +113,8 @@ pub fn sketch(text: &str, context: &[&str], rules: &Rules) -> Option<TextSketch>
         skeleton: fnv(head.join(" ").as_bytes()),
         minhash,
         excerpt: crate::redact::redact_decoded(&excerpt),
-        residue: super::residue::text_residue(text, rules),
-        self_id: super::residue::self_id(text),
+        residue: Vec::new(),
+        self_id: Vec::new(),
     })
 }
 

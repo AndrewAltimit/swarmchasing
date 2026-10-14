@@ -263,11 +263,25 @@ pub struct Analysis {
     /// beyond a hypergeometric chance model: a link to check, never a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cotarget_pairs: Vec<crate::cotarget::CoTargetPair>,
+    /// Pairs of concurrent clusters that first touched their shared rare
+    /// hosts in the same order beyond chance: a link to check, never a
+    /// merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ordered_cotarget_pairs: Vec<crate::cotarget::OrderedCoTargetPair>,
+    /// Pairs of clusters whose request templates are one structural part
+    /// apart beyond chance, sharing none outright: one harness changed
+    /// mid-fleet. A link to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lineage_pairs: Vec<crate::scaffold::LineagePair>,
+    /// Pairs of clusters writing prose parameter values from one template
+    /// beyond chance: a link to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prompt_echo_pairs: Vec<crate::prose::PromptEchoPair>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
     /// lengths, header sets, escalations, common features, captured
-    /// secrets, scaffolds, co-activity, co-targets), strongest
-    /// first. They never merge clusters or change a score.
+    /// secrets, scaffolds, scaffold lineage, prompt echoes, co-activity,
+    /// co-targets, ordered co-targets), strongest first. They never merge clusters or change a score.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub soft_links: Vec<crate::fleets::SoftLink>,
     /// Clusters whose combined soft links are strong: proposals for the

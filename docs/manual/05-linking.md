@@ -72,8 +72,11 @@ Soft links are leads for a reviewer, listed with the evidence for each:
 | Shared scaffold | One harness behind clusters with separate inboxes and tags ([FM-5.14](#fm-514-scaffold-fingerprints)). | Popular libraries and frameworks give unrelated operators one request shape. |
 | Co-activity | One dispatcher starting both, or one starting the other ([FM-6.9](06-timing.md#fm-69-co-activity)). | One scheduler drives unrelated jobs; busy clusters overlap. |
 | Co-target | One target list worked by several agents in the same hours, each in its own order ([FM-5.16](#fm-516-co-targets)). | A story or a disclosed flaw sends unrelated agents to one site at once. |
+| Ordered co-target | One ordered target list worked by several agents at once, each at its own pace ([FM-5.19](#fm-519-ordered-co-targets)). | A public ranked or sorted list gives every reader one order. |
+| Scaffold lineage | One harness changed mid-fleet: templates one part apart ([FM-5.20](#fm-520-scaffold-lineage)). | A framework release changes every user's template the same way. |
+| Prompt echo | Queries written from one prompt, each naming its own target ([FM-5.21](#fm-521-prompt-echo)). | Published query and dork lists give unrelated users one wording. |
 
-A soft link or edge with a chance model is one test of many: an analysis of `n` clusters compares up to `n(n-1)/2` pairs, and a 1% chance per pair gives one false pair in every hundred compared. Each such family of tests (shared pauses, scaffolds, co-activity, each interaction signal, platform candidates) **must** count the pairs it tested, keep only pairs that survive a false-discovery-rate cut over all of them, and state how many pairs that unlikely chance alone would give among them, so a reviewer reads a kept pair against its family's budget.
+A soft link or edge with a chance model is one test of many: an analysis of `n` clusters compares up to `n(n-1)/2` pairs, and a 1% chance per pair gives one false pair in every hundred compared. Each such family of tests (shared pauses, scaffolds, scaffold lineage, prompt echoes, co-activity, ordered co-targets, each interaction signal, platform candidates) **must** count the pairs it tested, keep only pairs that survive a false-discovery-rate cut over all of them, and state how many pairs that unlikely chance alone would give among them, so a reviewer reads a kept pair against its family's budget.
 
 ## FM-5.8 Candidate fleets, merge and split
 
@@ -87,7 +90,9 @@ Merges and splits are reversible and both are logged. A fleet grows, merges with
 
 Soft links are weighed before they are grouped ([FM-5.17](#fm-517-weighing-soft-links)). A candidate fleet **should** be a group whose clusters are tied to each other, not a chain: when one cluster is tied to two groups that share no tie, the two groups are two proposals, and the cluster joins at most one of them. A proposal states how dense it is and its weakest cut, the ties whose loss would split it, so the reviewer sees where it is thin.
 
-Toolkit: the analysis lists soft links between clusters with a kind and a likelihood ratio (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services, shared scaffolds, co-activity, co-targets), and groups strongly soft-linked clusters into candidate fleets by community detection, each with its density and weakest cut, shown in internal reports ([methodology](../methodology.md#descriptive-hints)). Candidate fleets never merge clusters or change a tier. The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
+Toolkit: the analysis lists soft links between clusters with a kind and a likelihood ratio (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services, shared scaffolds, scaffold lineage, prompt echoes, co-activity, co-targets, ordered co-targets), and groups strongly soft-linked clusters into candidate fleets by community detection, each with its density and weakest cut, shown in internal reports ([methodology](../methodology.md#descriptive-hints)). Candidate fleets never merge clusters or change a tier.
+
+The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
 
 ## FM-5.9 Escalation sequences
 
@@ -211,7 +216,7 @@ A co-target is a soft link and **must not** merge clusters: two operators can be
 Each kind of soft link is weighed as a likelihood ratio: how much likelier it is between two clusters of one operator than between unrelated ones. Two rules keep weak ties from adding up to a false proposal:
 
 - **Rarity.** A value many clusters share says less than one two clusters share, and its weight falls with the share of clusters holding it.
-- **Dependence.** Kinds that read one habit are not independent evidence. Encoding, header set, relay stack, scaffold, payload dialect, cut length and fan-out all describe one harness; shared pauses and co-activity one timeline; reruns, path sets, recon openings, co-targets and escalations one target list; captured secrets, common features and callback services what an operator holds. A pair **should** count only its strongest tie within each such family, and combine across families.
+- **Dependence.** Kinds that read one habit are not independent evidence. Encoding, header set, relay stack, scaffold, scaffold lineage, prompt echo, payload dialect, cut length and fan-out all describe one harness; shared pauses and co-activity one timeline; reruns, path sets, recon openings, co-targets, ordered co-targets and escalations one target list; captured secrets, common features and callback services what an operator holds. A pair **should** count only its strongest tie within each such family, and combine across families.
 
 The ratios **should** come from measurement: labelled fleets where they exist, and a simulator with ground truth otherwise, with a conservative bound taken rather than the point value. A kind with no measured evidence is off or weighed by stated judgment. Toolkit: `swarmchase sim calibrate` prints each kind's ratio from the simulator; the rules file says which ratios come from it ([methodology](../methodology.md#descriptive-hints)).
 
@@ -224,3 +229,34 @@ An analysis covers a window of days. A slow fleet, one cluster a week, can be we
 - **A conservative bound.** A pair is listed as persistent only when its accumulated weight passes the upper threshold of a sequential test at a small error rate.
 
 Persistent pairs are proposals in the admin's digest, like candidate fleets. They never merge clusters, change a tier or reach a provider, operator or public report. Toolkit: `FK-` keys and persistent pairs in the watch's ledger and digest.
+
+## FM-5.19 Ordered co-targets
+
+A target list is often ordered, and agents handed one list tend to work it in that order, each at its own pace. A co-target ([FM-5.16](#fm-516-co-targets)) ignores order; a rerun ([FM-5.10](#fm-510-reruns)) needs another day; a synchronised start ([FM-5.12](#fm-512-interaction-edges)) needs requests within seconds. An **ordered co-target** is two clusters, active at the same time, that first touched the rare hosts they share in the same order more often than chance allows.
+
+- **First touches, request times only.** Each cluster's order is the order of its first request to each shared host. Capture times **must not** be read: an archive's crawl order is not the client's.
+- **The statistic.** The longest run of shared hosts both clusters touched in the same order. A tie in either cluster's times **must not** count as agreement.
+- **Chance.** The chance of so long a run when the shared hosts are put in a random order; exactly computed for a few dozen hosts, and bounded from above beyond that. Pairs are kept under a false-discovery-rate cut over the pairs tested.
+- **Sorted lists.** A public list sorted by name or by number, or a published ranking, gives every reader one order without a shared operator. A pair whose two orders both follow the hosts' sorted order as far as they follow each other **must not** be tied.
+
+An ordered co-target is a soft link in the targets family and **must not** merge clusters: a list can be shared, and a ranking the toolkit does not know reads as an order. Toolkit: `ordered_cotarget_pairs` in the analysis and the `ordered_co_target` soft link, with the settings in `[co_target]` ([methodology](../methodology.md#timing)).
+
+## FM-5.20 Scaffold lineage
+
+An operator who upgrades a harness mid-fleet changes one part of its request structure: a parameter added or renamed, another encoding, a new payload set, another relay. Scaffold fingerprints ([FM-5.14](#fm-514-scaffold-fingerprints)) compare exact templates, so the fleet splits at the upgrade. **Scaffold lineage** compares templates one structural part apart.
+
+- **Deletion neighbourhood.** A specific template with at least one part more than the specificity floor yields one key per structural part dropped, and its own key. Two templates differing in one part, or one a part longer than the other, share a key. A pair already sharing a template is the scaffold test's, not this one's.
+- **Chance.** Each key has a base rate as a template does, with outside records counted as more holders; a key held by more than a few senders is a common default and ties none. Templates built from common parts are often one part apart by chance, so the chance **must** account for every key a cluster holds, not only those shared: the chance that an unrelated cluster holds as many of one side's keys as the other does. That chance **must** pass on its own; the handover only adds to it.
+- **Handover.** An upgrade has a before and an after: only pairs where one cluster ends before the other starts are compared, and the chance of a gap that short under random placement of the two spans is combined with the template chance as one test.
+
+Pairs are kept under a false-discovery-rate cut over the pairs compared. Scaffold lineage is a soft link in the harness family and **must not** merge clusters: a framework release changes every user's template the same way. Toolkit: `lineage_pairs` in the analysis and the `scaffold_lineage` soft link, read with the `[scaffold]` settings ([methodology](../methodology.md#descriptive-hints)).
+
+## FM-5.21 Prompt echo
+
+Agents given one prompt write their search and form text from one template, each naming its own target. A **prompt echo** is two clusters whose prose parameter values (several words of natural language) are near-duplicates once each value's per-instance parts are slots: the target's own name, numbers, URLs, addresses and identifiers.
+
+- **Shape.** Equal slotted text, or near-duplicate word shingles (estimated similarity of at least 0.6), as for platform text ([FM-5.15](#fm-515-coordinated-accounts-on-public-platforms)).
+- **Public wording.** Dork lists, benchmark prompts and tutorials give unrelated users one wording. A template matching a listed public query, each listed with its source, **must not** tie clusters; one carried by more than a few senders, records outside the clusters counted, is a common default.
+- **Chance.** The base rate of the template among the clusters writing prose at all, corrected for how many templates the pair shares, and a false-discovery-rate cut over the pairs compared.
+
+A prompt echo is a soft link in the harness family and **must not** merge clusters. The evidence quotes only the slotted template. Toolkit: `prompt_echo_pairs` in the analysis and the `prompt_echo` soft link, with the settings in `[prompt_echo]` ([methodology](../methodology.md#descriptive-hints)).

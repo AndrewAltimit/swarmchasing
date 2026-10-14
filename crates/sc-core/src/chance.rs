@@ -185,9 +185,154 @@ pub(crate) fn seed(parts: &[&str]) -> u64 {
     h
 }
 
+/// Items up to which [`increasing_at_least`] is exact.
+const LIS_EXACT_MAX: usize = 30;
+
+/// `ln(n!)`.
+pub(crate) fn ln_fact(n: usize) -> f64 {
+    (2..=n).map(|i| (i as f64).ln()).sum()
+}
+
+/// `P(LIS >= l)` for the longest increasing subsequence of a uniformly
+/// random permutation of `k` items. Exact up to [`LIS_EXACT_MAX`] items, by
+/// the Robinson-Schensted correspondence: the permutations whose longest
+/// increasing subsequence is `l` are counted by the squared numbers of
+/// standard Young tableaux (hook length formula) of the partitions of `k`
+/// whose first row is `l`. Above that, the union bound over every set of
+/// `l` positions, `C(k, l) / l!`, which overstates the chance, never
+/// understates it.
+pub(crate) fn increasing_at_least(k: usize, l: usize) -> f64 {
+    if l <= 1 {
+        return 1.0;
+    }
+    if l > k {
+        return 0.0;
+    }
+    if k <= LIS_EXACT_MAX {
+        return lis_table()[k][l];
+    }
+    let ln = ln_fact(k) - ln_fact(l) - ln_fact(k - l) - ln_fact(l);
+    ln.exp().min(1.0)
+}
+
+/// `table[k][l]`: `P(LIS >= l)` over permutations of `k` items, for `k` up
+/// to [`LIS_EXACT_MAX`].
+fn lis_table() -> &'static Vec<Vec<f64>> {
+    static TABLE: std::sync::OnceLock<Vec<Vec<f64>>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        (0..=LIS_EXACT_MAX)
+            .map(|k| {
+                // exact[l]: P(LIS = l).
+                let mut exact = vec![0.0; k + 2];
+                let ln_k = ln_fact(k);
+                let mut parts = Vec::new();
+                partitions(k, k, &mut parts, &mut |lambda| {
+                    let ln_f = ln_k - ln_hooks(lambda);
+                    exact[lambda[0]] += (2.0 * ln_f - ln_k).exp();
+                });
+                let mut at_least = vec![0.0; k + 2];
+                for l in (0..=k).rev() {
+                    at_least[l] = (at_least[l + 1] + exact[l]).min(1.0);
+                }
+                if k == 0 {
+                    at_least[0] = 1.0;
+                }
+                at_least
+            })
+            .collect()
+    })
+}
+
+/// Every partition of `n` into parts of at most `max`, largest first.
+fn partitions(n: usize, max: usize, parts: &mut Vec<usize>, f: &mut impl FnMut(&[usize])) {
+    if n == 0 {
+        if !parts.is_empty() {
+            f(parts);
+        }
+        return;
+    }
+    for p in (1..=max.min(n)).rev() {
+        parts.push(p);
+        partitions(n - p, p, parts, f);
+        parts.pop();
+    }
+}
+
+/// The sum of the logs of the hook lengths of partition `lambda`.
+fn ln_hooks(lambda: &[usize]) -> f64 {
+    let mut s = 0.0;
+    for (i, &row) in lambda.iter().enumerate() {
+        for j in 0..row {
+            // Cells below (i, j): rows after i at least j + 1 long.
+            let below = lambda[i + 1..].iter().filter(|&&r| r > j).count();
+            s += ((row - j - 1 + below + 1) as f64).ln();
+        }
+    }
+    s
+}
+
+/// The longest chain of `points` increasing strictly in both coordinates:
+/// the longest increasing subsequence of one order read in the other, with
+/// ties in either order never counted as agreement.
+pub(crate) fn longest_chain(points: &[(i64, i64)]) -> usize {
+    let mut p = points.to_vec();
+    p.sort();
+    let mut best = vec![1usize; p.len()];
+    for j in 0..p.len() {
+        for i in 0..j {
+            if p[i].0 < p[j].0 && p[i].1 < p[j].1 {
+                best[j] = best[j].max(best[i] + 1);
+            }
+        }
+    }
+    best.into_iter().max().unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn longest_increasing_subsequence_chances() {
+        // Every one of 5! orders: one is fully increasing.
+        assert!((increasing_at_least(5, 5) - 1.0 / 120.0).abs() < 1e-12);
+        assert_eq!(increasing_at_least(5, 1), 1.0);
+        assert_eq!(increasing_at_least(5, 6), 0.0);
+        // Brute force over permutations of 6: count by LIS.
+        fn perms(v: &mut Vec<i64>, k: usize, out: &mut Vec<Vec<i64>>) {
+            if k == v.len() {
+                out.push(v.clone());
+                return;
+            }
+            for i in k..v.len() {
+                v.swap(k, i);
+                perms(v, k + 1, out);
+                v.swap(k, i);
+            }
+        }
+        let mut all = Vec::new();
+        perms(&mut (0..6).collect(), 0, &mut all);
+        for l in 1..=6 {
+            let n = all
+                .iter()
+                .filter(|p| {
+                    let pts: Vec<(i64, i64)> =
+                        p.iter().enumerate().map(|(i, &x)| (i as i64, x)).collect();
+                    longest_chain(&pts) >= l
+                })
+                .count();
+            let want = n as f64 / all.len() as f64;
+            assert!((increasing_at_least(6, l) - want).abs() < 1e-9, "{l}");
+        }
+        // The bound above the exact range is above the exact value below it.
+        let exact = increasing_at_least(30, 20);
+        let bound = (ln_fact(30) - ln_fact(20) - ln_fact(10) - ln_fact(20)).exp();
+        assert!(exact <= bound && exact > 0.0, "{exact} {bound}");
+        assert!(increasing_at_least(40, 30) < 1e-20);
+        // Ties never count as agreement.
+        assert_eq!(longest_chain(&[(0, 0), (0, 1), (1, 0)]), 1);
+        assert_eq!(longest_chain(&[(0, 0), (1, 1), (2, 2)]), 3);
+    }
 
     #[test]
     fn a_family_keeps_what_its_cut_keeps_and_states_the_expected() {

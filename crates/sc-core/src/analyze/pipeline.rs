@@ -64,6 +64,10 @@ pub(super) const PASSES: &[Pass] = &[
             hints::paths(c, &cx.a.results, &unflagged, cx.rules);
         }
     }),
+    // Fabricated values more than one cluster carries.
+    pass("shared_inventions", &["paths"], |cx| {
+        hints::shared_inventions(&mut cx.a.clusters, &cx.a.results)
+    }),
     pass("dialect", &["link"], |cx| each_cluster(cx, hints::dialect)),
     pass("fanout", &["link"], |cx| each_cluster(cx, hints::fanout)),
     // Reads the clusters' spans for the fan-outs around them.
@@ -176,6 +180,37 @@ pub(super) const PASSES: &[Pass] = &[
             s.soft_links.max_shared,
             &s.co_target,
         );
+        let (pairs, family) = crate::cotarget::ordered_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.co_target,
+        );
+        cx.a.ordered_cotarget_pairs = pairs;
+        cx.a.multiplicity.push(family);
+    }),
+    pass("scaffold_lineage", &["number", "trim_layers"], |cx| {
+        let s = &cx.rules.set;
+        let (pairs, family) = crate::scaffold::lineage_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.scaffold,
+        );
+        cx.a.lineage_pairs = pairs;
+        cx.a.multiplicity.push(family);
+    }),
+    // Reads unflagged records' URLs where trimming dropped their layer.
+    pass("prompt_echo", &["number", "trim_layers"], |cx| {
+        let s = &cx.rules.set;
+        let (pairs, family) = crate::prose::prompt_echo_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.prompt_echo,
+        );
+        cx.a.prompt_echo_pairs = pairs;
+        cx.a.multiplicity.push(family);
     }),
     pass(
         "fleets",
@@ -187,6 +222,8 @@ pub(super) const PASSES: &[Pass] = &[
             "scaffolds",
             "co_activity",
             "co_target",
+            "scaffold_lineage",
+            "prompt_echo",
         ],
         fleets,
     ),
@@ -425,6 +462,9 @@ fn fleets(cx: &mut AnalysisCtx) {
             scaffold_pairs: &a.scaffold_pairs,
             coactive_pairs: &a.coactive_pairs,
             cotarget_pairs: &a.cotarget_pairs,
+            ordered_cotarget_pairs: &a.ordered_cotarget_pairs,
+            lineage_pairs: &a.lineage_pairs,
+            prompt_echo_pairs: &a.prompt_echo_pairs,
         },
         opts,
     );

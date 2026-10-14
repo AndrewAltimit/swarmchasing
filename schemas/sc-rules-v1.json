@@ -101,7 +101,10 @@
         "callback_service": { "$ref": "#/$defs/ratio" },
         "scaffold": { "$ref": "#/$defs/ratio" },
         "co_activity": { "$ref": "#/$defs/ratio" },
-        "co_target": { "$ref": "#/$defs/ratio" }
+        "co_target": { "$ref": "#/$defs/ratio" },
+        "ordered_co_target": { "$ref": "#/$defs/ratio" },
+        "scaffold_lineage": { "$ref": "#/$defs/ratio" },
+        "prompt_echo": { "$ref": "#/$defs/ratio" }
       }
     },
     "scaffold": {
@@ -139,7 +142,20 @@
         "min_hosts": { "$ref": "#/$defs/count" },
         "max_holders": { "$ref": "#/$defs/count" },
         "max_chance": { "$ref": "#/$defs/share" },
-        "fdr": { "$ref": "#/$defs/share" }
+        "fdr": { "$ref": "#/$defs/share" },
+        "order_min_hosts": { "$ref": "#/$defs/count" }
+      }
+    },
+    "prompt_echo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_words": { "$ref": "#/$defs/count" },
+        "min_similarity": { "$ref": "#/$defs/share" },
+        "max_holders": { "$ref": "#/$defs/count" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" },
+        "common_templates": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     },
     "swarm": {
