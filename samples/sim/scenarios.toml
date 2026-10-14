@@ -17,7 +17,6 @@ expect.benign_high = { max_records = 0 }
 # measures, each with the reason. `sim calibrate --check` fails on any other.
 [calibration.unmeasured]
 preamble = "the generator copies records one by one and writes no run's opening sequence of paths"
-path_set = "request paths come from the palette records unchanged, so no run sends an unusual path set of its own"
 cut_length = "generated requests are never cut at a model's output length"
 header_set = "generated records carry no request headers"
 common_feature = "every generated run gets identifiers of its own, so none is common to many clusters"

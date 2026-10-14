@@ -165,7 +165,7 @@ remote_browser = ["carrier.livecodes", "carrier.codesandbox", "carrier.browserle
 # ratio stratified by scenario, over the scenarios where it can occur. A
 # habit kind the simulation measures only on its one small set of copied
 # records stays low or off by judgment. A kind the simulation does not produce
-# (preambles, path sets, cut lengths, header sets, common features) keeps a
+# (preambles, cut lengths, header sets, common features) keeps a
 # ratio set by judgment, with its reason in the scenario file's
 # `calibration.unmeasured`, which the check reads.
 [soft_links]
@@ -187,9 +187,12 @@ dialect = 2.0
 # in one order on different days rerun it as one operator does, so a rerun
 # needs other evidence before it makes a fleet.
 rerun = 3.0
-# Judgment for the next five: the simulation does not produce them.
-preamble = 3.0
+# Simulation (fleet-large), far below its bound: one operator's target list
+# walked with one set of paths; held low by judgment, since one scenario
+# measures it.
 path_set = 3.0
+# Judgment for the next four: the simulation does not produce them.
+preamble = 3.0
 cut_length = 2.0
 header_set = 2.0
 common_feature = 2.0
