@@ -190,6 +190,17 @@ export class ByteReader {
       yield chunk;
     }
   }
+  /** The bytes held, or the next chunk; null at the end. */
+  async chunk() {
+    if (!this.buf.length && !(await this.fill(1))) return null;
+    const out = this.buf;
+    this.buf = new Uint8Array(0);
+    return out;
+  }
+  /** Put bytes back in front. */
+  unread(bytes) {
+    this.buf = this.buf.length ? concat([bytes, this.buf]) : bytes;
+  }
   /** Every byte left, as chunks. */
   async *rest() {
     if (this.buf.length) yield this.buf;
@@ -253,6 +264,280 @@ function inflate(chunks, format) {
     },
   });
   return chunksOf(source.pipeThrough(new DecompressionStream(format)));
+}
+
+// ── gzip of several members ──────────────────────────────────────────────
+// A gzip may hold several members one after another (logs joined with
+// `cat`, bgzip, pigz), which reads as their texts joined. Some browsers'
+// DecompressionStream stops at the first member and fails on the rest
+// (Chrome: "Junk found after end of compressed data"), and some fail on
+// zeros after the last. So the reader finds each member's end itself, in
+// every browser alike: it parses the member's header, walks its deflate
+// blocks to the last one without producing output, and hands the
+// browser's decompressor exactly that member, header to trailer, so the
+// browser still does the unpacking and checks the CRC and length.
+
+/** Extra bits after each length symbol (257..285) and distance symbol (0..29). */
+const LEN_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+const DIST_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+const CL_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+
+/**
+ * A canonical Huffman code as a lookup table indexed by the next `bits`
+ * input bits (least significant first): each entry is `symbol << 4 |
+ * length`, 0 where no code matches.
+ */
+function huffman(lengths) {
+  let bits = 0;
+  for (const l of lengths) if (l > bits) bits = l;
+  const table = new Uint16Array(1 << bits);
+  const count = new Uint16Array(16);
+  for (const l of lengths) if (l) count[l]++;
+  const next = new Uint32Array(16);
+  for (let l = 1, code = 0; l < 16; l++) {
+    code = (code + count[l - 1]) << 1;
+    next[l] = code;
+  }
+  for (let sym = 0; sym < lengths.length; sym++) {
+    const l = lengths[sym];
+    if (!l) continue;
+    const code = next[l]++;
+    if (code >= 1 << l) throw new Error("the compressed data is damaged (an oversubscribed code)");
+    let rev = 0;
+    for (let i = 0; i < l; i++) rev |= ((code >> i) & 1) << (l - 1 - i);
+    for (let j = rev; j < table.length; j += 1 << l) table[j] = (sym << 4) | l;
+  }
+  return { table, bits };
+}
+
+let fixedCodes = null;
+const fixed = () =>
+  (fixedCodes ??= {
+    lit: huffman(Array.from({ length: 288 }, (_, i) => (i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8))),
+    dist: huffman(new Array(30).fill(5)),
+  });
+
+/** Bits a step may need, so the walk waits for input rather than reading past it. */
+const STEP_BITS = 8192;
+
+/**
+ * Walks a deflate stream to its end without producing output, a chunk at
+ * a time: `push(chunk)` adds input, `finish()` says the input ended.
+ * `safe` is how many bytes, counted from the first pushed, certainly
+ * belong to the stream; once `end` is known (not -1), it is the stream's
+ * length in bytes.
+ */
+class DeflateEnd {
+  constructor() {
+    this.buf = new Uint8Array(0);
+    this.base = 0; // bytes dropped from the front of buf
+    this.bit = 0; // position in buf, in bits
+    this.ended = false; // no more input
+    this.state = "block"; // block | stored | codes
+    this.final = false;
+    this.stored = 0;
+    this.lit = null;
+    this.dist = null;
+    this.end = -1; // the stream's length in bytes, once known
+    this.pending = []; // chunks pushed and not yet in buf
+    this.pendingBytes = 0;
+  }
+  get safe() {
+    return this.end >= 0 ? this.end : this.base + (this.bit >> 3);
+  }
+  push(chunk) {
+    // Small chunks wait until a step's worth is there, so each byte is
+    // copied a bounded number of times.
+    this.pending.push(chunk);
+    this.pendingBytes += chunk.length;
+    if (this.state !== "stored" && (this.buf.length + this.pendingBytes) * 8 - this.bit < STEP_BITS) return;
+    this.gather();
+    this.run();
+  }
+  gather() {
+    const drop = Math.min(this.bit >> 3, this.buf.length);
+    const rest = this.buf.subarray(drop);
+    this.buf = rest.length ? concat([rest, ...this.pending]) : this.pending.length === 1 ? this.pending[0] : concat(this.pending);
+    this.base += drop;
+    this.bit -= drop * 8;
+    this.pending = [];
+    this.pendingBytes = 0;
+  }
+  finish() {
+    this.ended = true;
+    this.gather();
+    this.run();
+    if (this.end < 0) throw new Error("the compressed data ends early");
+  }
+  /** `n` bits (n <= 24) at the position, taken. */
+  take(n) {
+    const b = this.buf, i = this.bit >> 3;
+    const w = (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> (this.bit & 7);
+    this.bit += n;
+    if (this.bit > b.length * 8) throw new Error("the compressed data ends early");
+    return w & ((1 << n) - 1);
+  }
+  /** One symbol of a code, taken. */
+  symbol({ table, bits }) {
+    const b = this.buf, i = this.bit >> 3;
+    const w = (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16)) >>> (this.bit & 7);
+    const e = table[w & ((1 << bits) - 1)];
+    if (!e) throw new Error("the compressed data is damaged (an unknown code)");
+    this.bit += e & 15;
+    if (this.bit > b.length * 8) throw new Error("the compressed data ends early");
+    return e >> 4;
+  }
+  run() {
+    const room = () => this.ended || this.buf.length * 8 - this.bit >= STEP_BITS;
+    while (this.end < 0) {
+      if (this.state === "stored") {
+        const have = this.buf.length - (this.bit >> 3);
+        const k = Math.min(have, this.stored);
+        this.bit += k * 8;
+        this.stored -= k;
+        if (this.stored) {
+          if (this.ended) throw new Error("the compressed data ends early");
+          return;
+        }
+        this.state = "block";
+        continue;
+      }
+      if (!room()) return;
+      if (this.state === "block") {
+        if (this.final) {
+          this.end = this.base + ((this.bit + 7) >> 3);
+          return;
+        }
+        this.final = this.take(1) === 1;
+        const type = this.take(2);
+        if (type === 0) {
+          this.bit = (this.bit + 7) & ~7;
+          const len = this.take(16);
+          if ((len ^ this.take(16)) !== 0xffff) throw new Error("the compressed data is damaged (a stored block's length)");
+          this.stored = len;
+          this.state = "stored";
+        } else if (type === 1) {
+          ({ lit: this.lit, dist: this.dist } = fixed());
+          this.state = "codes";
+        } else if (type === 2) {
+          this.dynamic();
+          this.state = "codes";
+        } else throw new Error("the compressed data is damaged (a reserved block type)");
+        continue;
+      }
+      // Literals, lengths and distances, to the end-of-block symbol.
+      for (;;) {
+        if (!room()) return;
+        const sym = this.symbol(this.lit);
+        if (sym < 256) continue;
+        if (sym === 256) break;
+        if (sym > 285) throw new Error("the compressed data is damaged (a bad length)");
+        this.take(LEN_EXTRA[sym - 257]);
+        const d = this.symbol(this.dist);
+        if (d > 29) throw new Error("the compressed data is damaged (a bad distance)");
+        this.take(DIST_EXTRA[d]);
+      }
+      this.state = "block";
+    }
+  }
+  /** A dynamic block's code lengths, read into its two codes. */
+  dynamic() {
+    const nlit = this.take(5) + 257, ndist = this.take(5) + 1, ncl = this.take(4) + 4;
+    const cl = new Array(19).fill(0);
+    for (let i = 0; i < ncl; i++) cl[CL_ORDER[i]] = this.take(3);
+    const clCode = huffman(cl);
+    const lengths = [];
+    while (lengths.length < nlit + ndist) {
+      const s = this.symbol(clCode);
+      if (s < 16) lengths.push(s);
+      else if (s === 16) {
+        if (!lengths.length) throw new Error("the compressed data is damaged (a repeat with nothing before)");
+        const prev = lengths.at(-1);
+        for (let n = 3 + this.take(2); n > 0; n--) lengths.push(prev);
+      } else for (let n = s === 17 ? 3 + this.take(3) : 11 + this.take(7); n > 0; n--) lengths.push(0);
+    }
+    if (lengths.length > nlit + ndist || !lengths[256]) throw new Error("the compressed data is damaged (bad code lengths)");
+    this.lit = huffman(lengths.slice(0, nlit));
+    this.dist = huffman(lengths.slice(nlit));
+  }
+}
+
+/** A gzip member header's length from its first bytes, read through `r`. */
+async function gzipHeaderLength(r) {
+  const short = () => new Error("the compressed data ends early");
+  let b = await r.peek(10);
+  if (b.length < 10) throw short();
+  if (b[0] !== 0x1f || b[1] !== 0x8b || b[2] !== 8 || b[3] & 0xe0) throw new Error("not a gzip member");
+  const flags = b[3];
+  let at = 10;
+  if (flags & 4) {
+    b = await r.peek(at + 2);
+    if (b.length < at + 2) throw short();
+    at += 2 + u16(b, at);
+  }
+  for (const flag of [8, 16]) {
+    if (!(flags & flag)) continue;
+    // A name or comment, to its NUL.
+    for (let want = at + 256; ; want += 4096) {
+      if (want > 1 << 16) throw new Error("a gzip header longer than 64 kB");
+      b = await r.peek(want);
+      const nul = b.indexOf(0, at);
+      if (nul >= 0) {
+        at = nul + 1;
+        break;
+      }
+      if (b.length < want) throw short();
+    }
+  }
+  if (flags & 2) at += 2;
+  if ((await r.peek(at)).length < at) throw short();
+  return at;
+}
+
+/**
+ * A gzip's bytes unpacked member by member: each member found by its
+ * header and its deflate blocks, then unpacked on its own. Bytes after the
+ * last member that do not start another are left unread, as `gzip -d`
+ * leaves them.
+ */
+export async function* gzipMembers(chunks) {
+  const r = new ByteReader(chunks);
+  try {
+    for (let first = true; ; first = false) {
+      const magic = await r.peek(2);
+      if (!first && (magic.length < 2 || magic[0] !== 0x1f || magic[1] !== 0x8b)) return;
+      const head = await gzipHeaderLength(r);
+      const member = (async function* () {
+        yield await r.exact(head);
+        // Bytes go on once the walk has passed them; what follows the
+        // stream's end goes back to the reader.
+        const walk = new DeflateEnd();
+        let held = [], heldAt = 0;
+        while (walk.end < 0) {
+          const c = await r.chunk();
+          if (c) {
+            walk.push(c);
+            held.push(c);
+          } else walk.finish();
+          const k = walk.safe - heldAt;
+          if (k > 0) {
+            const all = held.length === 1 ? held[0] : concat(held);
+            yield all.subarray(0, k);
+            held = [all.subarray(k)];
+            heldAt += k;
+          }
+        }
+        const rest = concat(held);
+        if (rest.length) r.unread(rest);
+        const trailer = await r.exact(8);
+        if (!trailer) throw new Error("the compressed data ends early");
+        yield trailer;
+      })();
+      yield* inflate(member, "gzip");
+    }
+  } finally {
+    await r.close();
+  }
 }
 
 /** Chunks of a source, counting the bytes into `meter.packed`. */
@@ -359,21 +644,26 @@ export const gunzippedName = (name) => name.replace(/\.(?:gz|gzip)$/i, "") || na
  * during long ones. The page gets a turn between entries.
  */
 export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} } = {}) {
-  // `drained` counts bytes passed over unread (tar entries skipped or cut
-  // off): they cost unpacking too, so they count against the set's limit.
+  // `drained` counts bytes unpacked but not read as text (tar headers,
+  // tar entries skipped or cut off, a nested zip held to be read): they
+  // cost unpacking too, so they count against the set's limit.
   const st = { bytes: 0, drained: 0, entries: 0, files: 0, stop: null };
   const progress = (name) => onProgress({ files: st.files, bytes: st.bytes, name });
+  /** One more entry; false, with st.stop set, past the limit. */
+  const counted = () => {
+    st.entries++;
+    if (st.entries <= limits.entries) return true;
+    st.stop = `The set holds more than ${limits.entries.toLocaleString("en")} files and entries; the page read the first ${limits.entries.toLocaleString("en")} and stopped.`;
+    return false;
+  };
+  const bombText = `unpacks to over ${limits.ratio} times its packed size: an archive bomb, not a log`;
 
   /**
    * One entry's bytes: as a text file, a nested archive or a skip. `meter`
    * counts its packed bytes when it was compressed.
    */
   async function* entry(name, chunks, depth, meter = null) {
-    st.entries++;
-    if (st.entries > limits.entries) {
-      st.stop = `The set holds more than ${limits.entries.toLocaleString("en")} files and entries; the page read the first ${limits.entries.toLocaleString("en")} and stopped.`;
-      return;
-    }
+    if (!counted()) return;
     const r = new ByteReader(chunks);
     try {
       const head = await r.peek(SNIFF_BYTES);
@@ -396,8 +686,7 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
           return;
         }
         if (size > limits.entryBytes) return yield { type: "skip", name, reason: `larger than ${bytesText(limits.entryBytes)} unpacked` };
-        if (meter && size > limits.ratioAfter && size > meter.packed * limits.ratio)
-          return yield { type: "skip", name, reason: `unpacks to over ${limits.ratio} times its packed size: an archive bomb, not a log` };
+        if (meter && size > limits.ratioAfter && size > meter.packed * limits.ratio) return yield { type: "skip", name, reason: bombText };
         parts.push(dec.decode(c, { stream: true }));
         if (since >= YIELD_EVERY) {
           since = 0;
@@ -426,7 +715,7 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
     if (kind === "gzip") {
       const gz = { packed: 0 };
       // A .tar.gz is a tar inside; anything else is one file.
-      const inner = new ByteReader(inflate(metered(r.rest(), gz), "gzip"));
+      const inner = new ByteReader(gzipMembers(metered(r.rest(), gz)));
       try {
         const head = await inner.peek(512);
         if (sniff(head) === "tar") yield* tar(name, inner, depth, gz);
@@ -438,12 +727,19 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
       yield* tar(name, r, depth, meter);
     } else if (kind === "zip") {
       // A zip is read from its end; a nested one is held in memory first,
-      // which the entry size limit bounds.
+      // which the entry size limit bounds. What is held counts toward the
+      // set's limit and, when the enclosing entry was compressed, its ratio.
       const parts = [];
       let n = 0;
       for await (const c of r.rest()) {
         n += c.length;
+        st.drained += c.length;
+        if (st.bytes + st.drained > limits.totalBytes) {
+          st.stop = `The set unpacks to more than ${bytesText(limits.totalBytes)}; the page stopped at ${name} and read nothing after it.`;
+          return;
+        }
         if (n > limits.entryBytes) return yield { type: "skip", name, reason: `a zip larger than ${bytesText(limits.entryBytes)} inside an archive` };
+        if (meter && n > limits.ratioAfter && n > meter.packed * limits.ratio) return yield { type: "skip", name, reason: bombText };
         parts.push(c);
       }
       yield* zip(name, new Blob(parts), depth);
@@ -459,22 +755,29 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
     let longName = null;
     let out = 0; // bytes of the tar stream taken so far
     const bomb = () => meter && out > limits.ratioAfter && out > meter.packed * limits.ratio;
+    const bombRest = `${bombText}; the rest of this archive was not read`;
     /**
-     * Pass over `n` bytes unread, with turns for the page. Null when done;
-     * else why the rest of this tar is not read (the set's limit, or the
-     * ratio), with st.stop set for the former.
+     * Count `n` bytes taken but not read as text (a header, a name record,
+     * an entry passed over). Null while within the limits; else why the
+     * rest of this tar is not read (the set's limit, or the ratio), with
+     * st.stop set for the former.
      */
+    const charge = (n) => {
+      out += n;
+      st.drained += n;
+      if (st.bytes + st.drained > limits.totalBytes) {
+        st.stop = `The set unpacks to more than ${bytesText(limits.totalBytes)}, counting entries passed over; the page stopped in ${name} and read nothing after it.`;
+        return st.stop;
+      }
+      return bomb() ? bombRest : null;
+    };
+    /** Pass over `n` bytes unread, with turns for the page; null when done, else why the rest is not read. */
     const drain = async (n) => {
       let since = 0;
       for await (const c of r.take(n)) {
-        out += c.length;
-        st.drained += c.length;
+        const why = charge(c.length);
+        if (why) return why;
         since += c.length;
-        if (st.bytes + st.drained > limits.totalBytes) {
-          st.stop = `The set unpacks to more than ${bytesText(limits.totalBytes)}, counting entries passed over; the page stopped in ${name} and read nothing after it.`;
-          return st.stop;
-        }
-        if (bomb()) return `unpacks to over ${limits.ratio} times its packed size: an archive bomb, not a log; the rest of this archive was not read`;
         if (since >= YIELD_EVERY) {
           since = 0;
           await breathe();
@@ -485,23 +788,30 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
     const stopTar = function* (why) {
       if (!st.stop) yield { type: "skip", name, reason: why };
     };
+    const early = { type: "skip", name, reason: "the archive ends early; the rest was not read" };
     for (;;) {
       if (st.stop) return;
       const block = await r.exact(512);
-      if (!block) return;
-      out += 512;
+      if (!block) return yield early;
       const h = tarHeader(block);
       if (h === null) return;
+      // Every header counts, so a run of headers with no data (directories,
+      // name records) is held to the limits like data.
+      let why = charge(512);
+      if (why) return yield* stopTar(why);
       if (h.bad || !Number.isFinite(h.size) || h.size < 0) return yield { type: "skip", name, reason: "a damaged tar header; the rest of this archive was not read" };
       const pad = (512 - (h.size % 512)) % 512;
-      if (h.type === "L" || h.type === "x") {
-        // A GNU long name or a pax header names the entry that follows.
+      if (h.type === "L" || h.type === "x" || h.type === "K") {
+        // A GNU long name or a pax header names the entry that follows (a
+        // GNU long link name is read and left).
         if (h.size > 64 * 1024) return yield { type: "skip", name, reason: "an oversized tar name record" };
         const data = await r.exact(h.size + pad);
-        if (!data) return;
-        out += data.length;
+        if (!data) return yield early;
+        why = charge(data.length);
+        if (why) return yield* stopTar(why);
         const body = data.subarray(0, h.size);
-        longName = h.type === "L" ? utf8.decode(tarField(body, 0, body.length)) : paxPath(body) ?? longName;
+        if (h.type === "L") longName = utf8.decode(tarField(body, 0, body.length));
+        else if (h.type === "x") longName = paxPath(body) ?? longName;
         continue;
       }
       const entryName = longName ?? h.name;
@@ -509,16 +819,18 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
       const label = `${name}/${cleanName(entryName)}`;
       const regular = h.type === "0" || h.type === "7" || h.type === "\0";
       if (!regular || entryName.endsWith("/")) {
-        if (h.type !== "5" && h.type !== "g" && h.type !== "K" && !entryName.endsWith("/")) {
-          st.entries++;
+        // Directories and global pax headers are left out silently, the
+        // rest said; each counts as an entry.
+        if (!counted()) return;
+        if (h.type !== "5" && h.type !== "g" && !entryName.endsWith("/")) {
           yield { type: "skip", name: label, reason: `not a regular file (${TAR_SKIP[h.type] ?? `tar type ${cleanName(h.type)}`})` };
         }
-        const why = await drain(h.size + pad);
+        why = await drain(h.size + pad);
         if (why) return yield* stopTar(why);
         continue;
       }
       if (macJunk(entryName)) {
-        const why = await drain(h.size + pad);
+        why = await drain(h.size + pad);
         if (why) return yield* stopTar(why);
         continue;
       }
@@ -527,8 +839,8 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
       yield* entry(label, r.take(h.size, track), depth, meter);
       out += h.size - track.left;
       if (st.stop) return;
-      if (bomb()) return yield* stopTar(`unpacks to over ${limits.ratio} times its packed size: an archive bomb, not a log; the rest of this archive was not read`);
-      const why = await drain(track.left + pad);
+      if (bomb()) return yield* stopTar(bombRest);
+      why = await drain(track.left + pad);
       if (why) return yield* stopTar(why);
       await breathe();
     }
