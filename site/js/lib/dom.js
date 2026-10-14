@@ -185,7 +185,8 @@ export async function readFile(f, status, then) {
 
 /**
  * Run `fn` with `btn` disabled and marked busy, after the browser has
- * painted that state: the analyses run on the main thread. A second press
+ * painted that state: an analysis may run on the main thread (when no
+ * worker starts), and the label should show before it. A second press
  * while it runs does nothing, including one queued during the run.
  */
 export async function busy(btn, label, fn) {

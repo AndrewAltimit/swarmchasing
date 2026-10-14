@@ -123,15 +123,19 @@ export function tarHeader(b) {
   return { name, size: tarSize(b), type: String.fromCharCode(b[156] || 48) };
 }
 
-/** The `path` of a pax extended header (`"<len> path=<name>\n"` records), or null. */
+/**
+ * The `path` of a pax extended header (`"<len> path=<name>\n"` records), or
+ * null. Each record's length counts bytes, so the records are cut from the
+ * bytes before any is decoded.
+ */
 export function paxPath(bytes) {
-  const text = utf8.decode(bytes);
   let at = 0;
-  while (at < text.length) {
-    const sp = text.indexOf(" ", at);
-    const len = parseInt(text.slice(at, sp), 10);
-    if (sp < 0 || !(len > 0)) break;
-    const rec = text.slice(sp + 1, at + len - 1);
+  while (at < bytes.length) {
+    const sp = bytes.indexOf(0x20, at);
+    if (sp < 0) break;
+    const len = parseInt(latin1(bytes.subarray(at, sp)), 10);
+    if (!(len > sp - at + 1) || at + len > bytes.length) break;
+    const rec = utf8.decode(bytes.subarray(sp + 1, at + len - 1));
     if (rec.startsWith("path=")) return rec.slice(5);
     at += len;
   }
@@ -143,7 +147,7 @@ const TAR_SKIP = { 1: "a hard link", 2: "a symbolic link", 3: "a device", 4: "a 
 
 /**
  * Bytes from an async source of chunks, read on demand: whole blocks,
- * runs of a given length as chunks, or skipped.
+ * runs of a given length as chunks.
  */
 export class ByteReader {
   constructor(chunks) {
@@ -185,9 +189,6 @@ export class ByteReader {
       track.left -= k;
       yield chunk;
     }
-  }
-  async skip(n) {
-    for await (const _ of this.take(n));
   }
   /** Every byte left, as chunks. */
   async *rest() {
@@ -358,7 +359,9 @@ export const gunzippedName = (name) => name.replace(/\.(?:gz|gzip)$/i, "") || na
  * during long ones. The page gets a turn between entries.
  */
 export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} } = {}) {
-  const st = { bytes: 0, entries: 0, files: 0, stop: null };
+  // `drained` counts bytes passed over unread (tar entries skipped or cut
+  // off): they cost unpacking too, so they count against the set's limit.
+  const st = { bytes: 0, drained: 0, entries: 0, files: 0, stop: null };
   const progress = (name) => onProgress({ files: st.files, bytes: st.bytes, name });
 
   /**
@@ -379,7 +382,7 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
       if (kind === "binary") return yield { type: "skip", name, reason: "not text (binary content)" };
       if (kind !== "text") {
         if (depth > limits.depth) return yield { type: "skip", name, reason: `a ${kind} archive nested deeper than ${limits.depth === 1 ? "one level" : `${limits.depth} levels`}` };
-        yield* container(name, kind, r, depth + 1);
+        yield* container(name, kind, r, depth + 1, meter);
         return;
       }
       const dec = new TextDecoder("utf-8");
@@ -414,21 +417,25 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
     }
   }
 
-  /** An archive's entries, from a reader positioned at its first byte. */
-  async function* container(name, kind, r, depth) {
+  /**
+   * An archive's entries, from a reader positioned at its first byte.
+   * `meter` is the enclosing entry's, when that was compressed: a tar
+   * inside a zip or gzip entry is held to its ratio.
+   */
+  async function* container(name, kind, r, depth, meter = null) {
     if (kind === "gzip") {
-      const meter = { packed: 0 };
+      const gz = { packed: 0 };
       // A .tar.gz is a tar inside; anything else is one file.
-      const inner = new ByteReader(inflate(metered(r.rest(), meter), "gzip"));
+      const inner = new ByteReader(inflate(metered(r.rest(), gz), "gzip"));
       try {
         const head = await inner.peek(512);
-        if (sniff(head) === "tar") yield* tar(name, inner, depth, meter);
-        else yield* entry(gunzippedName(name), inner.rest(), depth, meter);
+        if (sniff(head) === "tar") yield* tar(name, inner, depth, gz);
+        else yield* entry(gunzippedName(name), inner.rest(), depth, gz);
       } finally {
         await inner.close();
       }
     } else if (kind === "tar") {
-      yield* tar(name, r, depth, null);
+      yield* tar(name, r, depth, meter);
     } else if (kind === "zip") {
       // A zip is read from its end; a nested one is held in memory first,
       // which the entry size limit bounds.
@@ -443,12 +450,46 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
     }
   }
 
+  /**
+   * A tar's entries. `meter` counts the packed bytes behind it when it was
+   * compressed; what the tar unpacks to, entries read and passed over
+   * alike, is held to the ratio against it.
+   */
   async function* tar(name, r, depth, meter) {
     let longName = null;
+    let out = 0; // bytes of the tar stream taken so far
+    const bomb = () => meter && out > limits.ratioAfter && out > meter.packed * limits.ratio;
+    /**
+     * Pass over `n` bytes unread, with turns for the page. Null when done;
+     * else why the rest of this tar is not read (the set's limit, or the
+     * ratio), with st.stop set for the former.
+     */
+    const drain = async (n) => {
+      let since = 0;
+      for await (const c of r.take(n)) {
+        out += c.length;
+        st.drained += c.length;
+        since += c.length;
+        if (st.bytes + st.drained > limits.totalBytes) {
+          st.stop = `The set unpacks to more than ${bytesText(limits.totalBytes)}, counting entries passed over; the page stopped in ${name} and read nothing after it.`;
+          return st.stop;
+        }
+        if (bomb()) return `unpacks to over ${limits.ratio} times its packed size: an archive bomb, not a log; the rest of this archive was not read`;
+        if (since >= YIELD_EVERY) {
+          since = 0;
+          await breathe();
+        }
+      }
+      return null;
+    };
+    const stopTar = function* (why) {
+      if (!st.stop) yield { type: "skip", name, reason: why };
+    };
     for (;;) {
       if (st.stop) return;
       const block = await r.exact(512);
       if (!block) return;
+      out += 512;
       const h = tarHeader(block);
       if (h === null) return;
       if (h.bad || !Number.isFinite(h.size) || h.size < 0) return yield { type: "skip", name, reason: "a damaged tar header; the rest of this archive was not read" };
@@ -458,6 +499,7 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
         if (h.size > 64 * 1024) return yield { type: "skip", name, reason: "an oversized tar name record" };
         const data = await r.exact(h.size + pad);
         if (!data) return;
+        out += data.length;
         const body = data.subarray(0, h.size);
         longName = h.type === "L" ? utf8.decode(tarField(body, 0, body.length)) : paxPath(body) ?? longName;
         continue;
@@ -471,18 +513,23 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
           st.entries++;
           yield { type: "skip", name: label, reason: `not a regular file (${TAR_SKIP[h.type] ?? `tar type ${cleanName(h.type)}`})` };
         }
-        await r.skip(h.size + pad);
+        const why = await drain(h.size + pad);
+        if (why) return yield* stopTar(why);
         continue;
       }
       if (macJunk(entryName)) {
-        await r.skip(h.size + pad);
+        const why = await drain(h.size + pad);
+        if (why) return yield* stopTar(why);
         continue;
       }
       // What the entry left unread is skipped, so the next header lines up.
       const track = { left: h.size };
       yield* entry(label, r.take(h.size, track), depth, meter);
+      out += h.size - track.left;
       if (st.stop) return;
-      await r.skip(track.left + pad);
+      if (bomb()) return yield* stopTar(`unpacks to over ${limits.ratio} times its packed size: an archive bomb, not a log; the rest of this archive was not read`);
+      const why = await drain(track.left + pad);
+      if (why) return yield* stopTar(why);
       await breathe();
     }
   }

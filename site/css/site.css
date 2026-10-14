@@ -62,7 +62,6 @@
     --surface-1: #1a1a19;
     --surface-2: #232321;
     --border: #33332f;
-  --control-border: #75736c;
     --control-border: #75736c;
     --hairline: rgba(255, 255, 255, 0.10);
     --text-primary: #f0efec;
@@ -1074,6 +1073,11 @@ table.files { min-width: 560px; }
 table.files td.file-name { overflow-wrap: anywhere; min-width: 160px; }
 table.files td.file-note { color: var(--text-secondary); overflow-wrap: anywhere; }
 ul.skipped { margin: 0 0 4px; padding-left: 18px; overflow-wrap: anywhere; }
+/* A running analysis: a bar, the stage with its counts, and Cancel. */
+.run-progress { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 6px 0; font-size: 13.5px; color: var(--text-secondary); }
+.run-progress[hidden] { display: none; }
+.run-progress progress { width: 120px; height: 8px; accent-color: var(--accent); }
+.run-progress .run-stage { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .sub-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .sub-head .pane-sub { margin-bottom: 6px; }
 table.endpoints td.hits { white-space: nowrap; }
@@ -1139,6 +1143,8 @@ table.endpoints td.hits { white-space: nowrap; }
   table.layers td[data-label]::before { content: none; }
   table.layers td:is([data-label="Label"], [data-label="Evidence"], [data-label="Tag"]) { display: inline-block; width: auto; margin-right: 10px; color: var(--text-secondary); }
   table.layers td[data-label="Party"] { font-weight: 600; }
+  /* A file read without a problem has no problem line. */
+  table.files td.file-note:empty { display: none; }
 }
 .conf-pair { white-space: nowrap; }
 

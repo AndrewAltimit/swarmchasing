@@ -1,5 +1,5 @@
-// The analysis workbench. Records are analysed by the engine in this page;
-// nothing is uploaded. Record contents are untrusted: they reach the page as
+// The analysis workbench. Records are analysed by the engine in this page,
+// in a worker when one starts (lib/runner.js); nothing is uploaded. Record contents are untrusted: they reach the page as
 // text only, URLs and hosts defanged, and never become links. The URL hash
 // holds the selection as ids only (a cluster key, a record number, a rule
 // id, a view), never hosts, URLs or other record data.
@@ -14,7 +14,8 @@ import { layersTable } from "../lib/layers.js";
 import { agentLadder as ladderOf } from "../lib/agent.js";
 import { scopePanel } from "../lib/scope.js";
 import { sightingsPanel, resetSightings } from "../lib/sightings.js";
-import { analyseSet, bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, progressText, setPanel, setSummary } from "../lib/fileset.js";
+import { bigSetOk, dropZone, fileOf, needsSet, picked, runProgress, setPanel, setSummary } from "../lib/fileset.js";
+import { runner, Cancelled } from "../lib/runner.js";
 
 const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
@@ -46,6 +47,12 @@ function ensure() {
 }
 /** Start loading the module; a failure is shown in the status line. */
 const warm = () => ensure().catch(() => {});
+// The analysis, and the endpoints, report, sightings and attribution that
+// read it, run in a worker, so a large set leaves the page responsive and
+// can be cancelled; on the page itself when no worker starts. The page's
+// own module serves the quick helpers (defang, claims, rules).
+const engine = runner(ensure);
+const progress = runProgress($("run").parentElement, () => engine.cancel());
 
 let a = null; // the analysis
 let dateTags = {};
@@ -153,7 +160,6 @@ tabs.forEach((t, i) => {
 // names the file in the record's context, the file filter and the CSV.
 let set = null; // the files picked, while a set replaces the text box
 let setRead = null; // what the last analysis read from each file of the set
-let setProgress = null; // the set panel's status line
 let bigOk = null; // the set the visitor said to read although it is big
 
 /** Analyze is offered only when there is something to analyse. */
@@ -228,7 +234,7 @@ function syncResultControls() {
 }
 
 // ── Analysis ───────────────────────────────────────────────────────────────
-function runAnalysis() {
+async function runAnalysis() {
   if (set) return runSetAnalysis();
   const warn = $("warnings");
   warn.hidden = true;
@@ -240,11 +246,14 @@ function runAnalysis() {
     return false;
   }
   try {
-    out = JSON.parse(sc.analyze(src.input, src.format, src.map, rules));
+    out = JSON.parse(await engine.analyze(src.input, src.format, src.map, rules, progress.show));
   } catch (e) {
+    if (e instanceof Cancelled) return cancelled();
+    progress.end();
     nothingRead("The input could not be read.", e?.message ?? e);
     return false;
   }
+  progress.end(`Analysed ${plural(num(out.analysis?.total) ?? 0, "record")}.`);
   if (!num(out.analysis?.total)) {
     nothingRead("Nothing was read from this input: no line held a record.", arr(out.warnings)[0]);
     return false;
@@ -258,11 +267,18 @@ function runAnalysis() {
 }
 
 /**
- * The format a file of a set is read in: the one picked, except that under
- * "Access log" a file that starts as JSON is detected (a JSON log beside
- * the access logs).
+ * A run the visitor cancelled. The worker that held the last analysis is
+ * gone with it, so the dashboard goes too and the input comes back.
  */
-const setFormat = (text) => ($("format").value === "access_log" ? logFormat(text) : $("format").value);
+function cancelled() {
+  progress.end("Analysis cancelled.");
+  clearAnalysis();
+  expandInput();
+  const status = $("drop-status");
+  status.replaceChildren("Analysis cancelled. Press Analyse to run it again.");
+  status.hidden = false;
+  return false;
+}
 
 /** Analyse the set of files: each unpacked and read in turn, all analysed as one. */
 async function runSetAnalysis() {
@@ -274,14 +290,18 @@ async function runSetAnalysis() {
     analyse();
   })) return false;
   let read;
+  $("drop-status").hidden = true;
   try {
-    read = await analyseSet(sc, set, { format: setFormat, map: $("map").value, rules, onProgress: (p) => (setProgress.textContent = progressText(p)) });
+    // Under "Access log", a file that starts as JSON is detected (a JSON
+    // log beside the access logs); any other format applies to every file.
+    read = await engine.readSet(set, { format: $("format").value, map: $("map").value, rules }, progress.show);
   } catch (e) {
-    setProgress.textContent = "";
+    if (e instanceof Cancelled) return cancelled();
+    progress.end();
     nothingRead("The files could not be read.", e?.message ?? e);
     return false;
   }
-  setProgress.textContent = `Read ${plural(read.files.length, "file")}.`;
+  progress.end(`Read ${plural(read.files.length, "file")}, ${plural(num(read.out?.analysis?.total) ?? 0, "record")} analysed.`);
   if (!num(read.out?.analysis?.total)) {
     setRead = null;
     nothingRead("Nothing was read from these files: no line held a record.", read.files.find((f) => f.warnings?.length)?.warnings[0] ?? read.skipped[0]?.reason);
@@ -314,7 +334,16 @@ function showFiles(read) {
 const fileName = (i) => (setRead ? fileOf(a.results[i]?.obs.id, setRead.files) : null);
 
 /** Show an analysis the module made (from text or from a set), with notes above it. */
-function takeAnalysis(out, notes) {
+async function takeAnalysis(out, notes) {
+  // The endpoints read the analysis where it was made.
+  let endpoints;
+  try {
+    endpoints = JSON.parse(await engine.call("endpoints", ""));
+  } catch (e) {
+    if (e instanceof Cancelled) return cancelled();
+    endpoints = e instanceof Error ? e : new Error(String(e));
+  }
+  document.body.dataset.analysedIn = engine.mode;
   const warn = $("warnings");
   if (notes.length) {
     warn.hidden = false;
@@ -330,7 +359,7 @@ function takeAnalysis(out, notes) {
   // audience gate, as the CLI does.
   for (const c of arr(a.clusters)) delete c.declared;
   dateTags = obj(out.cluster_date_tags);
-  endpointsCache = null;
+  endpointsCache = endpoints;
   const h = readHash();
   sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
   $("dl-json").disabled = false;
@@ -574,8 +603,8 @@ function swarmData() {
     edges.push({
       a: x, b: y, kind: String(e.kind ?? "other").replace(/[^a-z_]/g, ""), strength: String(e.strength ?? "weak").replace(/[^a-z]/g, ""),
       name: `${k.id} ${k.label}`, from: nodes.get(x).label, to: nodes.get(y).label, chance,
-      detail: safe(e.detail ?? "", 200),
-      label: `${k.id} ${k.label} (${e.strength ?? "?"}): ${nodes.get(x).label} → ${nodes.get(y).label}. ${safe(e.detail ?? "", 160)}${chance != null ? ` Chance ${chance.toExponential(1)}.` : ""} A hint to review, not evidence.`,
+      detail: safeText(e.detail ?? "", 200),
+      label: `${k.id} ${k.label} (${e.strength ?? "?"}): ${nodes.get(x).label} → ${nodes.get(y).label}. ${safeText(e.detail ?? "", 160)}${chance != null ? ` Chance ${chance.toExponential(1)}.` : ""} A hint to review, not evidence.`,
     });
   }
   const order = new Map(a.clusters.map((c, i) => [keyOf(c), i]));
@@ -798,12 +827,8 @@ $("rec-file").addEventListener("change", () => a && renderRecords());
 }
 
 function renderEndpoints() {
-  try {
-    endpointsCache ??= JSON.parse(sc.endpoints(""));
-  } catch (e) {
-    return showError($("endpoints"), e);
-  }
-  const views = endpointsCache;
+  if (endpointsCache instanceof Error) return showError($("endpoints"), endpointsCache);
+  const views = arr(endpointsCache);
   const body = el("tbody");
   if (!views.length) body.append(el("tr", {}, el("td", { colspan: 7, class: "hint" }, "No target host has a suggestive or significant hit.")));
   for (const v of views) {
@@ -992,8 +1017,7 @@ function attributionPanel(c) {
   const load = async () => {
     btn.disabled = true;
     try {
-      const t = await prepared();
-      const res = JSON.parse(t.attribution(JSON.stringify({ cluster: keyOf(c), claims: readClaims() ?? [], min_named: $("min-named").value })));
+      const res = JSON.parse(await engine.call("attribution", JSON.stringify({ cluster: keyOf(c), claims: readClaims() ?? [], min_named: $("min-named").value })));
       box.replaceChildren(
         el("p", { class: "hint" }, `What the records support at each layer, gated as a report at the naming level chosen under Report, with any claims from case work there.${res.withheld ? ` ${res.withheld} developer candidate(s) below that level are not shown.` : ""}`),
         layersTable(res.layers));
@@ -1016,7 +1040,7 @@ function plantReview(c) {
     ps.length
       ? el("ul", {}, ps.map((p) => {
         const rate = num(p.base_rate);
-        return el("li", { class: rate != null ? "base-rated" : null }, el("strong", {}, plantLabel(p.kind)), p.detail ? `: ${safe(p.detail, 200)}` : "",
+        return el("li", { class: rate != null ? "base-rated" : null }, el("strong", {}, plantLabel(p.kind)), p.detail ? `: ${safeText(p.detail, 200)}` : "",
           el("span", { class: "hint" }, ` (${plural(arr(p.records).length, "record")})`),
           rate != null ? el("div", { class: "hint" }, `Base rate: ${Math.round(rate * 100)}% of the clusters here carry it. Context, not counted toward review.`) : null);
       }))
@@ -1082,7 +1106,7 @@ function renderLinks() {
     out.push(el("h4", {}, `Common features (${common.length})`));
     out.push(el("p", { class: "hint" }, "Values many unrelated records share (a popular tool's tag, a shared service): kept from linking, shown so they are not read as one operator."));
     out.push(el("ul", {}, common.slice(0, 20).map((f) => el("li", {}, el("code", {}, safe(typeof f.feature === "string" ? f.feature : JSON.stringify(f.feature), 80)),
-      ` in ${f.records ?? "?"} records on ${f.hosts ?? "?"} hosts${f.reason ? `: ${safe(f.reason, 120)}` : ""}`))));
+      ` in ${f.records ?? "?"} records on ${f.hosts ?? "?"} hosts${f.reason ? `: ${safeText(f.reason, 120)}` : ""}`))));
   }
   const esc = arr(a.escalations);
   if (esc.length) {
@@ -1135,11 +1159,6 @@ function readClaims() {
   }
 }
 
-/** The module, holding the analysis shown (its own `analyze` made it). */
-async function prepared() {
-  return ensure();
-}
-
 /**
  * The audience choice as report options. The public notice has two stages
  * (docs/policies.md): the indicator notice names no host, so it passes an
@@ -1175,9 +1194,9 @@ async function renderReport() {
   };
   const my = ++reportSeq;
   try {
-    const t = await prepared();
+    const text = await engine.call("report", JSON.stringify(opts));
     if (my !== reportSeq) return;
-    $("report").textContent = t.report(JSON.stringify(opts));
+    $("report").textContent = text;
     for (const b of ["copy-report", "dl-report"]) $(b).disabled = false;
   } catch (e) {
     if (my === reportSeq) $("report").textContent = String(e?.message ?? e);
@@ -1209,7 +1228,7 @@ function startReport() {
 $("draft-report").addEventListener("click", startReport);
 // Sightings to share: built by the tools module from this analysis, shown in
 // full, saved only on Download.
-sightingsPanel(async () => (a ? prepared() : null));
+sightingsPanel(async () => (a ? { sightings: (opts) => engine.call("sightings", opts) } : null));
 // Reaching the report section starts the draft (the module is loaded), and
 // redrafts a stale one.
 if ("IntersectionObserver" in window) {
@@ -1297,7 +1316,7 @@ async function useSet(sources) {
   set = sources;
   bigOk = null;
   $("input").hidden = true;
-  setProgress = setPanel($("set"), sources, () => {
+  setPanel($("set"), sources, () => {
     clearSet();
     $("input").focus();
   });

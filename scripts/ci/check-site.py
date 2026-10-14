@@ -5,8 +5,9 @@ The site renders attack payloads: HTML programs, XSS probes, injection
 strings. Three layers keep them inert, and this gate checks each:
 
   1. A strict Content-Security-Policy on every page: no inline script, no
-     eval (only `wasm-unsafe-eval` for the WASM module), no network access
-     beyond the site's own files, and Trusted Types required at script sinks.
+     eval (only `wasm-unsafe-eval` for the WASM module), workers from the
+     site's own scripts only, no network access beyond the site's own
+     files, and Trusted Types required at script sinks.
   2. Page code that never parses strings as HTML or code: no innerHTML,
      outerHTML, insertAdjacentHTML, document.write, eval, new Function or
      string timers, no navigation by assignment, and in the markup no inline
@@ -53,8 +54,15 @@ REQUIRED = {
     # script-URL sink, so a sink this gate's scan misses still throws.
     "require-trusted-types-for": {"'script'"},
 }
-# Directives that may only list these sources.
-ALLOWED = {"connect-src": {"'self'"}, "img-src": {"'self'"}, **REQUIRED}
+# Directives that may only list these sources. worker-src: the analysis
+# worker (site/js/lib/engine-worker.js), the site's own script.
+ALLOWED = {"connect-src": {"'self'"}, "img-src": {"'self'"}, "worker-src": {"'self'"}, **REQUIRED}
+
+# The one Trusted Types policy: it passes the analysis worker's own URL to
+# new Worker() and nothing else. A policy anywhere else could turn a string
+# into script.
+TT_POLICY_FILE = "site/js/lib/runner.js"
+TT_POLICY = re.compile(r"\bcreatePolicy\b")
 
 # Markup patterns for sources (templates in Rust strings), checked by line.
 HTML_BAD = [
@@ -286,6 +294,8 @@ def check_sources(files: dict[str, str]) -> list[str]:
             errors += [f"{name}: {e}" for e in check_page(text)]
         elif name.endswith(".js"):
             errors += [f"{name}:{e}" for e in scan(text, JS_BAD)]
+            if name != TT_POLICY_FILE:
+                errors += [f"{name}:{e}" for e in scan(text, [(TT_POLICY, f"Trusted Types policy outside {TT_POLICY_FILE}")])]
         elif name.endswith(".rs"):
             # Templates only: test modules hold hostile fixtures on purpose.
             errors += [f"{name}:{e}" for e in scan(text.split("#[cfg(test)]")[0], HTML_BAD)]
@@ -352,11 +362,13 @@ def git_tracked() -> set[str] | None:
 def selftest() -> list[str]:
     good_csp = (
         '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
-        "script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; "
+        "script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; worker-src 'self'; "
         "base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'\">"
     )
     controls_bad = {
         "a.html": good_csp.replace("'wasm-unsafe-eval'", "'wasm-unsafe-eval' 'unsafe-inline'"),
+        "a2.html": good_csp.replace("worker-src 'self'", "worker-src 'self' blob:"),
+        "site/js/pages/p.js": 'trustedTypes.createPolicy("x", { createHTML: (s) => s });',
         "b.html": good_csp + "<script>alert(1)</script>",
         "c.html": good_csp + '<button onclick="x()">',
         "d.html": "<p>no policy</p>",

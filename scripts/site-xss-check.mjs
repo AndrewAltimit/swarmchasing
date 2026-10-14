@@ -22,7 +22,9 @@
 // (read once, then cleared); a set of log archives (zip, .tgz) whose entry
 // names and lines carry probes, checked on the log check, carried to the
 // workbench and picked on the workbench, each file read and named as text
-// (archives built at run time by ci/archive-fixtures.mjs). It also checks layout: no page scrolls sideways
+// (archives built at run time by ci/archive-fixtures.mjs), in the analysis
+// worker and again on the page with workers unavailable, which must give
+// the same result. It also checks layout: no page scrolls sideways
 // at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
 // one column, and each press of the theme toggle flips the look, storing it
 // only while it differs from the system's.
@@ -705,8 +707,10 @@ try {
       fileColumn: [...s.querySelectorAll("table.records th")].some((th) => th.textContent === "File"),
       text: s.textContent.includes("<script>") && s.textContent.includes("<img src=x"),
       alert: document.getElementById("cl-alert").hidden ? "" : document.getElementById("cl-alert").textContent,
+      ranIn: document.body.dataset.analysedIn ?? "",
     };
   })()`);
+  if (clSet.ranIn !== "worker") failures.push(`the log check's set did not run in the analysis worker: ${clSet.ranIn || "nothing ran"}`);
   stats.checkLogsSet = clSet.files;
   if (clSet.alert) failures.push(`the log check did not read the set of archives: ${clSet.alert.slice(0, 200)}`);
   if (clSet.files !== 7) failures.push(`the log check listed ${clSet.files} file(s) read from the set, expected 7`);
@@ -744,14 +748,32 @@ try {
     pick.value = "2";
     pick.dispatchEvent(new Event("change"));
     await wait(200);
-    return { files, counted, options, picker, rows, context, head: document.getElementById("records-h").textContent, alert: document.getElementById("alert").hidden ? "" : document.getElementById("alert").textContent };
+    return { files, counted, options, picker, rows, context, head: document.getElementById("records-h").textContent, alert: document.getElementById("alert").hidden ? "" : document.getElementById("alert").textContent, ranIn: document.body.dataset.analysedIn ?? "", total: document.getElementById("input-count").textContent };
   })()`);
+  if (wbSet.ranIn !== "worker") failures.push(`the workbench's set did not run in the analysis worker: ${wbSet.ranIn || "nothing ran"}`);
   stats.workbenchSet = wbSet.files;
   if (wbSet.alert) failures.push(`the workbench did not read the set: ${wbSet.alert.slice(0, 200)}`);
   if (wbSet.files !== 7 || !wbSet.counted || wbSet.options !== 8 || !wbSet.picker) failures.push(`the workbench's set summary or file filter is wrong: ${JSON.stringify(wbSet)}`);
   if (!wbSet.rows || !wbSet.context) failures.push(`the workbench's set showed no flagged record with its file: ${JSON.stringify(wbSet)}`);
   if (!/in rotated-logs\.tgz\/var\/log\/access\.log\.1/.test(wbSet.head)) failures.push(`the workbench's file filter did not apply: ${wbSet.head}`);
   await audit("workbench set");
+  // The same set with workers unavailable: the page runs the analysis
+  // itself, with the same result.
+  const noWorker = await send("Page.addScriptToEvaluateOnNewDocument", { source: "window.Worker = undefined;" });
+  await open("analyze/", `document.getElementById("file")`);
+  await run(`document.getElementById("map").value = "host=www.example.org"`);
+  await pickFiles("#file", [threeZip, logTgz]);
+  await waitFor(`!document.getElementById("input-collapsed").hidden || !document.getElementById("alert").hidden`);
+  const pageSet = await run(`({
+    files: document.querySelectorAll("#files table.files tbody tr").length,
+    rows: document.querySelectorAll("#records tbody tr.pick").length,
+    total: document.getElementById("input-count").textContent,
+    ranIn: document.body.dataset.analysedIn ?? "",
+  })`);
+  await send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noWorker.result.identifier });
+  if (pageSet.ranIn !== "page") failures.push(`with workers unavailable the workbench did not fall back to the page: ${pageSet.ranIn || "nothing ran"}`);
+  if (pageSet.files !== wbSet.files || pageSet.total !== wbSet.total) failures.push(`the page's analysis differs from the worker's: ${JSON.stringify({ worker: [wbSet.files, wbSet.total], page: [pageSet.files, pageSet.total] })}`);
+  await audit("workbench set without a worker");
   // Back to the tools page for the bundle viewer.
   await open("tools/", `document.getElementById("case-example")`);
 

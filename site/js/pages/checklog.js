@@ -3,14 +3,16 @@
 // the identity check on the same records, with the providers' files this
 // site was built with. A pasted log is one text; a set of files (several,
 // a folder, archives) is unpacked in the page and analysed as one input
-// (lib/fileset.js). Nothing is uploaded or fetched beyond the site's own
+// (lib/fileset.js). Both run in a worker when one starts (lib/runner.js),
+// so a large set leaves the page responsive and can be cancelled. Nothing is uploaded or fetched beyond the site's own
 // files. Log contents and file names are untrusted: inserted as text,
 // hosts and URLs defanged, never links.
 import { $, el, busy, fetchRoot, readFile, ruleLink, showAlert, HANDOFF_KEY } from "../lib/dom.js";
 import { arr, obj, num, str, trunc, plural, fmtShort, topEntries } from "../lib/fmt.js";
 import { tools, pageRules } from "../lib/wasm.js";
 import { EXAMPLE_FILES, EXAMPLE_HOST, PROBE_LOG } from "../lib/idexample.js";
-import { analyseSet, bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, progressText, setPanel, setSummary } from "../lib/fileset.js";
+import { bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, runProgress, setPanel, setSummary } from "../lib/fileset.js";
+import { runner, Cancelled } from "../lib/runner.js";
 
 const MAX_LISTED = 8;
 /** The most text a set carries over to the workbench: about what a tab's session storage holds. */
@@ -22,7 +24,6 @@ let snapshot = null; // the providers' files the build embedded, once read
 // past what the hand-over carries.
 let checked = null;
 let set = null; // the files picked, when a set replaces the text box
-let progress = null; // the set panel's status line
 let bigOk = null; // the set the visitor said to read although it is big
 
 // The workbench takes the logs checked here through this tab's session
@@ -72,6 +73,21 @@ function hostOf(text) {
   return t.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#\s]/)[0].toLowerCase();
 }
 
+// The analysis and the identity check run where the analysis is held: in a
+// worker, or on the page when none starts. The page's own module defangs.
+const engine = runner(tools);
+const progress = runProgress($("cl-run").parentElement, () => engine.cancel());
+
+/** A check the visitor cancelled: nothing is shown, the input stays. */
+function cancelled() {
+  progress.end("Check cancelled.");
+  $("cl-result").hidden = true;
+  $("cl-next").hidden = true;
+  const status = $("cl-drop-status");
+  status.replaceChildren("Check cancelled. Press Check my log to run it again.");
+  status.hidden = false;
+}
+
 /** Check the logs, with the button busy while it runs. */
 const runCheck = () => busy($("cl-run"), "Checking…", check);
 
@@ -93,11 +109,17 @@ async function check() {
   const map = host ? `host=${host}` : "";
   const format = logFormat(input);
   let analysis, ident;
+  $("cl-drop-status").hidden = true;
   try {
-    const out = JSON.parse(sc.analyze(input, format, map, rules));
+    const files = JSON.stringify(await providerFiles());
+    const out = JSON.parse(await engine.analyze(input, format, map, rules, progress.show));
     analysis = obj(out.analysis);
-    ident = JSON.parse(sc.identity_check(input, format, map, JSON.stringify(await providerFiles())));
+    progress.show({ stage: "check" });
+    ident = JSON.parse(await engine.call("identity_check", input, format, map, files));
+    progress.end(`Checked ${plural(num(analysis.total) ?? 0, "request")}.`);
   } catch (e) {
+    if (e instanceof Cancelled) return cancelled();
+    progress.end();
     showAlert($("cl-alert"), "The log could not be read.", ["First problem: ", el("code", {}, trunc(String(e?.message ?? e), 300))], FORMATS);
     return;
   }
@@ -106,6 +128,7 @@ async function check() {
     return;
   }
   checked = { log: input, map };
+  document.body.dataset.analysedIn = engine.mode;
   render(sc, analysis, ident, host, null);
 }
 
@@ -126,21 +149,29 @@ async function checkSet() {
   const rules = await pageRules(sc, $("rules-note"));
   const map = host ? `host=${host}` : "";
   let read, ident;
+  status.hidden = true;
   try {
-    read = await analyseSet(sc, set, { format: logFormat, map, rules, keep: HANDOFF_CHARS, onProgress: (p) => (progress.textContent = progressText(p)) });
-    if (read.out) ident = JSON.parse(sc.identity_check_held(JSON.stringify(await providerFiles())));
+    const files = JSON.stringify(await providerFiles());
+    // Each file is read as an access log, or detected when it starts as JSON.
+    read = await engine.readSet(set, { format: "access_log", map, rules, keep: HANDOFF_CHARS }, progress.show);
+    if (read.out) {
+      progress.show({ stage: "check" });
+      ident = JSON.parse(await engine.call("identity_check_held", files));
+    }
   } catch (e) {
-    progress.textContent = "";
+    if (e instanceof Cancelled) return cancelled();
+    progress.end();
     showAlert($("cl-alert"), "The files could not be read.", ["First problem: ", el("code", {}, trunc(String(e?.message ?? e), 300))], FORMATS);
     return;
   }
-  progress.textContent = `Read ${plural(read.files.length, "file")}.`;
+  progress.end(`Read ${plural(read.files.length, "file")}, ${plural(num(read.out?.analysis?.total) ?? 0, "request")} checked.`);
   const analysis = obj(read.out?.analysis);
   if (!num(analysis.total)) {
     showAlert($("cl-alert"), "Nothing was read from these files: no line held a request.", FORMATS, setSummary(read));
     return;
   }
   checked = read.kept ? { files: read.kept, map } : { tooBig: true };
+  document.body.dataset.analysedIn = engine.mode;
   render(sc, analysis, ident, host, read);
 }
 
@@ -322,7 +353,7 @@ async function take(sources) {
   set = sources;
   bigOk = null;
   $("cl-input").hidden = true;
-  progress = setPanel($("cl-set"), sources, () => {
+  setPanel($("cl-set"), sources, () => {
     clearSet();
     $("cl-input").focus();
   });

@@ -2,13 +2,15 @@
 // once, as a folder, or dropped (files and folders), with archives unpacked
 // in the page (archive.js). The set is read into the module one file at a
 // time (inputs_add) and analysed as one input (inputs_analyze), so clusters
-// and timing span files. File and entry names are labels shown as text;
+// and timing span files; inputs.js does that, in the analysis worker or on
+// the page (runner.js). File and entry names are labels shown as text;
 // they never reach the module, which numbers files instead (`f2:log-17`).
 import { el, BIG_FILE } from "./dom.js";
-import { LIMITS, bytesText, needsSet, unpack } from "./archive.js";
+import { LIMITS, bytesText, needsSet } from "./archive.js";
+import { logFormat } from "./inputs.js";
 import { plural, trunc } from "./fmt.js";
 
-export { needsSet };
+export { needsSet, logFormat };
 
 const byName = (x, y) => x.name.localeCompare(y.name, "en", { numeric: true });
 
@@ -85,66 +87,74 @@ export function dropZone(zone, onDrop) {
   });
 }
 
-/**
- * The format Check my logs reads a file in: an access log, unless the
- * text starts as JSON, which the engine then detects (NDJSON or a JSON
- * array). Auto-detection alone reads a short log with a stray line as URL
- * lines.
- */
-export const logFormat = (text) => (/^\s*[[{]/.test(text.slice(0, 64)) ? "auto" : "access_log");
-
 /** The file a record came from, by the number its id starts with (`f2:`), or null. */
 export function fileOf(id, files) {
   const m = /^f(\d+):/.exec(String(id ?? ""));
   return m ? files?.[Number(m[1]) - 1]?.name ?? null : null;
 }
 
-/** "Read 3 files, 12 MB unpacked; now logs.zip/b.log". */
-export const progressText = ({ files, bytes, name }) =>
-  `Read ${plural(files, "file")}, ${bytesText(bytes)} unpacked${name ? `; now ${trunc(name, 80)}` : ""}…`;
+/**
+ * A progress report as a line: "Read 3 files, 12 MB unpacked, 4,210
+ * records; now logs.zip/b.log…" while reading, "Analysing 4,210 records
+ * from 3 files…" after.
+ */
+export function progressText({ stage, files = 0, bytes = 0, records = 0, name }) {
+  if (stage === "load") return "Starting the analysis engine…";
+  if (stage === "analyse") return files ? `Analysing ${plural(records, "record")} from ${plural(files, "file")}…` : "Analysing…";
+  if (stage === "check") return "Checking declared agents…";
+  return `Read ${plural(files, "file")}, ${bytesText(bytes)} unpacked, ${plural(records, "record")}${name ? `; now ${trunc(name, 80)}` : ""}…`;
+}
+
+/** What a screen reader hears of a stage: once per stage, not every update. */
+const STAGE_SAID = { load: "Starting the analysis.", read: "Reading the files.", analyse: "Analysing the records.", check: "Checking declared agents." };
+
+/**
+ * The progress of a running analysis, put after `anchor`: a bar, the
+ * stage with its counts, and a Cancel button that calls `onCancel`. The
+ * line updates as reports arrive; a hidden status region says each stage
+ * once and the outcome, so a screen reader is not read every count.
+ * Returns `{ show(progress), end(text) }`; `end` hides the bar and says
+ * the outcome.
+ */
+export function runProgress(anchor, onCancel) {
+  const line = el("span", { class: "run-stage" });
+  const bar = el("progress", { "aria-hidden": "true" });
+  const cancel = el("button", { type: "button", class: "small" }, "Cancel");
+  const box = el("div", { class: "run-progress", hidden: true }, bar, line, cancel);
+  const said = el("p", { class: "sr-only", role: "status", "aria-live": "polite", "aria-atomic": "true" });
+  anchor.after(box, said);
+  let stage = null;
+  cancel.addEventListener("click", () => {
+    cancel.disabled = true;
+    onCancel();
+  });
+  return {
+    show(p) {
+      if (box.hidden) {
+        box.hidden = false;
+        cancel.disabled = false;
+      }
+      line.textContent = progressText(p);
+      if (p.stage !== stage) {
+        stage = p.stage;
+        said.textContent = STAGE_SAID[stage] ?? "";
+      }
+    },
+    end(text = "") {
+      // Focus on Cancel would be lost with the box: it goes back to the anchor's row.
+      const had = box.contains(document.activeElement);
+      box.hidden = true;
+      stage = null;
+      said.textContent = text;
+      if (had) anchor.querySelector("button")?.focus();
+    },
+  };
+}
 
 /** Total size of the picked files, packed. */
 export const setBytes = (sources) => sources.reduce((n, s) => n + (s.blob?.size ?? s.text?.length ?? 0), 0);
 
-/**
- * Read a set into the module and analyse it as one input. `format(text)`
- * names each file's format; `map` is the field map for every file; `keep`
- * is how many characters of text to keep for a hand-over (0 keeps none).
- * Resolves to `{ out, files, skipped, stopped, kept }`: the analysis
- * (null when no file read), a row per file read, the entries not read with
- * why, the reason the set stopped early (or null), and the texts kept
- * (null when they passed `keep`).
- */
-export async function analyseSet(sc, sources, { format, map, rules, keep = 0, onProgress = () => {} }) {
-  const files = [], skipped = [];
-  let stopped = null, kept = keep ? [] : null, keptChars = 0;
-  sc.inputs_clear();
-  try {
-    for await (const ev of unpack(sources, { onProgress })) {
-      if (ev.type === "skip") skipped.push({ name: ev.name, reason: ev.reason });
-      else if (ev.type === "stop") stopped = ev.reason;
-      else {
-        const fmt = format(ev.text);
-        const row = JSON.parse(sc.inputs_add(ev.text, fmt, map));
-        files.push({ ...row, name: ev.name, bytes: ev.bytes });
-        if (kept) {
-          keptChars += ev.text.length;
-          if (keptChars > keep) kept = null;
-          else kept.push({ name: ev.name, text: ev.text });
-        }
-      }
-    }
-  } catch (e) {
-    sc.inputs_clear();
-    throw e;
-  }
-  if (!files.length) {
-    sc.inputs_clear();
-    return { out: null, files, skipped, stopped, kept };
-  }
-  const out = JSON.parse(sc.inputs_analyze(rules));
-  return { out, files, skipped, stopped, kept };
-}
+let summaries = 0; // ids for the skipped lists' labels
 
 const FORMAT_LABEL = { access_log: "access log", ndjson: "NDJSON", json: "JSON", lines: "URL lines" };
 
@@ -165,32 +175,30 @@ export function setSummary({ files, skipped, stopped }) {
   return el("details", { class: "file-summary", open: true },
     el("summary", {}, `${plural(files.length, "file")} read, ${plural(records, "record")}${skipped.length ? `; ${skipped.length} not read` : ""}`),
     stopped ? el("p", { class: "warn" }, stopped) : null,
-    files.length ? el("div", { class: "scroll" }, el("table", { class: "files" },
+    files.length ? el("div", { class: "scroll", tabindex: "0", role: "region", "aria-label": "Files read" }, el("table", { class: "files cards" },
+      el("caption", { class: "sr-only" }, "Files read, with the format each was read as and its counts"),
       el("thead", {}, el("tr", {}, ["File", "Read as", "Lines", "Records", "Skipped", "First problem"].map((h, i) => el("th", { scope: "col", class: i >= 2 && i <= 4 ? "num" : null }, h)))),
       el("tbody", {}, rows))) : null,
-    skipped.length ? [el("p", { class: "hint" }, "Not read:"),
-      el("ul", { class: "skipped" }, skipped.slice(0, 200).map((s) => el("li", {}, el("code", {}, trunc(s.name, 160)), `: ${s.reason}`)),
+    skipped.length ? [el("p", { class: "hint", id: `skipped-h-${++summaries}` }, "Not read:"),
+      el("ul", { class: "skipped", "aria-labelledby": `skipped-h-${summaries}` }, skipped.slice(0, 200).map((s) => el("li", {}, el("code", {}, trunc(s.name, 160)), `: ${s.reason}`)),
         skipped.length > 200 ? el("li", { class: "hint" }, `and ${skipped.length - 200} more`) : null)] : null);
 }
 
 /**
  * The picked set in place of the text box: how many files, their total
- * size and the first names, a Clear button, and a status line for the
- * progress, which it returns.
+ * size and the first names, and a Clear button. The run's progress shows
+ * under the page's run button (runProgress).
  */
 export function setPanel(box, sources, onClear) {
   const shown = sources.slice(0, 6).map((s) => trunc(s.name, 80));
   const clear = el("button", { type: "button", class: "small" }, "Clear files");
   clear.addEventListener("click", onClear);
-  const progress = el("p", { class: "hint", role: "status", "aria-live": "polite" });
   box.replaceChildren(
     el("p", {}, el("strong", {}, `${plural(sources.length, "file")} picked`), `, ${bytesText(setBytes(sources))}: `,
       shown.join(", "), sources.length > shown.length ? ` and ${sources.length - shown.length} more` : ""),
     el("p", { class: "hint" }, "Archives (.zip, .tar, .tar.gz, .tgz, .gz) are unpacked in this page; nothing is uploaded. Each file is read on its own, and all of them are analysed as one."),
-    el("div", { class: "row" }, clear),
-    progress);
+    el("div", { class: "row" }, clear));
   box.hidden = false;
-  return progress;
 }
 
 /**
@@ -205,7 +213,7 @@ export function bigSetOk(sources, status, go) {
     status.hidden = true;
     go();
   }, { once: true });
-  status.replaceChildren(`These files are about ${Math.round(n / (1024 * 1024))} MB. The page unpacks and analyses them here, which can take a while and slow the tab; it stops at ${bytesText(LIMITS.totalBytes)} unpacked. `, yes);
+  status.replaceChildren(`These files are about ${Math.round(n / (1024 * 1024))} MB. The page unpacks and analyses them here, which can take a while (you can cancel it); it stops at ${bytesText(LIMITS.totalBytes)} unpacked. `, yes);
   status.hidden = false;
   return false;
 }

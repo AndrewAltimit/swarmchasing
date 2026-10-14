@@ -64,6 +64,14 @@ test("tar headers: ustar fields, the zero block, a bad checksum, pax paths", () 
   bad[0] ^= 1;
   assert.deepEqual(tarHeader(bad), { bad: true });
   assert.equal(paxPath(enc.encode("20 path=dir/a-b.log\n12 uid=1234\n")), "dir/a-b.log");
+  // Record lengths count bytes: a non-ASCII path is cut where its bytes end.
+  assert.equal(paxPath(enc.encode("12 uid=1234\n29 path=var/\u65e5\u5fd7/\u00e9t\u00e9.log\n")), "var/\u65e5\u5fd7/\u00e9t\u00e9.log");
+});
+
+test("a pax path with non-ASCII characters names its entry whole", async () => {
+  const name = "var/log/\u65e5\u5fd7-\u00e9t\u00e9-\u0436\u0443\u0440\u043d\u0430\u043b.log";
+  const r = await read([blob(gzip(tar([{ name, pax: true, data: logs["access.log"] }, { name: "after.log", data: logs["access.log.1"] }])), "intl.tgz")]);
+  assert.deepEqual(r.files.map((f) => f[0]), [`intl.tgz/${name}`, "intl.tgz/after.log"]);
 });
 
 test("a plain log and a gzipped one read as text", async () => {
@@ -158,6 +166,28 @@ test("the set stops at its unpacked limit, its entry limit, and skips a bomb or 
 
   r = await read([blob(enc.encode(big), "huge.log")], { ...LIMITS, entryBytes: 1000 });
   assert.match(r.skips[0][1], /larger than/);
+});
+
+test("entries passed over count: a link with a huge body in a .tgz, a set past its limit, a tar in a zip", async () => {
+  // A symbolic link that carries 64 MB of zeros packs to a few dozen kB:
+  // passing over it is held to the ratio, so the archive stops, quickly.
+  const zeros = new Uint8Array(64 * MiB);
+  const t0 = Date.now();
+  let r = await read([blob(gzip(tar([{ name: "link", type: "2", link: "x", body: true, data: zeros }, { name: "after.log", data: logs["access.log"] }])), "bomb.tgz")]);
+  assert.deepEqual(r.files, []);
+  assert.match(r.skips.at(-1)[1], /archive bomb/);
+  assert.ok(Date.now() - t0 < 20000, "the bomb was drained, not stopped");
+
+  // Uncompressed, what is passed over counts against the set's limit.
+  r = await read([blob(tar([{ name: "link", type: "2", link: "x", body: true, data: new Uint8Array(4 * MiB) }, { name: "after.log", data: logs["access.log"] }]), "big.tar")], { ...LIMITS, totalBytes: 1 * MiB });
+  assert.deepEqual(r.files, []);
+  assert.match(r.stop, /passed over/);
+
+  // A tar inside a deflated zip entry is held to that entry's ratio.
+  const inner = tar([{ name: "a.log", data: "a\n".repeat(1_000_000) }]);
+  r = await read([blob(zip([{ name: "logs.tar", data: inner }]), "tar-in.zip")], { ...LIMITS, ratio: 50, ratioAfter: 64 * 1024 });
+  assert.deepEqual(r.files, []);
+  assert.match(r.skips[0][1], /archive bomb/);
 });
 
 test("damaged archives are skipped with a reason, not thrown", async () => {

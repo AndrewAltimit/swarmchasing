@@ -61,6 +61,8 @@ const pad512 = (d) => concat([d, new Uint8Array((512 - (d.length % 512)) % 512)]
  * A tar archive. Each entry is `{ name, data, type }` (type "0" by default;
  * "5" a directory, "2" a symbolic link with `link`). A name over 100 bytes
  * goes in a GNU long-name record; `pax: true` puts it in a pax header.
+ * Only a regular file carries its data, unless `body: true` gives another
+ * kind of entry its data too (as a hostile archive may).
  */
 export function tar(entries) {
   const parts = [];
@@ -69,11 +71,12 @@ export function tar(entries) {
     const type = e.type ?? "0";
     let name = e.name;
     if (e.pax) {
+      // A record's length counts bytes, its own digits included.
       const rec = (k, v) => {
-        const body = ` ${k}=${v}\n`;
-        let len = body.length + 1;
-        while (String(len).length + body.length !== len) len = String(len).length + body.length;
-        return `${len}${body}`;
+        const body = enc.encode(` ${k}=${v}\n`).length;
+        let len = body + 1;
+        while (String(len).length + body !== len) len = String(len).length + body;
+        return `${len} ${k}=${v}\n`;
       };
       const pax = enc.encode(rec("path", name));
       parts.push(tarBlock("PaxHeader", pax.length, "x"), pad512(pax));
@@ -83,8 +86,9 @@ export function tar(entries) {
       parts.push(tarBlock("././@LongLink", long.length, "L"), pad512(long));
       name = name.slice(0, 99);
     }
-    parts.push(tarBlock(name, type === "0" ? data.length : 0, type, { link: e.link }));
-    if (type === "0") parts.push(pad512(data));
+    const carries = type === "0" || e.body;
+    parts.push(tarBlock(name, carries ? data.length : 0, type, { link: e.link }));
+    if (carries) parts.push(pad512(data));
   }
   parts.push(new Uint8Array(1024));
   return concat(parts);
