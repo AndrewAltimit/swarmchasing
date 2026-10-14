@@ -1,10 +1,10 @@
 //! `swarmchase scan`: flagged records, strongest first.
 
 use crate::input::{InputArgs, load_rules, parse_tier, read_records_counted};
-use crate::util::{print_summary, truncate};
+use crate::util::print_summary;
 use anyhow::{Result, bail};
 use clap::Args;
-use sc_core::{analyze, defang, fmt_ts};
+use sc_core::{analyze, fmt_ts};
 
 #[derive(Args)]
 pub struct ScanArgs {
@@ -48,7 +48,7 @@ pub fn run(args: ScanArgs) -> Result<()> {
             r.cluster
                 .map(|c| a.clusters[c].id.clone())
                 .unwrap_or_else(|| "-".into()),
-            defang(&truncate(&r.obs.url, 120))
+            sc_core::clip_defanged(&sc_core::defang(&r.obs.url), 120)
         );
         println!("{:>18}{}", "", rules.join(" "));
     }

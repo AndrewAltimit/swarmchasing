@@ -1,8 +1,8 @@
 //! The end of a report: representative records, method and limitations.
 
 use super::Report;
-use crate::extract::{defang, defang_host};
-use crate::model::{fmt_ts, truncate};
+use crate::extract::{clip_defanged, defang_host, defang_hosts};
+use crate::model::fmt_ts;
 use crate::notice::PublicView;
 use std::fmt::Write;
 
@@ -49,7 +49,7 @@ impl Report<'_> {
                         s,
                         "1. {}: `{}`",
                         fmt_ts(r.obs.ts),
-                        defang(&truncate(u, 240))
+                        clip_defanged(&defang_hosts(u), 240)
                     );
                 }
                 None => {

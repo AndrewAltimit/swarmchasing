@@ -7,7 +7,7 @@ use super::hints::{
 };
 use super::{Audience, Report, basis_note, dur, touches_exposed};
 use crate::analyze::Cluster;
-use crate::extract::{defang, defang_feature, defang_host};
+use crate::extract::{clip_defanged, defang, defang_feature, defang_host, defang_hosts};
 use crate::model::{fmt_ts, truncate};
 use crate::notice::PublicView;
 use std::fmt::Write;
@@ -116,7 +116,7 @@ impl Report<'_> {
                 ch.variants,
                 varied.join(", "),
                 defang_host(&ch.host),
-                truncate(&ch.path, 60),
+                clip_defanged(&defang_hosts(&ch.path), 60),
                 dur(ch.end - ch.start),
                 dur(ch.median_gap_secs),
                 ch.pace.describe(ch.time_basis),
@@ -150,7 +150,7 @@ impl Report<'_> {
                 s,
                 "  - route escalation on `{}{}`: {} over {}{basis}. One client changing route to reach a page is consistent with an agent working around a failure; two people reading it by different routes look the same (a hint, not evidence)",
                 defang_host(&e.host),
-                truncate(&e.path, 60),
+                clip_defanged(&defang_hosts(&e.path), 60),
                 e.route_line(),
                 dur(e.end - e.start)
             );
@@ -197,7 +197,7 @@ fn link_features(s: &mut String, c: &Cluster, mut view: Option<&mut PublicView>)
             Some(v) => v.feature(f),
             None => f.to_string(),
         })
-        .map(|f| format!("`{}`", defang_feature(&truncate(&f, 90))))
+        .map(|f| format!("`{}`", clip_defanged(&defang_feature(&f), 90)))
         .collect();
     let _ = writeln!(s, "  - linked by: {}", shown.join(", "));
 }
@@ -232,7 +232,7 @@ fn habits(s: &mut String, c: &Cluster, view: Option<&PublicView>) {
             .paths
             .iter()
             .take(8)
-            .map(|p| format!("`{}`", defang(&truncate(p, 60))))
+            .map(|p| format!("`{}`", clip_defanged(&defang_hosts(p), 60)))
             .collect();
         let _ = writeln!(
             s,

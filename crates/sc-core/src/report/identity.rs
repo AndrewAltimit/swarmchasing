@@ -7,7 +7,7 @@
 
 use super::{Audience, ReportOptions};
 use crate::analyze::Cluster;
-use crate::extract::defang;
+use crate::extract::defang_hosts;
 use crate::identity::{Access, IdentityClass};
 use std::fmt::Write;
 
@@ -44,7 +44,7 @@ pub(super) fn section(s: &mut String, clusters: &[&Cluster], opts: &ReportOption
                     | IdentityClass::InRange
             ) && !l.detail.is_empty()
         }) {
-            let _ = writeln!(s, "  - {}: {}", l.class.label(), defang(&l.detail));
+            let _ = writeln!(s, "  - {}: {}", l.class.label(), defang_hosts(&l.detail));
         }
         for l in id
             .lines
@@ -52,7 +52,11 @@ pub(super) fn section(s: &mut String, clusters: &[&Cluster], opts: &ReportOption
             .filter(|l| l.access == Some(Access::Intermediary))
         {
             let who = l.agent.as_deref().or(l.provider.as_deref()).unwrap_or("?");
-            let mut line = format!("  - {}: {}", defang(who), Access::Intermediary.meaning());
+            let mut line = format!(
+                "  - {}: {}",
+                defang_hosts(who),
+                Access::Intermediary.meaning()
+            );
             if l.end_users > 0 {
                 let _ = write!(
                     line,
@@ -75,7 +79,7 @@ pub(super) fn section(s: &mut String, clusters: &[&Cluster], opts: &ReportOption
                     "  - suggested claim (not recorded): `swarmchase case claim <case> --party \"{}\" --layer developer --evidence {} --detail \"{}\"`",
                     claim.party,
                     claim.evidence.id(),
-                    defang(&claim.details.join("; ")).replace('"', "'")
+                    defang_hosts(&claim.details.join("; ")).replace('"', "'")
                 );
             }
         }

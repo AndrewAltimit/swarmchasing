@@ -251,6 +251,17 @@ fn clusters_get_a_line_a_counter_signal_and_a_suggested_claim() {
     // Stored and read back, the identity stays.
     let back: crate::Cluster = serde_json::from_str(&serde_json::to_string(c).unwrap()).unwrap();
     assert_eq!(back.identity, c.identity);
+
+    // The spoofed line's address prints defanged.
+    let md = crate::report::render_markdown(
+        &a,
+        &crate::report::ReportOptions {
+            audience: crate::report::Audience::Internal,
+            ..Default::default()
+        },
+    );
+    assert!(md.contains("203[.]0[.]113[.]50 is outside"), "{md}");
+    assert!(!md.contains("203.0.113.50"), "{md}");
 }
 
 #[test]

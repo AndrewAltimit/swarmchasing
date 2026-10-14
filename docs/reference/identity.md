@@ -87,7 +87,7 @@ swarmchase case claim <case> --party "OpenAI" --layer developer --evidence provi
 
 Nothing is recorded until the admin runs it. Under an intermediary signer, the section says the signature attributes the platform, not the end user, and gives how many distinct end users the `Forwarded` header names, as a key to group requests by, not attribution.
 
-Case notes also carry the declared-then-undeclared hint ([`fallback.rs`](../../crates/sc-core/src/identity/fallback.rs)): a cluster's declared requests blocked with 403, 429 or a challenge, followed within ten minutes by undeclared browser-like requests for the same host and path. It is a pattern to check, never a score; an unrelated visitor reading the same page looks the same. The pipeline finds it from the rules alone, so the workbench shows it too; with the declared product's range files held, undeclared requests from inside them are left out.
+Case notes also carry the declared-then-undeclared hint ([`fallback.rs`](../../crates/sc-core/src/identity/fallback.rs)): a cluster's declared requests blocked with 403, 429 or a challenge, followed within ten minutes by undeclared browser-like requests for the same host and path shape: the normalised path, so `/docs/17` and `/docs/42` match. It is a pattern to check, never a score; an unrelated visitor reading the same page looks the same. The pipeline finds it from the rules alone, so the workbench shows it too; with the declared product's range files held, undeclared requests from inside them are left out.
 
 Reports to affected operators and public notices carry none of this. A spoofed identity also appears as a counter-signal in *Why we think this is an agent*, and a verified one as an L1 signal.
 

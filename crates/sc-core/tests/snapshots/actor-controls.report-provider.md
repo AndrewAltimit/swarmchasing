@@ -131,7 +131,7 @@ URLs are defanged. Records are listed by evidence strength.
    - rules: exploit.sqli_union, header.pentest_ua
 1. 2026-05-14 03:20:03 UTC: `hxxps://api[.]parts[.]example/v1/item?id=1%20UNION%20ALL%20SELECT%20NULL,NULL--%20-`
    - rules: exploit.sqli_union, header.pentest_ua
-1. 2026-05-15 22:05:13 UTC: `hxxps://files[.]depot[.]example/index.php?page=%3Cscript%3Ealert(document.domain)%3C/script%3E`
+1. 2026-05-15 22:05:13 UTC: `hxxps://files[.]depot[.]example/index.php?page=%3Cscript%3Ealert(document[.]domain)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-16 09:30:03 UTC: `hxxps://intranet[.]lab[.]example/profile?name=alice%3Cscript%3Ealert(1)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss

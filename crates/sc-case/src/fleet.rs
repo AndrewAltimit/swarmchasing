@@ -13,9 +13,8 @@
 //! starting from the analysis's interaction edges, which never do it alone.
 
 use crate::model::{Case, Fleet, SwarmEvidence};
-use crate::text::truncate;
 use crate::{Result, bail};
-use sc_core::{Analysis, Audience, Cluster, SwarmEdge, SwarmEdgeKind, defang};
+use sc_core::{Analysis, Audience, Cluster, SwarmEdge, SwarmEdgeKind};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
@@ -55,7 +54,10 @@ pub fn soft_evidence(a: &Analysis, keys: &BTreeSet<String>, detail: bool) -> Vec
             (keys.contains(&ka) && keys.contains(&kb)).then(|| {
                 let mut s = format!("{ka} ↔ {kb}: {} ({:.2})", l.kind.label(), l.strength);
                 if detail && !l.detail.is_empty() {
-                    s += &format!(": {}", defang(&truncate(&l.detail, 160)));
+                    s += &format!(
+                        ": {}",
+                        sc_core::clip_defanged(&sc_core::defang(&l.detail), 160)
+                    );
                 }
                 s
             })
@@ -531,7 +533,10 @@ pub fn report_section(c: &Case, a: &Analysis, audience: Audience) -> String {
         for e in &f.swarm_evidence {
             let note = match audience {
                 Audience::Internal | Audience::Provider => {
-                    format!(": {}", defang(&truncate(&e.note, 200)))
+                    format!(
+                        ": {}",
+                        sc_core::clip_defanged(&sc_core::defang(&e.note), 200)
+                    )
                 }
                 _ => String::new(),
             };

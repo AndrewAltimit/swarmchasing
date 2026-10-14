@@ -383,6 +383,31 @@ fn vendor_of(matched: &str) -> Option<(&'static str, &'static str)> {
     })
 }
 
+/// The company a self-identification hit names. A header rule's match is
+/// the whole header line, whose key ids, nonces and signatures may hold
+/// `gpt` or `kimi` by chance, so only the host names in a header line's
+/// value are read (`signature-agent: "https://chatgpt.com"`); any other
+/// match is read whole.
+fn self_id_vendor(matched: &str) -> Option<(&'static str, &'static str)> {
+    let Some((name, value)) = matched.split_once(": ") else {
+        return vendor_of(matched);
+    };
+    if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+        return vendor_of(matched);
+    }
+    value
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '.'))
+        .filter(|t| {
+            let labels: Vec<&str> = t.split('.').collect();
+            labels.len() > 1
+                && labels.iter().all(|l| !l.is_empty())
+                && labels
+                    .last()
+                    .is_some_and(|l| l.len() > 1 && l.chars().all(|c| c.is_ascii_alphabetic()))
+        })
+        .find_map(vendor_of)
+}
+
 /// Coding-harness tokens the `header.coding_agent_ua` rule reads, with the
 /// harness each names. Two of them sit inside a Mozilla-compatible user agent
 /// (Gemini CLI, Aider), so the first-token rule below would call them browser
@@ -428,19 +453,31 @@ fn ua_product(ua: &str) -> Option<String> {
     })
 }
 
-/// Who a runtime marker points at: the domain of a marker hostname
-/// (`a.hysandbox.example.com` → `example.com` runtime), else the rule.
-fn marker_party(rule: &str, matched: &str) -> String {
-    let labels: Vec<&str> = matched
-        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '.'))
-        .find(|s| s.contains('.'))
-        .unwrap_or("")
-        .split('.')
-        .filter(|l| !l.is_empty())
-        .collect();
+/// Who a runtime marker points at: the domain of a marker hostname, defanged
+/// (`a.hysandbox.example.com` → `example[.]com` runtime), when the rule
+/// matched a host (`host_match`); else the rule. A header line
+/// (`via: 1.1 edge`) names no domain, whatever dotted text it carries.
+fn marker_party(rule: &str, matched: &str, host_match: bool) -> String {
+    let labels: Vec<&str> = if host_match {
+        matched
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '.'))
+            .find(|s| s.contains('.'))
+            .unwrap_or("")
+            .split('.')
+            .filter(|l| !l.is_empty())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let tld = labels
+        .last()
+        .is_some_and(|l| l.len() > 1 && l.chars().all(|c| c.is_ascii_alphabetic()));
     match labels.len() {
-        0 | 1 => format!("runtime marked by {rule}"),
-        n => format!("{}.{} runtime", labels[n - 2], labels[n - 1]),
+        n if n >= 2 && tld => format!(
+            "{} runtime",
+            crate::extract::defang_host(&format!("{}.{}", labels[n - 2], labels[n - 1]))
+        ),
+        _ => format!("runtime marked by {rule}"),
     }
 }
 
@@ -459,14 +496,15 @@ pub fn tor_caution(n: usize) -> String {
 pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
     // Developer claims from self-identification: company -> (name, records).
     let mut named: BTreeMap<&str, BTreeMap<String, usize>> = BTreeMap::new();
-    // Runtime markers (sandbox hostnames, proxy headers): rule -> (matched, records).
-    let mut markers: BTreeMap<(String, String), usize> = BTreeMap::new();
+    // Runtime markers (sandbox hostnames, proxy headers):
+    // (rule, matched, matched a host) -> records.
+    let mut markers: BTreeMap<(String, String, bool), usize> = BTreeMap::new();
     for &m in &c.members {
         let mut seen = std::collections::BTreeSet::new();
         for h in &a.results[m].hits {
             match h.kind {
                 IndicatorKind::SelfId => {
-                    if let Some((company, name)) = vendor_of(&h.matched)
+                    if let Some((company, name)) = self_id_vendor(&h.matched)
                         && seen.insert(name)
                     {
                         *named
@@ -478,12 +516,12 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
                 }
                 IndicatorKind::Infra => {
                     *markers
-                        .entry((h.rule_id.clone(), h.matched.to_ascii_lowercase()))
+                        .entry((h.rule_id.clone(), h.matched.to_ascii_lowercase(), true))
                         .or_default() += 1;
                 }
                 IndicatorKind::Header if h.rule_id.starts_with("header.via_") => {
                     *markers
-                        .entry((h.rule_id.clone(), h.matched.to_ascii_lowercase()))
+                        .entry((h.rule_id.clone(), h.matched.to_ascii_lowercase(), false))
                         .or_default() += 1;
                 }
                 _ => {}
@@ -590,15 +628,16 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
             ..Claim::new(provider.clone(), Role::Host, Evidence::HostingAsn)
         });
     }
-    for ((rule, matched), n) in &markers {
+    for ((rule, matched, host), n) in &markers {
         claims.push(Claim {
             details: vec![format!(
-                "{n} record(s) carry the runtime marker `{matched}` (rule {rule})"
+                "{n} record(s) carry the runtime marker `{}` (rule {rule})",
+                crate::extract::defang_hosts(matched)
             )],
             tag: Some(Tag::Observed),
             records: *n,
             ..Claim::new(
-                marker_party(rule, matched),
+                marker_party(rule, matched, *host),
                 Role::Host,
                 Evidence::HostingAsn,
             )
@@ -988,5 +1027,58 @@ mod tests {
             ua_product("python-httpx/0.27").as_deref(),
             Some("python-httpx")
         );
+    }
+
+    /// A marker's party is a domain only when the rule matched a host, and
+    /// that domain prints defanged; a header marker names its rule.
+    #[test]
+    fn marker_parties_take_a_domain_only_from_a_host() {
+        assert_eq!(
+            marker_party(
+                "header.via_ats",
+                "via: 1.1 edge (apachetrafficserver/9.2)",
+                false
+            ),
+            "runtime marked by header.via_ats"
+        );
+        assert_eq!(
+            marker_party(
+                "header.via_hysandbox",
+                "via: 1.1 a.hysandbox.tencent-cloud.com",
+                false
+            ),
+            "runtime marked by header.via_hysandbox"
+        );
+        assert_eq!(
+            marker_party(
+                "infra.hysandbox_host",
+                "a1.hysandbox.tencent-cloud.com",
+                true
+            ),
+            "tencent-cloud[.]com runtime"
+        );
+        assert_eq!(
+            marker_party("infra.x", "1.1", true),
+            "runtime marked by infra.x"
+        );
+    }
+
+    /// A header self-identification hit records the whole header line, so
+    /// vendor names inside a key id or nonce are no developer claim.
+    #[test]
+    fn a_header_self_id_line_names_no_vendor() {
+        for line in [
+            "signature-input: sig1=(\"@authority\");keyid=\"gptglmkimi\";nonce=\"x\";tag=\"agent-browser-auth\"",
+            "signature-input: sig1=();keyid=\"poqkLGiym\";nonce=\"ZO3/XMEZjrvSnLtAP9M7jK0WGQf3J+pbmQRUpKDhF9/jsNCWqUh2sq+TH4WTX3/GpNoSZUa8eNWMKqxWp2/c2g==\"",
+        ] {
+            assert_eq!(self_id_vendor(line), None, "{line}");
+        }
+        // A signer's directory host is the agent's own name.
+        assert_eq!(
+            self_id_vendor("signature-agent: \"https://chatgpt.com\""),
+            Some(("OpenAI", "chatgpt"))
+        );
+        // A parameter value is read whole.
+        assert_eq!(self_id_vendor("GPT-4o"), Some(("OpenAI", "gpt")));
     }
 }
