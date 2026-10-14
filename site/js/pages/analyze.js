@@ -518,7 +518,15 @@ function viewSwarm() {
     legend: legend(...kinds.map((k) => swarmKey(`sk-${k} st-moderate`, `${swarmKind(k).id} ${swarmKind(k).label}`)), swarmKey("st-weak", "weak"), swarmKey("st-strong", "strong")),
     caption: `Interaction hints (SC-T9) between runs: a fleet is many agents doing the same thing, a swarm one whose agents act on each other's output. Each arc is one weak-to-moderate hint; a claim of interaction needs several together and review. None changes a score, links records or merges clusters.${edges.length ? "" : " This input has none."}`,
     head: ["Kind", "Strength", "From", "To", "Chance", "Detail"],
-    rows: edges.map((e) => [e.name, e.strength, e.from, e.to, e.chance != null ? e.chance.toExponential(1) : "–", e.detail]),
+    rows: [
+      ...edges.map((e) => [e.name, e.strength, e.from, e.to, e.chance != null ? e.chance.toExponential(1) : "–", e.detail]),
+      // Onset groups: clusters of different clients that began together.
+      ...arr(a.onset_groups).map((g) => {
+        const ids = arr(g.clusters).map((c) => safe(c, 12));
+        const chance = num(g.chance);
+        return [g.common_trigger ? "onset (common trigger)" : "onset group", "–", ids[0] ?? "–", trunc(ids.slice(1).join(", "), 80), chance != null ? chance.toExponential(1) : "–", safe(`${ids.length} clusters of different clients began within ${Math.round((num(g.window_secs) ?? 0) / 60)} min${g.common_trigger ? `; they share target families (${arr(g.shared_families).join(", ")}): one trigger, listed, not kept` : ""}`, 200)];
+      }),
+    ],
   });
 }
 

@@ -34,9 +34,12 @@
 mod artifacts;
 mod edges;
 mod eval;
+mod onset;
 mod runs;
 
 pub use eval::{SwarmEval, swarm_eval};
+pub use onset::{OnsetGroup, OnsetOptions};
+pub(crate) use onset::{onset_groups, report_block as onset_block};
 pub(crate) use runs::client_key;
 
 use crate::analyze::{Cluster, ObsResult};

@@ -143,5 +143,6 @@ export const PLANT_KINDS = {
   too_perfect: "too perfect: significant on many kinds of evidence with nothing ordinary around it",
   habit_mismatch: "habit mismatch: an identifier shared with an earlier cluster that worked differently",
   auto_submitted: "auto-submitted: ordinary links nearby fanned out to the same services, as a mail gateway or security product does",
+  seam: "seam: one record or one client holds together two groups of records that worked differently",
 };
 export const plantLabel = (k) => PLANT_KINDS[k] ?? trunc(String(k ?? "?").replace(/_/g, " "), 60);

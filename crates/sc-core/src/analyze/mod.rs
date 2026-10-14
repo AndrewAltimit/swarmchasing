@@ -11,6 +11,7 @@ mod pipeline;
 
 pub use hints::is_context_kind;
 pub(crate) use hints::{payload_variants, relay_stack, target_text};
+pub(crate) use link::{Tie, TieWhy};
 
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::Layer;
@@ -301,6 +302,11 @@ pub struct Analysis {
     /// hints for the admin, never scored, never a link or a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub swarm_edges: Vec<crate::swarm::SwarmEdge>,
+    /// Clusters of different clients that began within minutes of each
+    /// other beyond chance ([`crate::swarm::OnsetGroup`]), and those read
+    /// as one common trigger: hints, never a link or a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub onset_groups: Vec<crate::swarm::OnsetGroup>,
     /// The multiplicity budget of each family of pairwise tests (shared
     /// pauses, scaffolds, co-activity, the S3 to S6 edges): pairs tested,
     /// kept under a false-discovery cut, and expected by chance.

@@ -147,6 +147,9 @@ pub struct Linking {
     pub archive_burst_gap_secs: i64,
     pub archive_burst_min: usize,
     pub archive_burst_ratio: f64,
+    /// Seam review: both pieces a joint holds together need at least this
+    /// many records (0: off; [`crate::seam`]).
+    pub seam_min_side: usize,
 }
 
 impl Default for Linking {
@@ -166,6 +169,7 @@ impl Default for Linking {
             archive_burst_gap_secs: 180,
             archive_burst_min: 5,
             archive_burst_ratio: 10.0,
+            seam_min_side: 3,
         }
     }
 }
@@ -213,6 +217,8 @@ pub struct RuleSet {
     pub prompt_echo: crate::prose::PromptEchoOptions,
     #[serde(default)]
     pub swarm: crate::swarm::SwarmOptions,
+    #[serde(default)]
+    pub onset: crate::swarm::OnsetOptions,
     #[serde(default)]
     pub agentness: crate::agentness::AgentnessOptions,
     #[serde(default, rename = "rule")]

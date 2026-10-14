@@ -481,18 +481,38 @@ impl Gen<'_> {
                         }
                         None => (start + rng.range(0, 24 * 3600), None, a.records),
                     };
+                    // A bridging planter is an agent of its own operator
+                    // that copies two runs' tags; any other a person.
+                    let bridging = a.tag && !a.bridges.is_empty();
+                    let (label, actor, class, client, pace) = if bridging {
+                        (
+                            Some("agent"),
+                            "agent",
+                            "planted_bridge",
+                            agent_client(&mut rng),
+                            Pace::Model,
+                        )
+                    } else {
+                        (
+                            None,
+                            "human",
+                            "planted",
+                            browser_client(&mut rng),
+                            Pace::Human,
+                        )
+                    };
                     let spec = RunSpec {
                         truth: Truth {
-                            label: None,
-                            actor: "human",
-                            class: "planted".into(),
+                            label,
+                            actor,
+                            class: class.into(),
                             run: id(k),
                             swarm: Some("none".into()),
                             fleet: None,
                         },
-                        client: browser_client(&mut rng),
+                        client,
                         start: begin,
-                        pace: a.pace.unwrap_or(Pace::Human),
+                        pace: a.pace.unwrap_or(pace),
                         gaps,
                         hosts: spread(&hosts, records),
                         uses: vec![Use::Sink; records],
@@ -509,7 +529,24 @@ impl Gen<'_> {
                         habits: None,
                         prose: None,
                     };
-                    self.run(spec, &mut rng);
+                    match a.bridges.first() {
+                        // A bridging planter: every record also carries the
+                        // second victim's first run's tag, so one client's
+                        // records join two operators'.
+                        Some(&b) if a.tag => {
+                            let from = self.out.len();
+                            self.run(spec, &mut rng);
+                            let tag = Ids::new(self.seed).token(&format!("{b}:0"), "uqtag", 10);
+                            for v in &mut self.out[from..] {
+                                if let Some(u) = v.get("url").and_then(Value::as_str) {
+                                    v["url"] = json!(add_param(u, "uqtag", &format!("r{tag}")));
+                                }
+                            }
+                        }
+                        _ => {
+                            self.run(spec, &mut rng);
+                        }
+                    }
                 }
             }
             Kind::Mimic => {
@@ -899,7 +936,16 @@ impl Gen<'_> {
                 },
                 client: Client {
                     ua: AGENT_UAS[(base + k) % AGENT_UAS.len()].into(),
-                    asn: CLOUD_ASNS[(net + k) % CLOUD_ASNS.len()],
+                    // A launch's agents step through the networks at another
+                    // stride, so no two share a user agent and network.
+                    asn: CLOUD_ASNS[(net
+                        + k
+                        + if has(Mode::Launch) {
+                            k / AGENT_UAS.len()
+                        } else {
+                            0
+                        })
+                        % CLOUD_ASNS.len()],
                     ip: address(rng),
                 },
                 start: begin,

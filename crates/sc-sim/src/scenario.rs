@@ -106,8 +106,9 @@ pub struct Scenario {
     #[serde(default)]
     pub null: bool,
     /// What the scenario is built to produce: an interaction-edge kind
-    /// (`S3` or `synchronized_start`), a soft-link kind (`co_target`) or
-    /// `candidate_fleet`, each with the bounds it must meet on this
+    /// (`S3` or `synchronized_start`), a soft-link kind (`co_target`),
+    /// `candidate_fleet` or a review hint (`seam`, `onset_group`,
+    /// `onset_trigger`), each with the bounds it must meet on this
     /// scenario's own measurement (`expect.S3 = { min_recall = 0.8 }`). An
     /// expected kind that draws nothing fails, unless it sets `max_pairs`
     /// (`expect.S3 = { max_pairs = 0 }`: built not to fire).
@@ -147,13 +148,15 @@ pub struct Expect {
 pub const GRADE_KEYS: [&str; 2] = ["human_high", "benign_high"];
 
 /// The measurement key an `expect` names (an edge kind's serialised name,
-/// a soft-link kind's, or `candidate_fleet`) and whether it is an edge;
+/// a soft-link kind's, `candidate_fleet` or a review hint's) and whether it
+/// is an edge;
 /// `None` for a name that is none of these.
 pub fn expect_key(name: &str) -> Option<(String, bool)> {
     if let Ok(k) = name.parse::<sc_core::SwarmEdgeKind>() {
         return Some((k.name().to_string(), true));
     }
     if name == "candidate_fleet"
+        || crate::measure::GROUP_KINDS.contains(&name)
         || serde_json::from_value::<sc_core::SoftLinkKind>(serde_json::json!(name)).is_ok()
     {
         return Some((name.to_string(), false));
@@ -196,7 +199,7 @@ impl Scenario {
             .find(|k| expect_key(k).is_none() && !GRADE_KEYS.contains(&k.as_str()))
         {
             return Err(format!(
-                "{}: expect.{k} names no edge kind, soft-link kind, candidate_fleet or grade ceiling",
+                "{}: expect.{k} names no edge kind, soft-link kind, candidate_fleet, review hint or grade ceiling",
                 self.name
             ));
         }
@@ -259,6 +262,10 @@ pub enum Mode {
     /// other agent sends one 40 to 85 seconds after each dispatch
     /// (co-activity).
     Dispatch,
+    /// Agents launched within five minutes of each other, each with its own
+    /// client (no two sharing a user agent and network), tags, inbox and
+    /// hosts, and nothing else in common: only their onset ties them.
+    Launch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -452,6 +459,10 @@ pub struct Actor {
     pub copy_timing: bool,
     /// For a mimic: the fleets (by actor index) whose scaffolds it sends.
     /// For a hub: the target-list actors (by index) whose hosts it works.
+    /// For a planter: the first actor it names here is a second victim,
+    /// whose first run's run tag every record also carries, so one client
+    /// joins two operators' records. Such a planter is an agent of its own
+    /// operator (an agent client at model pace), not a person.
     #[serde(default)]
     pub bridges: Vec<usize>,
     /// For a fleet: hours between one agent's start and the next (26 by

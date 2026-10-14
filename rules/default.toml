@@ -100,6 +100,10 @@ pause_min_secs = 600
 archive_burst_gap_secs = 180
 archive_burst_min = 5
 archive_burst_ratio = 10.0
+# Seam review: a record, or every record of one client, whose removal splits a
+# cluster's link graph is a plant signal when the two largest pieces each hold
+# at least this many records and their habits or clients differ (0: off).
+seam_min_side = 3
 
 # Probe chains: requests to one host and path, each at most `max_gap_secs`
 # after the last, with at least `min_variants` distinct parameter sets. The
@@ -349,6 +353,23 @@ dispatch_pair_max_chance = 0.05
 dispatch_lag_tolerance_bins = 1
 dispatch_max_chance = 0.01
 fdr = 0.05
+
+# Onset groups: each cluster above noise naming a client is a point at its
+# first request or submit time (never a capture time). The densest
+# `window_secs` window of points of different clients is a group when it holds
+# at least `min_clusters` and its scan chance (Alm's approximation over the
+# analysis span) is at most `max_chance`, a window starting within
+# `clock_tolerance_secs` of a clock hour counting `clock_weight` of its points;
+# the scan repeats on the points left. A group whose members share target
+# families (last two labels) beyond their holders across the analysis, at
+# `trigger_max_chance` or below, is one common trigger: listed, not kept.
+[onset]
+window_secs = 900
+min_clusters = 4
+max_chance = 0.01
+trigger_max_chance = 0.01
+clock_tolerance_secs = 120
+clock_weight = 0.25
 
 # Agent grade: a machine fetch tool's habits, read from one client's requests
 # in a run (its unflagged ones included), request and submit times only; each
