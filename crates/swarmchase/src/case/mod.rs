@@ -945,6 +945,29 @@ mod tests {
     }
 
     #[test]
+    fn status_as_json_lists_cases_and_shows_one_defanged() {
+        let root = scratch("status-json");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        new_case(&root, "j-1", "Json", records, &rules, "2026-10-12").unwrap();
+        let all = status::json(&root, None).unwrap();
+        assert_eq!(all["cases"][0]["id"], "j-1", "{all}");
+        assert_eq!(all["cases"][0]["status"], CaseStatus::Open.label());
+        let one = status::json(&root, Some("j-1")).unwrap();
+        assert_eq!(one["records"], 6, "{one}");
+        let hosts: Vec<&str> = one["endpoints"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|e| e["host"].as_str())
+            .collect();
+        assert!(!hosts.is_empty(), "{one}");
+        assert!(hosts.iter().all(|h| h.contains("[.]")), "{hosts:?}");
+        assert!(one["needs"].as_array().is_some_and(|n| !n.is_empty()));
+        cleanup(&root);
+    }
+
+    #[test]
     fn opening_a_case_records_its_admin() {
         let root = scratch("admin");
         let rules = RulesText::load(None).unwrap();

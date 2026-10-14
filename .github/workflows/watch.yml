@@ -115,6 +115,12 @@ jobs:
           else
             echo "no public summary: the run stopped before writing it (exit $rc); the failure alert mails the log's tail"
           fi
+          # Exit 2: the run finished and its digest carries alerts, which
+          # the digest email reports; not a failed run.
+          if [ "$rc" -eq 2 ]; then
+            echo "the run finished with alerts; they are in the digest"
+            rc=0
+          fi
           exit "$rc"
 
       # The subject leads with the run's priority (high, medium or low).

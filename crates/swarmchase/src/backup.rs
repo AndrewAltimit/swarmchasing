@@ -287,34 +287,41 @@ fn sidecar(p: &Path) -> PathBuf {
     PathBuf::from(s)
 }
 
-/// The tar of [`PARTS`] that exist under `data`.
-fn archive(data: &Path) -> Result<Vec<u8>> {
-    let mut b = tar::Builder::new(Vec::new());
-    b.follow_symlinks(false);
-    let mut any = false;
-    for part in PARTS {
-        let p = data.join(part);
-        if p.is_dir() {
-            b.append_dir_all(part, &p)
-                .with_context(|| format!("archiving {}", p.display()))?;
-            any = true;
-        } else if p.is_file() {
-            b.append_path_with_name(&p, part)
-                .with_context(|| format!("archiving {}", p.display()))?;
-            any = true;
-        }
-    }
-    if !any {
+/// The [`PARTS`] that exist under `data`.
+fn present(data: &Path) -> Result<Vec<(&'static str, PathBuf)>> {
+    let found: Vec<(&'static str, PathBuf)> = PARTS
+        .iter()
+        .map(|part| (*part, data.join(part)))
+        .filter(|(_, p)| p.is_dir() || p.is_file())
+        .collect();
+    if found.is_empty() {
         bail!(
             "nothing to back up in {} (no cases, labels, rules, state or history)",
             data.display()
         );
     }
+    Ok(found)
+}
+
+/// Write the tar of `parts` into `out`, file by file.
+fn archive<W: Write>(parts: &[(&str, PathBuf)], out: W) -> Result<W> {
+    let mut b = tar::Builder::new(out);
+    b.follow_symlinks(false);
+    for (part, p) in parts {
+        if p.is_dir() {
+            b.append_dir_all(part, p)
+                .with_context(|| format!("archiving {}", p.display()))?;
+        } else {
+            b.append_path_with_name(p, part)
+                .with_context(|| format!("archiving {}", p.display()))?;
+        }
+    }
     Ok(b.into_inner()?)
 }
 
-fn encrypt(plain: &[u8], key: &Key, out: impl Write) -> Result<()> {
-    let enc = match key {
+/// age's encryptor for `key`.
+fn encryptor(key: &Key) -> Result<age::Encryptor> {
+    Ok(match key {
         Key::Recipient(r) => {
             age::Encryptor::with_recipients(std::iter::once(r as &dyn age::Recipient))?
         }
@@ -325,11 +332,54 @@ fn encrypt(plain: &[u8], key: &Key, out: impl Write) -> Result<()> {
         Key::Passphrase(p) => {
             age::Encryptor::with_user_passphrase(age::secrecy::SecretString::from(p.clone()))
         }
+    })
+}
+
+/// A writer that hashes what passes through it.
+struct Hashing<W> {
+    inner: W,
+    hash: sha2::Sha256,
+}
+
+impl<W: Write> Write for Hashing<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        use sha2::Digest as _;
+        let n = self.inner.write(buf)?;
+        self.hash.update(&buf[..n]);
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Stream the tar of `parts`, encrypted to `key`, into the file `p`,
+/// returning the SHA-256 of what was written. Nothing is held in memory
+/// beyond the buffers.
+fn seal_into(parts: &[(&str, PathBuf)], key: &Key, p: &Path) -> Result<String> {
+    use sha2::Digest as _;
+    let f = std::fs::File::create(p).with_context(|| format!("creating {}", p.display()))?;
+    let hashing = Hashing {
+        inner: std::io::BufWriter::new(f),
+        hash: sha2::Sha256::new(),
     };
-    let mut w = enc.wrap_output(out)?;
-    w.write_all(plain)?;
-    w.finish()?;
-    Ok(())
+    let sealed = archive(parts, encryptor(key)?.wrap_output(hashing)?)?;
+    let mut hashing = sealed.finish()?;
+    hashing.flush()?;
+    let f = hashing
+        .inner
+        .into_inner()
+        .map_err(|e| e.into_error())
+        .with_context(|| format!("writing {}", p.display()))?;
+    f.sync_all()
+        .with_context(|| format!("writing {}", p.display()))?;
+    Ok(hashing
+        .hash
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }
 
 fn decrypt(file: &Path, key: &Key) -> Result<impl Read> {
@@ -352,20 +402,28 @@ pub fn create(data: &Path, dir: &Path, stamp: &str, key: &Key) -> Result<PathBuf
     // A watch or case command writing meanwhile would leave a backup that
     // mixes two states, so the archive is read under the data lock.
     let _lock = crate::store::lock_data(data, "backup create")?;
-    let plain = archive(data)?;
+    let parts = present(data)?;
     std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     let name = format!("swarmchase-{stamp}.tar.age");
     let path = dir.join(&name);
     if path.exists() {
         bail!("{} exists", path.display());
     }
-    let mut sealed = Vec::new();
-    encrypt(&plain, key, &mut sealed)?;
-    crate::store::write_atomic(&path, &sealed)?;
-    crate::store::write_atomic(
-        &sidecar(&path),
-        format!("{}  {name}\n", crate::bundle::sha256_hex(&sealed)).as_bytes(),
-    )?;
+    // Streamed through a temporary file and a rename, so a backup cut
+    // short never leaves a file under the backup's name.
+    let tmp = crate::store::temp_path(&path);
+    let sealed = seal_into(&parts, key, &tmp).and_then(|sha| {
+        std::fs::rename(&tmp, &path).with_context(|| format!("writing {}", path.display()))?;
+        Ok(sha)
+    });
+    let sha = match sealed {
+        Ok(sha) => sha,
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+    };
+    crate::store::write_atomic(&sidecar(&path), format!("{sha}  {name}\n").as_bytes())?;
     Ok(path)
 }
 

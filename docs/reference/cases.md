@@ -38,7 +38,7 @@ Each change is logged with its date.
 
 | Command | What it does |
 |---|---|
-| `case status [<id>]` | Lists cases (a case.toml that does not load is skipped with a warning), or shows one case and what it still needs. |
+| `case status [<id>]` | Lists cases (a case.toml that does not load is skipped with a warning), or shows one case and what it still needs; `--json` prints either as one JSON document, hosts defanged. |
 | `case endpoint <id> <host>... <state> [--note …] [--basis …] [--single-source-reason …] [--sector "…"]` | Classifies one or more endpoints, given plain or defanged; `compromised` needs `--basis`. A host not in the case changes nothing. |
 | `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits, under the data directory's lock. Refused once its notice is published, or while a watch runs. |
 | `case claim <id> --party … [--layer …] --evidence … [--tag …] --detail …` | Records an attribution claim ([attribution claims](#attribution-claims)). |

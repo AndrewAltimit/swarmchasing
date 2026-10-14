@@ -29,7 +29,7 @@ swarmchase eval <data>/labels/reviewed.ndjson       # everything reviewed so far
 | Option | Does |
 |---|---|
 | `--show-fp N` | List up to N false positives. |
-| `--json <file>` | Write the full result, false-positive URLs (defanged) included. Keep it private for third-party records. |
+| `--json-out <file>` | Write the full result, false-positive URLs (defanged) included. Keep it private for third-party records. |
 | `--coverage` | Print the per-rule coverage table. |
 | `--coverage-allow <file>`, `--require-coverage` | Read the allow-list; fail on uncovered rules ([coverage gate](#coverage-gate)). |
 | `--summary-json <file>` | Write the [summary JSON](#summary-json). |
@@ -110,7 +110,7 @@ The margin report reads each labelled record's own hits against the rules the an
 
 ## Agent grades by actor
 
-The agent grade ([methodology](../methodology.md#agent-likelihood)) is measured against who really sent each record. A record's `actor` field says: `agent`, `human` or `tool`. An agent-labelled record without one counts as `agent`; a benign record without one is left out of the table. `eval` prints actor by grade, one count per record: `unflagged` (no rule fired), `unclustered` (flagged, in no cluster) and the grade of the record's cluster, `L0` to `L4`. L5 is never computed, so it has no column. The table is reported, never gated; its JSON is `grades.rows` in `--json`.
+The agent grade ([methodology](../methodology.md#agent-likelihood)) is measured against who really sent each record. A record's `actor` field says: `agent`, `human` or `tool`. An agent-labelled record without one counts as `agent`; a benign record without one is left out of the table. `eval` prints actor by grade, one count per record: `unflagged` (no rule fired), `unclustered` (flagged, in no cluster) and the grade of the record's cluster, `L0` to `L4`. L5 is never computed, so it has no column. The table is reported, never gated; its JSON is `grades.rows` in `--json-out`.
 
 A record with an `actor` and no `label` is graded but not scored for detection. A person's attack payloads are flagged by design ([known limits](../methodology.md#known-limits-and-false-positive-traps)): scoring them as benign would measure that limit, not the rules. The committed set's controls are of this kind ([samples/eval/README.md](../../samples/eval/README.md#actor-controlsndjson)).
 
@@ -167,7 +167,7 @@ Records labelled with `fleet` measure the soft links and candidate fleets as pro
 
 ## Swarm and fleet measurement
 
-`swarmchase sim score <files>` measures the interaction edges, soft links, candidate fleets and agent grades against records labelled with `run`, `swarm` and `fleet` ([`sc-sim`](../../crates/sc-sim/README.md)). `fleet` names the operator group a run belongs to (one scheduler, one scaffold deployment); a swarm's runs share one. A run with neither is its own operator. Each file is analysed on its own and the counts are summed; `--json` writes them.
+`swarmchase sim score <files>` measures the interaction edges, soft links, candidate fleets and agent grades against records labelled with `run`, `swarm` and `fleet` ([`sc-sim`](../../crates/sc-sim/README.md)). `fleet` names the operator group a run belongs to (one scheduler, one scaffold deployment); a swarm's runs share one. A run with neither is its own operator. Each file is analysed on its own and the counts are summed; `--json-out <file>` writes them.
 
 The unit is a pair of true runs. An edge side is placed on the run most of its records belong to, and a cluster on the run most of its members belong to.
 
@@ -342,7 +342,7 @@ It never holds a record's URL or other content. Records come from their source b
 swarmchase eval export-bench samples/eval/*.ndjson --out bench.json --name my-bench \
     --freeze-date 2026-01-31 --held-out-ids <data>/eval/holdout-ids.txt
 swarmchase eval --bench bench.json                                  # the reference tiers
-swarmchase eval --bench bench.json --predictions mine.ndjson --json score.json
+swarmchase eval --bench bench.json --predictions mine.ndjson --json-out score.json
 ```
 
 `export-bench` puts the ids in `--held-out-ids` in the `held_out` split and the rest in `--split` (default `regression`). A row's `labeller` or `labellers` field names who labelled it, else `--labeller`. The export checks that its reference tiers score exactly as the analysis did.

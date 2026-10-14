@@ -147,6 +147,73 @@ pub enum Cmd {
     },
 }
 
+/// Exit statuses beyond 0 (success) and 1 (an error).
+pub mod exit {
+    /// A watch run that finished, digest written, with alerts in it.
+    pub const ALERTS: u8 = 2;
+    /// `eval` or `sim bench` ran, and a floor or ceiling was not met.
+    pub const FLOOR_NOT_MET: u8 = 3;
+}
+
+/// A command's outcome that sets its own exit status ([`exit`]): returned
+/// as the command's error, so it ends the command like one.
+#[derive(Debug)]
+pub struct Exit {
+    pub code: u8,
+    pub message: String,
+}
+
+impl std::fmt::Display for Exit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for Exit {}
+
+impl Exit {
+    /// A watch run that finished with alerts ([`exit::ALERTS`]).
+    pub fn alerts(message: impl Into<String>) -> anyhow::Error {
+        Exit {
+            code: exit::ALERTS,
+            message: message.into(),
+        }
+        .into()
+    }
+
+    /// A floor or ceiling not met ([`exit::FLOOR_NOT_MET`]).
+    pub fn floor(message: impl Into<String>) -> anyhow::Error {
+        Exit {
+            code: exit::FLOOR_NOT_MET,
+            message: message.into(),
+        }
+        .into()
+    }
+}
+
+/// The exit status for a command's result, printing the error (or, for a
+/// run with alerts, the note) to stderr: 0, 1 for an error, or the
+/// [`Exit`] code.
+pub fn exit_status(r: Result<()>) -> std::process::ExitCode {
+    match r {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(e) => match e.downcast_ref::<Exit>() {
+            Some(x) if x.code == exit::ALERTS => {
+                eprintln!("note: {}", x.message);
+                std::process::ExitCode::from(x.code)
+            }
+            Some(x) => {
+                eprintln!("Error: {}", x.message);
+                std::process::ExitCode::from(x.code)
+            }
+            None => {
+                eprintln!("Error: {e:?}");
+                std::process::ExitCode::FAILURE
+            }
+        },
+    }
+}
+
 /// Parse the command line and run the command.
 pub fn run() -> Result<()> {
     match Cli::parse().cmd {

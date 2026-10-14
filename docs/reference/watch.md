@@ -11,8 +11,9 @@ Every watch, review and case command works in one data directory: `--data` (`-d`
 | `state.json` | Each source's time cursor, resume key or stream checkpoint, query fingerprint and health history; records not yet in a digest; state of sources removed from the watchlist. |
 | `state.json.bak` | The previous `state.json`, read when the current one does not parse. |
 | `.lock`, `.lock.owner` | The data directory's writer lock and the command holding it ([one writer at a time](#one-writer-at-a-time)). |
-| `store/<source>.ndjson` | Stored records, deduplicated by ID. |
-| `store/<source>.damaged` | Store lines that could not be read, moved aside ([collection](#collection)). |
+| `store/<source>/<YYYY-MM>.ndjson` | Stored records captured in that UTC month, deduplicated by ID ([the record store](#the-record-store)). |
+| `store/<source>/undated.ndjson` | Stored records with no capture time. |
+| `store/<source>/<partition>.damaged` | Store lines that could not be read, moved aside ([collection](#collection)). |
 | `runs/<stamp>/digest.md` | One directory per run, with its digest. |
 | `runs/<stamp>/analysis.json`, `case-notes.md` | The run's full analysis and its Markdown report; only the newest runs keep them ([retention](#retention)). |
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
@@ -40,7 +41,7 @@ Every watch, review and case command works in one data directory: `--data` (`-d`
 
 `watch` is incremental. It pulls the sources in [`watchlist.toml`](../../watchlist.toml), each of which carries a rationale: the agent behaviour it catches, the rule it feeds and what its noise looks like.
 
-- **Cursors.** Each source keeps a time cursor in `state.json`. New records are deduplicated by ID and appended to the source's store file. A record stamped in the future moves the cursor no further than the run's own time. A source that cannot page and returns `limit` records moves its cursor no further than the oldest of them, since what lies before may be missing. IDs of records with no time stay in the seen list, so they are never added twice.
+- **Cursors.** Each source keeps a time cursor in `state.json`. New records are deduplicated by ID and appended to the source's store, each to the file of its capture month. A record stamped in the future moves the cursor no further than the run's own time. A source that cannot page and returns `limit` records moves its cursor no further than the oldest of them, since what lies before may be missing. IDs of records with no time stay in the seen list, so they are never added twice.
 - **Wayback paging.** Wayback's index is sorted by URL rather than time, so a pull cut short by `limit`, or by a failed page, resumes from its resume key on the next run. A host too big for one index query is read by path prefix, and `slice_days` reads the time range in windows.
 - **Checkpoints.** GH Archive, Wikimedia EventStreams, Hacker News, Bluesky, GitHub search and CT logs read on from where the last run stopped (`mark` in `state.json`), within a per-run budget. Every page read counts as progress, matches or not, so a failure after matchless hours resumes after them. A GH Archive hour whose file is corrupt or cut off is skipped and counted, not retried each run.
 - **Unavailable hosts.** A host answering HTTP 503 gets ten minutes of retries; if it stays down, later requests to it in the same run are not sent, and its sources continue next run. The same holds at once for a host whose `Retry-After` asks for more than the five-minute cap on a wait, and for a host that times out on two requests in a row after their retries, so a hanging index cannot spend the run's time budget.
@@ -51,7 +52,7 @@ Every watch, review and case command works in one data directory: `--data` (`-d`
 - **urlquery.** urlquery sources need `URLQUERY_APIKEY`. Without it they are skipped and the digest says so ([configuration](configuration.md#urlquerynet)).
 - **GitHub search.** `ghsearch` sources need `GITHUB_TOKEN`. Without it they are skipped and the digest says so.
 - **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss. Cached bodies are raw answers, not redacted records, so every run deletes entries older than the TTL, and at least a day ([retention](#retention)).
-- **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is moved to `store/<source>.damaged` the first time a run sees it, with a `store_damaged` health alert; the other lines are read, and later runs do not alert on it again. Retention deletes a `.damaged` file once it was last written before the cutoff. Before an append, a last line without its newline is ended, so it never swallows the next record.
+- **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is moved to `<partition>.damaged` beside its file the first time a run sees it, with a `store_damaged` health alert; the other lines are read, and later runs do not alert on it again. Retention deletes a `.damaged` file once it was last written before the cutoff. Before an append, a last line without its newline is ended, so it never swallows the next record.
 - **Deadline.** Collection stops starting sources after `collect_deadline_mins` (default 90; 0 turns it off). A source already pulling finishes; the rest are reported as `deferred`, with what their absence costs, and go first next run. Analysis and the digest still run.
 - **ASN.** Once `swarmchase asn fetch` has put the IP-to-ASN table in `asn/`, records that carry an IP but no network get one ([configuration](configuration.md#ip-to-asn-table)).
 - **Network ranges.** Each run refreshes `netranges/` ([below](#network-ranges)) before it collects, then describes the analysis's clusters from it.
@@ -101,6 +102,14 @@ A `bluesky` source reads Jetstream's posts for a sampled stretch: from its check
 
 A `wikimedia` source reads the `mediawiki.page-links-change` stream
  from the millisecond after the last event read, until it reaches the time the run began or runs out of `scan` wall-clock minutes or `max_mb` megabytes; the rest waits for the next run. Each added external link is a record whose URL is the link, never fetched, and whose reference is the edit's diff. Bot-flagged accounts and the stream's `canary` events are dropped. `filter` takes `domain:<wiki>`, `!domain:<wiki>` and `ns:<n>`. Coverage is in minutes of stream time. Requests carry the client's identifying user agent, as Wikimedia's User-Agent policy asks. Every kind's terms of use are summarised in the [watchlist](../../watchlist.toml) and in its [collector](../../crates/sc-collect/README.md#record-sources).
+
+### The record store
+
+The store holds one directory per source and one file per UTC month of capture time, `store/<source>/<YYYY-MM>.ndjson`. A record with no capture time goes to `store/<source>/undated.ndjson`: its age is unknown, so only a read with no lower bound takes it in (`case add --record`, `inbox`) and retention keeps it.
+
+- **Windowed reads.** A run reads the months its analysis window and overlap reach and opens no older file. A record left over from a run cut short is found by ID in its source's files, most recently written first, without reading the rest.
+- **Damage checks.** Each run checks the files it reads and every file written to since the window began, since a damaged line comes from a write cut short.
+- **Older layout.** A data directory with one file per source (`store/<source>.ndjson`) is moved to this layout at the start of the next watch run, under the data lock, with a one-time note in the digest. Each old file is split into its months, each month file rewritten whole and deduplicated by ID, and the old file deleted last, so a run cut short during the move loses and duplicates nothing and the next run finishes it. Unreadable lines go to `undated.ndjson` as they are and are set aside from there with an alert; an old `<source>.damaged` becomes `store/<source>/legacy.damaged`. Until then every read takes in the old files too.
 
 ### One writer at a time
 
@@ -403,7 +412,7 @@ A lead's thread counts with every thread it was merged into. For `draft_case`, *
 
 ## Retention
 
-At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points, autonomy lines and `summary.json` endpoints last seen before that. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones.
+At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted: a month file whose month ended before the cutoff as a whole file, unread, and the older records of the month the cutoff falls in line by line. Undated records are kept, and a source directory left empty is removed. Ledger points, autonomy lines and `summary.json` endpoints last seen before the cutoff go too. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones.
 
 The platform pass keeps its carried events for `carry_hours` only. Cached HTTP responses older than `http_cache_ttl_secs`, and at least a day, are deleted on every run, before the digest; `watch prune-cache` does the same on demand. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
 
@@ -502,7 +511,7 @@ Each line is the stored record with these fields beside it:
 
 A line without `grade` comes from before grades were stored. Its grade is unknown, so each reader grades it from the analysis it has and says so. The review page and the dashboard use their own analysis. `review --stats` and `review agreement` analyse the review file's own records, so a cluster with members outside the file may grade differently. `eval` uses the analysis of its inputs and does not judge a line whose record is not among them.
 
-`review --stats` lists the agent labels below L2 with their grades and reasons. `review agreement` lists them too, and reads the stored grade before the grade now when a suggestion line records none.
+`review --stats` lists the agent labels below L2 with their grades and reasons; `review --stats --json` prints the counts, the baseline and the agreement between labellers as one JSON document, with record IDs and counts only. `review agreement` lists them too, and reads the stored grade before the grade now when a suggestion line records none.
 
 ### Label suggestions
 

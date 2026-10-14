@@ -45,7 +45,7 @@ enum SimCmd {
         #[arg(long)]
         total: bool,
         /// Also write the per-scenario measurements as JSON.
-        #[arg(long)]
+        #[arg(long = "json-out", value_name = "FILE", alias = "json")]
         json: Option<PathBuf>,
         /// Also run `sim calibrate --check` on the same generated records
         /// (each is generated once for both), and fail as it would.
@@ -86,7 +86,7 @@ enum SimCmd {
         #[arg(long)]
         rules: Option<PathBuf>,
         /// Also write the measurement as JSON (counts and kind names only).
-        #[arg(long)]
+        #[arg(long = "json-out", value_name = "FILE", alias = "json")]
         json: Option<PathBuf>,
     },
 }
@@ -246,12 +246,14 @@ pub fn run(a: SimArgs) -> Result<()> {
                 0
             };
             if failed > 0 {
-                bail!("{failed} simulator bound(s) not met");
+                return Err(crate::Exit::floor(format!(
+                    "{failed} simulator bound(s) not met"
+                )));
             }
             if calibration_failed > 0 {
-                bail!(
+                return Err(crate::Exit::floor(format!(
                     "{calibration_failed} soft-link ratio(s) above the simulation's stratified lower bound or unmeasured"
-                );
+                )));
             }
             Ok(())
         }

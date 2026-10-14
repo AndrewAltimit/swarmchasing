@@ -222,6 +222,90 @@ pub(crate) fn status(root: &Path, id: &str, out: &mut impl Write) -> Result<()> 
     Ok(())
 }
 
+/// `case status --json`: every case as `list` shows it, or one case as
+/// `status` shows it, as one JSON document. Hosts are defanged.
+pub(crate) fn json(root: &Path, id: Option<&str>) -> Result<serde_json::Value> {
+    use serde_json::json;
+    let Some(id) = id else {
+        let (mut cases, broken) = all_readable(root)?;
+        cases.sort_by(|a, b| b.opened.cmp(&a.opened).then(a.id.cmp(&b.id)));
+        return Ok(json!({
+            "cases": cases
+                .iter()
+                .map(|c| json!({
+                    "id": c.id,
+                    "status": c.status.label(),
+                    "notice": c.notice.label(),
+                    "opened": c.opened,
+                    "title": c.title,
+                }))
+                .collect::<Vec<_>>(),
+            "unreadable": broken
+                .iter()
+                .map(|(id, why)| json!({"id": id, "error": why.to_string()}))
+                .collect::<Vec<_>>(),
+        }));
+    };
+    let c = load(root, id)?;
+    let a = analysis(root, &c, &Scope::All)?;
+    let views = endpoints(&a, &EndpointOptions::default());
+    let claims = sc_case::report::all_claims(&c, &a);
+    let has_draft = case_dir(root, id)?.join(NOTICE_DRAFT).is_file();
+    Ok(json!({
+        "id": c.id,
+        "title": c.title,
+        "status": c.status.label(),
+        "notice": c.notice.label(),
+        "opened": c.opened,
+        "admin": c.admin,
+        "rules_pinned": c.rules_version,
+        "rules": a.rules_version,
+        "records": a.total,
+        "flagged": a.flagged,
+        "clusters": a
+            .clusters
+            .iter()
+            .map(|cl| json!({
+                "id": cl.id,
+                "key": cl.key,
+                "tier": cl.tier.label(),
+                "agent_level": cl.agent.level.code(),
+                "records": cl.members.len(),
+                "start": cl.start,
+                "end": cl.end,
+                "fleet": c.fleet_of(&cl.key).map(|f| f.id.clone()),
+            }))
+            .collect::<Vec<_>>(),
+        "endpoints": c
+            .endpoints
+            .iter()
+            .map(|e| {
+                let v = views.iter().find(|v| v.host == e.host);
+                json!({
+                    "host": sc_core::defang_host(&e.host),
+                    "state": e.state.label(),
+                    "hits": v.map(|v| v.hits),
+                    "last_seen": v.map(|v| v.last_seen),
+                })
+            })
+            .collect::<Vec<_>>(),
+        "claims": claims
+            .iter()
+            .map(|cl| json!({
+                "party": cl.party,
+                "role": format!("{:?}", cl.role),
+                "evidence": cl.evidence.describe(),
+                "nameable": cl.nameable(c.min_named),
+            }))
+            .collect::<Vec<_>>(),
+        "contacts": c.contacts.len(),
+        "decisions": c.decisions.len(),
+        "sent": c.sent.len(),
+        "notice_draft": has_draft,
+        "needs": todo(&c, &claims, has_draft),
+    }))
+}
+
 /// Both stages' clocks and the review state of each stage's draft.
 pub(crate) fn clocks(root: &Path, c: &Case, now: i64, out: &mut impl Write) -> Result<()> {
     if c.notice_added() {

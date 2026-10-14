@@ -163,7 +163,7 @@ cargo run --release -p swarmchase -- collect urlquery-reports \
 cargo run --release -p swarmchase -- eval data/eval/transluce.ndjson \
     --labels data/transluce/all-reports.csv \
     --labels samples/eval/overrides/transluce-labels.ndjson \
-    --json data/eval/transluce-eval.json
+    --json-out data/eval/transluce-eval.json
 ```
 
 Later `--labels` files override earlier ones. [`overrides/transluce-labels.ndjson`](overrides/transluce-labels.ndjson) holds our corrections to Transluce's labels, each with its reason. These are IDs and our own notes, no urlquery content. `URLQUERY_APIKEY` can live in `env.list` (run through `scripts/with-env.sh`).

@@ -28,6 +28,9 @@ impl Drop for Scratch {
 /// What one run printed, and whether it succeeded.
 pub struct Run {
     pub ok: bool,
+    /// The exit status: 0, 1 for an error, 2 a watch run with alerts, 3 a
+    /// floor not met.
+    pub code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
 }
@@ -36,6 +39,7 @@ impl From<Output> for Run {
     fn from(o: Output) -> Self {
         Self {
             ok: o.status.success(),
+            code: o.status.code(),
             stdout: String::from_utf8_lossy(&o.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&o.stderr).into_owned(),
         }

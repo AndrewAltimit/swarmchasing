@@ -67,6 +67,9 @@ pub enum CaseCmd {
     Status {
         /// A case ID; without one, every case is listed.
         id: Option<String>,
+        /// Print it as one JSON document on stdout.
+        #[arg(long)]
+        json: bool,
     },
     /// Classify affected endpoints, one or more hosts at a time.
     Endpoint(endpoints::EndpointArgs),
@@ -237,7 +240,7 @@ pub fn run(args: CaseArgs) -> Result<()> {
     match args.cmd {
         CaseCmd::New(a) => open::new(&ctx, a, out),
         CaseCmd::Add(a) => open::add(&ctx, a),
-        CaseCmd::Status { id } => open::status(&ctx, id.as_deref(), out),
+        CaseCmd::Status { id, json } => open::status(&ctx, id.as_deref(), json, out),
         CaseCmd::Rename { id, new_id } => open::rename(&ctx, &id, &new_id),
         CaseCmd::Set(a) => open::set(&ctx, a),
         CaseCmd::Note { id, text } => open::note(&ctx, &id, text),

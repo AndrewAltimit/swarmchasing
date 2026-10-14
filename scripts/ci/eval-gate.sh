@@ -59,6 +59,9 @@
 #
 # Usage:
 #     scripts/ci/eval-gate.sh [extra cargo args, e.g. --profile release-test]
+#
+# Exit status: 0 when everything passes, 3 when a floor, ceiling or bound is
+# not met (`eval` and `sim bench` exit 3 then), 1 on any other error.
 
 set -euo pipefail
 cd "$(dirname "$0")/../.."

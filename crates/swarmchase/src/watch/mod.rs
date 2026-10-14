@@ -5,7 +5,7 @@
 //! ```text
 //! <out>/state.json              per-source cursors and pending resume keys (.bak: the previous copy)
 //! <out>/.lock                   held by the run, so one writer works here at a time
-//! <out>/store/<source>.ndjson   every record collected within retention, redacted, deduplicated
+//! <out>/store/<source>/<YYYY-MM>.ndjson  every record collected within retention, by capture month (crate::store)
 //! <out>/summary.json            clusters and endpoints as of the last run (digest baseline)
 //! <out>/ledger.json             each cluster's history across runs (ledger)
 //! <out>/autonomy.ndjson         what autonomy levels did or would have done (autonomy)
@@ -95,7 +95,8 @@ pub(crate) mod triage;
 
 use crate::health::{RuleHistory, RuleRun, alert_due};
 use crate::store::{
-    append, load_store_counted, prune, read_json_kept, to_ndjson, write_json, write_json_kept,
+    append_records, load_store_counted, prune, read_json_kept, to_ndjson, write_json,
+    write_json_kept,
 };
 use anyhow::{Context, Result, bail};
 use cases::{CaseCheck, CaseWatch};
@@ -614,10 +615,17 @@ fn watch(
     let _lock = crate::store::lock_data(out, "watch")?;
     std::fs::create_dir_all(&run_dir)?;
     std::fs::create_dir_all(out.join("store"))?;
+    // A store of the older one-file-per-source layout moves to the
+    // partitioned one first; cut short, the next run finishes it.
+    let migrated = crate::store::migrate_store(&out.join("store"))?;
 
     let state_path = out.join("state.json");
     let mut state: State = read_json_kept(&state_path)?.unwrap_or_default();
     let mut c = Collected::default();
+    if let Some(m) = migrated {
+        eprintln!("note: {}", m.note());
+        c.notes.push(m.note());
+    }
     carry_over(out, &state, &mut c);
     for w in crate::commands::netranges::refresh_daily(&client, out) {
         c.notes.push(format!("Network ranges not refreshed: {w}"));
@@ -704,7 +712,7 @@ fn watch(
     let set_aside = soft(
         &mut alerts,
         "store",
-        crate::store::set_aside_damaged(&out.join("store")),
+        crate::store::set_aside_damaged(&out.join("store"), since - wl.overlap_days * DAY),
     )
     .unwrap_or_default();
     for (file, (n, aside)) in &set_aside {
@@ -1044,6 +1052,13 @@ fn watch(
             run_dir.join("digest.md").display()
         );
     }
+    if !health.alerts.is_empty() {
+        return Err(crate::Exit::alerts(format!(
+            "the run finished with {} alert(s); see {}",
+            health.alerts.len(),
+            run_dir.join("digest.md").display()
+        )));
+    }
     Ok(())
 }
 
@@ -1089,26 +1104,19 @@ fn before_window_note(fresh: &[Observation], since: i64, window_days: i64) -> Op
 /// Records an earlier run stored but never reported (it ended before its
 /// digest), loaded from the store into this run's new records.
 fn carry_over(out: &Path, state: &State, c: &mut Collected) {
-    let source_of: BTreeMap<&str, &str> = state
-        .undigested
-        .iter()
-        .flat_map(|(s, ids)| ids.iter().map(move |id| (id.as_str(), s.as_str())))
-        .collect();
-    if source_of.is_empty() {
+    if state.undigested.values().all(BTreeSet::is_empty) {
         return;
     }
-    let all = match load_store_counted(&out.join("store"), i64::MIN) {
-        Ok((all, _)) => all,
+    let found = match crate::store::load_ids(&out.join("store"), &state.undigested) {
+        Ok(found) => found,
         Err(e) => {
             soft::<()>(&mut c.alerts, "carry-over", Err(e));
             return;
         }
     };
-    for o in all {
-        if let Some(src) = source_of.get(o.id.as_str()) {
-            c.carried += 1;
-            c.add(src, o);
-        }
+    for (src, o) in found {
+        c.carried += 1;
+        c.add(&src, o);
     }
     c.notes.push(format!(
         "{} record(s) stored by an earlier run that ended before its digest are reported as new in this one.",
@@ -1239,14 +1247,12 @@ fn collect(
             Ok(p) => {
                 let pulled = p.pulled;
                 let mut new = p.new;
-                let store_file = x.out.join("store").join(format!("{}.ndjson", s.name));
+                let store_dir = x.out.join("store");
                 if restarted || st.restart {
                     // Seen IDs were reset with the position: what the store
                     // already holds is not new.
                     let held: BTreeSet<String> =
-                        crate::store::read_ndjson::<Observation>(&store_file)
-                            .map(|(v, _)| v.into_iter().map(|o| o.id).collect())
-                            .unwrap_or_default();
+                        crate::store::source_ids(&store_dir, &s.name).unwrap_or_default();
                     new.retain(|o| !held.contains(&o.id));
                     st.restart = false;
                 }
@@ -1288,7 +1294,7 @@ fn collect(
                 if !new.is_empty() {
                     let nd = to_ndjson(&new)?;
                     std::fs::write(x.run_dir.join(format!("{}.ndjson", s.name)), &nd)?;
-                    append(&store_file, &nd)?;
+                    append_records(&store_dir, &s.name, &new)?;
                     state
                         .undigested
                         .entry(s.name.clone())
@@ -1339,7 +1345,7 @@ fn retain(
     }
     if wl.retain_days > 0 {
         let cutoff = now - wl.retain_days.max(wl.analysis_window_days) * DAY;
-        let (runs, records) = prune(out, cutoff)?;
+        let pruned = prune(out, cutoff)?;
         for cw in state.cases.values_mut() {
             cw.hits.retain(|h| h.ts <= 0 || h.ts >= cutoff);
         }
@@ -1359,9 +1365,10 @@ fn retain(
             }
         }
         autonomy::prune(out, cutoff)?;
-        if runs + records > 0 {
+        let (runs, files, records) = (pruned.runs, pruned.store.files, pruned.store.records);
+        if runs + files + records > 0 {
             eprintln!(
-                "retention: deleted {runs} run dir(s) and {records} stored record(s) older than {} days",
+                "retention: deleted {runs} run dir(s), {files} store month file(s) and {records} more stored record(s) older than {} days",
                 wl.retain_days
             );
         }
