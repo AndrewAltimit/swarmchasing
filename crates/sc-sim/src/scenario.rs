@@ -266,6 +266,11 @@ pub enum Mode {
     /// client (no two sharing a user agent and network), tags, inbox and
     /// hosts, and nothing else in common: only their onset ties them.
     Launch,
+    /// A planner dispatching workers that dispatch workers of their own:
+    /// agent `k` (from 1) follows agent `(k - 1) / 2`, sending one request
+    /// 40 to 85 seconds after its parent's at each of the planner's
+    /// irregular dispatches, 10 to 50 minutes apart (a dispatch tree).
+    TreeDispatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -361,6 +366,12 @@ pub enum Kind {
     /// of a sharded swarm (S5) and of ordered co-targeting. Each vendor is
     /// one run.
     SeoCrawler,
+    /// `agents` unrelated agents watching one feed: at each of its `records`
+    /// items, 10 to 50 minutes apart, every agent sends one request at its
+    /// own lag (30 seconds to 4 minutes, up to 15 seconds late), each to its
+    /// own hosts: each its own operator, and a look-alike of a dispatch
+    /// star (S6) whose leader is the quickest reader.
+    Trigger,
 }
 
 impl Kind {
@@ -510,6 +521,26 @@ pub struct Actor {
     /// domain), as a list of sites is, instead of one site's hosts.
     #[serde(default)]
     pub own_families: bool,
+    /// For a fleet: each agent works its hosts one at a time, sending its
+    /// scaffold's templates on each in one fixed order (its playbook);
+    /// `records` is best a multiple of `hosts` times `steps`.
+    #[serde(default)]
+    pub playbook: bool,
+    /// For a fleet: templates in its scaffold (3 by default).
+    #[serde(default)]
+    pub steps: Option<usize>,
+    /// For a fleet: send the shape (templates and harness parameters) of
+    /// the fleet actor at this index, as another operator on the same
+    /// harness and palette does.
+    #[serde(default)]
+    pub shape_of: Option<usize>,
+    /// For a playbook fleet: its steps in reverse order.
+    #[serde(default)]
+    pub reverse_steps: bool,
+    /// For a fleet: agent `k` generates its tags in `tag_styles[k % n]`
+    /// instead of `tag_style`, as an operator changing its tags does.
+    #[serde(default)]
+    pub tag_styles: Vec<TagStyle>,
 }
 
 /// How a run's tag is generated.

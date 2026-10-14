@@ -220,6 +220,8 @@ pub struct RuleSet {
     #[serde(default)]
     pub generator: crate::generator::GeneratorOptions,
     #[serde(default)]
+    pub playbook: crate::playbook::PlaybookOptions,
+    #[serde(default)]
     pub swarm: crate::swarm::SwarmOptions,
     #[serde(default)]
     pub onset: crate::swarm::OnsetOptions,

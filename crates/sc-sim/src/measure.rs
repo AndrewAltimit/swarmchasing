@@ -737,14 +737,14 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
 
 /// Every soft-link kind. The match fails to compile when a kind is added
 /// to [`SoftLinkKind`] and not here, so none goes unmeasured.
-const SOFT_LINK_KINDS: [SoftLinkKind; 22] = {
+const SOFT_LINK_KINDS: [SoftLinkKind; 23] = {
     use SoftLinkKind::*;
     const fn listed(k: SoftLinkKind) {
         match k {
             SharedPause | Dialect | Rerun | Preamble | PathSet | Encoding | FanOut | CutLength
             | HeaderSet | Escalation | CommonFeature | SharedSecret | RelayStack
             | CallbackService | Scaffold | CoActivity | CoTarget | OrderedCoTarget
-            | ScaffoldLineage | PromptEcho | CoGroup | Generator => {}
+            | ScaffoldLineage | PromptEcho | CoGroup | Generator | Playbook => {}
         }
     }
     listed(SharedPause);
@@ -771,5 +771,6 @@ const SOFT_LINK_KINDS: [SoftLinkKind; 22] = {
         PromptEcho,
         CoGroup,
         Generator,
+        Playbook,
     ]
 };

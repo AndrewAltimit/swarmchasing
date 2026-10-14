@@ -241,6 +241,20 @@ pub(super) const PASSES: &[Pass] = &[
             cx.a.multiplicity.push(family);
         }
     }),
+    // Reads members' layers and parameters, and outside records' URLs.
+    pass("playbook", &["number", "trim_layers"], |cx| {
+        let s = &cx.rules.set;
+        let (pairs, family) = crate::playbook::playbook_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.playbook,
+        );
+        cx.a.playbook_pairs = pairs;
+        if family.tested > 0 {
+            cx.a.multiplicity.push(family);
+        }
+    }),
     pass(
         "fleets",
         &[
@@ -255,6 +269,7 @@ pub(super) const PASSES: &[Pass] = &[
             "prompt_echo",
             "co_group",
             "generator",
+            "playbook",
         ],
         fleets,
     ),
@@ -262,6 +277,9 @@ pub(super) const PASSES: &[Pass] = &[
         let (edges, families) = crate::swarm::swarm_edges(&cx.a.clusters, &cx.a.results, cx.rules);
         cx.a.swarm_edges = edges;
         cx.a.multiplicity.extend(families);
+    }),
+    pass("dispatch_trees", &["swarm"], |cx| {
+        cx.a.dispatch_trees = crate::swarm::dispatch_trees(&cx.a.swarm_edges);
     }),
     pass("onset", &["number"], |cx| {
         cx.a.onset_groups =
@@ -505,6 +523,7 @@ fn fleets(cx: &mut AnalysisCtx) {
             prompt_echo_pairs: &a.prompt_echo_pairs,
             co_groups: &a.co_groups,
             generator_pairs: &a.generator_pairs,
+            playbook_pairs: &a.playbook_pairs,
         },
         opts,
     );

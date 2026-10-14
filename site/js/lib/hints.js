@@ -27,6 +27,7 @@ export const SOFT_KINDS = {
   prompt_echo: "prompt echo",
   co_group: "co-group",
   generator: "identifier generator",
+  playbook: "playbook order",
 };
 
 /** A safe class suffix and a label for a soft-link kind id. */

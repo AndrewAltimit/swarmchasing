@@ -1118,3 +1118,52 @@ kind = "agent"
 agents = 20
 retry = 0.2
 palette_share = 0.3
+
+# One operator's agents each walking one list of eight sites, sending one
+# harness's four steps in one order on each, with fresh tags, over three
+# weeks, beside two hundred unrelated agents: the playbook ties them where a
+# shared template set would not, because the set is a common default.
+[[scenario]]
+name = "fleet-playbook"
+seed = 431
+seeds = 4
+span_hours = 240
+expect.playbook = { min_precision = 0.9, min_recall = 0.66 }
+expect.candidate_fleet = { min_precision = 0.9, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 32
+hosts = 8
+steps = 4
+playbook = true
+[[scenario.actor]]
+kind = "agent"
+agents = 200
+retry = 0.2
+palette_share = 0.1
+
+# A planner dispatching two workers that each dispatch two workers of their
+# own, over hours off the clock hour: a dispatch tree of three generations,
+# beside jobs on the hour.
+[[scenario]]
+name = "tree-dispatch"
+seed = 451
+seeds = 4
+expect.S6 = { min_precision = 1.0 }
+[[scenario.actor]]
+kind = "swarm"
+agents = 7
+modes = ["tree_dispatch"]
+records = 8
+offset_hours = 3
+palette_share = 0.3
+[[scenario.actor]]
+kind = "cron"
+agents = 2
+records = 24
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3

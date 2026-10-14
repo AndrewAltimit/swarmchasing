@@ -525,10 +525,27 @@ fn star(times: &[i64], workers: &[((&str, u32), i64)]) -> Vec<Observation> {
     obs
 }
 
+/// A planner at `times`, and one worker per client of `workers`, each
+/// leaving 40 to 85 s after every dispatch, its delay drawn anew each time
+/// (seeded by `seed`), as workers taking up a task do.
+fn varied_star(times: &[i64], workers: &[(&str, u32)], seed: u64) -> Vec<Observation> {
+    let mut mix = crate::chance::Mix(seed);
+    let mut obs = background();
+    obs.extend(client_run(0, P, times, &|_| false));
+    for (k, &client) in workers.iter().enumerate() {
+        let ts: Vec<i64> = times
+            .iter()
+            .map(|t| t + 40 + (mix.next() % 46) as i64)
+            .collect();
+        obs.extend(client_run(1 + k, client, &ts, &|_| false));
+    }
+    obs
+}
+
 #[test]
 fn a_planner_leading_two_workers_is_a_dispatch_star() {
     let (a, e) = edges(
-        star(&dispatches(), &[(A, 70), (B, 100)]),
+        varied_star(&dispatches(), &[A, B], 5),
         SwarmEdgeKind::DispatchStar,
     );
     assert_eq!(e.len(), 2, "{:?}", a.swarm_edges);
@@ -553,6 +570,28 @@ fn a_planner_leading_two_workers_is_a_dispatch_star() {
     assert_eq!(f.kept, 1, "{f:?}");
     let md = crate::report::render_markdown(&a, &crate::report::ReportOptions::default());
     assert!(md.contains("S6 dispatch star"), "{md}");
+}
+
+#[test]
+fn readers_of_one_feed_at_their_own_lags_make_no_star() {
+    // Four unrelated readers react to every feed item, each at a lag of its
+    // own and no dispatcher among them: the quickest leads the rest, but the
+    // next quickest leads the slower ones as well, so no reader stands out
+    // as the leader. The star read without stand-ins would pass.
+    let times = dispatches();
+    let readers = [
+        (A, 40),
+        (B, 90),
+        (("Reader/3", 14061), 150),
+        (("Reader/4", 24940), 230),
+    ];
+    let mut obs = background();
+    for (k, &(client, lag)) in readers.iter().enumerate() {
+        let ts: Vec<i64> = times.iter().map(|t| t + lag).collect();
+        obs.extend(client_run(k, client, &ts, &|_| false));
+    }
+    let (a, e) = edges(obs, SwarmEdgeKind::DispatchStar);
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
 }
 
 #[test]

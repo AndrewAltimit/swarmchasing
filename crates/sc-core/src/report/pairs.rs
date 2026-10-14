@@ -42,6 +42,10 @@ impl Report<'_> {
                     !g.common_trigger && g.clusters.iter().all(|c| self.selected(c))
                 }
             });
+            // Dispatch trees name every cluster in them: internal notes only.
+            if internal {
+                crate::swarm::dispatch_tree_block(s, &self.a.dispatch_trees, &|c| self.selected(c));
+            }
         }
         self.multiplicity(s);
         self.common_features(s);

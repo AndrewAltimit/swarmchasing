@@ -121,7 +121,100 @@ fn direction_chance(x: &[i64], y: &[i64], bin: i64, reach: i64) -> f64 {
     at_least(&vec![0.5; n], after)
 }
 
+/// The leader of a star against stand-in leaders of the same followers.
+struct Rank {
+    /// Other clusters that could stand in as leader of the followers (they
+    /// lead at least `dispatch_min_followers` of them), and those leading
+    /// them at least as well as the leader does.
+    standins: usize,
+    as_well: usize,
+    /// The leader's rank, `(as_well + 1) / (standins + 1)`; 0 when no other
+    /// cluster leads the followers at all, so a unique leader is not vetoed
+    /// and a trigger's leader (one of many) is.
+    chance: f64,
+}
+
+impl Rank {
+    fn line(&self) -> String {
+        if self.standins == 0 {
+            "; no other cluster active in its hours leads the same followers".into()
+        } else {
+            format!(
+                "; {} of {} other clusters that could lead the same followers lead them as well (rank chance {:.1e})",
+                self.as_well, self.standins, self.chance
+            )
+        }
+    }
+}
+
 impl Ctx<'_> {
+    /// How `l` leads `followers` (indexes into `acts`, `skip` left out): the
+    /// sum of `-ln` of each lead's chance, and how many it leads at all. A
+    /// follower it does not lead adds nothing.
+    fn lead_strength(
+        &self,
+        l: &Activity,
+        acts: &[Activity],
+        followers: &[usize],
+        skip: usize,
+    ) -> (f64, usize) {
+        let mut sum = 0.0;
+        let mut led = 0;
+        for &f in followers.iter().filter(|&&f| f != skip) {
+            if let Some(x) = self.lead(l, &acts[f]) {
+                sum += -x.chance.max(1e-300).ln();
+                led += 1;
+            }
+        }
+        (sum, led)
+    }
+
+    /// The leader's rank among stand-in leaders of the same followers: every
+    /// other cluster whose span meets the leader's and that is not itself
+    /// led by the leader's followers' leader (a cluster leading the leader
+    /// leads its followers through it, a tree, not a stand-in). A stand-in
+    /// counts when it leads at least `dispatch_min_followers` of the
+    /// followers (the leader scored on the same set, the stand-in left out),
+    /// and leads them as well when its strength is at least the leader's. The
+    /// rank is `(as_well + 1) / (standins + 1)`; with no stand-in at all it
+    /// is 0, so a unique leader passes. Under one trigger (a feed item, a
+    /// news alert) many clusters lead the followers about equally, so the
+    /// rank is large and the star does not pass.
+    fn leader_rank(&self, acts: &[Activity], li: usize, followers: &[usize]) -> Rank {
+        let l = &acts[li];
+        let reach = self.co.max_lag_bins.max(0) + 2;
+        let (ls, le) = (l.bins[0] - reach, l.bins[l.bins.len() - 1] + reach);
+        let min = self.opts.dispatch_min_followers.max(2);
+        let (mut standins, mut as_well) = (0usize, 0usize);
+        for (ci, c) in acts.iter().enumerate() {
+            if ci == li || c.bins[0] > le || c.bins[c.bins.len() - 1] < ls {
+                continue;
+            }
+            if self.lead(c, l).is_some() {
+                continue;
+            }
+            let (theirs, led) = self.lead_strength(c, acts, followers, ci);
+            if led < min {
+                continue;
+            }
+            standins += 1;
+            let (ours, _) = self.lead_strength(l, acts, followers, ci);
+            if theirs >= ours - 1e-9 {
+                as_well += 1;
+            }
+        }
+        let chance = if standins == 0 {
+            0.0
+        } else {
+            (as_well + 1) as f64 / (standins + 1) as f64
+        };
+        Rank {
+            standins,
+            as_well,
+            chance,
+        }
+    }
+
     /// Each cluster above noise with enough active bins outside crowded
     /// ones.
     fn activities(&self) -> Vec<Activity> {
@@ -390,6 +483,17 @@ impl Ctx<'_> {
             if p > o.dispatch_max_chance {
                 continue;
             }
+            // The leader against stand-ins: every other cluster active in
+            // its hours, read as the leader of the clusters it leads. The
+            // whole candidate set is read, not the consistent subset, so a
+            // trigger's chain (an earlier follower leading the later ones)
+            // is seen whatever subset the star kept.
+            let followers: Vec<usize> = cands.iter().map(|c| c.0).collect();
+            let rank = self.leader_rank(&acts, li, &followers);
+            let p = p.max(rank.chance);
+            if p > o.dispatch_max_chance {
+                continue;
+            }
             let lc = &self.cl[l.ci];
             let mut edges = Vec::new();
             for c in &chosen {
@@ -462,6 +566,7 @@ impl Ctx<'_> {
                     n_cand,
                     chosen.len() + 1
                 );
+                detail.push_str(&rank.line());
                 if !diff.is_empty() {
                     detail.push_str(&format!("; they differ in {}", diff.join(", ")));
                 }

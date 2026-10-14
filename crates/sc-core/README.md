@@ -73,6 +73,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model, and in the same order beyond a random order. |
 | [`biclique`](src/biclique.rs) | Co-groups: three or more clusters on several rarely held sites or templates, beyond a degree-preserving swap null. |
 | [`generator`](src/generator.rs) | Generated identifiers decoded (UUID node ids, Snowflake workers, clock skews, counters), and cluster pairs on one generator beyond chance. |
+| [`playbook`](src/playbook.rs) | Cluster pairs sending one harness's probe steps on their hosts in one order, beyond a within-host permutation null. |
 | [`community`](src/community.rs) | Backbone filter, deterministic Leiden (CPM) and minimum cut for candidate fleets. |
 | [`fleet_track`](src/fleet_track.rs) | Candidate fleets across analyses: `FK-` keys, matching, pair evidence accumulated over windows. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |
@@ -83,7 +84,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`attribution`](src/attribution.rs) | The evidence ladder and who a report may name. |
 | [`identity`](src/identity/mod.rs) | Declared agent identity: product claims, published ranges (`ranges`), Web Bot Auth signatures (`httpsig`, `sfv`); verified, spoofed or claimed. Ed25519 checks need the `signatures` feature. |
 | [`agentness`](src/agentness.rs) | Each cluster's agent grade (L0 payloads only to L4 agent likely) with its signals, counter-signals and caps; L5 only from a case decision. |
-| [`swarm`](src/swarm/mod.rs) | Interaction edges between runs (SC-T9): runs and strands (`runs`), named artifacts (`artifacts`), one detector per kind (`edges`), edges against labels (`eval`); onset groups of clusters launched together (`onset`). |
+| [`swarm`](src/swarm/mod.rs) | Interaction edges between runs (SC-T9): runs and strands (`runs`), named artifacts (`artifacts`), one detector per kind (`edges`), dispatch stars chained into trees (`tree`), edges against labels (`eval`); onset groups of clusters launched together (`onset`). |
 | [`platform`](src/platform/mod.rs) | Coordinated-account swarm candidates on public platforms: slotted text sketches and MinHash (`text`), residue in prose (`residue`), benign automation and templates (`automation`), grouping and the chance model (`detect`), members' build provenance (`provenance`). Hints, never findings. |
 | [`report`](src/report/mod.rs) | Markdown drafts and the public notice, one module per section; per-audience wording (`audience`) and cluster hint lines (`hints`). |
 | [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
