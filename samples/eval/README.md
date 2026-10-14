@@ -90,7 +90,7 @@ Synthetic runs sent by people and conventional tools, for the agent grade. Each 
 
 ## `linking-negatives.ndjson`
 
-Synthetic records for the cluster-level evaluation, each pair or group a case linking must keep apart. If one merged, the cluster-level evaluation would list it as a false merge. The cluster-level numbers are reported, not gated; the golden test in `sc-core` fails on these merges.
+Synthetic records for the cluster-level evaluation, each pair or group a case linking must keep apart. If one merged, the cluster-level evaluation would list it as a false merge. The eval gate holds floors on cluster recall and B-cubed F1, and the golden test in `sc-core` fails on these merges.
 
 - **Copied campaign tag.** Two readers, months apart, fetch different pages through the same relay with the same popular campaign tag (`tag=blackfriday`). A shared feature links only within the link window, so the pair stays apart.
 - **Planted records.** Two agent runs, each two probes on one host joined by a run tag, and beside each a benign record placed two minutes after it on the same host: one read through the same relay, one sharing only a cache-busting parameter. Each shares a rule and a host with its run inside the timing window, but only a context rule, so neither joins ([methodology](../../docs/methodology.md#linking-into-clusters)).

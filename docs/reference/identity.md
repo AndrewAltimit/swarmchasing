@@ -19,7 +19,7 @@ The platform pass reads `[[github_app]]`: those Apps' events are tallied by prod
 
 Every entry cites the provider page (`source`) that names the file. Adding one is a review decision, as for a rule: cite the page, keep the URL the page gives (or the host it redirects to, said in a comment), and run the tests. The catalog is compiled into the CLI and the browser module.
 
-`access` is `direct` (one operator runs the signer) or `intermediary` (a platform many end users direct), after Cloudflare's [signed-agent classes](https://developers.cloudflare.com/bots/concepts/bot/signed-agents/). Set it only where the provider's own documentation says which; no bundled directory has it yet. A verified signature from an intermediary attributes the platform, not the end user: the identity line, the suggested claim and the report say so ([methodology](../methodology.md#declared-agent-identity)).
+`access` is `direct` (one operator runs the signer) or `intermediary` (a platform many end users direct), after Cloudflare's [signed-agent classes](https://developers.cloudflare.com/bots/concepts/bot/signed-agents/). Set it only where the provider's own documentation says which. A verified signature from an intermediary attributes the platform, not the end user: the identity line, the suggested claim and the report say so ([methodology](../methodology.md#declared-agent-identity)).
 
 A product whose provider publishes no range file, or publishes its addresses only as a web page the refresh cannot parse (Amazon's), is listed without ranges: its user agent stays a claim, never verified and never called spoofed. A key directory whose `Signature-Agent` value and URL the provider's public documentation does not give is left out.
 

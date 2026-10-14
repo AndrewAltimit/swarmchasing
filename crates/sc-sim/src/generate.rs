@@ -1671,14 +1671,7 @@ impl Gen<'_> {
             TagStyle::Counter => {
                 let stem = COUNTER_STEMS[op.below(COUNTER_STEMS.len())];
                 let first = op.range(10_000, 90_000) as u64;
-                // The run's place in its operator's runs.
-                let k: u64 = spec
-                    .scope
-                    .rsplit(':')
-                    .next()
-                    .and_then(|x| x.parse().ok())
-                    .unwrap_or(0);
-                Some(format!("{stem}{}", first + k))
+                Some(format!("{stem}{}", first + counter_place(&spec.scope)))
             }
         }
     }
@@ -1918,6 +1911,24 @@ const COUNTER_STEMS: &[&str] = &["batch-", "job", "worker-", "task", "crawl-", "
 
 /// How redaction writes a secret: this prefix and hex digits.
 const SECRET: &str = "REDACTED-";
+
+/// How far past the first runs a rerun's counter sits: the operator's
+/// counter moved on by the next day, so a rerun never repeats a first run's
+/// tag.
+const RERUN_PLACE: u64 = 10_000;
+
+/// A run's place in its operator's runs, for counter tags: the agent index
+/// `k` of a scope `{actor}:{k}`, and past every first run for its rerun
+/// `{actor}:{k}:rerun`.
+fn counter_place(scope: &str) -> u64 {
+    let mut parts = scope.split(':');
+    let k: u64 = parts.nth(1).and_then(|x| x.parse().ok()).unwrap_or(0);
+    if parts.next() == Some("rerun") {
+        k + RERUN_PLACE
+    } else {
+        k
+    }
+}
 
 /// `s` with every case-insensitive occurrence of `from` replaced.
 fn replace_ci(s: &str, from: &str, to: &str) -> String {
@@ -2281,6 +2292,77 @@ mod tests {
         assert_eq!(first + gaps.iter().sum::<i64>(), 40);
         // On time throughout: the gaps are the dispatches'.
         assert_eq!(sync_times(&[5, 7, 9], &[2, 2, 2]), (2, vec![0, 7, 9]));
+    }
+
+    #[test]
+    fn counter_tags_place_reruns_after_the_first_runs() {
+        let rules = sc_core::Rules::default_rules();
+        let palette = Palette::default_palette(&rules);
+        let file = crate::ScenarioFile::parse(
+            "[[scenario]]\nname = \"t\"\n[[scenario.actor]]\nkind = \"agent\"\n",
+        )
+        .unwrap();
+        let g = Gen {
+            scenario: &file.scenario[0],
+            seed: 1,
+            palette: &palette,
+            rng: Rng::new(1),
+            t0: 0,
+            out: Vec::new(),
+            shapes: BTreeMap::new(),
+            times: BTreeMap::new(),
+            opts: RunOpts::default(),
+            tag_style: TagStyle::Counter,
+            taken: Taken::default(),
+        };
+        let mut rng = Rng::new(2);
+        let mut tag = |scope: &str| {
+            let spec = RunSpec {
+                truth: Truth {
+                    label: Some("agent"),
+                    actor: "agent",
+                    class: "test".into(),
+                    run: scope.into(),
+                    swarm: None,
+                    fleet: Some("f0".into()),
+                },
+                client: agent_client(&mut rng),
+                start: 1000,
+                pace: Pace::Model,
+                hosts: vec!["h0.t.example".to_string()],
+                uses: vec![Use::Attack],
+                gaps: None,
+                fixed: None,
+                harness: Vec::new(),
+                shapes: Vec::new(),
+                scope: scope.into(),
+                sink_scope: None,
+                tag: true,
+                retry: 0.0,
+                writes: None,
+                fetches: None,
+                adapt: true,
+                habits: None,
+                prose: None,
+            };
+            g.styled_tag(&spec, 1000).unwrap()
+        };
+        let num = |t: &str| -> u64 {
+            t.trim_start_matches(|c: char| !c.is_ascii_digit())
+                .parse()
+                .unwrap()
+        };
+        let (first0, first3) = (tag("0:0"), tag("0:3"));
+        assert_eq!(num(&first3), num(&first0) + 3);
+        // A rerun is a later run of the operator's: its counter is its own,
+        // never a first run's (agent 0's or its own agent's).
+        let (rerun0, rerun3) = (tag("0:0:rerun"), tag("0:3:rerun"));
+        for r in [&rerun0, &rerun3] {
+            assert_ne!(r, &first0);
+            assert_ne!(r, &first3);
+        }
+        assert_ne!(rerun0, rerun3);
+        assert_eq!(num(&rerun3), num(&rerun0) + 3);
     }
 
     #[test]

@@ -667,6 +667,23 @@ fn link_checkers_and_seo_crawlers_are_unrelated_tools() {
 }
 
 #[test]
+fn adjusted_rand_index_is_averaged_over_analyses() {
+    // One analysis whose groups are its runs (index 1), another whose two
+    // runs of two records sit in one group (index 0). Their pair counts
+    // summed would give 0.4, which is no analysis's index; the mean is 0.5.
+    let perfect = Clustering::of_analysis(4, 4.0, 4.0, (6.0, 2.0, 2.0, 2.0));
+    let merged = Clustering::of_analysis(4, 4.0, 2.0, (6.0, 2.0, 6.0, 2.0));
+    assert_eq!(merged.ari(), Some(0.0));
+    let mut both = perfect.clone();
+    both.add(&merged);
+    assert_eq!(both.ari(), Some(0.5));
+    // An analysis with too few records adds nothing to the mean.
+    both.add(&Clustering::of_analysis(1, 1.0, 1.0, (0.0, 0.0, 0.0, 0.0)));
+    assert_eq!(both.ari(), Some(0.5));
+    assert_eq!(both.records, 9);
+}
+
+#[test]
 fn clusters_are_scored_against_runs() {
     let m = measured();
     let (p, r, f) = m.clustering.bcubed().unwrap();
@@ -675,15 +692,7 @@ fn clusters_are_scored_against_runs() {
     // precision, a merge of runs for the adjusted Rand index.
     assert!((p - 1.0).abs() < 1e-9, "{p}");
     assert!(m.clustering.ari().unwrap() < 1.0);
-    let perfect = Clustering {
-        records: 4,
-        bcubed_precision_sum: 4.0,
-        bcubed_recall_sum: 4.0,
-        pairs: 6.0,
-        pairs_both: 2.0,
-        pairs_group: 2.0,
-        pairs_run: 2.0,
-    };
+    let perfect = Clustering::of_analysis(4, 4.0, 4.0, (6.0, 2.0, 2.0, 2.0));
     assert_eq!(perfect.ari(), Some(1.0));
     assert_eq!(perfect.bcubed(), Some((1.0, 1.0, 1.0)));
     assert_eq!(Clustering::default().ari(), None);
