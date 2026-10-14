@@ -26,7 +26,11 @@ The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read
 | Hacker News search index | Links in stories and comments matching relay hosts and run tags | Scheduled watch, as leads for review |
 | Bluesky Jetstream | Links in posts matching relay hosts and run tags, in a sampled stretch each run | Scheduled watch, as leads for review |
 | GitHub search | Links in pull request text and commit messages matching relay hosts and run tags (needs a token) | Scheduled watch, as leads for review |
-| GH Archive, npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Hugging Face Hub, Go module index, GitLab.com, Codeberg, Wikimedia EventStreams, Hacker News, Bluesky Jetstream, GitHub Advisory Database, CVE List | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
+| ClawHub skills listing | Skill summaries, names and topics matching relay hosts and run tags; skill files never downloaded | Scheduled watch, as leads for review |
+| GH Archive, npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Hugging Face Hub, Go module index, GitLab.com, Codeberg, ClawHub, Wikimedia EventStreams, Hacker News, Bluesky Jetstream, GitHub Advisory Database, CVE List | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
+| Open VSX search | Newest extensions' namespace, name, version, time and description | Platform pass, off until Eclipse's terms are confirmed |
+| AWS, Google Cloud, Oracle Cloud, Cloudflare range files; Tor bulk exit list | Published address ranges by provider, region and service; Tor exit addresses | Describing client addresses ([hosting class](#hosting-class)) |
+| ai.robots.txt list | AI crawler and agent user-agent tokens with operator and function | Proposing [declared identity](#declared-agent-identity) catalog entries for review |
 | OSV data dumps | Malicious-package records (`MAL-` ids) for npm and PyPI | Scheduled watch's platform pass, as labels on candidates |
 | MediaWiki API | Pages added to English Wikipedia's suspected-AI-generated-text cleanup categories | Scheduled watch's platform pass, as labels on candidates |
 | CT logs, crt.sh | Certificate Transparency entries | Watch sample of one log (relay look-alikes); case work (`swarmchase certs`) |
@@ -312,7 +316,7 @@ Most sources take records from anyone. A record shows that someone submitted or 
 |---|---|
 | `observed` | Access logs; logs an affected operator sent |
 | `submit-anywhere` | urlquery, urlscan, Wayback, Arquivo.pt, Memento timemaps |
-| `publish-anywhere` | GH Archive, npm, PyPI, Wikimedia EventStreams, CT logs, Common Crawl |
+| `publish-anywhere` | GH Archive, npm, PyPI, Wikimedia EventStreams, Hacker News, Bluesky, GitHub search, ClawHub, the MCP Registry, CT logs, Common Crawl |
 | `reported` | Records an outside submission states: its own logs and references as written ([inbox](reference/inbox.md)) |
 | `unknown` | Anything else: manual imports, fixtures |
 
@@ -381,6 +385,7 @@ Agent swarms also act through accounts: near-identical issues, comments and vuln
 - package registries: npm search results, PyPI's newest-projects feed, the Go module index, NuGet's catalog, Packagist's change feed, and RubyGems' and crates.io's newest listings ([`registries.rs`](../crates/sc-collect/src/registries.rs));
 - code hosts beside GitHub: GitLab.com's and Codeberg's newest public projects, as repositories created ([`forges.rs`](../crates/sc-collect/src/forges.rs));
 - the Hugging Face Hub's newest Spaces, models or datasets;
+- ClawHub's newest skills, as packages published, back to the last skill read ([`clawhub.rs`](../crates/sc-collect/src/clawhub.rs)), and Open VSX's newest extensions ([`openvsx.rs`](../crates/sc-collect/src/openvsx.rs)), whose watchlist entry stays off until the Eclipse Foundation confirms automated reads are welcome;
 - edits on Wikimedia wikis from EventStreams ([`wikimedia.rs`](../crates/sc-collect/src/wikimedia.rs));
 - Hacker News stories and comments ([`hackernews.rs`](../crates/sc-collect/src/hackernews.rs));
 - Bluesky posts from Jetstream, a sampled stretch of the newest half hour each run ([`bluesky.rs`](../crates/sc-collect/src/bluesky.rs)); a reply targets its thread's root post, whose author is the target's owner;
@@ -388,7 +393,7 @@ Agent swarms also act through accounts: near-identical issues, comments and vuln
 
 Each event keeps its id, time, target and public link, plus:
 
-- the account as a keyed hash of its id or login, never the login itself (on a wiki, of the global account name, since local user ids differ from wiki to wiki; on Go, of the module path's owner; on Packagist, of the vendor; on RubyGems, of the gemspec's author string; on crates.io, of the declared repository's host and owner; on GitLab.com, of the project's top-level namespace; on Codeberg, of the owner's login. NuGet's catalog and PyPI's feeds name no one, so their groups are floods);
+- the account as a keyed hash of its id or login, never the login itself (on a wiki, of the global account name, since local user ids differ from wiki to wiki; on Go, of the module path's owner; on Packagist, of the vendor; on RubyGems, of the gemspec's author string; on crates.io, of the declared repository's host and owner; on GitLab.com, of the project's top-level namespace; on Codeberg, of the owner's login; on ClawHub, of the owner handle; on Open VSX, of the namespace. NuGet's catalog and PyPI's feeds name no one, so their groups are floods);
 - on GitHub, the account id divided by 1000 (`actor_rank`): ids rise with account creation, so a rank near the newest seen marks a new account without identifying it; on a wiki, the account's registration time in units of 864 seconds, so a thousand ranks is ten days, and a first-edit flag from the account's edit count; on Hacker News, the account's creation time in the same units, looked up from its profile only for authors whose text a group could form around (a shared template or near-duplicate band with another author, or residue); on Bluesky, the same from the PLC directory's first operation for the account's DID; on Codeberg, the same from the owner's account creation time, which the listing carries. GitLab's listing gives no account age. GitHub's
  event payloads no longer carry the author association, so no GitHub event has a first-timer flag;
 - the text (title and body, a description or a summary) as a sketch: lower-cased words with URLs, addresses, mentions, paths, numbers, hex strings, mixed letter-and-digit tokens and the target's and actor's own names replaced by slots (`<url>`, `<user>`, `<num>` and so on); a 32-value MinHash signature over word 3-shingles; a hash of the first 48 slotted words (the template); the first 160 characters of slotted text; and the residue rules that fire on the raw text;
@@ -444,6 +449,12 @@ In a public notice, a developer below shared identifiers is named only as the pa
 **Layers, labels and tags.** Each claim belongs to one of four layers ([FM-7.1](manual/07-attribution.md#fm-71-four-layers)): `developer`, `host`, `harness` or `model_family` (`case claim --layer`). The code derives its label from the layer and the evidence: Confirmed, Suspected, Possible or Unattributed ([FM-7.7](manual/07-attribution.md#fm-77-attribution-labels)). Each claim also carries a tag, given with `--tag` or derived: a network seen in the records is Observed, a provider's confirmation or documented infrastructure is Documented, and the rest is Inference.
 
 Reports list each claim with its layer, label and tag, and add a Conclusion line for each developer named through the gate, with the strongest likelihood word its label allows. Harness and model-family candidates appear ranked in private reports and never in public. A model-family claim needs the method's held-out accuracy and corpus size, or it is refused.
+
+### Hosting class
+
+Once `swarmchase netranges fetch` has run (the watch refreshes the files at most once a day), each cluster's client addresses are looked up in the address ranges AWS, Google Cloud, Oracle Cloud and Cloudflare publish for their own networks, and in the Tor Project's bulk exit list ([`netranges.rs`](../crates/sc-core/src/netranges.rs)). The most specific published range gives the address's hosting class: provider, region and service (`AWS us-east-1 EC2`). A hosting claim lists how many of its records came from each class, and a record with no ASN whose address a provider's ranges hold gets a hosting claim naming that provider. A scan service's address is never looked up: it is the scanner's or the target's.
+
+A Tor exit names a relay, not the agent's host. Records sent from an address on the exit list are left out of every other hosting claim, including the same-company check that lifts a developer claim to `hosting_asn`, and get one claim of their own saying so. The hosting class is description only: it never raises a score, links records or names a developer.
 
 ## Declared agent identity
 

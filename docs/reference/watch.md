@@ -30,6 +30,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `runs/<stamp>/canary.json` | The run's canary sightings, when it has any. |
 | `cache/http/` | Cached collector responses, pruned every run ([retention](#retention)); safe to delete. |
 | `asn/ip2asn-v4.tsv.gz` | The IP-to-ASN table, once fetched. |
+| `netranges/` | Cloud providers' published address ranges and the Tor exit list ([network ranges](#network-ranges)). |
 | `identity/` | Providers' published agent ranges and key directories, once fetched ([identity](identity.md)). |
 | `.stale-alerted` | The run stamp the staleness check last mailed about ([runner](runner.md#watch-staleyml)). |
 
@@ -50,7 +51,12 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 - **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss. Cached bodies are raw answers, not redacted records, so every run deletes entries older than the TTL, and at least a day ([retention](#retention)).
 - **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is skipped and counted in a `store_damaged` health alert; the other lines are read. Before an append, a last line without its newline is ended, so it never swallows the next record.
 - **ASN.** Once `swarmchase asn fetch` has put the IP-to-ASN table in `asn/`, records that carry an IP but no network get one ([configuration](configuration.md#ip-to-asn-table)).
+- **Network ranges.** Each run refreshes `netranges/` ([below](#network-ranges)) before it collects, then describes the analysis's clusters from it.
 - **Redaction.** Collectors redact what they return, and the watch redacts every pulled record again before it reaches the run directory or the store, so a collector that misses a field cannot put a secret in the store. Redaction is idempotent: a record redacted once passes through unchanged.
+
+### Network ranges
+
+`netranges/` holds the address ranges AWS, Google Cloud, Oracle Cloud and Cloudflare publish for their networks and the Tor Project's bulk exit list. Each run fetches a file whose held copy is a day old or older, checks that the download parses, and only then replaces the held copy; a failure is a digest note and the held copy stays in use. `swarmchase netranges fetch` downloads them all now, `status` shows each file's age and `lookup <ip>...` prints an address's hosting class and Tor flag. The analysis describes each cluster's client addresses from them ([hosting class](../methodology.md#hosting-class)). The files are never committed.
 
 ### Source kinds
 
@@ -74,6 +80,7 @@ Each `[[source]]` names a `kind`. Its `pattern` means what the table says; `endp
 | `ctlog` | One CT log | substrings | `endpoint`: log URL; `scan`: entries per run |
 | `wellknown` | Wayback agent footprints | hosts or `*.domain`s | resumes across runs |
 | `mcp` | MCP Registry servers | substrings | metadata only; resumes across runs |
+| `clawhub` | ClawHub skills, newest back to the checkpoint | substrings of the summary, name, slug or topics | `page_size`; `scan`: pages per run (default 5) |
 
 Substrings are `|`-separated and case-insensitive. Archive kinds date records by capture, scan services by submission, and the rest by when the request reached the service (`ts_kind`).
 
@@ -239,14 +246,15 @@ A separate pass in each run looks for accounts acting alike on GitHub, GitLab.co
 | `crates` | crates.io's newest crates, back to the checkpoint | `scan`: pages of 100 per run (default 3) |
 | `gitlab` | GitLab.com's newest public projects, back to the checkpoint | `scan`: pages of 100 per run (default 3) |
 | `codeberg` | Codeberg's newest repositories, back to the checkpoint | `scan`: pages of 50 per run (default 3) |
-
+| `clawhub` | ClawHub's newest skills, back to the checkpoint | `page_size` (at most 100); `scan`: pages per run (default 5); `limit` |
+| `openvsx` | One page of Open VSX's newest extensions | `page_size` (at most 100); off in the watchlist until Eclipse's terms are confirmed |
 | `cve` | GitHub advisories of one type, oldest first from the checkpoint, or CVE List records new in its delta log | `endpoint`: `unreviewed` (default), `reviewed`, `malware` or `cvelist`; `scan`: requests of 100 (default 3), or records for `cvelist` (default 30) |
 | `wikimedia-ai-cleanup` | Pages added to a wiki's suspected-AI-generated-text cleanup categories since the checkpoint, as labels | `endpoint`: the wiki (default `en.wikipedia.org`); `pattern`: the category name before ` from <month>`, `*` for the default; `scan`: API requests (default 4) |
 | `osv` | OSV malicious-package records for one ecosystem, as labels | `endpoint`: `npm` (default), `PyPI`, `Go`, `crates.io`, `NuGet`, `Packagist` or `RubyGems`; `scan`: records per run (default 50) |
 | `bluesky` | Posts from Jetstream, from the checkpoint or the newest half hour of stream time, whichever is later | `endpoint`: the Jetstream instance; `scan`: wall-clock minutes (default 3); `max_mb`; `max_events`; `max_lookups` (default 40) |
 | `hackernews` | Stories and comments from the search index, newest back to the checkpoint | `scan`: queries of 1000 items (default 10); `max_lookups`: account-age lookups (default 40) |
 
-`pattern` is required by the format; only `npm` and `pypi` read it. Sources that read from a checkpoint (all but `npm`, `pypi`, `huggingface` and `rubygems`) keep it in `platform/state.json`; a backlog over 24 hours (a week for `osv` and `wikimedia-ai-cleanup`, half an hour of stream for `bluesky`) is skipped to the newest stretch, and the section shows how much was read and skipped. A corrupt GH Archive hour is skipped and counted.
+`pattern` is required by the format; only `npm` and `pypi` read it. Sources that read from a checkpoint (all but `npm`, `pypi`, `huggingface` and `rubygems`; `openvsx` keeps one but reads one page) keep it in `platform/state.json`; a backlog over 24 hours (a week for `osv` and `wikimedia-ai-cleanup`, half an hour of stream for `bluesky`) is skipped to the newest stretch, and the section shows how much was read and skipped. A corrupt GH Archive hour is skipped and counted.
 
 **Labels.** An `osv` or `wikimedia-ai-cleanup` source gives labels, not events: the packages OSV's malicious-package records name, or the wiki pages editors tagged as suspected AI-generated text. They are kept in `platform/labels.ndjson` for `label_days` (default 30). A candidate shown in the digest whose members published a labelled package or edited a labelled page gets a *Labelled* line with the records behind it, and `runs/<stamp>/platform-labels.json` lists every candidate's matches.
 

@@ -1,0 +1,6 @@
+{"extensions":[
+ {"deprecated":false,"description":"Probe extension for checking reach.","displayName":"Agent Probe 0042","downloadCount":0,"files":{"download":"https://open-vsx.org/api/probe-ns/agent-probe-0042/0.0.1/file/probe-ns.agent-probe-0042-0.0.1.vsix","icon":"https://open-vsx.org/api/probe-ns/agent-probe-0042/0.0.1/file/icon.png"},"name":"agent-probe-0042","namespace":"probe-ns","timestamp":"2026-10-14T12:37:30.335018Z","url":"https://open-vsx.org/api/probe-ns/agent-probe-0042","verified":false,"version":"0.0.1"},
+ {"deprecated":false,"description":"Probe extension for checking reach.","displayName":"Agent Probe 0043","downloadCount":0,"files":{"download":"https://open-vsx.org/api/probe-ns/agent-probe-0043/0.0.1/file/probe-ns.agent-probe-0043-0.0.1.vsix"},"name":"agent-probe-0043","namespace":"probe-ns","timestamp":"2026-10-14T12:20:00Z","url":"https://open-vsx.org/api/probe-ns/agent-probe-0043","verified":true,"version":"0.0.1"},
+ {"deprecated":false,"description":"Dependency update helper.","displayName":"Updater","name":"updater","namespace":"renovate-bot","timestamp":"2026-10-14T12:10:00Z","verified":false,"version":"3.0.0"},
+ {"deprecated":false,"description":"A theme.","displayName":"Old theme","name":"old-theme","namespace":"someone","timestamp":"2026-10-14T11:50:00Z","verified":true,"version":"1.2.0"}
+],"offset":0,"totalSize":4}

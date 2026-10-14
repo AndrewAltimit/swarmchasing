@@ -15,6 +15,8 @@
 //! verdict rests on. A fetch that does not parse leaves the previous copy in
 //! place. The files stay in the data directory and are never committed.
 
+pub mod reference;
+
 use crate::Client;
 use crate::client::Opts;
 use anyhow::{Context, Result, bail};

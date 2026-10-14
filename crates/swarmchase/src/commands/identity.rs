@@ -2,7 +2,8 @@
 //! `refresh` fetches the providers' published range files and key
 //! directories named in `declared-agents.toml` into `<data>/identity/`;
 //! `status` lists what is held; `check` classes each record of a log or
-//! export. Once fetched, the analysis commands (`report`, `clusters`,
+//! export; `reference` lists user-agent tokens the ai.robots.txt list names
+//! that the catalog lacks, as candidates for review. Once fetched, the analysis commands (`report`, `clusters`,
 //! `analyze`) add each cluster's identity line.
 
 use crate::input::{InputArgs, read_inputs};
@@ -37,6 +38,15 @@ enum IdentityCmd {
     Refresh,
     /// The catalog and what is held, with fetch dates.
     Status,
+    /// Fetch the ai.robots.txt list into <data>/identity/reference/ and
+    /// print the user-agent tokens it lists that the catalog lacks, as
+    /// candidates for review. Proposes only: the catalog is never edited,
+    /// and each entry added by hand cites the provider's own page.
+    Reference {
+        /// Read the held copy instead of fetching it again.
+        #[arg(long)]
+        offline: bool,
+    },
     /// Class each record's declared identity: verified, spoofed, claimed.
     Check {
         #[command(flatten)]
@@ -72,6 +82,7 @@ pub fn run(a: IdentityArgs) -> Result<()> {
             }
         }
         IdentityCmd::Status => status(&a.data, &catalog),
+        IdentityCmd::Reference { offline } => reference(&a.data, &catalog, offline)?,
         IdentityCmd::Check { input, all, json } => {
             let (data, _) = load(&a.data, &catalog);
             let records = read_inputs(&input)?;
@@ -114,6 +125,37 @@ pub fn run(a: IdentityArgs) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+/// `identity reference`: the listed tokens the catalog has no agent for.
+fn reference(data: &Path, catalog: &Catalog, offline: bool) -> Result<()> {
+    use sc_collect::identity::reference;
+    if !offline {
+        let client = Client::new(Duration::from_secs(1))?;
+        let (p, n) = reference::fetch(&client, data)?;
+        eprintln!("wrote {} ({n} tokens)", p.display());
+    }
+    let Some(bots) = reference::load(data)? else {
+        anyhow::bail!(
+            "no reference list at {}; run `swarmchase identity reference` without --offline",
+            reference::path(data).display()
+        );
+    };
+    let c = reference::candidates(&bots, catalog);
+    for b in &c {
+        println!(
+            "{}\t{}\t{}",
+            defang(&b.token),
+            defang(&b.operator),
+            defang(&b.function)
+        );
+    }
+    eprintln!(
+        "{} of {} listed token(s) are not in declared-agents.toml: candidates for review, not entries. An entry needs the provider's own page as its `source`.",
+        c.len(),
+        bots.len()
+    );
     Ok(())
 }
 

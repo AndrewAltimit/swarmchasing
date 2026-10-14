@@ -1,6 +1,7 @@
 //! Coordinated-account swarms on public platforms (GitHub, npm, PyPI,
 //! Hugging Face, Go modules, Wikimedia wikis, Hacker News, NuGet,
-//! Packagist, RubyGems, crates.io, CVE records, Bluesky): many accounts acting
+//! Packagist, RubyGems, crates.io, CVE records, Bluesky, ClawHub skills,
+//! Open VSX extensions): many accounts acting
 //! alike, found in public event archives, event streams and registry
 //! metadata.
 //!
@@ -79,6 +80,10 @@ pub enum Platform {
     Gitlab,
     /// Codeberg repositories.
     Codeberg,
+    /// ClawHub, the OpenClaw skills registry.
+    ClawHub,
+    /// Open VSX editor extensions.
+    OpenVsx,
 }
 
 impl Platform {
@@ -99,6 +104,8 @@ impl Platform {
             Self::Bluesky => "bluesky",
             Self::Gitlab => "gitlab",
             Self::Codeberg => "codeberg",
+            Self::ClawHub => "clawhub",
+            Self::OpenVsx => "openvsx",
         }
     }
 }
@@ -189,7 +196,8 @@ pub struct PlatformEvent {
     /// `go:<module>@<version>`, `hn:<item>`, `nuget:<id>@<version>`,
     /// `packagist:<name>@<time>`, `gem:<name>@<version>`,
     /// `crate:<name>@<version>`, `ghsa:<id>`, `cve:<id>`,
-    /// `bsky:<account hash>/<rkey>`, `gitlab:<project id>`, `codeberg:<repo id>`.
+    /// `bsky:<account hash>/<rkey>`, `gitlab:<project id>`, `codeberg:<repo id>`,
+    /// `clawhub:<owner>/<slug>@<version>`, `openvsx:<namespace>.<name>@<version>`.
     pub id: String,
     pub platform: Platform,
     pub action: Action,

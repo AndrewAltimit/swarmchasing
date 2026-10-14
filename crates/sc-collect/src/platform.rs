@@ -2,7 +2,8 @@
 //! (`sc_core::platform`): GitHub events from GH Archive, npm search results,
 //! PyPI's feeds, the Hugging Face Hub's newest Spaces, models and datasets,
 //! Wikimedia's revision stream ([`crate::wikimedia`]), and the other
-//! sources' modules ([`crate::registries`], [`crate::forges`]). Metadata and
+//! sources' modules ([`crate::registries`], [`crate::forges`],
+//! [`crate::clawhub`], [`crate::openvsx`]). Metadata and
 
 //! event text only: repositories, packages, Spaces, wiki pages and every
 //! URL inside the text are never fetched.
@@ -72,6 +73,8 @@ pub const PLATFORM_KINDS: &[&str] = &[
     "bluesky",
     "gitlab",
     "codeberg",
+    "clawhub",
+    "openvsx",
 ];
 
 /// A platform source in the watchlist (`[[platform.source]]`).
@@ -204,6 +207,8 @@ pub fn pull_platform(
         }
         "wikimedia" => crate::wikimedia::pull_platform(client, &src.query, mark, rules, max),
         "golang" => pull_golang(client, &src.query, mark, max),
+        "clawhub" => crate::clawhub::pull_platform(client, &src.query, mark, rules, max),
+        "openvsx" => crate::openvsx::pull_platform(client, &src.query, mark, rules, max),
         "cve" => crate::cve::pull_platform(client, &src.query, mark, rules, max),
         "osv" => crate::osv::pull_labels(client, &src.query, mark),
         "bluesky" => crate::bluesky::pull_platform(
@@ -955,6 +960,50 @@ mod tests {
         assert_eq!(
             last,
             crate::parse_date("2026-10-10T10:00:02Z").map(|t| t * 1000)
+        );
+    }
+
+    /// The Hub's model and dataset listings, in the shapes they are served:
+    /// a model's page is at the root, a dataset's under `datasets/`.
+    #[test]
+    fn hub_model_and_dataset_listings() {
+        let fixture = |name: &str| {
+            let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/huggingface")
+                .join(name);
+            std::fs::read_to_string(&p).unwrap()
+        };
+        let (v, n) = hf_events(&fixture("models.json"), "models").unwrap();
+        assert_eq!((v.len(), n), (3, 4), "an item with no `id` is skipped");
+        let p = feed_pull(v, n, "items");
+        assert_eq!((p.events.len(), p.automation), (2, 1));
+        let m = &p.events[0];
+        assert_eq!(m.id, "hf:models:probe-owner/agent-probe-0042");
+        assert_eq!(m.action, Action::ModelCreated);
+        assert_eq!(
+            m.link,
+            "https://huggingface.co/probe-owner/agent-probe-0042"
+        );
+        assert_eq!(m.name_template.as_deref(), Some("agent-probe-<num>"));
+        assert_eq!(m.ts, crate::parse_date("2026-10-14T12:43:46.000Z").unwrap());
+        assert_eq!(m.actor, p.events[1].actor);
+
+        let (v, n) = hf_events(&fixture("datasets.json"), "datasets").unwrap();
+        assert_eq!((v.len(), n), (2, 2));
+        let d = &v[0];
+        assert_eq!(d.id, "hf:datasets:probe-owner/reach-set-0007");
+        assert_eq!(d.action, Action::DatasetCreated);
+        assert_eq!(
+            d.link,
+            "https://huggingface.co/datasets/probe-owner/reach-set-0007"
+        );
+        assert_eq!(d.name_template.as_deref(), Some("reach-set-<num>"));
+        assert_eq!(d.actor, m.actor, "one owner across listings, one hash");
+        let json = serde_json::to_string(d).unwrap();
+        assert!(!json.contains("\"actor\":\"probe-owner"), "{json}");
+        assert!(
+            !json.contains("reach test"),
+            "descriptions are not kept: {json}"
         );
     }
 }

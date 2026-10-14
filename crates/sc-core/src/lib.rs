@@ -31,6 +31,7 @@ pub mod identity;
 pub mod ingest;
 pub mod knowledge;
 pub mod model;
+pub mod netranges;
 pub mod notice;
 pub mod paths;
 pub mod plant;
