@@ -104,7 +104,9 @@
         "co_target": { "$ref": "#/$defs/ratio" },
         "ordered_co_target": { "$ref": "#/$defs/ratio" },
         "scaffold_lineage": { "$ref": "#/$defs/ratio" },
-        "prompt_echo": { "$ref": "#/$defs/ratio" }
+        "prompt_echo": { "$ref": "#/$defs/ratio" },
+        "co_group": { "$ref": "#/$defs/ratio" },
+        "generator": { "$ref": "#/$defs/ratio" }
       }
     },
     "scaffold": {
@@ -156,6 +158,32 @@
         "max_chance": { "$ref": "#/$defs/share" },
         "fdr": { "$ref": "#/$defs/share" },
         "common_templates": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "biclique": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "window_secs": { "$ref": "#/$defs/secs" },
+        "min_clusters": { "$ref": "#/$defs/count" },
+        "min_features": { "$ref": "#/$defs/count" },
+        "max_holders": { "$ref": "#/$defs/count" },
+        "swaps": { "$ref": "#/$defs/count" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_skew_secs": { "$ref": "#/$defs/secs" },
+        "min_skew_secs": { "$ref": "#/$defs/secs" },
+        "skew_tolerance_secs": { "$ref": "#/$defs/secs" },
+        "counter_max_gap": { "$ref": "#/$defs/count" },
+        "max_holders": { "$ref": "#/$defs/count" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" }
       }
     },
     "swarm": {

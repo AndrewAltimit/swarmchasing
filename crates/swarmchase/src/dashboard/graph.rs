@@ -95,7 +95,7 @@ pub fn graph(a: &Analysis, q: Option<&Queue>) -> Value {
         p.soft.push(json!({
             "kind": l.kind,
             "label": l.kind.label(),
-            "family": l.kind.family().label(),
+            "family": l.family().label(),
             "strength": round2(l.strength),
             "lr": round2(l.lr),
             "detail": defang_text(&l.detail),

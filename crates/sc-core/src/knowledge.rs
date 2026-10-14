@@ -114,6 +114,12 @@ fn ua(r: &ObsResult) -> Option<&str> {
     })
 }
 
+/// Whether record `r` hits any entry of `set`.
+pub(crate) fn hits_any(r: &ObsResult, set: &KnownSet) -> bool {
+    !set.matches(crate::analyze::target_text(r), ua(r))
+        .is_empty()
+}
+
 /// Benchmark entries the members hit: id → records.
 pub(crate) fn benchmarks(
     results: &[ObsResult],
@@ -131,7 +137,7 @@ pub(crate) fn benchmarks(
 }
 
 /// The registrable-looking part of a host: its last two labels.
-fn family(host: &str) -> &str {
+pub(crate) fn family(host: &str) -> &str {
     let mut dots = host.rmatch_indices('.');
     dots.next();
     match dots.next() {

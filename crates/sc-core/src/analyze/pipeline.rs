@@ -212,6 +212,33 @@ pub(super) const PASSES: &[Pass] = &[
         cx.a.prompt_echo_pairs = pairs;
         cx.a.multiplicity.push(family);
     }),
+    // Reads members' layers and parameters, and outside records' URLs.
+    pass("co_group", &["number", "trim_layers"], |cx| {
+        let s = &cx.rules.set;
+        let (groups, family) = crate::biclique::co_groups(
+            &cx.a.clusters,
+            &cx.a.results,
+            &cx.rules.benchmarks,
+            s.scaffold.min_specificity,
+            &s.prompt_echo,
+            &s.biclique,
+        );
+        cx.a.co_groups = groups;
+        if family.tested > 0 {
+            cx.a.multiplicity.push(family);
+        }
+    }),
+    pass("generator", &["number"], |cx| {
+        let (pairs, family) = crate::generator::generator_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            &cx.rules.set.generator,
+        );
+        cx.a.generator_pairs = pairs;
+        if family.tested > 0 {
+            cx.a.multiplicity.push(family);
+        }
+    }),
     pass(
         "fleets",
         &[
@@ -224,6 +251,8 @@ pub(super) const PASSES: &[Pass] = &[
             "co_target",
             "scaffold_lineage",
             "prompt_echo",
+            "co_group",
+            "generator",
         ],
         fleets,
     ),
@@ -465,6 +494,8 @@ fn fleets(cx: &mut AnalysisCtx) {
             ordered_cotarget_pairs: &a.ordered_cotarget_pairs,
             lineage_pairs: &a.lineage_pairs,
             prompt_echo_pairs: &a.prompt_echo_pairs,
+            co_groups: &a.co_groups,
+            generator_pairs: &a.generator_pairs,
         },
         opts,
     );

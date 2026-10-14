@@ -156,6 +156,7 @@ mod tests {
             strength: 0.5,
             lr: 2.0,
             detail: String::new(),
+            family: None,
         }
     }
 

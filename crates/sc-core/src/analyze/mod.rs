@@ -277,11 +277,22 @@ pub struct Analysis {
     /// beyond chance: a link to check, never a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prompt_echo_pairs: Vec<crate::prose::PromptEchoPair>,
+    /// Groups of three or more clusters all holding several features few
+    /// others hold (rare host families in the same hours, request or prose
+    /// templates), beyond a degree-preserving null: a link to check, never a
+    /// merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub co_groups: Vec<crate::biclique::CoGroup>,
+    /// Pairs of clusters whose generated identifiers decode to one
+    /// generator (a UUID node id, a Snowflake worker, a clock skew, a
+    /// counter), beyond chance: a link to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub generator_pairs: Vec<crate::generator::GeneratorPair>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
     /// lengths, header sets, escalations, common features, captured
     /// secrets, scaffolds, scaffold lineage, prompt echoes, co-activity,
-    /// co-targets, ordered co-targets), strongest first. They never merge clusters or change a score.
+    /// co-targets, ordered co-targets, co-groups, generators), strongest first. They never merge clusters or change a score.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub soft_links: Vec<crate::fleets::SoftLink>,
     /// Clusters whose combined soft links are strong: proposals for the

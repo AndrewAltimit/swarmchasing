@@ -357,6 +357,7 @@ fn soft(a: &str, b: &str, kind: sc_core::SoftLinkKind, lr: f64) -> sc_core::Soft
         strength: sc_core::fleets::strength_of(lr),
         lr,
         detail: String::new(),
+        family: None,
     }
 }
 

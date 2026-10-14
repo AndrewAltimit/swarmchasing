@@ -75,8 +75,10 @@ Soft links are leads for a reviewer, listed with the evidence for each:
 | Ordered co-target | One ordered target list worked by several agents at once, each at its own pace ([FM-5.19](#fm-519-ordered-co-targets)). | A public ranked or sorted list gives every reader one order. |
 | Scaffold lineage | One harness changed mid-fleet: templates one part apart ([FM-5.20](#fm-520-scaffold-lineage)). | A framework release changes every user's template the same way. |
 | Prompt echo | Queries written from one prompt, each naming its own target ([FM-5.21](#fm-521-prompt-echo)). | Published query and dork lists give unrelated users one wording. |
+| Co-group | Three or more clusters on the same rare sites or templates, past the pairwise caps ([FM-5.22](#fm-522-co-groups)). | A story naming several sites, or a framework's default templates, reaches many operators at once. |
+| Identifier generator | One machine, clock or counter behind fresh run tags ([FM-5.23](#fm-523-identifier-generators)). | Cloned images and published tag schemes give unrelated operators one generator. |
 
-A soft link or edge with a chance model is one test of many: an analysis of `n` clusters compares up to `n(n-1)/2` pairs, and a 1% chance per pair gives one false pair in every hundred compared. Each such family of tests (shared pauses, scaffolds, scaffold lineage, prompt echoes, co-activity, ordered co-targets, each interaction signal, platform candidates) **must** count the pairs it tested, keep only pairs that survive a false-discovery-rate cut over all of them, and state how many pairs that unlikely chance alone would give among them, so a reviewer reads a kept pair against its family's budget.
+A soft link or edge with a chance model is one test of many: an analysis of `n` clusters compares up to `n(n-1)/2` pairs, and a 1% chance per pair gives one false pair in every hundred compared. Each such family of tests (shared pauses, scaffolds, scaffold lineage, prompt echoes, co-activity, ordered co-targets, co-groups, identifier generators, each interaction signal, platform candidates) **must** count the pairs it tested, keep only pairs that survive a false-discovery-rate cut over all of them, and state how many pairs that unlikely chance alone would give among them, so a reviewer reads a kept pair against its family's budget.
 
 ## FM-5.8 Candidate fleets, merge and split
 
@@ -90,7 +92,7 @@ Merges and splits are reversible and both are logged. A fleet grows, merges with
 
 Soft links are weighed before they are grouped ([FM-5.17](#fm-517-weighing-soft-links)). A candidate fleet **should** be a group whose clusters are tied to each other, not a chain: when one cluster is tied to two groups that share no tie, the two groups are two proposals, and the cluster joins at most one of them. A proposal states how dense it is and its weakest cut, the ties whose loss would split it, so the reviewer sees where it is thin.
 
-Toolkit: the analysis lists soft links between clusters with a kind and a likelihood ratio (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services, shared scaffolds, scaffold lineage, prompt echoes, co-activity, co-targets, ordered co-targets), and groups strongly soft-linked clusters into candidate fleets by community detection, each with its density and weakest cut, shown in internal reports ([methodology](../methodology.md#descriptive-hints)). Candidate fleets never merge clusters or change a tier.
+Toolkit: the analysis lists soft links between clusters with a kind and a likelihood ratio (shared pauses, dialect pairs, reruns, path sets, encodings, fan-out width, cut lengths, header sets, escalations, common features, captured secrets, relay stacks, callback services, shared scaffolds, scaffold lineage, prompt echoes, co-activity, co-targets, ordered co-targets, co-groups, identifier generators), and groups strongly soft-linked clusters into candidate fleets by community detection, each with its density and weakest cut, shown in internal reports ([methodology](../methodology.md#descriptive-hints)). Candidate fleets never merge clusters or change a tier.
 
 The admin records a merge or split with `case fleet merge` / `case fleet split`, which logs the soft links behind it in the case's decision log; reports and exports then treat the merged clusters as one fleet.
 
@@ -218,7 +220,7 @@ A co-target is a soft link and **must not** merge clusters: two operators can be
 Each kind of soft link is weighed as a likelihood ratio: how much likelier it is between two clusters of one operator than between unrelated ones. Two rules keep weak ties from adding up to a false proposal:
 
 - **Rarity.** A value many clusters share says less than one two clusters share, and its weight falls with the share of clusters holding it.
-- **Dependence.** Kinds that read one habit are not independent evidence. Encoding, header set, relay stack, scaffold, scaffold lineage, prompt echo, payload dialect, cut length and fan-out all describe one harness; shared pauses and co-activity one timeline; reruns, path sets, recon openings, co-targets, ordered co-targets and escalations one target list; captured secrets, common features and callback services what an operator holds. A pair **should** count only its strongest tie within each such family, and combine across families.
+- **Dependence.** Kinds that read one habit are not independent evidence. Encoding, header set, relay stack, scaffold, scaffold lineage, prompt echo, payload dialect, cut length, fan-out and co-groups on templates all describe one harness; shared pauses and co-activity one timeline; reruns, path sets, recon openings, co-targets, ordered co-targets, escalations and co-groups on sites one target list; captured secrets, common features, callback services and identifier generators what an operator holds. A pair **should** count only its strongest tie within each such family, and combine across families.
 
 The ratios **should** come from measurement: labelled fleets where they exist, and a simulator with ground truth otherwise, with a conservative bound taken rather than the point value. A kind with no measured evidence is off or weighed by stated judgment. Toolkit: `swarmchase sim calibrate` prints each kind's ratio from the simulator; the rules file says which ratios come from it ([methodology](../methodology.md#descriptive-hints)).
 
@@ -263,3 +265,25 @@ Agents given one prompt write their search and form text from one template, each
 - **Chance.** The base rate of the template among the clusters writing prose at all, read as the chance that an unrelated cluster meets one side in as many of its templates as the other does (templates carried by overlapping sets of clusters counting once), and a false-discovery-rate cut over the pairs compared. A prompt copied by a few unrelated operators **cannot** be told from one operator's by its wording alone.
 
 A prompt echo is a soft link in the harness family and **must not** merge clusters. The evidence quotes only the slotted template: the target's name **must** be a slot in each form prose writes it (its labels, the parts of a hyphenated label and those parts joined, and their possessives). Toolkit: `prompt_echo_pairs` in the analysis and the `prompt_echo` soft link, with the settings in `[prompt_echo]` ([methodology](../methodology.md#descriptive-hints)).
+
+## FM-5.22 Co-groups
+
+A fleet larger than a few clusters escapes every pairwise target and harness test: a host or template held by more than a few senders is treated as popular, since a news story sends many unrelated agents to one site and a framework gives many operators one request shape. A **co-group** is three or more clusters all holding several features few others hold, beyond what the clusters' and features' own counts explain.
+
+- **Features.** A rare site (its registrable domain) in one stretch of hours, a specific request template, a prose template. The hosts of one site **must** count as one feature: a story names one site, a list names many. A feature whose records always carry another, and prose templates carried by exactly the same clusters, **must** count once. Listed benchmark and practice targets **must not** count.
+- **Group.** Clusters all holding the same features, and only those clusters: a closed biclique of the cluster-by-feature matrix, with a minimum of clusters and of features.
+- **Null.** The matrix randomised with each cluster's number of features and each feature's number of holders kept (swap randomisation), a site moving only to a cluster active in its hours. A group's chance is the share of randomised matrices whose strongest group is as strong, which accounts for every group the analysis could have found. Groups are kept under a false-discovery-rate cut over the groups found.
+
+A co-group ties each pair of its clusters with a soft link, in the targets family for sites and the harness family for templates, and **must not** merge clusters. A large fleet on one site reads as a news spike; a story naming several sites, or a framework with several default templates, can read as a group. Toolkit: `co_groups` in the analysis and the `co_group` soft link, with the settings in `[biclique]` ([methodology](../methodology.md#descriptive-hints)).
+
+## FM-5.23 Identifier generators
+
+A fleet that gives each agent a fresh run tag defeats linking on the tag ([FM-5.2](#fm-52-shared-link-features)). How the tags were generated often survives: a time-based UUID carries its host's node id, a Snowflake id its worker, a time-ordered id (UUIDv7, ULID, KSUID) its generator's clock, and a counter its next number. An **identifier generator** link is two clusters whose generated identifiers decode to one generator.
+
+- **Node ids.** A UUIDv1 or v6 node id in both. A random node id (multicast bit set) **must not** count. A node id carried by many senders (cloned images, shared builders) **must not** tie, nor one seen only in one site's own URLs.
+- **Workers.** A Snowflake datacenter and worker, read only where the id's time falls near the record's.
+- **Clock skew.** The embedded time minus the time the identifier was first sent, stable over a cluster's identifiers, clear of an ordinary clock and of whole quarter hours (time-zone errors), and shared within seconds.
+- **Counters.** One stem, with numbers within a few of each other across the two clusters.
+- **Chance.** Each key's chance between unrelated generators, the pair's smallest corrected for the keys it shares, and a false-discovery-rate cut over the pairs compared.
+
+A node id is a device identifier: it **must not** be stored or shown, only a truncated hash too short to recover it. An identifier generator link is a soft link in the identifiers family and **must not** merge clusters: a shared builder image or a published tag scheme gives unrelated operators one generator. Toolkit: `generator_pairs` in the analysis and the `generator` soft link, with the settings in `[generator]` ([methodology](../methodology.md#descriptive-hints)).

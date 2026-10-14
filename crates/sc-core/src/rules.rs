@@ -210,6 +210,10 @@ pub struct RuleSet {
     #[serde(default)]
     pub prompt_echo: crate::prose::PromptEchoOptions,
     #[serde(default)]
+    pub biclique: crate::biclique::BicliqueOptions,
+    #[serde(default)]
+    pub generator: crate::generator::GeneratorOptions,
+    #[serde(default)]
     pub swarm: crate::swarm::SwarmOptions,
     #[serde(default)]
     pub agentness: crate::agentness::AgentnessOptions,

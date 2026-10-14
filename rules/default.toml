@@ -223,6 +223,15 @@ scaffold_lineage = 20.0
 # prose parameter values from one template, beyond the prompt echo chance
 # model, measured on one crowded scenario of synthetic prose.
 prompt_echo = 20.0
+# Simulation (fleet-large), held at the scaffold's ratio and the fleet
+# threshold, far below its bound: three or more clusters all holding several
+# rarely held features beyond the co-group null. Counted in the targets family
+# for host families and the harness family for templates.
+co_group = 20.0
+# Simulation (fleet-randomtags), held at the scaffold's ratio, far below its
+# bound: generated identifiers decoding to one node id, Snowflake worker, clock
+# skew or counter beyond the generator chance model.
+generator = 20.0
 
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least
@@ -311,6 +320,55 @@ max_holders = 5
 max_chance = 0.01
 fdr = 0.05
 common_templates = []
+
+# Co-group: clusters above noise hold features of two families. Targets: a
+# host family (its last two labels) in one episode of activity, touches by
+# clusters above noise at most `window_secs` apart, request and submit times
+# only; families with a record on a listed benchmark are left out. Harness: a
+# specific request template (`scaffold.min_specificity`), and a slotted prose
+# template (`prompt_echo.min_words`, `prompt_echo.common_templates` left out),
+# prose templates carried by the same clusters counting once. A feature carried
+# by more than `max_holders` senders (clusters, and records outside them) ties
+# none. A group is at least `min_clusters` clusters all holding at least
+# `min_features` features, closed; its score sums each feature's -ln chance
+# that a holder set of its size, among the clusters that could hold it (active
+# in its hours, for a host family), contains the whole group. The null draws
+# `swaps` matrices by degree-preserving swap randomisation (host features only
+# to clusters active in their hours); a group's chance is (ge + 1) / (swaps +
+# 1) for ge the matrices whose strongest group scores as high. Kept at
+# `max_chance`, then cut at false discovery rate `fdr` over the groups found.
+[biclique]
+window_secs = 21600
+min_clusters = 3
+min_features = 4
+max_holders = 30
+swaps = 199
+max_chance = 0.01
+fdr = 0.05
+
+# Identifier generators: strong-parameter values and UUID-shaped parameter
+# values decoded. UUIDv1/v6 give a node id (multicast nodes left out) and a
+# time; UUIDv7, ULID and KSUID a time; a Snowflake decimal its datacenter and
+# worker when its time, under the Twitter or Discord epoch, is within
+# `max_skew_secs` of the record (as must a ULID's or KSUID's); a
+# strong-parameter value ending in three or more digits, at least 100, a counter
+# stem and number. Pairs share a node id (chance 2^-47), a worker (2^-10), a
+# clock skew stable over a cluster's values within `skew_tolerance_secs`, at
+# least `min_skew_secs` and clear of whole quarter hours (chance of two skews
+# spread evenly over the widest seen meeting that closely), or a counter stem
+# with numbers within `counter_max_gap` (chance of numbers of that many digits
+# meeting that closely). A key carried by more than `max_holders` senders ties
+# none, and a node id seen only in one site's URLs outside a strong parameter
+# is the site's. Kept at `max_chance`, cut at `fdr`. Node ids are shown only as
+# a truncated hash.
+[generator]
+max_skew_secs = 172800
+min_skew_secs = 60
+skew_tolerance_secs = 2
+counter_max_gap = 3
+max_holders = 10
+max_chance = 0.01
+fdr = 0.05
 
 # Interaction edges (SC-T9). S3 synchronized start: two runs of different
 # clients whose requests, unflagged ones of the same client included, line up

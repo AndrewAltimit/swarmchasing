@@ -11,6 +11,7 @@ Every source the manual cites, grouped by use. Where a standard is paywalled, th
 | Office of the Director of National Intelligence, *Intelligence Community Directive 203: Analytic Standards*, signed 2 January 2015, as amended. <https://archive.dni.gov/files/documents/ICD/ICD-203.pdf> | The likelihood table, the rule against combining confidence and likelihood in one sentence, and separating information from judgment ([chapter 8](08-confidence.md), [FM-7.6](07-attribution.md#fm-76-claim-tags), [FM-9.12](09-evaluation.md#fm-912-calibrated-public-language)). |
 | S. Bradner, *Key words for use in RFCs to Indicate Requirement Levels*, RFC 2119, 1997. <https://www.rfc-editor.org/rfc/rfc2119> | Requirement words ([index](README.md#requirement-words)). |
 | B. Leiba, *Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words*, RFC 8174, 2017. <https://www.rfc-editor.org/rfc/rfc8174> | Requirement words. |
+| K. Davis, B. Peabody, P. Leach, *Universally Unique IDentifiers (UUIDs)*, RFC 9562, 2024. <https://www.rfc-editor.org/rfc/rfc9562> | UUID versions, node ids and the multicast bit ([FM-5.23](05-linking.md#fm-523-identifier-generators)). |
 | Regulation (EU) 2024/1689 (the AI Act), Article 73, *Reporting of serious incidents*. <https://eur-lex.europa.eu/eli/reg/2024/1689/oj> | Providers' reporting deadlines ([FM-12.5](12-interoperability.md#fm-125-regulatory-incident-reports)). |
 
 ## Disclosure
@@ -84,6 +85,8 @@ Every source the manual cites, grouped by use. Where a standard is paywalled, th
 | E. Amigó, J. Gonzalo, J. Artiles, F. Verdejo, "A comparison of extrinsic clustering evaluation metrics based on formal constraints", *Information Retrieval* 12(4), 2009, 461–486. <https://doi.org/10.1007/s10791-008-9066-8> | Why B-cubed suits cluster evaluation ([FM-9.6](09-evaluation.md#fm-96-cluster-metrics)). |
 | J. Cohen, "A coefficient of agreement for nominal scales", *Educational and Psychological Measurement* 20(1), 1960, 37–46. <https://doi.org/10.1177/001316446002000104> | Cohen's κ ([FM-9.8](09-evaluation.md#fm-98-inter-rater-agreement)). |
 | J. L. Fleiss, "Measuring nominal scale agreement among many raters", *Psychological Bulletin* 76(5), 1971, 378–382. <https://doi.org/10.1037/h0031619> | Fleiss' κ ([FM-9.8](09-evaluation.md#fm-98-inter-rater-agreement)). |
+| A. Gionis, H. Mannila, T. Mielikäinen, P. Tsaparas, "Assessing data mining results via swap randomization", *ACM Transactions on Knowledge Discovery from Data* 1(3), 2007, article 14. <https://doi.org/10.1145/1297332.1297338> | Swap randomisation with margins kept ([FM-5.22](05-linking.md#fm-522-co-groups)). |
+| J. Besag, P. Clifford, "Generalized Monte Carlo significance tests", *Biometrika* 76(4), 1989, 633–642. <https://doi.org/10.1093/biomet/76.4.633> | Exact Monte Carlo chances from a Markov chain ([FM-5.22](05-linking.md#fm-522-co-groups)). |
 | J. A. Hanley, A. Lippman-Hand, "If nothing goes wrong, is everything all right? Interpreting zero numerators", *JAMA* 249(13), 1983, 1743–1745. <https://doi.org/10.1001/jama.1983.03330370053031> | The rule of three for a zero count ([FM-9.5](09-evaluation.md#fm-95-detection-metrics)). |
 
 ## Interoperability

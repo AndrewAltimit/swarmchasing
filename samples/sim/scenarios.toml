@@ -751,3 +751,125 @@ agents = 150
 retry = 0.2
 palette_share = 0.05
 prose = "own"
+
+# A fleet too large for any pairwise target or harness test, in a crowd: one
+# operator's eight agents on one list of eight sites, each 15 to 20 minutes
+# after the last in its own order, and another operator's eight agents on one
+# harness a day apart, beside 250 unrelated agents. Every site and template
+# has eight holders, past the pairwise caps; the co-group test reads the
+# holder set repeated across features.
+[[scenario]]
+name = "fleet-large"
+seed = 371
+seeds = 4
+span_hours = 240
+expect.co_group = { min_precision = 1.0, min_recall = 0.96 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 0.96 }
+[[scenario.actor]]
+kind = "target_list"
+agents = 8
+records = 10
+hosts = 8
+own_families = true
+offset_hours = 30
+palette_share = 0.3
+[[scenario.actor]]
+kind = "fleet"
+agents = 8
+records = 12
+[[scenario.actor]]
+kind = "agent"
+agents = 250
+retry = 0.2
+palette_share = 0.1
+
+# The co-group test's hard negative: news sends thirty unrelated agents to
+# one site's hosts within a few hours. Many senders on one site are one
+# feature.
+[[scenario]]
+name = "news-spike-large"
+seed = 381
+seeds = 4
+expect.co_group = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "news_spike"
+agents = 30
+records = 6
+hosts = 4
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Another hard negative: unrelated operators on one agent framework, its
+# templates and step counter shared and one parameter each their own, in a
+# crowd of a hundred agents.
+[[scenario]]
+name = "framework-crowd"
+seed = 391
+seeds = 4
+span_hours = 240
+expect.co_group = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "framework"
+agents = 11
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 100
+retry = 0.2
+palette_share = 0.1
+
+# Three fleets of one harness each giving every agent a fresh run tag: one
+# machine's UUIDv1s (one node id), one skewed clock's ULIDs, one counter's
+# successive numbers; beside unrelated agents tagging the same ways on their
+# own machines, clocks and counters, and agents with random tags.
+[[scenario]]
+name = "fleet-randomtags"
+seed = 401
+seeds = 4
+span_hours = 240
+expect.generator = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+tag_style = "uuid_v1"
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+tag_style = "ulid"
+offset_hours = 4
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+tag_style = "counter"
+offset_hours = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+palette_share = 0.3
+tag_style = "uuid_v1"
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+palette_share = 0.3
+tag_style = "ulid"
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+palette_share = 0.3
+tag_style = "counter"
+[[scenario.actor]]
+kind = "agent"
+agents = 20
+retry = 0.2
+palette_share = 0.3

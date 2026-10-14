@@ -25,6 +25,7 @@ Each term links to the section that defines it.
 | Confidence level | High, moderate or low: the basis for a judgment. | [FM-8.2](08-confidence.md#fm-82-confidence-levels) |
 | Context cap | Context kinds alone never reach the suggestive threshold. | [FM-4.11](04-indicators.md#fm-411-independence-groups-and-the-context-cap) |
 | Context kind | A rule kind ordinary clients produce: relay, cache buster, self-identification, header, outcome. | [FM-4.11](04-indicators.md#fm-411-independence-groups-and-the-context-cap), [FM-5.3](05-linking.md#fm-53-close-timing-on-the-same-target) |
+| Co-group | Three or more clusters all holding several rarely held sites or templates beyond a degree-preserving null; a soft link. | [FM-5.22](05-linking.md#fm-522-co-groups) |
 | Co-target | Two clusters on the same rare targets in the same hours beyond chance; a soft link. | [FM-5.16](05-linking.md#fm-516-co-targets) |
 | Corroboration | One kind of source, several, or confirmed in operator logs. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Declared testing | Request text announcing a test; checked, never believed. | [FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing), [FM-10.6](10-disclosure.md#fm-106-authorised-testing) |
@@ -34,6 +35,7 @@ Each term links to the section that defines it.
 | Fleet | Clusters merged on evidence as one operator's agents. | [FM-1.3](01-scope.md#fm-13-groupings) |
 | Fleet key | `FK-` and 8 hex digits: a candidate fleet followed across watch runs. | [FM-5.18](05-linking.md#fm-518-fleets-across-windows) |
 | Hard link | A link that joins records into a cluster. | [FM-5.1](05-linking.md#fm-51-hard-and-soft-links) |
+| Identifier generator | Two clusters whose fresh tags decode to one node id, worker, clock skew or counter; a soft link. | [FM-5.23](05-linking.md#fm-523-identifier-generators) |
 | Incident | Confirmed agent activity that harms or risks an operator. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
 | Independence group | Rules reading the same artifact, counted once per record. | [FM-4.11](04-indicators.md#fm-411-independence-groups-and-the-context-cap) |
 | Indicator | A rule that matches a feature of a record. | [FM-1.2](01-scope.md#fm-12-units-of-observation), [FM-4.2](04-indicators.md#fm-42-rule-anatomy) |
