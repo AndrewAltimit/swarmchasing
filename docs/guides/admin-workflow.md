@@ -13,13 +13,14 @@ source scripts/with-env.sh
 The scheduled watch runs every 6 hours on the runner and emails the digest when something changed, or an alert when the run failed ([runner](../reference/runner.md)). To run one by hand:
 
 ```sh
-swarmchase watch                      # watchlist.toml, $SWARMCHASE_DATA (or data/)
+swarmchase watch                      # watchlist.toml, -d, else $SWARMCHASE_DATA, else data/
 swarmchase watch --init               # once, to start a new data directory
 ```
 
 Read it top down:
 
-- **Health.** A starved or failing source, or a rule whose hit rate jumped. Fix the source or the key before trusting the rest.
+- **Digests not mailed.** Leads from earlier runs whose digest never reached you, folded in here. Check the mail setup if it recurs.
+- **Health.** A starved or failing source, or a rule whose hit rate jumped. Fix the source or the key before trusting the rest. A failure that goes on is mailed again on its 2nd, 4th and 8th run, not every run; the sources table shows it each time.
 - **New clusters, tier changes, first-time endpoints.** The leads.
 - **Possible reruns and archive bursts.** Leads to check, never merged automatically.
 - **Case status.** Proposals for existing cases; see [step 9](#9-keep-the-notice-current).
@@ -40,7 +41,7 @@ Details: [the dashboard](../reference/watch.md#the-dashboard).
 swarmchase review --unflagged 20
 ```
 
-Label each lead agent, benign or unsure, strongest cluster first. The unflagged sample keeps the benign baseline honest. Labels feed the evaluation ([evaluation](../reference/evaluation.md#reviewed-records)). Press `c` on a lead worth pursuing to open a case from its cluster, or `c <case-id>` to add it to an open one.
+Label each lead agent, benign or unsure, strongest cluster first. The unflagged sample keeps the benign baseline honest. Labels feed the evaluation ([evaluation](../reference/evaluation.md#reviewed-records)). Press `c` on a lead worth pursuing to open a case from its cluster, or `c <case-id>` to add it to an open one. `z` takes back the last answer.
 
 Details: [reviewing leads](../reference/watch.md#reviewing-leads).
 

@@ -43,6 +43,10 @@ pub struct SourceState {
     /// the store already holds, since its seen IDs no longer know them.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub restart: bool,
+    /// The last run reached its collection deadline before this source's
+    /// turn: the next run pulls it first.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub deferred: bool,
 }
 
 impl SourceState {

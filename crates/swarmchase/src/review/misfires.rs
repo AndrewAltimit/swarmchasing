@@ -34,6 +34,7 @@ pub struct MisfiresArgs {
     /// `reviewed.ndjson`.
     #[arg(long)]
     labeller: Option<String>,
+    /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
     /// List a rule when at least this many benign records fired it...

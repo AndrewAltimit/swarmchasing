@@ -19,6 +19,7 @@ pub struct PlatformArgs {
     /// Detector options as TOML (the watchlist's `[platform.options]` keys).
     #[arg(long)]
     options: Option<PathBuf>,
+    /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
     /// Print the full report as JSON.

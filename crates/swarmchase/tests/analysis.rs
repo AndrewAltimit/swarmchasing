@@ -14,6 +14,19 @@ fn scan_lists_flagged_records() {
 }
 
 #[test]
+fn scan_fails_when_no_line_is_a_record() {
+    let s = Scratch::new("scan-bad");
+    let bad = s.path().join("bad.ndjson");
+    std::fs::write(&bad, "{\"url\": 3\n{ torn\n").unwrap();
+    let r = crate::common::run(
+        s.path(),
+        &["scan", "--format", "ndjson", bad.to_str().unwrap()],
+    );
+    assert!(!r.ok, "{}\n{}", r.stdout, r.stderr);
+    assert!(r.stderr.contains("no record could be read"), "{}", r.stderr);
+}
+
+#[test]
 fn clusters_print_their_stable_keys() {
     let s = Scratch::new("clusters");
     let files = samples();

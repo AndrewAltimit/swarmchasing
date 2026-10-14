@@ -2,7 +2,15 @@
 # Send a plain-text email over SMTP with curl. Used by the watch workflow for
 # run digests and failure alerts. Sends to the admin only, never to report contacts.
 #
-#   scripts/ci/send-mail.sh "<subject>" <body-file>
+#   scripts/ci/send-mail.sh "<subject>" <body-file> [<marker-file>]
+#
+# With a marker file (the watch passes `runs/<stamp>/mailed`), it is written
+# once the message is sent, so the next watch run knows which digests
+# reached the admin and folds the leads of any that did not into its own.
+#
+# The body is sent base64-encoded, so no line exceeds SMTP's 998-byte limit
+# whatever the digest holds. curl gives up after 120 seconds per attempt and
+# retries transient failures 3 times.
 #
 # Environment: SMTP_URL (e.g. smtps://smtp.example.com:465 or smtp://host:587),
 # SMTP_USER, SMTP_PASSWORD, MAIL_FROM, MAIL_TO. MAIL_FROM and MAIL_TO may be a
@@ -20,6 +28,7 @@ set -euo pipefail
 
 subject="$1"
 body_file="$2"
+marker="${3:-}"
 : "${SMTP_URL:?}" "${SMTP_USER:?}" "${SMTP_PASSWORD:?}" "${MAIL_FROM:?}" "${MAIL_TO:?}"
 
 for name in subject MAIL_FROM MAIL_TO; do
@@ -55,9 +64,25 @@ trap 'rm -rf "$tmp"' EXIT
 chmod 700 "$tmp"
 
 # Credentials go in a private netrc file so they never appear in the process list.
+# Each value is a quoted netrc token (curl 7.84 or later), with `\` and `"`
+# escaped, so a password with spaces or quotes reads back whole. A line
+# break cannot be written in a netrc token and is refused.
 host="$(printf '%s' "$SMTP_URL" | sed -E 's#^[a-z]+://([^:/]+).*#\1#')"
+for name in SMTP_USER SMTP_PASSWORD; do
+    if [[ "${!name}" == *$'\r'* || "${!name}" == *$'\n'* ]]; then
+        echo "send-mail: refusing a line break in $name" >&2
+        exit 2
+    fi
+done
+netrc_quote() {
+    local v="$1"
+    v="${v//\\/\\\\}"
+    v="${v//\"/\\\"}"
+    printf '"%s"' "$v"
+}
 umask 077
-printf 'machine %s login %s password %s\n' "$host" "$SMTP_USER" "$SMTP_PASSWORD" >"$tmp/netrc"
+printf 'machine %s login %s password %s\n' "$host" "$(netrc_quote "$SMTP_USER")" \
+    "$(netrc_quote "$SMTP_PASSWORD")" >"$tmp/netrc"
 
 {
   printf 'From: %s\r\n' "$MAIL_FROM"
@@ -65,14 +90,19 @@ printf 'machine %s login %s password %s\n' "$host" "$SMTP_USER" "$SMTP_PASSWORD"
   printf 'Subject: %s\r\n' "$subject"
   printf 'Date: %s\r\n' "$mail_date"
   printf 'Message-ID: %s\r\n' "$message_id"
-  printf 'MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n'
-  sed 's/$/\r/' "$body_file"
+  printf 'MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'
+  # Canonical CRLF text, encoded in 76-character lines.
+  sed 's/$/\r/' "$body_file" | base64 | sed 's/$/\r/'
 } >"$tmp/mail.txt"
 
 curl --silent --show-error --ssl-reqd \
+  --max-time 120 --retry 3 \
   --url "$SMTP_URL" \
   --netrc-file "$tmp/netrc" \
   --mail-from "$from_addr" \
   --mail-rcpt "$to_addr" \
   --upload-file "$tmp/mail.txt"
 echo "sent: $subject"
+if [ -n "$marker" ]; then
+    date -u '+%Y-%m-%dT%H:%M:%SZ' >"$marker"
+fi

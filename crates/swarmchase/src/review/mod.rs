@@ -124,6 +124,8 @@ pub struct ReviewArgs {
     /// Data directory (the watch's `--out`).
     #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
     data: PathBuf,
+    /// With no input files: review the watch store's records captured in
+    /// this many days before now.
     #[arg(long, default_value_t = 30)]
     days: i64,
     /// Queue records at or above this tier: suggestive | significant
@@ -139,6 +141,7 @@ pub struct ReviewArgs {
     /// Print counts of reviewed records and disagreements, and exit.
     #[arg(long)]
     stats: bool,
+    /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
     /// Save reviews as this labeller (`reviewed-<name>.ndjson`), for
@@ -643,7 +646,7 @@ impl ReviewStore {
     }
 
     pub fn open(path: PathBuf) -> Result<Self> {
-        let entries = Self::read(&path)?;
+        let (entries, _) = Self::read(&path)?;
         let base = snapshot(&entries)?;
         Ok(Self {
             path,
@@ -652,23 +655,38 @@ impl ReviewStore {
         })
     }
 
-    fn read(path: &Path) -> Result<BTreeMap<String, Review>> {
+    /// The file's labels, and the lines that do not read (a write cut
+    /// short, a hand edit). Those are skipped with a warning rather than
+    /// hiding every other label; a save moves them to `<file>.damaged`.
+    fn read(path: &Path) -> Result<(BTreeMap<String, Review>, Vec<String>)> {
         let mut entries = BTreeMap::new();
-        match std::fs::read_to_string(path) {
-            Ok(text) => {
+        let mut bad = Vec::new();
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                let text = String::from_utf8_lossy(&bytes);
                 for (n, line) in text.lines().enumerate() {
                     if line.trim().is_empty() {
                         continue;
                     }
-                    let r: Review = serde_json::from_str(line)
-                        .with_context(|| format!("{}:{}", path.display(), n + 1))?;
-                    entries.insert(r.record.id.clone(), r);
+                    match serde_json::from_str::<Review>(line) {
+                        Ok(r) => {
+                            entries.insert(r.record.id.clone(), r);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "warning: {}:{}: label line skipped: {e}",
+                                path.display(),
+                                n + 1
+                            );
+                            bad.push(line.to_string());
+                        }
+                    }
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
         }
-        Ok(entries)
+        Ok((entries, bad))
     }
 
     /// Write this store's changes into the file: entries added, changed or
@@ -689,7 +707,17 @@ impl ReviewStore {
             .with_context(|| format!("opening {}", lock_path.display()))?;
         lock.lock()
             .with_context(|| format!("locking {}", lock_path.display()))?;
-        let mut merged = Self::read(&self.path)?;
+        let (mut merged, bad) = Self::read(&self.path)?;
+        if !bad.is_empty() {
+            // Kept aside, not dropped: the rewrite below leaves them out.
+            let aside = dir.join(format!("{name}.damaged"));
+            crate::store::append(&aside, &(bad.join("\n") + "\n"))?;
+            eprintln!(
+                "warning: {} unreadable label line(s) moved to {}",
+                bad.len(),
+                aside.display()
+            );
+        }
         let ours = snapshot(&self.entries)?;
         for (id, r) in &self.entries {
             if self.base.get(id) == ours.get(id) {
@@ -817,6 +845,8 @@ pub enum Answer {
     /// Open a case from the cluster, or add it to the named case.
     Case(Option<String>),
     Skip,
+    /// Take back the last label or skip, and show that record again.
+    Undo,
     Quit,
     Help,
 }
@@ -824,6 +854,7 @@ pub enum Answer {
 /// `a`, `b`, `u` label one record; `A`, `B`, `U` label every queued record in
 /// its cluster. Anything after the key is the note: `b reading an article`.
 /// `c` opens a case from the cluster; `c <case-id>` adds it to that case.
+/// `z` takes back the last label or skip.
 pub fn parse_answer(line: &str) -> Answer {
     let line = line.trim();
     let mut chars = line.chars();
@@ -841,6 +872,7 @@ pub fn parse_answer(line: &str) -> Answer {
         'b' => "benign",
         'u' => "unsure",
         's' => return Answer::Skip,
+        'z' => return Answer::Undo,
         'c' => return Answer::Case(note),
         'q' => return Answer::Quit,
         _ => return Answer::Help,
@@ -848,8 +880,8 @@ pub fn parse_answer(line: &str) -> Answer {
     Answer::Label(label, note, key.is_ascii_uppercase())
 }
 
-const HELP: &str = "  a = agent, b = benign, u = unsure, s = skip, q = quit (progress is saved)\n  \
-     A / B / U label every queued record in this cluster. Text after the key is a note: `b ordinary article read`\n  \
+const HELP: &str = "  a = agent, b = benign, u = unsure, s = skip, z = undo the last answer, q = quit (progress is saved)\n  \
+     A / B / U label every queued record in this cluster (asking first when that is more than 5). Text after the key is a note: `b ordinary article read`\n  \
      c opens a case from this cluster; `c <case-id>` adds the cluster to that case";
 
 fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize) -> Result<()> {
@@ -1073,6 +1105,8 @@ pub fn session(
     let mut tally = Tally::default();
     let total = items.len();
     let mut pos = 0;
+    // What `z` takes back, newest last.
+    let mut history: Vec<Step> = Vec::new();
     while pos < items.len() {
         let item = items[pos];
         let id = &a.results[item.idx].obs.id;
@@ -1119,7 +1153,42 @@ pub fn session(
                 tally.quit = true;
                 break;
             }
-            Answer::Skip => tally.skipped += 1,
+            Answer::Skip => {
+                tally.skipped += 1;
+                history.push(Step::Skip { pos });
+            }
+            Answer::Undo => {
+                match history.pop() {
+                    None => writeln!(out, "  nothing to undo")?,
+                    Some(Step::Skip { pos: at }) => {
+                        tally.skipped -= 1;
+                        writeln!(out, "  undid a skip")?;
+                        pos = at;
+                    }
+                    Some(Step::Label {
+                        pos: at,
+                        label,
+                        prev,
+                    }) => {
+                        for (id, before) in &prev {
+                            match before {
+                                Some(r) => store.entries.insert(id.clone(), r.clone()),
+                                None => store.entries.remove(id),
+                            };
+                        }
+                        store.save()?;
+                        if let Some(n) = tally.labelled.get_mut(label) {
+                            *n -= prev.len();
+                            if *n == 0 {
+                                tally.labelled.remove(label);
+                            }
+                        }
+                        writeln!(out, "  undid {} `{label}` label(s)", prev.len())?;
+                        pos = at;
+                    }
+                }
+                continue;
+            }
             Answer::Label(label, note, whole_cluster) => {
                 let targets: Vec<Item> = match (whole_cluster, a.results[item.idx].cluster) {
                     (true, Some(c)) => items[pos..]
@@ -1129,7 +1198,24 @@ pub fn session(
                         .collect(),
                     _ => vec![item],
                 };
+                if targets.len() > CONFIRM_ABOVE
+                    && !confirm_many(targets.len(), label, &mut input, out)?
+                {
+                    writeln!(out, "  not labelled")?;
+                    continue;
+                }
                 let (label, note) = confirm_below_rule(a, &targets, label, note, &mut input, out)?;
+                history.push(Step::Label {
+                    pos,
+                    label,
+                    prev: targets
+                        .iter()
+                        .map(|it| {
+                            let id = &a.results[it.idx].obs.id;
+                            (id.clone(), store.entries.get(id).cloned())
+                        })
+                        .collect(),
+                });
                 for it in &targets {
                     let r = &a.results[it.idx];
                     store.entries.insert(
@@ -1162,6 +1248,39 @@ pub fn session(
         pos += 1;
     }
     Ok(tally)
+}
+
+/// One answer `z` can take back: a skip, or a label with what each record
+/// it touched held before.
+enum Step {
+    Skip {
+        pos: usize,
+    },
+    Label {
+        pos: usize,
+        label: &'static str,
+        prev: Vec<(String, Option<Review>)>,
+    },
+}
+
+/// An uppercase key that would label more records than this asks first.
+const CONFIRM_ABOVE: usize = 5;
+
+/// `label N records? [y/N]`: true only on `y` or `yes`.
+fn confirm_many(
+    n: usize,
+    label: &str,
+    input: &mut impl BufRead,
+    out: &mut impl Write,
+) -> Result<bool> {
+    write!(out, "  label {n} records `{label}`? [y/N] ")?;
+    out.flush()?;
+    let mut line = String::new();
+    input.read_line(&mut line)?;
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 /// `agent` on records graded below L2: say what the grade is and what the
@@ -1767,6 +1886,7 @@ mod tests {
         assert_eq!(parse_answer(""), Answer::Help);
         assert_eq!(parse_answer("q"), Answer::Quit);
         assert_eq!(parse_answer("s"), Answer::Skip);
+        assert_eq!(parse_answer("z"), Answer::Undo);
         assert_eq!(parse_answer("c"), Answer::Case(None));
         assert_eq!(parse_answer("c t-3"), Answer::Case(Some("t-3".into())));
         assert_eq!(parse_answer("cases"), Answer::Help);
@@ -1863,6 +1983,108 @@ mod tests {
             labels.labels[&first.obs.id].label,
             sc_core::Label::Agent,
             "eval reads the admin's label"
+        );
+        std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    fn run_session(
+        a: &Analysis,
+        q: &[Item],
+        store: &mut ReviewStore,
+        input: &str,
+    ) -> (Tally, String) {
+        let cases = sink(store);
+        let mut out = Vec::new();
+        let t = session(
+            a,
+            q,
+            store,
+            input.as_bytes(),
+            &mut out,
+            &Session {
+                now: "2026-10-12",
+                cases: &cases,
+                suggest: &|_, _| None,
+            },
+        )
+        .unwrap();
+        (t, String::from_utf8(out).unwrap())
+    }
+
+    #[test]
+    fn z_takes_back_the_last_label_or_skip() {
+        let a = analysis();
+        let q = queue_all(&a, &BTreeSet::new());
+        let mut store = tmp_store("undo");
+        // Nothing to undo; benign, undone, unsure; skip, undone, benign.
+        let (t, out) = run_session(&a, &q, &mut store, "z\nb\nz\nu\ns\nz\nb\nq\n");
+        assert!(out.contains("nothing to undo"), "{out}");
+        assert!(out.contains("undid 1 `benign` label(s)"), "{out}");
+        assert!(out.contains("undid a skip"), "{out}");
+        let id = |i: usize| a.results[q[i].idx].obs.id.clone();
+        assert_eq!(store.entries.len(), 2);
+        assert_eq!(store.entries[&id(0)].label, "unsure");
+        assert_eq!(store.entries[&id(1)].label, "benign");
+        assert_eq!(t.skipped, 0);
+        assert_eq!(t.labelled, BTreeMap::from([("benign", 1), ("unsure", 1)]));
+        // The undone label is gone from the file too.
+        let reopened = ReviewStore::open(store.path.clone()).unwrap();
+        assert_eq!(reopened.entries.len(), 2);
+        std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn a_cluster_label_over_five_records_asks_first() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let obs: Vec<Observation> = (0..8)
+            .map(|i| {
+                o(
+                    &format!("w{i}"),
+                    1000 + i * 30,
+                    &format!("{inbox}?kind=headers{i}"),
+                )
+            })
+            .collect();
+        let a = analyze(obs, &Rules::default_rules());
+        let q = queue_all(&a, &BTreeSet::new());
+        let c = a.results[q[0].idx].cluster.expect("one cluster");
+        let n = q
+            .iter()
+            .filter(|it| a.results[it.idx].cluster == Some(c))
+            .count();
+        assert!(n > CONFIRM_ABOVE, "{n}");
+        let mut store = tmp_store("confirm");
+        let (_, out) = run_session(&a, &q, &mut store, "B\nn\nB\ny\nq\n");
+        assert!(
+            out.contains(&format!("label {n} records `benign`? [y/N]")),
+            "{out}"
+        );
+        assert!(out.contains("not labelled"), "{out}");
+        assert!(
+            out.contains(&format!("labelled {n} records `benign`")),
+            "{out}"
+        );
+        assert_eq!(store.entries.len(), n);
+        std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn an_unreadable_label_line_is_skipped_and_kept_aside() {
+        let mut store = tmp_store("damaged");
+        let a = analysis();
+        let (_, _) = run_session(&a, &queue_all(&a, &BTreeSet::new()), &mut store, "b\nq\n");
+        let mut text = std::fs::read_to_string(&store.path).unwrap();
+        text.push_str("{ torn\n");
+        std::fs::write(&store.path, text).unwrap();
+        let mut reopened = ReviewStore::open(store.path.clone()).unwrap();
+        assert_eq!(reopened.entries.len(), 1);
+        reopened.save().unwrap();
+        let aside = store.path.with_file_name("reviewed.ndjson.damaged");
+        assert_eq!(std::fs::read_to_string(aside).unwrap(), "{ torn\n");
+        assert!(
+            !std::fs::read_to_string(&store.path)
+                .unwrap()
+                .contains("torn")
         );
         std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
     }

@@ -155,6 +155,7 @@ pub struct BenchArgs {
     pub input: Vec<PathBuf>,
     #[arg(long)]
     pub labels: Vec<PathBuf>,
+    /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     pub rules: Option<PathBuf>,
     /// Where the bench file goes.

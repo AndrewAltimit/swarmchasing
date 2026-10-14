@@ -37,7 +37,7 @@ Pull requests run `gates` then `ci`; pushes to `main` run both and then `deploy-
 |---|---|---|
 | [`ci/select-ci-target-dir.sh`](ci/select-ci-target-dir.sh) | Points `CARGO_TARGET_DIR` at a per-compiler cache outside the checkout and prunes the others. | every cargo job in both workflows |
 | [`ci/build-site.sh`](ci/build-site.sh) | Builds the WASM modules (wasm-opt run on all of them in parallel, cached by module hash, size budget enforced), then the site into `_site/`, then runs `check-site.py` on it. | `deploy-pages`; local site work |
-| [`ci/send-mail.sh`](ci/send-mail.sh) | Sends a plain-text email to the admin over SMTP with `curl`, with Date and Message-ID headers; refuses header injection. | `watch.yml` digest and failure alert, `watch-stale.yml` |
+| [`ci/send-mail.sh`](ci/send-mail.sh) | Sends a plain-text email to the admin over SMTP with `curl` (base64 body, retries), with Date and Message-ID headers; refuses header injection; marks a sent digest `mailed`. | `watch.yml` digest and failure alert, `watch-stale.yml` |
 | [`ci/check-watch-age.sh`](ci/check-watch-age.sh) | Prints the newest watch run's stamp and age from `<data>/LATEST`; exits 1 when it is older than the limit (default 12 hours) or missing. | `watch-stale.yml` |
 | [`ci/install-hooks.sh`](ci/install-hooks.sh) | Points `core.hooksPath` at `git-hooks/`. Run once per clone. | contributors |
 

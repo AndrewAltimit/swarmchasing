@@ -81,9 +81,10 @@ jobs:
       # in the same cache, so after a push to main the watch reuses that
       # build instead of linking a fat-LTO release binary of its own. The
       # step writes `changed`, `priority` and `run_dir` to $GITHUB_OUTPUT
-      # for the email steps below. A failed source, an unavailable host or a
-      # failed canary sets `changed`, so the digest carrying the alert is
-      # mailed the same run.
+      # for the email steps below, as soon as the digest is written. A failed
+      # source, an unavailable host or a failed canary sets `changed`, so the
+      # digest carrying the alert is mailed the same run; a failure that goes
+      # on sets it again on its 2nd, 4th, 8th... run, not on every one.
       #
       # The Actions log of a public repository is public, and the watch's
       # output describes unreviewed leads (counts by network, operator
@@ -119,7 +120,8 @@ jobs:
       # The subject leads with the run's priority (high, medium or low).
       # Mailed whenever the run wrote a changed digest, even when the watch
       # then exited non-zero (every source failed): that digest carries the
-      # alerts.
+      # alerts. A sent digest gets `runs/<stamp>/mailed`; the next run folds
+      # the leads of changed runs that never got one into its digest.
       - name: Email digest
         if: always() && steps.watch.outputs.changed == 'true' && env.SMTP_URL != ''
         env:
@@ -127,7 +129,27 @@ jobs:
           RUN_DIR: ${{ steps.watch.outputs.run_dir }}
         run: |
           bash scripts/ci/send-mail.sh "[swarmchase] [${PRIORITY^^}] watch digest $(basename "$RUN_DIR")" \
-            "$RUN_DIR/digest.md"
+            "$RUN_DIR/digest.md" "$RUN_DIR/mailed"
+
+      # The providers' published agent range files and key directories
+      # (declared-agents.toml), into $SWARMCHASE_DATA/identity, at most once
+      # a day. Only the catalog's own URLs are fetched. The Pages deploy
+      # embeds what this holds as the identity page's snapshot. It never
+      # blocks the watch: a failure here is a warning, and the previous
+      # copies stay in use.
+      - name: Refresh agent identity files
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          export SWARMCHASE_DATA="${SWARMCHASE_DATA:-$HOME/swarmchase-data}"
+          fetched="$SWARMCHASE_DATA/identity/fetched.json"
+          if [ -n "$(find "$fetched" -mmin -1380 2>/dev/null)" ]; then
+            echo "identity files fetched within the last day; nothing to do"
+            exit 0
+          fi
+          cargo run -q --profile release-test -p swarmchase -- identity refresh \
+            || echo "::warning::identity refresh failed; the previous copies stay in use"
 
       - name: Email failure alert
         if: (failure() || cancelled()) && env.SMTP_URL != ''

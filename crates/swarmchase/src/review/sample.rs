@@ -48,6 +48,7 @@ pub struct SampleArgs {
     /// Where the queue goes. Default: `<data>/labels/baseline-queue-<seed>.ndjson`.
     #[arg(short, long)]
     out: Option<PathBuf>,
+    /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
 }

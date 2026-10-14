@@ -178,7 +178,7 @@ Details: [Notices](../../docs/reference/notices.md).
 
 | Variable | Used for |
 |---|---|
-| `SWARMCHASE_DATA` | The data directory (`--out` / `--data`, default `data/`): watch state and store, labels, cases. Gitignored. |
+| `SWARMCHASE_DATA` | The data directory (`--data` or `-d`, default `data/`): watch state and store, labels, cases. Gitignored. |
 | `SWARMCHASE_ADMIN` | The admin name `case new` records; else `git config user.name`. |
 | `URLQUERY_APIKEY` | urlquery.net collectors. Without it, `watch` skips urlquery sources and says so. |
 | `URLSCAN_APIKEY` | Optional key for `collect urlscan`. |

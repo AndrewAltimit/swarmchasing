@@ -105,8 +105,68 @@ pub fn load_store_counted(
     Ok((out, bad))
 }
 
+/// Lines of the store files in `dir` that cannot be read, moved out of the
+/// way: each file is rewritten without them, and they are appended to
+/// `<source>.damaged` beside it, which no read of the store takes in. So a
+/// damaged line is reported in the run that finds it, not in every run
+/// after. Returns, per store file that had any, the lines moved and the
+/// file they went to.
+pub fn set_aside_damaged(dir: &Path) -> Result<BTreeMap<String, (usize, String)>> {
+    let mut out = BTreeMap::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(out);
+    };
+    for entry in entries {
+        let p = entry?.path();
+        if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
+            continue;
+        }
+        let bytes = std::fs::read(&p).with_context(|| format!("reading {}", p.display()))?;
+        let mut kept: Vec<u8> = Vec::with_capacity(bytes.len());
+        let mut bad: Vec<u8> = Vec::new();
+        let mut n = 0;
+        for line in byte_lines(&bytes) {
+            let ok = line
+                .ok()
+                .is_some_and(|l| serde_json::from_str::<Observation>(l).is_ok());
+            let raw = match line {
+                Ok(l) => l.as_bytes(),
+                Err(b) => b,
+            };
+            let to = if ok { &mut kept } else { &mut bad };
+            to.extend_from_slice(raw);
+            to.push(b'\n');
+            n += usize::from(!ok);
+        }
+        if n == 0 {
+            continue;
+        }
+        let aside = p.with_extension("damaged");
+        // The damaged lines first, so a failure in between leaves them in
+        // both places rather than in neither.
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&aside)
+            .with_context(|| format!("opening {}", aside.display()))?;
+        f.write_all(&bad)
+            .with_context(|| format!("writing {}", aside.display()))?;
+        write_atomic(&p, &kept)?;
+        let name = |q: &Path| {
+            format!(
+                "store/{}",
+                q.file_name().unwrap_or_default().to_string_lossy()
+            )
+        };
+        out.insert(name(&p), (n, name(&aside)));
+    }
+    Ok(out)
+}
+
 /// Delete run directories stamped before `cutoff` and stored records captured
 /// before it. Records with no timestamp are kept: their age is unknown.
+/// Damaged lines set aside ([`set_aside_damaged`]) go once their file was
+/// last written before `cutoff`.
 /// Returns (run dirs deleted, records deleted).
 pub fn prune(out: &Path, cutoff: i64) -> Result<(usize, usize)> {
     let mut runs = 0;
@@ -127,6 +187,18 @@ pub fn prune(out: &Path, cutoff: i64) -> Result<(usize, usize)> {
     if let Ok(entries) = std::fs::read_dir(out.join("store")) {
         for entry in entries {
             let p = entry?.path();
+            if p.extension().and_then(|e| e.to_str()) == Some("damaged") {
+                let old = std::fs::metadata(&p)
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .is_some_and(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX) < cutoff);
+                if old {
+                    std::fs::remove_file(&p)
+                        .with_context(|| format!("deleting {}", p.display()))?;
+                }
+                continue;
+            }
             if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
                 continue;
             }
@@ -398,6 +470,26 @@ mod tests {
         let before = std::fs::read(&p).unwrap();
         prune(&dir, 50).unwrap();
         assert_eq!(std::fs::read(&p).unwrap(), before);
+
+        // Set aside once: the store reads clean after, and a second pass
+        // finds nothing.
+        let moved = set_aside_damaged(&dir.join("store")).unwrap();
+        assert_eq!(
+            moved.get("store/s.ndjson"),
+            Some(&(2, "store/s.damaged".to_string()))
+        );
+        let (got, bad) = load_store_counted(&dir.join("store"), 0).unwrap();
+        assert_eq!(got.len(), 3);
+        assert!(bad.is_empty(), "{bad:?}");
+        assert!(set_aside_damaged(&dir.join("store")).unwrap().is_empty());
+        let aside = std::fs::read(dir.join("store").join("s.damaged")).unwrap();
+        assert!(aside.windows(2).any(|w| w == b"\xff\xfe"));
+        // Retention deletes the damaged lines once their file is older
+        // than the cutoff, and not before.
+        prune(&dir, 0).unwrap();
+        assert!(dir.join("store").join("s.damaged").exists());
+        prune(&dir, i64::MAX).unwrap();
+        assert!(!dir.join("store").join("s.damaged").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
