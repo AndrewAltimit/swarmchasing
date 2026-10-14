@@ -83,7 +83,9 @@ Streamed and feed kinds read a bounded amount each run and report their coverage
 
 GitHub's event payloads are trimmed: a pull request carries its number and refs but no title, body, link or author association, and a push carries no commits. A `gharchive` source therefore finds pasted URLs in issues, comments, reviews, discussions and releases, and run tags in repository names; a pull request's record links to it by number. `scan` hours at most are read per run, and `max_mb` is sized to fit them, so the hour cap ends a run.
 
-A `ghsearch` source fills the gap GitHub's trimmed payloads leave: it searches pull requests created and commits committed since its checkpoint, one search per substring, and checks every result against the substring again, since search matches words. Only matching links and run tags become records, the link as URL and the pull request or commit page as reference; the footers coding agents add to their own work never match. A search cut short by the request budget or GitHub's 1000-result cap counts as skipped.
+A `ghsearch` source fills the gap GitHub's trimmed payloads leave: it searches pull requests created and commits committed since its checkpoint, one search per substring, and checks every result against the substring again, since search matches words. Only matching links and run tags become records, the link as URL and the pull request or commit page as reference; the footers coding agents add to their own work never match.
+
+Each search reads oldest first, from three hours before the checkpoint (for items indexed late and commits dated before their push; seen IDs drop the repeats) to ten minutes ago. The checkpoint moves only as far as every search read: a search cut short by the request budget, a failed request or GitHub's 1000-result cap holds it at the newest item that search reached, and the next run reads on from there. A rate limit GitHub answers with HTTP 403 is waited out like a 429, within the client's retry cap. A search GitHub answered with `incomplete_results` counts as skipped, and so does every search when a checkpoint older than 48 hours is skipped to the newest six hours.
 
 A `bluesky` source reads Jetstream's posts for a sampled stretch: from its checkpoint, or the newest half hour when the checkpoint is older, for at most `scan` wall-clock minutes. Links posted outside the stretch are never seen, and the digest's coverage shows minutes read against minutes since the last run. Each link in a post's link facets or link card that matches is a record whose reference is the post's page; a post deleted during the read is dropped.
 
@@ -98,13 +100,15 @@ A review file is saved under a lock of its own and merged: a save rereads the fi
 
 ### Interrupted runs
 
-A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`. Steps after collection do not stop a run: a file that cannot be written or a history that cannot be read becomes a `step_failed` health alert, and the run goes on to its digest. A `summary.json` or `ledger.json` that does not parse is read from its `.bak` copy; when that fails too, the damaged file is kept as `.damaged`, the history starts afresh and the digest says so.
+A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written, and the ledger and `autonomy.ndjson` are saved just before that, so a run cut short before its digest leaves them as they were. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`.
+
+Steps after collection do not stop a run: a file that cannot be written or a history that cannot be read becomes a `step_failed` health alert, and the run goes on to its digest. A `summary.json` or `ledger.json` that does not parse is read from its `.bak` copy; when that fails too, the damaged file is kept as `.damaged`, the history starts afresh and the digest says so.
 
 A step after the digest that fails (the run's `summary.json`, `LATEST`, retention) ends the run with an error, having lost nothing the digest reported.
 
 ### One source, or starting one over
 
-`watch --only <name>` pulls one source, with its cursor, health and undigested records as a full run keeps them, and leaves the others as they are; the analysis and digest cover the store as usual. `watch reset <name>…` makes sources start over on their next run: it clears each one's cursor, seen IDs, resume key and checkpoint under the data lock, and keeps its health history.
+`watch --only <name>` pulls one source, with its cursor, health and undigested records as a full run keeps them, and leaves the others as they are; the analysis and digest cover the store as usual. `watch reset <name>…` makes sources start over on their next run: it clears each one's cursor, seen IDs, resume key and checkpoint under the data lock, and keeps its health history. The next run drops the records the source's store already holds, as for a changed query, so they are neither stored twice nor reported again.
 
 `watch prune-cache [watchlist.toml]` deletes cached responses older than the TTL (at least a day), or older than `--max-age-hours`, as each run does.
 

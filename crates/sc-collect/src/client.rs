@@ -3,7 +3,8 @@
 //! jittered backoff on transient failures (and longer patience for a host
 //! that answers "temporarily unavailable", which is then skipped for the
 //! rest of the run if it stays down; likewise a host that asks for a longer
-//! wait than the cap, or times out on two requests in a row), a cap on
+//! wait than the cap, or times out on two requests in a row; an HTTP 403
+//! that carries rate-limit headers is a wait like a 429), a cap on
 //! response size, an
 //! optional on-disk cache with conditional requests, and a request count for
 //! sources with a quota.
@@ -98,6 +99,29 @@ pub fn parse_retry_after(v: &str, now: i64) -> Option<Duration> {
     }
     let t = chrono::DateTime::parse_from_rfc2822(v).ok()?.timestamp();
     Some(Duration::from_secs((t - now).max(0) as u64))
+}
+
+/// Whether a response is a rate limit, and how long it asks to wait: one
+/// with `Retry-After`, or with `x-ratelimit-remaining: 0` (GitHub answers
+/// its limits with HTTP 403 as well as 429), waiting until
+/// `x-ratelimit-reset` (Unix seconds) when no `Retry-After` says. `None`
+/// when neither header marks a limit: a 403 then is a refusal.
+pub fn rate_limit(
+    retry_after: Option<Duration>,
+    remaining: Option<&str>,
+    reset: Option<&str>,
+    now: i64,
+) -> Option<Option<Duration>> {
+    if retry_after.is_some() {
+        return Some(retry_after);
+    }
+    if remaining.map(str::trim) != Some("0") {
+        return None;
+    }
+    let until_reset = reset
+        .and_then(|r| r.trim().parse::<i64>().ok())
+        .map(|t| Duration::from_secs((t - now).max(0) as u64 + 1));
+    Some(until_reset)
 }
 
 /// Unix seconds now.
@@ -474,6 +498,18 @@ impl Client {
         };
         let retry_after =
             header(reqwest::header::RETRY_AFTER).and_then(|v| parse_retry_after(&v, now_secs()));
+        let limit = rate_limit(
+            retry_after,
+            header(reqwest::header::HeaderName::from_static(
+                "x-ratelimit-remaining",
+            ))
+            .as_deref(),
+            header(reqwest::header::HeaderName::from_static(
+                "x-ratelimit-reset",
+            ))
+            .as_deref(),
+            now_secs(),
+        );
         let content_type = header(reqwest::header::CONTENT_TYPE);
         let etag = header(reqwest::header::ETAG);
         let last_modified = header(reqwest::header::LAST_MODIFIED);
@@ -521,7 +557,9 @@ impl Client {
         } else if code == 503 {
             Err(Failure::Unavailable(e, retry_after))
         } else if code == 429 || status.is_server_error() {
-            Err(Failure::Transient(e, retry_after))
+            Err(Failure::Transient(e, limit.flatten().or(retry_after)))
+        } else if let (403, Some(wait)) = (code, limit) {
+            Err(Failure::Transient(e, wait))
         } else {
             Err(Failure::Fatal(e))
         }
@@ -685,6 +723,24 @@ mod tests {
             Some(Duration::ZERO)
         );
         assert_eq!(parse_retry_after("soon", now), None);
+    }
+
+    #[test]
+    fn a_403_with_rate_limit_headers_is_a_wait_not_a_refusal() {
+        let now = 1_791_664_800;
+        let s = Duration::from_secs;
+        // GitHub's secondary limit: Retry-After.
+        assert_eq!(rate_limit(Some(s(60)), None, None, now), Some(Some(s(60))));
+        // Its primary limit: none left until the reset.
+        let reset = (now + 30).to_string();
+        assert_eq!(
+            rate_limit(None, Some("0"), Some(&reset), now),
+            Some(Some(s(31)))
+        );
+        assert_eq!(rate_limit(None, Some("0"), None, now), Some(None));
+        // Requests left, or no headers: a plain refusal.
+        assert_eq!(rate_limit(None, Some("12"), Some(&reset), now), None);
+        assert_eq!(rate_limit(None, None, None, now), None);
     }
 
     #[test]
