@@ -531,6 +531,11 @@ pub struct Actor {
     /// (one skew), or the operator's counter (successive numbers).
     #[serde(default)]
     pub tag_style: TagStyle,
+    /// For a UUIDv1 or ULID tag style: each run mints this many tags, a
+    /// fresh one at the start of each of that many equal parts of its
+    /// requests, as an agent minting an id per step does (one when unset).
+    #[serde(default)]
+    pub tag_mints: Option<usize>,
     /// For target lists: each host a site of its own (its own registrable
     /// domain), as a list of sites is, instead of one site's hosts.
     #[serde(default)]

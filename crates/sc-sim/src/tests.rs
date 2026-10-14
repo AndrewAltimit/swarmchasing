@@ -278,9 +278,10 @@ fn styled_tags_are_fresh_per_run_and_keep_their_generator() {
         }
     }
     let fleet = |a: &str| tags[&format!("fleet-randomtags-f{a}")].clone();
-    // A fresh tag per run, three runs each.
-    for a in ["0", "1", "2"] {
-        assert_eq!(fleet(a).len(), 3, "{tags:?}");
+    // Fresh tags per run, three runs each: two mints per run for the
+    // UUIDv1 and ULID fleets, one counter value per run.
+    for (a, n) in [("0", 6), ("1", 6), ("2", 3)] {
+        assert_eq!(fleet(a).len(), n, "{tags:?}");
     }
     // UUIDv1s on one node; ULIDs of 26 characters; one counter's stem.
     let nodes: std::collections::BTreeSet<String> =
