@@ -619,6 +619,9 @@ fn watch(
     let mut state: State = read_json_kept(&state_path)?.unwrap_or_default();
     let mut c = Collected::default();
     carry_over(out, &state, &mut c);
+    for w in crate::commands::netranges::refresh_daily(&client, out) {
+        c.notes.push(format!("Network ranges not refreshed: {w}"));
+    }
     collect(
         &Collect {
             client: &client,
@@ -753,7 +756,8 @@ fn watch(
         .into_iter()
         .filter(|o| o.ts >= since || new_ids.contains(&o.id))
         .collect();
-    let a = analyze(recent, rules);
+    let mut a = analyze(recent, rules);
+    crate::commands::netranges::annotate_in(out, &mut a);
     let (drifts, restarted) = state.rules.observe(
         &a.rules_version,
         ids_by_source

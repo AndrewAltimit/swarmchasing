@@ -19,6 +19,10 @@ The platform pass reads `[[github_app]]`: those Apps' events are tallied by prod
 
 Every entry cites the provider page (`source`) that names the file. Adding one is a review decision, as for a rule: cite the page, keep the URL the page gives (or the host it redirects to, said in a comment), and run the tests. The catalog is compiled into the CLI and the browser module.
 
+### Candidates from the reference list
+
+`swarmchase identity reference` fetches the community-maintained [ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt) list (MIT) of AI crawler and agent user-agent tokens into `<data>/identity/reference/robots.json` and prints the tokens it lists that the catalog has no `[[agent]]` for, matched case-insensitively, with the operator and function the list gives (defanged). `--offline` reads the held copy. The command proposes and never edits the catalog: the list is a pointer to where to look, and an entry is added only with the provider's own page as its `source`.
+
 ## Passivity
 
 `identity refresh` fetches only the catalog's URLs, over HTTPS, following redirects within the same host. These are the providers' own documents about their agents, read like a security.txt: no agent infrastructure is touched. A `Signature-Agent` URI in a request is an address the agent supplied and is never fetched, whatever it names ([FM-2.1](../manual/02-principles.md#fm-21-passive-only)). A signer whose directory is not in the catalog stays unverified.
@@ -28,6 +32,7 @@ Every entry cites the provider page (`source`) that names the file. Adding one i
 ```bash
 swarmchase identity refresh                        # fetch the catalog's files into <data>/identity/
 swarmchase identity status                         # what is held, with fetch dates
+swarmchase identity reference                      # tokens the ai.robots.txt list names that the catalog lacks
 swarmchase identity check access.log --map host=www.example.org
 swarmchase identity check records.ndjson --json --all
 ```
@@ -42,6 +47,7 @@ Once files are held, the analysis commands fill each cluster's identity from `<d
 |---|---|
 | `<data>/identity/<id>.json` | Each range file or directory as last fetched. A fetch that does not parse keeps the previous copy. |
 | `<data>/identity/fetched.json` | Per file: URL, fetch date, SHA-256 and entry count, so a case can cite the version a verdict rests on. |
+| `<data>/identity/reference/robots.json` | The ai.robots.txt list as last fetched by `identity reference`. |
 
 The files stay in the data directory and are never committed. Providers change them; refresh before checking a log, and for an old log say how far apart the log and the file are.
 

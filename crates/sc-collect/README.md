@@ -56,7 +56,7 @@ let records = client.wayback_cdx(&q)?;
 | `crtsh` | Certificate Transparency via crt.sh. |
 | `security_txt`, `security_txt_checked` | A domain's security.txt; the checked form says whether it has expired. |
 | `rdap_domain` | A domain's RDAP record, for the registrar's abuse contact. |
-| `download` | A large file streamed to disk (the ASN table). |
+| `download` | A large file streamed to disk (the ASN table, the network range files). |
 | `urlscan_by_id`, `gharchive_event`, `npm_release`, `pypi_release`, `crtsh_entry` | One record by id, for checking a reference a submission names ([`lookup.rs`](src/lookup.rs)). |
 
 Every source has a `parse_*` function that reads a saved response without the network.
@@ -81,6 +81,7 @@ Every source has a `parse_*` function that reads a saved response without the ne
 | `hackernews` | Links in Hacker News stories and comments (search index) | substrings of the link, title or text | request |
 | `bluesky` | Links in Bluesky posts (Jetstream), a sampled stretch | substrings of the link or text | request |
 | `ghsearch` | Links in GitHub pull request text and commit messages (search API, token needed) | substrings, each one search | request |
+| `clawhub` | Links and run tags in ClawHub skill summaries, names and topics | substrings | request |
 
 "Substrings" are `|`-separated and case-insensitive; `*` keeps everything. Each module's docs give the source's terms of use and what they allow.
 
@@ -98,7 +99,7 @@ Hacker News walks its search index back from the pull's start to the checkpoint,
 
 ### Platform events
 
-[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (a kind in `PLATFORM_KINDS`: `gharchive`, `npm`, `pypi`, `huggingface`, `golang`, `wikimedia`, `hackernews`, `nuget`, `packagist`, `rubygems`, `crates`, `cve`, `osv`, `wikimedia-ai-cleanup`, `bluesky`, `gitlab`, `codeberg`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped.
+[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (a kind in `PLATFORM_KINDS`: `gharchive`, `npm`, `pypi`, `huggingface`, `golang`, `wikimedia`, `hackernews`, `nuget`, `packagist`, `rubygems`, `crates`, `cve`, `osv`, `wikimedia-ai-cleanup`, `bluesky`, `gitlab`, `codeberg`, `clawhub`, `openvsx`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped.
 
 A reference source (`osv`, `wikimedia-ai-cleanup`) returns `PlatformPull::labels` instead of events: a `TargetLabel` names a target on a platform (`label_key` normalises it as events name it), what it says (`osv-malicious`, `wiki-ai-cleanup`) and the record or category that says so.
 
@@ -142,7 +143,7 @@ API keys are passed in by the caller. `Kind::key_env` names the variable the CLI
 cargo test -p sc-collect
 ```
 
-The tests parse synthetic responses (never third-party records) and feed the pager canned pages; none touches the network.
+The tests parse synthetic responses (never third-party records) and feed the pager canned pages; none touches the network. The ClawHub, Open VSX and Hugging Face listing fixtures in [`tests/fixtures/`](tests/fixtures/) are invented records in the shapes those APIs serve.
 
 ## Source
 
@@ -162,7 +163,8 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`bluesky.rs`](src/bluesky.rs) | Bluesky posts from Jetstream over one WebSocket connection, a sampled stretch a run: matching links as records, posts as platform events with account age from the PLC directory. |
 | [`ghsearch.rs`](src/ghsearch.rs) | GitHub search: relay links and run tags in pull request text and commit messages, which GH Archive's payloads leave out. |
 | [`forges.rs`](src/forges.rs) | GitLab.com's and Codeberg's newest public projects as platform events. |
-
+| [`clawhub.rs`](src/clawhub.rs) | ClawHub's newest skills: matching summaries as records, skills as platform events; skill files never downloaded. |
+| [`openvsx.rs`](src/openvsx.rs) | Open VSX's newest extensions as platform events; extension files never fetched. |
 | [`provenance.rs`](src/provenance.rs) | Build provenance of one npm or PyPI release, looked up for platform candidates' members. |
 | [`osv.rs`](src/osv.rs) | OSV malicious-package records as labels on package targets (`TargetLabel`), joined to candidates by the watch. |
 | [`hackernews.rs`](src/hackernews.rs) | Hacker News search index: links as records, stories and comments as platform events, account age from profiles. |
@@ -171,4 +173,6 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`lookup.rs`](src/lookup.rs) | Single records by id, for `swarmchase inbox verify`. |
 | [`crtsh.rs`](src/crtsh.rs), [`securitytxt.rs`](src/securitytxt.rs), [`rdap.rs`](src/rdap.rs) | Lookups: certificates, security.txt, RDAP. |
 | [`psl.rs`](src/psl.rs), [`asn.rs`](src/asn.rs) | Registrable domains; the IP-to-ASN table download. |
+| [`netranges.rs`](src/netranges.rs) | Cloud providers' published address ranges and the Tor exit list: daily download, checked before it replaces the held copy, loaded into `sc_core::netranges::NetRanges`. |
 | [`identity.rs`](src/identity.rs) | Providers' published range files and key directories, from the catalog's URLs only ([identity](../../docs/reference/identity.md)). |
+| [`identity/reference.rs`](src/identity/reference.rs) | The ai.robots.txt token list, and the tokens it names that the catalog lacks, as candidates. |

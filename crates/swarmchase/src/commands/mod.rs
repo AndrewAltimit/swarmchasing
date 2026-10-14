@@ -11,6 +11,7 @@ pub mod contact;
 pub mod endpoints;
 pub mod eval;
 pub mod identity;
+pub mod netranges;
 pub mod platform;
 pub mod report;
 pub mod rules;

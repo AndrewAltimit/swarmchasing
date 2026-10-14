@@ -174,6 +174,15 @@ pub struct Cluster {
         skip_serializing_if = "crate::identity::ClusterIdentity::is_empty"
     )]
     pub identity: crate::identity::ClusterIdentity,
+    /// Members' client addresses by the cloud range they fall in, and those
+    /// on the Tor exit list ([`crate::netranges`]). Filled by
+    /// [`crate::netranges::annotate`], not by the pipeline. Descriptive:
+    /// never scored, never linked on.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::netranges::ClusterHosting::is_empty"
+    )]
+    pub hosting: crate::netranges::ClusterHosting,
 }
 
 /// What the members' targets say about the agent's knowledge

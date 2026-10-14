@@ -130,6 +130,9 @@ pub enum Cmd {
     Key(signing::KeyArgs),
     /// The offline IP-to-ASN table: fetch it into the data directory, look up addresses.
     Asn(commands::asn::AsnArgs),
+    /// Cloud providers' published address ranges and the Tor exit list:
+    /// fetch them into the data directory, look up addresses.
+    Netranges(commands::netranges::NetrangesArgs),
     /// Sightings (SC-Sightings v1): `export` makes one from your own logs,
     /// `match` finds clusters several operators saw. Never merges clusters.
     Sightings(sightings::SightingsArgs),
@@ -173,6 +176,7 @@ pub fn run() -> Result<()> {
         Cmd::Backup(a) => backup::run(a),
         Cmd::Site(a) => commands::site::run(a),
         Cmd::Asn(a) => commands::asn::run(a),
+        Cmd::Netranges(a) => commands::netranges::run(a),
         Cmd::Sightings(a) => sightings::run(a),
         Cmd::Canary(a) => canary::run(a),
         Cmd::Key(a) => signing::run(a),

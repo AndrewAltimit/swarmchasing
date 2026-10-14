@@ -196,6 +196,7 @@ mod tests {
             "wikimedia-relay-links",
             "hackernews-relay-links",
             "bluesky-relay-links",
+            "clawhub-relay-links",
         ];
         let rules = Rules::default_rules();
         let wl: Watchlist = toml::from_str(include_str!("../../../../watchlist.toml")).unwrap();

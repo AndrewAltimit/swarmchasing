@@ -80,7 +80,9 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |
 | `collect mcp <substrings>` | Official MCP Registry servers whose name or declared URLs match (`*` for all), updated since `--from`. Metadata only; no server is contacted. |
 | `asn fetch`, `asn lookup <ip>…` | The offline IP-to-ASN table in `<data>/asn/`. |
+| `netranges fetch`, `netranges status`, `netranges lookup <ip>…` | Cloud providers' published address ranges and the Tor exit list in `<data>/netranges/` ([network ranges](../../docs/reference/watch.md#network-ranges)). |
 | `identity refresh`, `identity status`, `identity check <input>` | Providers' published agent ranges and keys in `<data>/identity/`, and each record's declared identity: verified, spoofed or claimed ([identity](../../docs/reference/identity.md)). |
+| `identity reference [--offline]` | User-agent tokens the ai.robots.txt list names that `declared-agents.toml` lacks, as candidates for review; never edits the catalog. |
 | `collect urlquery-reports <ids> -o <out>` | Fetches urlquery reports by ID, or every ID in a labels file such as Transluce's `reports.csv`. Appends to `--out` and skips IDs already there; `--sample N` caps the agent-labelled reports. |
 | `certs <query>` | Certificate Transparency lookup via crt.sh, e.g. `'%.example.com'`. |
 | `contact <domain>` | The domain's RFC 9116 security.txt contact. |

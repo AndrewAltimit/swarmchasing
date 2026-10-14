@@ -35,6 +35,8 @@ The hosting layer rests on the **client** network: the network the request came 
 
 The network fields of a scan-service record usually describe the **target**: where the scanner reached the submitted URL's host, which for a relayed URL is often the relay's network ([FM-14.3](14-limits.md#fm-143-a-scan-services-asn-is-the-targets)). Records keep client and target networks apart; a hosting claim cites which one it uses. An ASN names a host. It is never by itself evidence about the developer.
 
+A cloud provider's published ranges for its own network describe a client address further: provider, region and service. That is description of the host, not a stronger claim. An address on the Tor exit list names a relay, not a host: records sent from one are left out of hosting claims and of the same-company check, so anonymised traffic never supports a hosting or developer claim ([methodology](../methodology.md#hosting-class)).
+
 ## FM-7.4 Harness and framework layer
 
 The harness is the software around the model: the agent framework, the fetch tool, the browser automation, the product. Its traces include tool-call markup dialects, the user agent of a fetch tool, which relays and carriers it reaches for, fixed fan-out widths, and parameter conventions.

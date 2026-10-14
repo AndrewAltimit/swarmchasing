@@ -18,7 +18,9 @@
 //!    public scanner, so this alone never names a developer;
 //! 2. hosting network: the ASN the requests came from. It names a host, and
 //!    names a developer only when it belongs to the company the requests
-//!    self-identify as;
+//!    self-identify as. A cloud provider's published ranges add the region
+//!    and service as description; a Tor exit names no host, and its
+//!    records are left out of hosting claims ([`crate::netranges`]);
 //! 3. identifiers shared with a confirmed incident (inbox IDs, tags);
 //! 4. infrastructure owned by the provider;
 //! 5. confirmation by the provider.
@@ -481,12 +483,46 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
     // Networks the requests came from: the client's `asn`. A target's network
     // (`target_asn`, where a scan service reached the URL) says nothing about
     // who sent the request.
+    // A Tor exit names a relay, not the agent's host: those records are
+    // left out of every hosting claim, and said so in one claim of their own.
+    // Published cloud ranges ([`crate::netranges`]) describe the rest.
+    let hosting = &c.hosting;
     let mut sent_from: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut classed: BTreeMap<u32, BTreeMap<String, usize>> = BTreeMap::new();
+    let mut ranges_only: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
     for &m in &c.members {
-        if let Some(asn) = a.results[m].obs.asn {
-            *sent_from.entry(asn).or_default() += 1;
+        if hosting.tor.contains(&m) {
+            continue;
+        }
+        let class = hosting.members.get(&m);
+        match (a.results[m].obs.asn, class) {
+            (Some(asn), class) => {
+                *sent_from.entry(asn).or_default() += 1;
+                if let Some(cl) = class {
+                    *classed
+                        .entry(asn)
+                        .or_default()
+                        .entry(cl.label())
+                        .or_default() += 1;
+                }
+            }
+            (None, Some(cl)) => {
+                *ranges_only
+                    .entry(cl.provider.clone())
+                    .or_default()
+                    .entry(cl.label())
+                    .or_default() += 1;
+            }
+            (None, None) => {}
         }
     }
+    let in_ranges = |classes: Option<&BTreeMap<String, usize>>| -> Vec<String> {
+        classes
+            .into_iter()
+            .flatten()
+            .map(|(l, n)| format!("{n} of them from {l} published address ranges"))
+            .collect()
+    };
     let org = |asn: u32| {
         a.asns
             .iter()
@@ -517,8 +553,10 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
         });
     }
     for (&asn, n) in &sent_from {
+        let mut details = vec![format!("{n} record(s) sent from AS{asn}")];
+        details.extend(in_ranges(classed.get(&asn)));
         claims.push(Claim {
-            details: vec![format!("{n} record(s) sent from AS{asn}")],
+            details,
             tag: Some(Tag::Observed),
             records: *n,
             ..Claim::new(
@@ -526,6 +564,30 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
                 Role::Host,
                 Evidence::HostingAsn,
             )
+        });
+    }
+    // Records with no ASN whose address a provider's published ranges hold.
+    for (provider, classes) in &ranges_only {
+        let n: usize = classes.values().sum();
+        claims.push(Claim {
+            details: classes
+                .iter()
+                .map(|(l, k)| format!("{k} record(s) sent from {l} published address ranges"))
+                .collect(),
+            tag: Some(Tag::Observed),
+            records: n,
+            ..Claim::new(provider.clone(), Role::Host, Evidence::HostingAsn)
+        });
+    }
+    if !hosting.tor.is_empty() {
+        let n = hosting.tor.len();
+        claims.push(Claim {
+            details: vec![format!(
+                "{n} record(s) sent from addresses on the Tor exit list; an exit relay names neither the agent's host nor its developer, so these records are left out of the other hosting claims"
+            )],
+            tag: Some(Tag::Observed),
+            records: n,
+            ..Claim::new("Tor exit relays", Role::Host, Evidence::HostingAsn)
         });
     }
     for ((rule, matched), n) in &markers {
