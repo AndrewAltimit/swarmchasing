@@ -392,7 +392,7 @@ impl Default for SoftLinkOptions {
             joint: JointCaps {
                 harness_timeline: Some(20.0),
                 harness_identifiers: Some(90.0),
-                timeline_targets: Some(34.0),
+                timeline_targets: Some(5.0),
                 ..JointCaps::default()
             },
             playbook: 20.0,

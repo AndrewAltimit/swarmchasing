@@ -199,7 +199,10 @@ pub fn template(r: &ObsResult) -> Template {
         && layer.is_some_and(|l| !l.is_submitted())
     {
         for (n, v) in &outer.params {
-            if value_class(v) != "url" && !params.iter().any(|(m, _)| m == n) {
+            if value_class(v) != "url"
+                && value_class(n) != "url"
+                && !params.iter().any(|(m, _)| m == n)
+            {
                 params.push((n.clone(), v.clone()));
             }
         }
@@ -210,7 +213,14 @@ pub fn template(r: &ObsResult) -> Template {
         .filter(|(n, _)| seen.insert(n.to_ascii_lowercase()))
         .take(MAX_PARAMS)
         .map(|(n, v)| {
-            let n: String = n.to_ascii_lowercase().chars().take(32).collect();
+            // A URL written as a bare parameter name (`?a=1&https://t/`, as
+            // some relays take it) names a host: it is a slot, as a URL
+            // value is.
+            let n: String = if value_class(n) == "url" {
+                "<url>".into()
+            } else {
+                n.to_ascii_lowercase().chars().take(32).collect()
+            };
             format!("{n}={}", value_class(v))
         })
         .collect();
@@ -974,6 +984,25 @@ mod tests {
         assert_eq!(value_class("https://webhook.site/x"), "url");
         assert_eq!(value_class("two words"), "text");
         assert_eq!(value_class("REDACTED-0123456789ab"), "secret");
+    }
+
+    #[test]
+    fn a_url_as_a_parameter_name_is_a_slot() {
+        // A relay that takes the target as its query: parameters after the
+        // target's own split it, and the piece holding the target URL is
+        // read as a parameter name. The host must not make each host its
+        // own template.
+        let a = analyze(
+            fleet(1, |c, k| {
+                format!(
+                    "https://href.li/?https://h{k}.c{c}.example/x?id=%27&uqtag=fx{c}q{c}&step={k}"
+                )
+            }),
+            &Rules::default_rules(),
+        );
+        let t: Vec<Template> = a.results.iter().map(template).collect();
+        assert_eq!(t[0].key, t[1].key, "{t:?}");
+        assert!(!t[0].key.contains("example"), "{}", t[0].key);
     }
 
     /// `n` unflagged page fetches: the traffic a base rate is read against.

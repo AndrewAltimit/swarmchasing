@@ -184,7 +184,7 @@ A fleet built on one harness (one prompt, one tool wrapper, one request builder)
 
 - the relay and carrier route, outermost first;
 - the path's shape: each segment's type (word, number, hex, UUID, token), with a short file extension kept;
-- the parameters in the order sent, each as its name and the kind of its value (a URL, a payload, prose, a secret, or a number, word or token with a length class);
+- the parameters in the order sent, each as its name and the kind of its value (a URL, a payload, prose, a secret, or a number, word or token with a length class); a name that is itself a URL is a slot, since it names a host;
 - the URL's encoding choices ([FM-5.7](#fm-57-soft-links));
 - the canonical test payloads it carries, and whether it was cut off.
 

@@ -265,10 +265,10 @@ harness_timeline = 20.0
 # Simulation (fleet-randomtags), below its bound: template co-groups and
 # shared generators.
 harness_identifiers = 90.0
-# Judgment, at co-target's ratio: co-activity and co-targets both read
-# clusters running at the same time, so together they count as one. No
-# scenario links a pair of one operator in both.
-timeline_targets = 34.0
+# Simulation (rerun), at its bound: co-activity and co-targets both read
+# clusters running at the same time, so together they count as the stronger
+# alone (a cap below both families' ratios gives that).
+timeline_targets = 5.0
 
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least

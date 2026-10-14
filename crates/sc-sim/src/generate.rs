@@ -186,6 +186,9 @@ struct Gen<'a> {
     opts: RunOpts,
     /// How the current actor's runs generate their tags.
     tag_style: TagStyle,
+    /// Identifier replacements given out so far, shared by every run's
+    /// [`Ids`] so no two scopes get one value.
+    taken: Taken,
 }
 
 /// Actor options [`Gen::run`] applies to every run of the actor.
@@ -222,6 +225,7 @@ pub fn generate(s: &Scenario, seed: u64, palette: &Palette) -> Vec<Value> {
         times: BTreeMap::new(),
         opts: RunOpts::default(),
         tag_style: TagStyle::Random,
+        taken: Taken::default(),
     };
     for (i, a) in s.actor.iter().enumerate() {
         g.opts = RunOpts {
@@ -673,7 +677,7 @@ impl Gen<'_> {
                 habits: None,
                 prose: None,
             };
-            let mut ids = Ids::new(self.seed);
+            let mut ids = Ids::shared(self.seed, &self.taken);
             let mut t = base.start;
             for r in 0..a.records {
                 let host = &hosts[r % hosts.len()];
@@ -926,7 +930,7 @@ impl Gen<'_> {
         let base = rng.below(AGENT_UAS.len());
         let net = rng.below(CLOUD_ASNS.len());
         // The hand-off artifact: one gist per swarm, its ids of the swarm's own.
-        let mut ids = Ids::new(self.seed);
+        let mut ids = Ids::shared(self.seed, &self.taken);
         let scope = format!("{i}:handoff");
         let (user, gist) = (
             format!("u{}", ids.token(&scope, "user", 6)),
@@ -1171,7 +1175,7 @@ impl Gen<'_> {
             })
             .collect();
         let pick = |rng: &mut Rng| pool[rng.below(pool.len())].clone();
-        let mut ids = Ids::new(self.seed);
+        let mut ids = Ids::shared(self.seed, &self.taken);
         let begin = start + rng.range(0, window);
         match a.kind {
             Kind::UptimeMonitor => {
@@ -1466,7 +1470,7 @@ impl Gen<'_> {
     fn run(&mut self, mut spec: RunSpec, rng: &mut Rng) -> i64 {
         let mut t = spec.start;
         let mut step = 0usize;
-        let mut ids = Ids::new(self.seed);
+        let mut ids = Ids::shared(self.seed, &self.taken);
         let basis = self.scenario.basis;
         let opts = self.opts.clone();
         let per_request = opts.tags == Some(TagScope::PerRequest);
@@ -1733,17 +1737,29 @@ impl Gen<'_> {
     }
 }
 
+/// Identifier replacements given out, `(original, replacement)` to the
+/// scope that holds it.
+type Taken = std::rc::Rc<std::cell::RefCell<BTreeMap<(String, String), String>>>;
+
 /// Per-scope replacements for identifiers, deterministic from the seed.
 struct Ids {
     seed: u64,
     memo: BTreeMap<(String, String), String>,
+    taken: Taken,
 }
 
 impl Ids {
     fn new(seed: u64) -> Self {
+        Self::shared(seed, &Taken::default())
+    }
+
+    /// Ids that check their replacements against `taken`, shared with the
+    /// other runs of one generation.
+    fn shared(seed: u64, taken: &Taken) -> Self {
         Self {
             seed,
             memo: BTreeMap::new(),
+            taken: taken.clone(),
         }
     }
 
@@ -1772,6 +1788,36 @@ impl Ids {
             return v.clone();
         }
         let mut rng = self.rng(scope, orig);
+        // A short number has few replacements (`test2` has ten), so two
+        // scopes could draw one; a draw another scope holds is drawn again,
+        // and after a few tries the value gains a digit.
+        let mut extra = String::new();
+        let mut tries = 0;
+        loop {
+            let out = self.draw(orig, &mut rng) + &extra;
+            let owner = self
+                .taken
+                .borrow()
+                .get(&(orig.to_string(), out.clone()))
+                .cloned();
+            // A value with no digit has no other replacement.
+            let fixed = !orig.contains(|c: char| c.is_ascii_digit());
+            if fixed || tries >= 64 || owner.as_deref().is_none_or(|o| o == scope) {
+                self.taken
+                    .borrow_mut()
+                    .insert((orig.to_string(), out.clone()), scope.to_string());
+                self.memo.insert(key, out.clone());
+                return out;
+            }
+            tries += 1;
+            if tries % 8 == 0 && orig.chars().last().is_some_and(|c| c.is_ascii_digit()) {
+                extra.push(char::from(b'0' + rng.below(10) as u8));
+            }
+        }
+    }
+
+    /// One replacement for `orig`: its digits and long hex runs redrawn.
+    fn draw(&self, orig: &str, rng: &mut Rng) -> String {
         let mut out = String::with_capacity(orig.len());
         for run in split_runs(orig) {
             let alnum = run.chars().all(|c| c.is_ascii_alphanumeric());
@@ -1793,7 +1839,6 @@ impl Ids {
                 });
             }
         }
-        self.memo.insert(key, out.clone());
         out
     }
 }
@@ -2194,6 +2239,24 @@ mod tests {
     }
 
     #[test]
+    fn a_short_number_is_never_given_to_two_scopes() {
+        // `test2` has ten one-digit replacements: twenty scopes sharing
+        // one taken set still get twenty values, the later ones longer.
+        let taken = Taken::default();
+        let mut seen = std::collections::BTreeSet::new();
+        for k in 0..20 {
+            let mut ids = Ids::shared(5, &taken);
+            let v = ids.swap(&format!("s{k}"), "chatgpttest2");
+            assert!(v.starts_with("chatgpttest"), "{v}");
+            assert!(seen.insert(v.clone()), "{v} twice");
+            assert_eq!(ids.swap(&format!("s{k}"), "chatgpttest2"), v);
+        }
+        // A value with no digit has no other replacement.
+        let mut ids = Ids::shared(5, &taken);
+        assert_eq!(ids.swap("a", "fixed"), ids.swap("b", "fixed"));
+    }
+
+    #[test]
     fn a_palette_share_is_a_seeded_subset_per_scope() {
         let rules = sc_core::Rules::default_rules();
         let p = Palette::default_palette(&rules);
@@ -2239,6 +2302,7 @@ mod tests {
             times: BTreeMap::new(),
             opts: RunOpts::default(),
             tag_style: TagStyle::Random,
+            taken: Taken::default(),
         };
         let mut rng = Rng::new(2);
         let spec = |gaps: Vec<i64>, rng: &mut Rng| RunSpec {
