@@ -106,7 +106,7 @@ pub fn record_text(a: &Analysis, idx: usize) -> String {
     let r = &a.results[idx];
     let mut s = format!(
         "url: {}\ntier: {} (score {})\n",
-        defang(&truncate(&r.obs.url, 400)),
+        sc_core::clip_defanged(&sc_core::defang(&r.obs.url), 400),
         r.tier.label(),
         r.score
     );

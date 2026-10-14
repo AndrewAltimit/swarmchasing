@@ -30,6 +30,7 @@ pub enum KnownTarget {
 
 /// One `[[benchmark]]` or `[[stale]]` entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct KnownPattern {
     pub id: String,
     #[serde(default)]

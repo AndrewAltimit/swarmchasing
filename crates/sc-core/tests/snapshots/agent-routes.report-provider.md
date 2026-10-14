@@ -58,7 +58,7 @@ For each cluster, the window to search, what its times measure, and the strings 
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-08-14 09:00:00 UTC: `hxxps://s[.]jina[.]ai/site%3Aportal.agency.example%20admin%20login?uqtag=covrun12`
+1. 2026-08-14 09:00:00 UTC: `hxxps://s[.]jina[.]ai/site%3Aportal[.]agency[.]example%20admin%20login?uqtag=covrun12`
    - rules: relay.jina_search, marker.uq_tags
 1. 2026-08-14 09:03:00 UTC: `hxxps://uithub[.]com/portal-example/api-server?uqtag=covrun12`
    - rules: relay.repo_digest, marker.uq_tags

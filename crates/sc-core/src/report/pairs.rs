@@ -4,8 +4,8 @@
 
 use super::{Audience, Report, touches_exposed};
 use crate::analyze::Cluster;
-use crate::extract::{defang, defang_feature};
-use crate::model::{fmt_ts, truncate};
+use crate::extract::{clip_defanged, defang, defang_feature};
+use crate::model::fmt_ts;
 use crate::notice::PublicView;
 use std::fmt::Write;
 
@@ -133,7 +133,7 @@ impl Report<'_> {
                     l.b,
                     l.kind.label(),
                     l.strength,
-                    defang(&truncate(&l.detail, 160))
+                    clip_defanged(&defang(&l.detail), 160)
                 );
             }
         }
@@ -174,7 +174,7 @@ impl Report<'_> {
             let _ = writeln!(
                 s,
                 "- `{}`: {} records, {} → {}, {}",
-                defang_feature(&truncate(&c.feature.to_string(), 90)),
+                clip_defanged(&defang_feature(&c.feature.to_string()), 90),
                 c.records,
                 fmt_ts(c.start),
                 fmt_ts(c.end),

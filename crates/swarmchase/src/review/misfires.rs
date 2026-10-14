@@ -19,7 +19,7 @@
 use super::hosted::{self, Loaded, check_in_data};
 use super::{Review, ReviewStore};
 use anyhow::{Context, Result};
-use sc_core::{Analysis, Observation, Tier, defang};
+use sc_core::{Analysis, Observation, Tier};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -345,7 +345,7 @@ pub fn run(args: &MisfiresArgs) -> Result<()> {
             "  {} {} · {}",
             c.record.id,
             c.hard_negative_for.join(","),
-            defang(&crate::util::truncate(&c.record.url, 100))
+            sc_core::clip_defanged(&sc_core::defang(&c.record.url), 100)
         )?;
     }
     writeln!(

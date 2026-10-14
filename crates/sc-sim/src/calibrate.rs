@@ -408,7 +408,8 @@ impl RuleCheck {
 /// measures fails as unmeasured, unless `allowed` (the calibration config's
 /// `unmeasured` table, kind name to reason) names it. A kind that links only
 /// unrelated pairs ([`against`]) is measured: a ratio above 1 fails whatever
-/// `allowed` says.
+/// `allowed` says. A measured kind that `allowed` still names fails too:
+/// the entry is stale and must be dropped.
 pub fn check_rules(
     strata: &[(String, Calibration)],
     rules: &Rules,
@@ -424,9 +425,9 @@ pub fn check_rules(
                     kind: k,
                     bundled,
                     low: Some(st.low),
+                    ok: bundled <= st.low + 1e-9 && allowed.is_none(),
                     allowed,
                     against: 0,
-                    ok: bundled <= st.low + 1e-9,
                 }),
                 None if bundled > 1.0 => {
                     let against = against(strata, k);
@@ -889,10 +890,16 @@ mod tests {
         let hs = by(SoftLinkKind::HeaderSet);
         assert!(hs.ok && !hs.unmeasured(), "{hs:?}");
         assert!(hs.line().contains("(no header sets)"), "{}", hs.line());
-        // A measured kind is checked whatever the allow-list says.
+        // A measured kind is checked whatever the allow-list says, and an
+        // allow-list entry for it is stale: it fails until dropped.
         allowed.insert("dialect".to_string(), "stale".to_string());
         let c = check_rules(&strata, &rules, &allowed);
         let d = c.iter().find(|c| c.kind == SoftLinkKind::Dialect).unwrap();
-        assert!(d.ok && d.line().contains("drop it"), "{}", d.line());
+        assert!(
+            !d.ok && d.line().starts_with("FAIL dialect"),
+            "{}",
+            d.line()
+        );
+        assert!(d.line().contains("drop it"), "{}", d.line());
     }
 }

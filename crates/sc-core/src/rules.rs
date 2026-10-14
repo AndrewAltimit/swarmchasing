@@ -38,6 +38,7 @@ impl Target {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuleDef {
     pub id: String,
     pub kind: IndicatorKind,
@@ -184,12 +185,14 @@ pub struct Meta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AsnDef {
     pub asn: u32,
     pub org: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuleSet {
     #[serde(default)]
     pub meta: Meta,
@@ -517,6 +520,7 @@ mod tests {
             "agentness",
             "biclique",
             "generator",
+            "playbook",
             "onset",
         ] {
             let text = format!("[{table}]\nno_such_setting = 1\n");
@@ -524,6 +528,31 @@ mod tests {
             assert!(e.contains("unknown field"), "[{table}]: {e}");
         }
         assert!(Rules::from_toml("[soft_links]\nrerun = 2.0\n").is_ok());
+    }
+
+    /// A misspelt key in a rule, an `[[asn]]`, `[[benchmark]]` or
+    /// `[[stale]]` entry, or a misspelt table name, fails to load too.
+    #[test]
+    fn a_misspelt_rule_key_or_table_fails() {
+        let rule = "[[rule]]\nid = \"a\"\nkind = \"exfil\"\ntarget = \"url\"\npattern = \"x\"\nweight = 1\n";
+        assert!(Rules::from_toml(rule).is_ok());
+        for text in [
+            format!("{rule}signficant = true\n"),
+            format!("{rule}lnk = true\n"),
+            "[bicliqe]\nmin_targets = 3\n".to_string(),
+            "[[asn]]\nasn = 1\norg = \"x\"\nname = \"y\"\n".to_string(),
+            "[[benchmark]]\nid = \"b\"\npattern = \"x\"\nnotes = \"y\"\n".to_string(),
+            "[[stale]]\nid = \"s\"\npattern = \"x\"\ntarg = \"url\"\n".to_string(),
+        ] {
+            let e = Rules::from_toml(&text).err().unwrap_or_default();
+            assert!(e.contains("unknown field"), "{text}: {e}");
+        }
+        // A pinned copy drops such a key with a warning instead.
+        let (r, warnings) = Rules::from_toml_lenient(&format!("{rule}lnk = true\n")).unwrap();
+        assert_eq!(r.set.rules.len(), 1);
+        assert!(warnings[0].contains("rule[0].lnk"), "{warnings:?}");
+        let (_, warnings) = Rules::from_toml_lenient("[bicliqe]\nmin_targets = 3\n").unwrap();
+        assert!(warnings[0].contains("bicliqe"), "{warnings:?}");
     }
 
     /// A rules file without these sections (one a case pinned earlier) gets

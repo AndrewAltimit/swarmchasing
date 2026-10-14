@@ -128,7 +128,7 @@ fn wider_activity(
                 s,
                 "1. {}: `{}`\n   - rules: {}",
                 sc_core::fmt_ts(r.obs.ts),
-                sc_core::defang(&sc_case::text::truncate(&r.obs.url, 240)),
+                sc_core::clip_defanged(&sc_core::defang(&r.obs.url), 240),
                 rules.join(", ")
             );
         }

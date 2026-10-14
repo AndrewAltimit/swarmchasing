@@ -1,7 +1,6 @@
 //! `swarmchase unwrap` and `swarmchase defang`: one URL's layers, and URLs
 //! made safe to share.
 
-use crate::util::truncate;
 use anyhow::Result;
 use sc_core::{Observation, Rules, defang, unwrap_layers};
 
@@ -19,7 +18,7 @@ pub fn run(url: String) -> Result<()> {
         println!(
             "{:indent$}    {}",
             "",
-            defang(&truncate(&l.text, 160)),
+            sc_core::clip_defanged(&sc_core::defang(&l.text), 160),
             indent = l.depth * 2
         );
     }

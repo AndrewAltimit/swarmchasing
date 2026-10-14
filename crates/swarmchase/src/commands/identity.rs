@@ -12,7 +12,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use sc_collect::Client;
 use sc_core::identity::{Catalog, IdentityClass, IdentityData, classify};
-use sc_core::{Analysis, defang};
+use sc_core::{Analysis, defang, defang_hosts};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -114,10 +114,10 @@ pub fn run(a: IdentityArgs) -> Result<()> {
                 println!(
                     "{}\t{}\t{}\t{}\t{}",
                     o.id,
-                    o.ip.as_deref().unwrap_or("-"),
+                    defang_hosts(o.ip.as_deref().unwrap_or("-")),
                     r.class.id(),
-                    defang(&who.join(" ")),
-                    defang(&r.detail)
+                    defang_hosts(&who.join(" ")),
+                    defang_hosts(&r.detail)
                 );
             }
             let line: Vec<String> = counts
@@ -138,6 +138,17 @@ pub fn run(a: IdentityArgs) -> Result<()> {
     Ok(())
 }
 
+/// One candidate as `identity reference` prints it, every host in the
+/// list's free text (`[Webz.io](https://webz.io/)`) defanged.
+fn reference_line(b: &sc_collect::identity::reference::ReferenceBot) -> String {
+    format!(
+        "{}\t{}\t{}",
+        defang_hosts(&b.token),
+        defang_hosts(&b.operator),
+        defang_hosts(&b.function)
+    )
+}
+
 /// `identity reference`: the listed tokens the catalog has no agent for.
 fn reference(data: &Path, catalog: &Catalog, offline: bool) -> Result<()> {
     use sc_collect::identity::reference;
@@ -154,12 +165,7 @@ fn reference(data: &Path, catalog: &Catalog, offline: bool) -> Result<()> {
     };
     let c = reference::candidates(&bots, catalog);
     for b in &c {
-        println!(
-            "{}\t{}\t{}",
-            defang(&b.token),
-            defang(&b.operator),
-            defang(&b.function)
-        );
+        println!("{}", reference_line(b));
     }
     eprintln!(
         "{} of {} listed token(s) are not in declared-agents.toml: candidates for review, not entries. An entry needs the provider's own page as its `source`.",
@@ -268,6 +274,20 @@ pub fn annotate(a: &mut Analysis) {
 mod tests {
     use super::*;
     use sc_core::identity::ranges::RangeTable;
+
+    #[test]
+    fn reference_lines_defang_free_text_hosts() {
+        let b = sc_collect::identity::reference::ReferenceBot {
+            token: "Webzio-Extended".into(),
+            operator: "[Webz.io](https://webz.io/)".into(),
+            function: "AI data scrapers, see docs.webz.io".into(),
+        };
+        let line = reference_line(&b);
+        assert_eq!(
+            line,
+            "Webzio-Extended\t[Webz[.]io](hxxps://webz[.]io/)\tAI data scrapers, see docs[.]webz[.]io"
+        );
+    }
 
     #[test]
     fn check_states_each_dated_files_age() {

@@ -152,7 +152,7 @@ A verified signature shows that the request was signed with a key the signer pub
 
 Signers differ in who operates them. A **direct** signer is one operator's own agent; an **intermediary** is a platform a wide range of end users direct, each starting their own actions. A signature verified for an intermediary attributes the platform, never the end user, and a report says so. A per-end-user value the platform forwards (an RFC 7239 `Forwarded` header) separates one end user's requests from another's: it is a key to group requests by, not attribution, and is not published. A practitioner records the class only where the provider's own documentation states it.
 
-A declared agent that is refused (403, 429 or a challenge) and is followed within minutes by undeclared browser-like requests for the same pages from elsewhere is a pattern to check, not a finding: an agent falling back to an undeclared client looks like this, and so does an unrelated visitor reading the same page. It is never scored, names no provider beyond the refused requests' own declaration, and says nothing about who sent the undeclared requests.
+A declared agent that is refused (403, 429 or a challenge) and is followed within minutes by undeclared browser-like requests for the same host and path shape (`/docs/17` and `/docs/42` alike) from elsewhere is a pattern to check, not a finding: an agent falling back to an undeclared client looks like this, and so does an unrelated visitor reading the same page. It is never scored, names no provider beyond the refused requests' own declaration, and says nothing about who sent the undeclared requests.
 
 | Observation | Reading | Layer and level |
 |---|---|---|

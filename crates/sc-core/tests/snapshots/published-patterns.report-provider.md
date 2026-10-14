@@ -57,7 +57,7 @@ A person or a conventional scanner sending the same payloads through the same se
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `341cb867` over 2 records: sqli (numeric_or ×1); xss (script_alert ×1); first seen sqli.numeric_or → xss.script_alert. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C2** (significant): 3 records, 1 run(s), 2026-08-03 15:30:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
-  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace)
+  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data[.]jsonrecords` over 2m (median gap 60s, model pace)
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
@@ -89,19 +89,19 @@ For each cluster, the window to search, what its times measure, and the strings 
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-08-12 02:10:00 UTC: `hxxps://vizprod[.]aihw[.]gov[.]au/views/Dashboard/Overview?:embed=y&:showVizHome=no&:apiID=%3Cscript%3Ealert(document.domain)%3C/script%3E`
+1. 2026-08-12 02:10:00 UTC: `hxxps://vizprod[.]aihw[.]gov[.]au/views/Dashboard/Overview?:embed=y&:showVizHome=no&:apiID=%3Cscript%3Ealert(document[.]domain)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-20 19:04:00 UTC: `hxxps://markdown[.]new/hxxps://nmdigital[.]unm[.]edu/digital/collection/abqmuseum/id/1234?tok=expt4`
    - rules: relay.markdown_new, marker.probe_tag
-1. 2026-08-03 15:32:00 UTC: `hxxps://api[.]datausa[.]io/tesseract/data.jsonrecords?cube=../../etc/passwd`
+1. 2026-08-03 15:32:00 UTC: `hxxps://api[.]datausa[.]io/tesseract/data[.]jsonrecords?cube=../../etc/passwd`
    - rules: exploit.traversal, exploit.traversal_single
 1. 2026-06-02 14:00:05 UTC: `hxxps://civilrightsdata[.]ed[.]gov/api/v1.0/GetStateEstimation?survey_Year_Key=9&Measure_Id=1&State_Id=1%20OR%201=1`
    - rules: exploit.sqli_boolean
 1. 2026-06-10 09:12:00 UTC: `hxxps://recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record?app=divincan&IdNumber=1%20OR%201=1`
    - rules: exploit.sqli_boolean
-1. 2026-06-10 09:14:30 UTC: `hxxps://recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record?app=divincan&IdNumber=%253Cscript%253Ealert(document.domain)%253C%252Fscript%253E`
+1. 2026-06-10 09:14:30 UTC: `hxxps://recherche-collection-search[.]bac-lac[.]canada[.]ca/eng/Home/Record?app=divincan&IdNumber=%253Cscript%253Ealert(document[.]domain)%253C%252Fscript%253E`
    - rules: exploit.double_encoded_meta
-1. 2026-08-03 15:31:00 UTC: `hxxps://api[.]datausa[.]io/tesseract/data.jsonrecords?cube=ipeds_completions&include=University:%7B%7B7*7%7D%7D`
+1. 2026-08-03 15:31:00 UTC: `hxxps://api[.]datausa[.]io/tesseract/data[.]jsonrecords?cube=ipeds_completions&include=University:%7B%7B7*7%7D%7D`
    - rules: exploit.ssti
 1. 2026-05-20 19:01:00 UTC: `hxxps://nmdigital[.]unm[.]edu/digital/api/singleitem/image/pdf/abqmuseum/1234/default.jpg?tok=expt3`
    - rules: marker.probe_tag

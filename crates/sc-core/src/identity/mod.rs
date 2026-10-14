@@ -588,7 +588,7 @@ impl ClusterIdentity {
                 let who: Vec<String> = [l.provider.clone(), l.agent.clone()]
                     .into_iter()
                     .flatten()
-                    .map(|s| crate::extract::defang(&s))
+                    .map(|s| crate::extract::defang_hosts(&s))
                     .collect();
                 let mut s = format!("{} {}", l.records, l.class.id().replace('_', " "));
                 if !who.is_empty() {
@@ -754,7 +754,7 @@ pub fn annotate(a: &mut Analysis, catalog: &Catalog, data: &IdentityData) {
                 .iter()
                 .filter(|l| class.contains(&l.class))
                 .filter_map(|l| l.agent.clone().or(l.provider.clone()))
-                .map(|s| crate::extract::defang(&s))
+                .map(|s| crate::extract::defang_hosts(&s))
                 .collect();
             v.dedup();
             v.join(", ")

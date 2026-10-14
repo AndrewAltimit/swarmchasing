@@ -529,20 +529,41 @@ pub fn defang_host(host: &str) -> String {
 /// Make URLs safe to paste into a report: `hxxps://example[.]com/...`.
 /// Every embedded URL is defanged, not just the outermost, and so is a
 /// host after `//` without a scheme (`//a.example`, `%2F%2Fa.example`).
+/// Within a URL (from its scheme or `//` to the next space or quote) every
+/// host name or address is defanged wherever it sits: in a path, a query
+/// value (`site%3Aa.example`, `user%40a.example`) or a fragment. Text
+/// outside a URL is left as it is, so a rule id (`relay.jina`) stays
+/// readable; [`defang_hosts`] defangs bare hosts there too.
 pub fn defang(s: &str) -> String {
     static RE: OnceLock<Regex> = OnceLock::new();
     static BARE: OnceLock<Regex> = OnceLock::new();
+    static SPAN: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| Regex::new(r"(?i)(h)tt(ps?)://([^/?#\s]+)").unwrap());
     let bare = BARE.get_or_init(|| {
         Regex::new(r"(?i)(//|%2f%2f)([a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+)").unwrap()
     });
-    let s = re.replace_all(s, |c: &regex::Captures| {
-        format!("{}xx{}://{}", &c[1], &c[2], c[3].replace('.', "[.]"))
-    });
-    bare.replace_all(&s, |c: &regex::Captures| {
+    let span = SPAN.get_or_init(|| Regex::new(r#"(?i)(?://|%2f%2f)[^\s"'<>`]*"#).unwrap());
+    // A scheme glued to the one before it (`https://https://a.example`) is
+    // read as that one's host, so the pass repeats until no scheme is left;
+    // each pass removes at least one.
+    let mut s = s.to_string();
+    while re.is_match(&s) {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                format!(
+                    "{}xx{}://{}",
+                    &c[1],
+                    &c[2],
+                    c[3].replace("[.]", ".").replace('.', "[.]")
+                )
+            })
+            .into_owned();
+    }
+    let s = bare.replace_all(&s, |c: &regex::Captures| {
         format!("{}{}", &c[1], c[2].replace('.', "[.]"))
-    })
-    .into_owned()
+    });
+    span.replace_all(&s, |c: &regex::Captures| defang_bare(&c[0]))
+        .into_owned()
 }
 
 /// Text made safe to print wherever a host may sit outside a URL (a link
@@ -550,11 +571,24 @@ pub fn defang(s: &str) -> String {
 /// does, then every bare host name left (`a.example`, `1.2.3.4`) written
 /// `a[.]example`. A run of letters, digits, dots and hyphens counts as a
 /// host when its labels are all non-empty and its last is two or more
-/// letters, or when it is four numbers of at most 255 not following a
-/// product name (`Chrome/138.0.0.0`); so `0.52`, `e.g` and `v1.2` stay as
-/// they are.
+/// letters (not a file suffix such as `php`), or when it is four numbers of
+/// at most 255 not following a product name (`Chrome/138.0.0.0`); so
+/// `0.52`, `e.g`, `v1.2` and `index.html` stay as they are.
 pub fn defang_hosts(s: &str) -> String {
-    let s = defang(s);
+    defang_bare(&defang(s))
+}
+
+/// The bare-host pass of [`defang`]: every host name or address left in
+/// `s` written `a[.]example`.
+fn defang_bare(s: &str) -> String {
+    /// File name suffixes that are no top-level domain, so `d.php` or
+    /// `robots.txt` cannot be a host and stays readable. A suffix that is
+    /// also a TLD (`.zip`, `.sh`, `.md`) is not listed.
+    const FILE_SUFFIXES: &[&str] = &[
+        "asp", "aspx", "bak", "cfg", "cgi", "css", "csv", "exe", "gif", "gz", "htm", "html", "ico",
+        "ini", "jpeg", "jpg", "js", "json", "jsp", "log", "pdf", "php", "png", "svg", "tar",
+        "toml", "txt", "wasm", "webp", "woff", "woff2", "xml", "yaml", "yml",
+    ];
     let hosty = |c: char| c.is_ascii_alphanumeric() || c == '.' || c == '-';
     let mut out = String::with_capacity(s.len() + 8);
     let mut word = String::new();
@@ -567,7 +601,10 @@ pub fn defang_hosts(s: &str) -> String {
             && labels.iter().all(|l| !l.is_empty())
             && labels
                 .last()
-                .is_some_and(|l| l.len() > 1 && l.chars().all(|c| c.is_ascii_alphabetic()));
+                .is_some_and(|l| l.len() > 1 && l.chars().all(|c| c.is_ascii_alphabetic()))
+            && !labels
+                .last()
+                .is_some_and(|l| FILE_SUFFIXES.contains(&l.to_ascii_lowercase().as_str()));
         // `Chrome/138.0.0.0` is a version, not an address.
         let mut before = out.chars().rev();
         let version =
@@ -596,6 +633,24 @@ pub fn defang_hosts(s: &str) -> String {
     }
     flush(&mut word, &mut out);
     out
+}
+
+/// Defanged text cut to `max` characters, with `…` when cut. Defang
+/// first and cut after (`clip_defanged(&defang_hosts(s), 90)`): a host
+/// cut before defanging (`a.example.n`) no longer reads as one. A cut
+/// never ends inside a `[.]`.
+pub fn clip_defanged(defanged: &str, max: usize) -> String {
+    if defanged.chars().count() <= max {
+        return defanged.to_string();
+    }
+    let mut t: String = defanged.chars().take(max).collect();
+    if t.ends_with("[.") {
+        t.truncate(t.len() - 2);
+    } else if t.ends_with('[') && defanged[t.len()..].starts_with(".]") {
+        t.truncate(t.len() - 1);
+    }
+    t.push('…');
+    t
 }
 
 /// A linking feature's text (`<rule>:<value>` or `param:<name>=<value>`)
@@ -1083,8 +1138,47 @@ mod tests {
         // A host after `//` is one, with or without a scheme.
         assert_eq!(
             defang("https://https://a.example/x?u=%2F%2Fb.example%2F&c=//c.example/d.php"),
-            "hxxps://https://a[.]example/x?u=%2F%2Fb[.]example%2F&c=//c[.]example/d.php"
+            "hxxps://hxxps://a[.]example/x?u=%2F%2Fb[.]example%2F&c=//c[.]example/d.php"
         );
+        // A host anywhere in a URL is defanged: after an encoded `:` or
+        // `@`, after `=`, in a path or a fragment.
+        assert_eq!(
+            defang("https://s.jina.ai/site%3Aportal.agency.example%20admin"),
+            "hxxps://s[.]jina[.]ai/site%3Aportal[.]agency[.]example%20admin"
+        );
+        assert_eq!(
+            defang("https://f.example/s?email=user%40example.com&n=a.example.org#b.example"),
+            "hxxps://f[.]example/s?email=user%40example[.]com&n=a[.]example[.]org#b[.]example"
+        );
+        assert_eq!(
+            defang("https://f.example/go/t.example/x"),
+            "hxxps://f[.]example/go/t[.]example/x"
+        );
+        // Defanged text defangs to itself.
+        for s in [
+            "https://r.jina.ai/https://https://a.example/p?q=b.example",
+            "q=%2F%2Fa.example and //b.example/x.php",
+        ] {
+            assert_eq!(defang(&defang(s)), defang(s), "{s}");
+            assert_eq!(defang_hosts(&defang_hosts(s)), defang_hosts(s), "{s}");
+        }
+        // Text outside a URL keeps its dotted names (rule ids).
+        assert_eq!(
+            defang("relay.jina on https://a.example/p?q=b.example"),
+            "relay.jina on hxxps://a[.]example/p?q=b[.]example"
+        );
+    }
+
+    #[test]
+    fn clips_after_defanging() {
+        let f = "exfil.oast:id.oast.pipedream.net";
+        let d = defang_feature(f);
+        assert_eq!(clip_defanged(&d, 28), "exfil.oast:id[.]oast[.]piped…");
+        // Never inside a `[.]`.
+        assert_eq!(clip_defanged("a[.]example", 2), "a…");
+        assert_eq!(clip_defanged("a[.]example", 3), "a…");
+        assert_eq!(clip_defanged("a[.]example", 4), "a[.]…");
+        assert_eq!(clip_defanged("a[.]b", 9), "a[.]b");
     }
 
     #[test]

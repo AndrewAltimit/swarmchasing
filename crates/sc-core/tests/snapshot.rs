@@ -155,3 +155,29 @@ fn analysis_and_reports_match_snapshots() {
     snapshot(ALL, &all.join("\n"), &mut failures);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// No report or notice snapshot prints a host bare inside a URL: every
+/// defanged URL (`hxxps://...`) is unchanged by defanging it again, so a
+/// host in its path, query or fragment (`site%3Aa.example`) is defanged
+/// too. Analysis JSON holds the records as data and is not swept.
+#[test]
+fn printed_urls_carry_no_bare_host() {
+    let url = regex::Regex::new(r#"(?i)hxxps?://[^\s`"'<>\\]*"#).unwrap();
+    let dir = root().join("tests/snapshots");
+    let mut bare = Vec::new();
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        let name = p.file_name().unwrap().to_string_lossy().into_owned();
+        if !(name.ends_with(".md") || name.ends_with(".notice.json")) {
+            continue;
+        }
+        let text = std::fs::read_to_string(&p).unwrap();
+        for m in url.find_iter(&text) {
+            let again = sc_core::defang_hosts(m.as_str());
+            if again != m.as_str() {
+                bare.push(format!("{name}: {} (want {again})", m.as_str()));
+            }
+        }
+    }
+    assert!(bare.is_empty(), "{}", bare.join("\n"));
+}

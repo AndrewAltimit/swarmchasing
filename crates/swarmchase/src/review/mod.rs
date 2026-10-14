@@ -64,7 +64,6 @@ pub mod sample;
 pub mod serve;
 
 use crate::suggest::Suggestion;
-use crate::util::truncate;
 use anyhow::{Context, Result, bail};
 use sc_core::{Analysis, Observation, Tier, defang, fmt_ts};
 use serde::{Deserialize, Serialize};
@@ -260,7 +259,7 @@ pub fn run(args: ReviewArgs) -> Result<()> {
                 r.tier.label(),
                 r.score,
                 r.obs.id,
-                defang(&truncate(&r.obs.url, 100))
+                sc_core::clip_defanged(&sc_core::defang(&r.obs.url), 100)
             );
         }
         return Ok(());
@@ -935,23 +934,31 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
             " (below L2: unsure is the most the rule allows)"
         }
     )?;
-    writeln!(out, "  url:     {}", defang(&truncate(&r.obs.url, 300)))?;
+    writeln!(
+        out,
+        "  url:     {}",
+        sc_core::clip_defanged(&sc_core::defang(&r.obs.url), 300)
+    )?;
     for l in r.layers.iter().filter(|l| l.via != "submitted").take(5) {
         writeln!(
             out,
             "  {:<8} {}",
             format!("[{}]", l.via),
-            defang(&truncate(
-                &l.text.split_whitespace().collect::<Vec<_>>().join(" "),
+            sc_core::clip_defanged(
+                &defang(&l.text.split_whitespace().collect::<Vec<_>>().join(" ")),
                 200
-            ))
+            )
         )?;
     }
     if let Some(h) = &r.target_host {
         writeln!(out, "  target:  {}", sc_core::defang_host(h))?;
     }
     if let Some(f) = &r.obs.final_url {
-        writeln!(out, "  final:   {}", defang(&truncate(f, 120)))?;
+        writeln!(
+            out,
+            "  final:   {}",
+            sc_core::clip_defanged(&sc_core::defang(f), 120)
+        )?;
     }
     for h in &r.hits {
         writeln!(
@@ -959,7 +966,7 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
             "  rule:    {} (+{}) {}",
             h.rule_id,
             h.weight,
-            defang(&truncate(&h.matched, 80))
+            sc_core::clip_defanged(&sc_core::defang(&h.matched), 80)
         )?;
     }
     if let Some(link) = &r.obs.reference {

@@ -12,8 +12,8 @@
 
 use crate::analyze::{Analysis, Cluster, CommonFeature, ObsResult, Tie};
 use crate::escalation::Escalation;
-use crate::extract::{defang_feature, defang_hosts};
-use crate::model::{LinkFeature, Provenance, Tactic, Tier, truncate};
+use crate::extract::{clip_defanged, defang_feature, defang_hosts};
+use crate::model::{LinkFeature, Provenance, Tactic, Tier};
 use crate::rules::Linking;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -292,7 +292,7 @@ fn burned_in(results: &[ObsResult], c: &Cluster, cfg: &Linking, out: &mut Vec<Pl
             records: g.iter().map(|x| x.1).collect(),
             detail: format!(
                 "`{}` on {} record(s) {why}: anyone who read it can copy it",
-                defang_feature(&truncate(&g[0].0.to_string(), 90)),
+                clip_defanged(&defang_feature(&g[0].0.to_string()), 90),
                 g.len()
             ),
             base_rate: None,
@@ -419,7 +419,7 @@ fn habit_mismatches(
                     .collect(),
                 detail: format!(
                     "shares `{}` with the earlier {} but its {} have nothing in common with that cluster's: the identifier may have been copied",
-                    defang_feature(&truncate(&f.to_string(), 90)),
+                    clip_defanged(&defang_feature(&f.to_string()), 90),
                     first.id,
                     differs.join(", ")
                 ),
@@ -472,7 +472,7 @@ fn seams(
         v.iter()
             .map(|&i| results[i].obs.id.as_str())
             .find(|id| !id.is_empty())
-            .map(|id| format!(" from `{}`", defang_hosts(&truncate(id, 60))))
+            .map(|id| format!(" from `{}`", clip_defanged(&defang_hosts(id), 60)))
             .unwrap_or_default()
     };
     for s in crate::seam::seams(results, &c.members, ties, min_side) {
@@ -491,7 +491,7 @@ fn seams(
                 s.sides[1].len(),
                 first(&s.sides[1]),
                 s.differs.join(", "),
-                truncate(
+                clip_defanged(
                     &s.via
                         .iter()
                         .map(|v| defang_feature(v))
