@@ -7,20 +7,35 @@
 //! unflagged requests of its runs' clients included, never capture times)
 //! are binned in `co_activity.bin_secs` bins, and every ordered pair is read
 //! at signed lags: lag `l` counts the leader's active bins with follower
-//! activity in bin `b + l` or the next, from one bin before to
-//! `co_activity.max_lag_bins` after. A leader leads a follower when the best
-//! lag is zero or more and reads more coincidences than its mirror (the
-//! follower before the leader).
+//! activity in bin `b + l` or the next, for every `l` from
+//! `-(co_activity.max_lag_bins + 1)` to `co_activity.max_lag_bins`, so the
+//! follower is read from that many bins before the leader's bin to one more
+//! after. A leader leads a follower when the best lag is zero or more and
+//! reads more coincidences than its mirror (`-l - 1`, the follower before the
+//! leader by as much).
 //!
-//! A follower's own chance is co-activity's: the analytic Poisson-binomial
-//! tail at the follower's coverage of the union span, times the lags tried,
-//! and the share of circular shifts of its activity that align as well; the
-//! larger, with the shifts only vetoing when the span allows too few. A
-//! leader on clock hours is weighted down as co-activity weights it. A star
-//! needs `dispatch_min_followers` followers, each under
+//! A lead also needs a direction chance alone seldom gives, read on the
+//! times themselves rather than the bins: for each of the leader's active
+//! bins, the follower's nearest time to the leader's first time there, after
+//! it or before it, against even odds (a one-sided sign test). Clusters set
+//! off together by one trigger fall either side of each other alike, and two
+//! clusters busy in the same bins win lag zero over its mirror by bin
+//! boundaries alone.
+//!
+//! A follower's own chance is the larger of the direction's and
+//! co-activity's: the analytic Poisson-binomial tail at the follower's
+//! coverage of the union span, times the lags tried, and the share of
+//! circular shifts of its activity that align as well; the larger, with the
+//! shifts only vetoing when the span allows too few. Both must hold, so the
+//! larger is the chance of both. The shifts are only read for a lead that
+//! passes the rest. A leader on clock hours is weighted down as co-activity
+//! weights it. A star needs `dispatch_min_followers` followers, each under
 //! `dispatch_pair_max_chance`, of pairwise different clients, whose own best
 //! lag between each other agrees within `dispatch_lag_tolerance_bins` with
-//! the difference of their lags to the leader.
+//! the difference of their lags to the leader. Clients differ when they
+//! differ in a way of sending known on both sides (relay route, user agent,
+//! network, header set, encoding); clients known on neither side, as on a
+//! submit service or an archive, are never told apart.
 //!
 //! The star's chance combines its followers' chances, each corrected for the
 //! candidate followers the leader had (Sidak), as a product of independent
@@ -40,6 +55,13 @@ use crate::swarm::runs::{Fp, differ};
 use crate::swarm::{EdgeStrength, SwarmEdgeKind};
 use std::collections::BTreeMap;
 
+/// Whether two clusters' clients are told apart: they differ in at least
+/// one way of sending known on both sides. Clients known on neither side
+/// (submit services, archive captures) are never counted as different.
+fn different_clients(a: &Fp, b: &Fp) -> bool {
+    differ(a, b).is_some_and(|d| !d.is_empty())
+}
+
 /// One cluster's activity over its runs.
 struct Activity {
     ci: usize,
@@ -47,6 +69,8 @@ struct Activity {
     runs: Vec<usize>,
     /// Distinct active bins, earliest first.
     bins: Vec<i64>,
+    /// Distinct request and submit times in those bins, earliest first.
+    times: Vec<i64>,
     fp: Fp,
 }
 
@@ -67,6 +91,36 @@ fn signed_lags(m: i64) -> Vec<i64> {
     (0..=m).flat_map(|d| [d, -d - 1]).collect()
 }
 
+/// The one-sided sign test of a lead's direction, on the times
+/// themselves: for each of the leader's active bins, its first time there
+/// and the follower's nearest time within `reach` seconds of it; of those
+/// that differ, the chance that at least as many fall after the leader's as
+/// do when each is either way at even odds. Two clusters set off together
+/// by one trigger (a schedule, a feed item) fall either side of each other
+/// alike, whatever lag their bins read best at.
+fn direction_chance(x: &[i64], y: &[i64], bin: i64, reach: i64) -> f64 {
+    let (mut after, mut n) = (0usize, 0usize);
+    let mut prev = None;
+    for &t in x {
+        let b = t.div_euclid(bin);
+        if prev == Some(b) {
+            continue;
+        }
+        prev = Some(b);
+        let i = y.partition_point(|&v| v < t);
+        let near = [i.checked_sub(1).map(|k| y[k]), y.get(i).copied()]
+            .into_iter()
+            .flatten()
+            .filter(|&v| (v - t).abs() <= reach)
+            .min_by_key(|&v| ((v - t).abs(), v));
+        if let Some(v) = near.filter(|&v| v != t) {
+            n += 1;
+            after += usize::from(v > t);
+        }
+    }
+    at_least(&vec![0.5; n], after)
+}
+
 impl Ctx<'_> {
     /// Each cluster above noise with enough active bins outside crowded
     /// ones.
@@ -81,11 +135,13 @@ impl Ctx<'_> {
         let mut acts: Vec<Activity> = by
             .into_iter()
             .map(|(ci, runs)| {
-                let mut bins: Vec<i64> = runs
+                let mut times: Vec<i64> = runs
                     .iter()
-                    .flat_map(|&i| self.runs[i].events.iter().map(|t| t.div_euclid(bin)))
+                    .flat_map(|&i| self.runs[i].events.iter().copied())
                     .collect();
-                crate::sort::sort(&mut bins);
+                crate::sort::sort(&mut times);
+                times.dedup();
+                let mut bins: Vec<i64> = times.iter().map(|t| t.div_euclid(bin)).collect();
                 bins.dedup();
                 let mut fp: Fp = Default::default();
                 for &i in &runs {
@@ -97,7 +153,13 @@ impl Ctx<'_> {
                         }
                     }
                 }
-                Activity { ci, runs, bins, fp }
+                Activity {
+                    ci,
+                    runs,
+                    bins,
+                    times,
+                    fp,
+                }
             })
             .collect();
         // Bins where more clusters are active than `max_shared` say nothing
@@ -110,6 +172,8 @@ impl Ctx<'_> {
         }
         for a in &mut acts {
             a.bins.retain(|b| crowd[b] <= self.max_shared);
+            a.times
+                .retain(|t| crowd[&t.div_euclid(bin)] <= self.max_shared);
         }
         acts.retain(|a| a.bins.len() >= self.co.min_active_bins.max(1));
         acts
@@ -230,15 +294,29 @@ impl Ctx<'_> {
     }
 
     /// `f` read against leader `l`: its lead, when it trails `l` at its best
-    /// lag and more often than before it.
+    /// lag, more often than before it, and in a direction chance alone
+    /// seldom gives. The lead's chance is the larger of co-activity's and the
+    /// direction's ([`direction_chance`]): both must hold. The co-activity
+    /// chance, the costly part, is only read for a lead that passes the rest.
     fn lead(&self, l: &Activity, f: &Activity) -> Option<Lead> {
-        let (counts, lead) = self.per_lag(&l.bins, &f.bins, true)?;
-        if lead.lag < 0 {
+        let (counts, lead) = self.per_lag(&l.bins, &f.bins, false)?;
+        if lead.lag < 0 || lead.coincidences < self.co.min_coincidences {
             return None;
         }
         let lags = signed_lags(self.co.max_lag_bins.max(0));
         let mirror = lags.iter().position(|&x| x == -lead.lag - 1)?;
-        (lead.coincidences > counts[mirror] + 1e-9).then_some(lead)
+        if lead.coincidences <= counts[mirror] + 1e-9 {
+            return None;
+        }
+        let bin = self.co.bin_secs.max(1);
+        let reach = (self.co.max_lag_bins.max(0) + 2) * bin;
+        let direction = direction_chance(&l.times, &f.times, bin, reach);
+        if direction > self.opts.dispatch_pair_max_chance {
+            return None;
+        }
+        let (_, mut lead) = self.per_lag(&l.bins, &f.bins, true)?;
+        lead.chance = lead.chance.max(direction);
+        Some(lead)
     }
 
     /// Whether `x` and `y` come within reach of each other on enough bins
@@ -269,12 +347,11 @@ impl Ctx<'_> {
             let mut cands: Vec<(usize, Lead)> = Vec::new();
             let mut n_cand = 0usize;
             for (fi, f) in acts.iter().enumerate() {
-                if fi == li || differ(&l.fp, &f.fp).is_none() || !self.near(l, f) {
+                if fi == li || !different_clients(&l.fp, &f.fp) || !self.near(l, f) {
                     continue;
                 }
                 n_cand += 1;
                 if let Some(lead) = self.lead(l, f)
-                    && lead.coincidences >= self.co.min_coincidences
                     && lead.chance <= o.dispatch_pair_max_chance
                 {
                     cands.push((fi, lead));
@@ -296,7 +373,7 @@ impl Ctx<'_> {
                 let f = &acts[c.0];
                 let fits = chosen.iter().all(|d| {
                     let g = &acts[d.0];
-                    differ(&g.fp, &f.fp).is_some()
+                    different_clients(&g.fp, &f.fp)
                         && self.per_lag(&g.bins, &f.bins, false).is_some_and(|(_, x)| {
                             (x.lag - (c.1.lag - d.1.lag)).abs() <= o.dispatch_lag_tolerance_bins
                         })
@@ -360,7 +437,6 @@ impl Ctx<'_> {
                 let strength = if chosen
                     .iter()
                     .all(|d| d.1.coincidences >= 2.0 * self.co.min_coincidences)
-                    && !diff.is_empty()
                 {
                     EdgeStrength::Moderate
                 } else {
@@ -411,10 +487,29 @@ impl Ctx<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::signed_lags;
+    use super::{direction_chance, signed_lags};
 
     #[test]
     fn lags_are_read_nearest_first() {
         assert_eq!(signed_lags(2), vec![0, -1, 1, -2, 2, -3]);
+    }
+
+    #[test]
+    fn direction_reads_which_side_the_follower_falls() {
+        let x: Vec<i64> = (0..8).map(|i| 1000 + i * 3000).collect();
+        // Always 40 s after, often in the leader's own bin: 2^-8.
+        let after: Vec<i64> = x.iter().map(|t| t + 40).collect();
+        assert!((direction_chance(&x, &after, 60, 420) - 1.0 / 256.0).abs() < 1e-12);
+        // Either side alike: no direction.
+        let both: Vec<i64> = x
+            .iter()
+            .enumerate()
+            .map(|(i, t)| if i % 2 == 0 { t + 20 } else { t - 20 })
+            .collect();
+        assert!(direction_chance(&x, &both, 60, 420) > 0.5);
+        // Out of reach, or at the same second, counts neither way.
+        let far: Vec<i64> = x.iter().map(|t| t + 900).collect();
+        assert_eq!(direction_chance(&x, &far, 60, 420), 1.0);
+        assert_eq!(direction_chance(&x, &x, 60, 420), 1.0);
     }
 }

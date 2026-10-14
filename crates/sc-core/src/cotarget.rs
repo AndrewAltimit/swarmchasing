@@ -353,12 +353,9 @@ fn natural_part(s: &str, digits: bool) -> (u8, usize, String) {
 fn sorted_explains(hosts: &[&str], tx: &[i64], ty: &[i64], in_order: usize) -> bool {
     let mut by_text: Vec<usize> = (0..hosts.len()).collect();
     by_text.sort_by(|&i, &k| hosts[i].cmp(hosts[k]));
+    let keys: Vec<_> = hosts.iter().map(|h| natural_key(h)).collect();
     let mut by_number: Vec<usize> = (0..hosts.len()).collect();
-    by_number.sort_by(|&i, &k| {
-        natural_key(hosts[i])
-            .cmp(&natural_key(hosts[k]))
-            .then(hosts[i].cmp(hosts[k]))
-    });
+    by_number.sort_by(|&i, &k| keys[i].cmp(&keys[k]).then(hosts[i].cmp(hosts[k])));
     [by_text, by_number].iter().any(|order| {
         let mut rank = vec![0i64; hosts.len()];
         for (r, &i) in order.iter().enumerate() {
@@ -375,6 +372,31 @@ fn sorted_explains(hosts: &[&str], tx: &[i64], ty: &[i64], in_order: usize) -> b
     })
 }
 
+/// Whether both clusters' orders follow the order the hosts first appeared
+/// in the background (`seen`: each host's earliest time in records outside
+/// every cluster above noise) at least as far as they follow each other:
+/// readers of one time-ordered source (a certificate log, newly registered
+/// domains, a trending list) touch its hosts in the order they arrive,
+/// without a shared operator, and other readers of it show that order.
+/// Hosts the background never touched take no part.
+fn arrival_explains(
+    hosts: &[&str],
+    seen: &BTreeMap<&str, i64>,
+    tx: &[i64],
+    ty: &[i64],
+    in_order: usize,
+) -> bool {
+    let follows = |t: &[i64]| {
+        let pts: Vec<(i64, i64)> = hosts
+            .iter()
+            .zip(t)
+            .filter_map(|(h, &ti)| seen.get(h).map(|&s| (ti, s)))
+            .collect();
+        pts.len() >= in_order && crate::chance::longest_chain(&pts) >= in_order
+    };
+    follows(tx) && follows(ty)
+}
+
 /// Pairs of concurrent clusters above noise that first touched the rare
 /// hosts they share in the same order beyond chance, most unlikely first,
 /// and the family's multiplicity budget. A pair sharing at least
@@ -384,7 +406,9 @@ fn sorted_explains(hosts: &[&str], tx: &[i64], ty: &[i64], in_order: usize) -> b
 /// same order, from request and submit times only, against a random order
 /// ([`crate::chance::increasing_at_least`]). Ties in either cluster's times
 /// never count as agreement. A pair whose two orders both follow the
-/// hosts' sorted order as far is explained by a sorted list and kept out.
+/// hosts' sorted order as far is explained by a sorted list, and one whose
+/// two orders both follow the hosts' first appearance in the background as
+/// far by a time-ordered source ([`arrival_explains`]); both are kept out.
 pub(crate) fn ordered_pairs(
     clusters: &[Cluster],
     results: &[ObsResult],
@@ -396,6 +420,21 @@ pub(crate) fn ordered_pairs(
     let cap = opts.max_holders.min(max_shared);
     let rare = |h: &str| holders.get(h).is_some_and(|&n| n <= cap);
     let min_hosts = opts.order_min_hosts.max(2);
+    // Each rare host's first appearance outside every cluster above noise.
+    let in_shown: BTreeSet<usize> = shown
+        .iter()
+        .flat_map(|c| c.members.iter().copied())
+        .collect();
+    let mut seen: BTreeMap<&str, i64> = BTreeMap::new();
+    for (i, r) in results.iter().enumerate() {
+        if in_shown.contains(&i) || r.obs.ts <= 0 {
+            continue;
+        }
+        if let Some(h) = r.target_host.as_deref().filter(|h| rare(h)) {
+            let t = seen.entry(h).or_insert(r.obs.ts);
+            *t = (*t).min(r.obs.ts);
+        }
+    }
     // Each cluster's first touch of each rare host.
     let firsts: Vec<(&str, BTreeMap<&str, i64>)> = shown
         .iter()
@@ -454,7 +493,10 @@ pub(crate) fn ordered_pairs(
         let pts: Vec<(i64, i64)> = tx.iter().copied().zip(ty.iter().copied()).collect();
         let in_order = crate::chance::longest_chain(&pts);
         let chance = crate::chance::increasing_at_least(hosts.len(), in_order);
-        if chance > opts.max_chance || sorted_explains(&hosts, &tx, &ty, in_order) {
+        if chance > opts.max_chance
+            || sorted_explains(&hosts, &tx, &ty, in_order)
+            || arrival_explains(&hosts, &seen, &tx, &ty, in_order)
+        {
             continue;
         }
         out.push(OrderedCoTargetPair {
@@ -723,6 +765,62 @@ mod tests {
         assert_eq!(c.clusters.len(), 3);
         assert!(
             c.ordered_cotarget_pairs.is_empty(),
+            "{:?}",
+            c.ordered_cotarget_pairs
+        );
+    }
+
+    #[test]
+    fn readers_of_one_time_ordered_source_are_no_ordered_pair() {
+        let hosts = [
+            "kilo.new.example",
+            "alpha.new.example",
+            "mike.new.example",
+            "delta.new.example",
+            "zulu.new.example",
+            "echo.new.example",
+            "bravo.new.example",
+        ];
+        let same: Vec<usize> = (0..7).collect();
+        let pair = ordered(&hosts, &[same.clone(), same.clone()]);
+        let a = analyze(pair.clone(), &Rules::default_rules());
+        assert_eq!(
+            a.ordered_cotarget_pairs.len(),
+            1,
+            "{:?}",
+            a.ordered_cotarget_pairs
+        );
+        // Plain visits outside any cluster touch the hosts first, in the
+        // order they arrived: the same order, so arrival explains it.
+        let background = |order: &[usize]| -> Vec<Observation> {
+            order
+                .iter()
+                .enumerate()
+                .map(|(step, &k)| {
+                    o(
+                        &format!("bg-{k}"),
+                        1_790_990_000 + step as i64 * 600,
+                        &format!("https://{}/", hosts[k]),
+                    )
+                })
+                .collect()
+        };
+        let mut fed = pair.clone();
+        fed.extend(background(&same));
+        let b = analyze(fed, &Rules::default_rules());
+        assert_eq!(b.clusters.len(), 2, "{:?}", b.clusters.len());
+        assert!(
+            b.ordered_cotarget_pairs.is_empty(),
+            "{:?}",
+            b.ordered_cotarget_pairs
+        );
+        // Background in another order explains nothing.
+        let mut other = pair;
+        other.extend(background(&[3, 6, 1, 4, 0, 5, 2]));
+        let c = analyze(other, &Rules::default_rules());
+        assert_eq!(
+            c.ordered_cotarget_pairs.len(),
+            1,
             "{:?}",
             c.ordered_cotarget_pairs
         );

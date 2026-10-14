@@ -589,3 +589,38 @@ fn capture_times_make_no_star() {
     let (a, e) = edges(obs, SwarmEdgeKind::DispatchStar);
     assert!(e.is_empty(), "{:?}", a.swarm_edges);
 }
+
+#[test]
+fn clusters_set_off_together_make_no_star() {
+    // One trigger (a feed item, a schedule) at every dispatch time sets off
+    // three clients, each within 45 s either side of it: busy together, but
+    // none reliably first.
+    let mut mix = crate::chance::Mix(11);
+    let times = dispatches();
+    let mut obs = background();
+    for (k, client) in [P, A, B].into_iter().enumerate() {
+        let ts: Vec<i64> = times
+            .iter()
+            .map(|t| t + (mix.next() % 91) as i64 - 45)
+            .collect();
+        obs.extend(client_run(k, client, &ts, &|_| false));
+    }
+    let (a, e) = edges(obs, SwarmEdgeKind::DispatchStar);
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
+}
+
+#[test]
+fn workers_of_unknown_clients_make_no_star() {
+    // Neither worker states a user agent or a network: nothing tells their
+    // clients apart, from the planner's or from each other.
+    let mut obs = star(&dispatches(), &[(A, 70), (B, 100)]);
+    for x in obs
+        .iter_mut()
+        .filter(|x| x.id.starts_with("c1") || x.id.starts_with("c2"))
+    {
+        x.user_agent = None;
+        x.asn = None;
+    }
+    let (a, e) = edges(obs, SwarmEdgeKind::DispatchStar);
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
+}

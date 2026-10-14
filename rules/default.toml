@@ -278,7 +278,8 @@ clock_weight = 0.25
 # clusters sharing at least `order_min_hosts` rare hosts, first touched within
 # `bin_secs` of each other's span, are tested on the longest run of those hosts
 # both first touched in the same order, against a random order; a pair whose
-# orders both follow the hosts' sorted order as far ties nothing. Kept at
+# orders both follow the hosts' sorted order, or their first appearance in
+# records outside every cluster above noise, as far ties nothing. Kept at
 # `max_chance` and cut at `fdr`.
 [co_target]
 bin_secs = 3600
@@ -317,11 +318,13 @@ common_templates = []
 # `lockstep_max_permutations` when none lines up as well. Capture times never
 # count. S6 dispatch star: a cluster that `dispatch_min_followers` or more
 # different-client clusters each trail at their own lag, read on the
-# `[co_activity]` bins and lags, each follower's chance at most
-# `dispatch_pair_max_chance`, followers' own lag within
-# `dispatch_lag_tolerance_bins` of the difference of their lags to the leader,
-# and the star's combined chance at most `dispatch_max_chance`. S3 to S6 edges
-# are each cut at false discovery rate `fdr` over the tests their kind read.
+# `[co_activity]` bins and lags, each follower after the leader more often
+# than even odds (a sign test on the times), its chance (the larger of that
+# and co-activity's) at most `dispatch_pair_max_chance`, followers' own lag
+# within `dispatch_lag_tolerance_bins` of the difference of their lags to the
+# leader, and the star's combined chance at most `dispatch_max_chance`. S3 to
+# S6 edges are each cut at false discovery rate `fdr` over the tests their kind
+# read.
 [swarm]
 lockstep_tolerance_secs = 3
 lockstep_min_events = 4
