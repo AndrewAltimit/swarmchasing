@@ -175,13 +175,21 @@ pub const CHECK_LOGS: &str = r##"<header class="page-head compact"><h1>Check my 
 <section class="card" id="cl-next" aria-labelledby="cl-next-h" hidden>
 <h2 id="cl-next-h">3. What to do next</h2>
 <ul class="next-steps">
-<li><strong>Look closer.</strong> The <a href="../analyze/#preset=access-log">workbench's access-log preset</a> shows the same analysis with its clusters, runs and timing; the <a href="../identity/">agent identity page</a> lists every declared agent and takes newer copies of the providers' files. Paste the log there again: pages share nothing.</li>
+<li><strong>Look closer.</strong> The <a href="../analyze/#preset=access-log">workbench's access-log preset</a> shows the same analysis with its clusters, runs and timing; the <a href="../identity/">agent identity page</a> lists every declared agent and takes newer copies of the providers' files. The workbench link carries the log you checked over within this browser tab, never in the address; on the identity page, paste it again.</li>
 <li><strong>Share sightings.</strong> From the workbench, a <a href="../operators/#share-sightings">sightings file</a> lets the same swarm be matched across sites without sending your log.</li>
 <li><strong>Report a swarm.</strong> If the requests look like an AI agent acting against your site, <a href="../submit/">report it</a>: the form builds the report in your browser and sends nothing itself.</li>
 <li><strong>Talk to us privately.</strong> Questions, or a report from us to answer: <a href="../contact/">contact</a>. Please do not open a public issue that names your host.</li>
 </ul>
 <p class="hint">Flagged requests and spoofed agents are hints to check against the rest of your logs, not proof of who sent them (<a href="../operators/#what-to-expect-in-your-own-logs">what to expect in your own logs</a>).</p>
 </section>"##;
+
+/// Shown on the identity page when the build embedded no provider's files.
+/// The page script hides it while the operator's own copies or the example
+/// are in use.
+pub const NO_PROVIDER_FILES_IDENTITY: &str = r##"<div id="no-provider-files" class="alert" role="note"><p><strong>Spoofing cannot be checked with this site's files.</strong></p><p>This site was built without the providers' published address ranges and signing keys, so a request that names an AI provider's agent stays a claim: nothing is verified and nothing is shown spoofed. Load copies of the providers' files under Providers' files to check against them.</p></div>"##;
+
+/// Shown on Check my logs when the build embedded no provider's files.
+pub const NO_PROVIDER_FILES_CHECK_LOGS: &str = r##"<div id="no-provider-files" class="alert" role="note"><p><strong>Spoofing cannot be checked with this site's files.</strong></p><p>This site was built without the providers' published address ranges and signing keys, so a request that names an AI provider's agent stays a claim: nothing is verified and nothing is shown spoofed. The rules still run. The <a href="../identity/">agent identity page</a> takes copies of the providers' files you load.</p></div>"##;
 
 /// Agent identity: an operator checks the agents its own log declares
 /// against the providers' published ranges and keys

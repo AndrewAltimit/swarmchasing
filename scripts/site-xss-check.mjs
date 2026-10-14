@@ -18,7 +18,8 @@
 // defang on the tools page; the identity page's synthetic example (each
 // class it holds renders, spoofed records in the alert), hostile records
 // and a hostile provider file; the log check's example and a hostile access
-// log. It also checks layout: no page scrolls sideways
+// log, and the hostile log it hands the workbench through session storage
+// (read once, then cleared). It also checks layout: no page scrolls sideways
 // at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
 // one column, and each press of the theme toggle flips the look, storing it
 // only while it differs from the system's.
@@ -485,6 +486,11 @@ try {
     for (let i = 0; i < 50 && !document.querySelector("#context table.layers"); i++) await wait(100);
     const layersShown = !!document.querySelector("#context table.layers");
     const box = document.getElementById("claims");
+    // The draft is redrafted only while the report section is on screen
+    // (at this width the panes are steps: go to the report's).
+    document.querySelector('.steps button[data-step="report"]')?.click();
+    document.getElementById("report").scrollIntoView({ block: "center" });
+    await wait(100);
     const type = async (v) => { box.value = v; box.dispatchEvent(new Event("input")); await wait(400); };
     await type(${JSON.stringify(badClaims)});
     const claimsError = document.getElementById("claims-status").textContent;
@@ -629,6 +635,19 @@ try {
   if (!clRun.next) failures.push("the log check showed no next steps");
   if (!clRun.shown) failures.push("the log check showed nothing for a hostile log");
   await audit("check-logs");
+  // The log Check my logs hands the workbench: a hostile one, through this
+  // tab's session storage, read once and removed with the hash's flag.
+  await run(`sessionStorage.setItem("swarmchase.handoff", ${JSON.stringify(JSON.stringify({
+    v: 1,
+    log: `203.0.113.5 - - [04/Oct/2026:08:10:00 +0000] "GET /search?q=${encodeURIComponent(program)}&cb=https://webhook.site/x HTTP/1.1" 200 1 "-" "${tag}"\n`,
+    map: "host=www.example.org",
+  }))})`);
+  await open("analyze/#preset=access-log&from=check-logs", `!document.getElementById("input-collapsed").hidden`);
+  const handoff = await run(`({ read: !document.getElementById("input-collapsed").hidden && !document.getElementById("summary").hidden, left: sessionStorage.getItem("swarmchase.handoff"), hash: location.hash, format: document.getElementById("format").value })`);
+  if (!handoff.read) failures.push(`the workbench did not analyse the log Check my logs handed over: ${JSON.stringify(handoff)}`);
+  if (handoff.left !== null || /from=/.test(handoff.hash)) failures.push(`the handed-over log was not cleared: ${JSON.stringify({ left: !!handoff.left, hash: handoff.hash })}`);
+  if (handoff.format !== "access_log") failures.push(`the handed-over log was not read as an access log: ${handoff.format}`);
+  await audit("check-logs handoff");
   // Back to the tools page for the bundle viewer.
   await open("tools/", `document.getElementById("case-example")`);
 

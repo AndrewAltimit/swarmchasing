@@ -77,6 +77,43 @@ export function activate(node, fn) {
   return node;
 }
 
+/**
+ * A roving tab stop over `nodes`, in order: one of them (index `current`)
+ * is in the tab order, the arrow keys move focus along them (up and down
+ * with `vertical`, left and right with `horizontal`), Home and End to the
+ * ends. Whichever gets focus becomes the tab stop.
+ */
+export function roving(nodes, { current = 0, vertical = true, horizontal = true } = {}) {
+  const list = nodes.filter(Boolean);
+  if (!list.length) return;
+  const set = (k) => list.forEach((n, i) => n.setAttribute("tabindex", i === k ? "0" : "-1"));
+  set(Math.max(0, Math.min(list.length - 1, current)));
+  list.forEach((n, i) => {
+    n.addEventListener("focus", () => set(i));
+    n.addEventListener("keydown", (ev) => {
+      if (ev.target !== n) return;
+      const k = ev.key;
+      let j = null;
+      if ((vertical && k === "ArrowDown") || (horizontal && k === "ArrowRight")) j = Math.min(list.length - 1, i + 1);
+      else if ((vertical && k === "ArrowUp") || (horizontal && k === "ArrowLeft")) j = Math.max(0, i - 1);
+      else if (k === "Home") j = 0;
+      else if (k === "End") j = list.length - 1;
+      if (j == null) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      set(j);
+      list[j].focus();
+    });
+  });
+}
+
+/**
+ * The sessionStorage key under which Check my logs hands its log to the
+ * workbench (`{ v: 1, log, map }`). The workbench reads it once, when its
+ * address carries `from=check-logs`, and removes it. Never in the URL.
+ */
+export const HANDOFF_KEY = "swarmchase.handoff";
+
 export const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
@@ -98,6 +135,82 @@ export function showAlert(target, title, ...parts) {
     el("p", {}, el("strong", {}, title)),
     ...parts.filter((x) => x != null && x !== false).map((x) => (x instanceof Element ? x : el("p", {}, x))),
   );
+}
+
+/**
+ * A copy button: copies `text()` (a string, or a promise of one) and says
+ * so on the button for a moment, or says to select the text when the
+ * browser refuses.
+ */
+export function copyButton(btn, text, failed = "Copy failed: select the text") {
+  const label = btn.textContent;
+  let t = 0;
+  btn.addEventListener("click", async () => {
+    clearTimeout(t);
+    try {
+      await navigator.clipboard.writeText(await text());
+      btn.textContent = "Copied";
+    } catch {
+      btn.textContent = failed;
+    }
+    t = setTimeout(() => (btn.textContent = label), 2000);
+  });
+  return btn;
+}
+
+/** Files above this many bytes are read only after the visitor says so. */
+export const BIG_FILE = 50 * 1024 * 1024;
+
+/**
+ * Read a picked or dropped file, asking first when it is big: the page
+ * holds it all in memory and the analysis can take a while. Shows the
+ * question in `status` with a button that reads it anyway; resolves to the
+ * text, or null when the visitor has not said yes yet (the button then
+ * calls `then` with the text).
+ */
+export async function readFile(f, status, then) {
+  if (f.size > BIG_FILE) {
+    const mb = Math.round(f.size / (1024 * 1024));
+    const go = el("button", { type: "button" }, "Read it anyway");
+    go.addEventListener("click", async () => {
+      status.hidden = true;
+      then(await f.text());
+    }, { once: true });
+    status.replaceChildren(`This file is about ${mb} MB. The page reads it into memory and analyses it here, which can take a minute and slow the tab. `, go);
+    status.hidden = false;
+    return null;
+  }
+  return f.text();
+}
+
+/**
+ * Run `fn` with `btn` disabled and marked busy, after the browser has
+ * painted that state: the analyses run on the main thread. A second press
+ * while it runs does nothing, including one queued during the run.
+ */
+export async function busy(btn, label, fn) {
+  if (btn.dataset.busy) return undefined;
+  const text = btn.textContent;
+  const wasDisabled = btn.disabled;
+  btn.dataset.busy = "1";
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
+  btn.textContent = label;
+  await new Promise((r) => {
+    requestAnimationFrame(() => setTimeout(r, 0));
+    setTimeout(r, 100);
+  });
+  try {
+    return await fn();
+  } finally {
+    // Cleared after the input queued during the run has been handled.
+    setTimeout(() => {
+      delete btn.dataset.busy;
+      btn.removeAttribute("aria-busy");
+      btn.textContent = text;
+      btn.disabled = wasDisabled;
+    }, 0);
+  }
 }
 
 /** Save text as a file through a blob: URL the page made. */

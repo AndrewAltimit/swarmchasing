@@ -3,10 +3,10 @@
 // text only, URLs and hosts defanged, and never become links. The URL hash
 // holds the selection as ids only (a cluster key, a record number, a rule
 // id, a view), never hosts, URLs or other record data.
-import { $, el, activate, download, fetchRoot, ruleLink, showAlert, showError } from "../lib/dom.js";
+import { $, el, activate, busy, copyButton, download, fetchRoot, readFile, roving, ruleLink, showAlert, showError, HANDOFF_KEY } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
 import { workbench, host as hostOf, pageRules } from "../lib/wasm.js";
-import { figure, legend, legendKey, edgeKey, swarmKey, tierLegend, rampLegend, swimlanes, runExtent, zoomWindow, fleetGraph, swarmGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
+import { figure, legend, legendKey, edgeKey, swarmKey, tierLegend, rampLegend, swimlanes, runExtent, zoomTools, fleetGraph, swarmGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
 import {
   kindClass, kindLabel, tactic, route, fleetItems, language, levelOf, swarmKind, provenanceLabel, corroborationLabel, plantLabel,
 } from "../lib/hints.js";
@@ -58,6 +58,11 @@ let wantReport = false; // the visitor asked for the report, or reached it
 
 const host = (h) => hostOf(sc, h);
 const safe = (s, n = 120) => trunc(sc.defang(String(s ?? "")), n);
+// Hint text from the engine (a soft link's detail, a shared pause's reason)
+// can name a host without a scheme ("relay on www.example.org/q"), which
+// defang() leaves alone: a dotted name ending in a letter is defanged too.
+const BARE_NAME = /\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\b/gi;
+const safeText = (s, n = 120) => trunc(sc.defang(String(s ?? "")).replace(BARE_NAME, (m) => (/[a-z]/i.test(m.slice(m.lastIndexOf(".") + 1)) ? m.replaceAll(".", "[.]") : m)), n);
 const pill = (tier) => el("span", { class: `pill ${String(tier).replace(/[^a-z]/g, "")}` }, String(tier));
 const chips = (list) => list.map((x) => el("span", { class: "chip" }, x));
 const keyOf = (c) => c.key || c.id;
@@ -69,7 +74,7 @@ const VALID = { c: /^(k-[0-9a-f]{6,16}|C\d{1,5})$/, r: /^\d{1,7}$/, rule: /^[\w.
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   const get = (k) => (p.has(k) && VALID[k].test(p.get(k)) ? p.get(k) : null);
-  return { c: get("c"), r: get("r"), rule: get("rule"), v: VIEWS.includes(p.get("v")) ? p.get("v") : null, example: p.get("try") === "example", preset: p.get("preset") };
+  return { c: get("c"), r: get("r"), rule: get("rule"), v: VIEWS.includes(p.get("v")) ? p.get("v") : null, example: p.get("try") === "example", preset: p.get("preset"), from: p.get("from") };
 }
 function writeHash() {
   const p = new URLSearchParams();
@@ -270,7 +275,7 @@ function renderAll() {
   renderEndpoints();
   renderContext();
   renderLinks();
-  renderReport();
+  queueReport();
   writeHash();
 }
 
@@ -291,7 +296,7 @@ function select(next, step = "context") {
   renderFilterBar();
   renderRecords();
   renderContext();
-  renderReport();
+  queueReport();
   writeHash();
   if (mobile() && step) goStep(step);
   else refocus(key);
@@ -377,27 +382,6 @@ function setZoom(next) {
   refocus("swim-chart");
 }
 
-function zoomTools(full) {
-  const b = (label, text, fn, disabled = false) => {
-    const x = el("button", { type: "button", "aria-label": label, disabled }, text);
-    x.addEventListener("click", fn);
-    return x;
-  };
-  const [t0, t1] = zoom ?? full;
-  const fitBtn = el("button", { type: "button", "aria-pressed": String(fit), disabled: !!zoom, title: "Shrink idle stretches so runs days apart stay readable" }, "Fit to activity");
-  fitBtn.addEventListener("click", () => {
-    fit = !fit;
-    renderView();
-  });
-  return el("div", { class: "zoom-tools" },
-    fitBtn,
-    b("Zoom in", "+", () => setZoom(zoomWindow(full, zoom, 0.5))),
-    b("Zoom out", "−", () => setZoom(zoomWindow(full, zoom, 2)), !zoom),
-    b("Earlier", "◀", () => setZoom(zoomWindow(full, zoom, 1, -0.25)), !zoom),
-    b("Later", "▶", () => setZoom(zoomWindow(full, zoom, 1, 0.25)), !zoom),
-    b("Show the whole span", "Reset", () => setZoom(null), !zoom),
-    el("span", { class: "hint", "aria-live": "polite" }, zoom ? `${fmtTs(t0)} → ${fmtTs(t1)} (${dur(t1 - t0)}), to scale` : `${fit ? "Idle stretches shrink to hatched gaps. " : ""}Drag across the chart to zoom; with the chart focused, + − ← → and 0.`));
-}
 
 function viewRuns() {
   const cl = a.clusters.filter((c) => arr(c.runs).some((r) => r.start > 0)).slice(0, MAX_LANES);
@@ -406,7 +390,11 @@ function viewRuns() {
   const svgChart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), bands: sharedPauseBands(), selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth(), label: "Runs per cluster over time, UTC", domain: zoom, onZoom: setZoom, fit,
     empty: a.clusters.length ? "None of the clusters has a run with timestamps, so there is nothing to draw on a time axis. The flagged records are listed in the table below." : "No clusters formed, so there are no runs to draw: records link into a cluster through shared identifiers or close timing. Every flagged record is still listed in the flagged-records table below." });
   if (svgChart instanceof SVGElement) svgChart.setAttribute("data-focus-key", "swim-chart");
-  const chart = full ? el("div", {}, zoomTools(full), svgChart) : svgChart;
+  const tools = full && zoomTools({ full, zoom, setZoom, fit, onFit: () => {
+    fit = !fit;
+    renderView();
+  } });
+  const chart = full ? el("div", {}, tools, svgChart) : svgChart;
   return figure({
     chart,
     legend: legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"), legendKey("k-pause", "pause (all records)"), legendKey("k-band", "shared pause")),
@@ -445,7 +433,7 @@ function fleetEdges(keys) {
     const name = kindLabel(o.kind);
     const score = num(o.strength ?? o.score);
     const detail = o.detail ?? o.reason;
-    add(ends[0], ends[1], "soft", `Soft link, ${name}${detail ? ` (${trunc(String(detail), 140)})` : ""}${score != null ? `, strength ${score.toFixed(2)}` : ""}: a hint, not evidence`, `sk-${kindClass(o.kind)}`, name);
+    add(ends[0], ends[1], "soft", `Soft link, ${name}${detail ? ` (${safeText(detail, 140)})` : ""}${score != null ? `, strength ${score.toFixed(2)}` : ""}: a hint, not evidence`, `sk-${kindClass(o.kind)}`, name);
   }
   for (const f of arr(a.candidate_fleets)) {
     const o = Array.isArray(f) ? { clusters: f } : obj(f);
@@ -551,8 +539,10 @@ function viewHeat() {
 }
 
 function scopeIdx() {
-  let idx = a.results.map((_, i) => i).filter((i) => a.results[i].score > 0);
-  if (sel.c) idx = arr(clusterBy(sel.c)?.members);
+  const flagged = (i) => a.results[i]?.score > 0;
+  let idx = a.results.map((_, i) => i).filter(flagged);
+  // A cluster's members, flagged ones only: the list is "Flagged records".
+  if (sel.c) idx = arr(clusterBy(sel.c)?.members).filter(flagged);
   if (sel.rule) idx = idx.filter((i) => arr(a.results[i].hits).some((h) => h.rule_id === sel.rule));
   return idx;
 }
@@ -677,9 +667,16 @@ function renderRecords() {
   const shown = few ? capped.slice(0, FEW_ROWS) : capped;
   const body = el("tbody", {}, shown.map((i) => {
     const r = a.results[i];
-    const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, tabindex: 0, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}`, "data-focus-key": `rec:${i}` },
+    // One tab stop for the table (a roving one, moved by the arrow keys).
+    // The rule links stay out of the tab order: the record's context pane
+    // links the same rules.
+    const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}`, "data-focus-key": `rec:${i}` },
       cell(RECORD_HEAD, 0, { class: "rc-head" }, pill(r.tier)), cell(RECORD_HEAD, 1, { class: "num rc-head rc-lab" }, r.score),
-      cell(RECORD_HEAD, 2, { class: "rules" }, arr(r.hits).map((h) => ruleLink(h.rule_id))),
+      cell(RECORD_HEAD, 2, { class: "rules" }, arr(r.hits).map((h) => {
+        const link = ruleLink(h.rule_id);
+        link.tabIndex = -1;
+        return link;
+      })),
       cell(RECORD_HEAD, 3, { class: "url" }, safe(r.obs.url, 300)),
       cell(RECORD_HEAD, 4, { class: "nowrap rc-head", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
       cell(RECORD_HEAD, 5, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"));
@@ -697,7 +694,9 @@ function renderRecords() {
     const next = $("records").querySelectorAll("tbody tr.pick")[FEW_ROWS];
     next?.focus();
   });
-  $("records").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "records" },
+  const picks = [...body.querySelectorAll("tr.pick")];
+  roving(picks, { current: Math.max(0, shown.indexOf(sel.r)), horizontal: false });
+  $("records").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "records", role: "grid", "aria-labelledby": "records-h", "aria-readonly": "true" },
     el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)), ...(more ? [more] : []));
 }
 $("rec-sort").addEventListener("change", () => a && renderRecords());
@@ -893,10 +892,14 @@ function clusterContext(c) {
 /** The page's link to FM chapter 15 (a template in the page: scripts make no links). */
 const fm15 = () => $("tpl-fm15")?.content.cloneNode(true) ?? null;
 
+/** Redraws the shown attribution layers (after the naming level changes), or null. */
+let refreshAttribution = null;
+
 /** Attribution layers, from the tools module (loaded on request). */
 function attributionPanel(c) {
   const box = el("div", { class: "attr-box" });
   const btn = el("button", { type: "button" }, "Show attribution layers");
+  refreshAttribution = null;
   const load = async () => {
     btn.disabled = true;
     try {
@@ -905,6 +908,7 @@ function attributionPanel(c) {
       box.replaceChildren(
         el("p", { class: "hint" }, `What the records support at each layer, gated as a report at the naming level chosen under Report, with any claims from case work there.${res.withheld ? ` ${res.withheld} developer candidate(s) below that level are not shown.` : ""}`),
         layersTable(res.layers));
+      refreshAttribution = box.isConnected ? load : null;
     } catch (e) {
       showError(box, e);
     }
@@ -969,7 +973,7 @@ function renderLinks() {
   const none = [];
   if (pauses.length) {
     out.push(el("h4", {}, `Shared pauses (${pauses.length})`));
-    out.push(el("ul", {}, pauses.map((sp) => el("li", {}, el("strong", {}, `${sp.a} and ${sp.b}`), ` went quiet together: ${sp.reason ?? ""}. Their records share no identifier; a link to check, not a merge.`,
+    out.push(el("ul", {}, pauses.map((sp) => el("li", {}, el("strong", {}, `${sp.a} and ${sp.b}`), ` went quiet together: ${safeText(sp.reason ?? "", 200)}. Their records share no identifier; a link to check, not a merge.`,
       num(sp.p_chance) != null ? el("span", { class: "hint" }, ` (chance ${sp.p_chance.toExponential(1)})`) : null))));
   } else none.push(["shared pauses", "no pair of clusters went quiet together more often than chance allows"]);
   const dp = arr(a.dialect_pairs);
@@ -1089,23 +1093,49 @@ async function renderReport() {
   }
 }
 
+// Redrafting waits for a pause in typing and selecting, and for the report
+// section to be on screen: a change while it is out of sight marks the
+// draft stale, and it is redrafted when it comes into view (or on Copy).
+let reportVisible = !("IntersectionObserver" in window);
+let reportStale = false;
+let reportTimer = 0;
+function queueReport() {
+  reportStale = true;
+  clearTimeout(reportTimer);
+  reportTimer = setTimeout(() => reportVisible && flushReport(), 250);
+}
+function flushReport() {
+  clearTimeout(reportTimer);
+  reportStale = false;
+  return renderReport();
+}
+
 function startReport() {
   if (wantReport) return;
   wantReport = true;
-  renderReport();
+  flushReport();
 }
 $("draft-report").addEventListener("click", startReport);
 // Sightings to share: built by the tools module from this analysis, shown in
 // full, saved only on Download.
 sightingsPanel(async () => (a ? prepared() : null));
-// Reaching the report section starts the draft (the module is loaded).
+// Reaching the report section starts the draft (the module is loaded), and
+// redrafts a stale one.
 if ("IntersectionObserver" in window) {
   new IntersectionObserver((entries) => {
-    if (a && entries.some((e) => e.isIntersecting)) startReport();
+    reportVisible = entries[entries.length - 1].isIntersecting;
+    if (!a || !reportVisible) return;
+    if (!wantReport) startReport();
+    else if (reportStale) flushReport();
   }).observe($("report"));
 }
 
 // ── Wiring ─────────────────────────────────────────────────────────────────
+/** Analyse with the button busy: a second press while it runs does nothing. */
+async function analyse() {
+  return (await busy($("run"), "Analysing…", runAnalysis)) ?? false;
+}
+
 async function loadExample() {
   const mod = ensure();
   try {
@@ -1119,12 +1149,12 @@ async function loadExample() {
   syncPlaceholder();
   $("map").value = "";
   $("preset-note").hidden = true;
-  if (runAnalysis()) $("example-note").hidden = false;
+  if (await analyse()) $("example-note").hidden = false;
 }
 
 $("run").addEventListener("click", async () => {
   $("example-note").hidden = true;
-  if (await ensure().catch(() => null)) runAnalysis();
+  if (await ensure().catch(() => null)) analyse();
 });
 $("example").addEventListener("click", loadExample);
 $("input").addEventListener("input", () => {
@@ -1140,16 +1170,24 @@ $("input-edit").addEventListener("click", () => expandInput(true));
 async function loadFile(f) {
   $("example-note").hidden = true;
   const status = $("drop-status");
+  let text;
   try {
-    $("input").value = await f.text();
+    text = await readFile(f, status, useText);
   } catch (err) {
     status.textContent = `${trunc(String(f.name), 80)} could not be read: ${String(err?.message ?? err)}`;
     status.hidden = false;
     return;
   }
-  status.hidden = true;
+  if (text != null) {
+    status.hidden = true;
+    await useText(text);
+  }
+}
+/** Text read from a file (or carried over) into the records box, analysed. */
+async function useText(text) {
+  $("input").value = text;
   syncRun();
-  if (await ensure().catch(() => null)) runAnalysis();
+  if (await ensure().catch(() => null)) await analyse();
 }
 $("file").addEventListener("change", async (e) => {
   const f = e.target.files[0];
@@ -1165,11 +1203,24 @@ function syncPlaceholder() {
   $("input").placeholder = $("format").value === "access_log" ? ACCESS_LOG_PLACEHOLDER : NDJSON_PLACEHOLDER;
 }
 $("format").addEventListener("change", syncPlaceholder);
-for (const id of ["audience", "min-named"]) $(id).addEventListener("change", renderReport);
-$("reporter").addEventListener("input", renderReport);
-$("claims").addEventListener("input", () => (a ? renderReport() : sc && readClaims()));
-$("copy-report").addEventListener("click", () => navigator.clipboard?.writeText($("report").textContent));
-$("dl-report").addEventListener("click", () => download("swarmchase-report.md", $("report").textContent, "text/markdown"));
+$("audience").addEventListener("change", queueReport);
+$("min-named").addEventListener("change", () => {
+  queueReport();
+  refreshAttribution?.();
+});
+$("reporter").addEventListener("input", queueReport);
+// Claims are checked as they are typed; the draft follows after a pause.
+$("claims").addEventListener("input", () => {
+  if (sc) readClaims();
+  if (a) queueReport();
+});
+/** The draft as shown, redrafted first when it is stale. */
+async function reportText() {
+  if (reportStale) await flushReport();
+  return $("report").textContent;
+}
+copyButton($("copy-report"), reportText, "Copy failed: select the draft");
+$("dl-report").addEventListener("click", async () => download("swarmchase-report.md", await reportText(), "text/markdown"));
 $("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.json", JSON.stringify(a, null, 2), "application/json"));
 
 // ── CSV ────────────────────────────────────────────────────────────────────
@@ -1231,6 +1282,23 @@ $("csv-endpoints").addEventListener("click", () => {
   });
 }
 
+/**
+ * The log Check my logs handed over in this tab, read once: the stored copy
+ * and the hash's flag are removed whether or not one was there.
+ */
+function takeHandoff() {
+  let got = null;
+  try {
+    got = JSON.parse(sessionStorage.getItem(HANDOFF_KEY) ?? "null");
+    sessionStorage.removeItem(HANDOFF_KEY);
+  } catch {
+    got = null;
+  }
+  history.replaceState(null, "", "#preset=access-log");
+  if (!got || got.v !== 1 || typeof got.log !== "string" || !got.log.trim()) return null;
+  return { log: got.log, map: typeof got.map === "string" ? got.map : "" };
+}
+
 /** Apply what the URL hash asks for: the access-log preset or the example. */
 async function applyHash() {
   const h = readHash();
@@ -1243,8 +1311,14 @@ async function applyHash() {
     // The preset's instructions come before the box they are about.
     $("input-box").prepend($("preset-note"));
     $("preset-note").hidden = false;
-    $("input").focus();
-    warm();
+    const carried = h.from === "check-logs" ? takeHandoff() : null;
+    if (carried) {
+      $("map").value = carried.map;
+      await useText(carried.log);
+    } else {
+      $("input").focus();
+      warm();
+    }
   } else if (h.example) {
     await loadExample();
   }

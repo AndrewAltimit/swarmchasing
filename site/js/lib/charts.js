@@ -3,7 +3,7 @@
 // with a table view, and every mark that carries a tooltip shows it on hover,
 // keyboard focus and tap. Labels are record-derived text: they go in as text.
 
-import { el, svg, activate, download } from "./dom.js";
+import { el, svg, activate, download, roving } from "./dom.js";
 import { tip } from "./tip.js";
 
 export { tip };
@@ -110,6 +110,34 @@ export function zoomWindow(full, domain, factor = 1, shift = 0) {
   c = Math.max(f0 + w / 2, Math.min(f1 - w / 2, c));
   const out = [c - w / 2, c + w / 2];
   return out[0] <= f0 && out[1] >= f1 ? null : out;
+}
+
+/**
+ * The buttons over a zoomable swim-lane chart: zoom in and out, earlier,
+ * later, reset, and (with `onFit`) the fit-to-activity toggle. `full` is
+ * the whole span, `zoom` the window shown (null for all of it), `setZoom`
+ * takes the next window.
+ */
+export function zoomTools({ full, zoom, setZoom, fit = false, onFit = null }) {
+  const b = (label, text, fn, disabled = false) => {
+    const x = el("button", { type: "button", "aria-label": label, disabled }, text);
+    x.addEventListener("click", fn);
+    return x;
+  };
+  const [t0, t1] = zoom ?? full;
+  let fitBtn = null;
+  if (onFit) {
+    fitBtn = el("button", { type: "button", "aria-pressed": String(fit), disabled: !!zoom, title: "Shrink idle stretches so runs days apart stay readable" }, "Fit to activity");
+    fitBtn.addEventListener("click", onFit);
+  }
+  return el("div", { class: "zoom-tools" },
+    fitBtn,
+    b("Zoom in", "+", () => setZoom(zoomWindow(full, zoom, 0.5))),
+    b("Zoom out", "−", () => setZoom(zoomWindow(full, zoom, 2)), !zoom),
+    b("Earlier", "◀", () => setZoom(zoomWindow(full, zoom, 1, -0.25)), !zoom),
+    b("Later", "▶", () => setZoom(zoomWindow(full, zoom, 1, 0.25)), !zoom),
+    b("Show the whole span", "Reset", () => setZoom(null), !zoom),
+    el("span", { class: "hint", "aria-live": "polite" }, zoom ? `${fmtTs(t0)} → ${fmtTs(t1)} (${dur(t1 - t0)}), to scale` : `${fit && onFit ? "Idle stretches shrink to hatched gaps. " : ""}Drag across the chart to zoom; with the chart focused, + − ← → and 0.`));
 }
 
 // The width an idle stretch keeps when the runs are fitted to activity.
@@ -267,6 +295,11 @@ export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onS
     });
   }
   root.append(grid, axis);
+  // The lane labels are one tab stop (up and down move along them), the
+  // run bars another (the arrows move along them in lane, then time order).
+  const labs = [];
+  const bars = [];
+  let selBar = -1;
   lanes.forEach((lane, i) => {
     const y = T + i * LH;
     const on = selected == null || selected === lane.key;
@@ -277,6 +310,7 @@ export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onS
       "aria-label": onSelect ? `Cluster ${lane.label}` : null, "data-focus-key": `lane:${lane.key}`,
     }, lane.label);
     if (onSelect) activate(lab, () => onSelect(lane.key));
+    labs.push(lab);
     root.append(lab);
     for (const b of clip(bands.filter((b) => b.key === lane.key), t0, t1)) {
       root.append(tip(svg("rect", { class: "band", x: x(b.start), y: y + 2, width: Math.max(2, x(b.end) - x(b.start)), height: LH - 4 }), b.label));
@@ -293,9 +327,15 @@ export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onS
       });
       tip(bar, `${lane.label} · ${fmtShort(run.start)} → ${fmtShort(run.end)} UTC (${dur(Math.max(0, run.end - run.start))}) · ${run.count} record(s)`);
       if (onSelect) activate(bar, () => onSelect(lane.key));
+      if (selBar < 0 && selected === lane.key) selBar = bars.length;
+      bars.push(bar);
       root.append(bar);
     });
   });
+  if (onSelect) {
+    roving(labs, { current: Math.max(0, lanes.findIndex((l) => l.key === selected)), horizontal: false });
+    roving(bars, { current: Math.max(0, selBar) });
+  }
   return root;
 }
 

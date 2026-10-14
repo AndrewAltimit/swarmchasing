@@ -1,7 +1,7 @@
 // Report a swarm: build an SC-Submission v1 document from the form, check it
 // as the schema does, and offer it to copy or download. Nothing is sent: the
 // page makes no request, and the JSON is shown as text only.
-import { $, el, download, store } from "../lib/dom.js";
+import { $, el, copyButton, download, store } from "../lib/dom.js";
 
 const SPEC = "SC-Submission v1";
 const DRAFT_KEY = "sc-submit-draft";
@@ -188,15 +188,7 @@ function restore() {
 for (const id of ["sub-agent", "sub-role", "sub-kind", "sub-first", "sub-last", "sub-tz"]) $(id).addEventListener("change", update);
 for (const id of ["sub-name", "sub-contact", "sub-operator", "sub-model", "sub-summary", "sub-agents", "sub-targets"]) $(id).addEventListener("input", update);
 $("ev-add").addEventListener("click", () => { items.push(blank($("ev-type").value)); render(); });
-$("sub-copy").addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(current);
-    $("sub-copy").textContent = "Copied";
-    setTimeout(() => { $("sub-copy").textContent = "Copy JSON"; }, 1500);
-  } catch {
-    $("sub-copy").textContent = "Copy failed: select the text below";
-  }
-});
+copyButton($("sub-copy"), () => current, "Copy failed: select the text below");
 $("sub-dl").addEventListener("click", () => download("sc-submission.json", current, "application/json"));
 restore();
 render();

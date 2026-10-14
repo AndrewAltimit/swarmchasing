@@ -4,7 +4,7 @@
 // providers' files this site was built with. Nothing is uploaded or
 // fetched beyond the site's own files. Log contents are untrusted: inserted
 // as text, hosts and URLs defanged, never links.
-import { $, el, fetchRoot, ruleLink, showAlert } from "../lib/dom.js";
+import { $, el, busy, fetchRoot, readFile, ruleLink, showAlert, HANDOFF_KEY } from "../lib/dom.js";
 import { arr, obj, num, str, trunc, plural, fmtShort, topEntries } from "../lib/fmt.js";
 import { tools, pageRules } from "../lib/wasm.js";
 import { EXAMPLE_FILES, EXAMPLE_HOST, PROBE_LOG } from "../lib/idexample.js";
@@ -12,6 +12,27 @@ import { EXAMPLE_FILES, EXAMPLE_HOST, PROBE_LOG } from "../lib/idexample.js";
 const MAX_LISTED = 8;
 let example = false;
 let snapshot = null; // the providers' files the build embedded, once read
+let checked = null; // { log, map } of the last log checked, for the workbench
+
+// The workbench takes the log checked here through this tab's session
+// storage, never the URL: the link carries only #preset=access-log&from=check-logs,
+// and the workbench reads the log once and removes it.
+const WORKBENCH = "../analyze/#preset=access-log";
+
+/** Open the workbench with the log checked here; false when it does not fit. */
+function toWorkbench() {
+  if (!checked) return false;
+  try {
+    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({ v: 1, log: checked.log, map: checked.map }));
+  } catch {
+    showAlert($("cl-alert"), "This log is too large to carry over to the workbench.",
+      "The browser keeps only a few MB for a tab. Open the workbench's access-log preset and load the file there; it stays in your browser.");
+    $("cl-alert").scrollIntoView({ block: "nearest" });
+    return false;
+  }
+  location.assign(new URL(`${WORKBENCH}&from=check-logs`, location.href).href);
+  return true;
+}
 
 /** Check is offered once there is a log. */
 const sync = () => ($("cl-run").disabled = !$("cl-input").value.trim());
@@ -34,6 +55,9 @@ function hostOf(text) {
   const t = str(text).trim().replace(/^host=/i, "");
   return t.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#\s]/)[0].toLowerCase();
 }
+
+/** Check the log, with the button busy while it runs. */
+const runCheck = () => busy($("cl-run"), "Checking…", check);
 
 async function check() {
   $("cl-alert").hidden = true;
@@ -63,6 +87,7 @@ async function check() {
       "The page reads web server access logs in Common or Combined Log Format, one request per line.");
     return;
   }
+  checked = { log: input, map };
   render(sc, analysis, ident, host);
 }
 
@@ -120,7 +145,11 @@ function render(sc, a, ident, host) {
         el("td", { class: "rules", "data-label": "Rules" }, arr(r.hits).map((h) => ruleLink(h.rule_id))),
         el("td", { class: "url", "data-label": "Request (defanged)" }, trunc(df(r.obs.url), 300)),
         el("td", { class: "nowrap rc-head", "data-label": "Time (UTC)" }, fmtShort(r.obs.ts))))))));
-    if (flagged.length > MAX_LISTED) parts.push(el("p", { class: "hint" }, `${flagged.length - MAX_LISTED} more in the workbench.`));
+    if (flagged.length > MAX_LISTED) {
+      const more = el("button", { type: "button", class: "link-button" }, `${flagged.length - MAX_LISTED} more in the workbench`);
+      more.addEventListener("click", toWorkbench);
+      parts.push(el("p", { class: "hint" }, more, ", with this log carried over in this tab."));
+    }
   } else {
     parts.push(el("p", { class: "hint" }, "Nothing here looks like the agent activity the rules describe. The rules see only what a log line carries: a request body or a page an agent read is out of their sight."));
   }
@@ -150,12 +179,28 @@ function render(sc, a, ident, host) {
   $("cl-result").scrollIntoView({ block: "start" });
 }
 
+/** The build's notice that spoofing cannot be checked, when it has one, stands outside the example. */
+function syncNoFiles() {
+  const none = $("no-provider-files");
+  if (none) none.hidden = example;
+}
+
 function leaveExample() {
   example = false;
   $("cl-example-note").hidden = true;
+  syncNoFiles();
 }
 
-$("cl-run").addEventListener("click", check);
+$("cl-run").addEventListener("click", runCheck);
+// The next steps' workbench link takes the log checked, when there is one.
+for (const a of document.querySelectorAll(`#cl-next a[href="${WORKBENCH}"]`)) {
+  a.addEventListener("click", (ev) => {
+    if (checked) {
+      ev.preventDefault();
+      toWorkbench();
+    }
+  });
+}
 $("cl-input").addEventListener("input", () => {
   if (example) leaveExample();
   sync();
@@ -169,8 +214,9 @@ $("cl-example").addEventListener("click", () => {
   $("cl-input").value = PROBE_LOG;
   $("cl-host").value = EXAMPLE_HOST.slice(5);
   $("cl-example-note").hidden = false;
+  syncNoFiles();
   sync();
-  check();
+  runCheck();
 });
 
 async function loadFile(f) {
@@ -181,17 +227,26 @@ async function loadFile(f) {
     status.hidden = false;
     return;
   }
+  let text;
   try {
-    $("cl-input").value = await f.text();
+    text = await readFile(f, status, use);
   } catch (err) {
     status.textContent = `${trunc(String(f.name), 80)} could not be read: ${String(err?.message ?? err)}`;
     status.hidden = false;
     return;
   }
-  status.hidden = true;
+  if (text != null) {
+    status.hidden = true;
+    use(text);
+  }
+}
+
+/** A file's text into the log box, checked at once when the host is known. */
+function use(text) {
+  $("cl-input").value = text;
   leaveExample();
   sync();
-  if ($("cl-host").value.trim()) check();
+  if ($("cl-host").value.trim()) runCheck();
   else $("cl-host").focus();
 }
 $("cl-file").addEventListener("change", async (e) => {

@@ -115,6 +115,10 @@ function renderFileTable() {
       el("tbody", {}, rows)))
     : el("p", { class: "warn" }, "The catalog did not load; reload the page."));
   $("id-reset").disabled = example || !Object.keys(own.names).length;
+  // The build's notice that spoofing cannot be checked (present only when
+  // the site holds no provider's files) stands while nothing else is in use.
+  const none = $("no-provider-files");
+  if (none) none.hidden = example || Object.keys(own.ranges).length + Object.keys(own.directories).length > 0;
 }
 
 /** Read one file the operator picked as the catalog file `id`. */

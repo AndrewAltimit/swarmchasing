@@ -292,4 +292,8 @@ fi
 cargo run -q --profile release-test -p sc-publish --bin sc-site -- \
     --out "$OUT" --base-url "$BASE_URL" --inputs-log "$LOG" "${SNAPSHOT[@]}"
 "$(python_bin)" scripts/ci/check-site.py --built "$OUT" --inputs "$LOG"
-echo "site ready: serve ./$OUT (e.g. python -m http.server -d $OUT 8080)"
+case "$OUT" in
+    /* | [A-Za-z]:[/\\]* | ./* | ../*) SHOWN="$OUT" ;;
+    *) SHOWN="./$OUT" ;;
+esac
+echo "site ready: serve $SHOWN (e.g. python -m http.server -d $OUT 8080)"

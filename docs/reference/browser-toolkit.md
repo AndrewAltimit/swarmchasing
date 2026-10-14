@@ -47,7 +47,7 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 | `/llms.txt`, `/llms-full.txt`, `/.well-known/` | Plain files for AI agents and their operators ([agent-facing files](#agent-facing-files)). |
 | `/submit/` | Report a swarm: a form that builds an [SC-Submission](../specs/submission-v1.md) document in the page, and how to send it. |
 | `/contact/` | The private channel, and where each audience's replies go. Every page's footer links it. |
-| `/schemas/` | The JSON Schemas of the specs, as committed. |
+| `/schemas/` | An index of the JSON Schemas of the specs, each file published as committed. |
 
 The navigation has Notices, then the Learn, Investigate and Reference groups, then *Report a swarm* on its own. Each group is a `<details>` menu, so it works without scripts. On phones the header is two rows: the brand, *Report a swarm* and the theme switch, then the navigation. The docs sidebar groups the docs by directory, with the guides for the people who run the project (admin workflow, AI assistance, evaluating leads) last under Maintainers.
 
@@ -77,9 +77,11 @@ Until there is a real notice, the notices section shows the indicator notice the
 
 ## The workbench
 
-The workbench analyses pasted or loaded records, including an operator's own access log (`/analyze/#preset=access-log`; see [for operators](../guides/for-operators.md#check-your-own-logs)). *Try an example* loads the synthetic showcase. A link to `#try=example` or `#preset=access-log` followed while on the page applies it as arrival does.
+The workbench analyses pasted or loaded records, including an operator's own access log (`/analyze/#preset=access-log`; see [for operators](../guides/for-operators.md#check-your-own-logs)). *Try an example* loads the synthetic showcase. A link to `#try=example` or `#preset=access-log` followed while on the page applies it as arrival does. Arriving from *Check my logs* with `#preset=access-log&from=check-logs` takes the log and host checked there ([check my logs](#check-my-logs)) and analyses them.
 
-An empty workbench is one dashed area: paste records, drop a file on it, *Load file* or *Try an example*; the empty views pane says what will show there and offers the example too. A dropped file is read in the page, as a picked one is. *Analyse* is offered once there is input; drafting the report, preparing sightings and the CSV downloads wait for an analysis. An input from which no record is read shows no dashboard: an alert says nothing was read, quotes the first problem the parser met, and lists the formats the workbench reads. After a run the records box folds to a line with the record count and *Edit*, so the clusters sit under the summary.
+An empty workbench is one dashed area: paste records, drop a file on it, *Load file* or *Try an example*; the empty views pane says what will show there and offers the example too. A dropped file is read in the page, as a picked one is; a file over 50 MB is read only after the page says how big it is and the visitor presses *Read it anyway*. *Analyse* is offered once there is input, and while an analysis runs it says *Analysing…* and is disabled, so a second press does nothing; drafting the report, preparing sightings and the CSV downloads wait for an analysis.
+
+An input from which no record is read shows no dashboard: an alert says nothing was read, quotes the first problem the parser met, and lists the formats the workbench reads. After a run the records box folds to a line with the record count and *Edit*, so the clusters sit under the summary.
 
 On a wide screen it has three panes: the records and clusters, the views, and the context of what is selected, with the flagged records and the endpoints at full width below them. Phones step through them; the tables belong to the Explore step. The views are:
 
@@ -105,15 +107,19 @@ The flagged records table leads with what flags a record (tier, score, rules, th
 
 The flagged records (as the table lists them, filter and order included) and the endpoints each download as CSV: hosts and URLs defanged, times in UTC, and a cell a spreadsheet would read as a formula prefixed with a quote mark. The endpoints table gives times to the minute with UTC in its header, and its *Hits / all* column counts the suggestive or significant records to a host out of every record that targets it.
 
-Every mark that selects something is a keyboard button (Enter or Space), focus stays on it after the views redraw, and Escape clears the selection. Edges, shared pauses and rhythms are hints to check, not evidence ([methodology](../methodology.md#descriptive-hints)). The selection is kept in the URL hash as ids only (a cluster key, a record number, a rule id), never hosts or URLs.
+Every mark that selects something is a keyboard button (Enter or Space), focus stays on it after the views redraw, and Escape clears the selection. The flagged records table is one tab stop (a grid whose arrow keys move along the rows), and so are the Runs view's lane labels and its run bars. A tooltip shows on hover, focus and tap; Escape, or a tap elsewhere, dismisses it. Edges, shared pauses and rhythms are hints to check, not evidence ([methodology](../methodology.md#descriptive-hints)). The selection is kept in the URL hash as ids only (a cluster key, a record number, a rule id), never hosts or URLs.
 
-The last step drafts a disclosure, on *Draft the report* or when the section scrolls into view, from the analysis the page shows ([loading](#loading-and-size)). It follows the CLI's naming gate: pick the weakest evidence that may name a developer (the choices fill in, at the default level, when the engine loads), and paste claims from case work (the JSON `swarmchase report --claims` reads). Outside case notes, a developer below that level is not named ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
+The last step drafts a disclosure, on *Draft the report* or when the section scrolls into view, from the analysis the page shows ([loading](#loading-and-size)). A change to the selection or the report options redrafts it after a short pause, and only while the section is on screen; *Copy* and *Download .md* redraft a stale draft first. It follows the CLI's naming gate: pick the weakest evidence that may name a developer (the choices fill in, at the default level, when the engine loads), and paste claims from case work (the JSON `swarmchase report --claims` reads). Outside case notes, a developer below that level is not named ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
 
 ## Check my logs
 
 `/check-logs/` is the operator's short path: paste or drop an access log once and name the host. The tools module runs the workbench's analysis on it (format `access_log`, the host in the field map) and the identity check with the providers' files the site was built with, then the page says in plain words how many requests the rules flagged and which rules, lists the strongest of them defanged, and counts the agents that name themselves: verified, claims only, and spoofed (grouped by address and declared product, in an alert).
 
 It ends with what to do next: look closer in the workbench or on the identity page, share sightings, report a swarm, or reach the project privately. The next steps are links in the page's markup; the script only shows them. *Try an example* runs a synthetic log on a reserved host against synthetic range files, labelled as such. Nothing is uploaded or fetched beyond the site's own files.
+
+The workbench link under the flagged requests, and the next steps' link to the access-log preset, carry the log over: the page puts the log and the host's field map in the tab's `sessionStorage` and opens `/analyze/#preset=access-log&from=check-logs`. The workbench reads it once, removes it and the flag, and analyses it. The log is never in the URL; one too large for the browser's session storage is not carried, and the page says to load the file in the workbench. A file over 50 MB is read only after the visitor confirms, and *Check my log* is disabled while it runs.
+
+A site built without the providers' files (no [snapshot](identity.md#the-snapshot), or one that holds no range file or key directory) shows a notice under the heading of this page and of `/identity/`: spoofing cannot be checked, and a declared agent stays a claim. The identity page hides it while the operator's own files or the example are in use.
 
 ## Agent identity
 
