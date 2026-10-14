@@ -179,7 +179,7 @@ Only the unwrap page preloads a module, the engine. The tools page preloads noth
 
 Each page lists every module its scripts import, directly or not, as a `modulepreload` link, so the browser fetches them together instead of one import level at a time. Scripts, the stylesheet and the WASM modules are published under content-hashed names (`js/site.<hash>.js`): GitHub Pages sets its own cache headers, so a changed file gets a new name and a cached one is never stale. The generator rewrites the references in pages and between modules, and `check-site.py` fails a page that loads an unhashed asset.
 
-Until a module is ready the page says so and the controls that need it stay disabled, or, on the workbench, wait for it. The release build fails when any module is over its budget (the engine's is 1.5 MiB; the tools module's is the engine's plus 448 KiB for its own part, since it carries the engine) and prints each module's size and headroom.
+Until a module is ready the page says so and the controls that need it stay disabled, or, on the workbench, wait for it. The release build fails when any module is over its budget (the engine's is 2 MiB; the tools module's is the engine's plus 448 KiB for its own part, since it carries the engine) and prints each module's size and headroom.
 
 ## Agent-facing files
 

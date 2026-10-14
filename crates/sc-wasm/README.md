@@ -17,7 +17,7 @@ The crate builds two modules, by feature:
 | `engine` (default) | `site/pkg/sc_wasm.js` | What every analysis page loads: `analyze`, `unwrap`, `endpoints` and the helpers. |
 | `tools` | `site/pkg/tools/sc_tools.js` | What a page loads on demand: `prepare` and `report`, `attribution`, `verify_bundle`, `eval_labelled`, `parse_security_txt`. |
 
-Both carry `check_rules` and `defang`; tests build both. The build runs `wasm-pack build --target web` with size settings (opt-level `z`, one codegen unit, `panic=abort`, `wasm-opt -Oz` with `--gufa` and `--converge`) and fails a release module over its budget (the engine's is 1.5 MiB). The page loads a module as an ES module:
+Both carry `check_rules` and `defang`; tests build both. The build runs `wasm-pack build --target web` with size settings (opt-level `z`, one codegen unit, `panic=abort`, `wasm-opt -Oz` with `--gufa` and `--converge`) and fails a release module over its budget (the engine's is 2 MiB). The page loads a module as an ES module:
 
 ```js
 import init, * as sc from "./pkg/sc_wasm.js";

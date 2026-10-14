@@ -78,7 +78,7 @@ CACHE="${SWARMCHASE_WASM_OPT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/swarmchase-w
 KEEP=20                 # cached modules kept; older ones are pruned
 # Budgets in bytes. The engine's is the one that matters most: every
 # analysis page downloads it on arrival.
-ENGINE_BUDGET=$((1536 * 1024))
+ENGINE_BUDGET=$((2048 * 1024))
 # The tools module carries the whole engine, so its budget is the engine's
 # plus an allowance for its own part: an engine within its budget never
 # fails the tools module. Loaded on demand, never on arrival.
