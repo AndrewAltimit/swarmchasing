@@ -1,0 +1,18 @@
+{
+ "info": {
+  "name": "sigstore",
+  "version": "3.6.1"
+ },
+ "urls": [
+  {
+   "filename": "sigstore-3.6.1-py3-none-any.whl",
+   "packagetype": "bdist_wheel",
+   "upload_time_iso_8601": "2024-12-19T17:09:55.035121Z"
+  },
+  {
+   "filename": "sigstore-3.6.1.tar.gz",
+   "packagetype": "sdist",
+   "upload_time_iso_8601": "2024-12-19T17:09:58.053114Z"
+  }
+ ]
+}

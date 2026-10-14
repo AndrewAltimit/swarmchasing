@@ -102,6 +102,8 @@ Hacker News walks its search index back from the pull's start to the checkpoint,
 
 A reference source (`osv`, `wikimedia-ai-cleanup`) returns `PlatformPull::labels` instead of events: a `TargetLabel` names a target on a platform (`label_key` normalises it as events name it), what it says (`osv-malicious`, `wiki-ai-cleanup`) and the record or category that says so.
 
+[`provenance`](src/provenance.rs) is a lookup, not a source: `Client::package_provenance` takes a member event id (`npm:<name>@<version>`, `pypi:<name>[@<version>]`) and reads that release's build provenance, npm's SLSA statement from the registry's attestations endpoint or PyPI's trusted-publisher attestation from its integrity API, as `sc_core::platform::PackageProvenance` (repository, workflow, ref, commit, runner, environment). A 404 is `None`. No package file is downloaded and signatures are not verified. The parsers are tested against trimmed public responses in [`tests/fixtures/provenance/`](tests/fixtures/provenance/).
+
 Declared coding-agent Apps are tallied by product and lookalike App logins by login (`PlatformPull::declared`, `lookalikes`). GitHub's trimmed payloads give a pull request opened no text; it is kept text-less with its repository as the target, as stars and forks are. `gharchive_file` reads a GH Archive hour file from disk. Nothing inside an event's text is fetched, and a Space or repository is never opened ([methodology](../../docs/methodology.md#coordinated-accounts-on-public-platforms)).
 
 ### Coverage and canaries
@@ -161,6 +163,7 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`ghsearch.rs`](src/ghsearch.rs) | GitHub search: relay links and run tags in pull request text and commit messages, which GH Archive's payloads leave out. |
 | [`forges.rs`](src/forges.rs) | GitLab.com's and Codeberg's newest public projects as platform events. |
 
+| [`provenance.rs`](src/provenance.rs) | Build provenance of one npm or PyPI release, looked up for platform candidates' members. |
 | [`osv.rs`](src/osv.rs) | OSV malicious-package records as labels on package targets (`TargetLabel`), joined to candidates by the watch. |
 | [`hackernews.rs`](src/hackernews.rs) | Hacker News search index: links as records, stories and comments as platform events, account age from profiles. |
 | [`wellknown.rs`](src/wellknown.rs) | Agent protocol footprints in the Wayback index. |

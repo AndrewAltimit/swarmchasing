@@ -199,6 +199,8 @@ A candidate needs all of:
 
 Benign coordination is common and **must** be ruled out before a candidate is read as a swarm: dependency and release bots, translation syncs, contribution drives and coursework, scheduled jobs, organisation-wide automation, an outage that brings many users to one project at once, and issue templates. Known automation accounts are dropped at collection and known benign templates are listed as suppressed with their kind. A burst on one owner's projects by established accounts is not reported. Each candidate lists what is left to rule out.
 
+A registry candidate **may** be read beside its packages' build provenance, where the registry publishes it: the source repository and workflow a signed build statement names. Several packages naming one repository or workflow is a strong same-operator hint and ties a registry fleet to the code host account behind it; it remains a hint, since one monorepo publishes many packages by design. No provenance is weak context. Provenance is looked up for reported candidates' members only, within a budget, and **must not** change a candidate's chance or strength.
+
 Toolkit: `sc_core::platform` and `swarmchase platform-swarms`; the watch's platform pass lists new and grown candidates in the digest ([methodology](../methodology.md#coordinated-accounts-on-public-platforms), [watch](../reference/watch.md#platform-swarms)).
 
 ## FM-5.16 Co-targets

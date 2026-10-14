@@ -19,7 +19,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
 | `summary.json`, `ledger.json` (`.bak`, `.damaged`) | The previous copy, and a copy that could not be read, set aside ([interrupted runs](#interrupted-runs)). |
 | `autonomy.ndjson` | What each [autonomy](#autonomy) level did or would have done. |
-| `platform/` | The [platform pass](#platform-swarms): checkpoints, reported candidates and carried events. |
+| `platform/` | The [platform pass](#platform-swarms): checkpoints, reported candidates, carried events, labels and provenance answers. |
 | `runs/<stamp>/platform-swarms.json` | The run's platform swarm candidates. |
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
 | `labels/suggestions-local.ndjson` | The local model's suggestions on new leads ([model triage](#model-triage)). |
@@ -219,7 +219,7 @@ The watch changes nothing itself. Apply an approved proposal with `swarmchase no
 
 A separate pass in each run looks for accounts acting alike on GitHub, GitLab.com, Codeberg, package registries (npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Go modules), the Hugging Face Hub, Wikimedia wikis, Hacker News, Bluesky and CVE records: near-identical or templated text, templated names, or text-less stars, forks and pull requests on one target, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
 
-**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), `label_days` (default 30), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
+**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), `label_days` (default 30), `provenance_lookups` (default 40), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
 
 | Kind | Reads | Fields |
 |---|---|---|
@@ -246,11 +246,15 @@ A separate pass in each run looks for accounts acting alike on GitHub, GitLab.co
 
 **Labels.** An `osv` or `wikimedia-ai-cleanup` source gives labels, not events: the packages OSV's malicious-package records name, or the wiki pages editors tagged as suspected AI-generated text. They are kept in `platform/labels.ndjson` for `label_days` (default 30). A candidate shown in the digest whose members published a labelled package or edited a labelled page gets a *Labelled* line with the records behind it, and `runs/<stamp>/platform-labels.json` lists every candidate's matches.
 
+**Build provenance.** For the npm and PyPI candidates new or grown this run, the pass looks up the build provenance of member releases: npm's attestations and PyPI's integrity API, by name and version, at most `provenance_lookups` a run (0 turns them off), one member per candidate in turn, members on an OSV-labelled package first. Only the source repository, workflow, ref, commit, runner and deployment environment are kept; no package file is downloaded. Answers, including "none", go to `platform/provenance.ndjson` for `label_days`, so a release is looked up once.
+
+Each npm or PyPI candidate with answers carries them as `provenance` in `platform-swarms.json`, and the digest gives it a *Provenance* line: the repositories and workflows its packages name, whether several packages share one, or that none carries provenance (weak context). It changes neither the chance nor the strength ([methodology](../methodology.md#coordinated-accounts-on-public-platforms)).
+
 **Declared coding agents.** GitHub events from the coding-agent Apps that [`declared-agents.toml`](../../declared-agents.toml) lists (`github_app`) are tallied by product on the source's line, not grouped. An undeclared App whose login carries one of those products' names is listed below it as a spoofing lead, by login: App logins name software, not people.
 
 **What is stored.** Nothing from the full stream. After grouping, only events worth another look are carried in `platform/carry.ndjson` for `carry_hours`: members of a group with two or more accounts and events carrying residue. Events hold a keyed hash for the account, never its login, and slotted text sketches, never the text. The run's candidates, suppressed groups and counts go to `runs/<stamp>/platform-swarms.json`.
 
-**In the digest.** *Platform swarm hints* lists candidates that are new this run or have grown since they were last listed, each with its reason line (burst, new accounts, residue and their chances), what joined it, the slotted template, its targets, any coding-harness self-identification (weak context), what is left to rule out, and up to five defanged links. A new or grown candidate counts as a change. Suppressed groups are summed by benign kind. Candidates are not leads for triage: the hosted model may see only archive and urlquery records ([policies](../policies.md#evidence-and-attribution)).
+**In the digest.** *Platform swarm hints* lists candidates that are new this run or have grown since they were last listed, each with its reason line (burst, new accounts, residue and their chances), what joined it, the slotted template, its targets, any coding-harness self-identification (weak context), its packages' build provenance, what is left to rule out, and up to five defanged links. A new or grown candidate counts as a change. Suppressed groups are summed by benign kind. Candidates are not leads for triage: the hosted model may see only archive and urlquery records ([policies](../policies.md#evidence-and-attribution)).
 
 **On demand.** `swarmchase platform-swarms <events.ndjson>` runs the detector over carried events or fixtures, and `--gharchive <hour.json.gz>` over GH Archive hour files read locally; `--json` prints the full report and `--options` takes a TOML of tunables.
 

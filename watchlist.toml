@@ -645,6 +645,17 @@ page_size = 100
 [platform]
 carry_hours = 72
 label_days = 30           # keep labels from reference sources (osv, wikimedia-ai-cleanup) this long
+# Rationale: a registry fleet built in CI names where it was built. For the
+# npm and PyPI candidates new or grown in a run, look up member releases'
+# build provenance (npm's attestations endpoint, PyPI's integrity API), at
+# most this many a run, members on an OSV-labelled package first; answers
+# are kept for label_days so a release is looked up once. Several packages
+# from one repository or workflow ties the fleet to the account behind it,
+# as a hint. Publicly documented APIs, read by name and version, no package
+# file downloaded. Terms: npm Open Source Terms
+# (https://docs.npmjs.com/policies/open-source-terms), PyPI Terms of Service
+# (https://policies.python.org/pypi.org/Terms-of-Service/). 0 turns it off.
+provenance_lookups = 40
 # [platform.options] takes the detector's tunables (min_accounts, burst_secs,
 # max_chance, ...); the defaults are in crates/sc-core/src/platform/mod.rs.
 

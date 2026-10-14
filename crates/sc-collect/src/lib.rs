@@ -46,6 +46,7 @@ mod npm;
 pub mod osv;
 pub mod pager;
 pub mod platform;
+pub mod provenance;
 pub mod psl;
 mod pypi;
 mod rdap;

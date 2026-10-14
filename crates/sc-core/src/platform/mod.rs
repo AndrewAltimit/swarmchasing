@@ -31,6 +31,7 @@
 
 pub mod automation;
 mod detect;
+pub mod provenance;
 pub mod residue;
 pub mod text;
 
@@ -38,6 +39,7 @@ pub mod text;
 mod tests;
 
 pub use detect::{detect, detect_platform};
+pub use provenance::{CandidateProvenance, PackageProvenance};
 pub use text::{TextSketch, name_template, sketch, wiki_title_template};
 
 use crate::rules::Rules;
@@ -412,6 +414,11 @@ pub struct PlatformSwarm {
     /// Every member event id.
     pub members: Vec<String>,
     pub reason: String,
+    /// Build provenance of the members' package releases, where the watch
+    /// looked it up ([`provenance`]): context, never part of the chance or
+    /// the strength.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<CandidateProvenance>,
 }
 
 /// A group left out, and why.
