@@ -6,7 +6,7 @@ strings. Three layers keep them inert, and this gate checks each:
 
   1. A strict Content-Security-Policy on every page: no inline script, no
      eval (only `wasm-unsafe-eval` for the WASM module), no network access
-     beyond the site's own files.
+     beyond the site's own files, and Trusted Types required at script sinks.
   2. Page code that never parses strings as HTML or code: no innerHTML,
      outerHTML, insertAdjacentHTML, document.write, eval, new Function or
      string timers, no navigation by assignment, and in the markup no inline
@@ -49,6 +49,9 @@ REQUIRED = {
     "style-src": {"'self'"},
     "base-uri": {"'none'"},
     "form-action": {"'none'"},
+    # Trusted Types: the browser refuses a string at every HTML, script and
+    # script-URL sink, so a sink this gate's scan misses still throws.
+    "require-trusted-types-for": {"'script'"},
 }
 # Directives that may only list these sources.
 ALLOWED = {"connect-src": {"'self'"}, "img-src": {"'self'"}, **REQUIRED}
@@ -198,6 +201,65 @@ def check_asset_refs(text: str, page: Path) -> list[str]:
     return errors
 
 
+# Fragments the page scripts read rather than ids in the markup: a query in
+# the hash (#preset=, #try=, #sector=, #c=, #q=, ...), a rule row the rules
+# page opens (#rule-<id>), the rules editor (#edit).
+SCRIPT_FRAGMENT = re.compile(r"=|^rule-|^edit$")
+
+
+class Anchors(HTMLParser):
+    """The ids a page defines and the links in it that carry a fragment."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.ids: set[str] = set()
+        self.links: list[tuple[int, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        a = {k.lower(): (v or "") for k, v in attrs}
+        if a.get("id"):
+            self.ids.add(a["id"])
+        if tag == "a" and a.get("name"):
+            self.ids.add(a["name"])
+        href = a.get("href", "")
+        if tag == "a" and "#" in href:
+            self.links.append((self.getpos()[0], href))
+
+
+def check_fragments(pages: dict[str, str]) -> list[str]:
+    """Every same-site link with a #fragment names an id on its target page.
+    `pages` maps a path under the site root (`docs/x/index.html`) to its
+    HTML. Links elsewhere, to files that are not pages, and fragments the
+    page scripts read (SCRIPT_FRAGMENT) are not checked."""
+    from urllib.parse import unquote, urljoin, urlsplit
+
+    parsed: dict[str, Anchors] = {}
+    for rel, text in pages.items():
+        a = Anchors()
+        a.feed(text)
+        a.close()
+        parsed[rel] = a
+    errors = []
+    for rel, a in sorted(parsed.items()):
+        for line, href in a.links:
+            if re.match(r"^[a-z][a-z0-9+.-]*:|^//|^/", href, re.I):
+                continue
+            path, _, frag = href.partition("#")
+            frag = unquote(frag)
+            if not frag or SCRIPT_FRAGMENT.search(frag):
+                continue
+            target = urlsplit(urljoin("http://site/" + rel, path)).path.lstrip("/")
+            if target == "" or target.endswith("/"):
+                target += "index.html"
+            if target not in parsed:
+                if not target.endswith(".html"):
+                    continue
+                errors.append(f"{rel}:{line}: link {href} to a page that is not built")
+            elif frag not in parsed[target].ids:
+                errors.append(f"{rel}:{line}: link {href}: no id {frag!r} on {target}")
+    return errors
+
+
 def check_page(text: str) -> list[str]:
     errors = check_csp(text)
     p = PageCheck()
@@ -291,7 +353,7 @@ def selftest() -> list[str]:
     good_csp = (
         '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
         "script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; "
-        "base-uri 'none'; form-action 'none'\">"
+        "base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'\">"
     )
     controls_bad = {
         "a.html": good_csp.replace("'wasm-unsafe-eval'", "'wasm-unsafe-eval' 'unsafe-inline'"),
@@ -337,6 +399,21 @@ def selftest() -> list[str]:
     if not check_asset_refs('<script type="module" src="/js/site.js"></script>', ROOT / "index.html"):
         errors.append("selftest: missed an asset without a content hash")
     errors += [f"selftest: false positive {e}" for e in check_asset_refs('<link href="/css/site.0123456789.css">', ROOT / "index.html")]
+    site = {
+        "index.html": '<a href="docs/policies/#contact">c</a><a href="#main">m</a><main id="main">',
+        "docs/policies/index.html": '<h2 id="reporting">r</h2><a href="../../index.html#main">h</a>',
+    }
+    if not check_fragments(site):
+        errors.append("selftest: missed a link to a missing #fragment")
+    site_ok = {
+        "index.html": '<a href="docs/policies/#reporting">r</a><a href="#main">m</a><main id="main">'
+        '<a href="rules/#rule-x">r</a><a href="analyze/#try=example">t</a><a href="feed.xml#x">f</a>'
+        '<a href="https://example.org/#nothing">e</a>',
+        "docs/policies/index.html": '<h2 id="reporting">r</h2><a href="../../#main">h</a>',
+        "rules/index.html": "<p>rules</p>",
+        "analyze/index.html": "<p>workbench</p>",
+    }
+    errors += [f"selftest: false positive {e}" for e in check_fragments(site_ok)]
     if not check_inputs(["data/watch/records.ndjson"], None):
         errors.append("selftest: missed an input under data/")
     if not check_inputs(["docs/x.md"], set()):
@@ -380,6 +457,10 @@ def main(argv: list[str]) -> int:
                 text = p.read_text(encoding="utf-8")
                 errors += [f"{built}/{rel}: {e}" for e in check_page(text)]
                 errors += [f"{built}/{rel}: {e}" for e in check_asset_refs(text, p)]
+            errors += [
+                f"{built}/{e}"
+                for e in check_fragments({p.relative_to(out).as_posix(): p.read_text(encoding="utf-8") for p in pages})
+            ]
             for p in sorted(out.rglob("*.js")):
                 if "pkg" in p.relative_to(out).parts:
                     continue

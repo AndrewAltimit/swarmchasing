@@ -6,9 +6,10 @@ use super::html::esc;
 use std::fmt::Write;
 
 /// The policy every page carries. The site renders attack payloads, so only
-/// same-origin scripts, styles and the WASM module run, and nothing is sent
-/// anywhere. `scripts/ci/check-site.py` checks it on every page.
-pub const CSP: &str = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'";
+/// same-origin scripts, styles and the WASM module run, nothing is sent
+/// anywhere, and Trusted Types make every HTML and script sink refuse a
+/// plain string (the page scripts use none). `scripts/ci/check-site.py` checks it on every page.
+pub const CSP: &str = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'";
 
 /// One entry of a nav group: (key, label, path under the site root, what
 /// it is).
@@ -64,6 +65,12 @@ pub const NAV: &[(&str, &[NavItem])] = &[
                 "Workbench",
                 "analyze/",
                 "Grade, link and time records in the browser",
+            ),
+            (
+                "checklog",
+                "Check my logs",
+                "check-logs/",
+                "Your access log: flagged requests, spoofed agents",
             ),
             (
                 "unwrap",
@@ -133,6 +140,11 @@ pub struct Page {
 
 /// The preview image every page names for link cards (`site/og-image.png`).
 pub const OG_IMAGE: &str = "og-image.png";
+
+/// The preview image's text alternative, for `og:image:alt` and
+/// `twitter:image:alt`.
+pub const OG_IMAGE_ALT: &str =
+    "Swarmchasing: passive detection of AI agent activity in public records";
 
 /// A JSON-LD block. The CSP does not apply to it: a script element of a
 /// data type is never run. `<`, `>` and `&` are escaped inside the JSON
@@ -292,7 +304,7 @@ pub fn render(p: &Page, ctx: &Ctx, root: &str) -> String {
         "<footer class=\"site-foot\"><div class=\"wrap foot-row\">\n\
 <p>Passive detection of AI agent activity in public records. Analysis on this site runs in your browser; nothing you paste is uploaded.</p>\n\
 <p class=\"page-ref\">Page reference {canary}: identifies this page and the month it was published (<a href=\"{root}docs/reference/browser-toolkit/#page-references\">what this is</a>).</p>\n\
-<p><a href=\"{root}docs/policies/#contact\">Contact</a> · <a href=\"{root}notices/feed.xml\">Atom feed</a> · <a href=\"{}\">Source</a> · <a href=\"{root}docs/\">Docs</a> · For agents: <a href=\"{root}llms.txt\">llms.txt</a>, <a href=\"{root}submit/\">report a swarm</a>, <a href=\"{root}.well-known/security.txt\">security.txt</a> · toolkit {} · rules {}</p>\n\
+<p><a href=\"{root}contact/\">Contact</a> · <a href=\"{root}notices/feed.xml\">Atom feed</a> · <a href=\"{}\">Source</a> · <a href=\"{root}docs/\">Docs</a> · For agents: <a href=\"{root}llms.txt\">llms.txt</a>, <a href=\"{root}submit/\">report a swarm</a>, <a href=\"{root}.well-known/security.txt\">security.txt</a> · toolkit {} · rules {}</p>\n\
 </div></footer>\n<div id=\"tip\" class=\"tip\" role=\"tooltip\" hidden></div>\n</body>\n</html>\n",
         esc(&ctx.repo),
         esc(&ctx.version),
@@ -334,7 +346,9 @@ fn social(p: &Page, ctx: &Ctx) -> String {
             s,
             "<meta property=\"og:image\" content=\"{base}{OG_IMAGE}\">\n\
 <meta property=\"og:image:width\" content=\"1200\">\n<meta property=\"og:image:height\" content=\"630\">\n\
-<meta property=\"og:image:alt\" content=\"Swarmchasing: passive detection of AI agent activity in public records\">\n"
+<meta property=\"og:image:alt\" content=\"{OG_IMAGE_ALT}\">\n\
+<meta name=\"twitter:image\" content=\"{base}{OG_IMAGE}\">\n\
+<meta name=\"twitter:image:alt\" content=\"{OG_IMAGE_ALT}\">\n"
         );
     }
     s

@@ -37,7 +37,7 @@ pub fn swimlanes(lanes: &[Lane], pauses: &[(i64, i64)], label: &str) -> String {
         .max()
         .unwrap_or(1);
     let span = (t1 - t0).max(60) as f64;
-    let (w, lh, l, r, t, b) = (960.0, 30.0, 64.0, 12.0, 8.0, 28.0);
+    let (w, lh, l, r, t, b) = (720.0, 30.0, 64.0, 12.0, 8.0, 28.0);
     let h = t + b + lh * lanes.len() as f64;
     let x = |v: i64| l + (v - t0) as f64 / span * (w - l - r);
     let mut s = String::new();

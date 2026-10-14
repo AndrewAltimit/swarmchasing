@@ -1,7 +1,7 @@
 // Unwrap one URL: its layers and the rules each fires, and the score and
 // tier the workbench would give it. The URL is never opened; its text is
 // shown defanged.
-import { $, el, showError } from "../lib/dom.js";
+import { $, el, ruleLink, showError } from "../lib/dom.js";
 import { trunc } from "../lib/fmt.js";
 import { engine, host, pageRules } from "../lib/wasm.js";
 
@@ -54,7 +54,7 @@ function run() {
       el("div", { class: `layer d${Math.min(4, Number(l.depth) || 0)}` },
         el("div", { class: "via" }, `[${i}] ${l.via}${l.host ? " · " + host(sc, l.host) : ""}`),
         el("code", {}, sc.defang(trunc(String(l.text ?? ""), 400))),
-        el("div", {}, (byLayer[i] ?? []).map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched ?? "")) }, `${h.rule_id} +${h.weight}`))))),
+        el("div", {}, (byLayer[i] ?? []).map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched ?? "")) }, ruleLink(h.rule_id, "rule-link"), ` +${h.weight}`))))),
   ].filter((n) => n != null));
 }
 

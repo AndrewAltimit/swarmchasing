@@ -10,15 +10,24 @@ import { renderComparison, scoreBoth } from "../lib/evalview.js";
 
 const phone = window.matchMedia?.("(max-width: 720px)").matches;
 
-// On a phone every rule starts as its one-line row, and the filters folded:
-// the page is a list to scan, and a row opens on a tap. A rule the address
-// names stays open.
+// Every rule starts as its row, closed in the markup. On a wide screen the
+// rows open; on a phone they stay rows and the filters fold: the page is a
+// list to scan, and a row opens on a tap. A rule the address names opens
+// either way, and is scrolled to once the rows above it have their height.
 const target = () => (location.hash.startsWith("#rule-") ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null);
 if (phone) {
-  const t = target();
-  for (const d of document.querySelectorAll(".rule-card > details.rule-fold")) if (d.parentElement !== t) d.open = false;
   const fold = document.querySelector("details.filters-fold");
   if (fold) fold.open = false;
+} else {
+  for (const d of document.querySelectorAll(".rule-card > details.rule-fold")) d.open = true;
+}
+{
+  const t = target();
+  const d = t?.querySelector("details.rule-fold");
+  if (d) {
+    d.open = true;
+    t.scrollIntoView({ block: "start" });
+  }
 }
 window.addEventListener("hashchange", () => {
   const d = target()?.querySelector("details.rule-fold");
