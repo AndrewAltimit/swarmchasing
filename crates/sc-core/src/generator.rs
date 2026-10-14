@@ -9,7 +9,10 @@
 //! parameter value, is decoded:
 //!
 //! - **UUIDv1 and v6**: the node id and the timestamp. A node with the
-//!   multicast bit set is random by RFC 9562 and ties nothing.
+//!   multicast bit set is random by RFC 9562, and one with the locally
+//!   administered bit set is no vendor's assignment (a container bridge
+//!   gives the first container on every host one address): neither ties
+//!   anything.
 //! - **UUIDv7, ULID, KSUID**: the embedded time.
 //! - **Snowflake** (a 64-bit decimal): the 5-bit datacenter and 5-bit worker,
 //!   read under the Twitter or Discord epoch when the embedded time falls
@@ -152,8 +155,9 @@ impl GeneratorPair {
 /// A value decoded.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Decoded {
-    /// UUIDv1 or v6: node id (48 bits), whether it is random (multicast
-    /// bit), Unix milliseconds.
+    /// UUIDv1 or v6: node id (48 bits), whether it is no globally unique
+    /// address (the multicast or the locally administered bit set), Unix
+    /// milliseconds.
     Node { node: u64, random: bool, ms: i64 },
     /// UUIDv7, ULID, KSUID: Unix milliseconds.
     Timed { ms: i64 },
@@ -210,7 +214,7 @@ fn uuid(v: &str) -> Option<Decoded> {
             let node = hex_value(&h[20..32]);
             Some(Decoded::Node {
                 node,
-                random: (node >> 40) & 1 == 1,
+                random: (node >> 40) & 0b11 != 0,
                 ms: ms(ticks as i64),
             })
         }
@@ -721,10 +725,10 @@ mod tests {
 
     #[test]
     fn decoders_read_each_shape() {
-        let id = v1(T0, 77, 0x0242_ac11_0002);
+        let id = v1(T0, 77, 0x001a_2b3c_0002);
         match uuid(&id) {
             Some(Decoded::Node { node, random, ms }) => {
-                assert_eq!((node, random, ms), (0x0242_ac11_0002, false, T0 * 1000));
+                assert_eq!((node, random, ms), (0x001a_2b3c_0002, false, T0 * 1000));
             }
             d => panic!("{d:?}"),
         }
@@ -768,7 +772,7 @@ mod tests {
 
     #[test]
     fn one_machine_behind_fresh_uuid_tags_pairs_up() {
-        let node = 0x0242_ac11_0002;
+        let node = 0x001a_2b3c_0002;
         let a = analyze(
             runs(3, |k, t| v1(t, 100 + k as u16, node)),
             &Rules::default_rules(),
@@ -777,7 +781,7 @@ mod tests {
         assert_eq!(a.generator_pairs.len(), 3, "{:?}", a.generator_pairs);
         let d = a.generator_pairs[0].detail();
         assert!(d.contains("node A of this analysis"), "{d}");
-        assert!(!d.contains("0242ac110002") && !d.contains("ac11"), "{d}");
+        assert!(!d.contains("001a2b3c0002") && !d.contains("2b3c"), "{d}");
         // One node reads the same in every pair of the analysis.
         for p in &a.generator_pairs {
             assert!(p.keys[0].contains("node A "), "{:?}", p.keys);
@@ -791,7 +795,7 @@ mod tests {
         );
         // Each run its own machine: nothing.
         let b = analyze(
-            runs(3, |k, t| v1(t, 100, 0x0242_ac11_0010 + k as u64)),
+            runs(3, |k, t| v1(t, 100, 0x001a_2b3c_0010 + k as u64)),
             &Rules::default_rules(),
         );
         assert!(b.generator_pairs.is_empty(), "{:?}", b.generator_pairs);
@@ -804,9 +808,27 @@ mod tests {
     }
 
     #[test]
+    fn a_locally_administered_node_ties_none() {
+        // The default container bridge gives its first container
+        // 02:42:ac:11:00:02 on every host: unrelated operators each minting
+        // UUIDv1 tags in a fresh container carry one node.
+        let docker = 0x0242_ac11_0002;
+        assert!(matches!(
+            uuid(&v1(T0, 1, docker)),
+            Some(Decoded::Node { random: true, .. })
+        ));
+        let a = analyze(
+            runs(3, |k, t| v1(t, 100 + k as u16, docker)),
+            &Rules::default_rules(),
+        );
+        assert_eq!(a.clusters.len(), 3, "{:?}", a.clusters.len());
+        assert!(a.generator_pairs.is_empty(), "{:?}", a.generator_pairs);
+    }
+
+    #[test]
     fn one_cloned_node_on_many_senders_ties_none() {
         let a = analyze(
-            runs(12, |k, t| v1(t, k as u16, 0x0242_ac11_0002)),
+            runs(12, |k, t| v1(t, k as u16, 0x001a_2b3c_0002)),
             &Rules::default_rules(),
         );
         assert_eq!(a.clusters.len(), 12);
@@ -892,7 +914,7 @@ mod tests {
     fn a_sites_own_uuids_tie_its_visitors_to_nothing() {
         // Three clusters reading pages of one site whose ids are the site's
         // UUIDv1s: one node, one site.
-        let node = 0x0242_ac11_0002;
+        let node = 0x001a_2b3c_0002;
         let mut obs = Vec::new();
         for k in 0..3 {
             for j in 0..3 {

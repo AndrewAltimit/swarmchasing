@@ -59,7 +59,9 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
     // most `feature_link_window_secs` apart. A group whose feature is common
     // (too many hosts, or too large a share of the records around it) does
     // not link and is reported instead.
-    let mut carriers: HashMap<&LinkFeature, Vec<usize>> = HashMap::new();
+    // In feature order, so ties (and the seam review reading them) come out
+    // the same on every run.
+    let mut carriers: BTreeMap<&LinkFeature, Vec<usize>> = BTreeMap::new();
     for &i in flagged {
         for f in &results[i].features {
             carriers.entry(f).or_default().push(i);
@@ -118,8 +120,9 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
     // a host in the news draws many unrelated agents within minutes, and
     // being there together is all they share. Each record joins the latest
     // earlier one on the host that could be the same client (see
-    // `Clients::same`), so one client's run is not cut by another's requests
-    // between its own.
+    // `Clients::same`) and whose run holds no known, different client, so
+    // one client's run is not cut by another's requests between its own,
+    // and a record naming no client does not bridge two that do.
     let mut uses: HashMap<&str, usize> = HashMap::new();
     for r in results {
         if let Some(ip) = known(&r.obs.ip) {
@@ -195,8 +198,9 @@ const TIMING_LOOKBACK: usize = 64;
 
 /// The runs among `order` (record indexes in time order) that could each be
 /// one client's: every record joins the latest earlier one that
-/// [`Clients::same`] allows, within `window` seconds when given, if `joins`
-/// accepts the pair. Each connected run of two or more, in order.
+/// [`Clients::same`] allows, with every record of its run that names a
+/// client, within `window` seconds when given, if `joins` accepts the pair.
+/// Each connected run of two or more, in order.
 fn client_runs(
     results: &[ObsResult],
     clients: &Clients,
@@ -206,6 +210,21 @@ fn client_runs(
 ) -> Vec<Vec<usize>> {
     let mut dsu = Dsu((0..order.len()).collect());
     let mut linked = vec![false; order.len()];
+    // Each run's records that name their client, one per address and user
+    // agent, by the run's root. A record that names none can be anyone's,
+    // so a join through it must still not bring two known, different
+    // clients into one run.
+    let names = |o: &Observation| known(&o.ip).is_some() || known(&o.user_agent).is_some();
+    let mut named: Vec<Vec<usize>> = order
+        .iter()
+        .map(|&i| {
+            if names(&results[i].obs) {
+                vec![i]
+            } else {
+                Vec::new()
+            }
+        })
+        .collect();
     for (k, &bi) in order.iter().enumerate() {
         let b = &results[bi].obs;
         if window.is_some() && b.ts <= 0 {
@@ -217,18 +236,40 @@ fn client_runs(
                 t > 0 && b.ts - t <= w
             })
         };
-        let Some(j) = (0..k)
-            .rev()
-            .take(TIMING_LOOKBACK)
-            .take_while(near)
-            .find(|&j| clients.same(&results[order[j]].obs, b))
-        else {
+        let kr = dsu.find(k);
+        let fits = |dsu: &mut Dsu, j: usize| {
+            let jr = dsu.find(j);
+            jr != kr
+                && named[jr].iter().all(|&x| {
+                    named[kr]
+                        .iter()
+                        .all(|&y| clients.same(&results[x].obs, &results[y].obs))
+                })
+        };
+        let mut found = None;
+        for j in (0..k).rev().take(TIMING_LOOKBACK).take_while(near) {
+            if clients.same(&results[order[j]].obs, b) && fits(&mut dsu, j) {
+                found = Some(j);
+                break;
+            }
+        }
+        let Some(j) = found else {
             continue;
         };
         if joins(order[j], bi) {
+            let jr = dsu.find(j);
             dsu.union(j, k);
             linked[j] = true;
             linked[k] = true;
+            let root = dsu.find(k);
+            let mut all = std::mem::take(&mut named[jr]);
+            all.append(&mut named[kr]);
+            let mut seen = BTreeSet::new();
+            all.retain(|&x| {
+                let o = &results[x].obs;
+                seen.insert((known(&o.ip), known(&o.user_agent)))
+            });
+            named[root] = all;
         }
     }
     let mut runs: BTreeMap<usize, Vec<usize>> = BTreeMap::new();

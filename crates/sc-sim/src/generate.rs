@@ -1642,8 +1642,9 @@ impl Gen<'_> {
         match self.tag_style {
             TagStyle::Random => None,
             TagStyle::UuidV1 => {
-                // A unicast node id: the multicast bit clear.
-                let node = op.next_u64() & 0xfeff_ffff_ffff;
+                // A globally unique node id: the multicast and locally
+                // administered bits clear.
+                let node = op.next_u64() & 0xfcff_ffff_ffff;
                 let seq = own.below(1 << 14) as u64;
                 let ticks =
                     (at * 10_000_000 + GREGORIAN_OFFSET) as u64 + own.below(10_000_000) as u64;

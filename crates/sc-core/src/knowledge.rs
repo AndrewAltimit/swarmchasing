@@ -136,14 +136,93 @@ pub(crate) fn benchmarks(
     out
 }
 
-/// The registrable-looking part of a host: its last two labels.
-pub(crate) fn family(host: &str) -> &str {
-    let mut dots = host.rmatch_indices('.');
-    dots.next();
-    match dots.next() {
-        Some((i, _)) => &host[i + 1..],
-        None => host,
+/// Second levels a country code registers names under (`example.co.uk`,
+/// `example.com.au`, `example.ac.jp`).
+const CC_SECOND_LEVELS: [&str; 22] = [
+    "ac", "co", "com", "edu", "gen", "go", "gob", "gov", "gv", "info", "ltd", "me", "mil", "ne",
+    "net", "nhs", "nic", "or", "org", "plc", "sch", "web",
+];
+
+/// Suffixes under which each name is its own site, as the Public Suffix
+/// List's private section lists them: hosting platforms whose users each
+/// hold a subdomain.
+const PRIVATE_SUFFIXES: [&str; 32] = [
+    "appspot.com",
+    "azurewebsites.net",
+    "blogspot.com",
+    "cloudfront.net",
+    "deno.dev",
+    "firebaseapp.com",
+    "fly.dev",
+    "github.io",
+    "gitlab.io",
+    "glitch.me",
+    "herokuapp.com",
+    "hf.space",
+    "netlify.app",
+    "ngrok-free.app",
+    "ngrok.app",
+    "ngrok.io",
+    "onrender.com",
+    "pages.dev",
+    "r2.dev",
+    "readthedocs.io",
+    "repl.co",
+    "replit.app",
+    "s3.amazonaws.com",
+    "streamlit.app",
+    "surge.sh",
+    "trycloudflare.com",
+    "up.railway.app",
+    "vercel.app",
+    "web.app",
+    "webflow.io",
+    "workers.dev",
+    "azurestaticapps.net",
+];
+
+/// A host's site: its registrable part, approximated without the whole
+/// Public Suffix List. The last two labels; three under a country code
+/// with a registry second level (`example.co.uk`); one more than a
+/// hosting platform's suffix (`someone.github.io`, `app.vercel.app`). A
+/// host that is itself such a suffix is its own site. The one helper for
+/// every reading of host families (co-groups, generator sites, sharded
+/// partitions, template slices, onset groups).
+pub fn family(host: &str) -> &str {
+    let host = host.trim_end_matches('.');
+    // The start of each label, last first.
+    let starts: Vec<usize> = std::iter::once(0)
+        .chain(host.match_indices('.').map(|(i, _)| i + 1))
+        .collect();
+    let n = starts.len();
+    let last = |k: usize| &host[starts[n.saturating_sub(k)]..];
+    if n <= 2 {
+        return host;
     }
+    let labels = |k: usize| -> usize {
+        (2..=4)
+            .take_while(|&j| j <= n)
+            .filter(|&j| {
+                PRIVATE_SUFFIXES
+                    .iter()
+                    .any(|s| s.eq_ignore_ascii_case(last(j)))
+            })
+            .max()
+            .map_or(k, |j| (j + 1).min(n))
+    };
+    let tld = last(1);
+    let second = &last(2)[..last(2).len() - tld.len() - 1];
+    let base = if tld.len() == 2
+        && tld.bytes().all(|b| b.is_ascii_alphabetic())
+        && CC_SECOND_LEVELS
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case(second))
+    {
+        3
+    } else {
+        2
+    };
+    last(labels(base))
 }
 
 /// The API version in a URL's path (`/v2/`, `/api/v1.0/`), if any.
@@ -235,5 +314,20 @@ mod tests {
         assert_eq!(api_version("https://a.example/"), None);
         assert_eq!(family("api.data.a.example"), "a.example");
         assert_eq!(family("localhost"), "localhost");
+        assert_eq!(family("a.example"), "a.example");
+        // A country code's registry second level.
+        assert_eq!(family("www.shop.example.co.uk"), "example.co.uk");
+        assert_eq!(family("a.example.com.au"), "example.com.au");
+        assert_eq!(family("co.uk"), "co.uk");
+        assert_eq!(family("www.example.de"), "example.de");
+        assert_eq!(family("x.abc.de"), "abc.de");
+        // Hosting platforms: each user its own site.
+        assert_eq!(family("someone.github.io"), "someone.github.io");
+        assert_eq!(family("docs.someone.github.io"), "someone.github.io");
+        assert_eq!(family("my-app.vercel.app"), "my-app.vercel.app");
+        assert_eq!(family("Svc.Up.Railway.App"), "Svc.Up.Railway.App");
+        assert_eq!(family("github.io"), "github.io");
+        assert_eq!(family("www.github.io"), "www.github.io");
+        assert_eq!(family("api.github.com"), "github.com");
     }
 }

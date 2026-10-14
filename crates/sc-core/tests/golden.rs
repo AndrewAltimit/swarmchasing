@@ -62,7 +62,7 @@ fn evaluation_set_numbers_hold() {
         [213, 109, 167],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 56, "clusters");
+    assert_eq!(a.clusters.len(), 58, "clusters");
 
     // Agent grades by actor: no scanner run and no hand-typed pentest grades
     // above L0; a person pasting chatbot payloads reaches L3, the grade's

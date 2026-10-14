@@ -535,6 +535,8 @@ fn fleets(cx: &mut AnalysisCtx) {
     cx.a.candidate_fleets =
         crate::fleets::candidate_fleets(&soft_links, &cluster_ids(&a.clusters), opts);
     cx.a.soft_links = soft_links;
+    cx.a.joint_caps =
+        (opts.joint != crate::fleets::SoftLinkOptions::default().joint).then(|| opts.joint.clone());
 }
 
 /// Counts, the rules version and timing over every flagged record.

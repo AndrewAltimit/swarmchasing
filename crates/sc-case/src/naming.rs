@@ -405,20 +405,14 @@ pub fn draft(c: &Case, hosts: &[String], single_source: &[String]) -> NamingDraf
     }
 }
 
-/// The registrable-looking part of a host: its last two labels, or three
-/// under a two-letter country code with a short second level (`co.uk`).
+/// The registrable-looking part of a host ([`sc_core::knowledge::family`]),
+/// none for a bare label or an address.
 fn registrable(host: &str) -> Option<String> {
     let labels: Vec<&str> = host.split('.').filter(|l| !l.is_empty()).collect();
     if labels.len() < 2 || labels.iter().all(|l| l.chars().all(|c| c.is_ascii_digit())) {
         return None;
     }
-    let n = labels.len();
-    let take = if n >= 3 && labels[n - 1].len() == 2 && labels[n - 2].len() <= 3 {
-        3
-    } else {
-        2
-    };
-    Some(labels[n.saturating_sub(take)..].join("."))
+    Some(sc_core::knowledge::family(&labels.join(".")).to_string())
 }
 
 /// Whether `needle` appears in `hay` as a whole host or domain (not inside

@@ -30,9 +30,9 @@
 //! running at the same time draw both co-activity (timeline) and co-targets
 //! (targets) from that one fact. `[soft_links.joint]` caps a family pair's
 //! combined ratio at what the simulation measures for the pair firing
-//! together ([`JointCaps`]); the product is bounded by each capped pair's cap
-//! times the other families' ratios, and the smallest bound holds
-//! ([`combine`]).
+//! together ([`JointCaps`]); the product is bounded by the caps of any set
+//! of disjoint capped pairs times the other families' ratios, and the
+//! smallest bound holds ([`combine`]).
 //!
 //! **Fleets.** Pairs whose combined ratio reaches `fleet_min_lr` are the
 //! edges of a graph of clusters, weighted by the log of the ratio. The
@@ -535,46 +535,64 @@ pub struct PairEvidence {
     pub b: String,
     /// Each family's strongest link: kind and ratio.
     pub families: Vec<(Family, SoftLinkKind, f64)>,
-    /// Product of the families' ratios, at most what the tightest joint
-    /// cap allows.
+    /// Product of the families' ratios, at most what the tightest set of
+    /// disjoint joint caps allows.
     pub lr: f64,
-    /// The family pair whose joint cap set `lr`, when one did.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capped: Option<(Family, Family)>,
+    /// The family pairs whose joint caps set `lr`, none when no cap did.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capped: Vec<(Family, Family)>,
 }
 
 /// Every linked pair's combined evidence, by `(a, b)` as the links name
-/// them, under the bundled joint caps (for views that hold an analysis but
-/// not its rules; candidate fleets use the rules' own, [`pair_evidence_with`]).
+/// them, under the bundled joint caps. A view of an analysis uses
+/// [`crate::Analysis::pair_evidence`], which combines under the caps the
+/// analysis was made with.
 pub fn pair_evidence(links: &[SoftLink]) -> BTreeMap<(String, String), PairEvidence> {
     pair_evidence_with(links, &SoftLinkOptions::default().joint)
 }
 
 /// The combined log ratio of families' ratios under `caps`, and the family
-/// pair whose cap bound it. The independent product is `sum(ln r)`; each
-/// capped pair `(f, g)` bounds it by the pair's own term plus the other
-/// families' logs, where the pair's term is `ln cap` but never below the
-/// stronger family's log and never above their sum. The smallest bound
-/// holds, so the result does not depend on the order of families or caps,
-/// and adding a family never lowers it.
-pub fn combine(fams: &[(Family, f64)], caps: &JointCaps) -> (f64, Option<(Family, Family)>) {
-    let logs: Vec<(Family, f64)> = fams.iter().map(|&(f, r)| (f, r.max(1.0).ln())).collect();
+/// pairs whose caps bound it. The independent product is `sum(ln r)`; any
+/// set of disjoint capped pairs (no family in two) bounds it by the pairs'
+/// own terms plus the other families' logs, where a pair `(f, g)`'s term is
+/// `ln cap` but never below the stronger family's log and never above their
+/// sum. Two capped pairs that share no family are each one fact counted
+/// twice, so both caps apply at once. The smallest bound over every such
+/// set holds, so the result does not depend on the order of families or
+/// caps, and adding a family never lowers it.
+pub fn combine(fams: &[(Family, f64)], caps: &JointCaps) -> (f64, Vec<(Family, Family)>) {
+    let mut logs: Vec<(Family, f64)> = fams.iter().map(|&(f, r)| (f, r.max(1.0).ln())).collect();
+    crate::sort::by(&mut logs, |a, b| a.0.cmp(&b.0));
     let total: f64 = logs.iter().map(|x| x.1).sum();
-    let mut best = (total, None);
+    // Every capped pair, as indexes into `logs`, in family order.
+    let mut pairs: Vec<(usize, usize, f64)> = Vec::new();
     for (i, &(f, lf)) in logs.iter().enumerate() {
-        for &(g, lg) in &logs[i + 1..] {
-            let Some(cap) = caps.get(f, g) else {
-                continue;
-            };
-            let pair = cap.max(1.0).ln().clamp(lf.max(lg), lf + lg);
-            let bound = total - lf - lg + pair;
-            let key = (f.min(g), f.max(g));
-            // Ties go to the first family pair, so the pair named does not
-            // depend on the order families came in.
-            if bound < best.0 - 1e-12
-                || (bound <= best.0 + 1e-12 && best.1.is_some_and(|b| key < b))
-            {
-                best = (bound.min(best.0), Some(key));
+        for (j, &(g, lg)) in logs.iter().enumerate().skip(i + 1) {
+            if let Some(cap) = caps.get(f, g) {
+                let term = cap.max(1.0).ln().clamp(lf.max(lg), lf + lg);
+                pairs.push((i, j, term - lf - lg));
+            }
+        }
+    }
+    // Every set of disjoint pairs (four families: at most two pairs), the
+    // first in family order winning a tie, so the pairs named do not depend
+    // on the order families came in.
+    let mut best = (total, Vec::new());
+    let mut consider = |delta: f64, set: Vec<(usize, usize)>| {
+        let bound = total + delta;
+        if bound < best.0 - 1e-12 {
+            let named = set
+                .iter()
+                .map(|&(i, j)| (logs[i].0, logs[j].0))
+                .collect::<Vec<_>>();
+            best = (bound, named);
+        }
+    };
+    for (k, &(i, j, d)) in pairs.iter().enumerate() {
+        consider(d, vec![(i, j)]);
+        for &(x, y, e) in &pairs[k + 1..] {
+            if x != i && x != j && y != i && y != j {
+                consider(d + e, vec![(i, j), (x, y)]);
             }
         }
     }
@@ -1174,6 +1192,57 @@ mod tests {
     }
 
     #[test]
+    fn two_disjoint_capped_pairs_both_bound_the_product() {
+        use Family::*;
+        // Harness and identifiers are one fact, timeline and targets
+        // another: each cap applies, at once.
+        let caps = SoftLinkOptions::default().joint;
+        let four = [
+            (Harness, 20.0),
+            (Timeline, 25.0),
+            (Targets, 34.0),
+            (Identifiers, 20.0),
+        ];
+        let (log, by) = combine(&four, &caps);
+        // Harness-identifiers at 90, timeline-targets at 5 but never below
+        // the stronger alone (34): 90 * 34.
+        assert!((log.exp() - 3060.0).abs() < 1e-6, "{}", log.exp());
+        assert_eq!(by, [(Harness, Identifiers), (Timeline, Targets)]);
+        let mut shuffled = four;
+        shuffled.reverse();
+        assert_eq!(combine(&shuffled, &caps), combine(&four, &caps));
+        // One capped pair alone binds as before.
+        let (log, by) = combine(&four[..3], &caps);
+        assert!((log.exp() - 20.0 * 34.0).abs() < 1e-6, "{}", log.exp());
+        assert_eq!(by, [(Timeline, Targets)]);
+    }
+
+    #[test]
+    fn an_analysis_combines_pairs_under_its_own_caps() {
+        let links = vec![
+            link("C1", "C2", SoftLinkKind::CoActivity, 25.0),
+            link("C1", "C2", SoftLinkKind::CoTarget, 34.0),
+        ];
+        let key = ("C1".to_string(), "C2".to_string());
+        let mut a = crate::Analysis {
+            soft_links: links,
+            ..Default::default()
+        };
+        // Bundled caps: timeline-targets at 5, never below 34.
+        assert!((a.pair_evidence()[&key].lr - 34.0).abs() < 1e-9);
+        let mut caps = JointCaps::default();
+        caps.set(Family::Timeline, Family::Targets, Some(300.0));
+        a.joint_caps = Some(caps);
+        assert!((a.pair_evidence()[&key].lr - 300.0).abs() < 1e-9);
+        // An analysis made under a rules file with other caps keeps them.
+        let r = Rules::from_toml("[soft_links.joint]\ntimeline_targets = 12.0\n").unwrap();
+        let made = crate::analyze::analyze(Vec::new(), &r);
+        assert_eq!(made.joint_caps, Some(r.set.soft_links.joint.clone()));
+        let bundled = crate::analyze::analyze(Vec::new(), &Rules::default_rules());
+        assert_eq!(bundled.joint_caps, None);
+    }
+
+    #[test]
     fn joint_caps_bound_two_families_in_any_order() {
         use Family::*;
         let mut caps = JointCaps::default();
@@ -1189,7 +1258,7 @@ mod tests {
         // Capped, in either order.
         let (log, by) = combine(&tt, &caps);
         assert!((log.exp() - 300.0).abs() < 1e-6);
-        assert_eq!(by, Some((Timeline, Targets)));
+        assert_eq!(by, [(Timeline, Targets)]);
         let rev = [(Targets, 34.0), (Timeline, 25.0)];
         assert_eq!(combine(&rev, &caps), combine(&tt, &caps));
         // Never below the stronger family alone.
@@ -1204,7 +1273,7 @@ mod tests {
         // 100 * 25 = 2500; the product is 17000.
         let (log, by) = combine(&three, &caps);
         assert!((log.exp() - 800.0).abs() < 1e-6, "{}", log.exp());
-        assert_eq!(by, Some((Timeline, Targets)));
+        assert_eq!(by, [(Timeline, Targets)]);
         assert!(log.exp() >= lr(&tt, &caps));
         let mut shuffled = three;
         shuffled.reverse();
@@ -1216,7 +1285,7 @@ mod tests {
         ];
         let e = &pair_evidence_with(&links, &caps)[&("C1".to_string(), "C2".to_string())];
         assert!((e.lr - 40.0).abs() < 1e-9, "{e:?}");
-        assert_eq!(e.capped, Some((Timeline, Targets)));
+        assert_eq!(e.capped, [(Timeline, Targets)]);
         // The rules file names them under [soft_links.joint]; unknown keys fail.
         let r = Rules::from_toml("[soft_links.joint]\ntimeline_targets = 12.0\n").unwrap();
         assert_eq!(r.set.soft_links.joint.get(Targets, Timeline), Some(12.0));
