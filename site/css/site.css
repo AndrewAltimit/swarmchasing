@@ -561,6 +561,12 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
 .chart .edge.soft.sk-shared-secret { stroke: var(--critical); stroke-dasharray: 8 3; }
 .chart .edge.soft.sk-relay-stack { stroke: var(--series-1); stroke-dasharray: 2 4; stroke-linecap: round; }
 .chart .edge.soft.sk-callback-service { stroke: var(--series-3); stroke-dasharray: 3 3; }
+.chart .edge.soft.sk-scaffold { stroke: var(--series-3); stroke-dasharray: 14 3; }
+.chart .edge.soft.sk-scaffold-lineage { stroke: var(--series-3); stroke-dasharray: 14 3 2 3; }
+.chart .edge.soft.sk-prompt-echo { stroke: var(--series-1); stroke-dasharray: 4 2; }
+.chart .edge.soft.sk-co-activity { stroke: var(--band-line); stroke-dasharray: 6 6; }
+.chart .edge.soft.sk-co-target { stroke: var(--series-2); stroke-dasharray: 12 4; }
+.chart .edge.soft.sk-ordered-co-target { stroke: var(--series-2); stroke-dasharray: 12 3 2 3; }
 /* Tier marks: significant filled; suggestive a ring around a light tint of
    its colour, so the two differ in shape and lightness, not hue alone. */
 .chart :is(.run, .node, .dot).tier-significant, .chart .s-sig { fill: var(--tier-sig); }

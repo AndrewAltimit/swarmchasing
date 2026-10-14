@@ -825,6 +825,10 @@ function clusterContext(c) {
     row("Unusual path set", `${set.hosts ?? "?"} hosts were asked for the same unusual paths${num(set.not_found) ? `; ${set.not_found} got 404/410` : ""}: `, chips(arr(set.paths).slice(0, 8).map((x) => safe(x, 60))));
   if (num(p.fabricated_ids))
     row("Fabricated identifiers", `${p.fabricated_ids} record(s) carry identifiers no generator produces, consistent with invented placeholders `, chips(Object.entries(obj(p.fabricated_reasons)).map(([r, n]) => `${trunc(String(r), 40)} ×${n}`)));
+  const inv = arr(p.shared_invention);
+  if (inv.length)
+    row("Shared invention", "the same fabricated identifier in other clusters: ", chips(inv.slice(0, 6).map((x) => `${safe(obj(x).value ?? "", 64)} (${num(obj(x).clusters) ?? "?"} clusters)`)),
+      el("div", { class: "hint" }, "one model family's habit of inventing the same value, not an operator link"));
   const d = obj(c.dialect);
   const variants = topEntries(d.variants, 12);
   if (num(d.records) >= 2 && variants.length)

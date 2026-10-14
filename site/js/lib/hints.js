@@ -19,6 +19,8 @@ export const SOFT_KINDS = {
   shared_secret: "shared captured secret",
   relay_stack: "relay stack",
   callback_service: "callback service",
+  scaffold: "shared scaffold",
+  co_activity: "co-activity",
   co_target: "shared rare targets",
   ordered_co_target: "ordered rare targets",
   scaffold_lineage: "scaffold lineage",
