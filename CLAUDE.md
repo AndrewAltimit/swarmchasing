@@ -20,7 +20,7 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 
 | Path | Covers |
 |---|---|
-| [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, reports. No I/O (compiles to WASM). |
+| [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, fleet links, swarm edges, reports. No I/O (compiles to WASM). |
 | [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (archive CDX, scan services, GH Archive, registries, CT logs, security.txt), HTTP cache, PSL, ASN table, network ranges. |
 | [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README): [`watch/`](crates/swarmchase/src/watch/mod.rs) watch and digest, [`review/`](crates/swarmchase/src/review/mod.rs) lead labelling, [`case/`](crates/swarmchase/src/case/mod.rs) case files (subcommands in `case/cli/`), [`contacts/`](crates/swarmchase/src/contacts/mod.rs) contact discovery, [`notice.rs`](crates/swarmchase/src/notice.rs) notices, [`canary.rs`](crates/swarmchase/src/canary.rs) canary tokens. |
 | [`crates/sc-case`](crates/sc-case/README.md) | What a case is and may do, without I/O: case model, admin actions, pinning, lead clock, bundles, notice format and linter. |
