@@ -796,3 +796,66 @@ fn a_fabricated_value_in_two_clusters_is_a_shared_invention_hint() {
     assert!(render(crate::report::Audience::Internal).contains("shared invention"));
     assert!(!render(crate::report::Audience::Provider).contains("shared invention"));
 }
+
+/// Records on one host a minute apart, each sharing the SQL injection rule:
+/// `(address, user agent)` per record.
+fn on_one_host(clients: &[(Option<&str>, Option<&str>)]) -> Analysis {
+    let obs: Vec<Observation> = clients
+        .iter()
+        .enumerate()
+        .map(|(i, (ip, ua))| Observation {
+            id: format!("r{i}"),
+            ip: ip.map(String::from),
+            user_agent: ua.map(String::from),
+            ..o(
+                1_791_000_000 + 60 * i as i64,
+                &format!("https://records.t.example/s{i}?id={i}%20UNION%20SELECT%20{i}--"),
+            )
+        })
+        .collect();
+    analyze(obs, &Rules::default_rules())
+}
+
+#[test]
+fn different_clients_on_one_host_are_not_joined_by_timing() {
+    let (a, b) = (Some("192.0.2.10"), Some("192.0.2.20"));
+    // Two clients take turns on a host in the news: two clusters, each
+    // client's records joined across the other's.
+    let x = on_one_host(&[(a, None), (b, None), (a, None), (b, None)]);
+    assert_eq!(x.clusters.len(), 2, "{:?}", x.clusters);
+    for c in &x.clusters {
+        let ips: std::collections::BTreeSet<_> =
+            c.members.iter().map(|&m| &x.results[m].obs.ip).collect();
+        assert_eq!(ips.len(), 1, "{:?}", c.members);
+    }
+    // No addresses but different user agents: two clients.
+    let ua = |s| Some(s);
+    let y = on_one_host(&[(None, ua("python-httpx/0.27.0")), (None, ua("axios/1.6.8"))]);
+    assert!(y.clusters.is_empty(), "{:?}", y.clusters);
+    // Nothing said of the client: joined as before.
+    let z = on_one_host(&[(None, None), (a, None), (None, ua("axios/1.6.8"))]);
+    assert_eq!(z.clusters.len(), 1);
+    assert_eq!(z.clusters[0].members.len(), 3);
+}
+
+#[test]
+fn a_run_behind_rotating_addresses_still_joins_by_timing() {
+    // Every request from an address used once: one client rotating, joined.
+    let x = on_one_host(&[
+        (Some("198.51.100.1"), None),
+        (Some("198.51.100.77"), None),
+        (Some("203.0.113.9"), None),
+    ]);
+    assert_eq!(x.clusters.len(), 1);
+    assert_eq!(x.clusters[0].members.len(), 3);
+    // One of them is another client's, seen twice: it is not joined.
+    let y = on_one_host(&[
+        (Some("198.51.100.1"), None),
+        (Some("192.0.2.5"), None),
+        (Some("192.0.2.5"), None),
+        (Some("203.0.113.9"), None),
+    ]);
+    let joined: Vec<Vec<usize>> = y.clusters.iter().map(|c| c.members.clone()).collect();
+    assert!(joined.contains(&vec![1, 2]), "{joined:?}");
+    assert!(joined.contains(&vec![0, 3]), "{joined:?}");
+}

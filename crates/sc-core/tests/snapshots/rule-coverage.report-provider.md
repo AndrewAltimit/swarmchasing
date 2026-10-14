@@ -4,13 +4,13 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-08-03 09:00:00 UTC → 2026-08-13 09:00:00 UTC
-- **Records:** 39 linked public records in 13 cluster(s) (of 113 records reviewed, 80 flagged)
+- **Records:** 38 linked public records in 13 cluster(s) (of 113 records reviewed, 80 flagged)
 - **Evidence tier:** significant
 - **Method:** swarmchasing 0.1.0, rules version 2026-10-14.3
 
 ## Summary
 
-We observed automated activity consistent with AI agents operating with little or no human oversight. Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. Targets included `records[.]agency[.]example` (29), `portal[.]agency[.]example` (4), `data[.]portal[.]example` (3), `demo[.]testfire[.]net` (2), `internal[.]agency[.]example` (1).
+We observed automated activity consistent with AI agents operating with little or no human oversight. Based on the indicators below, we believe some of it may originate from agents built on or hosted by your platform. Targets included `records[.]agency[.]example` (28), `portal[.]agency[.]example` (4), `data[.]portal[.]example` (3), `demo[.]testfire[.]net` (2), `internal[.]agency[.]example` (1).
 
 **Attack payloads were present** (see Indicators). We did not test whether they succeeded.
 
@@ -38,8 +38,7 @@ We observed automated activity consistent with AI agents operating with little o
 | Agent tags and markers | `marker.agent_discovery` | 2 |
 | Agent tags and markers | `marker.callback_seq` | 1 |
 | Agent tags and markers | `marker.placeholder` | 2 |
-| Agent tags and markers | `marker.uq_tags` | 14 |
-| Self-identification strings (unreliable) | `selfid.signature_agent` | 1 |
+| Agent tags and markers | `marker.uq_tags` | 13 |
 | Self-identification strings (unreliable) | `selfid.vendor_name` | 1 |
 | Callback / exfiltration channels | `exfil.cookie` | 1 |
 | Callback / exfiltration channels | `exfil.disposable_mail` | 1 |
@@ -69,8 +68,8 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 
 **Harness and framework candidates** (ranked; never named as the source in public):
 
-1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36`; 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; ExaSearchBot/1.0; +hxxps://crawler[.]exa[.]ai/)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; ExampleAgent/1.0)`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +hxxps://openai[.]com/bot`; 1 record(s) send the header-name set 5eac670f (signature-agent, signature-input); 1 record(s) encode URLs in style `dbl.sorted.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0 Safari/537.36`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
-2. modelcontextprotocol. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `ModelContextProtocol/1.0 (Autonomous; +hxxps://github[.]com/modelcontextprotocol/servers)`; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.mcp_fetch_ua; 1 record(s) send the header-name set 5b6270b3 (cf-brapi-request-id).
+1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36`; 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; ExaSearchBot/1.0; +https://crawler.exa.ai/)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot`; 1 record(s) encode URLs in style `dbl.sorted.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0 Safari/537.36`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
+2. modelcontextprotocol. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)`; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.mcp_fetch_ua; 1 record(s) send the header-name set 5b6270b3 (cf-brapi-request-id).
 3. nuclei. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Nuclei - Open-source project (github.com/projectdiscovery/nuclei)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`.
 4. playwright. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Playwright/1.48`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 5. python-httpx. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `python-httpx/0.27.0`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
@@ -89,9 +88,9 @@ A person or a conventional scanner sending the same payloads through the same se
 - **C3**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 3 record(s) (marker.uq_tags, selfid.vendor_name)
 - **C4**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
-- **C5**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
-  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 3 record(s) (marker.uq_tags, selfid.signature_agent)
-- **C6**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
+- **C5**: L0 payloads only. Attack payloads were present; this alone does not show what sent them.
+- **C6**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
+  - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 2 record(s) (marker.uq_tags)
 - **C7**: L1 self-described. Attack payloads were present; this alone does not show what sent them.
   - signal (L1): names a model or vendor, or carries an agent test tag (anyone can write this): 2 record(s) (marker.uq_tags)
   - counter-signal: public benchmark or practice targets: 2 record(s) (altoro_mutual)
@@ -131,14 +130,14 @@ A person or a conventional scanner sending the same payloads through the same se
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them); S5 (accounts or credentials were acquired or reused); S6 (data was sent to a callback inbox or side channel)
   - relay stack `carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
-- **C5** (significant): 3 records, 1 run(s), 2026-08-10 09:15:00 UTC → 2026-08-10 09:30:00 UTC, median gap 10m
-  - artifacts: 3 of 3 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
-  - provenance: unknown 3 · single source
-  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
-- **C6** (significant): 2 records, 1 run(s), 2026-08-03 09:01:10 UTC → 2026-08-03 09:01:40 UTC, median gap 30s
+- **C5** (significant): 2 records, 1 run(s), 2026-08-03 09:01:10 UTC → 2026-08-03 09:01:40 UTC, median gap 30s
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
   - payload dialect `c0942b1d` over 2 records: cmd (semicolon ×1, subshell ×1); first seen cmd.semicolon → cmd.subshell. Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
+- **C6** (significant): 2 records, 1 run(s), 2026-08-10 09:20:00 UTC → 2026-08-10 09:30:00 UTC, median gap 10m
+  - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
+  - provenance: unknown 2 · single source
+  - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them)
 - **C7** (significant): 2 records, 1 run(s), 2026-08-11 09:00:00 UTC → 2026-08-11 09:00:30 UTC, median gap 30s
   - artifacts: 2 of 2 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
   - linked by: `param:uqtag=covscope`
@@ -181,8 +180,8 @@ For each cluster, the window to search, what its times measure, and the strings 
   - identifiers: `param:uqtag=covrun7`
 - **C4**: 2026-08-06 16:00:00 UTC to 2026-08-07 12:00:00 UTC, times of unknown kind
   - identifiers: `exfil.requestbin:c0ve7x9.m.pipedream.net`
-- **C5**: 2026-08-10 09:15:00 UTC to 2026-08-10 09:30:00 UTC, times of unknown kind
-- **C6**: 2026-08-03 09:01:10 UTC to 2026-08-03 09:01:40 UTC, times of unknown kind
+- **C5**: 2026-08-03 09:01:10 UTC to 2026-08-03 09:01:40 UTC, times of unknown kind
+- **C6**: 2026-08-10 09:20:00 UTC to 2026-08-10 09:30:00 UTC, times of unknown kind
 - **C7**: 2026-08-11 09:00:00 UTC to 2026-08-11 09:00:30 UTC, times of unknown kind
   - identifiers: `param:uqtag=covscope`
 - **C8**: 2026-08-13 09:00:00 UTC to 2026-08-13 09:00:00 UTC, times of unknown kind

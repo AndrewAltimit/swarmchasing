@@ -57,8 +57,8 @@ pub fn render(m: &Measurement) -> String {
     let _ = writeln!(s, "Records with truth: {}", m.records);
     let _ = writeln!(
         s,
-        "\nInteraction edges against true swarm pairs ({} reachable of {}). Right: distinct runs in one swarm; run: both sides one run; fleet: one operator, no interaction. Precision, then recall over reachable pairs.",
-        m.swarm_pairs.reachable, m.swarm_pairs.total
+        "\nInteraction edges against true swarm pairs ({} reachable of {}, {} already in one cluster). Right: distinct runs in one swarm; run: both sides one run; fleet: one operator, no interaction. Precision, then recall over reachable pairs, those in one cluster included.",
+        m.swarm_pairs.reachable, m.swarm_pairs.total, m.swarm_pairs.joined
     );
     table(&mut s, &m.edges, true);
     let _ = writeln!(

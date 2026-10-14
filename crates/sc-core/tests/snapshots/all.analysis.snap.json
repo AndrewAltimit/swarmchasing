@@ -1,10 +1,10 @@
 {
   "rules_version": "2026-10-14.3",
-  "total": 489,
-  "flagged": 372,
+  "total": 488,
+  "flagged": 371,
   "tier_counts": {
     "noise": 213,
-    "suggestive": 109,
+    "suggestive": 108,
     "significant": 167
   },
   "rule_counts": {
@@ -87,7 +87,7 @@
     "marker.probe_tag": 2,
     "marker.repeated_token": 2,
     "marker.template_unrendered": 3,
-    "marker.test_tag": 2,
+    "marker.test_tag": 1,
     "marker.title_write": 3,
     "marker.tool_call_json": 2,
     "marker.tool_call_markup": 2,
@@ -1672,7 +1672,7 @@
       ],
       "target_host": "portal.agency.example",
       "features": [],
-      "cluster": 24
+      "cluster": 23
     },
     {
       "obs": {
@@ -1703,7 +1703,7 @@
       ],
       "target_host": "portal.agency.example",
       "features": [],
-      "cluster": 24
+      "cluster": 23
     },
     {
       "obs": {
@@ -1734,50 +1734,7 @@
       ],
       "target_host": "portal.agency.example",
       "features": [],
-      "cluster": 24
-    },
-    {
-      "obs": {
-        "id": "eval:cov-test-tag-underscore",
-        "source": "eval",
-        "ts": 1786352400,
-        "url": "https://records.agency.example/api/items?page=2&ref=uq_agenttest42"
-      },
-      "score": 3,
-      "tier": "suggestive",
-      "hits": [
-        {
-          "rule_id": "marker.test_tag",
-          "kind": "agent_marker",
-          "weight": 3,
-          "matched": "agenttest42",
-          "layer": 0,
-          "artifact": true
-        }
-      ],
-      "layers": [
-        {
-          "via": "submitted",
-          "depth": 0,
-          "host": "records.agency.example",
-          "text": "https://records.agency.example/api/items?page=2&ref=uq_agenttest42"
-        }
-      ],
-      "target_host": "records.agency.example",
-      "features": [
-        "marker.test_tag:agenttest42"
-      ],
-      "cluster": null,
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "marker.test_tag"
-          }
-        ]
-      }
+      "cluster": 23
     },
     {
       "obs": {
@@ -5344,7 +5301,7 @@
         "url": "https://api.data.example/v1/quotes?symbol=ACME",
         "user_agent": "axios/1.7.7",
         "headers": {
-          "payment-signature": "REDACTED-c77c2a8972bd"
+          "payment-signature": "eyJ4NDAyVmVyc2lvbiI6Mn0="
         }
       },
       "score": 2,
@@ -5354,7 +5311,7 @@
           "rule_id": "selfid.agent_commerce",
           "kind": "self_id",
           "weight": 1,
-          "matched": "payment-signature: REDACTED-c77c2a8972bd",
+          "matched": "payment-signature: eyJ4NDAyVmVyc2lvbiI6Mn0=",
           "layer": 0,
           "artifact": true
         },
@@ -7334,7 +7291,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 34
+      "cluster": 33
     },
     {
       "obs": {
@@ -7382,7 +7339,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 34
+      "cluster": 33
     },
     {
       "obs": {
@@ -8215,7 +8172,7 @@
       ],
       "target_host": "civilrightsdata.ed.gov",
       "features": [],
-      "cluster": 33
+      "cluster": 32
     },
     {
       "obs": {
@@ -8246,7 +8203,7 @@
       ],
       "target_host": "civilrightsdata.ed.gov",
       "features": [],
-      "cluster": 33
+      "cluster": 32
     },
     {
       "obs": {
@@ -10482,7 +10439,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 35
+      "cluster": 34
     },
     {
       "obs": {
@@ -10513,7 +10470,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 35
+      "cluster": 34
     },
     {
       "obs": {
@@ -11859,7 +11816,17 @@
       "features": [
         "param:uqtag=covsig1"
       ],
-      "cluster": 23
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "marker.uq_tags, selfid.signature_agent"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -11901,7 +11868,7 @@
       "features": [
         "param:uqtag=covrun11"
       ],
-      "cluster": 23
+      "cluster": 35
     },
     {
       "obs": {
@@ -11957,7 +11924,7 @@
       "features": [
         "param:uqtag=covrun12"
       ],
-      "cluster": 23
+      "cluster": 35
     },
     {
       "obs": {
@@ -15083,7 +15050,7 @@
       "features": [
         "param:uqtag=la1q7c"
       ],
-      "cluster": 25
+      "cluster": 24
     },
     {
       "obs": {
@@ -15125,7 +15092,7 @@
       "features": [
         "param:uqtag=la1q7c"
       ],
-      "cluster": 25
+      "cluster": 24
     },
     {
       "obs": {
@@ -15167,7 +15134,7 @@
       "features": [
         "param:uqtag=lb8w2n"
       ],
-      "cluster": 26
+      "cluster": 25
     },
     {
       "obs": {
@@ -15209,7 +15176,7 @@
       "features": [
         "param:uqtag=lb8w2n"
       ],
-      "cluster": 26
+      "cluster": 25
     },
     {
       "obs": {
@@ -15251,7 +15218,7 @@
       "features": [
         "param:uqtag=lc4e9r"
       ],
-      "cluster": 27
+      "cluster": 26
     },
     {
       "obs": {
@@ -15293,7 +15260,7 @@
       "features": [
         "param:uqtag=lc4e9r"
       ],
-      "cluster": 27
+      "cluster": 26
     },
     {
       "obs": {
@@ -15335,7 +15302,7 @@
       "features": [
         "param:uqtag=ld6t3m"
       ],
-      "cluster": 28
+      "cluster": 27
     },
     {
       "obs": {
@@ -15377,7 +15344,7 @@
       "features": [
         "param:uqtag=ld6t3m"
       ],
-      "cluster": 28
+      "cluster": 27
     },
     {
       "obs": {
@@ -15419,7 +15386,7 @@
       "features": [
         "param:uqtag=le2y8k"
       ],
-      "cluster": 29
+      "cluster": 28
     },
     {
       "obs": {
@@ -15461,7 +15428,7 @@
       "features": [
         "param:uqtag=le2y8k"
       ],
-      "cluster": 29
+      "cluster": 28
     },
     {
       "obs": {
@@ -15503,7 +15470,7 @@
       "features": [
         "param:uqtag=lf9u4p"
       ],
-      "cluster": 30
+      "cluster": 29
     },
     {
       "obs": {
@@ -15545,7 +15512,7 @@
       "features": [
         "param:uqtag=lf9u4p"
       ],
-      "cluster": 30
+      "cluster": 29
     },
     {
       "obs": {
@@ -15587,7 +15554,7 @@
       "features": [
         "param:uqtag=lg5i1x"
       ],
-      "cluster": 31
+      "cluster": 30
     },
     {
       "obs": {
@@ -15629,7 +15596,7 @@
       "features": [
         "param:uqtag=lg5i1x"
       ],
-      "cluster": 31
+      "cluster": 30
     },
     {
       "obs": {
@@ -15671,7 +15638,7 @@
       "features": [
         "param:uqtag=lh3o6v"
       ],
-      "cluster": 32
+      "cluster": 31
     },
     {
       "obs": {
@@ -15713,7 +15680,7 @@
       "features": [
         "param:uqtag=lh3o6v"
       ],
-      "cluster": 32
+      "cluster": 31
     },
     {
       "obs": {
@@ -18843,16 +18810,16 @@
       "id": "C1",
       "key": "k-9544a26c",
       "members": [
-        431,
-        433,
-        435,
-        437,
-        439,
-        441,
-        443,
-        445,
-        447,
-        449
+        430,
+        432,
+        434,
+        436,
+        438,
+        440,
+        442,
+        444,
+        446,
+        448
       ],
       "start": 1778730369,
       "end": 1778748169,
@@ -19036,16 +19003,16 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            431,
-            433,
-            435,
-            437,
-            439,
-            441,
-            443,
-            445,
-            447,
-            449
+            430,
+            432,
+            434,
+            436,
+            438,
+            440,
+            442,
+            444,
+            446,
+            448
           ],
           "detail": "all 10 records come from services anyone can submit a URL to (urlscan); no server log or owner-published record stands behind them"
         }
@@ -19085,16 +19052,16 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              431,
-              433,
-              435,
-              437,
-              439,
-              441,
-              443,
-              445,
-              447,
-              449
+              430,
+              432,
+              434,
+              436,
+              438,
+              440,
+              442,
+              444,
+              446,
+              448
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -19125,16 +19092,16 @@
       "id": "C2",
       "key": "k-94a01368",
       "members": [
-        432,
-        434,
-        436,
-        438,
-        440,
-        442,
-        444,
-        446,
-        448,
-        450
+        431,
+        433,
+        435,
+        437,
+        439,
+        441,
+        443,
+        445,
+        447,
+        449
       ],
       "start": 1778730414,
       "end": 1778748218,
@@ -19327,16 +19294,16 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            432,
-            434,
-            436,
-            438,
-            440,
-            442,
-            444,
-            446,
-            448,
-            450
+            431,
+            433,
+            435,
+            437,
+            439,
+            441,
+            443,
+            445,
+            447,
+            449
           ],
           "detail": "all 10 records come from services anyone can submit a URL to (urlscan); no server log or owner-published record stands behind them"
         }
@@ -19369,16 +19336,16 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              432,
-              434,
-              436,
-              438,
-              440,
-              442,
-              444,
-              446,
-              448,
-              450
+              431,
+              433,
+              435,
+              437,
+              439,
+              441,
+              443,
+              445,
+              447,
+              449
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -19409,16 +19376,16 @@
       "id": "C3",
       "key": "k-343cf869",
       "members": [
-        372,
-        374,
-        377,
-        386,
-        388,
-        391,
+        371,
+        373,
+        376,
+        385,
+        387,
+        390,
+        392,
         393,
         394,
-        395,
-        397
+        396
       ],
       "start": 1786611600,
       "end": 1786611600,
@@ -19606,7 +19573,7 @@
             "id": "S2",
             "outcome": "fail",
             "records": [
-              374
+              373
             ],
             "detail": "the route climbed to reach one target, past a block"
           },
@@ -19619,14 +19586,14 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              372,
-              374,
-              388,
-              391,
+              371,
+              373,
+              387,
+              390,
+              392,
               393,
               394,
-              395,
-              397
+              396
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -19639,7 +19606,7 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              386
+              385
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -20107,14 +20074,14 @@
       "id": "C6",
       "key": "k-a0f281b4",
       "members": [
+        69,
         70,
         71,
         72,
         73,
         74,
         75,
-        76,
-        77
+        76
       ],
       "start": 1789898400,
       "end": 1789898544,
@@ -20246,14 +20213,14 @@
         {
           "kind": "provenance_monoculture",
           "records": [
+            69,
             70,
             71,
             72,
             73,
             74,
             75,
-            76,
-            77
+            76
           ],
           "detail": "all 8 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them"
         }
@@ -20307,14 +20274,14 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
+              69,
               70,
               71,
               72,
               73,
               74,
               75,
-              76,
-              77
+              76
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -20345,12 +20312,12 @@
       "id": "C7",
       "key": "k-fd3d4fb8",
       "members": [
+        472,
         473,
         474,
         475,
         476,
-        477,
-        478
+        477
       ],
       "start": 1773046800,
       "end": 1773047100,
@@ -20516,12 +20483,12 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
+              472,
               473,
               474,
               475,
               476,
-              477,
-              478
+              477
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -20744,12 +20711,12 @@
       "id": "C9",
       "key": "k-003e3240",
       "members": [
+        85,
         86,
-        87,
+        89,
         90,
-        91,
-        94,
-        95
+        93,
+        94
       ],
       "start": 1789905600,
       "end": 1789905723,
@@ -20882,24 +20849,24 @@
         {
           "kind": "provenance_monoculture",
           "records": [
+            85,
             86,
-            87,
+            89,
             90,
-            91,
-            94,
-            95
+            93,
+            94
           ],
           "detail": "all 6 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them"
         },
         {
           "kind": "auto_submitted",
           "records": [
+            85,
             86,
-            87,
+            89,
             90,
-            91,
-            94,
-            95
+            93,
+            94
           ],
           "detail": "3 of its targets went to urlquery, urlscan within 3s, and 5 ordinary link(s) on other hosts were fanned out alike around it: something submits every link it sees, as a mail gateway or security product does, so whoever sent the links made these records"
         }
@@ -20955,12 +20922,12 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
+              85,
               86,
-              87,
+              89,
               90,
-              91,
-              94,
-              95
+              93,
+              94
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -20991,11 +20958,11 @@
       "id": "C10",
       "key": "k-a798e7e7",
       "members": [
+        483,
         484,
         485,
         486,
-        487,
-        488
+        487
       ],
       "start": 1773333000,
       "end": 1773333240,
@@ -21149,11 +21116,11 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
+              483,
               484,
               485,
               486,
-              487,
-              488
+              487
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -21399,11 +21366,11 @@
       "id": "C12",
       "key": "k-cc3501da",
       "members": [
+        173,
         174,
-        175,
-        184,
-        187,
-        188
+        183,
+        186,
+        187
       ],
       "start": 1782986580,
       "end": 1782987420,
@@ -21971,10 +21938,10 @@
       "id": "C15",
       "key": "k-7a37d335",
       "members": [
+        235,
         236,
         237,
-        238,
-        288
+        287
       ],
       "start": 1781082720,
       "end": 1781082870,
@@ -22126,10 +22093,10 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
+              235,
               236,
               237,
-              238,
-              288
+              287
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22160,9 +22127,9 @@
       "id": "C16",
       "key": "k-74c086a9",
       "members": [
+        469,
         470,
-        471,
-        472
+        471
       ],
       "start": 1772720700,
       "end": 1772720850,
@@ -22329,8 +22296,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              471,
-              472
+              470,
+              471
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22361,9 +22328,9 @@
       "id": "C17",
       "key": "k-ce706bea",
       "members": [
+        405,
         406,
-        407,
-        408
+        407
       ],
       "start": 1775466847,
       "end": 1775467041,
@@ -22487,9 +22454,9 @@
         {
           "kind": "provenance_monoculture",
           "records": [
+            405,
             406,
-            407,
-            408
+            407
           ],
           "detail": "all 3 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -22532,9 +22499,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
+              405,
               406,
-              407,
-              408
+              407
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22565,9 +22532,9 @@
       "id": "C18",
       "key": "k-f773d3d1",
       "members": [
+        408,
         409,
-        410,
-        411
+        410
       ],
       "start": 1775898847,
       "end": 1775899041,
@@ -22691,9 +22658,9 @@
         {
           "kind": "provenance_monoculture",
           "records": [
+            408,
             409,
-            410,
-            411
+            410
           ],
           "detail": "all 3 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -22736,9 +22703,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
+              408,
               409,
-              410,
-              411
+              410
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22769,9 +22736,9 @@
       "id": "C19",
       "key": "k-48937eab",
       "members": [
+        411,
         412,
-        413,
-        414
+        413
       ],
       "start": 1776330847,
       "end": 1776331041,
@@ -22895,9 +22862,9 @@
         {
           "kind": "provenance_monoculture",
           "records": [
+            411,
             412,
-            413,
-            414
+            413
           ],
           "detail": "all 3 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -22940,9 +22907,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
+              411,
               412,
-              413,
-              414
+              413
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22973,9 +22940,9 @@
       "id": "C20",
       "key": "k-15c03b5e",
       "members": [
-        293,
-        295,
-        296
+        292,
+        294,
+        295
       ],
       "start": 1785747600,
       "end": 1785747645,
@@ -23129,9 +23096,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              293,
-              295,
-              296
+              292,
+              294,
+              295
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23162,9 +23129,9 @@
       "id": "C21",
       "key": "k-96a48819",
       "members": [
-        247,
-        251,
-        252
+        246,
+        250,
+        251
       ],
       "start": 1785771000,
       "end": 1785771120,
@@ -23310,9 +23277,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              247,
-              251,
-              252
+              246,
+              250,
+              251
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23343,9 +23310,9 @@
       "id": "C22",
       "key": "k-3d8e048c",
       "members": [
+        302,
         303,
-        304,
-        319
+        318
       ],
       "start": 1785924000,
       "end": 1786107600,
@@ -23502,7 +23469,7 @@
             "id": "S5",
             "outcome": "fail",
             "records": [
-              319
+              318
             ],
             "detail": "accounts or credentials were acquired or reused"
           },
@@ -23510,7 +23477,7 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              319
+              318
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -23531,9 +23498,9 @@
       "id": "C23",
       "key": "k-2a0dbcd7",
       "members": [
+        309,
         310,
-        311,
-        318
+        317
       ],
       "start": 1786032000,
       "end": 1786104000,
@@ -23687,7 +23654,7 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              318
+              317
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23695,7 +23662,7 @@
             "id": "S5",
             "outcome": "fail",
             "records": [
-              318
+              317
             ],
             "detail": "accounts or credentials were acquired or reused"
           },
@@ -23703,9 +23670,9 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
+              309,
               310,
-              311,
-              318
+              317
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -23724,181 +23691,6 @@
     },
     {
       "id": "C24",
-      "key": "k-fcf5d060",
-      "members": [
-        335,
-        336,
-        338
-      ],
-      "start": 1786353300,
-      "end": 1786354200,
-      "tier": "significant",
-      "score": 9,
-      "rules": {
-        "exploit.double_encoded_meta": 1,
-        "header.agent_ua": 1,
-        "marker.uq_tags": 3,
-        "selfid.signature_agent": 1
-      },
-      "kinds": {
-        "exploit": 1,
-        "agent_marker": 3,
-        "self_id": 1,
-        "header": 1
-      },
-      "tactics": {
-        "T4": 1
-      },
-      "artifacts": 3,
-      "target_hosts": {
-        "records.agency.example": 3
-      },
-      "asns": {},
-      "user_agents": {
-        "Mozilla/5.0 (compatible; ExampleAgent/1.0)": 1,
-        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot": 1
-      },
-      "encodings": {
-        "dbl.sorted.noslash": 1
-      },
-      "header_sets": {
-        "5eac670f": 1
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1786353300,
-          "end": 1786354200,
-          "count": 3
-        }
-      ],
-      "timing": {
-        "count": 3,
-        "start": 1786353300,
-        "end": 1786354200,
-        "median_gap_secs": 600.0,
-        "p90_gap_secs": 600.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1786352400,
-            3
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.16666666666666666,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 3
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 3,
-            "detail": "marker.uq_tags, selfid.signature_agent"
-          }
-        ]
-      },
-      "scope": {
-        "task_class": "unclear",
-        "target_classes": {
-          "interactive": 3
-        },
-        "tests": [
-          {
-            "id": "S1",
-            "outcome": "not_assessable",
-            "detail": "the task class is unclear, so an off-task target cannot be judged"
-          },
-          {
-            "id": "S2",
-            "outcome": "pass",
-            "detail": "no block, challenge or rate limit was circumvented"
-          },
-          {
-            "id": "S3",
-            "outcome": "pass",
-            "detail": "no sensitive path was requested"
-          },
-          {
-            "id": "S4",
-            "outcome": "fail",
-            "records": [
-              338
-            ],
-            "detail": "attack payloads were sent to a party that did not sanction them"
-          },
-          {
-            "id": "S5",
-            "outcome": "pass",
-            "detail": "no account or credential acquisition"
-          },
-          {
-            "id": "S6",
-            "outcome": "pass",
-            "detail": "no data was sent to a channel outside the target"
-          },
-          {
-            "id": "S7",
-            "outcome": "not_assessable",
-            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
-          }
-        ],
-        "finding": "scope_exceeded",
-        "payload_present": true,
-        "agent_present": false,
-        "out_of_scope": true,
-        "coordinated": false
-      }
-    },
-    {
-      "id": "C25",
       "key": "k-a70b6adc",
       "members": [
         41,
@@ -24081,11 +23873,11 @@
       }
     },
     {
-      "id": "C26",
+      "id": "C25",
       "key": "k-4a7f92c8",
       "members": [
-        415,
-        416
+        414,
+        415
       ],
       "start": 1775023421,
       "end": 1775023561,
@@ -24190,8 +23982,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            415,
-            416
+            414,
+            415
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -24234,8 +24026,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              415,
-              416
+              414,
+              415
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -24263,11 +24055,11 @@
       }
     },
     {
-      "id": "C27",
+      "id": "C26",
       "key": "k-2b8249d6",
       "members": [
-        417,
-        418
+        416,
+        417
       ],
       "start": 1775286221,
       "end": 1775286361,
@@ -24372,8 +24164,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            417,
-            418
+            416,
+            417
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -24416,8 +24208,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              417,
-              418
+              416,
+              417
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -24445,11 +24237,11 @@
       }
     },
     {
-      "id": "C28",
+      "id": "C27",
       "key": "k-b6272b6c",
       "members": [
-        419,
-        420
+        418,
+        419
       ],
       "start": 1775549021,
       "end": 1775549161,
@@ -24554,8 +24346,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            419,
-            420
+            418,
+            419
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -24598,8 +24390,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              419,
-              420
+              418,
+              419
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -24627,11 +24419,11 @@
       }
     },
     {
-      "id": "C29",
+      "id": "C28",
       "key": "k-2ce667ee",
       "members": [
-        421,
-        422
+        420,
+        421
       ],
       "start": 1775811821,
       "end": 1775811961,
@@ -24736,8 +24528,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            421,
-            422
+            420,
+            421
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -24780,8 +24572,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              421,
-              422
+              420,
+              421
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -24809,11 +24601,11 @@
       }
     },
     {
-      "id": "C30",
+      "id": "C29",
       "key": "k-9b98d2af",
       "members": [
-        423,
-        424
+        422,
+        423
       ],
       "start": 1776074621,
       "end": 1776074761,
@@ -24918,8 +24710,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            423,
-            424
+            422,
+            423
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -24962,8 +24754,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              423,
-              424
+              422,
+              423
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -24991,11 +24783,11 @@
       }
     },
     {
-      "id": "C31",
+      "id": "C30",
       "key": "k-30b2a402",
       "members": [
-        425,
-        426
+        424,
+        425
       ],
       "start": 1776337421,
       "end": 1776337561,
@@ -25100,8 +24892,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            425,
-            426
+            424,
+            425
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -25144,8 +24936,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              425,
-              426
+              424,
+              425
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -25173,11 +24965,11 @@
       }
     },
     {
-      "id": "C32",
+      "id": "C31",
       "key": "k-ee412da9",
       "members": [
-        427,
-        428
+        426,
+        427
       ],
       "start": 1776600221,
       "end": 1776600361,
@@ -25282,8 +25074,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            427,
-            428
+            426,
+            427
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -25326,8 +25118,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              427,
-              428
+              426,
+              427
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -25355,11 +25147,11 @@
       }
     },
     {
-      "id": "C33",
+      "id": "C32",
       "key": "k-d3d2f667",
       "members": [
-        429,
-        430
+        428,
+        429
       ],
       "start": 1776863021,
       "end": 1776863161,
@@ -25464,8 +25256,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            429,
-            430
+            428,
+            429
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
         }
@@ -25508,8 +25300,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              429,
-              430
+              428,
+              429
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -25537,11 +25329,11 @@
       }
     },
     {
-      "id": "C34",
+      "id": "C33",
       "key": "k-3bed0073",
       "members": [
-        233,
-        234
+        232,
+        233
       ],
       "start": 1780408805,
       "end": 1780408990,
@@ -25690,7 +25482,7 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              233
+              232
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -25718,11 +25510,11 @@
       }
     },
     {
-      "id": "C35",
+      "id": "C34",
       "key": "k-a40c5369",
       "members": [
-        195,
-        196
+        194,
+        195
       ],
       "start": 1782987840,
       "end": 1782987900,
@@ -25861,7 +25653,7 @@
             "id": "S1",
             "outcome": "fail",
             "records": [
-              196
+              195
             ],
             "detail": "a account setup run reached access-controlled or sensitive targets"
           },
@@ -25879,7 +25671,7 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              196
+              195
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -25887,8 +25679,8 @@
             "id": "S5",
             "outcome": "fail",
             "records": [
-              195,
-              196
+              194,
+              195
             ],
             "detail": "accounts or credentials were acquired or reused"
           },
@@ -25911,11 +25703,11 @@
       }
     },
     {
-      "id": "C36",
+      "id": "C35",
       "key": "k-21e5a81d",
       "members": [
-        299,
-        300
+        298,
+        299
       ],
       "start": 1785747670,
       "end": 1785747700,
@@ -26055,8 +25847,176 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              299,
-              300
+              298,
+              299
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
+      }
+    },
+    {
+      "id": "C36",
+      "key": "k-e17d390c",
+      "members": [
+        335,
+        337
+      ],
+      "start": 1786353600,
+      "end": 1786354200,
+      "tier": "significant",
+      "score": 8,
+      "rules": {
+        "exploit.double_encoded_meta": 1,
+        "header.agent_ua": 1,
+        "marker.uq_tags": 2
+      },
+      "kinds": {
+        "exploit": 1,
+        "agent_marker": 2,
+        "header": 1
+      },
+      "tactics": {
+        "T4": 1
+      },
+      "artifacts": 2,
+      "target_hosts": {
+        "records.agency.example": 2
+      },
+      "asns": {},
+      "user_agents": {
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot": 1
+      },
+      "encodings": {
+        "dbl.sorted.noslash": 1
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1786353600,
+          "end": 1786354200,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1786353600,
+        "end": 1786354200,
+        "median_gap_secs": 600.0,
+        "p90_gap_secs": 600.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786352400,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.16666666666666666,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 2,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              337
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -26087,8 +26047,8 @@
       "id": "C37",
       "key": "k-11b00947",
       "members": [
-        340,
-        341
+        339,
+        340
       ],
       "start": 1786438800,
       "end": 1786438830,
@@ -26259,8 +26219,8 @@
             "id": "S4",
             "outcome": "not_assessable",
             "records": [
-              340,
-              341
+              339,
+              340
             ],
             "detail": "attack payloads reached a benchmark target built to be tested"
           },
@@ -26291,8 +26251,8 @@
       "id": "C38",
       "key": "k-93ae0ac9",
       "members": [
-        248,
-        249
+        247,
+        248
       ],
       "start": 1786500600,
       "end": 1786500840,
@@ -26437,7 +26397,7 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              248
+              247
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -26468,8 +26428,8 @@
       "id": "C39",
       "key": "k-e15d2c41",
       "members": [
-        383,
-        384
+        382,
+        383
       ],
       "start": 1786611600,
       "end": 1786611600,
@@ -26637,8 +26597,8 @@
       "id": "C40",
       "key": "k-131d8ae5",
       "members": [
-        165,
-        166
+        164,
+        165
       ],
       "start": 1788357600,
       "end": 1788357780,
@@ -26788,8 +26748,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              165,
-              166
+              164,
+              165
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -26820,8 +26780,8 @@
       "id": "C41",
       "key": "k-635475d7",
       "members": [
-        168,
-        169
+        167,
+        168
       ],
       "start": 1788426000,
       "end": 1788426120,
@@ -26962,8 +26922,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              168,
-              169
+              167,
+              168
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -26994,8 +26954,8 @@
       "id": "C42",
       "key": "k-f3eb632e",
       "members": [
-        78,
-        79
+        77,
+        78
       ],
       "start": 1789902000,
       "end": 1789902240,
@@ -27105,8 +27065,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            78,
-            79
+            77,
+            78
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them"
         }
@@ -27139,8 +27099,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              78,
-              79
+              77,
+              78
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -27171,14 +27131,14 @@
       "id": "C43",
       "key": "k-b000dccb",
       "members": [
+        450,
         451,
         452,
         453,
         454,
         455,
         456,
-        457,
-        458
+        457
       ],
       "start": 1772445600,
       "end": 1772445950,
@@ -27361,14 +27321,14 @@
       "id": "C44",
       "key": "k-1d59194a",
       "members": [
+        458,
         459,
         460,
         461,
         462,
         463,
         464,
-        465,
-        466
+        465
       ],
       "start": 1772445640,
       "end": 1772445990,
@@ -27551,11 +27511,11 @@
       "id": "C45",
       "key": "k-408d9c03",
       "members": [
+        478,
         479,
         480,
         481,
-        482,
-        483
+        482
       ],
       "start": 1773331200,
       "end": 1773331440,
@@ -27728,9 +27688,9 @@
       "id": "C46",
       "key": "k-4c8b6e8f",
       "members": [
+        466,
         467,
-        468,
-        469
+        468
       ],
       "start": 1772719200,
       "end": 1772719320,
@@ -27899,9 +27859,9 @@
       "id": "C47",
       "key": "k-323bd6db",
       "members": [
-        323,
-        325,
-        326
+        322,
+        324,
+        325
       ],
       "start": 1786266600,
       "end": 1786273500,
@@ -28055,8 +28015,8 @@
             "id": "S1",
             "outcome": "fail",
             "records": [
-              325,
-              326
+              324,
+              325
             ],
             "detail": "a data retrieval run reached access-controlled or sensitive targets"
           },
@@ -28069,7 +28029,7 @@
             "id": "S3",
             "outcome": "fail",
             "records": [
-              326
+              325
             ],
             "detail": "requests reached configuration, source or administration paths"
           },
@@ -28105,9 +28065,9 @@
       "id": "C48",
       "key": "k-ed0b96c0",
       "members": [
+        66,
         67,
-        68,
-        69
+        68
       ],
       "start": 1786699200,
       "end": 1786699440,
@@ -28252,9 +28212,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
+              66,
               67,
-              68,
-              69
+              68
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -28285,8 +28245,8 @@
       "id": "C49",
       "key": "k-31edd96c",
       "members": [
-        244,
-        245
+        243,
+        244
       ],
       "start": 1779303660,
       "end": 1779303840,
@@ -28388,14 +28348,14 @@
         {
           "kind": "burned_identifier",
           "records": [
-            244
+            243
           ],
           "detail": "`param:tok=expt3` on 1 record(s) is quoted in a public report (linking.published_tags): anyone who read it can copy it"
         },
         {
           "kind": "burned_identifier",
           "records": [
-            245
+            244
           ],
           "detail": "`param:tok=expt4` on 1 record(s) is quoted in a public report (linking.published_tags): anyone who read it can copy it"
         }
@@ -28463,8 +28423,8 @@
       "id": "C50",
       "key": "k-9df8c89d",
       "members": [
-        178,
-        181
+        177,
+        180
       ],
       "start": 1782986820,
       "end": 1782987000,
@@ -28637,8 +28597,8 @@
       "id": "C51",
       "key": "k-6ac6b86f",
       "members": [
-        192,
-        194
+        191,
+        193
       ],
       "start": 1782987660,
       "end": 1782987780,
@@ -28806,8 +28766,8 @@
       "id": "C52",
       "key": "k-7714324d",
       "members": [
-        306,
-        307
+        305,
+        306
       ],
       "start": 1786024800,
       "end": 1786024830,
@@ -28948,8 +28908,8 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              306,
-              307
+              305,
+              306
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -28970,8 +28930,8 @@
       "id": "C53",
       "key": "k-3cff30a9",
       "members": [
-        315,
-        316
+        314,
+        315
       ],
       "start": 1786093200,
       "end": 1786093260,
@@ -29105,8 +29065,8 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              315,
-              316
+              314,
+              315
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -29127,8 +29087,8 @@
       "id": "C54",
       "key": "k-67c2b035",
       "members": [
-        343,
-        344
+        342,
+        343
       ],
       "start": 1786525200,
       "end": 1786525500,
@@ -29257,8 +29217,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              343,
-              344
+              342,
+              343
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -29289,8 +29249,8 @@
       "id": "C55",
       "key": "k-a6c34dc6",
       "members": [
-        357,
-        358
+        356,
+        357
       ],
       "start": 1786528200,
       "end": 1786528500,
@@ -29419,8 +29379,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              357,
-              358
+              356,
+              357
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -29561,7 +29521,7 @@
             37,
             38
           ],
-          "detail": "shares `param:uqtag=covrun12` with the earlier C24 but its URL encodings have nothing in common with that cluster's: the identifier may have been copied"
+          "detail": "shares `param:uqtag=covrun12` with the earlier C36 but its URL encodings have nothing in common with that cluster's: the identifier may have been copied"
         }
       ],
       "agent": {
@@ -29625,7 +29585,7 @@
     }
   ],
   "timing": {
-    "count": 372,
+    "count": 371,
     "start": 1425996000,
     "end": 1791538800,
     "median_gap_secs": 240.0,
@@ -68346,9 +68306,9 @@
       "host": "civilrightsdata.ed.gov",
       "path": "/api/v1.0/GetStateEstimation",
       "members": [
+        232,
         233,
-        234,
-        235
+        234
       ],
       "varied": [
         "Measure_Id",
@@ -68368,10 +68328,10 @@
       "host": "recherche-collection-search.bac-lac.canada.ca",
       "path": "/eng/Home/Record",
       "members": [
+        235,
         236,
         237,
-        238,
-        288
+        287
       ],
       "varied": [
         "IdNumber"
@@ -68388,9 +68348,9 @@
       "host": "records.agency.example",
       "path": "/api/items",
       "members": [
-        293,
-        295,
-        296
+        292,
+        294,
+        295
       ],
       "varied": [
         "id"
@@ -68407,9 +68367,9 @@
       "host": "api.datausa.io",
       "path": "/tesseract/data.jsonrecords",
       "members": [
-        247,
-        251,
-        252
+        246,
+        250,
+        251
       ],
       "varied": [
         "cube",
@@ -68427,16 +68387,16 @@
       "host": "records.agency.example",
       "path": "/items",
       "members": [
-        372,
-        374,
-        377,
-        386,
-        388,
-        391,
+        371,
+        373,
+        376,
+        385,
+        387,
+        390,
+        392,
         393,
         394,
-        395,
-        397
+        396
       ],
       "varied": [
         "id",
@@ -68454,9 +68414,9 @@
       "host": "records.agency.example",
       "path": "/items",
       "members": [
+        66,
         67,
-        68,
-        69
+        68
       ],
       "varied": [
         "id"
@@ -68493,14 +68453,14 @@
       "host": "permits.xsvc-a.example",
       "path": "/search",
       "members": [
+        69,
         70,
         71,
         72,
         73,
         74,
         75,
-        76,
-        77
+        76
       ],
       "varied": [
         "page",
@@ -68519,12 +68479,12 @@
       "host": "portal.xsvc-gw.example",
       "path": "/lookup",
       "members": [
+        85,
         86,
-        87,
+        89,
         90,
-        91,
-        94,
-        95
+        93,
+        94
       ],
       "varied": [
         "id",
@@ -68590,12 +68550,12 @@
       "steps": [
         {
           "route": "direct",
-          "record": 176,
+          "record": 175,
           "ts": 1782986700
         },
         {
           "route": "relay",
-          "record": 192,
+          "record": 191,
           "ts": 1782987660
         }
       ],
@@ -68611,12 +68571,12 @@
       "steps": [
         {
           "route": "direct",
-          "record": 322,
+          "record": 321,
           "ts": 1786266000
         },
         {
           "route": "relay",
-          "record": 323,
+          "record": 322,
           "ts": 1786266600
         }
       ],
@@ -68632,12 +68592,12 @@
       "steps": [
         {
           "route": "relay",
-          "record": 372,
+          "record": 371,
           "ts": 1786611600
         },
         {
           "route": "program",
-          "record": 377,
+          "record": 376,
           "ts": 1786611600
         }
       ],

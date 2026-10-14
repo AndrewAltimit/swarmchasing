@@ -441,8 +441,8 @@ name = "fleet-crowd"
 seed = 261
 seeds = 4
 span_hours = 240
-expect.scaffold = { min_precision = 0.92, min_recall = 1.0 }
-expect.candidate_fleet = { min_precision = 0.92, min_recall = 1.0 }
+expect.scaffold = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "fleet"
 agents = 3
@@ -778,13 +778,13 @@ prose = "own"
 # quota running out stalls them at once, twice. Beside them: feed readers backing
 # off through one outage, an uptime service, and unrelated agents walking
 # one published list in one order over two days, which rerun it as one
-# operator would: the rerun link's precision here is theirs.
+# operator would: the hard negative for the rerun link.
 [[scenario]]
 name = "rerun"
 seed = 371
 seeds = 4
 span_hours = 72
-expect.rerun = { min_precision = 0.28, min_recall = 0.2 }
+expect.rerun = { min_precision = 1.0, min_recall = 0.2 }
 expect.shared_pause = { min_precision = 1.0, min_recall = 0.15 }
 expect.candidate_fleet = { min_precision = 1.0 }
 [[scenario.actor]]
@@ -1048,18 +1048,20 @@ agents = 10
 retry = 0.2
 palette_share = 0.3
 
-# Another hard negative: unrelated operators on one agent framework, its
-# templates and step counter shared and one parameter each their own, in a
-# crowd of a hundred agents.
+# Another hard negative: thirty unrelated operators on one agent framework,
+# its templates and step counter shared and one parameter each picks from a
+# dozen names, so several pick the same one, in a crowd of a hundred agents.
 [[scenario]]
 name = "framework-crowd"
 seed = 391
 seeds = 4
 span_hours = 240
 expect.co_group = { max_pairs = 0 }
+expect.scaffold = { max_pairs = 0 }
+expect.candidate_fleet = { max_pairs = 0 }
 [[scenario.actor]]
 kind = "framework"
-agents = 11
+agents = 30
 records = 8
 [[scenario.actor]]
 kind = "agent"

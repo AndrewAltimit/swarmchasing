@@ -183,10 +183,11 @@ shared_pause = 4.0
 # small set of records, so shared habits are measured on less variety than
 # real traffic has. Listed when rare.
 dialect = 2.0
-# Simulation (rerun), at its bound: unrelated agents walking one published list
-# in one order on different days rerun it as one operator does, so a rerun
-# needs other evidence before it makes a fleet.
-rerun = 3.0
+# Simulation (rerun), below its bound: a list more than a few clusters walk is
+# a published one and draws no rerun, but a rerun is not tested against a
+# chance model, so it is held at half the fleet threshold and needs other
+# evidence before it makes a fleet.
+rerun = 10.0
 # Simulation (fleet-large), far below its bound: one operator's target list
 # walked with one set of paths; held low by judgment, since one scenario
 # measures it.
