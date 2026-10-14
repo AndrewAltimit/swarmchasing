@@ -225,3 +225,47 @@ fn check_reports_unknown_keys_without_a_data_directory() {
     assert!(r.stderr.contains("unknown key `limt`"), "{}", r.stderr);
     assert!(!s.path().join("data").exists());
 }
+
+#[test]
+fn a_run_that_keeps_failing_errors_on_its_due_runs_only() {
+    let s = Scratch::new("watch-failed-streak");
+    let d = s.path();
+    std::fs::write(
+        d.join("watchlist.toml"),
+        "[[source]]\nname = \"uq\"\nkind = \"urlquery\"\npattern = \"r.jina.ai\"\n",
+    )
+    .unwrap();
+    let mut codes = Vec::new();
+    let mut digests = Vec::new();
+    for i in 0..4 {
+        if i > 0 {
+            // Each run its own stamp.
+            std::thread::sleep(std::time::Duration::from_millis(1100));
+        }
+        let mut args = vec!["watch", "watchlist.toml", "--out", "data"];
+        if i == 0 {
+            args.push("--init");
+        }
+        let r = run(d, &args);
+        codes.push(r.code);
+        let stamp = std::fs::read_to_string(d.join("data/LATEST")).unwrap();
+        digests.push(
+            std::fs::read_to_string(d.join("data/runs").join(stamp.trim()).join("digest.md"))
+                .unwrap(),
+        );
+    }
+    // Runs 1, 2 and 4 of the streak end with an error; run 3 does not, and
+    // its digest says when the error comes back.
+    assert_eq!(codes[0], Some(1));
+    assert_eq!(codes[1], Some(1));
+    assert_ne!(codes[2], Some(1));
+    assert_eq!(codes[3], Some(1));
+    assert!(
+        digests[2].contains("The run failed again (no source could run), 3 runs in a row"),
+        "{}",
+        digests[2]
+    );
+    // No run succeeded, so the staleness check's file was never written.
+    assert!(d.join("data/LATEST").is_file());
+    assert!(!d.join("data/LATEST_OK").exists());
+}

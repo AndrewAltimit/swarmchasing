@@ -109,6 +109,9 @@ pub struct PlatformPull {
     pub lookalikes: BTreeMap<String, (String, usize)>,
     /// Labels a reference source puts on targets (`osv`): no events.
     pub labels: Vec<TargetLabel>,
+    /// Why the pull stopped part way, keeping what it read and its
+    /// checkpoint where it was.
+    pub stopped: Option<String>,
 }
 
 /// A label a reference source puts on a target other sources' events act

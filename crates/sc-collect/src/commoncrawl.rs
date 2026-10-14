@@ -173,6 +173,7 @@ impl Source for CommonCrawl {
                 .map(|c| format!("{c}#0"))
         };
         Ok(Page {
+            stopped: None,
             records,
             next: next.map(Cursor::Key),
             truncated,

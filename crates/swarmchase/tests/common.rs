@@ -28,8 +28,8 @@ impl Drop for Scratch {
 /// What one run printed, and whether it succeeded.
 pub struct Run {
     pub ok: bool,
-    /// The exit status: 0, 1 for an error, 2 a watch run with alerts, 3 a
-    /// floor not met.
+    /// The exit status: 0, 1 for an error, 2 a usage error, 3 a floor not
+    /// met, 4 a watch run with alerts.
     pub code: Option<i32>,
     pub stdout: String,
     pub stderr: String,

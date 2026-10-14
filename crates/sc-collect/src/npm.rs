@@ -83,6 +83,7 @@ impl Source for Npm {
         records.retain(|o| from.is_none_or(|t| o.ts >= t) && to.is_none_or(|t| o.ts <= t));
         let next = (n > 0 && offset + n < total).then_some(Cursor::Offset(offset + n));
         Ok(Page {
+            stopped: None,
             records,
             next,
             truncated: false,

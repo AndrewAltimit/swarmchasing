@@ -78,7 +78,10 @@ pub struct Refreshed {
 }
 
 /// Fetch every range file and directory in `catalog` into `data`, dated
-/// `today`. One failure does not stop the others.
+/// `today`. One failure does not stop the others. `fetched.json` is
+/// rewritten only when a fetch succeeded, so its age is that of the last
+/// refresh that got something, and a failed attempt does not hold off the
+/// next one.
 pub fn refresh(client: &Client, data: &Path, catalog: &Catalog, today: &str) -> Vec<Refreshed> {
     let mut idx = index(data);
     let mut out = Vec::new();
@@ -104,7 +107,9 @@ pub fn refresh(client: &Client, data: &Path, catalog: &Catalog, today: &str) -> 
             result,
         });
     }
-    if let Err(e) = write_index(data, &idx) {
+    if out.iter().any(|r| r.result.is_ok())
+        && let Err(e) = write_index(data, &idx)
+    {
         out.push(Refreshed {
             id: "fetched.json".into(),
             url: String::new(),
@@ -247,6 +252,27 @@ mod tests {
             ),
             Ok((1, Some("2026-10-10T14:30:00Z".into()), Some("7".into())))
         );
+        let _ = std::fs::remove_dir_all(data);
+    }
+
+    #[test]
+    fn a_refresh_where_every_fetch_fails_leaves_the_index_alone() {
+        let data =
+            std::env::temp_dir().join(format!("sc-collect-identity-failed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&data);
+        // Plain-http URLs are refused before any request is sent.
+        let mut catalog = Catalog::bundled();
+        for f in &mut catalog.range_files {
+            f.url = f.url.replacen("https://", "http://", 1);
+        }
+        for d in &mut catalog.directories {
+            d.url = d.url.replacen("https://", "http://", 1);
+        }
+        let client = Client::new(std::time::Duration::ZERO).unwrap();
+        let got = refresh(&client, &data, &catalog, "2026-10-14");
+        assert!(!got.is_empty());
+        assert!(got.iter().all(|r| r.result.is_err()));
+        assert!(!index_path(&data).exists());
         let _ = std::fs::remove_dir_all(data);
     }
 }

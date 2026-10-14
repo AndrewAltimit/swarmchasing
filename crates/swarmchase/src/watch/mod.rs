@@ -12,6 +12,7 @@
 //! <out>/platform/               platform pass state and carried events (platform)
 //! <out>/runs/<stamp>/           new records per source, analysis, case notes, digest, run.json
 //! <out>/LATEST                  stamp of the most recent run
+//! <out>/LATEST_OK               stamp of the most recent run in which a source ran and not every one failed
 //! ```
 //!
 //! The digest opens with the run's priority ([`priority`]), set from
@@ -67,9 +68,11 @@
 //! Collection has a deadline (`collect_deadline_mins`): sources whose turn
 //! comes after it are deferred, reported as such, and go first next run;
 //! analysis and the digest still run. A failure that repeats run after run
-//! (a source, a host, a canary) alerts on its 1st, 2nd, 4th, 8th... run
-//! ([`crate::health::alert_due`]). Changed runs whose digest was never
-//! mailed are folded into the next digest ([`mailed`]).
+//! (a source, a host, a canary, a step after collection) alerts on its 1st,
+//! 2nd, 4th, 8th... run ([`crate::health::alert_due`]). So does a run in
+//! which no source could run or every source failed: it ends with an error
+//! on those runs and with a digest note on the others. Changed runs whose
+//! digest was never mailed are folded into the next digest ([`mailed`]).
 //!
 //! Retention (docs/policies.md): run directories and stored records older than
 //! `retain_days` are deleted at the end of every run. Records needed for a case
@@ -230,6 +233,17 @@ pub struct State {
     /// Hosts unavailable on the last runs, with how many runs in a row.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub host_down: BTreeMap<String, u32>,
+    /// Steps after collection that failed on the last runs ([`soft`]),
+    /// with how many runs in a row.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub step_failed: BTreeMap<String, u32>,
+    /// Runs in a row in which no source could run or every source failed.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub failed_runs: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 #[derive(clap::Args)]
@@ -493,6 +507,8 @@ struct Collected {
     ids_by_source: BTreeMap<String, BTreeSet<String>>,
     alerts: Vec<Alert>,
     notes: Vec<String>,
+    /// Steps that failed, with their first error ([`soft`]).
+    failed_steps: BTreeMap<String, String>,
     /// Records reported as new here that an earlier run collected.
     carried: usize,
 }
@@ -510,22 +526,71 @@ impl Collected {
 }
 
 /// A step after collection that failed: the run goes on without it, and
-/// the digest says so, rather than losing the records already collected.
-fn soft<T>(alerts: &mut Vec<Alert>, step: &str, r: Result<T>) -> Option<T> {
+/// the digest says so ([`step_alerts`]), rather than losing the records
+/// already collected. `failed` keeps each step's first error this run.
+fn soft<T>(failed: &mut BTreeMap<String, String>, step: &str, r: Result<T>) -> Option<T> {
     match r {
         Ok(v) => Some(v),
         Err(e) => {
             eprintln!("{step}: error: {e:#}");
-            alerts.push(Alert::new(
-                AlertKind::StepFailed,
-                step,
-                format!(
-                    "The run's {step} step failed and was skipped ({}); the rest of the run went ahead.",
-                    crate::util::one_line(&format!("{e:#}"), 200)
-                ),
-            ));
+            failed
+                .entry(step.to_string())
+                .or_insert_with(|| crate::util::one_line(&format!("{e:#}"), 200));
             None
         }
+    }
+}
+
+/// This run's failed steps against their streaks in `state.json`: a step
+/// that failed alerts on the 1st, 2nd, 4th, 8th... run of its streak and is
+/// a digest note on the others; a step that did not fail ends its streak.
+fn step_alerts(
+    streaks: &mut BTreeMap<String, u32>,
+    failed: BTreeMap<String, String>,
+    alerts: &mut Vec<Alert>,
+    notes: &mut Vec<String>,
+) {
+    streaks.retain(|s, _| failed.contains_key(s));
+    for (step, why) in failed {
+        let n = streaks.entry(step.clone()).or_default();
+        *n += 1;
+        let n = *n;
+        if alert_due(n) {
+            alerts.push(Alert::new(
+                AlertKind::StepFailed,
+                &step,
+                if n == 1 {
+                    format!(
+                        "The run's {step} step failed and was skipped ({why}); the rest of the run went ahead."
+                    )
+                } else {
+                    format!(
+                        "The run's {step} step has failed {n} runs in a row ({why}); each run skips it and goes ahead with the rest."
+                    )
+                },
+            ));
+        } else {
+            notes.push(format!(
+                "The run's {step} step failed again and was skipped ({why}), {n} runs in a row; it alerts again on run {} of the streak.",
+                n.next_power_of_two()
+            ));
+        }
+    }
+}
+
+/// Why the whole run failed, if it did: no source could run, or every
+/// source that ran failed.
+fn run_failure(sources: &[SourceReport]) -> Option<&'static str> {
+    let ran: Vec<_> = sources
+        .iter()
+        .filter(|r| r.skipped.is_none() && !r.deferred)
+        .collect();
+    if ran.is_empty() {
+        Some("no source could run")
+    } else if ran.iter().all(|r| r.error.is_some()) {
+        Some("every source failed")
+    } else {
+        None
     }
 }
 
@@ -621,8 +686,8 @@ fn watch(
             crate::store::describe_data(out)
         );
     }
-    // One writer at a time: a second watch, or a case rename, waits for this
-    // one to finish.
+    // One writer at a time: a second watch, or any other command that takes
+    // the lock, refuses at once while this one holds it.
     let _lock = crate::store::lock_data(out, "watch")?;
     std::fs::create_dir_all(&run_dir)?;
     std::fs::create_dir_all(out.join("store"))?;
@@ -702,10 +767,11 @@ fn watch(
         ids_by_source,
         mut alerts,
         mut notes,
+        mut failed_steps,
         carried,
     } = c;
     let canaries = soft(
-        &mut alerts,
+        &mut failed_steps,
         "canary",
         crate::canary::watch_sightings(out, &fresh, &run_dir),
     )
@@ -714,7 +780,7 @@ fn watch(
     // Coordinated accounts on public platforms: its own pull and store, so a
     // failure here never stops the record analysis.
     let platform_outcome = soft(
-        &mut alerts,
+        &mut failed_steps,
         "platform",
         platform::run(&client, out, &run_dir, now.timestamp(), &wl.platform, rules),
     )
@@ -726,7 +792,7 @@ fn watch(
     let since = now.timestamp() - wl.analysis_window_days * DAY;
     // Unreadable lines are moved aside once, so they alert in this run only.
     let set_aside = soft(
-        &mut alerts,
+        &mut failed_steps,
         "store",
         crate::store::set_aside_damaged(&out.join("store"), since - wl.overlap_days * DAY),
     )
@@ -742,7 +808,7 @@ fn watch(
         ));
     }
     let (mut stored, damaged) = soft(
-        &mut alerts,
+        &mut failed_steps,
         "store",
         load_store_counted(&out.join("store"), since - wl.overlap_days * DAY),
     )
@@ -816,7 +882,7 @@ fn watch(
     }
     crate::util::print_summary(&a);
     soft(
-        &mut alerts,
+        &mut failed_steps,
         "analysis",
         serde_json::to_string(&a)
             .map_err(anyhow::Error::from)
@@ -830,7 +896,7 @@ fn watch(
         },
     );
     soft(
-        &mut alerts,
+        &mut failed_steps,
         "case notes",
         std::fs::write(run_dir.join("case-notes.md"), md).map_err(anyhow::Error::from),
     );
@@ -873,14 +939,14 @@ fn watch(
     );
     // Written before the digest, so a failure is in it.
     soft(
-        &mut alerts,
+        &mut failed_steps,
         "attention",
         write_json(&run_dir.join(attention::FILE), &queue),
     );
     // Cached responses are raw collector answers: kept no longer than the
     // TTL (and a day), on every run.
     let cache = soft(
-        &mut alerts,
+        &mut failed_steps,
         "cache",
         sc_collect::prune_http_cache(
             &out.join("cache").join("http"),
@@ -889,6 +955,31 @@ fn watch(
         )
         .map_err(anyhow::Error::from),
     );
+    step_alerts(
+        &mut state.step_failed,
+        failed_steps,
+        &mut alerts,
+        &mut notes,
+    );
+    // A whole run that fails ends with an error (and the workflow's failure
+    // mail) on the 1st, 2nd, 4th, 8th... run of its streak, and with a note
+    // on the others.
+    let failure = run_failure(&reports);
+    state.failed_runs = if failure.is_some() {
+        state.failed_runs + 1
+    } else {
+        0
+    };
+    let failure_due = failure.is_some() && alert_due(state.failed_runs);
+    if let Some(f) = failure
+        && !failure_due
+    {
+        notes.push(format!(
+            "The run failed again ({f}), {} runs in a row; it ends with an error again on run {} of the streak.",
+            state.failed_runs,
+            state.failed_runs.next_power_of_two()
+        ));
+    }
     let health = Health {
         sources: reports,
         alerts,
@@ -898,13 +989,13 @@ fn watch(
     let mut priority = priority::assess(&leads, &health.alerts, &cases.due);
     priority.add(autonomy::priority_reasons(&decisions));
     priority.add(onset::priority_reasons(&onsets));
-    if let Some(top) = unmailed.iter().map(mailed::Unmailed::level).max() {
+    if let Some(top) = unmailed.runs.iter().map(mailed::Unmailed::level).max() {
         priority.add(vec![priority::Reason {
             level: top,
             kind: "unmailed".into(),
             text: format!(
                 "{} earlier digest(s) were never mailed; their leads are under Digests not mailed",
-                unmailed.len()
+                unmailed.total()
             ),
         }]);
     }
@@ -1036,6 +1127,14 @@ fn watch(
         "LATEST",
         crate::store::write_atomic(&out.join("LATEST"), stamp.as_bytes()),
     );
+    // What the staleness check reads for a watch that runs but never
+    // succeeds: LATEST moves on every run.
+    if failure.is_none() {
+        later(
+            "LATEST_OK",
+            crate::store::write_atomic(&out.join("LATEST_OK"), stamp.as_bytes()),
+        );
+    }
     later(
         "retention",
         retain(
@@ -1065,21 +1164,14 @@ fn watch(
             late.join("; ")
         );
     }
-    let ran: Vec<_> = health
-        .sources
-        .iter()
-        .filter(|r| r.skipped.is_none() && !r.deferred)
-        .collect();
-    if ran.is_empty() {
-        bail!(
-            "no source could run; see {}",
-            run_dir.join("digest.md").display()
-        );
-    }
-    if ran.iter().all(|r| r.error.is_some()) {
-        bail!(
-            "every source failed; see {}",
-            run_dir.join("digest.md").display()
+    if let Some(f) = failure {
+        if failure_due {
+            bail!("{f}; see {}", run_dir.join("digest.md").display());
+        }
+        eprintln!(
+            "note: {f}, {} runs in a row; the run ends with an error again on run {} of the streak",
+            state.failed_runs,
+            state.failed_runs.next_power_of_two()
         );
     }
     if !health.alerts.is_empty() {
@@ -1140,7 +1232,7 @@ fn carry_over(out: &Path, state: &State, c: &mut Collected) {
     let found = match crate::store::load_ids(&out.join("store"), &state.undigested) {
         Ok(found) => found,
         Err(e) => {
-            soft::<()>(&mut c.alerts, "carry-over", Err(e));
+            soft::<()>(&mut c.failed_steps, "carry-over", Err(e));
             return;
         }
     };
@@ -1542,6 +1634,25 @@ mod tests {
         assert_eq!(state.sources["r"].health.skipped_runs, 0);
         assert_eq!(state.sources["n"].health.errors_in_row, 1);
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_failing_step_alerts_on_its_due_runs_and_notes_the_others() {
+        let mut streaks = BTreeMap::new();
+        let mut kinds = Vec::new();
+        for _ in 0..4 {
+            let (mut alerts, mut notes) = (Vec::new(), Vec::new());
+            let failed = BTreeMap::from([("platform".to_string(), "HTTP 503".to_string())]);
+            step_alerts(&mut streaks, failed, &mut alerts, &mut notes);
+            kinds.push((alerts.len(), notes.len()));
+        }
+        // Runs 1, 2 and 4 alert; run 3 is a note.
+        assert_eq!(kinds, [(1, 0), (1, 0), (0, 1), (1, 0)]);
+        assert_eq!(streaks["platform"], 4);
+        // A run in which it succeeds ends the streak.
+        let (mut alerts, mut notes) = (Vec::new(), Vec::new());
+        step_alerts(&mut streaks, BTreeMap::new(), &mut alerts, &mut notes);
+        assert!(streaks.is_empty() && alerts.is_empty() && notes.is_empty());
     }
 
     #[test]

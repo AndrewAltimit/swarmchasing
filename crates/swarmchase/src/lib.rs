@@ -149,9 +149,11 @@ pub enum Cmd {
 
 /// Exit statuses beyond 0 (success) and 1 (an error).
 pub mod exit {
-    /// A watch run that finished, digest written, with alerts in it.
-    pub const ALERTS: u8 = 2;
-    /// `eval` or `sim bench` ran, and a floor or ceiling was not met.
+    /// A watch run that finished, digest written, with alerts in it. Not 2,
+    /// which clap uses for a usage error.
+    pub const ALERTS: u8 = 4;
+    /// `eval`, `sim bench` or `sim calibrate --check` ran, and a floor,
+    /// ceiling or bound was not met.
     pub const FLOOR_NOT_MET: u8 = 3;
 }
 

@@ -357,23 +357,25 @@ pub fn overview(i: &Inputs) -> Result<Value> {
         "suggestions": summary.as_ref().map_or(Value::Null, |s| suggestions(&s["leads"])),
     });
     // Changed runs whose digest never reached the admin.
-    let unmailed: Vec<Value> =
-        crate::watch::mailed::unmailed_all(data, state.last_mailed.as_deref())
-            .into_iter()
-            .map(|u| {
-                json!({
-                    "stamp": u.stamp,
-                    "priority": u.priority,
-                    "reasons": u.reasons,
-                    "leads": u.leads,
-                    "digest": shell_path(&data.join("runs").join(&u.stamp).join("digest.md")),
-                })
+    let listed = crate::watch::mailed::unmailed_all(data, state.last_mailed.as_deref());
+    let unmailed_total = listed.total();
+    let unmailed: Vec<Value> = listed
+        .runs
+        .into_iter()
+        .map(|u| {
+            json!({
+                "stamp": u.stamp,
+                "priority": u.priority,
+                "reasons": u.reasons,
+                "leads": u.leads,
+                "digest": shell_path(&data.join("runs").join(&u.stamp).join("digest.md")),
             })
-            .collect();
+        })
+        .collect();
     if let Some(first) = unmailed.first() {
         actions.push(json!({
             "kind": "mail",
-            "title": format!("{} digest(s) were never mailed", unmailed.len()),
+            "title": format!("{unmailed_total} digest(s) were never mailed"),
             "detail": "Changed runs whose digest was not delivered (no mail setup, a refused send or a cancelled job). The next digest folds them in; read the first here.",
             "command": format!("cat {}", first["digest"].as_str().unwrap_or("")),
         }));

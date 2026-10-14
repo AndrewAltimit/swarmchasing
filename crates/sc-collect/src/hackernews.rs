@@ -553,6 +553,7 @@ impl Source for HnLinks {
             .collect();
         records.truncate(size);
         Ok(Page {
+            stopped: None,
             records,
             next: None,
             truncated: false,

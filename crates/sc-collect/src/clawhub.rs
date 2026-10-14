@@ -18,7 +18,12 @@
 //! checkpoint (the newest creation time read, in ms), at most `scan` pages
 //! of `page_size` skills. When more skills (or their records) are found
 //! than a pull keeps, the oldest are kept and the checkpoint moves only to
-//! the newest of those, so the rest come on the next run.
+//! the newest of those, so the rest come on the next run. A page after the
+//! first that fails, or does not parse, stops the walk: the skills read so
+//! far are kept, the checkpoint stays where it was, so the next run reads
+//! the gap again (records are deduplicated by ID), and the pull reports
+//! itself stopped. Pages running out at the `scan` cap count the rest of
+//! the span as skipped.
 //!
 //! Terms: the ClawHub API documentation
 //! (<https://docs.openclaw.ai/clawhub/api>) allows catalogs built on the
@@ -143,6 +148,9 @@ pub struct Walked {
     /// Skills created after the checkpoint, newest first.
     pub skills: Vec<Skill>,
     pub coverage: Coverage,
+    /// Why a page after the first could not be read: the walk stopped there
+    /// and the checkpoint stayed where it was.
+    pub stopped: Option<String>,
 }
 
 /// Page the newest-first listing back from now to the checkpoint `mark`
@@ -162,12 +170,14 @@ pub fn walk(
     let (mut newest, mut reached, mut read) = (None::<i64>, now_ms, 0usize);
     let mut done = false;
     for i in 0..pages.max(1) {
-        let body = match fetch(cursor.as_deref()) {
-            Ok(b) => b,
+        let page = match fetch(cursor.as_deref()).and_then(|b| parse_skills(&b)) {
+            Ok(p) => p,
             Err(e) if i == 0 => return Err(e),
-            Err(_) => break,
+            Err(e) => {
+                out.stopped = Some(format!("{e:#}"));
+                break;
+            }
         };
-        let page = parse_skills(&body)?;
         read += page.read;
         for s in page.skills {
             newest = newest.max(Some(s.created_ms));
@@ -183,11 +193,16 @@ pub fn walk(
         cursor = page.next;
     }
     // Read from `reached` up to now; what lies between the checkpoint and
-    // `reached` was not reached when the pages ran out.
+    // `reached` was not reached. When the pages ran out, it is passed over;
+    // when a page failed, the checkpoint stays and the next run reads it.
     let gap = if done { 0 } else { (reached - start).max(0) };
     out.coverage = minutes(start, now_ms - gap, now_ms, skipped, read > 0);
-    out.coverage.skipped += (gap / 60_000) as u64;
-    out.coverage.next = Some(newest.unwrap_or(start).max(start).max(0) as u64);
+    if out.stopped.is_some() {
+        out.coverage.next = Some(start.max(0) as u64);
+    } else {
+        out.coverage.skipped += (gap / 60_000) as u64;
+        out.coverage.next = Some(newest.unwrap_or(start).max(start).max(0) as u64);
+    }
     keep_oldest(&mut out, max);
     Ok(out)
 }
@@ -207,6 +222,9 @@ pub(crate) fn keep_oldest(w: &mut Walked, n: usize) -> bool {
     let kept_newest = w.skills.iter().map(|s| s.created_ms).max().unwrap_or(0);
     let tie = left_out.iter().any(|s| s.created_ms <= kept_newest);
     let mark = if tie { kept_newest - 1 } else { kept_newest };
+    // Never forward of where the walk left it (a stopped walk keeps the
+    // previous checkpoint).
+    let mark = w.coverage.next.map_or(mark, |x| mark.min(x as i64));
     let m = |ms: i64| (ms.max(0) / 60_000) as u64;
     let unread = m(w.coverage.next.map_or(0, |x| x as i64) - mark);
     w.coverage.read = w.coverage.read.saturating_sub(unread);
@@ -316,6 +334,7 @@ pub(crate) fn pull_platform(
         events,
         automation,
         coverage: w.coverage,
+        stopped: w.stopped,
         ..Default::default()
     })
 }
@@ -384,6 +403,7 @@ impl Source for ClawHub {
             next: None,
             truncated: cut,
             coverage: Some(w.coverage),
+            stopped: w.stopped,
         })
     }
 
@@ -522,5 +542,43 @@ mod tests {
         assert!(w.coverage.read <= all.coverage.read);
         // A first page that fails is an error; a later one ends the walk.
         assert!(walk(None, 2, 100, now, &mut |_| anyhow::bail!("HTTP 503")).is_err());
+    }
+
+    #[test]
+    fn a_later_page_that_fails_keeps_the_checkpoint_and_page_one() {
+        let page1 = fixture("page1.json");
+        // A checkpoint well before page one's oldest skill, so the walk
+        // needs page two.
+        let mark = 1_791_900_000_000u64;
+        let now = 1_791_980_000_000i64;
+        for bad in [None, Some("<html>busy</html>")] {
+            let w = walk(Some(mark), 5, 100, now, &mut |c| match (c, bad) {
+                (None, _) => Ok(page1.clone()),
+                (Some(_), None) => anyhow::bail!("HTTP 503"),
+                (Some(_), Some(b)) => Ok(b.to_string()),
+            })
+            .unwrap();
+            // Page one's skills are kept.
+            assert_eq!(w.skills.len(), 3, "{bad:?}");
+            // The checkpoint stays, so the unread gap comes next run, and
+            // the gap is not counted as passed over.
+            assert_eq!(w.coverage.next, Some(mark), "{bad:?}");
+            assert_eq!(w.coverage.skipped, 0, "{bad:?}");
+            assert!(w.coverage.read < w.coverage.available, "{:?}", w.coverage);
+            assert!(w.stopped.is_some(), "{bad:?}");
+            // A cap on skills kept never moves it forward either.
+            let w = walk(Some(mark), 5, 1, now, &mut |c| match c {
+                None => Ok(page1.clone()),
+                Some(_) => anyhow::bail!("HTTP 429"),
+            })
+            .unwrap();
+            assert_eq!(w.coverage.next, Some(mark));
+        }
+        // The pages running out at the scan cap still count the rest as
+        // skipped and move on.
+        let w = walk(Some(mark), 1, 100, now, &mut |_| Ok(page1.clone())).unwrap();
+        assert!(w.stopped.is_none());
+        assert!(w.coverage.skipped > 0, "{:?}", w.coverage);
+        assert!(w.coverage.next > Some(mark));
     }
 }

@@ -79,7 +79,7 @@ fn month_span(name: &str) -> Option<(i64, i64)> {
 }
 
 /// A file of the store.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct StoreFile {
     path: PathBuf,
     /// The source it belongs to.
@@ -162,15 +162,7 @@ fn files(store: &Path, ext: &str) -> Result<Vec<StoreFile>> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned();
-            for q in entries(&p)? {
-                if q.is_file() && has_ext(&q, ext) {
-                    out.push(StoreFile {
-                        span: Span::of(&stem(&q)),
-                        source: source.clone(),
-                        path: q,
-                    });
-                }
-            }
+            out.extend(partitions(store, &source, ext)?);
         } else if has_ext(&p, ext) {
             out.push(StoreFile {
                 source: stem(&p),
@@ -182,12 +174,55 @@ fn files(store: &Path, ext: &str) -> Result<Vec<StoreFile>> {
     Ok(out)
 }
 
+/// `source`'s partition files with extension `ext`, in path order.
+fn partitions(store: &Path, source: &str, ext: &str) -> Result<Vec<StoreFile>> {
+    Ok(entries(&store.join(source))?
+        .into_iter()
+        .filter(|q| q.is_file() && has_ext(q, ext))
+        .map(|q| StoreFile {
+            span: Span::of(&stem(&q)),
+            source: source.to_string(),
+            path: q,
+        })
+        .collect())
+}
+
 /// The records of a store file, or none when it is gone (moved by a
 /// migration that ran meanwhile).
 fn read_records(p: &Path) -> Result<(Vec<Observation>, usize)> {
     match read_ndjson::<Observation>(p) {
         Err(_) if !p.exists() => Ok((Vec::new(), 0)),
         r => r,
+    }
+}
+
+/// The records of store file `f`, with its unreadable lines, per file
+/// read. A reader takes no lock, so a migration may run between listing the
+/// store and reading it: an older-layout file (directly under `store/`)
+/// gone by then was moved into its source's partitions, and those are
+/// listed again and read instead, each that `keep` accepts. A record read
+/// twice that way is deduplicated by ID by the callers.
+fn read_moved(
+    dir: &Path,
+    f: &StoreFile,
+    keep: &dyn Fn(&StoreFile) -> bool,
+) -> Result<Vec<(StoreFile, Vec<Observation>, usize)>> {
+    match read_ndjson::<Observation>(&f.path) {
+        Ok((records, n)) => Ok(vec![(f.clone(), records, n)]),
+        Err(_) if !f.path.exists() => {
+            if f.path.parent() != Some(dir) {
+                return Ok(Vec::new());
+            }
+            let mut out = Vec::new();
+            for p in partitions(dir, &f.source, "ndjson")? {
+                if keep(&p) {
+                    let (records, n) = read_records(&p.path)?;
+                    out.push((p, records, n));
+                }
+            }
+            Ok(out)
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -208,20 +243,33 @@ pub fn load_store_counted(
     dir: &Path,
     since: i64,
 ) -> Result<(Vec<Observation>, BTreeMap<String, usize>)> {
+    load_store_with(dir, since, &mut |_| {})
+}
+
+/// [`load_store_counted`], calling `before` ahead of each file it reads, so
+/// a test can change the store between the listing and the reads.
+fn load_store_with(
+    dir: &Path,
+    since: i64,
+    before: &mut dyn FnMut(&Path),
+) -> Result<(Vec<Observation>, BTreeMap<String, usize>)> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
     let mut bad = BTreeMap::new();
+    let keep = |f: &StoreFile| f.span.reaches(since);
     for f in files(dir, "ndjson")? {
-        if !f.span.reaches(since) {
+        if !keep(&f) {
             continue;
         }
-        let (records, n) = read_records(&f.path)?;
-        if n > 0 {
-            bad.insert(f.name(dir), n);
-        }
-        for o in records {
-            if o.ts >= since && seen.insert(o.id.clone()) {
-                out.push(o);
+        before(&f.path);
+        for (f, records, n) in read_moved(dir, &f, &keep)? {
+            if n > 0 {
+                bad.insert(f.name(dir), n);
+            }
+            for o in records {
+                if o.ts >= since && seen.insert(o.id.clone()) {
+                    out.push(o);
+                }
             }
         }
     }
@@ -250,9 +298,11 @@ pub fn load_ids(
             if left.is_empty() {
                 break;
             }
-            for o in read_records(&f.path)?.0 {
-                if left.remove(o.id.as_str()) {
-                    out.push((source.clone(), o));
+            for (_, records, _) in read_moved(dir, f, &|_| true)? {
+                for o in records {
+                    if left.remove(o.id.as_str()) {
+                        out.push((source.clone(), o));
+                    }
                 }
             }
         }
@@ -265,7 +315,9 @@ pub fn source_ids(dir: &Path, source: &str) -> Result<BTreeSet<String>> {
     let mut out = BTreeSet::new();
     for f in files(dir, "ndjson")? {
         if f.source == source {
-            out.extend(read_records(&f.path)?.0.into_iter().map(|o| o.id));
+            for (_, records, _) in read_moved(dir, &f, &|_| true)? {
+                out.extend(records.into_iter().map(|o| o.id));
+            }
         }
     }
     Ok(out)
@@ -442,6 +494,32 @@ mod tests {
 
     fn ts(d: &str) -> i64 {
         sc_core::parse_ts(d).unwrap()
+    }
+
+    #[test]
+    fn a_migration_between_listing_and_reading_loses_no_source() {
+        let d = scratch("moved");
+        let store = d.join("store");
+        std::fs::create_dir_all(&store).unwrap();
+        // An older-layout file, listed before a migration (in another
+        // process, under the lock this reader does not take) moves it.
+        let recs = [rec("a", ts("2026-03-02")), rec("b", ts("2026-04-02"))];
+        std::fs::write(store.join("s.ndjson"), to_ndjson(&recs).unwrap()).unwrap();
+        let mut migrated = false;
+        let (got, bad) = load_store_with(&store, 0, &mut |p| {
+            if !migrated && p == store.join("s.ndjson") {
+                crate::store::migrate_store(&store).unwrap().unwrap();
+                migrated = true;
+            }
+        })
+        .unwrap();
+        assert!(migrated);
+        assert!(!store.join("s.ndjson").exists());
+        assert_eq!(ids(&got), ["a", "b"]);
+        assert!(bad.is_empty());
+        // The other readers find the moved records too.
+        assert_eq!(source_ids(&store, "s").unwrap().len(), 2);
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

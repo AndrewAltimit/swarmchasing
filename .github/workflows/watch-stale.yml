@@ -3,9 +3,14 @@
 # run fails or is cancelled, but not when no run happens at all: a schedule
 # GitHub disabled, a runner that was offline, a queue stuck behind another
 # workload. Every three hours this reads the stamp of the newest run on the
-# runner (<data>/LATEST, nothing else) and mails the admin once per stale
-# stamp when it is more than 12 hours old. The mail goes to the admin only,
-# through the same send-mail.sh as the digest; nothing goes to anyone else.
+# runner (<data>/LATEST) and mails the admin once per stale stamp when it is
+# more than 12 hours old. It also reads <data>/LATEST_OK, the newest run in
+# which a source ran and not every one failed, and mails once per stamp when
+# that is more than 24 hours old: a watch that runs but keeps failing ends
+# with an error only on the 1st, 2nd, 4th, 8th... failed run, so this is
+# what keeps a long failure from going quiet. The mail goes to the admin
+# only, through the same send-mail.sh as the digest; nothing goes to anyone
+# else.
 
 name: watch staleness
 
@@ -80,3 +85,41 @@ jobs:
           if [ -d "$SWARMCHASE_DATA" ]; then
             echo "${stamp:-none}" > "$marker"
           fi
+
+      # A missing LATEST_OK is a data directory from before it was written,
+      # or one whose watch has never had a source work; the watch's own
+      # failure mail covers the second until its first good run.
+      - name: Check the newest successful watch run's age
+        run: |
+          export SWARMCHASE_DATA="${SWARMCHASE_DATA:-$HOME/swarmchase-data}"
+          if [ ! -s "$SWARMCHASE_DATA/LATEST_OK" ]; then
+            echo "no LATEST_OK in the data directory; skipped"
+            exit 0
+          fi
+          rc=0
+          line="$(scripts/ci/check-watch-age.sh 24 LATEST_OK)" || rc=$?
+          echo "$line"
+          if [ "$rc" -eq 0 ]; then
+            exit 0
+          fi
+          echo "::warning::$line"
+          stamp="$(tr -d '[:space:]' <"$SWARMCHASE_DATA/LATEST_OK" 2>/dev/null || true)"
+          marker="$SWARMCHASE_DATA/.failing-alerted"
+          if [ "$(cat "$marker" 2>/dev/null || true)" = "${stamp:-none}" ]; then
+            echo "already alerted for ${stamp:-no run}"
+            exit 0
+          fi
+          if [ -z "$SMTP_URL" ]; then
+            echo "SMTP_URL not set; no alert mailed"
+            exit 0
+          fi
+          {
+            echo "No watch run in the last 24 hours had a source that worked: every run since then could run no source, or every source failed."
+            echo
+            echo "$line"
+            echo
+            echo "Check the newest digests and the watch workflow's recent runs:"
+            echo "${{ github.server_url }}/${{ github.repository }}/actions/workflows/watch.yml"
+          } > "$RUNNER_TEMP/failing.txt"
+          bash scripts/ci/send-mail.sh "[swarmchase] watch FAILING" "$RUNNER_TEMP/failing.txt"
+          echo "${stamp:-none}" > "$marker"

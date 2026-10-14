@@ -51,6 +51,10 @@ PY=python3
 command -v "$PY" >/dev/null 2>&1 || PY=python
 
 STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+# What the commit touches, for the path triggers: deleted files too, and a
+# rename as both its old and new path (`--no-renames`), so moving a .rs file
+# to a .md one still runs the Rust checks.
+TOUCHED="$(git diff --cached --name-only --no-renames)"
 
 # Runs on every commit: a raw dump or a live token is exactly the kind of
 # file that arrives in a commit nobody thought of as touching data.
@@ -60,7 +64,7 @@ if ! "$PY" scripts/ci/check-committed-data.py --staged --quiet; then
     exit 1
 fi
 
-if grep -q '\.md$' <<<"$STAGED"; then
+if grep -q '\.md$' <<<"$TOUCHED"; then
     printf '[pre-commit] doc link + anchor check\n'
     if ! "$PY" scripts/ci/check-md-links.py --staged --quiet; then
         printf '[pre-commit] fix the link target (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
@@ -74,7 +78,7 @@ if grep -q '\.md$' <<<"$STAGED"; then
     fi
 fi
 
-if grep -qE '^(site/js/lib/|scripts/ci/archive-|scripts/ci/check-archive)' <<<"$STAGED" && command -v node >/dev/null 2>&1; then
+if grep -qE '^(site/js/lib/|scripts/ci/archive-|scripts/ci/check-archive)' <<<"$TOUCHED" && command -v node >/dev/null 2>&1; then
     printf '[pre-commit] archive reader tests\n'
     if ! node scripts/ci/check-archive.mjs >/dev/null; then
         printf '[pre-commit] run node scripts/ci/check-archive.mjs (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
@@ -82,7 +86,7 @@ if grep -qE '^(site/js/lib/|scripts/ci/archive-|scripts/ci/check-archive)' <<<"$
     fi
 fi
 
-if grep -q '^site/' <<<"$STAGED"; then
+if grep -q '^site/' <<<"$TOUCHED"; then
     printf '[pre-commit] site safety check\n'
     if ! "$PY" scripts/ci/check-site.py >/dev/null; then
         printf '[pre-commit] fix the site code (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
@@ -90,7 +94,7 @@ if grep -q '^site/' <<<"$STAGED"; then
     fi
 fi
 
-if grep -qE '^(notices|rules)/' <<<"$STAGED"; then
+if grep -qE '^(notices|rules)/' <<<"$TOUCHED"; then
     printf '[pre-commit] published-tags check\n'
     if ! "$PY" scripts/ci/check-published-tags.py --quiet; then
         printf '[pre-commit] list the tag in [linking] published_tags (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
@@ -98,7 +102,7 @@ if grep -qE '^(notices|rules)/' <<<"$STAGED"; then
     fi
 fi
 
-if grep -qE '^(rules|schemas)/' <<<"$STAGED"; then
+if grep -qE '^(rules|schemas)/' <<<"$TOUCHED"; then
     printf '[pre-commit] rules schema check\n'
     if ! "$PY" scripts/ci/check-rules-schema.py; then
         printf '[pre-commit] rules/default.toml does not validate against schemas/sc-rules-v1.json (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
@@ -106,7 +110,7 @@ if grep -qE '^(rules|schemas)/' <<<"$STAGED"; then
     fi
 fi
 
-if grep -q '^notices/' <<<"$STAGED"; then
+if grep -q '^notices/' <<<"$TOUCHED"; then
     printf '[pre-commit] notice lint\n'
     if ! cargo run -q --profile release-test -p swarmchase -- notice lint; then
         printf '[pre-commit] a notice carries something notices withhold (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
@@ -116,7 +120,7 @@ fi
 
 # The watchlist read strictly: a misspelt key a run would silently ignore,
 # or a source that no longer builds after a collector change.
-if grep -qE '^(watchlist\.toml$|crates/sc-collect/|crates/swarmchase/src/watch/)' <<<"$STAGED"; then
+if grep -qE '^(watchlist\.toml$|crates/sc-collect/|crates/swarmchase/src/watch/)' <<<"$TOUCHED"; then
     printf '[pre-commit] watchlist check\n'
     if ! cargo run -q --profile release-test -p swarmchase -- watch --check watchlist.toml >/dev/null; then
         printf '[pre-commit] fix the watchlist key or source (or SWARMCHASE_SKIP_PRECOMMIT=1 to bypass)\n' >&2
@@ -126,7 +130,7 @@ fi
 
 # A new or bumped dependency is where an advisory or a copyleft license gets
 # in. Not installed means not checked here; CI installs it and checks.
-if grep -qE '^(Cargo\.lock|deny\.toml)$' <<<"$STAGED"; then
+if grep -qE '^(Cargo\.lock|deny\.toml)$' <<<"$TOUCHED"; then
     if cargo deny --version >/dev/null 2>&1; then
         printf '[pre-commit] cargo-deny (advisories, licenses, sources, bans)\n'
         if ! scripts/ci/deny.sh >/dev/null; then
@@ -138,7 +142,7 @@ if grep -qE '^(Cargo\.lock|deny\.toml)$' <<<"$STAGED"; then
     fi
 fi
 
-if ! grep -qE '(^crates/|^Cargo\.(toml|lock)$|^rust-toolchain|^rules/|^samples/eval/)' <<<"$STAGED"; then
+if ! grep -qE '(^crates/|^Cargo\.(toml|lock)$|^rust-toolchain|^rules/|^samples/eval/)' <<<"$TOUCHED"; then
     exit 0
 fi
 
@@ -164,12 +168,12 @@ cargo clippy --all-targets --workspace --quiet -- -D warnings
 # Rules and the analysis they run in decide what gets flagged, so a change to
 # either re-measures precision and recall against samples/eval/. Optimised,
 # as CI runs it: unoptimised, the simulator alone takes minutes.
-if grep -qE '^(rules/|crates/sc-core/|crates/sc-sim/|samples/eval/|samples/sim/)' <<<"$STAGED"; then
+if grep -qE '^(rules/|crates/sc-core/|crates/sc-sim/|samples/eval/|samples/sim/)' <<<"$TOUCHED"; then
     printf '[pre-commit] detection eval gate\n'
     scripts/ci/eval-gate.sh --profile release-test >/dev/null
 fi
 
-if grep -qE '^crates/(sc-core|sc-wasm|sc-case)/' <<<"$STAGED"; then
+if grep -qE '^crates/(sc-core|sc-wasm|sc-case)/' <<<"$TOUCHED"; then
     printf '[pre-commit] wasm32 type-check\n'
     scripts/ci/check-wasm-target.sh >/dev/null
 fi

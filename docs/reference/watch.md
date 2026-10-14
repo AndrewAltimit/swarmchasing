@@ -19,6 +19,7 @@ Every watch, review and case command works in one data directory: `--data` (`-d`
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
 | `runs/<stamp>/attention.json` | The run's [attention queue](#the-attention-queue). |
 | `runs/<stamp>/mailed` | Written by the workflow's mail step once the digest is sent ([digests not mailed](#digests-not-mailed)). |
+| `LATEST`, `LATEST_OK` | The newest run's stamp, and the newest run's in which a source worked ([health](#health)). |
 | `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
 | `summary.json`, `ledger.json` (`.bak`, `.damaged`) | The previous copy, and a copy that could not be read, set aside ([interrupted runs](#interrupted-runs)). |
 | `autonomy.ndjson` | What each [autonomy](#autonomy) level did or would have done. |
@@ -98,7 +99,7 @@ A `ghsearch` source fills the gap GitHub's trimmed payloads leave: it searches p
 
 Each search reads oldest first, from three hours before the checkpoint (for items indexed late and commits dated before their push; seen IDs drop the repeats) to ten minutes ago. The checkpoint moves only as far as every search read: a search cut short by the request budget, a failed request or GitHub's 1000-result cap holds it at the newest item that search reached, and the next run reads on from there. A rate limit GitHub answers with HTTP 403 is waited out like a 429, within the client's retry cap. A search GitHub answered with `incomplete_results` counts as skipped, and so does every search when a checkpoint older than 48 hours is skipped to the newest six hours.
 
-A `clawhub` source that finds more matching skills than its `limit` keeps the oldest and moves its checkpoint only to the newest of those, so the rest are read on the next run; the pull prints a warning when that happens.
+A `clawhub` source that finds more matching skills than its `limit` keeps the oldest and moves its checkpoint only to the newest of those, so the rest are read on the next run; the pull prints a warning when that happens. A listing page after the first that fails or does not parse stops the walk: the skills read so far are kept, the checkpoint stays where it was, and the source shows as stopped, so the next run reads the gap again. Only pages running out at `scan` count the rest of the span as skipped.
 
 A `bluesky` source reads Jetstream's posts for a sampled stretch: from its checkpoint, or the newest half hour when the checkpoint is older, for at most `scan` wall-clock minutes. Links posted outside the stretch are never seen, and the digest's coverage shows minutes read against minutes since the last run. Each link in a post's link facets or link card that matches is a record whose reference is the post's page; a post deleted during the read is dropped.
 
@@ -115,7 +116,7 @@ The store holds one directory per source and one file per UTC month of capture t
 
 ### One writer at a time
 
-A watch run holds an exclusive lock on the data directory (`.lock`) from start to finish; `case rename`, `watch reset`, `watch prune-cache`, `backup create` and `backup restore` take it too. A second command that needs it fails at once, naming the holder from `.lock.owner`, instead of writing beside the first. The lock is advisory and released when the command exits, however it exits. `state.json` and every other rewritten file are written to a temporary file of their own and renamed into place; the previous `state.json` is kept as `state.json.bak`, read with a warning when the current one does not parse.
+A watch run holds an exclusive lock on the data directory (`.lock`) from start to finish; `case new`, `case add`, `case rename`, a case opened from `review` (`c`), `canary register`, `watch reset`, `watch prune-cache`, `backup create` and `backup restore` take it too. A second command that needs it fails at once, naming the holder from `.lock.owner`, instead of writing beside the first. The lock is advisory and released when the command exits, however it exits. `state.json` and every other rewritten file are written to a temporary file of their own and renamed into place; the previous `state.json` is kept as `state.json.bak`, read with a warning when the current one does not parse.
 
 A review file is saved under a lock of its own and merged: a save rereads the file and writes only what that command changed, so a `review --serve` page left open never undoes a `review tuned` run meanwhile.
 
@@ -123,7 +124,7 @@ A review file is saved under a lock of its own and merged: a save rereads the fi
 
 A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written and handed to the workflow (`$GITHUB_OUTPUT`). Case hits, the rule and slice history and alert streaks are saved in that same write (the saves after each source keep each source's health as the run found it), and the ledger and `autonomy.ndjson` just before it, so a run cut short before its digest leaves them as they were and the next run reports its case matches again. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`.
 
-Steps after collection do not stop a run: a file that cannot be written or a history that cannot be read becomes a `step_failed` health alert, and the run goes on to its digest. A `summary.json` or `ledger.json` that does not parse is read from its `.bak` copy; when that fails too, the damaged file is kept as `.damaged`, the history starts afresh and the digest says so.
+Steps after collection do not stop a run: a file that cannot be written or a history that cannot be read becomes a `step_failed` health alert, and the run goes on to its digest. A step that fails run after run alerts as other repeated failures do ([health](#health)), with its streak in `state.json` (`step_failed`). A `summary.json` or `ledger.json` that does not parse is read from its `.bak` copy; when that fails too, the damaged file is kept as `.damaged`, the history starts afresh and the digest says so.
 
 A step after the digest that fails (the public log, `state.json`, the run's `summary.json`, `LATEST`, retention) ends the run with an error, having lost nothing the digest reported: the workflow already has `changed`, so the digest is mailed. Should `state.json` fail to save, the next run reports the records again.
 
@@ -174,11 +175,15 @@ The health block comes first, because a source that did not run hides whatever i
 
 Under *Capability lost this run* it lists each skipped, failed or stopped source with what its absence costs, and the part of a stream it skipped. When no submit-time source ran (urlquery is the only one scheduled), it says so first: without submission times, timing links, pace, agent grades above L2 and interaction edges are unavailable. *Quiet sources* notes a source that has pulled nothing for several runs, and whether its canary passed.
 
-Any alert gets the digest emailed; lost capability and quiet sources alone do not. A failure that repeats (a source, a host, a canary) alerts on the 1st, 2nd, 4th, 8th and later powers of two of its streak; on the runs between, the sources table still shows the error and a note gives the streak, without mailing a digest for it. A failed source's reason never includes the request URL; the full error is in the run's log and in `state.json`.
+Any alert gets the digest emailed; lost capability and quiet sources alone do not. A failure that repeats (a source, a host, a canary, a step after collection) alerts on the 1st, 2nd, 4th, 8th and later powers of two of its streak; on the runs between, the sources table still shows the error and a note gives the streak, without mailing a digest for it.
+
+A run in which no source could run, or every source that ran failed, ends with an error (exit 1, the workflow's failure mail) on the same runs of its streak (`failed_runs` in `state.json`), and with a digest note on the others. Such a run still writes `LATEST`; only a run in which a source worked writes `LATEST_OK`, which the [staleness check](runner.md#watch-staleyml) reads. A failed source's reason never includes the request URL; the full error is in the run's log and in `state.json`.
 
 ### Digests not mailed
 
 The workflow's mail step writes `runs/<stamp>/mailed` once a digest is sent. A changed run newer than the newest mailed one, without the marker, had a digest that never reached the admin (no mail that run, a refused send, a cancelled job). The next digest lists those runs under *Digests not mailed*, before the health block, with each one's priority reasons and leads, takes the highest of their priorities as a reason of kind `unmailed`, and counts as changed. A data directory with no marker at all is not mailed from, and nothing is listed. Each run keeps the newest marked stamp in `state.json` (`last_mailed`), so retention deleting the run that held the marker does not stop the list. The [dashboard](#the-dashboard) lists the same runs.
+
+The newest twelve are listed; older ones are counted in the section's heading and a line of their own.
 
 ### Slice onsets
 

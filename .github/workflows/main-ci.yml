@@ -149,7 +149,9 @@ jobs:
       # docs (sc-core embeds the Field Manual and the spec vectors; sc-publish
       # builds the checkout's pages) instead of the whole workspace. Anything
       # unclear (a manual dispatch, a new branch, a base that cannot be
-      # fetched, an empty diff) runs everything.
+      # fetched, an empty diff) runs everything. `--no-renames` lists a
+      # renamed file under its old path as well as its new one, so renaming a
+      # .rs file to a .md one is not mistaken for a docs-only change.
       - name: Changed paths
         id: paths
         env:
@@ -165,7 +167,7 @@ jobs:
           esac
           if [[ "$base" =~ ^[0-9a-f]{40}$ && "$base" != 0000000000000000000000000000000000000000 ]] \
              && git fetch -q --depth=1 origin "$base" 2>/dev/null \
-             && files="$(git diff --name-only "$base" HEAD)" && [ -n "$files" ]; then
+             && files="$(git diff --no-renames --name-only "$base" HEAD)" && [ -n "$files" ]; then
             if ! grep -qvE '\.md$' <<<"$files" && ! grep -q '^notices/' <<<"$files"; then
               code=false
             fi

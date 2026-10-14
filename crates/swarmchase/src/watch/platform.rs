@@ -108,6 +108,9 @@ pub struct SourceLine {
     /// Labels a reference source gave this run.
     pub labels: usize,
     pub error: Option<String>,
+    /// The pull stopped part way: what it read is kept, and the next run
+    /// reads the rest.
+    pub stopped: Option<String>,
 }
 
 /// A candidate's members that acted on labelled targets.
@@ -193,6 +196,10 @@ pub fn run(
                 line.declared = p.declared;
                 line.lookalikes = p.lookalikes;
                 line.labels = p.labels.len();
+                if let Some(e) = &p.stopped {
+                    eprintln!("  stopped early: {e}");
+                    line.stopped = Some(crate::util::one_line(e, 200));
+                }
                 batch.extend(p.events);
                 new_labels.extend(p.labels);
             }
@@ -545,6 +552,12 @@ pub fn section(o: &Outcome) -> String {
                         String::new()
                     }
                 );
+                if let Some(e) = &l.stopped {
+                    let _ = writeln!(
+                        t,
+                        "  - Stopped part way ({e}); the next run reads the rest from the same checkpoint."
+                    );
+                }
                 if !l.declared.is_empty() {
                     let d: Vec<String> =
                         l.declared.iter().map(|(k, n)| format!("{k} {n}")).collect();

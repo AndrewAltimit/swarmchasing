@@ -55,6 +55,7 @@ impl Source for Urlquery {
         let n = p.records.len();
         let next = (n > 0 && offset + n < p.total_hits).then_some(Cursor::Offset(offset + n));
         Ok(Page {
+            stopped: None,
             records: p.records,
             next,
             truncated: false,

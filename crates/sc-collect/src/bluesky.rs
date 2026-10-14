@@ -515,6 +515,7 @@ impl Source for BskyLinks {
             read.take(m, &plan, Keep::Links(&needles))
         })?;
         Ok(Page {
+            stopped: None,
             coverage: Some(read.coverage(&plan)),
             records: read.records,
             next: None,

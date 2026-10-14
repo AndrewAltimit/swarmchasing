@@ -147,6 +147,26 @@ fn a_floor_not_met_exits_3_and_an_error_1() {
 }
 
 #[test]
+fn a_failed_calibration_check_exits_3_as_sim_bench_does() {
+    let s = Scratch::new("sim-calibrate-exit");
+    // One scenario and no `calibration.unmeasured` table: every kind the
+    // rules give a ratio above 1 that it does not measure fails.
+    let file = s.path().join("scenarios.toml");
+    std::fs::write(
+        &file,
+        "[[scenario]]\nname = \"sink\"\nseed = 11\nseeds = 1\n\
+         [[scenario.actor]]\nkind = \"swarm\"\nagents = 3\nmodes = [\"sink\"]\nrecords = 8\n",
+    )
+    .unwrap();
+    let r = run(
+        s.path(),
+        &["sim", "calibrate", file.to_str().unwrap(), "--check"],
+    );
+    assert_eq!(r.code, Some(3), "{}", r.stderr);
+    assert!(r.stdout.contains("UNMEASURED"), "{}", r.stdout);
+}
+
+#[test]
 fn the_full_result_goes_to_json_out_and_json_still_works() {
     let s = Scratch::new("eval-json-out");
     let files = samples();

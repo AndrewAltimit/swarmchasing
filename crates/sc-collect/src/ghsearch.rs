@@ -443,6 +443,7 @@ impl Source for GhSearch {
             .collect();
         records.truncate(size);
         Ok(Page {
+            stopped: None,
             records,
             next: None,
             truncated: false,
