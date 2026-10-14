@@ -22,7 +22,7 @@ let text = c.to_toml()?; // the caller writes it back
 |---|---|
 | [`model`](src/model.rs) | What `case.toml` holds: status, admin, endpoints, typed contact roles, claims, sends, fleets, scope findings, naming consent, the self-review and second-review records. |
 | [`actions`](src/actions.rs) | The admin's decisions: classify, describe, send, no contact, alternative, claim, grade, scope finding, plant review, contacts, settings. Each is checked and logged. |
-| [`evidence`](src/evidence.rs) | Logs operators send back, and which rendering may use them (`Scope`). |
+| [`evidence`](src/evidence.rs) | Logs operators send back, and which rendering may use them and which hosts it covers (`Scope`). |
 | [`report`](src/report.rs) | Report options from a case, the hosts a notice may name, who the sends reached, the claims a report sees. |
 | [`fleet`](src/fleet.rs) | Fleet merges and splits, and the interaction evidence that makes a fleet a swarm. |
 | [`lead`](src/lead.rs) | The indicator notice's clock each party's report starts, and the Publication section of a report. |

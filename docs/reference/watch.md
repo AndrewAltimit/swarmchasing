@@ -447,7 +447,7 @@ The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<sta
 | `a` / `b` / `u` | Labels the record agent, benign or unsure. |
 | `A` / `B` / `U` | Labels every queued record in the cluster. |
 | `s` / `q` | Skips the record, or quits. |
-| `c` | Opens a case from the shown record's cluster. |
+| `c` | Opens a case from the shown record's cluster, or adds to the open case that already holds some of its records. |
 | `c <case-id>` | Adds the cluster to an open case. |
 
 Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing.

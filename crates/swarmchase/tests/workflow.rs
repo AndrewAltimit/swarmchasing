@@ -298,6 +298,8 @@ fn from_a_watch_digest_to_a_linted_notice() {
             "wf-1",
             "--audience",
             "affected",
+            "--to",
+            &address,
             "-o",
             "aff.md",
         ],
