@@ -1144,7 +1144,7 @@ fn leads(t: &mut String, a: &Analysis) {
         let _ = writeln!(
             t,
             "- `{}`: {}, {} → {}{clusters}",
-            sc_core::defang(&one_line(&format!("{}{}", e.host, e.path), 100)),
+            sc_core::defang_hosts(&one_line(&format!("{}{}", e.host, e.path), 100)),
             e.route_line(),
             sc_core::fmt_ts(e.start),
             sc_core::fmt_ts(e.end)
@@ -1165,7 +1165,7 @@ fn leads(t: &mut String, a: &Analysis) {
         let _ = writeln!(
             t,
             "- `{}`: {} records on {} hosts, {} → {}; {}",
-            sc_core::defang(&one_line(&c.feature.to_string(), 90)),
+            sc_core::defang_feature(&one_line(&c.feature.to_string(), 90)),
             c.records,
             c.hosts,
             sc_core::fmt_ts(c.start),

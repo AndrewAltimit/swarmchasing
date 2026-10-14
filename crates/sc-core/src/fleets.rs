@@ -837,7 +837,11 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             .filter(|f| common.contains(f))
             .collect();
         for f in feats {
-            add(SoftLinkKind::CommonFeature, f.to_string(), &c.id);
+            add(
+                SoftLinkKind::CommonFeature,
+                crate::extract::defang_feature(&f.to_string()),
+                &c.id,
+            );
         }
     }
     let stock = stock_secrets();

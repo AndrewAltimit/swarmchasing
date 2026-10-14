@@ -57,7 +57,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`urlquery`](src/urlquery.rs) | urlquery.net report records into `Observation`s. |
 | [`capture`](src/capture.rs) | Wayback and Arquivo.pt captures into `Observation`s, with one id however they arrive. |
 | [`redact`](src/redact.rs) | Replaces secrets with `REDACTED-<hash>` at ingest, and in every layer unwrapping decodes. |
-| [`extract`](src/extract.rs) | URL unwrapping, indicator matching for one record, and `defang`. |
+| [`extract`](src/extract.rs) | URL unwrapping, indicator matching for one record, and defanging: `defang` (URLs, and hosts after `//`), `defang_hosts` (bare hosts in free text), `defang_feature` (a linking feature's value). |
 | [`rules`](src/rules.rs) | Loading and compiling rule sets. |
 | [`analyze`](src/analyze/mod.rs) | The pipeline as ordered passes (`pipeline`): score, link into clusters (`link`), describe each cluster (`hints`), number, then cross-cluster hints. Clusters have a number (`C1`) and a stable `key`. |
 | [`chains`](src/chains.rs) | Probe chains: one client trying variant after variant of a request. |

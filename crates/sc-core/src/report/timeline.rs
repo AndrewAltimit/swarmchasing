@@ -7,7 +7,7 @@ use super::hints::{
 };
 use super::{Audience, Report, basis_note, dur, touches_exposed};
 use crate::analyze::Cluster;
-use crate::extract::{defang, defang_host};
+use crate::extract::{defang, defang_feature, defang_host};
 use crate::model::{fmt_ts, truncate};
 use crate::notice::PublicView;
 use std::fmt::Write;
@@ -197,7 +197,7 @@ fn link_features(s: &mut String, c: &Cluster, mut view: Option<&mut PublicView>)
             Some(v) => v.feature(f),
             None => f.to_string(),
         })
-        .map(|f| format!("`{}`", defang(&truncate(&f, 90))))
+        .map(|f| format!("`{}`", defang_feature(&truncate(&f, 90))))
         .collect();
     let _ = writeln!(s, "  - linked by: {}", shown.join(", "));
 }

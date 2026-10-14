@@ -69,8 +69,8 @@ pub use escalation::{Escalation, Route};
 pub use eval::summary::{Summary, summarize};
 pub use eval::{EvalReport, Label, LabelSet, evaluate, parse_labels};
 pub use extract::{
-    Extracted, Layer, defang, defang_host, extract, intermediary_hosts, is_intermediary_host,
-    unwrap_layers,
+    Extracted, Layer, defang, defang_feature, defang_host, defang_hosts, extract,
+    intermediary_hosts, is_intermediary_host, unwrap_layers,
 };
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};

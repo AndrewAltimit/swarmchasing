@@ -651,7 +651,7 @@ pub fn harness(a: &Analysis, c: &Cluster) -> Vec<Claim> {
                 .map(|(ua, k)| {
                     format!(
                         "{k} record(s) sent User-Agent `{}`",
-                        crate::extract::defang(ua)
+                        crate::extract::defang_hosts(ua)
                     )
                 })
                 .collect();

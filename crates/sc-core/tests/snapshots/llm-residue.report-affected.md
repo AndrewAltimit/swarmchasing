@@ -55,7 +55,7 @@ URLs are defanged. Records are listed by evidence strength.
 
 1. 2026-07-02 10:04:00 UTC: `hxxps://records[.]agency[.]example/api/search?q=building%20permits%3C/tool_call%3E&uqtag=r7k2`
    - rules: marker.tool_call_markup, marker.uq_tags
-1. 2026-07-02 10:17:00 UTC: `hxxps://r[.]jina[.]ai/hxxps://https://records.agency.example/staff/directory?uqtag=r7k2`
+1. 2026-07-02 10:17:00 UTC: `hxxps://r[.]jina[.]ai/hxxps://https://records[.]agency[.]example/staff/directory?uqtag=r7k2`
    - rules: relay.jina, marker.doubled_scheme, marker.uq_tags
 1. 2026-07-02 10:25:00 UTC: `hxxps://records[.]agency[.]example/signup?user=test123&email=user%40example.com&name=%3Cscript%3Ealert(1)%3C/script%3E`
    - rules: carrier.html_program, marker.placeholder_identity, exploit.xss

