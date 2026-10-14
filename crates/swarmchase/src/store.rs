@@ -304,7 +304,16 @@ pub const LOCK_FILE: &str = ".lock";
 /// never write at once.
 #[derive(Debug)]
 pub struct DataLock {
-    _file: std::fs::File,
+    file: std::fs::File,
+}
+
+impl Drop for DataLock {
+    /// Unlock explicitly rather than by closing: a child process forked
+    /// while the lock was held shares the open file until it execs, and
+    /// closing only our handle would leave the lock held until then.
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
 }
 
 /// Take `<data>/.lock` for `what`, or fail at once, naming the holder, when
@@ -349,7 +358,7 @@ pub fn lock_data(data: &Path, what: &str) -> Result<DataLock> {
             std::process::id()
         ),
     );
-    Ok(DataLock { _file: f })
+    Ok(DataLock { file: f })
 }
 
 #[cfg(test)]
