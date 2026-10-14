@@ -71,7 +71,7 @@ pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, Family, PairEvidence, SoftLink, SoftLinkKind};
 pub use identity::{Catalog, ClusterIdentity, IdentityClass, IdentityData, RecordIdentity};
-pub use ingest::{FieldMap, Format, Parsed, parse_input};
+pub use ingest::{FieldMap, Format, Parsed, detect_format, parse_input};
 pub use model::{
     Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SUBMISSION_SOURCE,
     SourceKind, Tactic, Tier, TsKind, fmt_ts, parse_ts, top_counts,

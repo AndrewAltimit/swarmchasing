@@ -1063,6 +1063,17 @@ details.on-this-page { display: none; }
 .dropzone .drop-actions { margin: 0 0 8px; }
 .dropzone textarea { background: var(--surface-1); }
 .dropzone #drop-status { margin: 6px 0 0; }
+/* A set of files in place of the text box, and what was read from each. */
+.row label[hidden] { display: none; }
+.file-set { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; overflow-wrap: anywhere; }
+.file-set p { margin: 0 0 4px; }
+.file-set .row { margin-top: 4px; }
+.file-summary { margin: 8px 0; font-size: 13.5px; }
+.file-summary summary { cursor: pointer; font-weight: 600; }
+table.files { min-width: 560px; }
+table.files td.file-name { overflow-wrap: anywhere; min-width: 160px; }
+table.files td.file-note { color: var(--text-secondary); overflow-wrap: anywhere; }
+ul.skipped { margin: 0 0 4px; padding-left: 18px; overflow-wrap: anywhere; }
 .sub-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .sub-head .pane-sub { margin-bottom: 6px; }
 table.endpoints td.hits { white-space: nowrap; }

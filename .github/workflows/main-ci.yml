@@ -98,6 +98,16 @@ jobs:
       - name: Site safety (CSP, no HTML sinks)
         run: python3 scripts/ci/check-site.py
 
+      # The archive reader the log pages unpack sets of logs with, on
+      # synthetic archives built at run time.
+      - name: Site archive reader
+        run: |
+          if command -v node >/dev/null 2>&1; then
+            node scripts/ci/check-archive.mjs
+          else
+            echo "::warning::node not found; archive reader tests skipped"
+          fi
+
       # A tag a notice prints is public and anyone can copy it, so it must be
       # in [linking] published_tags or it would still link clusters.
       - name: Published tags (burned identifiers)

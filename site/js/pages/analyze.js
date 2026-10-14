@@ -14,6 +14,7 @@ import { layersTable } from "../lib/layers.js";
 import { agentLadder as ladderOf } from "../lib/agent.js";
 import { scopePanel } from "../lib/scope.js";
 import { sightingsPanel, resetSightings } from "../lib/sightings.js";
+import { analyseSet, bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, progressText, setPanel, setSummary } from "../lib/fileset.js";
 
 const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
@@ -146,14 +147,23 @@ tabs.forEach((t, i) => {
 }
 
 // ── Input ──────────────────────────────────────────────────────────────────
+// A set of files (several, a folder, archives) takes the text box's place:
+// unpacked and read file by file into the module, analysed as one input
+// (lib/fileset.js). Each record's id starts with its file's number, which
+// names the file in the record's context, the file filter and the CSV.
+let set = null; // the files picked, while a set replaces the text box
+let setRead = null; // what the last analysis read from each file of the set
+let setProgress = null; // the set panel's status line
+let bigOk = null; // the set the visitor said to read although it is big
+
 /** Analyze is offered only when there is something to analyse. */
-const syncRun = () => ($("run").disabled = !$("input").value.trim());
+const syncRun = () => ($("run").disabled = !set && !$("input").value.trim());
 
 /** After a run: the records box shrinks to a line, so the clusters come up. */
 function collapseInput(n) {
   const hadFocus = $("input-box").contains(document.activeElement);
   $("input-box").hidden = true;
-  $("input-count").textContent = `${plural(n, "record")} loaded`;
+  $("input-count").textContent = `${plural(n, "record")}${setRead ? ` from ${plural(setRead.files.length, "file")}` : ""} loaded`;
   $("input-collapsed").hidden = false;
   $("input-edit").setAttribute("aria-expanded", "false");
   if (hadFocus) $("input-edit").focus({ preventScroll: true });
@@ -162,7 +172,7 @@ function expandInput(focus = false) {
   $("input-box").hidden = false;
   $("input-collapsed").hidden = true;
   $("input-edit").setAttribute("aria-expanded", "true");
-  if (focus) $("input").focus();
+  if (focus) (set ? $("set").querySelector("button") : $("input"))?.focus();
 }
 
 const FORMATS_READ = "The workbench reads NDJSON (one JSON object per line, with a url field), a JSON array, Wayback CDX JSON, one URL per line (optionally after a timestamp), or a web server access log.";
@@ -195,6 +205,7 @@ function clearAnalysis() {
   $("links").replaceChildren(hint("None yet."));
   $("report").textContent = "Analyse records to draft a report.";
   for (const b of ["copy-report", "dl-report", "dl-json"]) $(b).disabled = true;
+  showFiles(null);
   syncResultControls();
   resetSightings();
   writeHash();
@@ -218,6 +229,7 @@ function syncResultControls() {
 
 // ── Analysis ───────────────────────────────────────────────────────────────
 function runAnalysis() {
+  if (set) return runSetAnalysis();
   const warn = $("warnings");
   warn.hidden = true;
   $("alert").hidden = true;
@@ -240,6 +252,70 @@ function runAnalysis() {
   const notes = [];
   if (out.redacted) notes.push(`${out.redacted} secret value(s) such as cookies or tokens were replaced with hashes.`);
   if (arr(out.warnings).length) notes.push(`${out.warnings.length} warning(s): ${out.warnings.slice(0, 3).join("; ")}`);
+  setRead = null;
+  showFiles(null);
+  return takeAnalysis(out, notes);
+}
+
+/**
+ * The format a file of a set is read in: the one picked, except that under
+ * "Access log" a file that starts as JSON is detected (a JSON log beside
+ * the access logs).
+ */
+const setFormat = (text) => ($("format").value === "access_log" ? logFormat(text) : $("format").value);
+
+/** Analyse the set of files: each unpacked and read in turn, all analysed as one. */
+async function runSetAnalysis() {
+  const warn = $("warnings");
+  warn.hidden = true;
+  $("alert").hidden = true;
+  if (bigOk !== set && !bigSetOk(set, $("drop-status"), () => {
+    bigOk = set;
+    analyse();
+  })) return false;
+  let read;
+  try {
+    read = await analyseSet(sc, set, { format: setFormat, map: $("map").value, rules, onProgress: (p) => (setProgress.textContent = progressText(p)) });
+  } catch (e) {
+    setProgress.textContent = "";
+    nothingRead("The files could not be read.", e?.message ?? e);
+    return false;
+  }
+  setProgress.textContent = `Read ${plural(read.files.length, "file")}.`;
+  if (!num(read.out?.analysis?.total)) {
+    setRead = null;
+    nothingRead("Nothing was read from these files: no line held a record.", read.files.find((f) => f.warnings?.length)?.warnings[0] ?? read.skipped[0]?.reason);
+    showFiles(read);
+    return false;
+  }
+  const notes = [];
+  const redacted = read.files.reduce((n, f) => n + f.redacted, 0);
+  const warned = read.files.filter((f) => f.warning_count);
+  if (redacted) notes.push(`${redacted} secret value(s) such as cookies or tokens were replaced with hashes.`);
+  if (warned.length) notes.push(`${plural(warned.reduce((n, f) => n + f.warning_count, 0), "warning")} in ${plural(warned.length, "file")}; the files read list the first problem of each.`);
+  if (read.stopped) notes.push(read.stopped);
+  setRead = read;
+  showFiles(read);
+  return takeAnalysis(read.out, notes);
+}
+
+/** The per-file summary of a set, and the records table's file filter; none for null. */
+function showFiles(read) {
+  const box = $("files");
+  box.hidden = !read;
+  box.replaceChildren(...(read ? [setSummary(read)] : []));
+  const pick = $("rec-file");
+  pick.replaceChildren(el("option", { value: "" }, "every file"),
+    ...(read?.files ?? []).map((f, i) => el("option", { value: String(i + 1) }, trunc(f.name, 80))));
+  $("rec-file-wrap").hidden = !(read?.files.length > 1);
+}
+
+/** The file a record came from, when a set was analysed; else null. */
+const fileName = (i) => (setRead ? fileOf(a.results[i]?.obs.id, setRead.files) : null);
+
+/** Show an analysis the module made (from text or from a set), with notes above it. */
+function takeAnalysis(out, notes) {
+  const warn = $("warnings");
   if (notes.length) {
     warn.hidden = false;
     warn.textContent = notes.join(" ");
@@ -653,14 +729,18 @@ const SORTS = {
 function listedRecords() {
   const needle = $("rec-filter").value.trim().toLowerCase();
   let idx = [...scopeIdx()];
-  if (needle) idx = idx.filter((i) => defangedUrl(i).toLowerCase().includes(needle) || arr(a.results[i].hits).some((h) => String(h.rule_id).toLowerCase().includes(needle)));
+  const file = setRead ? $("rec-file").value : "";
+  if (file) idx = idx.filter((i) => String(a.results[i].obs.id ?? "").startsWith(`f${file}:`));
+  if (needle) idx = idx.filter((i) => defangedUrl(i).toLowerCase().includes(needle) || arr(a.results[i].hits).some((h) => String(h.rule_id).toLowerCase().includes(needle))
+    || (setRead && (fileName(i) ?? "").toLowerCase().includes(needle)));
   return idx.sort(SORTS[$("rec-sort").value] ?? SORTS.score);
 }
 
 function renderRecords() {
   const idx = listedRecords();
   const needle = $("rec-filter").value.trim();
-  $("records-h").textContent = `Flagged records (${scopeText()}${needle ? `, matching "${trunc(needle, 40)}"` : ""}: ${idx.length})`;
+  const file = setRead && $("rec-file").value ? setRead.files[Number($("rec-file").value) - 1]?.name : null;
+  $("records-h").textContent = `Flagged records (${scopeText()}${file ? `, in ${trunc(file, 40)}` : ""}${needle ? `, matching "${trunc(needle, 40)}"` : ""}: ${idx.length})`;
   const capped = idx.slice(0, MAX_ROWS);
   // A selected record past the short list shows the whole list.
   const few = !allRecords && capped.length > FEW_ROWS + 2 && !(sel.r != null && capped.indexOf(sel.r) >= FEW_ROWS);
@@ -700,6 +780,7 @@ function renderRecords() {
     el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)), ...(more ? [more] : []));
 }
 $("rec-sort").addEventListener("change", () => a && renderRecords());
+$("rec-file").addEventListener("change", () => a && renderRecords());
 {
   let t = 0;
   $("rec-filter").addEventListener("input", () => {
@@ -946,6 +1027,8 @@ function recordContext(i) {
     return b;
   })() : "none");
   row("Record id", trunc(String(r.obs.id ?? ""), 80));
+  const file = fileName(i);
+  if (file) row("File", el("code", {}, trunc(file, 300)));
   if (r.obs.source) row("Source", trunc(String(r.obs.source), 60));
   if (r.target_host) row("Target", host(r.target_host));
   row("URL (defanged)", el("code", {}, safe(r.obs.url, 1200)));
@@ -1138,6 +1221,7 @@ async function analyse() {
 
 async function loadExample() {
   const mod = ensure();
+  clearSet();
   try {
     $("input").value = await fetchRoot("assets/example.ndjson", "text");
   } catch (e) {
@@ -1185,15 +1269,52 @@ async function loadFile(f) {
 }
 /** Text read from a file (or carried over) into the records box, analysed. */
 async function useText(text) {
+  clearSet();
   $("input").value = text;
   syncRun();
   if (await ensure().catch(() => null)) await analyse();
 }
-$("file").addEventListener("change", async (e) => {
-  const f = e.target.files[0];
-  if (f) await loadFile(f);
-  e.target.value = "";
-});
+/** Files picked or dropped: one plain file to the records box, anything else as a set. */
+async function takeFiles(sources) {
+  if (!sources.length) return;
+  warm();
+  $("example-note").hidden = true;
+  $("drop-status").hidden = true;
+  const blobs = sources.filter((s) => s.blob).map((s) => s.blob);
+  if (blobs.length === sources.length && !(await needsSet(blobs))) return loadFile(blobs[0]);
+  await useSet(sources);
+}
+/** A set of files in place of the records box, analysed. */
+async function useSet(sources) {
+  set = sources;
+  bigOk = null;
+  $("input").hidden = true;
+  setProgress = setPanel($("set"), sources, () => {
+    clearSet();
+    $("input").focus();
+  });
+  syncRun();
+  if (await ensure().catch(() => null)) await analyse();
+}
+/** Back to the records box. */
+function clearSet() {
+  if (!set) return;
+  set = null;
+  bigOk = null;
+  $("set").hidden = true;
+  $("set").replaceChildren();
+  $("input").hidden = false;
+  $("drop-status").hidden = true;
+  syncRun();
+}
+for (const id of ["file", "folder"]) {
+  $(id).addEventListener("change", async (e) => {
+    const files = picked(e.target);
+    e.target.value = "";
+    await takeFiles(files);
+  });
+}
+$("folder").addEventListener("click", warm, { once: true });
 syncRun();
 // The records box shows a sample of the format picked: a Common Log Format
 // line for an access log (a documentation address and a placeholder path).
@@ -1240,9 +1361,11 @@ $("csv-records").addEventListener("click", () => {
   const idx = listedRecords();
   const rows = idx.map((i) => {
     const r = a.results[i];
-    return [i, r.tier, r.score, iso(r.obs.ts), r.cluster != null ? a.clusters[r.cluster]?.id ?? "" : "", r.target_host ? host(r.target_host) : "", sc.defang(String(r.obs.url ?? "")), arr(r.hits).map((h) => h.rule_id).join(" ")];
+    const row = [i, r.tier, r.score, iso(r.obs.ts), r.cluster != null ? a.clusters[r.cluster]?.id ?? "" : "", r.target_host ? host(r.target_host) : "", sc.defang(String(r.obs.url ?? "")), arr(r.hits).map((h) => h.rule_id).join(" ")];
+    return setRead ? [...row, fileName(i) ?? ""] : row;
   });
-  download("swarmchase-flagged-records.csv", csv(["record", "tier", "score", "time_utc", "cluster", "target_host", "url_defanged", "rules"], rows), "text/csv");
+  const head = ["record", "tier", "score", "time_utc", "cluster", "target_host", "url_defanged", "rules"];
+  download("swarmchase-flagged-records.csv", csv(setRead ? [...head, "file"] : head, rows), "text/csv");
 });
 $("csv-endpoints").addEventListener("click", () => {
   if (!a) return;
@@ -1251,40 +1374,14 @@ $("csv-endpoints").addEventListener("click", () => {
 });
 
 // ── Drop a file ────────────────────────────────────────────────────────────
-// A file dropped on the records area loads as "Load file" does: read in the
-// page, never uploaded.
-{
-  const zone = $("drop");
-  let depth = 0;
-  const has = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
-  zone.addEventListener("dragenter", (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    depth++;
-    zone.classList.add("over");
-  });
-  zone.addEventListener("dragover", (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  });
-  zone.addEventListener("dragleave", () => {
-    depth = Math.max(0, depth - 1);
-    if (!depth) zone.classList.remove("over");
-  });
-  zone.addEventListener("drop", async (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    depth = 0;
-    zone.classList.remove("over");
-    const f = e.dataTransfer.files[0];
-    if (f) await loadFile(f);
-  });
-}
+// Files and folders dropped on the records area load as "Load files" does:
+// read in the page, never uploaded.
+dropZone($("drop"), takeFiles);
 
 /**
- * The log Check my logs handed over in this tab, read once: the stored copy
- * and the hash's flag are removed whether or not one was there.
+ * The logs Check my logs handed over in this tab, read once: the stored
+ * copy and the hash's flag are removed whether or not one was there.
+ * `{ log, map }` for one pasted log (v1), `{ files, map }` for a set (v2).
  */
 function takeHandoff() {
   let got = null;
@@ -1295,8 +1392,13 @@ function takeHandoff() {
     got = null;
   }
   history.replaceState(null, "", "#preset=access-log");
-  if (!got || got.v !== 1 || typeof got.log !== "string" || !got.log.trim()) return null;
-  return { log: got.log, map: typeof got.map === "string" ? got.map : "" };
+  const map = typeof got?.map === "string" ? got.map : "";
+  if (got?.v === 1 && typeof got.log === "string" && got.log.trim()) return { log: got.log, map };
+  if (got?.v === 2 && Array.isArray(got.files)) {
+    const files = got.files.filter((f) => typeof f?.name === "string" && typeof f?.text === "string").map((f) => ({ name: f.name, text: f.text }));
+    if (files.length) return { files, map };
+  }
+  return null;
 }
 
 /** Apply what the URL hash asks for: the access-log preset or the example. */
@@ -1314,7 +1416,8 @@ async function applyHash() {
     const carried = h.from === "check-logs" ? takeHandoff() : null;
     if (carried) {
       $("map").value = carried.map;
-      await useText(carried.log);
+      if (carried.files) await useSet(carried.files);
+      else await useText(carried.log);
     } else {
       $("input").focus();
       warm();

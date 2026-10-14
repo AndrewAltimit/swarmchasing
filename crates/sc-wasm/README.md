@@ -35,6 +35,8 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 |---|---|
 | `check_rules(rules_json)` | `{"rules", "asns", "version"}`, or throws on an invalid rule set. |
 | `analyze(input, format, map, rules_json)` | Engine. `{"analysis", "warnings", "redacted", "cluster_date_tags"}`, and keeps the analysis for `endpoints`. `format` is `auto`, `ndjson`, `json`, `lines` or `access_log`; `map` is a field mapping such as `ts=a.b,url=c`, or empty. Secrets are redacted before analysis. |
+| `inputs_add(input, format, map)` | Engine. Parses one file of a set and keeps its records, ids prefixed with the file's number (`f2:log-17`); returns `{"file", "format", "lines", "records", "skipped", "redacted", "warnings", "warning_count"}`. |
+| `inputs_analyze(rules_json)` | Engine. One analysis over every file added since the last call, as `analyze` returns it and keeps it; clears the set. `inputs_clear()` drops the set. |
 | `unwrap(url, rules_json)` | Engine. The layers inside one URL and the rules that fired. |
 | `prepare(input, format, map, rules_json)` | Tools. Re-runs `analyze` on the same input and keeps it for `report` and `attribution`; returns `{"clusters", "total"}`. |
 | `report(opts_json)` | Tools. A Markdown draft of the prepared analysis. `opts_json` takes `audience`, `cluster` (a cluster `id` or `key`), `reporter`, `generated`, `min_named` and `claims`, as the CLI's `report` does. |
@@ -49,6 +51,7 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 | `parse_security_txt(text)` | Tools. The parsed `security.txt` fields. |
 | `identity_catalog()` | Tools. The declared-agent catalog, with each range file's and directory's URL. |
 | `identity_check(input, format, map, files_json)` | Tools. Each record's declared identity; `files_json` holds downloaded range files and directories by catalog id ([identity](../../docs/reference/identity.md#in-the-browser)). |
+| `identity_check_held(files_json)` | Tools. `identity_check` on the records of the held analysis, such as a set analysed with `inputs_analyze`. |
 
 Clusters in an analysis carry a number (`id`, `C1`) and a stable `key` (`k-3f9a2c1b`); its records may carry `ts_kind` and `target_asn` (see [`sc-core`](../sc-core/README.md#concepts)).
 

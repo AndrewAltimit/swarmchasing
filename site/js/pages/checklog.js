@@ -1,41 +1,57 @@
-// Check my logs: one access log, two checks, one summary. The tools module
-// runs the workbench's analysis (format access_log, the operator's host in
-// the field map) and the identity check on the same text, with the
-// providers' files this site was built with. Nothing is uploaded or
-// fetched beyond the site's own files. Log contents are untrusted: inserted
-// as text, hosts and URLs defanged, never links.
+// Check my logs: access logs in, two checks, one summary. The tools module
+// runs the workbench's analysis (the operator's host in the field map) and
+// the identity check on the same records, with the providers' files this
+// site was built with. A pasted log is one text; a set of files (several,
+// a folder, archives) is unpacked in the page and analysed as one input
+// (lib/fileset.js). Nothing is uploaded or fetched beyond the site's own
+// files. Log contents and file names are untrusted: inserted as text,
+// hosts and URLs defanged, never links.
 import { $, el, busy, fetchRoot, readFile, ruleLink, showAlert, HANDOFF_KEY } from "../lib/dom.js";
 import { arr, obj, num, str, trunc, plural, fmtShort, topEntries } from "../lib/fmt.js";
 import { tools, pageRules } from "../lib/wasm.js";
 import { EXAMPLE_FILES, EXAMPLE_HOST, PROBE_LOG } from "../lib/idexample.js";
+import { analyseSet, bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, progressText, setPanel, setSummary } from "../lib/fileset.js";
 
 const MAX_LISTED = 8;
+/** The most text a set carries over to the workbench: about what a tab's session storage holds. */
+const HANDOFF_CHARS = 4 * 1024 * 1024;
 let example = false;
 let snapshot = null; // the providers' files the build embedded, once read
-let checked = null; // { log, map } of the last log checked, for the workbench
+// The last logs checked, for the workbench: { log, map } for pasted text,
+// { files: [{ name, text }], map } for a set, { tooBig: true } for a set
+// past what the hand-over carries.
+let checked = null;
+let set = null; // the files picked, when a set replaces the text box
+let progress = null; // the set panel's status line
+let bigOk = null; // the set the visitor said to read although it is big
 
-// The workbench takes the log checked here through this tab's session
+// The workbench takes the logs checked here through this tab's session
 // storage, never the URL: the link carries only #preset=access-log&from=check-logs,
-// and the workbench reads the log once and removes it.
+// and the workbench reads them once and removes them.
 const WORKBENCH = "../analyze/#preset=access-log";
 
-/** Open the workbench with the log checked here; false when it does not fit. */
+/** Open the workbench with the logs checked here; false when they do not fit. */
 function toWorkbench() {
   if (!checked) return false;
-  try {
-    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({ v: 1, log: checked.log, map: checked.map }));
-  } catch {
-    showAlert($("cl-alert"), "This log is too large to carry over to the workbench.",
-      "The browser keeps only a few MB for a tab. Open the workbench's access-log preset and load the file there; it stays in your browser.");
+  const tooBig = () => {
+    showAlert($("cl-alert"), "These logs are too large to carry over to the workbench.",
+      "The browser keeps only a few MB for a tab. Open the workbench's access-log preset and load the same files, folder or archive there; they stay in your browser.");
     $("cl-alert").scrollIntoView({ block: "nearest" });
     return false;
+  };
+  if (checked.tooBig) return tooBig();
+  try {
+    const payload = checked.files ? { v: 2, files: checked.files, map: checked.map } : { v: 1, log: checked.log, map: checked.map };
+    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(payload));
+  } catch {
+    return tooBig();
   }
   location.assign(new URL(`${WORKBENCH}&from=check-logs`, location.href).href);
   return true;
 }
 
-/** Check is offered once there is a log. */
-const sync = () => ($("cl-run").disabled = !$("cl-input").value.trim());
+/** Check is offered once there is a log or a set. */
+const sync = () => ($("cl-run").disabled = !set && !$("cl-input").value.trim());
 
 async function providerFiles() {
   if (example) return EXAMPLE_FILES;
@@ -56,11 +72,14 @@ function hostOf(text) {
   return t.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#\s]/)[0].toLowerCase();
 }
 
-/** Check the log, with the button busy while it runs. */
+/** Check the logs, with the button busy while it runs. */
 const runCheck = () => busy($("cl-run"), "Checking…", check);
+
+const FORMATS = "The page reads web server access logs in Common or Combined Log Format, one request per line, and JSON logs with a url field.";
 
 async function check() {
   $("cl-alert").hidden = true;
+  if (set) return checkSet();
   const input = $("cl-input").value;
   if (!input.trim()) return;
   const host = hostOf($("cl-host").value);
@@ -72,23 +91,57 @@ async function check() {
   }
   const rules = await pageRules(sc, $("rules-note"));
   const map = host ? `host=${host}` : "";
+  const format = logFormat(input);
   let analysis, ident;
   try {
-    const out = JSON.parse(sc.analyze(input, "access_log", map, rules));
+    const out = JSON.parse(sc.analyze(input, format, map, rules));
     analysis = obj(out.analysis);
-    ident = JSON.parse(sc.identity_check(input, "access_log", map, JSON.stringify(await providerFiles())));
+    ident = JSON.parse(sc.identity_check(input, format, map, JSON.stringify(await providerFiles())));
   } catch (e) {
-    showAlert($("cl-alert"), "The log could not be read.", ["First problem: ", el("code", {}, trunc(String(e?.message ?? e), 300))],
-      "The page reads web server access logs in Common or Combined Log Format.");
+    showAlert($("cl-alert"), "The log could not be read.", ["First problem: ", el("code", {}, trunc(String(e?.message ?? e), 300))], FORMATS);
     return;
   }
   if (!num(analysis.total)) {
-    showAlert($("cl-alert"), "Nothing was read from this input: no line held a request.",
-      "The page reads web server access logs in Common or Combined Log Format, one request per line.");
+    showAlert($("cl-alert"), "Nothing was read from this input: no line held a request.", FORMATS);
     return;
   }
   checked = { log: input, map };
-  render(sc, analysis, ident, host);
+  render(sc, analysis, ident, host, null);
+}
+
+/** Check a set of files: unpacked, read one by one, analysed as one. */
+async function checkSet() {
+  const status = $("cl-drop-status");
+  if (bigOk !== set && !bigSetOk(set, status, () => {
+    bigOk = set;
+    runCheck();
+  })) return;
+  const host = hostOf($("cl-host").value);
+  let sc;
+  try {
+    sc = await tools();
+  } catch {
+    return;
+  }
+  const rules = await pageRules(sc, $("rules-note"));
+  const map = host ? `host=${host}` : "";
+  let read, ident;
+  try {
+    read = await analyseSet(sc, set, { format: logFormat, map, rules, keep: HANDOFF_CHARS, onProgress: (p) => (progress.textContent = progressText(p)) });
+    if (read.out) ident = JSON.parse(sc.identity_check_held(JSON.stringify(await providerFiles())));
+  } catch (e) {
+    progress.textContent = "";
+    showAlert($("cl-alert"), "The files could not be read.", ["First problem: ", el("code", {}, trunc(String(e?.message ?? e), 300))], FORMATS);
+    return;
+  }
+  progress.textContent = `Read ${plural(read.files.length, "file")}.`;
+  const analysis = obj(read.out?.analysis);
+  if (!num(analysis.total)) {
+    showAlert($("cl-alert"), "Nothing was read from these files: no line held a request.", FORMATS, setSummary(read));
+    return;
+  }
+  checked = read.kept ? { files: read.kept, map } : { tooBig: true };
+  render(sc, analysis, ident, host, read);
 }
 
 /** Identity records grouped by address and declared agent, in first-seen order. */
@@ -103,7 +156,8 @@ function bySource(records) {
   return out;
 }
 
-function render(sc, a, ident, host) {
+/** The summary. `read` is the set's per-file account, or null for pasted text. */
+function render(sc, a, ident, host, read) {
   const df = (s) => sc.defang(str(s));
   const shownHost = host ? sc.defang(`https://${host}`).slice(8) : "your host";
   const results = arr(a.results);
@@ -118,9 +172,12 @@ function render(sc, a, ident, host) {
   const failed = num(counts.signature_failed) ?? 0;
   const rulesHit = {};
   for (const [r] of flagged) for (const h of arr(r.hits)) rulesHit[h.rule_id] = (rulesHit[h.rule_id] ?? 0) + 1;
+  const files = read?.files ?? null;
+  const fileCell = (id) => trunc(fileOf(id, files) ?? "", 60);
+  const these = files ? "these logs" : "this log";
 
   const parts = [];
-  parts.push(el("p", { class: "verdict-line" }, el("strong", {}, `${plural(a.total, "request")} read for ${shownHost}. `),
+  parts.push(el("p", { class: "verdict-line" }, el("strong", {}, `${plural(a.total, "request")} read${files ? ` from ${plural(files.length, "file")}` : ""} for ${shownHost}. `),
     flagged.length
       ? `${plural(flagged.length, "request")} matched the indicator rules (${sig} significant, ${flagged.length - sig} suggestive).`
       : "No request matched the indicator rules strongly enough to flag.",
@@ -130,25 +187,28 @@ function render(sc, a, ident, host) {
       : verified || claims
         ? "No request passed as a provider's agent from outside its published addresses."
         : "No request declared an AI provider's agent."));
+  if (read) parts.push(setSummary(read));
 
   // Flagged requests.
   parts.push(el("h3", {}, "Flagged requests"));
   if (flagged.length) {
     const clusters = arr(a.clusters).filter((c) => c.tier === "significant" || c.tier === "suggestive");
-    parts.push(el("p", {}, `They fall into ${plural(clusters.length, "cluster")}: requests linked by shared tags, identifiers or close timing. The rules they matched most: `,
+    parts.push(el("p", {}, `They fall into ${plural(clusters.length, "cluster")}: requests linked by shared tags, identifiers or close timing${files && files.length > 1 ? ", across files" : ""}. The rules they matched most: `,
       topEntries(rulesHit, 6).map(([id, n]) => el("span", { class: "chip" }, ruleLink(id, "rule-link"), ` ×${n}`)), "."));
+    const head = ["Tier", "Score", "Rules", "Request (defanged)", "Time (UTC)", ...(files ? ["File"] : [])];
     parts.push(el("div", { class: "scroll" }, el("table", { class: "records" },
-      el("thead", {}, el("tr", {}, ["Tier", "Score", "Rules", "Request (defanged)", "Time (UTC)"].map((h) => el("th", { scope: "col" }, h)))),
+      el("thead", {}, el("tr", {}, head.map((h) => el("th", { scope: "col" }, h)))),
       el("tbody", {}, flagged.slice(0, MAX_LISTED).map(([r]) => el("tr", {},
         el("td", { class: "rc-head", "data-label": "Tier" }, el("span", { class: `pill ${str(r.tier).replace(/[^a-z]/g, "")}` }, str(r.tier))),
         el("td", { class: "num rc-head rc-lab", "data-label": "Score" }, String(r.score)),
         el("td", { class: "rules", "data-label": "Rules" }, arr(r.hits).map((h) => ruleLink(h.rule_id))),
         el("td", { class: "url", "data-label": "Request (defanged)" }, trunc(df(r.obs.url), 300)),
-        el("td", { class: "nowrap rc-head", "data-label": "Time (UTC)" }, fmtShort(r.obs.ts))))))));
+        el("td", { class: "nowrap rc-head", "data-label": "Time (UTC)" }, fmtShort(r.obs.ts)),
+        files ? el("td", { class: "file-name", "data-label": "File" }, fileCell(r.obs.id)) : null))))));
     if (flagged.length > MAX_LISTED) {
       const more = el("button", { type: "button", class: "link-button" }, `${flagged.length - MAX_LISTED} more in the workbench`);
       more.addEventListener("click", toWorkbench);
-      parts.push(el("p", { class: "hint" }, more, ", with this log carried over in this tab."));
+      parts.push(el("p", { class: "hint" }, more, `, with ${these} carried over in this tab.`));
     }
   } else {
     parts.push(el("p", { class: "hint" }, "Nothing here looks like the agent activity the rules describe. The rules see only what a log line carries: a request body or a page an agent read is out of their sight."));
@@ -168,7 +228,8 @@ function render(sc, a, ident, host) {
       el("p", {}, el("strong", {}, `${plural(spoofed.length, "request")} passed as a provider's agent from outside its published ranges`)),
       el("p", {}, "Something else is using the provider's name: a scraper or another agent passing as a known one. Check that your log has the real client address before you act on it."),
       el("ul", {}, [...bySource(spoofed).values()].slice(0, MAX_LISTED).map(({ r, n }) => el("li", {}, el("code", {}, str(r.ip) || "–"), ` as ${str(r.provider) || "a provider"} `,
-        r.agent ? el("code", {}, trunc(df(r.agent), 80)) : null, n > 1 ? ` (${plural(n, "request")})` : null)))));
+        r.agent ? el("code", {}, trunc(df(r.agent), 80)) : null, n > 1 ? ` (${plural(n, "request")})` : null,
+        files && fileOf(r.id, files) ? ` in ${fileCell(r.id)}` : null)))));
   }
   if (example) parts.push(el("p", { class: "hint" }, `The example's host is ${sc.defang("https://" + EXAMPLE_HOST.slice(5)).slice(8)}; its range files are synthetic.`));
 
@@ -192,7 +253,7 @@ function leaveExample() {
 }
 
 $("cl-run").addEventListener("click", runCheck);
-// The next steps' workbench link takes the log checked, when there is one.
+// The next steps' workbench link takes the logs checked, when there are some.
 for (const a of document.querySelectorAll(`#cl-next a[href="${WORKBENCH}"]`)) {
   a.addEventListener("click", (ev) => {
     if (checked) {
@@ -210,6 +271,7 @@ const warm = () => tools().catch(() => {});
 $("cl-input").addEventListener("focus", warm, { once: true });
 $("cl-example").addEventListener("pointerenter", warm, { once: true });
 $("cl-example").addEventListener("click", () => {
+  clearSet();
   example = true;
   $("cl-input").value = PROBE_LOG;
   $("cl-host").value = EXAMPLE_HOST.slice(5);
@@ -219,14 +281,9 @@ $("cl-example").addEventListener("click", () => {
   runCheck();
 });
 
+/** One plain file into the log box. */
 async function loadFile(f) {
   const status = $("cl-drop-status");
-  // This page reads access logs only; records go to the workbench.
-  if (/\.(ndjson|jsonl|json)$/i.test(String(f.name))) {
-    status.textContent = `${trunc(String(f.name), 80)} looks like records, not an access log; load it in the workbench instead.`;
-    status.hidden = false;
-    return;
-  }
   let text;
   try {
     text = await readFile(f, status, use);
@@ -241,46 +298,56 @@ async function loadFile(f) {
   }
 }
 
-/** A file's text into the log box, checked at once when the host is known. */
-function use(text) {
-  $("cl-input").value = text;
+/** The checked state follows the input: checked again when the host is known, else the host is asked for. */
+function checkOrAsk() {
   leaveExample();
   sync();
   if ($("cl-host").value.trim()) runCheck();
   else $("cl-host").focus();
 }
-$("cl-file").addEventListener("change", async (e) => {
-  const f = e.target.files[0];
-  if (f) await loadFile(f);
-  e.target.value = "";
-});
-// A file dropped on the log area is read in the page, as a picked one is.
-{
-  const zone = $("cl-drop");
-  const has = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
-  let depth = 0;
-  zone.addEventListener("dragenter", (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    depth++;
-    zone.classList.add("over");
+
+/** A file's text into the log box. */
+function use(text) {
+  clearSet();
+  $("cl-input").value = text;
+  checkOrAsk();
+}
+
+/** Files picked or dropped: one plain file to the box, anything else as a set. */
+async function take(sources) {
+  if (!sources.length) return;
+  warm();
+  $("cl-drop-status").hidden = true;
+  if (!(await needsSet(sources.map((s) => s.blob)))) return loadFile(sources[0].blob);
+  set = sources;
+  bigOk = null;
+  $("cl-input").hidden = true;
+  progress = setPanel($("cl-set"), sources, () => {
+    clearSet();
+    $("cl-input").focus();
   });
-  zone.addEventListener("dragover", (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  });
-  zone.addEventListener("dragleave", () => {
-    depth = Math.max(0, depth - 1);
-    if (!depth) zone.classList.remove("over");
-  });
-  zone.addEventListener("drop", async (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    depth = 0;
-    zone.classList.remove("over");
-    const f = e.dataTransfer.files[0];
-    if (f) await loadFile(f);
+  checkOrAsk();
+}
+
+/** Back to the text box. */
+function clearSet() {
+  if (!set) return;
+  set = null;
+  bigOk = null;
+  $("cl-set").hidden = true;
+  $("cl-set").replaceChildren();
+  $("cl-input").hidden = false;
+  $("cl-drop-status").hidden = true;
+  sync();
+}
+
+for (const id of ["cl-file", "cl-folder"]) {
+  $(id).addEventListener("change", async (e) => {
+    const files = picked(e.target);
+    e.target.value = "";
+    await take(files);
   });
 }
+// Files and folders dropped on the log area are read in the page, as picked ones are.
+dropZone($("cl-drop"), take);
 sync();

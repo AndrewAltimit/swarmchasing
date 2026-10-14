@@ -1092,14 +1092,25 @@ mod tests {
     }
 
     #[test]
-    fn check_logs_offers_only_the_files_it_reads() {
-        // The page reads access logs only; records belong in the workbench.
-        let input = shells::CHECK_LOGS
-            .split("id=\"cl-file\"")
-            .nth(1)
-            .and_then(|t| t.split('>').next())
-            .unwrap();
-        assert_eq!(input.trim(), "accept=\".log,.txt\"");
+    fn log_pickers_take_sets_of_files() {
+        // Both pages take several files and a folder. The pickers filter no
+        // extension: rotated logs end in a number (`access.log.1`), and the
+        // page tells an archive from a log by its first bytes.
+        let attrs = |page: &str, id: &str| {
+            page.split(&format!("id=\"{id}\""))
+                .nth(1)
+                .and_then(|t| t.split('>').next())
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        for (page, file, folder) in [
+            (shells::CHECK_LOGS, "cl-file", "cl-folder"),
+            (shells::ANALYZE, "file", "folder"),
+        ] {
+            assert_eq!(attrs(page, file), "multiple");
+            assert_eq!(attrs(page, folder), "webkitdirectory");
+        }
     }
 
     #[test]
