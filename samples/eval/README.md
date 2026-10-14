@@ -58,6 +58,11 @@ Synthetic records for the client-trace rules, each marked `"synthetic": true`, o
 
 - **Coding-harness user agents** (`header.coding_agent_ua`): agent runs sending probes through Gemini CLI, Qwen Code, Aider (its browser and its plain HTTP client) and Crush, with the user agents those tools' source code sets. The hard negatives are developers reading documentation, a README and a package registry with the same tools, and a person reading the Aider site in a browser.
 - **Assistant citation tag** (`marker.assistant_citation`): an agent reusing a ChatGPT-cited URL, `utm_source=chatgpt.com` and all, for a probe and with its run tag; the tag scores as context and never grades as self-description, so the probe alone is L0 and the run tag alone sets L1. The hard negatives, class `ai_referral`, are people clicking cited news, documentation and recipe links; one reads a cited article through a relay (the relay and the tag stay under the context cap), and an analyst filters referral traffic by the tag.
+- **Declared-agent headers**: probes from a coding agent asking for Markdown first (`header.markdown_accept`), from a paying agent with a pay-per-crawl price header and an `agent-browser-auth` signature (`selfid.agent_commerce`), and from a fetcher naming Kimi-User (`header.agent_ua`). Their hard negatives are in `hard-negatives.ndjson`.
+
+## `agent-routes.ndjson`
+
+Synthetic agent records, each marked `"synthetic": true`, on reserved `.example` hosts and the public services the rules name, written by hand: a tagged search through Jina's search relay and a target's repository read through a digest service, a program driving a Lightpanda Cloud browser to a quote probe, a vendor-plus-date run tag (`research20261004final`, the shape in the swarmcha.se fleet report) on a relayed probe, and one run that adds a fresh random value to each probe and no run tag, so only timing on the target links it. The records are kept out of `rule-coverage.ndjson`, which the simulator copies from, so adding them leaves the simulated scenarios unchanged.
 
 ## `hard-negatives.ndjson`
 
@@ -67,6 +72,8 @@ Synthetic benign records, each marked `"synthetic": true`, on reserved `.example
 - **Look-alikes that fire and stay noise**: ordinary scripted clients (a feed reader, an install script, a server calling its own API), header fingerprints on ordinary traffic (an Apache Traffic Server cache, a gzip-only mobile client, an owner's own Browser Rendering job, a signed declared agent, the MCP fetch server driven by a person), Markdown relays used to read, a large `limit`, and pages naming disposable mail, a paste app or a `document.title` assignment.
 - **Scanners** (`scanner`): an operator's template scan reading `robots.txt` and `security.txt`, and directory listing and path fuzzing on the operator's own staging host, all with the tools' default user agents and no payload.
 - **Archive links** (`archive_link`): an ordinary capture, an `im_` image capture, the capture calendar, an arquivo.pt capture and an archive.today snapshot, none of them the raw `id_` form.
+- **Ordinary automation**: a CI link checker, a chat app's link-preview bot fetching an assistant-cited link, an uptime monitor with a timestamp cache-buster, a fresh copy of a post read through a relay, a documentation sync tool asking for Markdown, a paying crawler's price header, an API client's x402 payment header, and declared fetchers reading a page.
+- **Near misses for the narrow rules**: searches and blog posts naming anti-bot tokens, a sandbox host and a published tag; an OCR call on a receipt; an owner's own hosted-browser and playground sessions; a product slug and a SKU that start like a tag; a dead link and a challenge page a person met; a search through Jina's search relay; repositories read through digest services.
 
 ## `carrier-negatives.ndjson`
 

@@ -50,7 +50,9 @@ interrupts_per_day = 3
 # interact.sh  .oast.  //ntfy.sh/  dnslog.cn  requestrepo.com
 # Left out: href.li and *.translate.goog (WordPress and translation links,
 # far too common in posts and edits), the scraping APIs of relay.scrape_api
-# and codesandbox.io (their own users' issues and posts name them all day).
+# and codesandbox.io (their own users' issues and posts name them all day),
+# s.jina.ai (its path is a search query, not a target) and the repository
+# digest services of relay.repo_digest (READMEs link them all day).
 # The carrier rules that read program content fire on what the unwrapper
 # finds inside a URL these substrings already keep.
 

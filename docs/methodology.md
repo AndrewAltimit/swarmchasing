@@ -398,7 +398,7 @@ Each event keeps its id, time, target and public link, plus:
  event payloads no longer carry the author association, so no GitHub event has a first-timer flag;
 - the text (title and body, a description or a summary) as a sketch: lower-cased words with URLs, addresses, mentions, paths, numbers, hex strings, mixed letter-and-digit tokens and the target's and actor's own names replaced by slots (`<url>`, `<user>`, `<num>` and so on); a 32-value MinHash signature over word 3-shingles; a hash of the first 48 slotted words (the template); the first 160 characters of slotted text; and the residue rules that fire on the raw text;
 - for a created item, its name as a template (`reach-check-<num>`), only when the name keeps a word of three letters or more and has a slot; for a wiki edit, the page title the same way, with the editor's own name as `<user>` (`user:<user>/sandbox`);
-- coding-harness self-identification on the raw text: the footers, trailers and session links harnesses add (`Generated with Claude Code`, a `Co-Authored-By` trailer, a Codex task, Devin session or Jules task link).
+- coding-harness self-identification on the raw text: the footers, trailers and session links harnesses add (`Generated with Claude Code`, a `Co-Authored-By` or `Made-with` trailer naming a harness, an `Assisted-by` trailer, a Codex task, Devin session, Jules task or Amp thread link, a GitHub Agentic Workflows marker).
 
 GitHub's event payloads are trimmed: a pull request opened carries its number and refs, no title or body, and a push carries no commits. A pull request opened is kept without text, as are stars and forks, so these group by their target instead.
 

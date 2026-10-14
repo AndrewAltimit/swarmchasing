@@ -19,6 +19,8 @@ The platform pass reads `[[github_app]]`: those Apps' events are tallied by prod
 
 Every entry cites the provider page (`source`) that names the file. Adding one is a review decision, as for a rule: cite the page, keep the URL the page gives (or the host it redirects to, said in a comment), and run the tests. The catalog is compiled into the CLI and the browser module.
 
+A product whose provider publishes no range file, or publishes its addresses only as a web page the refresh cannot parse (Amazon's), is listed without ranges: its user agent stays a claim, never verified and never called spoofed. A key directory whose `Signature-Agent` value and URL the provider's public documentation does not give is left out.
+
 ### Candidates from the reference list
 
 `swarmchase identity reference` fetches the community-maintained [ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt) list (MIT) of AI crawler and agent user-agent tokens into `<data>/identity/reference/robots.json` and prints the tokens it lists that the catalog has no `[[agent]]` for, matched case-insensitively, with the operator and function the list gives (defanged). `--offline` reads the held copy. The command proposes and never edits the catalog: the list is a pointer to where to look, and an entry is added only with the provider's own page as its `source`.
