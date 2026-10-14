@@ -84,12 +84,75 @@ pub(crate) fn save(root: &Path, c: &Case) -> Result<()> {
     crate::store::write_atomic(&dir.join("case.toml"), c.to_toml()?.as_bytes())
 }
 
+/// Load case `id`, change it with `f` and save it, holding the case's lock
+/// ([`lock_case`]) from the load to the save, so two commands changing one
+/// case at once never lose either change.
 pub fn update(root: &Path, id: &str, f: impl FnOnce(&mut Case) -> Result<()>) -> Result<()> {
+    let _lock = lock_case(root, id)?;
     let mut c = load(root, id)?;
     f(&mut c)?;
     save(root, &c)?;
     println!("updated {}", root.join(id).join("case.toml").display());
     Ok(())
+}
+
+/// A held case lock; released when dropped.
+pub(crate) struct CaseLock {
+    file: Option<std::fs::File>,
+    path: PathBuf,
+}
+
+thread_local! {
+    /// The case locks this thread holds, so a change made inside another
+    /// (a log entry inside an update) does not wait on itself.
+    static HELD: std::cell::RefCell<BTreeSet<PathBuf>> = const {
+        std::cell::RefCell::new(BTreeSet::new())
+    };
+}
+
+impl Drop for CaseLock {
+    fn drop(&mut self) {
+        if let Some(f) = self.file.take() {
+            let _ = f.unlock();
+            HELD.with(|h| h.borrow_mut().remove(&self.path));
+        }
+    }
+}
+
+/// Take case `id`'s lock, `<cases>/.locks/<id>.lock`, waiting while another
+/// command holds it (`case contacts` holds it through its lookups). Every
+/// read-change-write of a case.toml goes through it. Outside the case
+/// directory, so moving a case (`case rename`) never meets an open file.
+pub(crate) fn lock_case(root: &Path, id: &str) -> Result<CaseLock> {
+    check_id(id)?;
+    let dir = root.join(".locks");
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let path = dir.join(format!("{id}.lock"));
+    if HELD.with(|h| h.borrow().contains(&path)) {
+        return Ok(CaseLock { file: None, path });
+    }
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .with_context(|| format!("opening {}", path.display()))?;
+    match f.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => {
+            eprintln!("case {id} is in use by another swarmchase command; waiting for it");
+            f.lock()
+                .with_context(|| format!("locking {}", path.display()))?;
+        }
+        Err(std::fs::TryLockError::Error(e)) => {
+            return Err(e).with_context(|| format!("locking {}", path.display()));
+        }
+    }
+    HELD.with(|h| h.borrow_mut().insert(path.clone()));
+    Ok(CaseLock {
+        file: Some(f),
+        path,
+    })
 }
 
 /// Which operator evidence a report for `audience` may use
@@ -98,9 +161,43 @@ pub(crate) fn scope(audience: Audience, to: Option<&Contact>) -> Scope<'_> {
     Scope::for_audience(audience, to)
 }
 
-/// The case's records plus the operator evidence `scope` allows.
+/// The case's records plus the operator evidence `scope` allows. For one
+/// operator ([`Scope::hosts`]) only the records aimed at its own endpoints,
+/// judged by the case's pinned rules: its report, bundle and exports never
+/// carry another operator's records.
 pub fn case_records(root: &Path, c: &Case, scope: &Scope) -> Result<Vec<Observation>> {
+    records_in_scope(root, c, scope, None)
+}
+
+/// [`case_records`], with the rules that find each record's target (the
+/// case's pinned rules when not given).
+fn records_in_scope(
+    root: &Path,
+    c: &Case,
+    scope: &Scope,
+    rules: Option<&Rules>,
+) -> Result<Vec<Observation>> {
     let mut all = load_records(root, &c.id)?;
+    if let Some(hosts) = scope.hosts(c) {
+        if hosts.is_empty() {
+            bail!(
+                "a report to an operator covers its own endpoints, and this contact has none; give it one (`case contact add --endpoint`)"
+            );
+        }
+        let pinned;
+        let rules = match rules {
+            Some(r) => r,
+            None => {
+                pinned = case_rules(root, c)?;
+                &pinned
+            }
+        };
+        all.retain(|o| {
+            sc_core::extract::extract(o, rules)
+                .target_host
+                .is_some_and(|h| hosts.contains(&h.to_ascii_lowercase()))
+        });
+    }
     let dir = case_dir(root, &c.id)?;
     for e in c.evidence.iter().filter(|e| e.in_scope(scope)) {
         let p = crate::evidence::file(&dir, &e.id);
@@ -134,7 +231,7 @@ impl<'a> Pinned<'a> {
     /// The analysis of the records `scope` allows.
     pub fn analysis(&self, scope: &Scope) -> Result<Analysis> {
         Ok(analyze(
-            case_records(self.root, self.case, scope)?,
+            records_in_scope(self.root, self.case, scope, Some(&self.rules))?,
             &self.rules,
         ))
     }
@@ -202,6 +299,7 @@ pub(crate) fn all(root: &Path) -> Result<Vec<Case>> {
 
 /// Append a decision log entry without printing anything.
 pub(crate) fn log_entry(root: &Path, id: &str, today: &str, text: impl Into<String>) -> Result<()> {
+    let _lock = lock_case(root, id)?;
     let mut c = load(root, id)?;
     c.log(today, text);
     save(root, &c)
@@ -238,6 +336,7 @@ pub(crate) fn new_case(
     today: &str,
 ) -> Result<Analysis> {
     let dir = case_dir(root, id)?;
+    let _lock = lock_case(root, id)?;
     if dir.join("case.toml").exists() {
         bail!("case {id} already exists; use `case add` to add records");
     }
@@ -246,7 +345,7 @@ pub(crate) fn new_case(
     }
     std::fs::create_dir_all(dir.join("raw"))?;
     let pin = pin_rules(root, rules)?;
-    std::fs::write(records_path(root, id)?, to_ndjson(&records))?;
+    crate::store::write_atomic(&records_path(root, id)?, to_ndjson(&records).as_bytes())?;
     let a = analyze(records, &rules.rules);
     let mut c = Case::new(id, title, today, Some(pin.clone()));
     c.add_endpoints(&a);
@@ -261,6 +360,65 @@ pub(crate) fn new_case(
     Ok(a)
 }
 
+/// Open a case as [`new_case`] does and record its admin: `admin` (the
+/// person running the command, [`admin_name`]), or a warning that none is
+/// recorded. `case new` and review's `c` both open cases here.
+pub(crate) fn open_case(
+    root: &Path,
+    id: &str,
+    title: &str,
+    records: Vec<Observation>,
+    rules: &RulesText,
+    today: &str,
+    admin: Option<&str>,
+) -> Result<Analysis> {
+    let a = new_case(root, id, title, records, rules, today)?;
+    match admin {
+        Some(name) => {
+            let _lock = lock_case(root, id)?;
+            let mut c = load(root, id)?;
+            sc_case::review::set_admin(&mut c, name, today)?;
+            save(root, &c)?;
+        }
+        None => eprintln!(
+            "warning: no admin recorded (set SWARMCHASE_ADMIN or `git config user.name`); `swarmchase case set {id} --admin \"<name>\"` before the second review"
+        ),
+    }
+    Ok(a)
+}
+
+/// The admin's name for a new case: `SWARMCHASE_ADMIN`, else `git config
+/// user.name`.
+pub(crate) fn admin_name() -> Option<String> {
+    let given = |s: String| Some(s.trim().to_string()).filter(|s| !s.is_empty());
+    std::env::var("SWARMCHASE_ADMIN")
+        .ok()
+        .and_then(given)
+        .or_else(|| {
+            let o = std::process::Command::new("git")
+                .args(["config", "user.name"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())?;
+            given(String::from_utf8_lossy(&o.stdout).into_owned())
+        })
+}
+
+/// The open case (not closed) that already holds the most of `ids`, if any
+/// holds one: where opening a case on those records again should add to
+/// instead. Cases that do not load are passed over.
+pub(crate) fn holding(root: &Path, ids: &BTreeSet<String>) -> Result<Option<String>> {
+    let (cases, _) = all_readable(root)?;
+    let mut best: Option<(usize, String)> = None;
+    for c in cases.iter().filter(|c| c.status != CaseStatus::Closed) {
+        let n = record_ids(root, &c.id)?.intersection(ids).count();
+        if n > 0 && best.as_ref().is_none_or(|(b, _)| n > *b) {
+            best = Some((n, c.id.clone()));
+        }
+    }
+    Ok(best.map(|(_, id)| id))
+}
+
 /// Add the records the case does not hold yet, and any new endpoints they
 /// bring, judged by the case's pinned rules.
 pub(crate) fn add_records(
@@ -269,6 +427,7 @@ pub(crate) fn add_records(
     records: Vec<Observation>,
     today: &str,
 ) -> Result<(usize, usize)> {
+    let _lock = lock_case(root, id)?;
     let mut c = load(root, id)?;
     let mut all = load_records(root, id)?;
     let have: BTreeSet<String> = all.iter().map(|o| o.id.clone()).collect();
@@ -456,6 +615,309 @@ mod tests {
         cleanup(&root);
     }
 
+    fn contact(role: ContactRole, org: &str, endpoint: Option<&str>, address: &str) -> Contact {
+        Contact {
+            org: org.into(),
+            role,
+            endpoint: endpoint.map(str::to_string),
+            channel: "email".into(),
+            address: address.into(),
+            source: "https://example.org/.well-known/security.txt".into(),
+            confidence: "medium".into(),
+            found_on: "2026-10-14".into(),
+            purpose: None,
+        }
+    }
+
+    /// Every file in the bundle directories of case `id`, as text.
+    fn bundles_text(root: &Path, id: &str) -> String {
+        let mut text = String::new();
+        for d in std::fs::read_dir(root.join(id).join("bundles")).unwrap() {
+            for f in std::fs::read_dir(d.unwrap().path()).unwrap() {
+                text += &String::from_utf8_lossy(&std::fs::read(f.unwrap().path()).unwrap());
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn an_operator_report_keeps_to_its_own_endpoints() {
+        let root = scratch("scoped");
+        let rules = RulesText::load(None).unwrap();
+        // One probe run on two operators' hosts.
+        let mut records: Vec<Observation> =
+            fixture().results.iter().map(|r| r.obs.clone()).collect();
+        records.extend((0..3).map(|i| Observation {
+            id: format!("e{i}"),
+            ts: 1_791_000_020 + i * 40,
+            url: format!(
+                "https://r.jina.ai/https://elsewhere.example/q?id={i}%20UNION%20SELECT%201&uqtag=zz9&agent=hunyuan"
+            ),
+            asn: Some(132203),
+            ..Default::default()
+        }));
+        // A third operator's one request, linked to the run by its tag only.
+        records.push(Observation {
+            id: "w1".into(),
+            ts: 1_791_000_200,
+            url: "https://lone.example/login?user=admin'--&uqtag=zz9".into(),
+            ..Default::default()
+        });
+        new_case(&root, "s-1", "Two operators", records, &rules, "2026-10-12").unwrap();
+        update(&root, "s-1", |c| {
+            for e in &mut c.endpoints {
+                e.state = EndpointState::Targeted;
+            }
+            c.contacts = vec![
+                contact(
+                    ContactRole::Affected,
+                    "example.gov",
+                    Some("portal.example.gov"),
+                    "security@portal.example.gov",
+                ),
+                contact(
+                    ContactRole::Affected,
+                    "elsewhere.example",
+                    Some("elsewhere.example"),
+                    "security@elsewhere.example",
+                ),
+                contact(
+                    ContactRole::Affected,
+                    "Nowhere",
+                    None,
+                    "ops@nowhere.example",
+                ),
+                contact(
+                    ContactRole::Affected,
+                    "lone.example",
+                    Some("lone.example"),
+                    "security@lone.example",
+                ),
+                contact(
+                    ContactRole::Provider,
+                    "Tencent",
+                    None,
+                    "security@tencent.example",
+                ),
+            ];
+            Ok(())
+        })
+        .unwrap();
+        let c = load(&root, "s-1").unwrap();
+        let all = analysis(&root, &c, &Scope::All).unwrap();
+        assert!(
+            all.results
+                .iter()
+                .any(|r| r.target_host.as_deref() == Some("elsewhere.example")),
+            "the fixture has a second operator"
+        );
+
+        // The provider and case notes see the whole case.
+        let provider = report(&root, "s-1", Audience::Provider, None, None, "d").unwrap();
+        assert!(provider.contains("elsewhere[.]example"), "{provider}");
+        let notes = report(&root, "s-1", Audience::Internal, None, None, "d").unwrap();
+        assert!(notes.contains("elsewhere[.]example"), "{notes}");
+
+        // An operator sees its own endpoint, never the other one: not in
+        // the report (the .eml's body) or the bundle beside it.
+        let to = &c.contacts[0];
+        let own = report(&root, "s-1", Audience::Affected, None, Some(to), "d").unwrap();
+        assert!(own.contains("portal[.]example[.]gov"), "{own}");
+        assert!(!own.contains("elsewhere") && !own.contains("lone"), "{own}");
+        // What the rest of the case says, counted and never named.
+        assert!(own.contains("## Wider activity"), "{own}");
+        assert!(own.contains("which also reached 2 other host(s)"), "{own}");
+        // An operator whose one request links to the run only through
+        // records elsewhere still gets it, and nothing of the others.
+        let lone = report(
+            &root,
+            "s-1",
+            Audience::Affected,
+            None,
+            Some(&c.contacts[3]),
+            "d",
+        )
+        .unwrap();
+        assert!(lone.contains("lone[.]example/login"), "{lone}");
+        assert!(lone.contains("only through records elsewhere"), "{lone}");
+        assert!(
+            !lone.contains("portal[.]") && !lone.contains("elsewhere[.]"),
+            "{lone}"
+        );
+        let p = draft(
+            &root,
+            "s-1",
+            Audience::Affected,
+            "security@portal.example.gov",
+            None,
+            "2026-10-14",
+            false,
+        )
+        .unwrap();
+        assert!(p.is_file());
+        let bundled = bundles_text(&root, "s-1");
+        assert!(bundled.contains("portal.example.gov"));
+        assert!(!bundled.contains("elsewhere"), "{bundled}");
+        assert!(!bundled.contains("\"e1\""), "{bundled}");
+        let records = case_records(
+            &root,
+            &c,
+            &Scope::for_audience(Audience::Affected, Some(to)),
+        )
+        .unwrap();
+        assert!(records.iter().all(|o| o.url.contains("portal.example.gov")));
+
+        // Without a contact, or for a contact with no endpoint, there is no
+        // operator to scope to: refused, never the whole case.
+        assert!(report(&root, "s-1", Audience::Affected, None, None, "d").is_err());
+        let e = draft(
+            &root,
+            "s-1",
+            Audience::Affected,
+            "ops@nowhere.example",
+            None,
+            "2026-10-14",
+            false,
+        )
+        .unwrap_err();
+        assert!(e.to_string().contains("own endpoints"), "{e}");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn drafts_never_overwrite_each_other() {
+        let root = scratch("stems");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        new_case(&root, "d-1", "Drafts", records, &rules, "2026-10-12").unwrap();
+        update(&root, "d-1", |c| {
+            c.contacts = vec![
+                contact(ContactRole::Provider, "P", None, "a.b@x.org"),
+                contact(ContactRole::Provider, "P", None, "a-b@x.org"),
+            ];
+            Ok(())
+        })
+        .unwrap();
+        let d = |to: &str, force| {
+            draft(
+                &root,
+                "d-1",
+                Audience::Provider,
+                to,
+                None,
+                "2026-10-14",
+                force,
+            )
+        };
+        let one = d("a.b@x.org", false).unwrap();
+        let two = d("a-b@x.org", false).unwrap();
+        assert_ne!(one, two, "addresses that slug alike");
+        assert!(
+            one.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("2026-10-14-provider-a-b-x-org-")
+        );
+        // A hand-edited draft is kept unless forced.
+        std::fs::write(&one, "edited").unwrap();
+        assert!(
+            d("a.b@x.org", false)
+                .unwrap_err()
+                .to_string()
+                .contains("--force")
+        );
+        assert_eq!(std::fs::read_to_string(&one).unwrap(), "edited");
+        d("a.b@x.org", true).unwrap();
+        assert_ne!(std::fs::read_to_string(&one).unwrap(), "edited");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn concurrent_changes_to_one_case_are_both_kept() {
+        let root = scratch("lock");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        new_case(&root, "l-1", "Lock", records, &rules, "2026-10-12").unwrap();
+        // One command holds the case through a slow step (as `case contacts`
+        // does through its lookups) while another adds a note.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let slow = {
+            let root = root.clone();
+            std::thread::spawn(move || {
+                update(&root, "l-1", |c| {
+                    tx.send(()).unwrap();
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    c.log("d", "slow change");
+                    Ok(())
+                })
+                .unwrap();
+            })
+        };
+        rx.recv().unwrap();
+        update(&root, "l-1", |c| {
+            c.log("d", "quick note");
+            Ok(())
+        })
+        .unwrap();
+        slow.join().unwrap();
+        let c = load(&root, "l-1").unwrap();
+        let texts: Vec<&str> = c.decisions.iter().map(|d| d.text.as_str()).collect();
+        assert!(
+            texts.contains(&"slow change") && texts.contains(&"quick note"),
+            "{texts:?}"
+        );
+        // A change inside a change does not wait on itself.
+        update(&root, "l-1", |c| {
+            log_entry(&root, "l-1", "d", "nested")?;
+            c.log("d", "outer");
+            Ok(())
+        })
+        .unwrap();
+        cleanup(&root);
+    }
+
+    #[test]
+    fn opening_a_case_records_its_admin() {
+        let root = scratch("admin");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        open_case(
+            &root,
+            "a-1",
+            "A",
+            records.clone(),
+            &rules,
+            "2026-10-12",
+            Some("Ada"),
+        )
+        .unwrap();
+        assert_eq!(load(&root, "a-1").unwrap().admin.as_deref(), Some("Ada"));
+        open_case(
+            &root,
+            "a-2",
+            "A",
+            records.clone(),
+            &rules,
+            "2026-10-12",
+            None,
+        )
+        .unwrap();
+        assert_eq!(load(&root, "a-2").unwrap().admin, None);
+        // The case holding the most of the records is found; a closed one
+        // is not.
+        let ids: BTreeSet<String> = records.iter().map(|o| o.id.clone()).collect();
+        assert_eq!(holding(&root, &ids).unwrap().as_deref(), Some("a-1"));
+        for id in ["a-1", "a-2"] {
+            update(&root, id, |c| {
+                c.status = CaseStatus::Closed;
+                Ok(())
+            })
+            .unwrap();
+        }
+        assert_eq!(holding(&root, &ids).unwrap(), None);
+        cleanup(&root);
+    }
+
     #[test]
     fn case_lifecycle() {
         let root = scratch("life");
@@ -509,7 +971,18 @@ mod tests {
         assert!(md.contains("**Tencent** (developer)"), "{md}");
 
         // Drafts go only to listed contacts, and never as case notes.
-        assert!(draft(&root, "t-1", Audience::Affected, "x@y.example", None, "d").is_err());
+        assert!(
+            draft(
+                &root,
+                "t-1",
+                Audience::Affected,
+                "x@y.example",
+                None,
+                "d",
+                false
+            )
+            .is_err()
+        );
         update(&root, "t-1", |c| {
             c.contacts.push(Contact {
                 org: "portal.example.gov".into(),
@@ -532,7 +1005,8 @@ mod tests {
                 Audience::Internal,
                 "security@portal.example.gov",
                 None,
-                "d"
+                "d",
+                false
             )
             .is_err()
         );
@@ -543,6 +1017,7 @@ mod tests {
             "SECURITY@portal.example.gov",
             None,
             "2026-10-14",
+            false,
         )
         .unwrap();
         let eml = std::fs::read_to_string(&p).unwrap();
@@ -564,7 +1039,8 @@ mod tests {
                 Audience::Public,
                 "security@portal.example.gov",
                 None,
-                "d"
+                "d",
+                false
             )
             .is_err(),
             "notices are published, not sent"

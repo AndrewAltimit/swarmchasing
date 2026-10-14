@@ -104,7 +104,9 @@ swarmchase case draft 2026-10-portal --all            # every provider and affec
 swarmchase case draft 2026-10-portal --audience affected --to security@example.gov
 ```
 
-`case contacts` adds the provider's channels from the [provider directory](../reference/cases.md#the-provider-directory) when a claim names it, then reads security.txt, then RDAP abuse addresses. Add anything else by hand with `case contact add` (a CSIRT, a declared owner). `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form; `--all` drafts for every provider and affected contact not yet sent to, and lists the contacts it leaves for you (registrars, hosts, CSIRTs). Each report states when the indicator notice is scheduled, that it will not name the recipient, and when the recipient may be named. Read every draft before sending it.
+`case contacts` adds the provider's channels from the [provider directory](../reference/cases.md#the-provider-directory) when a claim names it, then reads security.txt, then RDAP abuse addresses. Add anything else by hand with `case contact add` (a CSIRT, a declared owner). `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form; `--all` drafts for every provider and affected contact not yet sent to, and lists the contacts it leaves for you (registrars, hosts, CSIRTs).
+
+An affected report and its bundle cover only that operator's own endpoints ([what an operator is sent](../reference/cases.md#what-an-operator-is-sent)). Each report states when the indicator notice is scheduled, that it will not name the recipient, and when the recipient may be named. Read every draft before sending it.
 
 Details: [contacts](../reference/cases.md#contacts), [drafts](../reference/cases.md#drafts).
 

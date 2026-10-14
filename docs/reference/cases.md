@@ -14,10 +14,12 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 
 A record named with `--record` that is older than the window is taken from the whole store, outside the window's analysis, so the digest's `case add` lines work for late-indexed captures.
 
+`case new` and `case add` hold the data directory's lock, like a watch, so they refuse to run while one does. Every command that changes `case.toml` holds that case's lock (`<data>/cases/.locks/<id>.lock`) from reading it to writing it, and waits while another command holds it; `case contacts` holds it through its lookups, so a `case note` made meanwhile waits and is kept. Files are written whole through a temporary file and a rename.
+
 ## What `case.toml` holds
 
 - the case status (`open`, `reported`, `published`, `closed`), the notice status (`active`, `contained`, `historical`), and the date a notice was added while its publication is pending;
-- the admin's name (`admin`), set by `case new` from `SWARMCHASE_ADMIN`, else `git config user.name`, and changed with `case set --admin`;
+- the admin's name (`admin`), set by `case new` and review's `c` from `SWARMCHASE_ADMIN`, else `git config user.name`, and changed with `case set --admin`;
 - each endpoint and the admin's decision on it: `compromised` (with its basis), `targeted`, `historical`, `not-affected`, or still `unreviewed`, any sector description for the notice, and any reason for naming an endpoint seen only in submit-anywhere records;
 - attribution claims established by case work, each with its layer, evidence and tag;
 - contacts;
@@ -37,7 +39,7 @@ Each change is logged with its date.
 | Command | What it does |
 |---|---|
 | `case status [<id>]` | Lists cases (a case.toml that does not load is skipped with a warning), or shows one case and what it still needs. |
-| `case endpoint <id> <host>... <state> [--note …] [--basis …] [--single-source-reason …] [--sector "…"]` | Classifies one or more endpoints; `compromised` needs `--basis`. A host not in the case changes nothing. |
+| `case endpoint <id> <host>... <state> [--note …] [--basis …] [--single-source-reason …] [--sector "…"]` | Classifies one or more endpoints, given plain or defanged; `compromised` needs `--basis`. A host not in the case changes nothing. |
 | `case rename <id> <new-id>` | Gives a case a new ID, carrying over its watch hits, under the data directory's lock. Refused once its notice is published, or while a watch runs. |
 | `case claim <id> --party … [--layer …] --evidence … [--tag …] --detail …` | Records an attribution claim ([attribution claims](#attribution-claims)). |
 | `case set <id> --status … --notice … --min-named … --naming-days N --admin "…"` | Changes the status, the developer naming threshold, the naming lead (3 to 20 working days) or the admin's name. |
@@ -49,12 +51,12 @@ Each change is logged with its date.
 | `case add <id> …` | Adds new records. |
 | `case contacts <id> [--providers-only] [--country CC]` | Adds provider contacts from the directory, proposes national CSIRTs, then finds a contact for each compromised, targeted or historical endpoint, never reading a relay, carrier or callback host ([contacts](#contacts)). |
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
-| `case report <id> --audience …` | Drafts a report into `reports/`, applying the case's claims and naming threshold. |
-| `case draft <id> --audience provider\|affected --to <contact>` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
+| `case report <id> --audience … [--to <contact>]` | Drafts a report into `reports/`, applying the case's claims and naming threshold; an affected report needs `--to` ([operator scope](#what-an-operator-is-sent)). |
+| `case draft <id> --audience provider\|affected --to <contact> [--force]` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
 | `case draft <id> --all` | Writes a draft for every provider and affected contact not yet sent to ([drafts](#drafts)). |
 | `case bundle <id>` | Writes an evidence bundle without drafting a report, signed when there is a signing key ([signing](#signed-bundles)). |
 | `case verify <bundle> [--key <file>]` | Checks the signature, the manifest, re-runs the analysis and fails if the signature is invalid or any tier or cluster differs. |
-| `case sent <id> --to … --channel … [--at <time>]` | Records a send the admin made, with its time, and moves an open case to reported ([lead times](#lead-times)). |
+| `case sent <id> --to … --channel … [--at <time>] [--again]` | Records a send the admin made, with its time, and moves an open case to reported ([lead times](#lead-times)). |
 | `case sent <id> --draft <file> [--at <time>]` | The same, with the recipient and channel read from the draft that was sent ([drafts](#drafts)). |
 | `case no-contact <id> <host\|org\|provider> --searched …` | Records that no contact was found for a party ([lead times](#lead-times)). |
 | `case consent <id> --party <p> --note "…"` | Records an operator's written consent to be named before its naming lead runs ([lead times](#lead-times)). |
@@ -134,7 +136,7 @@ While a fleet has an entry, reports call it a swarm and list each entry as an In
 
 `case contacts` first adds the provider directory's channels for every provider a developer or host claim names (by name or alias). It then proposes national CSIRTs ([below](#national-csirts)). Last, it looks up a contact for each endpoint classified compromised, targeted or historical: the first security.txt on the host or its parent domains, else the registrar's abuse address from RDAP. Each domain is read once a run, whether the read succeeds or not, so endpoints under one registered domain (by the Public Suffix List) share its security.txt and RDAP reads. `--providers-only` skips the CSIRTs and the lookups. Each contact has a source link, a confidence and a date.
 
-Unreviewed endpoints are counted and left until classified with `case endpoint`. A host that a relay, carrier or callback rule matches is never read, nor is a parent domain that such a rule matches: an inbox's security.txt would be on the agent's own callback channel. The rules are the case's pinned rules and the current ones, against the host alone and against every host in the case's records (an inbox id on a request catcher matches only in a record).
+Unreviewed endpoints are listed, defanged, with a `case endpoint` line ready to run, and left until classified. A host that a relay, carrier or callback rule matches is never read, nor is a parent domain that such a rule matches: an inbox's security.txt would be on the agent's own callback channel. The rules are the case's pinned rules and the current ones, against the host alone and against every host in the case's records (an inbox id on a request catcher matches only in a record).
 
 Each contact has a role: `provider`, `affected` (an operator), `registrar`, `host`, `csirt` or `declared_owner`. A role this toolkit version does not know reads as `other`.
 
@@ -154,13 +156,21 @@ Each contact has a role: `provider`, `affected` (an operator), `registrar`, `hos
 
 ## Drafts
 
-`case draft` writes the report for one listed contact into `outbox/`. For an email contact it is an unsent `.eml` with a fresh evidence bundle attached; otherwise it is paste-ready text for a web form or CERT portal. Nothing is ever sent by the tool. After the admin sends a draft, `case sent --draft <file>` records it, reading the recipient from the draft's `To:` header (or the form draft's first line) and recording the file as the report sent.
+`case draft` writes the report for one listed contact into `outbox/`. For an email contact it is an unsent `.eml` with a fresh evidence bundle attached; otherwise it is paste-ready text for a web form or CERT portal, naming the fresh bundle made for that recipient. Nothing is ever sent by the tool. After the admin sends a draft, `case sent --draft <file>` records it, reading the recipient from the draft's `To:` header (or the form draft's first line) and recording the file as the report sent.
+
+A draft is named `<date>-<audience>-<address slug>-<hash>`, the hash taken from the address, so two addresses that slug alike never share a file. A draft already in the outbox may hold the admin's edits: drafting for the same contact on the same day is refused unless `--force`. `case sent` refuses to record a send again (same recipient and draft, or without a draft the same day) unless `--again`, for a report that really went out twice. `case draft` and `case contacts` list unreviewed endpoints with a `case endpoint` line ready to run.
 
 `case draft --all` drafts for every contact whose role implies the audience: provider contacts get the provider report, affected contacts the affected report scoped to their endpoint. Contacts already sent to are skipped, and so are registrar, host, CSIRT and other contacts, since what they may see is the admin's call; draft those one at a time with `--audience` and `--to`. Each skipped contact is listed. `--reporter` names who the report is from in its *Reporter* line.
 
 An unknown case ID, endpoint or contact address is refused with the closest match the case holds, when one is close enough to be a typo.
 
 Provider and affected reports end with a *Publication* section: the time the indicator notice is scheduled for, that it will not name or locate the recipient, the time from which the recipient may be named, that both are fixed and not an embargo, how to consent to earlier naming, and that a statement sent for the notice is appended verbatim. The times assume every party not yet sent its report is sent it now; send the drafts as soon as they are read.
+
+### What an operator is sent
+
+A report to an affected operator covers that operator's own endpoints and nothing else: the contact's endpoint and, for an affected contact, the endpoints of the case's other affected contacts at the same organisation. Only the records aimed at those hosts are analysed, rendered and bundled, by the case's pinned rules, with that operator's own logs; the same scope applies to `case export --audience affected --to`. No other operator's host, record or payload reaches it. A contact with no endpoint is refused until it has one.
+
+A *Wider activity* section says how many linked clusters in the case hold the operator's records, how large they are and how many other hosts they reached, counted and never named. It lists the operator's requests that link to the activity only through records elsewhere, so a single request on its host is not lost. Provider reports, case notes and `case bundle` keep the whole case.
 
 ## Lead times
 

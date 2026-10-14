@@ -90,6 +90,8 @@ pub fn run(args: CanaryArgs) -> Result<()> {
     match args.cmd {
         CanaryCmd::Register { site } => {
             let seed = seed()?;
+            // A watch reads the registry; never let it see one half updated.
+            let _lock = crate::store::lock_data(&args.data, "canary register")?;
             let mut reg = load(&args.data)?;
             let (new, seen) = register(&site, seed.as_bytes(), now, &mut reg)?;
             let p = args.data.join(REGISTRY);

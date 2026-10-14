@@ -457,7 +457,7 @@ The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<sta
 | `A` / `B` / `U` | Labels every queued record in the cluster, asking `[y/N]` first when that is more than 5. |
 | `s` / `q` | Skips the record, or quits. |
 | `z` | Takes back the last label or skip, and shows that record again; repeat to go further back. |
-| `c` | Opens a case from the shown record's cluster. |
+| `c` | Opens a case from the shown record's cluster, or adds to the open case that already holds some of its records. |
 | `c <case-id>` | Adds the cluster to an open case. |
 
 Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing. A label line that does not read (a write cut short, a hand edit) is skipped with a warning, and the next save moves it to `<file>.damaged` beside the review file.

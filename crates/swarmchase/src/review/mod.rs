@@ -983,7 +983,10 @@ pub struct CaseAction {
 
 /// Open a case from the cluster of record `idx` (the record alone when it is
 /// unclustered), or add those records to case `into`, and log in the case's
-/// decision log where they came from.
+/// decision log where they came from. Without `into`, an open case that
+/// already holds some of the records takes the rest, so `c` twice never
+/// opens two cases on one cluster. A new case is named after the cluster's
+/// stable key and records its admin.
 pub fn case_from_cluster(
     a: &Analysis,
     idx: usize,
@@ -994,16 +997,17 @@ pub fn case_from_cluster(
     let (members, what, slug) = match r.cluster {
         Some(c) => {
             let c = &a.clusters[c];
-            let slug: String =
-                c.id.chars()
-                    .map(|ch| {
-                        if ch.is_ascii_alphanumeric() {
-                            ch.to_ascii_lowercase()
-                        } else {
-                            '-'
-                        }
-                    })
-                    .collect();
+            let slug: String = c
+                .key
+                .chars()
+                .map(|ch| {
+                    if ch.is_ascii_alphanumeric() {
+                        ch.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .collect();
             (
                 c.members.clone(),
                 format!("cluster {} ({})", c.id, c.key),
@@ -1022,8 +1026,17 @@ pub fn case_from_cluster(
         .collect();
     let origin = format!("review of {}, {what}", sink.from);
     let today = sink.today.as_str();
+    // A watch reads the cases; never let it see one half written.
+    let _lock = crate::store::lock_data(sink.root.parent().unwrap_or(&sink.root), "review case")?;
+    let into = match into {
+        Some(id) => Some(id.to_string()),
+        None => {
+            let ids: BTreeSet<String> = records.iter().map(|o| o.id.clone()).collect();
+            crate::case::holding(&sink.root, &ids)?
+        }
+    };
 
-    if let Some(id) = into {
+    if let Some(id) = into.as_deref() {
         let c = crate::case::load(&sink.root, id)?;
         if c.status == crate::case::CaseStatus::Closed {
             bail!("case {id} is closed");
@@ -1061,7 +1074,15 @@ pub fn case_from_cluster(
         r.cluster.map_or(r.tier, |c| a.clusters[c].tier).label()
     );
     let added = records.len();
-    crate::case::new_case(&sink.root, &id, &title, records, &sink.rules, today)?;
+    crate::case::open_case(
+        &sink.root,
+        &id,
+        &title,
+        records,
+        &sink.rules,
+        today,
+        crate::case::admin_name().as_deref(),
+    )?;
     crate::case::log_entry(&sink.root, &id, today, format!("opened from {origin}"))?;
     Ok(CaseAction {
         id,
@@ -2272,8 +2293,21 @@ mod tests {
                 cluster.id, cluster.key
             )
         );
+        assert!(
+            opened.id.ends_with(&cluster.key.to_ascii_lowercase()),
+            "{}",
+            opened.id
+        );
+        // `c` again: the case that holds the cluster, not a second one.
         let again = case_from_cluster(&a, idx, None, &sink).unwrap();
-        assert_eq!(again.id, format!("{}-2", opened.id), "never overwrites");
+        assert_eq!(
+            (again.id.as_str(), again.opened, again.added),
+            (opened.id.as_str(), false, 0)
+        );
+        assert_eq!(
+            crate::case::ids(&sink.root),
+            std::slice::from_ref(&opened.id)
+        );
 
         // `c <id>`: the cluster again adds nothing; another record is added
         // and logged.
@@ -2312,7 +2346,11 @@ mod tests {
         )
         .unwrap();
         let out = String::from_utf8(out).unwrap();
-        assert!(out.contains("opened case review-2026-10-12-"), "{out}");
+        // The cluster's case is open already, so `c` adds to it.
+        assert!(
+            out.contains(&format!("added 0 record(s) to case {}", opened.id)),
+            "{out}"
+        );
         assert!(out.contains("case: no case at"), "{out}");
         assert_eq!(t.labelled.get("agent"), Some(&1));
         std::fs::remove_dir_all(sink.root.parent().unwrap()).unwrap();

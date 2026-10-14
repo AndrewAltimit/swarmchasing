@@ -3,7 +3,7 @@
 //! `bundle`, `verify`.
 
 use super::Ctx;
-use crate::case::report::{draft as draft_for, report as render};
+use crate::case::report::{draft as draft_for, find_contact, report as render, stem};
 use crate::case::{Pinned, Scope, case_dir, case_records, load, update};
 use crate::input::load_rules;
 use crate::pinning::bundle_rules;
@@ -26,7 +26,12 @@ pub struct ReportArgs {
     /// organisation). Without it the report has no such line.
     #[arg(long)]
     reporter: Option<String>,
-    /// Default: <case>/reports/<audience>-<date>.md
+    /// For an affected report: the operator's contact address, as listed in
+    /// case.toml. The report covers that operator's endpoints only.
+    #[arg(long)]
+    to: Option<String>,
+    /// Default: <case>/reports/<audience>-<date>.md, or for --to the name
+    /// its draft would have.
     #[arg(short, long)]
     out: Option<PathBuf>,
 }
@@ -51,6 +56,10 @@ pub struct DraftArgs {
     /// organisation). Without it the report has no such line.
     #[arg(long)]
     reporter: Option<String>,
+    /// Write over a draft already in the outbox for the same contact and
+    /// day (it may hold your edits).
+    #[arg(long)]
+    force: bool,
 }
 
 #[derive(Args)]
@@ -81,17 +90,25 @@ pub struct SentArgs {
     /// The day only; the clocks then count from the end of it.
     #[arg(long)]
     date: Option<String>,
+    /// Record a send although the same one (same recipient and draft, or
+    /// with no draft the same day) is recorded already: the report really
+    /// went out twice.
+    #[arg(long)]
+    again: bool,
 }
 
 pub(super) fn report(ctx: &Ctx, a: ReportArgs) -> Result<()> {
-    let md = render(&ctx.root, &a.id, a.audience, a.reporter, None, &ctx.today)?;
-    let path = a.out.unwrap_or_else(|| {
-        ctx.root.join(&a.id).join("reports").join(format!(
-            "{}-{}.md",
-            audience_id(a.audience),
-            ctx.today
-        ))
-    });
+    let c = load(&ctx.root, &a.id)?;
+    let to = a.to.as_deref().map(|to| find_contact(&c, to)).transpose()?;
+    let md = render(&ctx.root, &a.id, a.audience, a.reporter, to, &ctx.today)?;
+    // A report for one contact is named after it, as its draft is.
+    let name = match to {
+        Some(x) => format!("{}.md", stem(&ctx.today, a.audience, &x.address)),
+        None => format!("{}-{}.md", audience_id(a.audience), ctx.today),
+    };
+    let path = a
+        .out
+        .unwrap_or_else(|| ctx.root.join(&a.id).join("reports").join(name));
     crate::util::write_out(Some(&path), &md)
 }
 
@@ -116,11 +133,8 @@ pub(super) fn draft(ctx: &Ctx, a: DraftArgs) -> Result<()> {
             _ => bail!("--audience and --to, or --all"),
         }
     };
-    let unreviewed = c.unreviewed().len();
-    if unreviewed > 0 {
-        eprintln!(
-            "warning: {unreviewed} endpoint(s) are still unreviewed; classify them before sending"
-        );
+    if let Some(hint) = c.unreviewed_hint() {
+        eprintln!("warning: {hint}\n  classify them before sending");
     }
     for (audience, to) in &targets {
         let path = draft_for(
@@ -130,6 +144,7 @@ pub(super) fn draft(ctx: &Ctx, a: DraftArgs) -> Result<()> {
             to,
             a.reporter.clone(),
             &ctx.today,
+            a.force,
         )?;
         println!(
             "wrote {} (not sent; review it, send it yourself, then `swarmchase case sent {} --draft {}`)",
@@ -227,6 +242,25 @@ pub(super) fn sent(ctx: &Ctx, a: SentArgs) -> Result<()> {
         ),
     };
     update(&ctx.root, &a.id, |c| {
+        if !a.again
+            && let Some(s) = sc_case::actions::repeated_send(
+                c,
+                &to,
+                report.as_deref(),
+                a.at.as_deref(),
+                a.date.as_deref(),
+                ctx.now,
+            )
+        {
+            bail!(
+                "a send to {to} on {} is recorded already{}; pass --again if it was sent twice",
+                s.date,
+                s.report
+                    .as_deref()
+                    .map(|r| format!(" ({r})"))
+                    .unwrap_or_default()
+            );
+        }
         let s = sc_case::actions::sent(
             c,
             &to,

@@ -73,7 +73,7 @@ Once it is there, `watch` and the commands that read record files fill the netwo
 
 ## Backups
 
-Cases, reviewed labels and pinned rules cannot be collected again, so `swarmchase backup` keeps encrypted copies of them, with `state.json`, the cross-run history (`ledger.json`, `summary.json`, `autonomy.ndjson`) and the canary registry. The record store is left out: the sources refill it.
+Cases, reviewed labels, pinned rules and the submission inbox cannot be collected again, so `swarmchase backup` keeps encrypted copies of them, with `state.json`, the cross-run history (`ledger.json`, `summary.json`, `autonomy.ndjson`) and the canary registry. The record store is left out: the sources refill it.
 
 ```sh
 swarmchase backup keygen --out swarmchase-backup.key   # once, on the admin's own machine
@@ -87,7 +87,7 @@ swarmchase backup restore <file> --identity swarmchase-backup.key --to restored/
 - It encrypts to `SWARMCHASE_BACKUP_RECIPIENT`, a public key, so the machine making backups holds no secret; `SWARMCHASE_BACKUP_PASSPHRASE` is the alternative.
 - `keygen` writes the identity file and prints the public key. Keep the identity off the runner and away from the backup drive: anyone holding it reads every backup, and without it none can be restored.
 - `verify` checks the hash; with the identity it also decrypts and reads the archive through, writing nothing.
-- `restore` refuses a directory that is not empty unless `--force`, and holds the directory's lock while it writes. Restored without a record store, every source's cursor, seen list, resume key and stream checkpoint in `state.json` are reset, so the next watch fetches the analysis window again; health history is kept.
+- `restore` checks that the key opens the backup before it touches the directory, so a failed attempt leaves nothing to block the retry. It refuses a directory that is not empty (the lock's own files aside) unless `--force`, and holds the directory's lock while it writes. Restored without a record store, every source's cursor, seen list, resume key and stream checkpoint in `state.json` are reset, so the next watch fetches the analysis window again; health history is kept.
 
 ## Bundle signing
 

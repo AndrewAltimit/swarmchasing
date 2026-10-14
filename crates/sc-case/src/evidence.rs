@@ -5,9 +5,10 @@
 //! the public notice uses them only once the operator's agreement is
 //! recorded.
 
-use crate::model::Contact;
+use crate::model::{Case, Contact, ContactRole};
 use sc_core::Audience;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorEvidence {
@@ -62,6 +63,36 @@ impl<'a> Scope<'a> {
     }
 }
 
+impl Scope<'_> {
+    /// The target hosts a rendering for this scope may cover, lowercase:
+    /// for an operator, the contact's own endpoint and, when the contact is
+    /// that endpoint's affected operator, the endpoints of the case's other
+    /// affected contacts at the same organisation. `None` for case notes,
+    /// provider reports and the notice, which cover the whole case. A report
+    /// to one operator never names another one's hosts or carries its
+    /// records.
+    pub fn hosts(&self, c: &Case) -> Option<BTreeSet<String>> {
+        let Scope::Operator { org, host } = self else {
+            return None;
+        };
+        let mut out: BTreeSet<String> = host.iter().map(|h| h.to_ascii_lowercase()).collect();
+        let affected_at =
+            |x: &Contact| x.role == ContactRole::Affected && x.org.eq_ignore_ascii_case(org);
+        let operator =
+            host.is_some_and(|h| c.contacts.iter().any(|x| affected_at(x) && x.is_for(h)));
+        if operator && !org.trim().is_empty() {
+            out.extend(
+                c.contacts
+                    .iter()
+                    .filter(|x| affected_at(x))
+                    .filter_map(|x| x.endpoint.as_deref())
+                    .map(str::to_ascii_lowercase),
+            );
+        }
+        Some(out)
+    }
+}
+
 impl OperatorEvidence {
     pub fn in_scope(&self, scope: &Scope) -> bool {
         match scope {
@@ -99,5 +130,59 @@ mod tests {
             org: "other",
             host: Some("PORTAL.example.gov")
         }));
+    }
+
+    #[test]
+    fn an_operator_scope_covers_its_own_organisation_only() {
+        let contact = |org: &str, role, host: &str| Contact {
+            org: org.into(),
+            role,
+            endpoint: Some(host.into()),
+            channel: "email".into(),
+            address: format!("security@{host}"),
+            source: String::new(),
+            confidence: "medium".into(),
+            found_on: "d".into(),
+            purpose: None,
+        };
+        let mut c = Case::new("t-1", "t", "d", None);
+        c.contacts = vec![
+            contact(
+                "utility.example",
+                ContactRole::Affected,
+                "Billing.utility.example",
+            ),
+            contact(
+                "utility.example",
+                ContactRole::Affected,
+                "pay.utility.example",
+            ),
+            contact(
+                "transit.example",
+                ContactRole::Affected,
+                "p0.transit.example",
+            ),
+            // A registrar speaks for many operators; it widens nothing.
+            contact("utility.example", ContactRole::Registrar, "other.example"),
+        ];
+        let hosts = Scope::for_audience(Audience::Affected, Some(&c.contacts[0]))
+            .hosts(&c)
+            .unwrap();
+        assert_eq!(
+            hosts.into_iter().collect::<Vec<_>>(),
+            ["billing.utility.example", "pay.utility.example"]
+        );
+        let hosts = Scope::for_audience(Audience::Affected, Some(&c.contacts[3]))
+            .hosts(&c)
+            .unwrap();
+        assert_eq!(hosts.into_iter().collect::<Vec<_>>(), ["other.example"]);
+        assert!(
+            Scope::for_audience(Audience::Affected, None)
+                .hosts(&c)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(Scope::All.hosts(&c).is_none());
+        assert!(Scope::Public.hosts(&c).is_none());
     }
 }

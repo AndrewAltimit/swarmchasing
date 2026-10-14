@@ -120,7 +120,7 @@ Everyone else's traffic stays out of the case. What is kept is redacted at inges
 - private reports to the AI provider;
 - private reports to you.
 
-A report to another affected operator never carries your logs.
+A report to another affected operator never carries your logs, and a report to you never carries another operator's: it and its bundle hold only the records aimed at your own hosts, and other targets of the same activity are counted, never named.
 
 **The public notice uses your logs only with your agreement.** Until you agree, nothing from them appears in the notice. When you agree, the admin records how and when (`swarmchase case evidence consent`), and records used in the notice are marked as provided by the operator. You can withdraw your agreement. The admin records that with `case evidence withdraw`, and drafts made afterwards no longer use your logs. A notice already published changes only through a dated update, so ask us if you want one.
 
