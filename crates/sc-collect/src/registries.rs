@@ -76,7 +76,7 @@ const CRATES: &str = "https://crates.io/api/v1/crates";
 const DEFAULT_CRATES_PAGES: usize = 3;
 
 /// Where a pull starts (ms) and how much backlog it passed over (ms).
-fn start_at(mark: Option<i64>, newest: i64) -> (i64, i64) {
+pub(crate) fn start_at(mark: Option<i64>, newest: i64) -> (i64, i64) {
     let fresh = newest - FRESH_MS;
     match mark {
         Some(m) if m >= newest - MAX_BACKLOG_MS => (m.min(newest), 0),
@@ -87,7 +87,13 @@ fn start_at(mark: Option<i64>, newest: i64) -> (i64, i64) {
 
 /// Coverage in minutes: read from `start` to `reached`, against `start`
 /// to `newest`, with `skipped` ms passed over.
-fn minutes(start: i64, reached: i64, newest: i64, skipped: i64, read_any: bool) -> Coverage {
+pub(crate) fn minutes(
+    start: i64,
+    reached: i64,
+    newest: i64,
+    skipped: i64,
+    read_any: bool,
+) -> Coverage {
     let m = |ms: i64| (ms.max(0) / 60_000) as u64;
     Coverage {
         unit: "minutes",
@@ -99,14 +105,14 @@ fn minutes(start: i64, reached: i64, newest: i64, skipped: i64, read_any: bool) 
     }
 }
 
-fn ms_of(s: &str) -> Option<i64> {
+pub(crate) fn ms_of(s: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(s.trim())
         .ok()
         .map(|d| d.timestamp_millis())
 }
 
 /// Drop events from automation accounts (marked by an empty id) and count them.
-fn split_automation(mut events: Vec<PlatformEvent>) -> (Vec<PlatformEvent>, usize) {
+pub(crate) fn split_automation(mut events: Vec<PlatformEvent>) -> (Vec<PlatformEvent>, usize) {
     let n = events.len();
     events.retain(|e| !e.id.is_empty());
     let dropped = n - events.len();

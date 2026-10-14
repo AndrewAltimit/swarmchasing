@@ -15,7 +15,7 @@ The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read
 | Source | What is read | Used for |
 |---|---|---|
 | Wayback Machine CDX | Index rows: capture time, captured URL, status, digest | Scheduled watch, per-case pulls |
-| Arquivo.pt CDX | Index rows, as above | Per-case pulls only; its index lags too far for the watch window |
+| Arquivo.pt CDX | Index rows, as above | Scheduled watch for its on-demand saves (`SAWP` collections) only, since its crawls are indexed too late; per-case pulls |
 | Common Crawl CDX | Index rows of one crawl, never WARC content | Scheduled watch, per-case pulls |
 | Memento timemaps | One URL's captures across archives | Per-case pulls |
 | urlquery.net | Search results and reports by ID (needs an API key) | Scheduled watch; the held-out evaluation |
@@ -24,13 +24,15 @@ The collectors are in [`sc-collect`](../crates/sc-collect/src/lib.rs). They read
 | npm, PyPI | Package names, versions and publish times matching run tags | Scheduled watch, as leads for review |
 | Wikimedia EventStreams | External links added to wiki pages, matching relay hosts and run tags or added to configuration pages | Scheduled watch, as leads for review |
 | Hacker News search index | Links in stories and comments matching relay hosts and run tags | Scheduled watch, as leads for review |
-| GH Archive, npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Hugging Face Hub, Go module index, Wikimedia EventStreams, Hacker News, Bluesky Jetstream, GitHub Advisory Database, CVE List | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
+| Bluesky Jetstream | Links in posts matching relay hosts and run tags, in a sampled stretch each run | Scheduled watch, as leads for review |
+| GitHub search | Links in pull request text and commit messages matching relay hosts and run tags (needs a token) | Scheduled watch, as leads for review |
+| GH Archive, npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Hugging Face Hub, Go module index, GitLab.com, Codeberg, Wikimedia EventStreams, Hacker News, Bluesky Jetstream, GitHub Advisory Database, CVE List | Event and listing metadata, sketched for [coordinated accounts](#coordinated-accounts-on-public-platforms) | Scheduled watch's platform pass, as hints |
 | OSV data dumps | Malicious-package records (`MAL-` ids) for npm and PyPI | Scheduled watch's platform pass, as labels on candidates |
 | MediaWiki API | Pages added to English Wikipedia's suspected-AI-generated-text cleanup categories | Scheduled watch's platform pass, as labels on candidates |
 | CT logs, crt.sh | Certificate Transparency entries | Watch sample of one log (relay look-alikes); case work (`swarmchase certs`) |
 | security.txt, RDAP | The affected organisation's published security contact, or its registrar's abuse address | Finding who to report to |
 
-The scheduled watch pulls the sources in [`watchlist.toml`](../watchlist.toml). Each source there carries a rationale: which agent behaviour it catches, which rule it feeds, and what its noise looks like. The same file lists what is deliberately not watched, such as callback channels.
+The scheduled watch pulls the sources in [`watchlist.toml`](../watchlist.toml). Each source there carries a rationale: which agent behaviour it catches, which rule it feeds, and what its noise looks like. The same file lists what is deliberately not watched, such as callback channels, and the case-only sources: urlscan.io (its terms), Memento timemaps (one URL's history) and Arquivo.pt's crawls (indexed too late for the window) are pulled per case with `swarmchase collect`, and crt.sh per name with `swarmchase certs`.
 
 Passive limits, enforced by what the code does and does not implement:
 
@@ -325,6 +327,7 @@ Agent swarms also act through accounts: near-identical issues, comments and vuln
 
 - GH Archive events: issues, pull requests and discussions opened; issue, review and commit comments and reviews; releases published; wiki pages edited; repositories created, starred and forked;
 - package registries: npm search results, PyPI's newest-projects feed, the Go module index, NuGet's catalog, Packagist's change feed, and RubyGems' and crates.io's newest listings ([`registries.rs`](../crates/sc-collect/src/registries.rs));
+- code hosts beside GitHub: GitLab.com's and Codeberg's newest public projects, as repositories created ([`forges.rs`](../crates/sc-collect/src/forges.rs));
 - the Hugging Face Hub's newest Spaces, models or datasets;
 - edits on Wikimedia wikis from EventStreams ([`wikimedia.rs`](../crates/sc-collect/src/wikimedia.rs));
 - Hacker News stories and comments ([`hackernews.rs`](../crates/sc-collect/src/hackernews.rs));
@@ -333,8 +336,9 @@ Agent swarms also act through accounts: near-identical issues, comments and vuln
 
 Each event keeps its id, time, target and public link, plus:
 
-- the account as a keyed hash of its id or login, never the login itself (on a wiki, of the global account name, since local user ids differ from wiki to wiki; on Go, of the module path's owner; on Packagist, of the vendor; on RubyGems, of the gemspec's author string; on crates.io, of the declared repository's host and owner. NuGet's catalog and PyPI's feeds name no one, so their groups are floods);
-- on GitHub, the account id divided by 1000 (`actor_rank`): ids rise with account creation, so a rank near the newest seen marks a new account without identifying it; on a wiki, the account's registration time in units of 864 seconds, so a thousand ranks is ten days, and a first-edit flag from the account's edit count; on Hacker News, the account's creation time in the same units, looked up from its profile only for authors whose text a group could form around (a shared template or near-duplicate band with another author, or residue); on Bluesky, the same from the PLC directory's first operation for the account's DID. GitHub's event payloads no longer carry the author association, so no GitHub event has a first-timer flag;
+- the account as a keyed hash of its id or login, never the login itself (on a wiki, of the global account name, since local user ids differ from wiki to wiki; on Go, of the module path's owner; on Packagist, of the vendor; on RubyGems, of the gemspec's author string; on crates.io, of the declared repository's host and owner; on GitLab.com, of the project's top-level namespace; on Codeberg, of the owner's login. NuGet's catalog and PyPI's feeds name no one, so their groups are floods);
+- on GitHub, the account id divided by 1000 (`actor_rank`): ids rise with account creation, so a rank near the newest seen marks a new account without identifying it; on a wiki, the account's registration time in units of 864 seconds, so a thousand ranks is ten days, and a first-edit flag from the account's edit count; on Hacker News, the account's creation time in the same units, looked up from its profile only for authors whose text a group could form around (a shared template or near-duplicate band with another author, or residue); on Bluesky, the same from the PLC directory's first operation for the account's DID; on Codeberg, the same from the owner's account creation time, which the listing carries. GitLab's listing gives no account age. GitHub's
+ event payloads no longer carry the author association, so no GitHub event has a first-timer flag;
 - the text (title and body, a description or a summary) as a sketch: lower-cased words with URLs, addresses, mentions, paths, numbers, hex strings, mixed letter-and-digit tokens and the target's and actor's own names replaced by slots (`<url>`, `<user>`, `<num>` and so on); a 32-value MinHash signature over word 3-shingles; a hash of the first 48 slotted words (the template); the first 160 characters of slotted text; and the residue rules that fire on the raw text;
 - for a created item, its name as a template (`reach-check-<num>`), only when the name keeps a word of three letters or more and has a slot; for a wiki edit, the page title the same way, with the editor's own name as `<user>` (`user:<user>/sandbox`);
 - coding-harness self-identification on the raw text: the footers, trailers and session links harnesses add (`Generated with Claude Code`, a `Co-Authored-By` trailer, a Codex task, Devin session or Jules task link).

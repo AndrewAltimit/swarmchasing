@@ -44,6 +44,8 @@ Model triage is opt-in through the variables below: a model server the runner re
 | `SMTP_USER`, `SMTP_PASSWORD` | secret | `watch.yml`, `watch-stale.yml` | SMTP login. |
 | `MAIL_FROM`, `MAIL_TO` | secret | `watch.yml`, `watch-stale.yml` | Sender and the admin's address. |
 | `URLQUERY_APIKEY` | secret | `watch.yml` | Enables the urlquery sources. |
+| `GITHUB_TOKEN` | automatic | `watch.yml` | The job's own read-only token; enables the GitHub search source. |
+
 | `SWARMCHASE_DATA` | variable | `watch.yml`, `watch-stale.yml` | Data directory on the runner; default `~/swarmchase-data`. |
 | `SWARMCHASE_WATCH_TRIAGE` | variable | `watch.yml` | `local` (or `true`) or `claude` turns on [model triage](watch.md#model-triage) of new leads. Unset, no model is asked. |
 | `SWARMCHASE_LLM_URL`, `SWARMCHASE_LLM_MODEL` | variable | `watch.yml` | The model server local triage asks, on the runner or its private network, and the model name. |

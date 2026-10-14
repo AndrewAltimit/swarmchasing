@@ -14,7 +14,8 @@ A public record is a trace of a request that a third party publishes to anyone, 
 | Certificate Transparency logs | Certificates issued for a name | crt.sh lookups; CT logs read directly |
 | Package registries | Package metadata: names, versions, publish times, maintainers | npm search, PyPI feeds, the Go module index, NuGet's catalog, Packagist's change feed, RubyGems and crates.io listings |
 | Vulnerability databases | Published CVE records and advisories: descriptions, references, credits | GitHub Advisory Database, the CVE List |
-| Public code-host event streams | Public events: repository creation, issues, comments, stars, forks | GH Archive |
+| Public code-host records | Public events (repository creation, issues, comments, stars, forks), pull request and commit text, new projects | GH Archive, GitHub search, GitLab.com and Codeberg project listings |
+
 | Public wiki edit streams | Edits and the external links they add | Wikimedia EventStreams |
 | Public forums and social streams | Posts and replies, their links and their authors' account age | Hacker News search index, Bluesky Jetstream |
 | Agent protocol footprints | Archive index rows for the well-known files agents and agent platforms serve | Wayback CDX for agent cards, agent registration files and signature key directories |

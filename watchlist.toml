@@ -23,9 +23,35 @@ draft_case = "shadow"       # off | shadow
 interrupts_per_day = 3
 #
 # Kinds: wayback | arquivo | urlquery | commoncrawl | urlscan | memento |
-# gharchive | npm | pypi | ctlog | wellknown | mcp | wikimedia | hackernews
-# (docs/reference/watch.md#source-kinds).
+# gharchive | npm | pypi | ctlog | wellknown | mcp | wikimedia | hackernews |
+# bluesky | ghsearch (docs/reference/watch.md#source-kinds).
 # Every source's terms of use are summarised in its rationale, with the URL.
+#
+# The streamed relay sources (gharchive-relays, wikimedia-relay-links,
+# hackernews-relay-links, bluesky-relay-links) share one list of substrings,
+# taken from the relay, carrier, marker and callback rules in
+# rules/default.toml: relay and carrier hosts in the form a wrapped URL
+# takes, run tags, and callback hosts. Callback hosts are only matched as
+# text inside the records these sources find; no channel is read. A test
+# (`watch::check`) fails when a relay or carrier rule has no substring here,
+# unless it names why the rule is left out. The list:
+# //r.jina.ai/http  //markdown.new/  //pure.md/  //defuddle.md/
+# api.allorigins.win/  corsproxy.io/  cors-anywhere  thingproxy
+# codetabs.com/v1/proxy  api.microlink.io/  httpbin.org/base64
+# httpbin.org/anything  httpbin.org/redirect-to  //httpbun.com/
+# //httpbun.org/  livecodes.io/?  .e2b.app  .modal.run  .proxy.daytona.work
+# production-sfo.browserless.io  production-lon.browserless.io
+# production-ams.browserless.io  chrome.browserless.io  connect.browserbase.com
+# connect.steel.dev  connect.browser-use.com  connect.hyperbrowser.ai
+# milankarman.github.io/embed-web-playground  id_/http  web.archive.org/save/
+# arquivo.pt/savepagenow  uqtag=  uqscan  chatgpttest  agenttest  zz=oai
+# tok=expt  archive_test=  //webhook.site/  oastify.com  burpcollaborator.net
+# interact.sh  .oast.  //ntfy.sh/  dnslog.cn  requestrepo.com
+# Left out: href.li and *.translate.goog (WordPress and translation links,
+# far too common in posts and edits), the scraping APIs of relay.scrape_api
+# and codesandbox.io (their own users' issues and posts name them all day).
+# The carrier rules that read program content fire on what the unwrapper
+# finds inside a URL these substrings already keep.
 
 # ── Relays: agents wrap targets so the request comes from someone else's server ──
 # Archives capture these wrapped URLs when the relay's output is saved or linked,
@@ -97,6 +123,48 @@ endpoint = "latest"       # the newest crawl; `latest:2` or a crawl id also work
 from = "20260901"
 limit = 2000
 
+# Rationale: the crawler's view of the allorigins CORS proxy, as for
+# cc-jina-reader. Feeds relay.allorigins and what the unwrapper finds in
+# `?url=`. Noise: front-end demos linked from their own pages. Terms as above.
+[[source]]
+name = "cc-allorigins"
+kind = "commoncrawl"
+pattern = "api.allorigins.win/*"
+endpoint = "latest"
+from = "20260901"
+limit = 2000
+
+# Rationale: the crawler's view of the markdown.new converter, as for
+# cc-jina-reader. Feeds relay.markdown_new. Noise: people linking a page's
+# Markdown rendering. Terms as above.
+[[source]]
+name = "cc-markdown-new"
+kind = "commoncrawl"
+pattern = "markdown.new/*"
+endpoint = "latest"
+from = "20260901"
+limit = 2000
+
+# Rationale: URL-to-Markdown converter used the way agents use Jina Reader:
+# `pure.md/<target>` puts the target in the path, so payloads and run tags
+# survive in the capture. Feeds relay.pure_md. Noise: people reading pages
+# as Markdown. Terms as for the other Wayback sources.
+[[source]]
+name = "pure-md"
+kind = "wayback"
+pattern = "pure.md/*"
+from = "20260901"
+limit = 2000
+
+# Rationale: the same converter pattern on defuddle.md (`defuddle.md/<target>`).
+# Feeds relay.defuddle_md. Noise: as for pure-md.
+[[source]]
+name = "defuddle-md"
+kind = "wayback"
+pattern = "defuddle.md/*"
+from = "20260901"
+limit = 2000
+
 # Rationale: CodeTabs proxy endpoint, the other proxy relay.corsproxy names. Only
 # the `/v1/proxy` path is collected; the rest of the site is unrelated tools.
 [[source]]
@@ -149,6 +217,18 @@ slice_days = 7
 limit = 1000
 page_size = 500
 
+# Rationale: httpbin's clone on httpbun.com, the same echo carrier with the
+# same paths (`/base64/`, `/anything`, `/redirect-to`), swapped in when
+# httpbin.org is slow or blocked. Small enough to read whole. Feeds
+# carrier.httpbin and what the unwrapper finds inside. Noise: developer
+# tests, as for httpbin.
+[[source]]
+name = "httpbun"
+kind = "wayback"
+pattern = "httpbun.com/*"
+from = "20260901"
+limit = 2000
+
 # Rationale: in-browser code playground. Share links carry the whole program in
 # the URL, so a fetch program aimed at a target is visible in the capture itself,
 # and it runs from a third-party origin. Feeds carrier.livecodes and carrier.inline_fetch_program.
@@ -173,6 +253,57 @@ kind = "urlquery"
 pattern = "r.jina.ai"
 from = "20260901"
 limit = 1000
+page_size = 100
+
+# Rationale: the same submissions through the other relays and carriers the
+# rules know: an agent that submits `api.allorigins.win/raw?url=<target>` or
+# a LiveCodes share link to a scanner gets the wrapped request sent from the
+# scanner's origin, and the report keeps the submission time. Feed
+# relay.allorigins, relay.markdown_new, relay.corsproxy, carrier.httpbin and
+# carrier.livecodes, and the timing links only submit-time records give.
+# Noise: people scanning a proxy link someone sent them. The key's quota is
+# shared, so each reads at most three pages of 100 a run, and a pull that
+# fills `limit` moves its cursor no further than its oldest report (the
+# digest warns). Terms as for urlquery-jina.
+
+[[source]]
+name = "urlquery-allorigins"
+kind = "urlquery"
+pattern = "api.allorigins.win"
+from = "20260901"
+limit = 300
+page_size = 100
+
+[[source]]
+name = "urlquery-markdown-new"
+kind = "urlquery"
+pattern = "markdown.new"
+from = "20260901"
+limit = 300
+page_size = 100
+
+[[source]]
+name = "urlquery-httpbin"
+kind = "urlquery"
+pattern = "httpbin.org"
+from = "20260901"
+limit = 300
+page_size = 100
+
+[[source]]
+name = "urlquery-livecodes"
+kind = "urlquery"
+pattern = "livecodes.io"
+from = "20260901"
+limit = 300
+page_size = 100
+
+[[source]]
+name = "urlquery-corsproxy"
+kind = "urlquery"
+pattern = "corsproxy.io"
+from = "20260901"
+limit = 300
 page_size = 100
 
 # Rationale: Arquivo.pt's SavePageNow archives any URL anyone submits, and
@@ -205,11 +336,32 @@ filter = ["collection:SAWP.*"]
 from = "20260901"
 limit = 2000
 
+# Rationale: the same channel for the CORS proxy and the Markdown converter:
+# a save of an allorigins or markdown.new URL sends the wrapped request from
+# Arquivo.pt's origin. Feed relay.allorigins and relay.markdown_new. Noise:
+# people saving a proxied page. Terms as for arquivo-spn-jina.
+[[source]]
+name = "arquivo-spn-allorigins"
+kind = "arquivo"
+pattern = "api.allorigins.win/*"
+filter = ["collection:SAWP.*"]
+from = "20260901"
+limit = 2000
+
+[[source]]
+name = "arquivo-spn-markdown-new"
+kind = "arquivo"
+pattern = "markdown.new/*"
+filter = ["collection:SAWP.*"]
+from = "20260901"
+limit = 2000
+
 # ── Code hosts, registries and certificates ───────────────────────────────────
 
 # Rationale: agents that work through GitHub (issues, comments, new repos)
 # paste the relay URLs and run tags they use, and swarms create repos named
-# after their runs. Keeps public events whose repo name or payload URLs match;
+# after their runs. Keeps public events whose repo name or payload URLs match
+# the shared list above;
 # the record is the event's public link, so the URL rules do not fire on it:
 # these are leads for review, linked by time and name. Noise: developers
 # discussing Jina Reader or proxies. GitHub's event payloads carry no pull
@@ -226,7 +378,7 @@ limit = 2000
 [[source]]
 name = "gharchive-relays"
 kind = "gharchive"
-pattern = "r.jina.ai/http|api.allorigins.win/get|uqtag="
+pattern = "//r.jina.ai/http|//markdown.new/|//pure.md/|//defuddle.md/|api.allorigins.win/|corsproxy.io/|cors-anywhere|thingproxy|codetabs.com/v1/proxy|api.microlink.io/|httpbin.org/base64|httpbin.org/anything|httpbin.org/redirect-to|//httpbun.com/|//httpbun.org/|livecodes.io/?|.e2b.app|.modal.run|.proxy.daytona.work|production-sfo.browserless.io|production-lon.browserless.io|production-ams.browserless.io|chrome.browserless.io|connect.browserbase.com|connect.steel.dev|connect.browser-use.com|connect.hyperbrowser.ai|milankarman.github.io/embed-web-playground|id_/http|web.archive.org/save/|arquivo.pt/savepagenow|uqtag=|uqscan|chatgpttest|agenttest|zz=oai|tok=expt|archive_test=|//webhook.site/|oastify.com|burpcollaborator.net|interact.sh|.oast.|//ntfy.sh/|dnslog.cn|requestrepo.com"
 scan = 6                  # hours per run, read on from the last one read
 max_mb = 1024             # compressed bytes per run
 limit = 500
@@ -237,8 +389,9 @@ limit = 500
 # configuration at their own targets, using it as a fetch proxy. Wikimedia's
 # EventStreams publishes every link an edit adds, on every wiki, as it
 # happens; this keeps the added external links that match relay hosts and
-# run tags. The record is the link (never fetched), its reference the edit's
-# diff. Bot-flagged accounts and the stream's canary events are dropped.
+# run tags (the shared list above). The record is the link (never fetched),
+# its reference the edit's diff. Bot-flagged accounts and the stream's
+# canary events are dropped.
 # Noise: editors citing pages through archive or translation proxies. Reads
 # on from the last event read for up to `scan` minutes of wall time and
 # `max_mb` MB; the digest shows minutes of stream read against minutes there
@@ -249,7 +402,7 @@ limit = 500
 [[source]]
 name = "wikimedia-relay-links"
 kind = "wikimedia"
-pattern = "r.jina.ai/http|api.allorigins.win|corsproxy.io|uqtag=|uqscan"
+pattern = "//r.jina.ai/http|//markdown.new/|//pure.md/|//defuddle.md/|api.allorigins.win/|corsproxy.io/|cors-anywhere|thingproxy|codetabs.com/v1/proxy|api.microlink.io/|httpbin.org/base64|httpbin.org/anything|httpbin.org/redirect-to|//httpbun.com/|//httpbun.org/|livecodes.io/?|.e2b.app|.modal.run|.proxy.daytona.work|production-sfo.browserless.io|production-lon.browserless.io|production-ams.browserless.io|chrome.browserless.io|connect.browserbase.com|connect.steel.dev|connect.browser-use.com|connect.hyperbrowser.ai|milankarman.github.io/embed-web-playground|id_/http|web.archive.org/save/|arquivo.pt/savepagenow|uqtag=|uqscan|chatgpttest|agenttest|zz=oai|tok=expt|archive_test=|//webhook.site/|oastify.com|burpcollaborator.net|interact.sh|.oast.|//ntfy.sh/|dnslog.cn|requestrepo.com"
 scan = 10                 # wall-clock minutes per run
 max_mb = 512              # stream bytes per run
 limit = 2000
@@ -272,9 +425,9 @@ limit = 500
 # through and the run tags they carry, and agent-built projects are
 # announced as stories. Hacker News's search index lists every story and
 # comment with its submitted URL and text; this keeps the links (and items
-# whose title or text carries a run tag) that match relay hosts and tags.
+# whose title or text carries a run tag) that match the shared list above.
 # The record is the link (never fetched), its reference the item's page.
-# Feeds relay.jina, relay.allorigins, relay.corsproxy and the marker rules.
+# Feeds the relay, carrier, marker and callback rules.
 # Noise: people discussing Jina Reader or sharing a proxied link. Reads
 # back from the run's start to the last run's, up to `scan` index queries
 # of 1000 items; the digest shows minutes read against minutes there were.
@@ -285,9 +438,53 @@ limit = 500
 [[source]]
 name = "hackernews-relay-links"
 kind = "hackernews"
-pattern = "r.jina.ai/http|api.allorigins.win|corsproxy.io|uqtag=|uqscan"
+pattern = "//r.jina.ai/http|//markdown.new/|//pure.md/|//defuddle.md/|api.allorigins.win/|corsproxy.io/|cors-anywhere|thingproxy|codetabs.com/v1/proxy|api.microlink.io/|httpbin.org/base64|httpbin.org/anything|httpbin.org/redirect-to|//httpbun.com/|//httpbun.org/|livecodes.io/?|.e2b.app|.modal.run|.proxy.daytona.work|production-sfo.browserless.io|production-lon.browserless.io|production-ams.browserless.io|chrome.browserless.io|connect.browserbase.com|connect.steel.dev|connect.browser-use.com|connect.hyperbrowser.ai|milankarman.github.io/embed-web-playground|id_/http|web.archive.org/save/|arquivo.pt/savepagenow|uqtag=|uqscan|chatgpttest|agenttest|zz=oai|tok=expt|archive_test=|//webhook.site/|oastify.com|burpcollaborator.net|interact.sh|.oast.|//ntfy.sh/|dnslog.cn|requestrepo.com"
 scan = 10                 # index queries per run (1000 items each)
 limit = 500
+
+# Rationale: agents that post to social networks paste the relay URLs they
+# fetched through and the run tags they carry, as on Hacker News. Bluesky's
+# Jetstream relays every public post; this keeps the links in a post's link
+# facets and link card that match the shared list above, and posts whose
+# text carries a run tag. The record is the link (never fetched), its
+# reference the post's page on bsky.app. Coverage is a sample, not the
+# stream: a run reads at most the newest half hour of posts, in `scan`
+# wall-clock minutes, and the digest shows minutes read against minutes
+# since the last run; links posted in the rest are never seen. Posts
+# deleted during the read are dropped. Noise: people sharing proxied links
+# and webhook demos. Terms as for `bluesky-posts` below.
+[[source]]
+name = "bluesky-relay-links"
+kind = "bluesky"
+endpoint = "jetstream2.us-east.bsky.network"
+pattern = "//r.jina.ai/http|//markdown.new/|//pure.md/|//defuddle.md/|api.allorigins.win/|corsproxy.io/|cors-anywhere|thingproxy|codetabs.com/v1/proxy|api.microlink.io/|httpbin.org/base64|httpbin.org/anything|httpbin.org/redirect-to|//httpbun.com/|//httpbun.org/|livecodes.io/?|.e2b.app|.modal.run|.proxy.daytona.work|production-sfo.browserless.io|production-lon.browserless.io|production-ams.browserless.io|chrome.browserless.io|connect.browserbase.com|connect.steel.dev|connect.browser-use.com|connect.hyperbrowser.ai|milankarman.github.io/embed-web-playground|id_/http|web.archive.org/save/|arquivo.pt/savepagenow|uqtag=|uqscan|chatgpttest|agenttest|zz=oai|tok=expt|archive_test=|//webhook.site/|oastify.com|burpcollaborator.net|interact.sh|.oast.|//ntfy.sh/|dnslog.cn|requestrepo.com"
+scan = 3                  # wall-clock minutes per run
+max_mb = 256              # stream bytes per run
+limit = 500
+
+# Rationale: GH Archive's payloads carry no pull request text and no
+# commits, so relay URLs and run tags an agent writes into a pull request or
+# a commit message never reach gharchive-relays. GitHub's search API finds
+# them: one search per substring for pull requests created and commits
+# committed since the last run, each result checked again against the
+# substring (search matches words). Only relay links and run tags become
+# records; the footers coding agents add to their own work (`Generated with
+# ...`, `Co-Authored-By:`) are everyday use and never match. The record is
+# the link (never fetched), its reference the pull request or commit page.
+# Relay hosts whose words are common English (markdown.new) are left out:
+# their searches would spend the budget on ordinary text. Needs
+# GITHUB_TOKEN; skipped without it. Search allows 30 requests a minute and
+# 1000 results a search; `scan` caps requests a run, and a search cut short
+# is counted as skipped. Noise: developers discussing these relays. Terms:
+# the search API (https://docs.github.com/en/rest/search/search) and
+# GitHub's Acceptable Use Policies, as for gharchive-relays.
+[[source]]
+name = "github-search-relays"
+kind = "ghsearch"
+pattern = "r.jina.ai/http|//pure.md/|//defuddle.md/|api.allorigins.win/|corsproxy.io/|api.microlink.io/|uqtag=|uqscan|chatgpttest|agenttest|zz=oai"
+scan = 40                 # search requests per run
+limit = 500
+
 
 # Rationale: swarms told to "ship" or prove reach publish throwaway packages
 # whose names or summaries carry run tags. Keeps the newest PyPI releases
@@ -569,6 +766,44 @@ name = "crates-new"
 kind = "crates"
 pattern = "*"
 scan = 6                  # listing pages per run
+
+# Rationale: swarms that publish code create repositories with templated
+# names in bursts, and not only on GitHub: GitLab.com takes new projects
+# from any account without review. The public projects listing, newest
+# first, gives path, description and creation time; the top-level
+# namespace stands for the account, as a keyed hash. No account age: the
+# listing does not give one. Pages of 100 back to the last run, up to
+# `scan` pages; a busy stretch reads the newest part and the digest counts
+# the rest as skipped. Noise: course and template exercises (many students
+# creating `lab-<num>` at once) and CI-created scratch projects, handled
+# by the chance model and the benign templates. Terms: GitLab's Acceptable
+# Use Policy (https://handbook.gitlab.com/handbook/legal/acceptable-use-policy/)
+# forbids disrupting the service and collecting users' personal data;
+# anonymous API callers get hundreds of requests a minute
+# (https://docs.gitlab.com/user/gitlab_com/). No repository is opened.
+[[platform.source]]
+name = "gitlab-new-projects"
+kind = "gitlab"
+pattern = "*"
+scan = 10                 # listing pages per run
+
+# Rationale: the same on Codeberg, whose terms bar projects mostly written
+# by generative AI tools, so a burst of templated repositories there from
+# new accounts is worth a look. Forgejo's repository search, newest first,
+# gives path, description, creation time and the owner's account creation
+# time (a coarse age, as on a wiki); the owner's login becomes a keyed
+# hash, and no name or address is kept. Pages of 50 back to the last run,
+# up to `scan` pages, a handful of requests every six hours. Noise:
+# personal projects created together by one person (one account). Terms:
+# Codeberg's Terms of Use (https://codeberg.org/codeberg/org/src/branch/main/TermsOfUse.md)
+# govern content and forbid doxxing; the API states a rate limit of 2000
+# requests per ten minutes. No repository is opened.
+[[platform.source]]
+name = "codeberg-new-repos"
+kind = "codeberg"
+pattern = "*"
+scan = 4                  # listing pages per run
+
 
 # Rationale: agents told to find vulnerabilities file reports in bulk,
 # and CVE records have been fabricated in bursts against one project with

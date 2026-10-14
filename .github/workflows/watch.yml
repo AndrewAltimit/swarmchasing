@@ -40,6 +40,9 @@ env:
   MAIL_TO: ${{ secrets.MAIL_TO }}
   # If it is missing, urlquery sources are skipped and the digest says so.
   URLQUERY_APIKEY: ${{ secrets.URLQUERY_APIKEY }}
+  # The job's own token, read-only (`permissions` above), for the GitHub
+  # search source; it searches public pull requests and commits only.
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # Opt-in model triage, a label suggestion on each new lead. Unset, no
   # model is asked.
   # - `local` (or `true`) asks a model server on the runner or its private
