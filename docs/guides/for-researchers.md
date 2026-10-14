@@ -68,7 +68,7 @@ SC-Bench is the evaluation set as a file another group can score its own detecto
 
 1. Get the records. The committed example, [`sc-bench-v1-example.json`](../../samples/eval/bench/sc-bench-v1-example.json), names records in [`samples/eval/`](../../samples/eval/README.md); a bench over a third-party source names records you fetch yourself, by id, under the source's terms.
 2. Run your detector and write one NDJSON line per record: `id`, then `tier` (`noise`, `suggestive`, `significant`) or `flagged` (true or false), and optionally your `cluster` for the record.
-3. Score: `swarmchase eval --bench <bench.json> --predictions <yours.ndjson> --json score.json`. The score has record-unit and cluster-unit precision and recall with intervals, for all records and for the non-synthetic ones, overall and per split. `swarmchase eval --bench <bench.json>` alone scores this project's rules as frozen in the file, for comparison.
+3. Score: `swarmchase eval --bench <bench.json> --predictions <yours.ndjson> --json-out score.json`. The score has record-unit and cluster-unit precision and recall with intervals, for all records and for the non-synthetic ones, overall and per split. `swarmchase eval --bench <bench.json>` alone scores this project's rules as frozen in the file, for comparison.
 
 When you report a score, give the bench name and freeze date, the split, the unit, and the non-synthetic numbers beside the all-records ones.
 

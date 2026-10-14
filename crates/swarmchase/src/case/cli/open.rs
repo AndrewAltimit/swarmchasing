@@ -82,7 +82,12 @@ pub(super) fn add(ctx: &Ctx, a: AddArgs) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn status(ctx: &Ctx, id: Option<&str>, out: &mut impl Write) -> Result<()> {
+pub(super) fn status(ctx: &Ctx, id: Option<&str>, json: bool, out: &mut impl Write) -> Result<()> {
+    if json {
+        let v = crate::case::status::json(&ctx.root, id)?;
+        writeln!(out, "{}", serde_json::to_string_pretty(&v)?)?;
+        return Ok(());
+    }
     match id {
         None => list_cases(&ctx.root, out),
         Some(id) => show_case(&ctx.root, id, out),

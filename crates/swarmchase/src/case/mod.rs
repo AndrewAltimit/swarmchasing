@@ -78,9 +78,18 @@ pub fn load(root: &Path, id: &str) -> Result<Case> {
     Case::parse(&text).with_context(|| format!("parsing {}", p.display()))
 }
 
+/// Write case.toml into the case's directory, which must exist: a case
+/// renamed or deleted while a command held it is not brought back as a
+/// case.toml with no records.
 pub(crate) fn save(root: &Path, c: &Case) -> Result<()> {
     let dir = case_dir(root, &c.id)?;
-    std::fs::create_dir_all(&dir)?;
+    if !dir.is_dir() {
+        bail!(
+            "case {} is gone from {} (renamed or deleted meanwhile); the change was not saved",
+            c.id,
+            dir.display()
+        );
+    }
     crate::store::write_atomic(&dir.join("case.toml"), c.to_toml()?.as_bytes())
 }
 
@@ -88,12 +97,22 @@ pub(crate) fn save(root: &Path, c: &Case) -> Result<()> {
 /// ([`lock_case`]) from the load to the save, so two commands changing one
 /// case at once never lose either change.
 pub fn update(root: &Path, id: &str, f: impl FnOnce(&mut Case) -> Result<()>) -> Result<()> {
-    let _lock = lock_case(root, id)?;
-    let mut c = load(root, id)?;
-    f(&mut c)?;
-    save(root, &c)?;
+    modify(root, id, f)?;
     println!("updated {}", root.join(id).join("case.toml").display());
     Ok(())
+}
+
+/// [`update`] without the message, returning what `f` returns.
+pub(crate) fn modify<T>(
+    root: &Path,
+    id: &str,
+    f: impl FnOnce(&mut Case) -> Result<T>,
+) -> Result<T> {
+    let _lock = lock_case(root, id)?;
+    let mut c = load(root, id)?;
+    let v = f(&mut c)?;
+    save(root, &c)?;
+    Ok(v)
 }
 
 /// A held case lock; released when dropped.
@@ -103,8 +122,9 @@ pub(crate) struct CaseLock {
 }
 
 thread_local! {
-    /// The case locks this thread holds, so a change made inside another
-    /// (a log entry inside an update) does not wait on itself.
+    /// The case locks this thread holds, so a change begun inside another
+    /// (which would wait on itself, and whose write the outer change would
+    /// then overwrite) is refused instead.
     static HELD: std::cell::RefCell<BTreeSet<PathBuf>> = const {
         std::cell::RefCell::new(BTreeSet::new())
     };
@@ -123,13 +143,17 @@ impl Drop for CaseLock {
 /// command holds it (`case contacts` holds it through its lookups). Every
 /// read-change-write of a case.toml goes through it. Outside the case
 /// directory, so moving a case (`case rename`) never meets an open file.
+/// Taking it again while this thread holds it is an error: the inner change
+/// would be lost when the outer one saves its own copy.
 pub(crate) fn lock_case(root: &Path, id: &str) -> Result<CaseLock> {
     check_id(id)?;
     let dir = root.join(".locks");
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let path = dir.join(format!("{id}.lock"));
     if HELD.with(|h| h.borrow().contains(&path)) {
-        return Ok(CaseLock { file: None, path });
+        bail!(
+            "case {id} is already being changed by this command; a change inside that change would be lost when it saves"
+        );
     }
     let f = std::fs::OpenOptions::new()
         .create(true)
@@ -464,6 +488,11 @@ pub(crate) fn add_records(
 pub(crate) fn rename(root: &Path, old: &str, new: &str, today: &str) -> Result<()> {
     let data = root.parent().unwrap_or(root);
     let _lock = crate::store::lock_data(data, "case rename")?;
+    // Both IDs' case locks: a command changing the case (`case contacts`
+    // through its lookups) finishes first, and one that starts after finds
+    // the case gone rather than writing it back under the old ID.
+    let _old = lock_case(root, old)?;
+    let _new = lock_case(root, new)?;
     let mut c = load(root, old)?;
     let to = case_dir(root, new)?;
     if to.exists() {
@@ -578,11 +607,36 @@ mod tests {
         assert!(rename(&root, "old-1", "new-1", "2026-10-13").is_err());
         assert!(load(&root, "old-1").is_ok());
         drop(held);
+        // A command holding the case through a slow step (as `case
+        // contacts` does) finishes before the rename moves it, and its
+        // change moves with the case.
+        let stale = load(&root, "old-1").unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let slow = {
+            let root = root.clone();
+            std::thread::spawn(move || {
+                update(&root, "old-1", |c| {
+                    tx.send(()).unwrap();
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    c.log("d", "slow change");
+                    Ok(())
+                })
+                .unwrap();
+            })
+        };
+        rx.recv().unwrap();
         rename(&root, "old-1", "new-1", "2026-10-13").unwrap();
+        slow.join().unwrap();
         assert!(!root.join("old-1").exists());
         let c = load(&root, "new-1").unwrap();
         assert_eq!(c.id, "new-1");
         assert_eq!(c.decisions.last().unwrap().text, "renamed from old-1");
+        assert!(c.decisions.iter().any(|d| d.text == "slow change"));
+        // A copy read before the rename is not written back under the old
+        // ID as a case with no records.
+        let err = save(&root, &stale).unwrap_err();
+        assert!(err.to_string().contains("gone"), "{err}");
+        assert!(!root.join("old-1").exists());
         let s = std::fs::read_to_string(&state).unwrap();
         assert!(s.contains("\"new-1\"") && !s.contains("\"old-1\""), "{s}");
 
@@ -866,13 +920,50 @@ mod tests {
             texts.contains(&"slow change") && texts.contains(&"quick note"),
             "{texts:?}"
         );
-        // A change inside a change does not wait on itself.
-        update(&root, "l-1", |c| {
+        // A change inside a change is refused, not lost: the outer one
+        // fails and the case is as it was.
+        let err = update(&root, "l-1", |c| {
             log_entry(&root, "l-1", "d", "nested")?;
             c.log("d", "outer");
             Ok(())
         })
-        .unwrap();
+        .unwrap_err();
+        assert!(err.to_string().contains("already being changed"), "{err}");
+        let c = load(&root, "l-1").unwrap();
+        assert!(
+            !c.decisions
+                .iter()
+                .any(|d| d.text == "nested" || d.text == "outer"),
+            "{:?}",
+            c.decisions
+        );
+        // The lock was let go: the next change goes through.
+        log_entry(&root, "l-1", "d", "after").unwrap();
+        let c = load(&root, "l-1").unwrap();
+        assert!(c.decisions.iter().any(|d| d.text == "after"));
+        cleanup(&root);
+    }
+
+    #[test]
+    fn status_as_json_lists_cases_and_shows_one_defanged() {
+        let root = scratch("status-json");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture().results.iter().map(|r| r.obs.clone()).collect();
+        new_case(&root, "j-1", "Json", records, &rules, "2026-10-12").unwrap();
+        let all = status::json(&root, None).unwrap();
+        assert_eq!(all["cases"][0]["id"], "j-1", "{all}");
+        assert_eq!(all["cases"][0]["status"], CaseStatus::Open.label());
+        let one = status::json(&root, Some("j-1")).unwrap();
+        assert_eq!(one["records"], 6, "{one}");
+        let hosts: Vec<&str> = one["endpoints"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|e| e["host"].as_str())
+            .collect();
+        assert!(!hosts.is_empty(), "{one}");
+        assert!(hosts.iter().all(|h| h.contains("[.]")), "{hosts:?}");
+        assert!(one["needs"].as_array().is_some_and(|n| !n.is_empty()));
         cleanup(&root);
     }
 

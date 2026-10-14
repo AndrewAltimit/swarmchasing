@@ -141,6 +141,9 @@ pub struct ReviewArgs {
     /// Print counts of reviewed records and disagreements, and exit.
     #[arg(long)]
     stats: bool,
+    /// With `--stats`: print the counts as one JSON document on stdout.
+    #[arg(long, requires = "stats")]
+    json: bool,
     /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
@@ -197,6 +200,11 @@ pub fn run(args: ReviewArgs) -> Result<()> {
     let mut store = ReviewStore::open(path)?;
     if args.stats {
         let rules = crate::pinning::RulesText::load(args.rules.as_deref())?;
+        if args.json {
+            let v = stats_json(&store, &rules.rules, &data.join("labels"))?;
+            println!("{}", serde_json::to_string_pretty(&v)?);
+            return Ok(());
+        }
         stats(&store, &rules.rules, &mut std::io::stdout())?;
         return agreement_report(&data.join("labels"), &mut std::io::stdout());
     }
@@ -1401,6 +1409,91 @@ pub fn stats(store: &ReviewStore, rules: &sc_core::Rules, out: &mut impl Write) 
     Ok(())
 }
 
+/// What [`stats`], [`baseline`] and [`agreement_report`] print, as one
+/// JSON document: counts by class and label, the disagreements with the
+/// rules, agent labels below the labelling rule, the benign baseline and
+/// agreement between labellers. Record IDs and counts only, no record
+/// content.
+pub fn stats_json(
+    store: &ReviewStore,
+    rules: &sc_core::Rules,
+    labels_dir: &Path,
+) -> Result<serde_json::Value> {
+    use serde_json::json;
+    let mut by: BTreeMap<(&str, &str), usize> = BTreeMap::new();
+    for r in store.entries.values() {
+        *by.entry((r.class.as_str(), r.label.as_str())).or_default() += 1;
+    }
+    let count = |f: &dyn Fn(&Review) -> bool| store.entries.values().filter(|r| f(r)).count();
+    let below = if store.entries.values().any(|r| r.label == "agent") {
+        let a = sc_core::analyze(
+            store.entries.values().map(|r| r.record.clone()).collect(),
+            rules,
+        );
+        count_below_rule(store, &a)
+    } else {
+        BelowRuleCount::default()
+    };
+    let base: Vec<&Review> = store
+        .entries
+        .values()
+        .filter(|r| r.class == CLASS_BASELINE)
+        .collect();
+    let baseline = (!base.is_empty()).then(|| {
+        let sampled: Vec<&&Review> = base.iter().filter(|r| !r.tuned).collect();
+        let n = sampled.iter().filter(|r| r.label == "benign").count();
+        let k = sampled
+            .iter()
+            .filter(|r| r.label == "benign" && r.tier >= Tier::Suggestive)
+            .count();
+        let p = sc_core::eval::stats::Proportion::new(k, n);
+        json!({
+            "reviews": base.len(),
+            "tuned": base.len() - sampled.len(),
+            "benign": n,
+            "target": sc_core::eval::baseline::TARGET,
+            "agents": sampled.iter().filter(|r| r.label == "agent").count(),
+            "benign_flagged": k,
+            "fp_rate": p.value,
+            "fp_rate_lo": p.lo,
+            "fp_rate_hi": p.hi,
+        })
+    });
+    let files = labeller_files(labels_dir)?;
+    let mut agreement = Vec::new();
+    if files.len() >= 2 {
+        let stores: Vec<(String, ReviewStore)> = files
+            .into_iter()
+            .map(|(who, p)| Ok((who, ReviewStore::open(p)?)))
+            .collect::<Result<_>>()?;
+        for i in 0..stores.len() {
+            for j in i + 1..stores.len() {
+                let p = pair_agreement((&stores[i].0, &stores[i].1), (&stores[j].0, &stores[j].1));
+                agreement.push(json!({
+                    "a": p.a,
+                    "b": p.b,
+                    "overlap": p.overlap,
+                    "agree": p.agree,
+                    "kappa": p.kappa,
+                }));
+            }
+        }
+    }
+    Ok(json!({
+        "file": store.path.display().to_string(),
+        "reviewed": store.entries.len(),
+        "by_class": by
+            .iter()
+            .map(|((class, label), n)| json!({"class": class, "label": label, "n": n}))
+            .collect::<Vec<_>>(),
+        "flagged_but_benign": count(&|r| r.label == "benign" && r.tier >= Tier::Suggestive),
+        "agent_but_not_flagged": count(&|r| r.label == "agent" && r.tier < Tier::Suggestive),
+        "below_rule": below,
+        "baseline": baseline,
+        "agreement": agreement,
+    }))
+}
+
 /// Agent labels below the labelling rule, each with the grade it was judged
 /// against: the one stored with the label, else (an older line) the grade
 /// now from the review file's own records, said as such.
@@ -2229,6 +2322,18 @@ mod tests {
         assert!(out.contains("(grade now) · no reason noted"), "{out}");
         let c = count_below_rule(&store, &a);
         assert_eq!((c.agents, c.total, c.graded_now, c.flagged), (1, 1, 1, 1));
+        // `--stats --json` says the same in one document.
+        let j = stats_json(
+            &store,
+            &Rules::default_rules(),
+            store.path.parent().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(j["reviewed"], 1, "{j}");
+        assert_eq!(j["by_class"][0]["label"], "agent", "{j}");
+        assert_eq!(j["below_rule"]["total"], 1, "{j}");
+        assert_eq!(j["below_rule"]["graded_now"], 1, "{j}");
+        assert!(j["baseline"].is_null() && j["agreement"] == serde_json::json!([]));
 
         // Once stored, the stored grade is read and said so.
         let idx = a.results.iter().position(|r| r.obs.id == "solo").unwrap();

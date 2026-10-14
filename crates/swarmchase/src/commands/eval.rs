@@ -30,9 +30,10 @@ pub struct EvalArgs {
     labels: Vec<PathBuf>,
     #[command(flatten)]
     floors: Floors,
-    /// Also write the full result as JSON (includes false-positive URLs,
-    /// defanged; keep it private for third-party records).
-    #[arg(long)]
+    /// Also write the full result as JSON to this file (includes
+    /// false-positive URLs, defanged; keep it private for third-party
+    /// records). `--json <file>` is an older spelling.
+    #[arg(long = "json-out", value_name = "FILE", alias = "json")]
     json: Option<PathBuf>,
     /// How many false positives to list.
     #[arg(long, default_value_t = 20)]
@@ -423,7 +424,10 @@ pub fn run(args: EvalArgs) -> Result<()> {
         for f in &failures {
             eprintln!("eval gate: {f}");
         }
-        bail!("eval gate failed ({} check(s) not met)", failures.len());
+        return Err(crate::Exit::floor(format!(
+            "eval gate failed ({} check(s) not met)",
+            failures.len()
+        )));
     }
     Ok(())
 }

@@ -143,8 +143,18 @@ fn the_workflow_output_is_written_before_later_steps_and_damage_alerts_once() {
             .join("digest.md"),
     )
     .unwrap();
-    assert!(digest.contains("moved to `store/old.damaged`"), "{digest}");
-    assert!(d.join("data/store/old.damaged").is_file());
+    // The older one-file-per-source store was moved into months first;
+    // its unreadable line went with it and was set aside from there.
+    assert!(
+        digest.contains("moved to one file per source and month"),
+        "{digest}"
+    );
+    assert!(
+        digest.contains("moved to `store/old/undated.damaged`"),
+        "{digest}"
+    );
+    assert!(d.join("data/store/old/undated.damaged").is_file());
+    assert!(!d.join("data/store/old.ndjson").exists());
 
     // The next run: the damaged line is gone from the store, the skip has
     // already alerted, so nothing changed and nothing is mailed. `-o` is

@@ -5,7 +5,7 @@
 //! which records change tier. Pin names and tier changes are
 //! [`sc_case::pinning`]; this module keeps the files.
 
-use crate::case::{Case, Scope, case_records, load, save};
+use crate::case::{Case, Scope, case_records, load};
 use crate::input::load_rules;
 use anyhow::{Context, Result, bail};
 use sc_case::pinning::{check_pin, describe_changes, pin_names};
@@ -142,7 +142,7 @@ pub(crate) fn rules_cmd(
     today: &str,
     out: &mut impl Write,
 ) -> Result<()> {
-    let mut c = load(root, id)?;
+    let c = load(root, id)?;
     let pinned = c
         .rules_version
         .clone()
@@ -168,10 +168,6 @@ pub(crate) fn rules_cmd(
         return Ok(());
     }
     let pin = pin_rules(root, current)?;
-    if c.rules_version.as_deref() == Some(pin.as_str()) {
-        writeln!(out, "already pinned to {pin}")?;
-        return Ok(());
-    }
     let what = if changes.is_empty() {
         "no record changed tier".to_string()
     } else {
@@ -181,16 +177,26 @@ pub(crate) fn rules_cmd(
             describe_changes(&changes, 10)
         )
     };
-    c.log(
-        today,
-        format!(
-            "rules re-pinned: {} → {pin}; {what}",
-            c.rules_version.as_deref().unwrap_or("not pinned")
-        ),
-    );
-    c.rules_version = Some(pin.clone());
-    save(root, &c)?;
-    writeln!(out, "pinned {id} to rules {pin}")?;
+    // Re-read under the case's lock, so a change made meanwhile is kept.
+    let repinned = crate::case::modify(root, id, |c| {
+        if c.rules_version.as_deref() == Some(pin.as_str()) {
+            return Ok(false);
+        }
+        c.log(
+            today,
+            format!(
+                "rules re-pinned: {} → {pin}; {what}",
+                c.rules_version.as_deref().unwrap_or("not pinned")
+            ),
+        );
+        c.rules_version = Some(pin.clone());
+        Ok(true)
+    })?;
+    if repinned {
+        writeln!(out, "pinned {id} to rules {pin}")?;
+    } else {
+        writeln!(out, "already pinned to {pin}")?;
+    }
     Ok(())
 }
 #[cfg(test)]

@@ -8,7 +8,7 @@
 //! the records; the public notice uses them only once the operator's
 //! agreement is recorded with `case evidence consent`.
 
-use crate::case::{Case, CaseStatus, NOTICE_DRAFT, case_dir, load, save, update};
+use crate::case::{Case, CaseStatus, NOTICE_DRAFT, case_dir, load, update};
 use crate::pinning::case_rules;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
@@ -253,45 +253,47 @@ fn add_evidence(root: &Path, id: &str, r: Received, today: &str) -> Result<Opera
         date,
         note,
     } = r;
-    let mut c = load(root, id)?;
-    let sha256 = crate::bundle::sha256_hex(text.as_bytes());
-    if let Some(e) = c.evidence.iter().find(|e| e.sha256 == sha256) {
-        bail!("this file is already evidence {} in case {id}", e.id);
-    }
-    let eid = format!("e{}", c.evidence.len() + 1);
-    let (records, lines, warnings) = ingest(text, format, map, &eid, &case_rules(root, &c)?);
-    for w in warnings.iter().take(5) {
-        eprintln!("warning: {w}");
-    }
-    if lines == 0 {
-        bail!("no records in the file (check --format and --map)");
-    }
-    let dir = case_dir(root, id)?;
-    let p = file(&dir, &eid);
-    std::fs::create_dir_all(p.parent().unwrap_or(&dir))?;
-    std::fs::write(&p, crate::store::to_ndjson(&records)?)?;
-    let received = date.unwrap_or_else(|| today.to_string());
-    let e = OperatorEvidence {
-        id: eid.clone(),
-        org: org.to_string(),
-        host: host.to_ascii_lowercase(),
-        received: received.clone(),
-        sha256,
-        lines,
-        kept: records.len(),
-        public: None,
-        note,
-    };
-    c.evidence.push(e.clone());
-    c.log(
+    // Under the case's lock from the read to the write, so a change made
+    // meanwhile is neither lost nor lost to.
+    crate::case::modify(root, id, |c| {
+        let sha256 = crate::bundle::sha256_hex(text.as_bytes());
+        if let Some(e) = c.evidence.iter().find(|e| e.sha256 == sha256) {
+            bail!("this file is already evidence {} in case {id}", e.id);
+        }
+        let eid = format!("e{}", c.evidence.len() + 1);
+        let (records, lines, warnings) = ingest(text, format, map, &eid, &case_rules(root, c)?);
+        for w in warnings.iter().take(5) {
+            eprintln!("warning: {w}");
+        }
+        if lines == 0 {
+            bail!("no records in the file (check --format and --map)");
+        }
+        let dir = case_dir(root, id)?;
+        let p = file(&dir, &eid);
+        std::fs::create_dir_all(p.parent().unwrap_or(&dir))?;
+        std::fs::write(&p, crate::store::to_ndjson(&records)?)?;
+        let received = date.unwrap_or_else(|| today.to_string());
+        let e = OperatorEvidence {
+            id: eid.clone(),
+            org: org.to_string(),
+            host: host.to_ascii_lowercase(),
+            received: received.clone(),
+            sha256,
+            lines,
+            kept: records.len(),
+            public: None,
+            note,
+        };
+        c.evidence.push(e.clone());
+        c.log(
         &received,
         format!(
             "operator evidence {eid} from {org}: {} of {lines} records kept; private reports only",
             records.len()
         ),
     );
-    save(root, &c)?;
-    Ok(e)
+        Ok(e)
+    })
 }
 
 #[cfg(test)]
