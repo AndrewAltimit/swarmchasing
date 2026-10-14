@@ -156,10 +156,13 @@ remote_browser = ["carrier.livecodes", "carrier.codesandbox", "carrier.browserle
 # Potts model). Each community of two or more is a candidate fleet.
 #
 # Where `swarmchase sim calibrate samples/sim/scenarios.toml` measures a kind,
-# its ratio here is the calibration's conservative ("low") value rounded down,
-# and a kind the simulation finds no evidence for is off. A kind the
-# simulation cannot produce (it copies request content, so no captured
-# secrets, header sets or reruns) keeps a ratio set by judgment.
+# its ratio here starts from the calibration's conservative value, and
+# `sim calibrate --check` compares it with the lower bound of the kind's
+# ratio stratified by scenario, over the scenarios where it can occur. A
+# habit kind the simulation measures only on its one small set of copied
+# records stays low or off by judgment. A kind the simulation cannot produce (it copies request
+# content, so no captured secrets, header sets or reruns) keeps a ratio set by
+# judgment.
 [soft_links]
 fleet_min_lr = 20.0
 fleet_density = 0.5
@@ -169,7 +172,9 @@ min_link_lr = 2.0
 max_shared = 10
 # Judgment: tested against a chance model, never produced by the simulation.
 shared_pause = 4.0
-# Simulation: weak (point ratio above 3, low bound near 1); listed when rare.
+# Judgment, below the simulation's bound: every simulated agent copies one
+# small set of records, so shared habits are measured on less variety than
+# real traffic has. Listed when rare.
 dialect = 2.0
 # Judgment for the next six: the simulation does not produce them. A rerun of
 # a whole host list in order on another day is a fleet edge on its own.
@@ -179,7 +184,9 @@ path_set = 3.0
 cut_length = 2.0
 header_set = 2.0
 common_feature = 2.0
-# Simulation: no evidence (unrelated clusters share a style as often).
+# Judgment: off. The simulation measures an encoding style shared by one
+# operator's clusters more often than by unrelated ones, on its one small set
+# of records, as with dialect. It does not produce fan-out.
 encoding = 1.0
 fanout = 1.0
 # Simulation.
@@ -187,11 +194,13 @@ escalation = 30.0
 # Judgment: the same redacted secret (REDACTED-<hash>) in records of both
 # clusters, a captured token reused. Stock passwords do not count.
 shared_secret = 50.0
-# Simulation: no evidence. A stack of two or more relays and carriers is
-# shared by unrelated clusters as often as by one operator's.
+# Judgment: off. A stack of two or more relays and carriers; the simulation
+# measures it shared by one operator's clusters more often than by unrelated
+# ones, on its one small set of records, as with dialect.
 relay_stack = 1.0
-# Simulation: no evidence. Inboxes on one callback service (webhook.site, a
-# request catcher); the same inbox links outright.
+# Judgment: off. Inboxes on one callback service (webhook.site, a request
+# catcher); the same inbox links outright. The simulation measures it as it
+# does relay stacks.
 callback_service = 1.0
 # Judgment: a shared structure beyond the scaffold chance model.
 scaffold = 20.0

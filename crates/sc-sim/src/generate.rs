@@ -38,6 +38,26 @@ const BROWSER_UAS: &[&str] = &[
     "Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0",
 ];
 
+/// User agents of benign look-alikes: an uptime service, an internet-wide
+/// scanner, link-preview bots, feed readers.
+const MONITOR_UA: &str = "Mozilla/5.0 (compatible; UptimeRobot/2.0; http://www.uptimerobot.com/)";
+const SCANNER_UA: &str = "Mozilla/5.0 (compatible; survey-scanner/2.1; +https://scanner.example/)";
+const PREVIEW_UAS: &[&str] = &[
+    "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
+    "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+    "Twitterbot/1.0",
+    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)",
+    "TelegramBot (like TwitterBot)",
+];
+const FEED_UAS: &[&str] = &[
+    "Feedly/1.0 (+http://www.feedly.com/fetcher.html; 12 subscribers)",
+    "Mozilla/5.0 (compatible; Inoreader/1.0; https://www.inoreader.com)",
+    "NewsBlur Feed Fetcher - 8 subscribers",
+    "FreshRSS/1.24.1 (Linux; https://freshrss.org)",
+    "Miniflux/2.1.3 (https://miniflux.app)",
+];
+
 /// Hosting networks agents run from, and access networks people use.
 const CLOUD_ASNS: &[u32] = &[16509, 14061, 24940, 396982, 8075, 63949, 14618];
 const ACCESS_ASNS: &[u32] = &[7922, 3320, 2856, 701, 3215, 6830];
@@ -432,6 +452,9 @@ impl Gen<'_> {
             Kind::TargetList | Kind::NewsSpike | Kind::Hub => {
                 self.target_list(i, a, start, window, &mut rng)
             }
+            Kind::UptimeMonitor | Kind::InternetScanner | Kind::LinkPreview | Kind::FeedPoller => {
+                self.lookalike(i, a, start, window, &mut rng)
+            }
             _ => self.background(i, a, start, window, &mut rng),
         }
     }
@@ -651,7 +674,7 @@ impl Gen<'_> {
                     }
                 })
                 .collect();
-            let begin = if dispatch {
+            let mut begin = if dispatch {
                 start + late.first().copied().unwrap_or(0)
             } else if handoff && k > 0 {
                 t + rng.range(5 * 60, 45 * 60)
@@ -662,6 +685,19 @@ impl Gen<'_> {
             } else {
                 start + rng.range(0, 300)
             };
+            // One dispatcher sends each step to every agent; each request
+            // leaves up to the jitter after its dispatch, never before the
+            // agent's previous request. Times are placed against the
+            // dispatches, not the previous request, so lateness never
+            // accumulates.
+            let sync = (!dispatch && has(Mode::Sync)).then(|| {
+                let jitter = a.jitter_secs.unwrap_or(2).max(0);
+                let late: Vec<i64> = sync_gaps.iter().map(|_| rng.range(0, jitter)).collect();
+                sync_times(&sync_gaps, &late)
+            });
+            if let Some((first, _)) = &sync {
+                begin += first;
+            }
             let spec = RunSpec {
                 truth: Truth {
                     label: Some("agent"),
@@ -678,8 +714,6 @@ impl Gen<'_> {
                 },
                 start: begin,
                 pace,
-                // One dispatcher sends each step to every agent; each
-                // request leaves 0 to 2 s after its dispatch.
                 gaps: if dispatch {
                     Some(
                         (0..a.records)
@@ -687,17 +721,7 @@ impl Gen<'_> {
                             .collect(),
                     )
                 } else {
-                    has(Mode::Sync).then(|| {
-                        let jitter = a.jitter_secs.unwrap_or(2).max(0);
-                        let late: Vec<i64> =
-                            sync_gaps.iter().map(|_| rng.range(0, jitter)).collect();
-                        (0..sync_gaps.len())
-                            .map(|r| {
-                                let prev = late[r.saturating_sub(1)];
-                                (sync_gaps[r] + late[r] - prev).max(0)
-                            })
-                            .collect()
-                    })
+                    sync.map(|(_, gaps)| gaps)
                 },
                 // A reader and an attacker go through the hosts in one order.
                 hosts: if has(Mode::Roles) {
@@ -721,6 +745,161 @@ impl Gen<'_> {
             let end = self.run(spec, rng);
             if reader {
                 t = end;
+            }
+        }
+    }
+
+    /// Benign look-alikes of swarm and fleet signals. Each client is its
+    /// own run and its own operator, so every edge or soft link drawn
+    /// between two of them is false.
+    fn lookalike(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let (class, palette_class) = match a.kind {
+            Kind::UptimeMonitor => ("uptime_monitor", "api_client"),
+            Kind::InternetScanner => ("internet_scanner", "crawler"),
+            Kind::LinkPreview => ("link_preview", "crawler"),
+            _ => ("feed_poller", "crawler"),
+        };
+        let pool: Vec<Template> = self
+            .palette
+            .benign_flagged(palette_class)
+            .into_iter()
+            .cloned()
+            .collect();
+        if pool.is_empty() {
+            return;
+        }
+        let n = a.agents.max(1);
+        let basis = self.scenario.basis;
+        let ok = move |code: u16| (basis == Basis::Request).then_some(code);
+        let net = rng.below(CLOUD_ASNS.len());
+        let prefix = rng.pick(NETS).copied().unwrap_or("192.0.2");
+        let specs: Vec<RunSpec> = (0..n)
+            .map(|k| {
+                let other_net = CLOUD_ASNS[(net + k) % CLOUD_ASNS.len()];
+                let client = match a.kind {
+                    Kind::UptimeMonitor => Client {
+                        ua: MONITOR_UA.into(),
+                        asn: other_net,
+                        ip: address(rng),
+                    },
+                    // One network, consecutive addresses.
+                    Kind::InternetScanner => Client {
+                        ua: SCANNER_UA.into(),
+                        asn: CLOUD_ASNS[net],
+                        ip: format!("{prefix}.{}", 10 + k % 240),
+                    },
+                    Kind::LinkPreview => Client {
+                        ua: PREVIEW_UAS[k % PREVIEW_UAS.len()].into(),
+                        asn: other_net,
+                        ip: address(rng),
+                    },
+                    _ => Client {
+                        ua: FEED_UAS[k % FEED_UAS.len()].into(),
+                        asn: other_net,
+                        ip: address(rng),
+                    },
+                };
+                self.bg_spec(
+                    i,
+                    k,
+                    a,
+                    class,
+                    "tool",
+                    Some("benign"),
+                    Use::Benign,
+                    Pace::Tool,
+                    false,
+                    &client,
+                    &[],
+                    start,
+                    0,
+                )
+            })
+            .collect();
+        let pick = |rng: &mut Rng| pool[rng.below(pool.len())].clone();
+        let mut ids = Ids::new(self.seed);
+        let begin = start + rng.range(0, window);
+        match a.kind {
+            Kind::UptimeMonitor => {
+                // The same URLs from every region, one check a minute in
+                // turn, each region within a second of the others.
+                let hosts = self.hosts(&format!("a{i}"), a.hosts);
+                let checks: Vec<(Template, String)> =
+                    hosts.iter().map(|h| (pick(rng), h.clone())).collect();
+                for c in 0..a.records {
+                    let (tpl, host) = &checks[c % checks.len()];
+                    let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                    let at = begin + c as i64 * 60;
+                    for spec in &specs {
+                        let ts = at + rng.range(0, 2);
+                        self.emit(spec, &tpl.origin, url.clone(), ts, ok(200), basis);
+                    }
+                }
+            }
+            Kind::InternetScanner => {
+                // One host family split over the addresses, one probe set
+                // per host, every address starting at once.
+                let family = self.hosts(&format!("a{i}"), a.hosts * n);
+                let probes: Vec<Template> = (0..3).map(|_| pick(rng)).collect();
+                for (k, spec) in specs.iter().enumerate() {
+                    let mut t = begin + rng.range(0, 3);
+                    let mine = family.iter().skip(k).step_by(n);
+                    let sends = mine.flat_map(|h| probes.iter().map(move |p| (p, h)));
+                    for (tpl, host) in sends.take(a.records) {
+                        let url = rewrite(tpl, host, spec, &mut ids, None);
+                        self.emit(spec, &tpl.origin, url, t, ok(200), basis);
+                        t += gap(rng, Pace::Tool);
+                    }
+                }
+            }
+            Kind::LinkPreview => {
+                // Each posted link fetched by most platforms' bots within
+                // seconds of the post.
+                let hosts = self.hosts(&format!("a{i}"), a.hosts);
+                for p in 0..a.records {
+                    let posted = start + rng.range(0, window);
+                    let tpl = pick(rng);
+                    let host = &hosts[p % hosts.len()];
+                    let url = rewrite(&tpl, host, &specs[0], &mut ids, None);
+                    for spec in &specs {
+                        if rng.chance(0.7) {
+                            let ts = posted + rng.range(1, 6);
+                            self.emit(spec, &tpl.origin, url.clone(), ts, ok(200), basis);
+                        }
+                    }
+                }
+            }
+            _ => {
+                // The same feeds in one order each poll, each reader on its
+                // own interval and phase; through the feed host's outage
+                // each reader fails once and backs off until it ends.
+                let hosts = self.hosts(&format!("a{i}"), a.hosts);
+                let feeds: Vec<(Template, String)> =
+                    hosts.iter().map(|h| (pick(rng), h.clone())).collect();
+                let down = start + window / 2 + rng.range(0, 3600);
+                let up = down + rng.range(3600, 3 * 3600);
+                for spec in &specs {
+                    let every = [900, 1800, 3600][rng.below(3)];
+                    let phase = rng.range(0, every);
+                    let mut failed = false;
+                    for c in 0..a.records as i64 {
+                        let mut t = start + phase + c * every;
+                        if (down..up).contains(&t) {
+                            if !failed {
+                                let (tpl, host) = &feeds[0];
+                                let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                                self.emit(spec, &tpl.origin, url, t, ok(503), basis);
+                                failed = true;
+                            }
+                            continue;
+                        }
+                        for (tpl, host) in &feeds {
+                            let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                            self.emit(spec, &tpl.origin, url, t, ok(200), basis);
+                            t += rng.range(1, 3);
+                        }
+                    }
+                }
             }
         }
     }
@@ -900,6 +1079,7 @@ impl Gen<'_> {
             self.emit(&spec, "generated hand-off fetch", url, t, status, basis);
             t += gap(rng, spec.pace);
         }
+        let mut sched = t;
         for (r, (host, u)) in spec.hosts.iter().zip(&spec.uses).enumerate() {
             let shape = (!spec.shapes.is_empty()).then(|| &spec.shapes[r % spec.shapes.len()]);
             let fixed = shape.map(|s| &s.templates).or(spec.fixed.as_ref());
@@ -929,12 +1109,22 @@ impl Gen<'_> {
             let Some(tpl) = tpl else {
                 continue;
             };
+            // A scheduled run (synchronised, dispatched or copied timing)
+            // keeps its schedule: retries take time after a request but do
+            // not move the next one, which leaves at its scheduled time or
+            // right after the last retry. A run without one paces itself
+            // from its last request.
             if r > 0 {
-                t += spec
-                    .gaps
-                    .as_ref()
-                    .and_then(|g| g.get(r).copied())
-                    .unwrap_or_else(|| gap(rng, spec.pace));
+                match spec.gaps.as_ref().and_then(|g| g.get(r).copied()) {
+                    Some(g) => {
+                        sched += g;
+                        t = t.max(sched);
+                    }
+                    None => {
+                        t += gap(rng, spec.pace);
+                        sched = t;
+                    }
+                }
             }
             let error = rng.chance(spec.retry);
             let tries = if error { 3 } else { 1 };
@@ -1198,6 +1388,24 @@ fn rfc3339(ts: i64) -> String {
         .unwrap_or_default()
 }
 
+/// A synchronised worker's schedule: dispatch `r` comes `gaps[r]` after
+/// dispatch `r - 1` (`gaps[0]` unused) and the worker's request `late[r]`
+/// after it, never before its previous request. Returns the first request's
+/// lateness and the gaps between requests, placed against the dispatches.
+fn sync_times(gaps: &[i64], late: &[i64]) -> (i64, Vec<i64>) {
+    let (mut dispatch, mut prev) = (0i64, 0i64);
+    let mut out = Vec::with_capacity(gaps.len());
+    for (r, g) in gaps.iter().enumerate() {
+        if r > 0 {
+            dispatch += g;
+        }
+        let at = (dispatch + late.get(r).copied().unwrap_or(0)).max(prev);
+        out.push(if r == 0 { 0 } else { at - prev });
+        prev = at;
+    }
+    (late.first().copied().unwrap_or(0), out)
+}
+
 fn gap(rng: &mut Rng, pace: Pace) -> i64 {
     let (lo, hi) = pace.bounds();
     rng.log_range(lo, hi).round().max(0.0) as i64
@@ -1320,6 +1528,80 @@ mod tests {
         assert_eq!(a, ids(subset(pool, 7, "0:1", 0.3)));
         assert_ne!(a, ids(subset(pool, 7, "0:2", 0.3)));
         assert_eq!(subset(pool, 7, "0:1", 0.0).len(), 2);
+    }
+
+    #[test]
+    fn sync_lateness_does_not_accumulate() {
+        // Dispatches 10 s apart; a worker 30 s late on the first and on time
+        // after. It waits for nothing it already sent, then is back on the
+        // dispatches: its fifth request leaves at the fifth dispatch.
+        let (first, gaps) = sync_times(&[0, 10, 10, 10, 10], &[30, 0, 0, 0, 0]);
+        assert_eq!(first, 30);
+        assert_eq!(gaps, [0, 0, 0, 0, 10]);
+        assert_eq!(first + gaps.iter().sum::<i64>(), 40);
+        // On time throughout: the gaps are the dispatches'.
+        assert_eq!(sync_times(&[5, 7, 9], &[2, 2, 2]), (2, vec![0, 7, 9]));
+    }
+
+    #[test]
+    fn retries_do_not_move_a_schedule() {
+        let rules = sc_core::Rules::default_rules();
+        let palette = Palette::default_palette(&rules);
+        let file = crate::ScenarioFile::parse(
+            "[[scenario]]\nname = \"t\"\n[[scenario.actor]]\nkind = \"agent\"\n",
+        )
+        .unwrap();
+        let mut g = Gen {
+            scenario: &file.scenario[0],
+            seed: 1,
+            palette: &palette,
+            rng: Rng::new(1),
+            t0: 0,
+            out: Vec::new(),
+            shapes: BTreeMap::new(),
+            times: BTreeMap::new(),
+        };
+        let mut rng = Rng::new(2);
+        let spec = |gaps: Vec<i64>, rng: &mut Rng| RunSpec {
+            truth: Truth {
+                label: Some("agent"),
+                actor: "agent",
+                class: "test".into(),
+                run: format!("r{}", gaps[1]),
+                swarm: None,
+                fleet: None,
+            },
+            client: agent_client(rng),
+            start: 1000,
+            pace: Pace::Model,
+            hosts: vec!["h0.t.example".to_string(); gaps.len()],
+            uses: vec![Use::Attack; gaps.len()],
+            gaps: Some(gaps),
+            fixed: None,
+            harness: Vec::new(),
+            shapes: Vec::new(),
+            scope: "0:0".into(),
+            sink_scope: None,
+            tag: true,
+            retry: 1.0,
+            writes: None,
+            fetches: None,
+            adapt: true,
+            habits: None,
+        };
+        // Every request fails twice and is retried, each retry at most a
+        // model's pace later: well inside ten minutes.
+        g.run(spec(vec![0, 600, 600, 600], &mut rng), &mut rng);
+        let ts = &g.times["r600"];
+        assert_eq!(ts.len(), 12);
+        let firsts: Vec<i64> = ts.iter().step_by(3).copied().collect();
+        assert_eq!(firsts, [1000, 1600, 2200, 2800]);
+        // Retries longer than the schedule's gaps: the next request leaves
+        // after the last retry, never before it, and the schedule resumes.
+        g.run(spec(vec![0, 1, 1, 2000], &mut rng), &mut rng);
+        let ts = &g.times["r1"];
+        assert!(ts.windows(2).all(|w| w[0] <= w[1]), "{ts:?}");
+        assert_eq!(ts[9], 3002, "{ts:?}");
     }
 
     #[test]

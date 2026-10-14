@@ -20,13 +20,16 @@ pub mod rng;
 pub mod scenario;
 pub mod truth;
 
-pub use calibrate::{Calibration, calibrate, render_calibration};
+pub use calibrate::{
+    Calibration, RuleCheck, Stratified, calibrate, calibrate_by_scenario, check_rules,
+    render_calibration, render_stratified, stratified,
+};
 pub use gate::{Check, Gate, NullCounts, null_counts};
 pub use generate::{generate, to_ndjson};
 pub use measure::{KindStat, Measurement, PairCounts, measure};
 pub use palette::{Palette, Template, Use};
 pub use render::render;
-pub use scenario::{Scenario, ScenarioFile};
+pub use scenario::{Expect, Scenario, ScenarioFile};
 pub use truth::{Truth, TruthRow};
 
 use sc_core::{FieldMap, Format, Rules, analyze, parse_input};

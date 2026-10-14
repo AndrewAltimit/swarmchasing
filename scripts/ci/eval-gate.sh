@@ -34,12 +34,16 @@
 #
 # Simulator: `swarmchase sim bench` on samples/sim/scenarios.toml, with
 # floors on interaction-edge, soft-link and candidate-fleet precision summed
-# over every scenario, and ceilings on the edges, soft links and
-# candidate-fleet pairs the null scenarios (no two runs related) draw. The
-# simulator is seeded, so the numbers only move when the analysis, the rules,
-# the generator or the scenarios do. Floors only go up and ceilings only go
-# down, as above; a new scenario that lowers a pooled number is argued in its
-# commit, never landed by moving a bound.
+# over every scenario (soft links and candidate fleets also between distinct
+# runs only, since a split run rejoined counts as right in the first), ceilings
+# on the edges, soft links and candidate-fleet pairs the null scenarios (no two
+# runs related) draw, ceilings on benign and tool records graded L2 or above
+# and on people's records graded L3 or above, and each scenario's `expect`
+# table (`--expect`: every kind a scenario is built to produce must draw pairs
+# and meet its bounds there). The simulator is seeded, so the numbers only move
+# when the analysis, the rules, the generator or the scenarios do. Floors only
+# go up and ceilings only go down, as above; a new scenario that lowers a
+# pooled number is argued in its commit, never landed by moving a bound.
 #
 # Usage:
 #     scripts/ci/eval-gate.sh [extra cargo args, e.g. --profile release-test]
@@ -74,4 +78,9 @@ cargo run --quiet "$@" -p swarmchase -- sim bench samples/sim/scenarios.toml \
     --max-null-edges 0 \
     --max-null-links 10 \
     --max-null-fleet-pairs 3 \
+    --min-link-cross-run-precision 0.27 \
+    --min-fleet-cross-run-precision 0.91 \
+    --max-benign-high 2429 \
+    --max-human-high 10 \
+    --expect \
     | sed -n '/^Null scenarios/,$p'

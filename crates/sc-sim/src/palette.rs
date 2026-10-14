@@ -70,6 +70,8 @@ pub struct Template {
     pub class: String,
     /// The identifiers to rewrite: linking feature values as they appear.
     pub features: Vec<LinkFeature>,
+    /// A rule fires on it as written.
+    pub flagged: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -145,6 +147,7 @@ impl Palette {
             origin: format!("{file}/{}", obs.id),
             host,
             class: class.to_string(),
+            flagged: !ex.hits.is_empty(),
             features: ex.features,
             obs,
         });
@@ -152,6 +155,15 @@ impl Palette {
 
     pub fn get(&self, u: Use) -> &[Template] {
         self.by_use.get(&u).map_or(&[], Vec::as_slice)
+    }
+
+    /// Benign templates of one class that a rule fires on: the benign
+    /// content the timing and linking detectors can see. All of the class
+    /// when none is flagged.
+    pub fn benign_flagged(&self, class: &str) -> Vec<&Template> {
+        let all = self.benign(class);
+        let flagged: Vec<&Template> = all.iter().copied().filter(|t| t.flagged).collect();
+        if flagged.is_empty() { all } else { flagged }
     }
 
     /// Benign templates of one class, or all benign ones when the class has

@@ -2,7 +2,7 @@
 
 A seeded swarm simulator with ground truth, and swarm and fleet detection measured against it. The generator turns a scenario file into labelled records: request content is copied from the committed evaluation records, and what it simulates is who sends them, when, from which client and in what order. The measurement reads, from labelled records, who sent each record, its true run, and the swarm and fleet that run belongs to, then scores an analysis's interaction edges (S1 to S5), soft links, candidate fleets and agent grades against them. The [`swarmchase`](../swarmchase/README.md) CLI runs it as `swarmchase sim write`, `sim bench`, `sim calibrate` and `sim score` ([evaluation](../../docs/reference/evaluation.md#swarm-and-fleet-measurement)).
 
-No I/O. The eval gate holds `sim bench`'s precision floors and null-scenario ceilings ([simulator bounds](../../docs/reference/evaluation.md#simulator-bounds)).
+No I/O. The eval gate holds `sim bench`'s precision floors, grade and null-scenario ceilings and per-scenario expectations ([simulator bounds](../../docs/reference/evaluation.md#simulator-bounds)).
 
 ## Use
 
@@ -18,15 +18,15 @@ print!("{}", render(&m));
 
 | Module | Covers |
 |---|---|
-| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, target lists, news spikes, hubs, single agents, background, planters, mimics, escalators), pace, retries, start offsets and windows, palette shares, time basis, seeds, null scenarios. |
+| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, target lists, news spikes, hubs, single agents, background, benign look-alikes, planters, mimics, escalators), pace, retries, offsets, windows, palette shares, time basis, seeds, null scenarios, expectations. |
 | [`palette`](src/palette.rs) | The committed records the generator copies, sorted by use (attack, read, callback inbox, benign, person, tool). |
 | [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers, a fleet harness's own parameters. |
 | [`rng`](src/rng.rs) | A small seeded generator, the same on every platform. |
 | [`truth`](src/truth.rs) | `TruthRow` per record id from `label`, `actor`, `class`, `run`, `swarm` and `fleet`; the operator a run belongs to. |
-| [`measure`](src/measure.rs) | Pair-level precision and recall per edge kind, soft-link kind and candidate fleet; the grade table by actor and class. |
+| [`measure`](src/measure.rs) | Pair-level precision and recall per edge kind, soft-link kind and candidate fleet; split runs rejoined; the grade table by actor and class. |
 | [`render`](src/render.rs) | The measurement as text tables, with Wilson intervals. |
-| [`gate`](src/gate.rs) | Precision floors over every scenario and ceilings on what the null scenarios draw. |
-| [`calibrate`](src/calibrate.rs) | Each soft-link kind's likelihood ratio from simulated truth, point and conservative. |
+| [`gate`](src/gate.rs) | Precision floors over every scenario, grade ceilings, ceilings on what the null scenarios draw, per-scenario expectations. |
+| [`calibrate`](src/calibrate.rs) | Each soft-link kind's likelihood ratio from simulated truth, pooled and stratified by scenario, and the check of the bundled ratios. |
 
 `bench` generates each scenario under its seeds, analyses each run on its own and sums the measurements.
 
