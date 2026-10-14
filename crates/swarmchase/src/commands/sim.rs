@@ -5,8 +5,8 @@ use crate::input::{InputArgs, load_rules, read_records};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_sim::{
-    Gate, Measurement, Palette, ScenarioFile, Truth, bench, calibrate, generate, measure,
-    null_counts, render, render_calibration, to_ndjson,
+    Gate, Measurement, Palette, ScenarioFile, Truth, bench, calibrate_by_scenario, check_rules,
+    generate, measure, null_counts, render, render_stratified, to_ndjson,
 };
 use std::path::PathBuf;
 
@@ -49,11 +49,16 @@ enum SimCmd {
     },
     /// Each soft-link kind's likelihood ratio from simulated truth: every
     /// kind switched on, every pair of clusters above noise counted as one
-    /// operator's or not. Prints the ratios beside the ones the rules set.
+    /// operator's or not. Prints the pooled ratios, the ratios stratified by
+    /// scenario and each scenario's, beside the ones the rules set.
     Calibrate {
         scenarios: PathBuf,
         #[arg(long)]
         rules: Option<PathBuf>,
+        /// Exit non-zero when a ratio the rules set is above the
+        /// stratified lower bound of a kind the scenarios measure.
+        #[arg(long)]
+        check: bool,
     },
     /// Score interaction edges, soft links, candidate fleets and agent
     /// grades against records labelled with `run`, `swarm` and `fleet`.
@@ -84,6 +89,13 @@ struct GateArgs {
     /// Candidate fleets, as cluster pairs.
     #[arg(long)]
     min_fleet_precision: Option<f64>,
+    /// Soft links of any kind between distinct runs (pairs of clusters on
+    /// one run left out).
+    #[arg(long)]
+    min_link_cross_run_precision: Option<f64>,
+    /// Candidate-fleet cluster pairs between distinct runs.
+    #[arg(long)]
+    min_fleet_cross_run_precision: Option<f64>,
     /// Edges between different runs in the null scenarios, summed over
     /// their seeds.
     #[arg(long)]
@@ -95,6 +107,17 @@ struct GateArgs {
     /// scenarios.
     #[arg(long)]
     max_null_fleet_pairs: Option<usize>,
+    /// Benign or tool records in clusters graded L2 or above, summed over
+    /// every scenario.
+    #[arg(long)]
+    max_benign_high: Option<usize>,
+    /// People's records in clusters graded L3 or above.
+    #[arg(long)]
+    max_human_high: Option<usize>,
+    /// Hold each scenario's `expect` table: every kind it names must draw
+    /// pairs and meet its bounds on that scenario.
+    #[arg(long)]
+    expect: bool,
 }
 
 impl GateArgs {
@@ -103,9 +126,14 @@ impl GateArgs {
             min_edge_precision: self.min_edge_precision,
             min_link_precision: self.min_link_precision,
             min_fleet_precision: self.min_fleet_precision,
+            min_link_cross_run_precision: self.min_link_cross_run_precision,
+            min_fleet_cross_run_precision: self.min_fleet_cross_run_precision,
             max_null_edges: self.max_null_edges,
             max_null_links: self.max_null_links,
             max_null_fleet_pairs: self.max_null_fleet_pairs,
+            max_benign_high: self.max_benign_high,
+            max_human_high: self.max_human_high,
+            expect: self.expect,
         }
     }
 }
@@ -162,7 +190,11 @@ pub fn run(a: SimArgs) -> Result<()> {
             let mut failed = 0;
             if !gate.is_empty() {
                 println!();
-                for c in gate.check(&sum, &null) {
+                for c in gate
+                    .check(&sum, &null)
+                    .into_iter()
+                    .chain(gate.check_scenarios(&results, &file))
+                {
                     println!("{}", c.line());
                     failed += usize::from(!c.ok);
                 }
@@ -186,11 +218,34 @@ pub fn run(a: SimArgs) -> Result<()> {
             }
             Ok(())
         }
-        SimCmd::Calibrate { scenarios, rules } => {
+        SimCmd::Calibrate {
+            scenarios,
+            rules,
+            check,
+        } => {
             let rules = load_rules(rules.as_deref())?;
             let file = read_scenarios(&scenarios)?;
-            let c = calibrate(&file, &Palette::default_palette(&rules), &rules);
-            print!("{}", render_calibration(&c, &rules));
+            let strata = calibrate_by_scenario(&file, &Palette::default_palette(&rules), &rules);
+            print!("{}", render_stratified(&strata, &rules));
+            if check {
+                println!();
+                let mut failed = 0;
+                for c in check_rules(&strata, &rules) {
+                    println!(
+                        "{} {}: rules {:.2}, stratified lower bound {:.2}",
+                        if c.ok { "ok  " } else { "FAIL" },
+                        serde_json::to_value(c.kind)?.as_str().unwrap_or_default(),
+                        c.bundled,
+                        c.low
+                    );
+                    failed += usize::from(!c.ok);
+                }
+                if failed > 0 {
+                    bail!(
+                        "{failed} soft-link ratio(s) above the simulation's stratified lower bound"
+                    );
+                }
+            }
             Ok(())
         }
         SimCmd::Score { input, rules, json } => {

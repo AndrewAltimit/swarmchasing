@@ -1,7 +1,7 @@
 //! The measurement over the committed interaction samples.
 
 use super::*;
-use sc_core::{FieldMap, Format, Rules, analyze, parse_input};
+use sc_core::{FieldMap, Format, Observation, Rules, analyze, parse_input};
 
 const SWARMS: &str = include_str!("../../../samples/eval/swarm-interaction.ndjson");
 
@@ -247,6 +247,92 @@ fn an_agent_changing_route_draws_escalation_links() {
     let e = &m.links["escalation"];
     // Each route a separate tool: two clusters of one run.
     assert!(e.pairs > 0 && e.same_run == e.pairs, "{}", render(&m));
+    // Counted as split runs rejoined, not as pairs of distinct runs.
+    assert!(
+        e.rejoined > 0 && e.rejoined <= m.split_pairs,
+        "{}",
+        render(&m)
+    );
+    assert_eq!(e.cross_correct, 0);
+    assert_eq!(e.cross_run_precision().n, 0);
+}
+
+#[test]
+fn a_benign_record_without_an_actor_is_left_out_of_the_grades() {
+    let t = Truth::from_ndjson(
+        "{\"id\":\"b\",\"run\":\"r1\",\"label\":\"benign\"}\n\
+         {\"id\":\"a\",\"run\":\"r2\",\"label\":\"agent\"}\n\
+         {\"id\":\"h\",\"run\":\"r3\",\"actor\":\"human\"}\n",
+    );
+    assert_eq!(t.get("b").unwrap().actor, None);
+    assert_eq!(
+        t.get("a").unwrap().actor,
+        Some(sc_core::eval::grades::Actor::Agent)
+    );
+    assert_eq!(
+        t.get("h").unwrap().actor,
+        Some(sc_core::eval::grades::Actor::Human)
+    );
+}
+
+#[test]
+fn benign_look_alikes_are_unrelated_tools() {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    let s = scenario("null-lookalikes");
+    let text = to_ndjson(&generate(&s, s.seed, &p));
+    let truth = Truth::from_ndjson(&text);
+    let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
+    let mut by_class: std::collections::BTreeMap<String, Vec<&Observation>> = Default::default();
+    for o in &obs {
+        let t = truth.get(&o.id).unwrap();
+        if t.class == "single_agent" {
+            continue;
+        }
+        assert_eq!(t.label, Some(sc_core::Label::Benign), "{}", t.class);
+        assert_eq!(t.actor, Some(sc_core::eval::grades::Actor::Tool));
+        assert_eq!(t.operator(), format!("run:{}", t.run));
+        by_class.entry(t.class.clone()).or_default().push(o);
+    }
+    let classes: Vec<&str> = by_class.keys().map(String::as_str).collect();
+    assert_eq!(
+        classes,
+        [
+            "feed_poller",
+            "internet_scanner",
+            "link_preview",
+            "uptime_monitor"
+        ]
+    );
+    // The monitor's regions check each URL within a second of each other,
+    // from different networks.
+    let mut checks: std::collections::BTreeMap<String, Vec<i64>> = Default::default();
+    for o in &by_class["uptime_monitor"] {
+        checks.entry(o.url.clone()).or_default().push(o.ts);
+    }
+    let first = by_class["uptime_monitor"][0].ts;
+    let minute: Vec<i64> = by_class["uptime_monitor"]
+        .iter()
+        .filter(|o| o.ts - first < 60)
+        .map(|o| o.ts)
+        .collect();
+    assert_eq!(minute.len(), 4, "{minute:?}");
+    assert!(minute.iter().max().unwrap() - minute.iter().min().unwrap() <= 1);
+    let nets: std::collections::BTreeSet<u32> = by_class["uptime_monitor"]
+        .iter()
+        .filter_map(|o| o.asn)
+        .collect();
+    assert_eq!(nets.len(), 4);
+    // The scanner's addresses share one network and one /24.
+    let scan = &by_class["internet_scanner"];
+    let asns: std::collections::BTreeSet<u32> = scan.iter().filter_map(|o| o.asn).collect();
+    let ips: std::collections::BTreeSet<&str> =
+        scan.iter().filter_map(|o| o.ip.as_deref()).collect();
+    let nets: std::collections::BTreeSet<&str> = ips
+        .iter()
+        .map(|ip| ip.rsplit_once('.').unwrap().0)
+        .collect();
+    assert_eq!((asns.len(), ips.len(), nets.len()), (1, 6, 1));
 }
 
 #[test]

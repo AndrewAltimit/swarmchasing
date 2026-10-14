@@ -9,14 +9,19 @@
 //! nothing.
 
 use crate::truth::Truth;
+use sc_core::eval::Label;
+use sc_core::eval::grades::Actor;
 use sc_core::eval::stats::Proportion;
-use sc_core::{Analysis, SoftLinkKind, Tier};
+use sc_core::{AgentLevel, Analysis, SoftLinkKind, Tier};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// One kind's pairs. For an edge, `correct` is a pair of distinct runs in one
 /// swarm; for a soft link or candidate fleet, a pair with one operator
-/// (`same_run` included).
+/// (`same_run` included, so a run split in two clusters and rejoined counts
+/// as right). `cross_correct` counts only right pairs of distinct runs, and
+/// [`KindStat::cross_run_precision`] reads it over the pairs of distinct
+/// runs.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct KindStat {
     /// Distinct run pairs it drew, both sides placed.
@@ -27,6 +32,14 @@ pub struct KindStat {
     /// Distinct runs, one operator, no interaction (edges only).
     pub same_operator: usize,
     pub unrelated: usize,
+    /// Right pairs of distinct runs.
+    #[serde(default)]
+    pub cross_correct: usize,
+    /// Soft links and candidate fleets: pairs of two clusters above noise
+    /// on one run it linked (a split run rejoined), of
+    /// [`Measurement::split_pairs`].
+    #[serde(default)]
+    pub rejoined: usize,
     /// True pairs it found, of those it could reach.
     pub found: usize,
     pub of: usize,
@@ -41,12 +54,20 @@ impl KindStat {
         Proportion::new(self.found, self.of)
     }
 
+    /// Precision over the pairs of distinct runs: same-run pairs left out
+    /// of both counts.
+    pub fn cross_run_precision(&self) -> Proportion {
+        Proportion::new(self.cross_correct, self.pairs - self.same_run)
+    }
+
     fn add(&mut self, o: &Self) {
         self.pairs += o.pairs;
         self.correct += o.correct;
         self.same_run += o.same_run;
         self.same_operator += o.same_operator;
         self.unrelated += o.unrelated;
+        self.cross_correct += o.cross_correct;
+        self.rejoined += o.rejoined;
         self.found += o.found;
         self.of += o.of;
     }
@@ -76,8 +97,19 @@ pub struct Measurement {
     pub links: BTreeMap<String, KindStat>,
     /// Edges or links with a side no truth places.
     pub unplaced: usize,
-    /// `actor/class` → grade column → records.
+    /// Pairs of clusters above noise both placed on one run: a run split
+    /// across clusters, which soft links may rejoin.
+    #[serde(default)]
+    pub split_pairs: usize,
+    /// `actor/class` → grade column → records. Records with no actor are
+    /// left out.
     pub grades: BTreeMap<String, BTreeMap<String, usize>>,
+    /// Benign or tool records in clusters graded L2 or above.
+    #[serde(default)]
+    pub benign_high: usize,
+    /// People's records in clusters graded L3 or above.
+    #[serde(default)]
+    pub human_high: usize,
 }
 
 impl Measurement {
@@ -98,6 +130,9 @@ impl Measurement {
             }
         }
         self.unplaced += o.unplaced;
+        self.split_pairs += o.split_pairs;
+        self.benign_high += o.benign_high;
+        self.human_high += o.human_high;
         for (row, cols) in &o.grades {
             let r = self.grades.entry(row.clone()).or_default();
             for (c, n) in cols {
@@ -150,16 +185,29 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
         }
         out.records += 1;
         run_row.entry(t.run.as_str()).or_insert(t);
-        let col = match (r.score, r.cluster) {
+        let level = match (r.score, r.cluster) {
+            (0, _) | (_, None) => None,
+            (_, Some(c)) => Some(a.clusters[c].agent.level),
+        };
+        let col = match (r.score, level) {
             (0, _) => "unflagged".to_string(),
             (_, None) => "unclustered".to_string(),
-            (_, Some(c)) => a.clusters[c].agent.level.code().to_string(),
+            (_, Some(l)) => l.code().to_string(),
         };
-        *out.grades
-            .entry(format!("{}/{}", t.actor.id(), t.class))
-            .or_default()
-            .entry(col)
-            .or_default() += 1;
+        if let Some(actor) = t.actor {
+            *out.grades
+                .entry(format!("{}/{}", actor.id(), t.class))
+                .or_default()
+                .entry(col)
+                .or_default() += 1;
+        }
+        let benign = t.label == Some(Label::Benign) || t.actor == Some(Actor::Tool);
+        if benign && level >= Some(AgentLevel::ModelWritten) {
+            out.benign_high += 1;
+        }
+        if t.actor == Some(Actor::Human) && level >= Some(AgentLevel::Adaptive) {
+            out.human_high += 1;
+        }
         if let Some(c) = r.cluster.filter(|&c| a.clusters[c].tier > Tier::Noise) {
             *run_clusters
                 .entry(t.run.as_str())
@@ -232,6 +280,7 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
                 s.same_run += 1;
             } else if tx.swarm_id().is_some() && tx.swarm_id() == ty.swarm_id() {
                 s.correct += 1;
+                s.cross_correct += 1;
             } else if tx.operator() == ty.operator() {
                 s.same_operator += 1;
             } else {
@@ -253,6 +302,16 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
             majority(truth, ids).map(|r| (c, r))
         })
         .collect();
+    // Clusters above noise on one run: the split runs a link may rejoin.
+    let above = |c: usize| a.clusters[c].tier > Tier::Noise;
+    let placed_above: Vec<&str> = cluster_run
+        .iter()
+        .filter(|(c, _)| above(**c))
+        .map(|(_, r)| *r)
+        .collect();
+    for (i, rx) in placed_above.iter().enumerate() {
+        out.split_pairs += placed_above[i + 1..].iter().filter(|ry| *ry == rx).count();
+    }
     let mut linked: BTreeMap<String, BTreeSet<(usize, usize)>> = BTreeMap::new();
     for k in SOFT_LINK_KINDS {
         linked.entry(kind_name(&k)).or_default();
@@ -293,8 +352,12 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
             if rx == ry {
                 s.same_run += 1;
                 s.correct += 1;
+                if above(x) && above(y) {
+                    s.rejoined += 1;
+                }
             } else if run_row[rx].operator() == run_row[ry].operator() {
                 s.correct += 1;
+                s.cross_correct += 1;
             } else {
                 s.unrelated += 1;
             }

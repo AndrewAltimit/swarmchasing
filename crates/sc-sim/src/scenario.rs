@@ -5,6 +5,7 @@
 //! scenario can be a name and one actor.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ScenarioFile {
@@ -67,8 +68,46 @@ pub struct Scenario {
     /// different runs is false. The gate holds a ceiling on them.
     #[serde(default)]
     pub null: bool,
+    /// What the scenario is built to produce: an interaction-edge kind
+    /// (`S3` or `synchronized_start`), a soft-link kind (`co_target`) or
+    /// `candidate_fleet`, each with the bounds it must meet on this
+    /// scenario's own measurement (`expect.S3 = { min_recall = 0.8 }`). An
+    /// expected kind that draws nothing fails.
+    #[serde(default)]
+    pub expect: BTreeMap<String, Expect>,
     #[serde(default)]
     pub actor: Vec<Actor>,
+}
+
+/// Bounds on one kind in one scenario, summed over its seeds.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Expect {
+    /// Pairs it draws that are right.
+    #[serde(default)]
+    pub min_precision: Option<f64>,
+    /// Reachable true pairs it finds.
+    #[serde(default)]
+    pub min_recall: Option<f64>,
+    /// Soft links and candidate fleets: pairs of clusters on one run it
+    /// rejoins, of those split.
+    #[serde(default)]
+    pub min_rejoined: Option<f64>,
+}
+
+/// The measurement key an `expect` names (an edge kind's serialised name,
+/// a soft-link kind's, or `candidate_fleet`) and whether it is an edge;
+/// `None` for a name that is none of these.
+pub fn expect_key(name: &str) -> Option<(String, bool)> {
+    if let Ok(k) = name.parse::<sc_core::SwarmEdgeKind>() {
+        return Some((k.name().to_string(), true));
+    }
+    if name == "candidate_fleet"
+        || serde_json::from_value::<sc_core::SoftLinkKind>(serde_json::json!(name)).is_ok()
+    {
+        return Some((name.to_string(), false));
+    }
+    None
 }
 
 fn one() -> u64 {
@@ -98,6 +137,12 @@ impl Scenario {
             return Err(format!(
                 "{}: a null scenario relates no runs, but has a {:?} actor",
                 self.name, a.kind
+            ));
+        }
+        if let Some(k) = self.expect.keys().find(|k| expect_key(k).is_none()) {
+            return Err(format!(
+                "{}: expect.{k} names no edge kind, soft-link kind or candidate_fleet",
+                self.name
             ));
         }
         Ok(())
@@ -145,8 +190,8 @@ pub enum Mode {
     /// within the hour, then work their own hosts (S2).
     Handoff,
     /// The first agent is a planner sending a request at irregular
-    /// dispatches, twenty times its pace apart (80 s to 30 min at model pace);
-    /// each other agent sends one 40 to 85 seconds after each dispatch
+    /// dispatches 10 to 50 minutes apart, so a few records span hours; each
+    /// other agent sends one 40 to 85 seconds after each dispatch
     /// (co-activity).
     Dispatch,
 }
@@ -201,6 +246,26 @@ pub enum Kind {
     /// One unrelated agent working the target lists of the actors it
     /// `bridges` (by index) in their hours: a cluster tied to two fleets.
     Hub,
+    /// An uptime service checking the same `hosts` in turn, one a minute
+    /// (`records` checks), from `agents` regions in lockstep, each region
+    /// its own network and address: benign, and a look-alike of a
+    /// synchronised swarm (S3).
+    UptimeMonitor,
+    /// An internet-wide scanner sharding one host family over `agents`
+    /// addresses of one network, all starting together, each address
+    /// sending one probe set to its hosts (`records` requests each):
+    /// benign, and a look-alike of a sharded swarm (S5) and of a shared
+    /// scaffold.
+    InternetScanner,
+    /// Link-preview bots of `agents` chat and social platforms, most of
+    /// them fetching each posted link (`records` posts) within seconds of
+    /// the post: benign, and a look-alike of co-activity.
+    LinkPreview,
+    /// `agents` feed readers polling the same `hosts` feeds in one order
+    /// (`records` polls each) on their own intervals, all backing off
+    /// through one outage of the feed host: benign, and a look-alike of
+    /// reruns and shared pauses.
+    FeedPoller,
 }
 
 impl Kind {

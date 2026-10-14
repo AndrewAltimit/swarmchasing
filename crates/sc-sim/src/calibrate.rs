@@ -9,6 +9,15 @@
 //! on one side has a finite ratio). The ratios are the defaults the rules
 //! file starts from; the simulator only copies request content, so a kind
 //! it cannot produce (a captured secret, a header set) has no estimate.
+//!
+//! Pooled over scenarios, the unrelated pairs of a few crowded scenarios
+//! (hundreds of agents, hundreds of thousands of pairs) swamp the rest and
+//! make every kind look rarer among unrelated pairs than it is where one
+//! operator's pairs are (Simpson's effect). So each scenario is also a
+//! stratum: [`stratified`] is a Mantel-Haenszel ratio over the scenarios
+//! where the kind fired and both kinds of pair exist, with a
+//! Greenland-Robins interval, and its lower bound is the conservative value
+//! the bundled ratios must not exceed ([`check_rules`]).
 
 use crate::measure::majority;
 use crate::{Palette, ScenarioFile, Truth, generate, to_ndjson};
@@ -142,18 +151,177 @@ pub fn count(a: &Analysis, truth: &Truth) -> Calibration {
     out
 }
 
-/// Every scenario of `file` under each of its seeds, with every kind on.
-pub fn calibrate(file: &ScenarioFile, palette: &Palette, rules: &Rules) -> Calibration {
+/// Every scenario of `file` under each of its seeds, with every kind on,
+/// summed per scenario.
+pub fn calibrate_by_scenario(
+    file: &ScenarioFile,
+    palette: &Palette,
+    rules: &Rules,
+) -> Vec<(String, Calibration)> {
     let open = open_rules(rules);
-    let mut total = Calibration::default();
+    let mut out = Vec::new();
     for s in &file.scenario {
+        let mut total = Calibration::default();
         for k in 0..s.seeds.max(1) {
             let text = to_ndjson(&generate(s, s.seed + k as u64, palette));
             let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
             total.add(&count(&analyze(obs, &open), &Truth::from_ndjson(&text)));
         }
+        out.push((s.name.clone(), total));
+    }
+    out
+}
+
+/// Every scenario of `file` under each of its seeds, with every kind on,
+/// pooled.
+pub fn calibrate(file: &ScenarioFile, palette: &Palette, rules: &Rules) -> Calibration {
+    pool(&calibrate_by_scenario(file, palette, rules))
+}
+
+/// The strata summed.
+pub fn pool(strata: &[(String, Calibration)]) -> Calibration {
+    let mut total = Calibration::default();
+    for (_, c) in strata {
+        total.add(c);
     }
     total
+}
+
+/// A kind's ratio over strata (scenarios).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Stratified {
+    /// Strata counted: the kind fired in them, and they hold pairs of one
+    /// operator and unrelated pairs.
+    pub strata: usize,
+    /// The Mantel-Haenszel ratio, half a pair added to each linked count
+    /// and one pair to each total in every stratum counted.
+    pub lr: f64,
+    /// Its lower 95% bound (Greenland-Robins variance of the log ratio).
+    pub low: f64,
+}
+
+/// The Mantel-Haenszel ratio of `kind` over the strata where it can occur:
+/// those where it linked a pair, with pairs of one operator and unrelated
+/// pairs. `None` when it linked no pair of one operator in any of them.
+pub fn stratified(strata: &[(String, Calibration)], kind: SoftLinkKind) -> Option<Stratified> {
+    let (mut r, mut s, mut v, mut n, mut hits) = (0.0, 0.0, 0.0, 0, 0);
+    for (_, c) in strata {
+        let k = c.kinds.get(&kind).cloned().unwrap_or_default();
+        if k.same + k.other == 0 || c.same_pairs == 0 || c.other_pairs == 0 {
+            continue;
+        }
+        n += 1;
+        hits += k.same;
+        let (a, b) = (k.same as f64 + 0.5, k.other as f64 + 0.5);
+        let (n1, n0) = (c.same_pairs as f64 + 1.0, c.other_pairs as f64 + 1.0);
+        let t = n1 + n0;
+        r += a * n0 / t;
+        s += b * n1 / t;
+        v += (n1 * n0 * (a + b) / (t * t) - a * b / t).max(0.0);
+    }
+    if hits == 0 || r <= 0.0 || s <= 0.0 {
+        return None;
+    }
+    let lr = r / s;
+    let se = (v / (r * s)).sqrt();
+    Some(Stratified {
+        strata: n,
+        lr,
+        low: lr * (-sc_core::eval::stats::Z95 * se).exp(),
+    })
+}
+
+/// One kind's bundled ratio against the stratified lower bound.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RuleCheck {
+    pub kind: SoftLinkKind,
+    pub bundled: f64,
+    pub low: f64,
+    pub ok: bool,
+}
+
+/// Every kind the strata measure: its ratio in `rules` must be at or below
+/// the stratified lower bound, so no bundled ratio claims more than the
+/// simulation shows.
+pub fn check_rules(strata: &[(String, Calibration)], rules: &Rules) -> Vec<RuleCheck> {
+    SoftLinkKind::ALL
+        .into_iter()
+        .filter_map(|k| {
+            let st = stratified(strata, k)?;
+            let bundled = rules.set.soft_links.lr(k);
+            Some(RuleCheck {
+                kind: k,
+                bundled,
+                low: st.low,
+                ok: bundled <= st.low + 1e-9,
+            })
+        })
+        .collect()
+}
+
+/// The serialised name of a kind (`co_target`).
+fn kind_name(k: SoftLinkKind) -> String {
+    serde_json::to_value(k)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// The calibration as a table, with each kind's pooled ratio, its
+/// stratified ratio over the scenarios where it can occur, and the ratio
+/// `rules` sets now; then each kind's ratio per scenario.
+pub fn render_stratified(strata: &[(String, Calibration)], rules: &Rules) -> String {
+    let c = pool(strata);
+    let mut s = render_calibration(&c, rules);
+    let _ = writeln!(
+        s,
+        "\nStratified by scenario (Mantel-Haenszel over the scenarios where the kind fired and both kinds of pair exist; low: the lower 95% bound, the value no bundled ratio may exceed):\n"
+    );
+    let _ = writeln!(
+        s,
+        "  {:<18} {:>7} {:>10} {:>8} {:>8}",
+        "kind", "strata", "ratio", "low", "rules"
+    );
+    for k in SoftLinkKind::ALL {
+        let Some(st) = stratified(strata, k) else {
+            continue;
+        };
+        let _ = writeln!(
+            s,
+            "  {:<18} {:>7} {:>10.1} {:>8.1} {:>8.1}",
+            kind_name(k),
+            st.strata,
+            st.lr,
+            st.low,
+            rules.set.soft_links.lr(k)
+        );
+    }
+    let _ = writeln!(
+        s,
+        "\nPer scenario (one operator's pairs linked / pairs, unrelated linked / pairs, ratio):"
+    );
+    for k in SoftLinkKind::ALL {
+        let rows: Vec<String> = strata
+            .iter()
+            .filter_map(|(name, c)| {
+                let p = c.kinds.get(&k)?;
+                if p.same + p.other == 0 {
+                    return None;
+                }
+                let lr = c
+                    .lr(k)
+                    .map_or_else(|| "-".to_string(), |x| format!("{x:.1}"));
+                Some(format!(
+                    "{name} {}/{} {}/{} {lr}",
+                    p.same, c.same_pairs, p.other, c.other_pairs
+                ))
+            })
+            .collect();
+        if !rows.is_empty() {
+            let _ = writeln!(s, "  {}: {}", kind_name(k), rows.join("; "));
+        }
+    }
+    s
 }
 
 /// The calibration as a table, with each kind's ratio and the ratio
@@ -181,10 +349,7 @@ pub fn render_calibration(c: &Calibration, rules: &Rules) -> String {
         let _ = writeln!(
             s,
             "  {:<18} {:<12} {:>6} {:>7} {:>10} {:>8} {:>8}",
-            serde_json::to_value(k)
-                .ok()
-                .and_then(|v| v.as_str().map(str::to_string))
-                .unwrap_or_default(),
+            kind_name(k),
             k.family().label(),
             p.same,
             p.other,
@@ -220,5 +385,50 @@ mod tests {
         let open = open_rules(&Rules::default_rules());
         assert_eq!(open.set.soft_links.lr(SoftLinkKind::RelayStack), 2.0);
         assert_eq!(open.set.soft_links.min_link_lr, 1.0);
+    }
+
+    fn stratum(same_pairs: usize, other_pairs: usize, same: usize, other: usize) -> Calibration {
+        let mut c = Calibration {
+            same_pairs,
+            other_pairs,
+            ..Default::default()
+        };
+        c.kinds
+            .insert(SoftLinkKind::Dialect, KindPairs { same, other });
+        c
+    }
+
+    #[test]
+    fn a_crowded_stratum_does_not_inflate_the_stratified_ratio() {
+        // One small scenario where the kind fires on a third of either kind
+        // of pair (no evidence), and a crowd where it never fires.
+        let strata = vec![
+            ("small".to_string(), stratum(30, 300, 10, 100)),
+            ("crowd".to_string(), stratum(3, 300_000, 0, 0)),
+        ];
+        let pooled = pool(&strata).lr(SoftLinkKind::Dialect).unwrap();
+        assert!(pooled > 100.0, "{pooled}");
+        let st = stratified(&strata, SoftLinkKind::Dialect).unwrap();
+        assert_eq!(st.strata, 1);
+        assert!((0.8..1.3).contains(&st.lr), "{st:?}");
+        assert!(st.low < st.lr);
+        // A kind that never fires on one operator's pairs has no estimate.
+        let none = vec![("x".to_string(), stratum(30, 300, 0, 20))];
+        assert_eq!(stratified(&none, SoftLinkKind::Dialect), None);
+        assert_eq!(stratified(&strata, SoftLinkKind::Scaffold), None);
+    }
+
+    #[test]
+    fn a_bundled_ratio_above_the_stratified_bound_fails() {
+        let strata = vec![("s".to_string(), stratum(30, 300, 10, 100))];
+        let mut set = Rules::default_rules().set.clone();
+        set.soft_links.set_lr(SoftLinkKind::Dialect, 0.5);
+        let low = Rules::compile(set.clone()).unwrap();
+        let c = check_rules(&strata, &low);
+        assert_eq!(c.len(), 1);
+        assert!(c[0].ok, "{c:?}");
+        set.soft_links.set_lr(SoftLinkKind::Dialect, 20.0);
+        let c = check_rules(&strata, &Rules::compile(set).unwrap());
+        assert!(!c[0].ok, "{c:?}");
     }
 }

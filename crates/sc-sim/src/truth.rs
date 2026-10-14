@@ -17,7 +17,9 @@ pub struct TruthRow {
     /// `agent` or `benign`; none for a person's or tool's payloads, which
     /// are graded, not scored (as in the evaluation set).
     pub label: Option<Label>,
-    pub actor: Actor,
+    /// Who sent it; none for a benign record that names no actor, which
+    /// the grade table leaves out (as `eval` does).
+    pub actor: Option<Actor>,
     /// The kind of actor (`swarm_agent`, `cron_scanner`, ...).
     pub class: String,
     /// The true run: one client working one stretch of one task.
@@ -58,7 +60,8 @@ impl Truth {
     }
 
     /// Truth from labelled NDJSON: every line with an `id` and a `run`.
-    /// `actor` defaults to `agent` for an agent label and `human` otherwise.
+    /// `actor` defaults to `agent` for an agent label and to none otherwise,
+    /// as in `eval`'s grade table.
     pub fn from_ndjson(text: &str) -> Self {
         let mut out = Self::default();
         for line in text.lines() {
@@ -74,13 +77,9 @@ impl Truth {
                 Some("benign" | "background") => Some(Label::Benign),
                 _ => None,
             };
-            let actor = s("actor").and_then(|a| Actor::parse(&a)).unwrap_or(
-                if label == Some(Label::Agent) {
-                    Actor::Agent
-                } else {
-                    Actor::Human
-                },
-            );
+            let actor = s("actor")
+                .and_then(|a| Actor::parse(&a))
+                .or((label == Some(Label::Agent)).then_some(Actor::Agent));
             out.rows.insert(
                 id,
                 TruthRow {
