@@ -95,7 +95,7 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 
 | Command | What it does |
 |---|---|
-| `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`, with a machine-readable `run.json` beside it; `--triage` asks a local model about new leads. `--init` starts a new data directory, `--check` checks the watchlist offline, `--public-log` writes a summary safe for a public log. Details: [Watch runs](../../docs/reference/watch.md). |
+| `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`, with a machine-readable `run.json` beside it. Options (`--init`, `--check`, `--only`, `--triage`, `--public-log`) and the `reset` and `prune-cache` subcommands: [Watch runs](../../docs/reference/watch.md). |
 | `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest`, `--serve` and `--export-hosted` add suggestions and a local page. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
 | `review agreement`, `misfires`, `check-suggestions`, `suggest-claude` | Compare model suggestions with the admin's labels, list rules that fire on benign records, validate a suggestions file, and ask Claude Code for suggestions on an export. Details: [AI assistance](../../docs/guides/ai-assistance.md). |
 | `dashboard` | A read-only local page of the attention queue, what is new since you last looked, an activity timeline, a link graph of soft links, interaction and candidate fleets, source health and rule drift, the review queue, open cases and the autonomy record, with the command for each next step. `--json` prints the same overview. Details: [The dashboard](../../docs/reference/watch.md#the-dashboard). |
@@ -112,6 +112,8 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 ```sh
 swarmchase watch                              # uses watchlist.toml and $SWARMCHASE_DATA (or data/)
 swarmchase watch --check                      # the watchlist, strictly and offline
+swarmchase watch --only jina-reader           # one source, with its cursor and health
+swarmchase watch reset jina-reader            # that source starts over next run
 swarmchase review --unflagged 20
 swarmchase eval samples/eval/*.ndjson
 swarmchase eval data/labels/reviewed.ndjson   # everything reviewed so far

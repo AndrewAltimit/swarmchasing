@@ -2,7 +2,9 @@
 //! with a minimum gap per host, an identifying user agent, retries with
 //! jittered backoff on transient failures (and longer patience for a host
 //! that answers "temporarily unavailable", which is then skipped for the
-//! rest of the run if it stays down), a cap on response size, an
+//! rest of the run if it stays down; likewise a host that asks for a longer
+//! wait than the cap, or times out on two requests in a row), a cap on
+//! response size, an
 //! optional on-disk cache with conditional requests, and a request count for
 //! sources with a quota.
 
@@ -34,7 +36,8 @@ pub struct Retry {
     pub max_timeout_retries: u32,
     /// First wait; doubles after each retry.
     pub base: Duration,
-    /// Cap on any single wait, including a server's `Retry-After`.
+    /// Cap on any single wait. A server whose `Retry-After` asks for more
+    /// is not retried: its host is skipped for the rest of the run.
     pub max_wait: Duration,
     /// Spread of the backoff wait, as a fraction either side (0.25 waits
     /// between 75% and 125% of it), so clients that failed together do not
@@ -135,9 +138,18 @@ pub struct Client {
     requests: Cell<usize>,
     cache_hits: Cell<usize>,
     rng: Cell<u64>,
-    /// Hosts that stayed unavailable past `unavailable_patience`, with why.
+    /// Hosts given up on for the run, with why: unavailable past
+    /// `unavailable_patience`, asking for a wait over `max_wait`, or timing
+    /// out on [`TIMEOUT_TRIPS`] requests in a row.
     down: RefCell<HashMap<String, String>>,
+    /// Per host, requests in a row given up on because they timed out.
+    timeouts: RefCell<HashMap<String, u32>>,
 }
+
+/// Requests in a row a host may time out on, retries spent, before it is
+/// marked down for the run. A hanging index would otherwise cost every
+/// later request its full timeout and retries, and eat the run's budget.
+pub const TIMEOUT_TRIPS: u32 = 2;
 
 /// Why a request failed, and whether trying again could help.
 enum Failure {
@@ -201,6 +213,7 @@ impl Client {
             cache_hits: Cell::new(0),
             rng: Cell::new(seed),
             down: RefCell::new(HashMap::new()),
+            timeouts: RefCell::new(HashMap::new()),
         })
     }
 
@@ -312,16 +325,34 @@ impl Client {
         let started = Instant::now();
         let (mut attempt, mut timeouts) = (0, 0);
         loop {
-            let (e, retry_after, unavailable) = match f() {
-                Ok(v) => return Ok(v),
-                Err(Failure::Fatal(e)) => return Err(e),
-                Err(Failure::Transient(e, retry_after)) => (e, retry_after, false),
-                Err(Failure::Unavailable(e, retry_after)) => (e, retry_after, true),
+            let (e, retry_after, unavailable, timed_out) = match f() {
+                Ok(v) => {
+                    self.timeouts.borrow_mut().remove(&host);
+                    return Ok(v);
+                }
+                Err(Failure::Fatal(e)) => {
+                    // The host answered.
+                    self.timeouts.borrow_mut().remove(&host);
+                    return Err(e);
+                }
+                Err(Failure::Transient(e, retry_after)) => (e, retry_after, false, false),
+                Err(Failure::Unavailable(e, retry_after)) => (e, retry_after, true, false),
                 Err(Failure::TimedOut(e)) => {
                     timeouts += 1;
-                    (e, None, false)
+                    (e, None, false, true)
                 }
             };
+            // A server that asks for a longer wait than the cap is not asked
+            // again this run: retrying sooner only spends its patience.
+            if let Some(ra) = retry_after.filter(|ra| *ra > self.retry.max_wait) {
+                let why = format!(
+                    "asked to retry after {}s, over the {}s cap",
+                    ra.as_secs(),
+                    self.retry.max_wait.as_secs()
+                );
+                self.mark_down(&host, &why);
+                return Err(e.context(format!("not retried: {why}")));
+            }
             let wait = self.retry.wait_jittered(attempt, retry_after, self.unit());
             let give_up = if unavailable {
                 started.elapsed() + wait > self.retry.unavailable_patience
@@ -334,16 +365,38 @@ impl Client {
                     attempt + 1,
                     started.elapsed().as_secs()
                 );
-                if unavailable && !host.is_empty() {
-                    self.down
-                        .borrow_mut()
-                        .insert(host.clone(), format!("HTTP 503, {why}"));
+                if unavailable {
+                    self.mark_down(&host, &format!("HTTP 503, {why}"));
+                } else if timed_out {
+                    let n = {
+                        let mut t = self.timeouts.borrow_mut();
+                        let n = t.entry(host.clone()).or_default();
+                        *n += 1;
+                        *n
+                    };
+                    if n >= TIMEOUT_TRIPS {
+                        self.mark_down(
+                            &host,
+                            &format!("timed out on {n} requests in a row, {why}"),
+                        );
+                    }
+                } else {
+                    self.timeouts.borrow_mut().remove(&host);
                 }
                 return Err(e.context(format!("gave up after {} attempts", attempt + 1)));
             }
             eprintln!("  {e:#}; retrying in {}s", wait.as_secs());
             std::thread::sleep(wait);
             attempt += 1;
+        }
+    }
+
+    /// Skip `host` for the rest of the run, saying why.
+    fn mark_down(&self, host: &str, why: &str) {
+        if !host.is_empty() {
+            self.down
+                .borrow_mut()
+                .insert(host.to_string(), why.to_string());
         }
     }
 
@@ -498,13 +551,18 @@ impl Client {
             if not_found_ok && status.as_u16() == 404 {
                 return Ok(None);
             }
+            let retry_after = r
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| parse_retry_after(v, now_secs()));
             let e = anyhow::anyhow!("GET {url}: HTTP {status}");
             if status.as_u16() == 504 {
                 Err(Failure::TimedOut(e))
             } else if status.as_u16() == 503 {
-                Err(Failure::Unavailable(e, None))
+                Err(Failure::Unavailable(e, retry_after))
             } else if status.as_u16() == 429 || status.is_server_error() {
-                Err(Failure::Transient(e, None))
+                Err(Failure::Transient(e, retry_after))
             } else {
                 Err(Failure::Fatal(e))
             }
@@ -686,6 +744,58 @@ mod tests {
         assert_eq!(calls.get(), 0);
         // Other hosts are unaffected.
         assert!(c.with_retries("https://other.example/", || Ok(())).is_ok());
+    }
+
+    #[test]
+    fn a_retry_after_over_the_cap_gives_up_at_once() {
+        let c = Client::new(Duration::ZERO).unwrap().with_retry(Retry {
+            base: Duration::ZERO,
+            max_wait: Duration::from_secs(300),
+            ..Retry::default()
+        });
+        let calls = Cell::new(0);
+        let r: Result<()> = c.with_retries("https://slow.example/cdx", || {
+            calls.set(calls.get() + 1);
+            Err(Failure::Transient(
+                anyhow::anyhow!("HTTP 429"),
+                Some(Duration::from_secs(3600)),
+            ))
+        });
+        let e = format!("{:#}", r.unwrap_err());
+        assert!(e.contains("not retried") && e.contains("3600s"), "{e}");
+        assert_eq!(calls.get(), 1);
+        let down = c.down_hosts();
+        assert_eq!(down[0].0, "slow.example");
+        assert!(down[0].1.contains("over the 300s cap"), "{down:?}");
+    }
+
+    #[test]
+    fn a_host_that_times_out_twice_in_a_row_is_skipped_for_the_run() {
+        let c = Client::new(Duration::ZERO).unwrap().with_retry(Retry {
+            base: Duration::ZERO,
+            ..Retry::default()
+        });
+        let u = "https://hang.example/cdx";
+        let timeout = || -> Result<()> {
+            c.with_retries(u, || Err(Failure::TimedOut(anyhow::anyhow!("timed out"))))
+        };
+        assert!(timeout().is_err());
+        assert!(c.down_hosts().is_empty());
+        // An answer between the two resets the count.
+        assert!(c.with_retries(u, || Ok(())).is_ok());
+        assert!(timeout().is_err());
+        assert!(c.down_hosts().is_empty());
+        assert!(timeout().is_err());
+        let down = c.down_hosts();
+        assert_eq!(down[0].0, "hang.example");
+        assert!(down[0].1.contains("timed out on 2 requests"), "{down:?}");
+        let calls = Cell::new(0);
+        let r: Result<()> = c.with_retries(u, || {
+            calls.set(calls.get() + 1);
+            Ok(())
+        });
+        assert!(r.is_err());
+        assert_eq!(calls.get(), 0);
     }
 
     #[test]

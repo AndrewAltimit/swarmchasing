@@ -34,6 +34,51 @@ pub struct SourceState {
     pub last_error: Option<String>,
     #[serde(default)]
     pub health: SourceHealth,
+    /// The [`fingerprint`] of the query the cursor belongs to. A state
+    /// saved without one is taken to match, and gets one on its next run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+}
+
+impl SourceState {
+    /// Forget where the pulls had reached: the cursor, seen IDs, a pending
+    /// resume key and a stream checkpoint. Health history stays.
+    pub fn reset_position(&mut self) {
+        self.cursor = 0;
+        self.seen.clear();
+        self.pending = None;
+        self.mark = None;
+        self.last_error = None;
+    }
+
+    /// Bring the state in line with `fingerprint`: a state with another
+    /// query's fingerprint is reset ([`SourceState::reset_position`]), since
+    /// its cursor, resume key and checkpoint belong to the old query.
+    /// Returns whether it was reset.
+    pub fn align(&mut self, fingerprint: &str) -> bool {
+        let changed = self.query.as_deref().is_some_and(|q| q != fingerprint);
+        if changed {
+            self.reset_position();
+        }
+        self.query = Some(fingerprint.to_string());
+        changed
+    }
+}
+
+/// What a source's position depends on: its kind and the parts of its query
+/// that choose what it reads (pattern, match type, filters, endpoint). A
+/// limit, page size or budget changes how much a pull reads, not where its
+/// cursor points, so they are left out.
+pub fn fingerprint(s: &WatchSource) -> String {
+    let q = &s.query;
+    let canon = serde_json::json!({
+        "kind": s.kind,
+        "pattern": q.pattern,
+        "match_type": q.match_type,
+        "filter": q.filter,
+        "endpoint": q.endpoint,
+    });
+    sc_case::bundle::sha256_hex(canon.to_string().as_bytes())[..16].to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -308,6 +353,50 @@ mod tests {
         let ids: Vec<&str> = fresh.iter().map(|o| o.id.as_str()).collect();
         assert_eq!(ids, ["b"]);
         assert!(st.seen.contains_key("u") && !st.seen.contains_key("a"));
+    }
+
+    #[test]
+    fn a_changed_query_resets_the_position_but_not_the_health() {
+        let src = |pattern: &str, endpoint: Option<&str>| WatchSource {
+            name: "s".into(),
+            kind: "memento".into(),
+            query: sc_collect::CdxQuery {
+                pattern: pattern.into(),
+                endpoint: endpoint.map(str::to_string),
+                ..Default::default()
+            },
+        };
+        let a = fingerprint(&src("https://a.example/", None));
+        assert_eq!(a, fingerprint(&src("https://a.example/", None)));
+        // A limit is not part of it; the pattern and endpoint are.
+        let mut limited = src("https://a.example/", None);
+        limited.query.limit = 7;
+        assert_eq!(a, fingerprint(&limited));
+        assert_ne!(a, fingerprint(&src("https://b.example/", None)));
+        assert_ne!(
+            a,
+            fingerprint(&src("https://a.example/", Some("http://x/")))
+        );
+
+        // A state saved before fingerprints were kept matches, and gets one.
+        let mut st: SourceState = serde_json::from_str(
+            r#"{"cursor":100,"seen":{"r":100},"mark":4,"health":{"ever_pulled":true}}"#,
+        )
+        .unwrap();
+        assert!(!st.align(&a));
+        assert_eq!((st.cursor, st.mark), (100, Some(4)));
+        assert_eq!(st.query.as_deref(), Some(a.as_str()));
+        assert!(!st.align(&a));
+        // Another query starts over, keeping its health.
+        st.pending = Some(Pending {
+            resume_key: "k".into(),
+            from: "2026".into(),
+            started: 1,
+        });
+        assert!(st.align(&fingerprint(&src("https://b.example/", None))));
+        assert_eq!((st.cursor, st.mark), (0, None));
+        assert!(st.seen.is_empty() && st.pending.is_none());
+        assert!(st.health.ever_pulled);
     }
 
     #[test]

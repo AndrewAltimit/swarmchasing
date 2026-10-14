@@ -55,6 +55,7 @@ mod wellknown;
 pub mod wikimedia;
 
 pub use arquivo::{Arquivo, parse_arquivo_cdx};
+pub use cache::{CacheStats, prune_http_cache, temp_path, write_atomic};
 pub use client::{Client, DEFAULT_MAX_BODY, Retry, USER_AGENT, parse_retry_after};
 pub use commoncrawl::{CommonCrawl, parse_cc_cdx, parse_collinfo};
 pub use crtsh::CertRecord;

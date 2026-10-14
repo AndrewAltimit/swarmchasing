@@ -73,8 +73,13 @@ pub struct AutonomySummary<'a> {
 pub struct Counts {
     /// Records in the analysis window.
     pub records: usize,
-    /// Records this run collected.
+    /// Records this run reports as new.
     pub new_records: usize,
+    /// Of those, records an earlier run stored but ended before reporting.
+    pub carried_over: usize,
+    /// Of those, records captured before the analysis window; this run
+    /// analyses them with it.
+    pub new_before_window: usize,
     pub significant: usize,
     pub suggestive: usize,
     pub clusters_above_noise: usize,
@@ -113,6 +118,8 @@ pub struct Input<'a> {
     pub generated: &'a str,
     pub analysis: &'a Analysis,
     pub new_records: usize,
+    pub carried_over: usize,
+    pub new_before_window: usize,
     pub changed: bool,
     pub priority: &'a Priority,
     pub leads: &'a [Lead],
@@ -138,6 +145,8 @@ pub fn build<'a>(i: &Input<'a>) -> RunSummary<'a> {
         counts: Counts {
             records: a.total,
             new_records: i.new_records,
+            carried_over: i.carried_over,
+            new_before_window: i.new_before_window,
             significant: tier(Tier::Significant),
             suggestive: tier(Tier::Suggestive),
             clusters_above_noise: a
@@ -235,6 +244,8 @@ mod tests {
             generated: "2026-10-11T00:00:00Z",
             analysis: &a,
             new_records: ids.len(),
+            carried_over: 0,
+            new_before_window: 0,
             changed: true,
             priority: &priority,
             leads: &l,

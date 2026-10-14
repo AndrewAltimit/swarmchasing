@@ -109,10 +109,12 @@ Sources that read a stream or feed and keep only matches report a `Coverage` on 
 
 - **Retries.** Dropped connections, HTTP 429 and 5xx are retried with exponential backoff: 5 retries from 5 seconds, spread ±25%, each wait capped at 5 minutes. A gateway timeout (HTTP 504) or a request that timed out is retried only twice, because an index query too heavy for the server times out the same way every time. Other errors fail at once. Change the policy with `Client::with_retry`.
 - **Unavailable hosts.** HTTP 503 (the Internet Archive's "Temporarily Offline") is retried for a span of time, `unavailable_patience` (10 minutes), rather than a count. A host still unavailable after that is marked down for the client's life: later requests to it fail at once, so one outage costs a watch run ten minutes, not ten minutes per source. `Client::down_hosts` lists them.
-- **Retry-After.** A server's `Retry-After`, in seconds or as an HTTP date, is honoured as given.
+- **Retry-After.** A server's `Retry-After`, in seconds or as an HTTP date, is honoured as given, on streamed downloads too. One that asks for more than the 5-minute cap is not waited out: the host is marked down for the client's life at once.
+- **Hanging hosts.** A host that times out on two requests in a row, each after its retries, is marked down the same way, so a hanging index costs a run two requests' patience, not one per source.
 - **Pacing.** The minimum interval applies per host, so sources on different hosts do not slow each other.
 - **Size cap.** A response read into memory is capped at 64 MiB (`Client::with_max_body`). Large files are streamed with their own cap.
-- **Cache.** `Client::with_cache(dir, ttl)` keeps responses on disk. One younger than `ttl` is reused without a request; an older one is revalidated with its ETag or Last-Modified. Requests carrying API keys are never cached.
+- **Cache.** `Client::with_cache(dir, ttl)` keeps responses on disk. One younger than `ttl` is reused without a request; an older one is revalidated with its ETag or Last-Modified. Requests carrying API keys are never cached. Cached bodies are raw answers, so `prune_http_cache` deletes entries older than a given age, bodies without metadata and stale temporary files; the watch runs it every run.
+- **Atomic writes.** `write_atomic` writes through a temporary file beside the target and a rename, and removes the temporary file when either step fails. The cache and every rewritten file in the CLI's data directory use it.
 - **Counts.** `Client::requests` counts the requests sent, retries included; `Client::cache_hits` counts reuses.
 
 Error messages name the URL and never a header value, so an API key does not end up in a log.

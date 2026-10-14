@@ -12,6 +12,8 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 
 `case new` copies the selected records into `raw/records.ndjson`, so watch retention cannot delete them, and writes `case.toml`. Records come from the watch store, or from files given as arguments. From the store it analyses the last `--days` days, by default the `analysis_window_days` of `--watchlist` (`watchlist.toml`, else 30), the window the digest analyses, so a cluster number from the digest names the same cluster; a stable key (`k-3f9a2c1b`) names it whatever the window. A line of `raw/records.ndjson` that cannot be read is skipped with a warning. `--host-hits` also takes every flagged record on the same hosts, including other clusters. `review` can open a case from a lead too ([review](watch.md#reviewing-leads)).
 
+A record named with `--record` that is older than the window is taken from the whole store, outside the window's analysis, so the digest's `case add` lines work for late-indexed captures.
+
 ## What `case.toml` holds
 
 - the case status (`open`, `reported`, `published`, `closed`), the notice status (`active`, `contained`, `historical`), and the date a notice was added while its publication is pending;

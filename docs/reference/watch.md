@@ -8,7 +8,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 
 | Path | Holds |
 |---|---|
-| `state.json` | Each source's time cursor, resume key or stream checkpoint, and health history. |
+| `state.json` | Each source's time cursor, resume key or stream checkpoint, query fingerprint and health history; records not yet in a digest; state of sources removed from the watchlist. |
 | `state.json.bak` | The previous `state.json`, read when the current one does not parse. |
 | `.lock`, `.lock.owner` | The data directory's writer lock and the command holding it ([one writer at a time](#one-writer-at-a-time)). |
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
@@ -17,6 +17,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
 | `runs/<stamp>/attention.json` | The run's [attention queue](#the-attention-queue). |
 | `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
+| `summary.json`, `ledger.json` (`.bak`, `.damaged`) | The previous copy, and a copy that could not be read, set aside ([interrupted runs](#interrupted-runs)). |
 | `autonomy.ndjson` | What each [autonomy](#autonomy) level did or would have done. |
 | `platform/` | The [platform pass](#platform-swarms): checkpoints, reported candidates and carried events. |
 | `runs/<stamp>/platform-swarms.json` | The run's platform swarm candidates. |
@@ -27,7 +28,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `rules/<version>.toml` | Rules versions that cases pin. |
 | `canary/registry.json` | Canary tokens registered from built sites ([canary sightings](#canary-sightings)). |
 | `runs/<stamp>/canary.json` | The run's canary sightings, when it has any. |
-| `cache/http/` | Cached collector responses; safe to delete. |
+| `cache/http/` | Cached collector responses, pruned every run ([retention](#retention)); safe to delete. |
 | `asn/ip2asn-v4.tsv.gz` | The IP-to-ASN table, once fetched. |
 | `identity/` | Providers' published agent ranges and key directories, once fetched ([identity](identity.md)). |
 | `.stale-alerted` | The run stamp the staleness check last mailed about ([runner](runner.md#watch-staleyml)). |
@@ -39,11 +40,13 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 - **Cursors.** Each source keeps a time cursor in `state.json`. New records are deduplicated by ID and appended to the source's store file. A record stamped in the future moves the cursor no further than the run's own time. A source that cannot page and returns `limit` records moves its cursor no further than the oldest of them, since what lies before may be missing. IDs of records with no time stay in the seen list, so they are never added twice.
 - **Wayback paging.** Wayback's index is sorted by URL rather than time, so a pull cut short by `limit`, or by a failed page, resumes from its resume key on the next run. A host too big for one index query is read by path prefix, and `slice_days` reads the time range in windows.
 - **Checkpoints.** GH Archive, Wikimedia EventStreams, Hacker News and CT logs read on from where the last run stopped (`mark` in `state.json`), within a per-run budget. Every page read counts as progress, matches or not, so a failure after matchless hours resumes after them. A GH Archive hour whose file is corrupt or cut off is skipped and counted, not retried each run.
-- **Unavailable hosts.** A host answering HTTP 503 gets ten minutes of retries; if it stays down, later requests to it in the same run are not sent, and its sources continue next run.
+- **Unavailable hosts.** A host answering HTTP 503 gets ten minutes of retries; if it stays down, later requests to it in the same run are not sent, and its sources continue next run. The same holds at once for a host whose `Retry-After` asks for more than the five-minute cap on a wait, and for a host that times out on two requests in a row after their retries, so a hanging index cannot spend the run's time budget.
 - **Overlap.** Each pull overlaps the last by `overlap_days` to catch late-indexed captures.
-- **Analysis window.** Every run analyses the stored records captured in the last `analysis_window_days` together, so clusters can span runs. The overlap before the window is read for the archive burst baseline only. `case new` defaults to the same window, so a cluster number from the digest names the same cluster there.
+- **Analysis window.** Every run analyses the stored records captured in the last `analysis_window_days` together, so clusters can span runs, plus the run's new records whatever their capture time: an archive that indexes a capture late still gets it analysed once. The digest notes how many new records were captured before the window, and `run.json` counts them. The overlap before the window is read for the archive burst baseline only. `case new` defaults to the same window, so a cluster number from the digest names the same cluster there; a record named with `--record` is taken from the whole store when it is older.
+- **Changed queries.** Each source's state holds a fingerprint of its kind, pattern, match type, filters and endpoint. A source edited under the same name starts over (cursor, seen IDs, resume key and checkpoint reset, health kept), records its store already holds are not reported again, and the digest says so. A state saved without a fingerprint counts as matching.
+- **Removed sources.** The state of a source no longer in the watchlist is set aside under `retired` in `state.json`, with a digest note; a source added back under the same name continues from it.
 - **urlquery.** urlquery sources need `URLQUERY_APIKEY`. Without it they are skipped and the digest says so ([configuration](configuration.md#urlquerynet)).
-- **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss.
+- **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss. Cached bodies are raw answers, not redacted records, so every run deletes entries older than the TTL, and at least a day ([retention](#retention)).
 - **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is skipped and counted in a `store_damaged` health alert; the other lines are read. Before an append, a last line without its newline is ended, so it never swallows the next record.
 - **ASN.** Once `swarmchase asn fetch` has put the IP-to-ASN table in `asn/`, records that carry an IP but no network get one ([configuration](configuration.md#ip-to-asn-table)).
 - **Redaction.** Collectors redact what they return, and the watch redacts every pulled record again before it reaches the run directory or the store, so a collector that misses a field cannot put a secret in the store. Redaction is idempotent: a record redacted once passes through unchanged.
@@ -81,7 +84,21 @@ A `wikimedia` source reads the `mediawiki.page-links-change` stream from the mil
 
 ### One writer at a time
 
-A watch run holds an exclusive lock on the data directory (`.lock`) from start to finish; `case rename` and `backup restore` take it too. A second command that needs it fails at once, naming the holder from `.lock.owner`, instead of writing beside the first. The lock is advisory and released when the command exits, however it exits. `state.json` and every other rewritten file are written to a temporary file of their own and renamed into place; the previous `state.json` is kept as `state.json.bak`, read with a warning when the current one does not parse.
+A watch run holds an exclusive lock on the data directory (`.lock`) from start to finish; `case rename`, `watch reset`, `watch prune-cache`, `backup create` and `backup restore` take it too. A second command that needs it fails at once, naming the holder from `.lock.owner`, instead of writing beside the first. The lock is advisory and released when the command exits, however it exits. `state.json` and every other rewritten file are written to a temporary file of their own and renamed into place; the previous `state.json` is kept as `state.json.bak`, read with a warning when the current one does not parse.
+
+A review file is saved under a lock of its own and merged: a save rereads the file and writes only what that command changed, so a `review --serve` page left open never undoes a `review tuned` run meanwhile.
+
+### Interrupted runs
+
+A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`. Steps after collection do not stop a run: a file that cannot be written or a history that cannot be read becomes a `step_failed` health alert, and the run goes on to its digest. A `summary.json` or `ledger.json` that does not parse is read from its `.bak` copy; when that fails too, the damaged file is kept as `.damaged`, the history starts afresh and the digest says so.
+
+A step after the digest that fails (the run's `summary.json`, `LATEST`, retention) ends the run with an error, having lost nothing the digest reported.
+
+### One source, or starting one over
+
+`watch --only <name>` pulls one source, with its cursor, health and undigested records as a full run keeps them, and leaves the others as they are; the analysis and digest cover the store as usual. `watch reset <name>…` makes sources start over on their next run: it clears each one's cursor, seen IDs, resume key and checkpoint under the data lock, and keeps its health history.
+
+`watch prune-cache [watchlist.toml]` deletes cached responses older than the TTL (at least a day), or older than `--max-age-hours`, as each run does.
 
 ### Checking a watchlist
 
@@ -119,7 +136,8 @@ The health block comes first, because a source that did not run hides whatever i
 - a source skipped for the first time (no API key);
 - a source whose pull falls below a fifth of its median over recent runs, which usually means an API change, an expired key or a spent quota. A source's first pull and a pull spread over several runs are catching up, so they do not count towards the median;
 - a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it;
-- a store file with lines that cannot be read, with their count. They are skipped; the other records are read.
+- a store file with lines that cannot be read, with their count. They are skipped; the other records are read;
+- a step after collection that failed and was skipped, or a `summary.json` or `ledger.json` started afresh because it could not be read ([interrupted runs](#interrupted-runs)).
 
 Under *Capability lost this run* it lists each skipped, failed or stopped source with what its absence costs, and the part of a stream it skipped. When no submit-time source ran (urlquery is the only one scheduled), it says so first: without submission times, timing links, pace, agent grades above L2 and interaction edges are unavailable. *Quiet sources* notes a source that has pulled nothing for several runs, and whether its canary passed.
 
@@ -129,7 +147,7 @@ Any alert gets the digest emailed; lost capability and quiet sources alone do no
 
 The sources table shows each source's records, requests, coverage and status. Coverage is what a stream or feed source read against what there was to read since its checkpoint, such as `6 of 6 hours, canary ok` or `1024 of 400000 entries, 398976 skipped` for a CT log that grows faster than a polite reader.
 
-The digest ends with a *Run time* line: the run's time up to the digest, each phase (`collect`, `platform`, `analysis`, `triage`) and the three slowest sources. `run.json` has the same in milliseconds.
+The digest ends with a *Run time* line: the run's time up to the digest, each phase (`collect`, `platform`, `analysis`, `triage`) and the three slowest sources. `run.json` has the same in milliseconds. An *HTTP cache* line follows: responses served from the cache this run, entries kept and their size, and entries deleted.
 
 ### Headline counts
 
@@ -236,7 +254,7 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `rules_version` | The rules the analysis ran with. |
 | `changed` | Whether the digest counts as changed, and so is emailed. |
 | `priority`, `reasons` | `high`, `medium` or `low`, and the facts behind it ([needs attention](#needs-attention)). |
-| `counts` | `records`, `new_records`, `significant`, `suggestive` and `clusters_above_noise` over the window. |
+| `counts` | `records`, `new_records`, `significant`, `suggestive` and `clusters_above_noise` over the window; of the new records, `carried_over` and `new_before_window`. |
 | `leads` | The run's new leads, strongest first ([leads](#lead-fields)). |
 | `triage` | `enabled`, `backend`, `model`, `asked`, `answered`, `reused`, `left`, `withheld` and an optional `note` ([model triage](#model-triage)). |
 | `health` | `alerts`, the `lost` capability lines, and `sources` with `name`, `kind`, `pulled`, `new`, `status` and `duration_ms`. |
@@ -246,7 +264,7 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `durations_ms` | Milliseconds per phase (`collect`, `platform`, `analysis`, `triage`, `report`) and `total` up to this file. |
 | `digest` | The digest's file name in the same directory. |
 
-A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
+A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged`, `step_failed` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
 
 ### Lead fields
 
@@ -351,7 +369,9 @@ A lead's thread counts with every thread it was merged into. For `draft_case`, *
 
 ## Retention
 
-At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones. The platform pass keeps its carried events for `carry_hours` only. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
+At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones.
+
+The platform pass keeps its carried events for `carry_hours` only. Cached HTTP responses older than `http_cache_ttl_secs`, and at least a day, are deleted on every run, before the digest; `watch prune-cache` does the same on demand. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
 
 ## The dashboard
 
