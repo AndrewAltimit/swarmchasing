@@ -1077,7 +1077,8 @@ palette_share = 0.1
 
 # Three fleets of one harness each giving every agent a fresh run tag: one
 # machine's UUIDv1s (one node id), one skewed clock's ULIDs, one counter's
-# successive numbers; beside unrelated agents tagging the same ways on their
+# successive numbers. The UUIDv1 and ULID runs mint a fresh tag halfway
+# through, as an agent minting an id per step does; beside unrelated agents tagging the same ways on their
 # own machines, clocks and counters, and agents with random tags.
 [[scenario]]
 name = "fleet-randomtags"
@@ -1091,11 +1092,13 @@ kind = "fleet"
 agents = 3
 records = 8
 tag_style = "uuid_v1"
+tag_mints = 2
 [[scenario.actor]]
 kind = "fleet"
 agents = 3
 records = 8
 tag_style = "ulid"
+tag_mints = 2
 offset_hours = 4
 [[scenario.actor]]
 kind = "fleet"
@@ -1109,12 +1112,14 @@ agents = 4
 retry = 0.2
 palette_share = 0.3
 tag_style = "uuid_v1"
+tag_mints = 2
 [[scenario.actor]]
 kind = "agent"
 agents = 4
 retry = 0.2
 palette_share = 0.3
 tag_style = "ulid"
+tag_mints = 2
 [[scenario.actor]]
 kind = "agent"
 agents = 4

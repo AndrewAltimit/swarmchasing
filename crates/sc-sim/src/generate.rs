@@ -205,6 +205,9 @@ struct RunOpts {
     stalls: Vec<(i64, i64)>,
     /// A secret every request carries, as ingest writes it.
     secret: Option<String>,
+    /// Time-bearing tags each run mints, one per equal part of its
+    /// requests.
+    tag_mints: usize,
 }
 
 /// The parameter a secret rides in.
@@ -236,6 +239,7 @@ pub fn generate(s: &Scenario, seed: u64, palette: &Palette) -> Vec<Value> {
             secret: a
                 .stock_secret
                 .then(|| sc_core::redact::hash_token(DEMO_KEY)),
+            tag_mints: a.tag_mints.unwrap_or(1).max(1),
         };
         g.actor(i, a);
     }
@@ -1506,7 +1510,12 @@ impl Gen<'_> {
             self.emit(&spec, "generated hand-off fetch", url, t, status, basis);
             t += gap(rng, spec.pace);
         }
-        let styled = self.styled_tag(&spec, t);
+        let mut styled = self.styled_tag(&spec, t, 0);
+        // A time-bearing tag is minted afresh at the start of each part of
+        // the run, at the time of the request that first carries it.
+        let fresh = matches!(self.tag_style, TagStyle::UuidV1 | TagStyle::Ulid);
+        let (mints, requests) = (opts.tag_mints, spec.hosts.len().min(spec.uses.len()));
+        let mut minted = 0;
         let mut sched = t;
         for (r, (host, u)) in spec.hosts.iter().zip(&spec.uses).enumerate() {
             let shape = (!spec.shapes.is_empty()).then(|| &spec.shapes[r % spec.shapes.len()]);
@@ -1568,6 +1577,11 @@ impl Gen<'_> {
                     t += secs;
                     sched += secs;
                 }
+            }
+            let part = r * mints / requests.max(1);
+            if fresh && part != minted {
+                minted = part;
+                styled = self.styled_tag(&spec, t, part);
             }
             let error = rng.chance(spec.retry);
             let tries = if error { 3 } else { 1 };
@@ -1633,12 +1647,16 @@ impl Gen<'_> {
     /// The run's tag when its actor does not use random ones, generated at
     /// `at`: on the operator's node id, clock or counter. The operator is
     /// the run's fleet, else the run itself. From streams of their own, so
-    /// runs with random tags draw as before.
-    fn styled_tag(&self, spec: &RunSpec, at: i64) -> Option<String> {
+    /// runs with random tags draw as before. Mint `m` after the run's first
+    /// draws from a stream of its own, so a run's first tag is as before.
+    fn styled_tag(&self, spec: &RunSpec, at: i64, m: usize) -> Option<String> {
         let operator = spec.truth.fleet.as_deref().unwrap_or(&spec.scope);
         let base = Rng::new(self.seed).fork("tag_style");
         let mut op = base.fork(operator);
         let mut own = base.fork(&spec.scope);
+        if m > 0 {
+            own = own.fork(&m.to_string());
+        }
         match self.tag_style {
             TagStyle::Random => None,
             TagStyle::UuidV1 => {
@@ -2346,7 +2364,7 @@ mod tests {
                 habits: None,
                 prose: None,
             };
-            g.styled_tag(&spec, 1000).unwrap()
+            g.styled_tag(&spec, 1000, 0).unwrap()
         };
         let num = |t: &str| -> u64 {
             t.trim_start_matches(|c: char| !c.is_ascii_digit())

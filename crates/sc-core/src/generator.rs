@@ -38,9 +38,12 @@
 //!   each value was first seen, read from strong-parameter values only (an
 //!   id in a path or an ordinary parameter may be one the target site
 //!   minted, and agents fetching a fresh one would share its skew), when
-//!   every such value of the cluster agrees within `skew_tolerance_secs`
-//!   (a run tag is one value: one reading of its clock, priced by the
-//!   prior below like any other). Skews under `min_skew_secs` are ordinary
+//!   the cluster has values first seen at two or more times and every such
+//!   value agrees within `skew_tolerance_secs`. One value, such as a single
+//!   run tag, reads the clock offset plus the wait between minting it and
+//!   first sending it, and a few minutes' wait looks like a few minutes'
+//!   skew; readings at several times that agree are a constant offset, as
+//!   a wait rarely is. Skews under `min_skew_secs` are ordinary
 //!   clocks, and skews within the tolerance of a whole quarter hour are
 //!   time-zone errors many machines share; neither ties. Two skews within
 //!   the tolerance tie, at the chance of an unrelated skew landing that
@@ -455,7 +458,8 @@ pub(crate) fn generator_pairs(
 
     let mut profiles: Vec<Profile> = (0..shown.len()).map(|_| Profile::default()).collect();
     let mut outside: BTreeMap<Key, usize> = BTreeMap::new();
-    let mut skews: Vec<Vec<i64>> = vec![Vec::new(); shown.len()];
+    // Each cluster's readings: when the value was first seen, and its skew.
+    let mut skews: Vec<Vec<(i64, i64)>> = vec![Vec::new(); shown.len()];
     for ((holder, name, value, strong), at) in &first {
         let mut keys: Vec<(Key, Option<u64>)> = Vec::new();
         let d = decode(value, *at, opts);
@@ -492,7 +496,7 @@ pub(crate) fn generator_pairs(
                     && *at > 0
                     && (d.ms() - at * 1000).abs() <= opts.max_skew_secs.max(0) * 1000
                 {
-                    skews[*c].push(d.ms() - at * 1000);
+                    skews[*c].push((*at, d.ms() - at * 1000));
                 }
             }
             None => {
@@ -503,10 +507,16 @@ pub(crate) fn generator_pairs(
         }
     }
     let tol = opts.skew_tolerance_secs.max(0) * 1000;
-    for (p, mut s) in profiles.iter_mut().zip(skews) {
-        if s.is_empty() {
+    for (p, readings) in profiles.iter_mut().zip(skews) {
+        // A value minted once and first seen later reads its clock offset
+        // plus the wait from minting to sending: one reading cannot tell
+        // the two apart. Values first seen at two or more times that agree
+        // read a constant offset, which a wait rarely is.
+        let times: BTreeSet<i64> = readings.iter().map(|&(at, _)| at).collect();
+        if times.len() < 2 {
             continue;
         }
+        let mut s: Vec<i64> = readings.into_iter().map(|(_, x)| x).collect();
         s.sort_unstable();
         let mid = s[s.len() / 2];
         let zone = (mid.rem_euclid(ZONE_STEP_MS)).min(ZONE_STEP_MS - mid.rem_euclid(ZONE_STEP_MS));
@@ -870,13 +880,12 @@ mod tests {
             "{:?}",
             a.generator_pairs
         );
-        // One run tag per cluster is one reading of each clock: it still
-        // ties.
+        // One run tag per cluster is one reading: no clock, nothing.
         let one = analyze(
             runs(3, |k, t| ulid_of((t + 412) * 1000 + 250, k as u64 + 1)),
             &Rules::default_rules(),
         );
-        assert_eq!(one.generator_pairs.len(), 3, "{:?}", one.generator_pairs);
+        assert!(one.generator_pairs.is_empty(), "{:?}", one.generator_pairs);
         // Readings of one cluster that disagree are no clock: nothing.
         let unstable = analyze(
             runs_fresh(3, |k, j, t| {
@@ -908,6 +917,45 @@ mod tests {
             &Rules::default_rules(),
         );
         assert!(d.generator_pairs.is_empty(), "{:?}", d.generator_pairs);
+    }
+
+    #[test]
+    fn one_tag_minted_before_the_first_request_is_no_clock() {
+        // Two unrelated agents each mint one ULID tag about 90 s before
+        // their first request, within 2 s of each other: the readings are
+        // mint-to-request latency, not a clock offset, and tie nothing.
+        let a = analyze(
+            runs(2, |k, t| {
+                ulid_of((t - 90) * 1000 - 1500 * k as i64, k as u64 + 1)
+            }),
+            &Rules::default_rules(),
+        );
+        assert_eq!(a.clusters.len(), 2, "{:?}", a.clusters.len());
+        assert!(a.generator_pairs.is_empty(), "{:?}", a.generator_pairs);
+        // Two tags per cluster, minted at different requests on one clock
+        // 90 s slow: a clock offset, and the pair ties.
+        let b = analyze(
+            runs_fresh(2, |k, j, t| {
+                ulid_of(
+                    (t - 90) * 1000 - 1500 * k as i64,
+                    (k * 3) as u64 + j as u64 + 1,
+                )
+            }),
+            &Rules::default_rules(),
+        );
+        assert_eq!(b.generator_pairs.len(), 1, "{:?}", b.generator_pairs);
+        // Two values first seen in one request are one reading.
+        let c = analyze(
+            runs(2, |k, t| {
+                format!(
+                    "{}&nonce={}",
+                    ulid_of((t - 90) * 1000 - 1500 * k as i64, k as u64 + 1),
+                    ulid_of((t - 90) * 1000 - 1500 * k as i64 + 7, k as u64 + 11)
+                )
+            }),
+            &Rules::default_rules(),
+        );
+        assert!(c.generator_pairs.is_empty(), "{:?}", c.generator_pairs);
     }
 
     #[test]
