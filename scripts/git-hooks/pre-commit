@@ -152,10 +152,11 @@ printf '[pre-commit] cargo clippy -D warnings\n'
 cargo clippy --all-targets --workspace --quiet -- -D warnings
 
 # Rules and the analysis they run in decide what gets flagged, so a change to
-# either re-measures precision and recall against samples/eval/.
+# either re-measures precision and recall against samples/eval/. Optimised,
+# as CI runs it: unoptimised, the simulator alone takes minutes.
 if grep -qE '^(rules/|crates/sc-core/|crates/sc-sim/|samples/eval/|samples/sim/)' <<<"$STAGED"; then
     printf '[pre-commit] detection eval gate\n'
-    scripts/ci/eval-gate.sh >/dev/null
+    scripts/ci/eval-gate.sh --profile release-test >/dev/null
 fi
 
 if grep -qE '^crates/(sc-core|sc-wasm|sc-case)/' <<<"$STAGED"; then

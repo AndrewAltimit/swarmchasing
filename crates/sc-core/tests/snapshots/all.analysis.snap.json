@@ -1739,8 +1739,9 @@
     {
       "obs": {
         "id": "eval:b-echo-script-page",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1425996000,
+        "ts_kind": "capture",
         "url": "https://httpbin.org/base64/PCFkb2N0eXBlIGh0bWw-PGh0bWw-PGJvZHk-PHAgaWQ9InQiPm9rPC9wPjxzY3JpcHQ-Y29uc29sZS5sb2coJ3BhZ2UgbG9hZGVkJyk8L3NjcmlwdD48L2JvZHk-PC9odG1sPg"
       },
       "score": 2,
@@ -1780,14 +1781,18 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "payloads_only"
+        "level": "payloads_only",
+        "caps": [
+          "capture_times"
+        ]
       }
     },
     {
       "obs": {
         "id": "eval:b-echo-script-widget",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1504517400,
+        "ts_kind": "capture",
         "url": "https://httpbin.org/base64/PGRpdiBpZD0iYXBwIj48L2Rpdj48c2NyaXB0IHNyYz0iaHR0cHM6Ly9jZG4ud2lkZ2V0cy5leGFtcGxlL3dpZGdldC5qcyI-PC9zY3JpcHQ-"
       },
       "score": 2,
@@ -1833,14 +1838,18 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "payloads_only"
+        "level": "payloads_only",
+        "caps": [
+          "capture_times"
+        ]
       }
     },
     {
       "obs": {
         "id": "eval:b-echo-script-onload",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1561135500,
+        "ts_kind": "capture",
         "url": "https://httpbun.com/base64/PGh0bWw-PGhlYWQ-PHNjcmlwdD53aW5kb3cub25sb2FkPWZ1bmN0aW9uKCl7ZG9jdW1lbnQuYm9keS5jbGFzc05hbWU9J3JlYWR5J308L3NjcmlwdD48L2hlYWQ-PGJvZHk-dGVzdDwvYm9keT48L2h0bWw-"
       },
       "score": 2,
@@ -1880,14 +1889,18 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "payloads_only"
+        "level": "payloads_only",
+        "caps": [
+          "capture_times"
+        ]
       }
     },
     {
       "obs": {
         "id": "eval:b-echo-script-counter",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1613128500,
+        "ts_kind": "capture",
         "url": "https://httpbin.org/base64/PGJ1dHRvbiBpZD0iYiI-MDwvYnV0dG9uPjxzY3JpcHQ-dmFyIG49MDtiLm9uY2xpY2s9ZnVuY3Rpb24oKXtiLnRleHRDb250ZW50PSsrbn08L3NjcmlwdD4"
       },
       "score": 2,
@@ -1927,7 +1940,10 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "payloads_only"
+        "level": "payloads_only",
+        "caps": [
+          "capture_times"
+        ]
       }
     },
     {
@@ -14411,8 +14427,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h0-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775466847,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop0.retail0.example/catalog/item/4100/view?q=%27%20OR%201%3D1--&uqtag=fx3k9q&step=1&ts=1775466847"
       },
       "score": 9,
@@ -14474,8 +14491,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h0-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775466944,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop1.retail0.example/catalog/item/4137/view?q=%27%20OR%201%3D1--&uqtag=fx3k9q&step=2&ts=1775466944"
       },
       "score": 9,
@@ -14537,8 +14555,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h0-2",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775467041,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop2.retail0.example/catalog/item/4174/view?q=%27%20OR%201%3D1--&uqtag=fx3k9q&step=3&ts=1775467041"
       },
       "score": 9,
@@ -14600,8 +14619,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h1-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775898847,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop0.retail1.example/catalog/item/4101/view?q=%27%20OR%201%3D1--&uqtag=m2v8wd&step=1&ts=1775898847"
       },
       "score": 9,
@@ -14663,8 +14683,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h1-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775898944,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop1.retail1.example/catalog/item/4138/view?q=%27%20OR%201%3D1--&uqtag=m2v8wd&step=2&ts=1775898944"
       },
       "score": 9,
@@ -14726,8 +14747,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h1-2",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775899041,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop2.retail1.example/catalog/item/4175/view?q=%27%20OR%201%3D1--&uqtag=m2v8wd&step=3&ts=1775899041"
       },
       "score": 9,
@@ -14789,8 +14811,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h2-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776330847,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop0.retail2.example/catalog/item/4102/view?q=%27%20OR%201%3D1--&uqtag=p7tr4z&step=1&ts=1776330847"
       },
       "score": 9,
@@ -14852,8 +14875,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h2-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776330944,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop1.retail2.example/catalog/item/4139/view?q=%27%20OR%201%3D1--&uqtag=p7tr4z&step=2&ts=1776330944"
       },
       "score": 9,
@@ -14915,8 +14939,9 @@
     {
       "obs": {
         "id": "eval:scaffold-h2-2",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776331041,
+        "ts_kind": "capture",
         "url": "https://r.jina.ai/https://shop2.retail2.example/catalog/item/4176/view?q=%27%20OR%201%3D1--&uqtag=p7tr4z&step=3&ts=1776331041"
       },
       "score": 9,
@@ -14978,8 +15003,9 @@
     {
       "obs": {
         "id": "eval:lookalike-0-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775023421,
+        "ts_kind": "capture",
         "url": "https://app0.tenant0.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=la1q7c"
       },
       "score": 7,
@@ -15019,8 +15045,9 @@
     {
       "obs": {
         "id": "eval:lookalike-0-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775023561,
+        "ts_kind": "capture",
         "url": "https://app1.tenant0.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=la1q7c"
       },
       "score": 7,
@@ -15060,8 +15087,9 @@
     {
       "obs": {
         "id": "eval:lookalike-1-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775286221,
+        "ts_kind": "capture",
         "url": "https://app0.tenant1.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lb8w2n"
       },
       "score": 7,
@@ -15101,8 +15129,9 @@
     {
       "obs": {
         "id": "eval:lookalike-1-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775286361,
+        "ts_kind": "capture",
         "url": "https://app1.tenant1.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lb8w2n"
       },
       "score": 7,
@@ -15142,8 +15171,9 @@
     {
       "obs": {
         "id": "eval:lookalike-2-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775549021,
+        "ts_kind": "capture",
         "url": "https://app0.tenant2.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lc4e9r"
       },
       "score": 7,
@@ -15183,8 +15213,9 @@
     {
       "obs": {
         "id": "eval:lookalike-2-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775549161,
+        "ts_kind": "capture",
         "url": "https://app1.tenant2.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lc4e9r"
       },
       "score": 7,
@@ -15224,8 +15255,9 @@
     {
       "obs": {
         "id": "eval:lookalike-3-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775811821,
+        "ts_kind": "capture",
         "url": "https://app0.tenant3.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=ld6t3m"
       },
       "score": 7,
@@ -15265,8 +15297,9 @@
     {
       "obs": {
         "id": "eval:lookalike-3-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1775811961,
+        "ts_kind": "capture",
         "url": "https://app1.tenant3.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=ld6t3m"
       },
       "score": 7,
@@ -15306,8 +15339,9 @@
     {
       "obs": {
         "id": "eval:lookalike-4-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776074621,
+        "ts_kind": "capture",
         "url": "https://app0.tenant4.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=le2y8k"
       },
       "score": 7,
@@ -15347,8 +15381,9 @@
     {
       "obs": {
         "id": "eval:lookalike-4-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776074761,
+        "ts_kind": "capture",
         "url": "https://app1.tenant4.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=le2y8k"
       },
       "score": 7,
@@ -15388,8 +15423,9 @@
     {
       "obs": {
         "id": "eval:lookalike-5-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776337421,
+        "ts_kind": "capture",
         "url": "https://app0.tenant5.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lf9u4p"
       },
       "score": 7,
@@ -15429,8 +15465,9 @@
     {
       "obs": {
         "id": "eval:lookalike-5-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776337561,
+        "ts_kind": "capture",
         "url": "https://app1.tenant5.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lf9u4p"
       },
       "score": 7,
@@ -15470,8 +15507,9 @@
     {
       "obs": {
         "id": "eval:lookalike-6-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776600221,
+        "ts_kind": "capture",
         "url": "https://app0.tenant6.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lg5i1x"
       },
       "score": 7,
@@ -15511,8 +15549,9 @@
     {
       "obs": {
         "id": "eval:lookalike-6-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776600361,
+        "ts_kind": "capture",
         "url": "https://app1.tenant6.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lg5i1x"
       },
       "score": 7,
@@ -15552,8 +15591,9 @@
     {
       "obs": {
         "id": "eval:lookalike-7-0",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776863021,
+        "ts_kind": "capture",
         "url": "https://app0.tenant7.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lh3o6v"
       },
       "score": 7,
@@ -15593,8 +15633,9 @@
     {
       "obs": {
         "id": "eval:lookalike-7-1",
-        "source": "eval",
+        "source": "wayback",
         "ts": 1776863161,
+        "ts_kind": "capture",
         "url": "https://app1.tenant7.example/items?id=7%27%20AND%201%3D1--&lang=en&src=agentkit&uqtag=lh3o6v"
       },
       "score": 7,
@@ -15634,7 +15675,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-0",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778730369,
         "ts_kind": "submit",
         "url": "https://node0.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -15676,7 +15717,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-0",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778730414,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki0.docs-hub.example/docs/300?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -15724,7 +15765,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-1",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778732569,
         "ts_kind": "submit",
         "url": "https://node1.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -15766,7 +15807,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-1",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778732631,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki1.docs-hub.example/docs/301?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -15814,7 +15855,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-2",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778733469,
         "ts_kind": "submit",
         "url": "https://node2.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -15856,7 +15897,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-2",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778733549,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki2.docs-hub.example/docs/302?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -15904,7 +15945,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-3",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778736569,
         "ts_kind": "submit",
         "url": "https://node3.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -15946,7 +15987,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-3",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778736620,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki3.docs-hub.example/docs/303?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -15994,7 +16035,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-4",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778737869,
         "ts_kind": "submit",
         "url": "https://node0.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -16036,7 +16077,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-4",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778737942,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki0.docs-hub.example/docs/304?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -16084,7 +16125,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-5",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778740469,
         "ts_kind": "submit",
         "url": "https://node1.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -16126,7 +16167,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-5",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778740509,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki1.docs-hub.example/docs/305?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -16174,7 +16215,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-6",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778742169,
         "ts_kind": "submit",
         "url": "https://node2.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -16216,7 +16257,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-6",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778742254,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki2.docs-hub.example/docs/306?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -16264,7 +16305,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-7",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778745069,
         "ts_kind": "submit",
         "url": "https://node3.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -16306,7 +16347,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-7",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778745127,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki3.docs-hub.example/docs/307?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -16354,7 +16395,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-8",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778746169,
         "ts_kind": "submit",
         "url": "https://node0.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -16396,7 +16437,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-8",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778746235,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki0.docs-hub.example/docs/308?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -16444,7 +16485,7 @@
     {
       "obs": {
         "id": "eval:orchestra-plan-9",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778748169,
         "ts_kind": "submit",
         "url": "https://node1.ledger.example/api/v1/records?filter=%27%20OR%20%271%27%3D%271&uqtag=orc5pl"
@@ -16486,7 +16527,7 @@
     {
       "obs": {
         "id": "eval:orchestra-work-9",
-        "source": "eval",
+        "source": "urlscan",
         "ts": 1778748218,
         "ts_kind": "submit",
         "url": "https://r.jina.ai/https://wiki1.docs-hub.example/docs/309?x=%3Csvg/onload%3Dalert(1)%3E&run=orc5wk"
@@ -18945,9 +18986,27 @@
         }
       },
       "provenance": {
-        "unknown": 10
+        "submit-anywhere": 10
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            430,
+            432,
+            434,
+            436,
+            438,
+            440,
+            442,
+            444,
+            446,
+            448
+          ],
+          "detail": "all 10 records come from services anyone can submit a URL to (urlscan); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -19218,9 +19277,27 @@
         }
       },
       "provenance": {
-        "unknown": 10
+        "submit-anywhere": 10
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            431,
+            433,
+            435,
+            437,
+            439,
+            441,
+            443,
+            445,
+            447,
+            449
+          ],
+          "detail": "all 10 records come from services anyone can submit a URL to (urlscan); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "payloads_only"
       },
@@ -22247,6 +22324,7 @@
       ],
       "start": 1775466847,
       "end": 1775467041,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 9,
       "rules": {
@@ -22286,13 +22364,6 @@
         ],
         "signature": "3e4414d1"
       },
-      "fanout": {
-        "batches": 3,
-        "widths": {
-          "1": 3
-        },
-        "modal_share": 1.0
-      },
       "relay_stacks": {
         "relay.jina → target": 3
       },
@@ -22331,7 +22402,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -22347,9 +22418,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.026944444444444444,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -22366,9 +22437,20 @@
         }
       },
       "provenance": {
-        "unknown": 3
+        "submit-anywhere": 3
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            405,
+            406,
+            407
+          ],
+          "detail": "all 3 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -22377,6 +22459,9 @@
             "records": 3,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -22443,6 +22528,7 @@
       ],
       "start": 1775898847,
       "end": 1775899041,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 9,
       "rules": {
@@ -22482,13 +22568,6 @@
         ],
         "signature": "3e4414d1"
       },
-      "fanout": {
-        "batches": 3,
-        "widths": {
-          "1": 3
-        },
-        "modal_share": 1.0
-      },
       "relay_stacks": {
         "relay.jina → target": 3
       },
@@ -22527,7 +22606,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -22543,9 +22622,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.026944444444444444,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -22562,9 +22641,20 @@
         }
       },
       "provenance": {
-        "unknown": 3
+        "submit-anywhere": 3
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            408,
+            409,
+            410
+          ],
+          "detail": "all 3 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -22573,6 +22663,9 @@
             "records": 3,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -22639,6 +22732,7 @@
       ],
       "start": 1776330847,
       "end": 1776331041,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 9,
       "rules": {
@@ -22678,13 +22772,6 @@
         ],
         "signature": "3e4414d1"
       },
-      "fanout": {
-        "batches": 3,
-        "widths": {
-          "1": 3
-        },
-        "modal_share": 1.0
-      },
       "relay_stacks": {
         "relay.jina → target": 3
       },
@@ -22723,7 +22810,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -22739,9 +22826,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.026944444444444444,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -22758,9 +22845,20 @@
         }
       },
       "provenance": {
-        "unknown": 3
+        "submit-anywhere": 3
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            411,
+            412,
+            413
+          ],
+          "detail": "all 3 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -22769,6 +22867,9 @@
             "records": 3,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -23945,6 +24046,7 @@
       ],
       "start": 1775023421,
       "end": 1775023561,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 7,
       "rules": {
@@ -23967,13 +24069,6 @@
       "user_agents": {},
       "encodings": {
         "sp20.hexU.sorted.noslash": 2
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
       },
       "link_features": [
         "param:uqtag=la1q7c"
@@ -24007,7 +24102,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -24026,9 +24121,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03888888888888889,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -24045,9 +24140,19 @@
         }
       },
       "provenance": {
-        "unknown": 2
+        "submit-anywhere": 2
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            414,
+            415
+          ],
+          "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -24056,6 +24161,9 @@
             "records": 2,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -24120,6 +24228,7 @@
       ],
       "start": 1775286221,
       "end": 1775286361,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 7,
       "rules": {
@@ -24142,13 +24251,6 @@
       "user_agents": {},
       "encodings": {
         "sp20.hexU.sorted.noslash": 2
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
       },
       "link_features": [
         "param:uqtag=lb8w2n"
@@ -24183,7 +24285,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -24201,9 +24303,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03888888888888889,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -24220,9 +24322,19 @@
         }
       },
       "provenance": {
-        "unknown": 2
+        "submit-anywhere": 2
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            416,
+            417
+          ],
+          "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -24231,6 +24343,9 @@
             "records": 2,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -24295,6 +24410,7 @@
       ],
       "start": 1775549021,
       "end": 1775549161,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 7,
       "rules": {
@@ -24317,13 +24433,6 @@
       "user_agents": {},
       "encodings": {
         "sp20.hexU.sorted.noslash": 2
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
       },
       "link_features": [
         "param:uqtag=lc4e9r"
@@ -24359,7 +24468,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -24376,9 +24485,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03888888888888889,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -24395,9 +24504,19 @@
         }
       },
       "provenance": {
-        "unknown": 2
+        "submit-anywhere": 2
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            418,
+            419
+          ],
+          "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -24406,6 +24525,9 @@
             "records": 2,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -24470,6 +24592,7 @@
       ],
       "start": 1775811821,
       "end": 1775811961,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 7,
       "rules": {
@@ -24492,13 +24615,6 @@
       "user_agents": {},
       "encodings": {
         "sp20.hexU.sorted.noslash": 2
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
       },
       "link_features": [
         "param:uqtag=ld6t3m"
@@ -24535,7 +24651,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -24551,9 +24667,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03888888888888889,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -24570,9 +24686,19 @@
         }
       },
       "provenance": {
-        "unknown": 2
+        "submit-anywhere": 2
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            420,
+            421
+          ],
+          "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -24581,6 +24707,9 @@
             "records": 2,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -24645,6 +24774,7 @@
       ],
       "start": 1776074621,
       "end": 1776074761,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 7,
       "rules": {
@@ -24667,13 +24797,6 @@
       "user_agents": {},
       "encodings": {
         "sp20.hexU.sorted.noslash": 2
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
       },
       "link_features": [
         "param:uqtag=le2y8k"
@@ -24711,7 +24834,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -24726,9 +24849,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03888888888888889,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -24745,9 +24868,19 @@
         }
       },
       "provenance": {
-        "unknown": 2
+        "submit-anywhere": 2
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            422,
+            423
+          ],
+          "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -24756,6 +24889,9 @@
             "records": 2,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -24820,6 +24956,7 @@
       ],
       "start": 1776337421,
       "end": 1776337561,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 7,
       "rules": {
@@ -24842,13 +24979,6 @@
       "user_agents": {},
       "encodings": {
         "sp20.hexU.sorted.noslash": 2
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
       },
       "link_features": [
         "param:uqtag=lf9u4p"
@@ -24887,7 +25017,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -24901,9 +25031,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03888888888888889,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -24920,9 +25050,19 @@
         }
       },
       "provenance": {
-        "unknown": 2
+        "submit-anywhere": 2
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            424,
+            425
+          ],
+          "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -24931,6 +25071,9 @@
             "records": 2,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -24995,6 +25138,7 @@
       ],
       "start": 1776600221,
       "end": 1776600361,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 7,
       "rules": {
@@ -25017,13 +25161,6 @@
       "user_agents": {},
       "encodings": {
         "sp20.hexU.sorted.noslash": 2
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
       },
       "link_features": [
         "param:uqtag=lg5i1x"
@@ -25063,7 +25200,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -25076,9 +25213,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03888888888888889,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -25095,9 +25232,19 @@
         }
       },
       "provenance": {
-        "unknown": 2
+        "submit-anywhere": 2
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            426,
+            427
+          ],
+          "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -25106,6 +25253,9 @@
             "records": 2,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {
@@ -25170,6 +25320,7 @@
       ],
       "start": 1776863021,
       "end": 1776863161,
+      "time_basis": "capture",
       "tier": "significant",
       "score": 7,
       "rules": {
@@ -25192,13 +25343,6 @@
       "user_agents": {},
       "encodings": {
         "sp20.hexU.sorted.noslash": 2
-      },
-      "fanout": {
-        "batches": 2,
-        "widths": {
-          "1": 2
-        },
-        "modal_share": 1.0
       },
       "link_features": [
         "param:uqtag=lh3o6v"
@@ -25239,7 +25383,7 @@
             0,
             0,
             0,
-            1,
+            0,
             0,
             0,
             0,
@@ -25251,9 +25395,9 @@
             0,
             0
           ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.03888888888888889,
-          "days": 1,
+          "entropy": 0.0,
+          "longest_idle_hours": 0.0,
+          "days": 0,
           "verdict": {
             "kind": "too_short"
           }
@@ -25270,9 +25414,19 @@
         }
       },
       "provenance": {
-        "unknown": 2
+        "submit-anywhere": 2
       },
       "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "provenance_monoculture",
+          "records": [
+            428,
+            429
+          ],
+          "detail": "all 2 records come from services anyone can submit a URL to (wayback); no server log or owner-published record stands behind them"
+        }
+      ],
       "agent": {
         "level": "self_described",
         "signals": [
@@ -25281,6 +25435,9 @@
             "records": 2,
             "detail": "marker.uq_tags"
           }
+        ],
+        "caps": [
+          "capture_times"
         ]
       },
       "scope": {

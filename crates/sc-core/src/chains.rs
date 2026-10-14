@@ -24,7 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Probe chain settings (`[chains]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ChainOptions {
     /// Requests further apart than this start a new chain.
     pub max_gap_secs: i64,

@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Scaffold settings (`[scaffold]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ScaffoldOptions {
     /// A template ties clusters only with at least this many structural
     /// parts: relay hops, parameters, an informative encoding, test

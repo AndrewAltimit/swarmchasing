@@ -256,7 +256,7 @@ pub fn prose_stats<'a>(
 
 /// Prompt echo settings (`[prompt_echo]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct PromptEchoOptions {
     /// Words a prose value must keep once slotted.
     pub min_words: usize,

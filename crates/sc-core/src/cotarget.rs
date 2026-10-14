@@ -40,7 +40,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Co-target settings (`[co_target]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CoTargetOptions {
     /// Width of a time bin.
     pub bin_secs: i64,

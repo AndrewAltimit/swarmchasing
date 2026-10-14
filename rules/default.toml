@@ -160,9 +160,10 @@ remote_browser = ["carrier.livecodes", "carrier.codesandbox", "carrier.browserle
 # `sim calibrate --check` compares it with the lower bound of the kind's
 # ratio stratified by scenario, over the scenarios where it can occur. A
 # habit kind the simulation measures only on its one small set of copied
-# records stays low or off by judgment. A kind the simulation cannot produce (it copies request
-# content, so no captured secrets, header sets or reruns) keeps a ratio set by
-# judgment.
+# records stays low or off by judgment. A kind the simulation does not produce
+# (preambles, path sets, cut lengths, header sets, common features) keeps a
+# ratio set by judgment, with its reason in the scenario file's
+# `calibration.unmeasured`, which the check reads.
 [soft_links]
 fleet_min_lr = 20.0
 fleet_density = 0.5
@@ -170,15 +171,19 @@ backbone_alpha = 0.05
 backbone_overlap = 0.5
 min_link_lr = 2.0
 max_shared = 10
-# Judgment: tested against a chance model, never produced by the simulation.
+# Judgment, well below the simulation's bound (rerun: one operator's agents
+# stalled together by its quota), which measures one way pauses come to be
+# shared; tested against a chance model.
 shared_pause = 4.0
 # Judgment, below the simulation's bound: every simulated agent copies one
 # small set of records, so shared habits are measured on less variety than
 # real traffic has. Listed when rare.
 dialect = 2.0
-# Judgment for the next six: the simulation does not produce them. A rerun of
-# a whole host list in order on another day is a fleet edge on its own.
-rerun = 25.0
+# Simulation (rerun), at its bound: unrelated agents walking one published list
+# in one order on different days rerun it as one operator does, so a rerun
+# needs other evidence before it makes a fleet.
+rerun = 3.0
+# Judgment for the next five: the simulation does not produce them.
 preamble = 3.0
 path_set = 3.0
 cut_length = 2.0
@@ -191,8 +196,9 @@ encoding = 1.0
 fanout = 1.0
 # Simulation (escalation, hub, ordered-list).
 escalation = 28.0
-# Judgment: the same redacted secret (REDACTED-<hash>) in records of both
-# clusters, a captured token reused. Stock passwords do not count.
+# Simulation (shared-secret), below its bound: the same redacted secret
+# (REDACTED-<hash>) in records of both clusters, a captured token reused.
+# Stock passwords and documented demo keys do not count.
 shared_secret = 50.0
 # Judgment: off. A stack of two or more relays and carriers; the simulation
 # measures it shared by one operator's clusters more often than by unrelated

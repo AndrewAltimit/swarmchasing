@@ -15,7 +15,7 @@
 
 use crate::palette::{Palette, Template, Use};
 use crate::rng::Rng;
-use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Prose, Scenario};
+use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Prose, Scenario, TagScope};
 use sc_core::{LinkFeature, Observation, TsKind};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -50,6 +50,16 @@ const PREVIEW_UAS: &[&str] = &[
     "LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)",
     "TelegramBot (like TwitterBot)",
 ];
+/// One link checker's scripted client, the same in every repository.
+const LINK_CHECKER_UA: &str = "python-requests/2.31.0";
+const SEO_UAS: &[&str] = &[
+    "Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)",
+    "Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)",
+    "Mozilla/5.0 (compatible; MJ12bot/v1.4.8; http://mj12bot.com/)",
+    "Mozilla/5.0 (compatible; DotBot/1.2; +https://opensiteexplorer.org/dotbot)",
+];
+/// Addresses an SEO vendor shards its crawl over.
+const SEO_SHARDS: usize = 4;
 const FEED_UAS: &[&str] = &[
     "Feedly/1.0 (+http://www.feedly.com/fetcher.html; 12 subscribers)",
     "Mozilla/5.0 (compatible; Inoreader/1.0; https://www.inoreader.com)",
@@ -171,7 +181,31 @@ struct Gen<'a> {
     shapes: BTreeMap<usize, Vec<Shape>>,
     /// Request times by true run, for planters copying timing.
     times: BTreeMap<String, Vec<i64>>,
+    /// The current actor's options that [`Gen::run`] applies to each of its
+    /// runs.
+    opts: RunOpts,
 }
+
+/// Actor options [`Gen::run`] applies to every run of the actor.
+#[derive(Debug, Clone, Default)]
+struct RunOpts {
+    /// Overrides each run's `tag`.
+    tags: Option<TagScope>,
+    /// A new client for every request.
+    rotate: bool,
+    /// Seconds between requests, a tenth either way, instead of the pace.
+    gap_secs: Option<i64>,
+    /// Stalls, in time order: requests due in `[start, start + secs)` leave
+    /// `secs` later, each stall once per run.
+    stalls: Vec<(i64, i64)>,
+    /// A secret every request carries, as ingest writes it.
+    secret: Option<String>,
+}
+
+/// The parameter a secret rides in.
+const SECRET_PARAM: &str = "api_key";
+/// The documented demo key that unrelated clients copy from one API's docs.
+const DEMO_KEY: &str = "demo";
 
 /// The labelled records of one scenario under one seed, in time order.
 pub fn generate(s: &Scenario, seed: u64, palette: &Palette) -> Vec<Value> {
@@ -184,8 +218,18 @@ pub fn generate(s: &Scenario, seed: u64, palette: &Palette) -> Vec<Value> {
         out: Vec::new(),
         shapes: BTreeMap::new(),
         times: BTreeMap::new(),
+        opts: RunOpts::default(),
     };
     for (i, a) in s.actor.iter().enumerate() {
+        g.opts = RunOpts {
+            tags: a.tag_scope,
+            rotate: a.rotate_clients,
+            gap_secs: a.gap_hours.map(|h| (h * 3600.0) as i64),
+            stalls: Vec::new(),
+            secret: a
+                .stock_secret
+                .then(|| sc_core::redact::hash_token(DEMO_KEY)),
+        };
         g.actor(i, a);
     }
     g.out.sort_by(|a, b| {
@@ -301,6 +345,24 @@ impl Gen<'_> {
                     upgraded.templates[0] = t.clone();
                 }
                 let interval = (a.interval_hours.unwrap_or(26.0) * 3600.0) as i64;
+                // Where each agent starts after its slot: within three hours,
+                // or within `window_hours` when set.
+                let jitter = if a.window_hours.is_some() {
+                    window
+                } else {
+                    3 * 3600
+                };
+                // Twice: four minutes after the start, and four minutes
+                // after the first stall ends.
+                if let Some(m) = a.stall_minutes {
+                    let secs = (m * 60.0) as i64;
+                    let first = start + 240;
+                    self.opts.stalls = vec![(first, secs), (first + secs + 240, secs)];
+                }
+                if a.shared_secret {
+                    let hex = Ids::new(self.seed).token(&fleet, "secret", 12);
+                    self.opts.secret = Some(format!("{SECRET}{hex}"));
+                }
                 self.shapes.insert(i, vec![first.clone(), upgraded.clone()]);
                 for k in 0..a.agents {
                     let shape = if a.upgrade_at.is_some_and(|u| k >= u) {
@@ -319,7 +381,7 @@ impl Gen<'_> {
                             "scaffold_fleet",
                         ),
                         client,
-                        start: start + k as i64 * interval + rng.range(0, 3 * 3600),
+                        start: start + k as i64 * interval + rng.range(0, jitter),
                         pace: a.pace.unwrap_or(Pace::Model),
                         gaps: None,
                         hosts: spread(&hosts, a.records),
@@ -337,7 +399,21 @@ impl Gen<'_> {
                         habits: None,
                         prose: prose_scope(a, i, k, Some(&fleet)),
                     };
+                    // The rerun: the same hosts in the same order on another
+                    // day, from a new client with new tags.
+                    let rerun = a.rerun_after_hours.map(|h| {
+                        let mut again = spec.clone();
+                        again.truth.run = format!("{}r", id(k));
+                        again.client = agent_client(&mut rng);
+                        again.client.ua.clone_from(&ua);
+                        again.start = spec.start + (h * 3600.0) as i64 + rng.range(0, 3600);
+                        again.scope = format!("{i}:{k}:rerun");
+                        again
+                    });
                     self.run(spec, &mut rng);
+                    if let Some(again) = rerun {
+                        self.run(again, &mut rng);
+                    }
                 }
             }
             Kind::Scheduler => {
@@ -474,9 +550,12 @@ impl Gen<'_> {
             Kind::TargetList | Kind::NewsSpike | Kind::Hub => {
                 self.target_list(i, a, start, window, &mut rng)
             }
-            Kind::UptimeMonitor | Kind::InternetScanner | Kind::LinkPreview | Kind::FeedPoller => {
-                self.lookalike(i, a, start, window, &mut rng)
-            }
+            Kind::UptimeMonitor
+            | Kind::InternetScanner
+            | Kind::LinkPreview
+            | Kind::FeedPoller
+            | Kind::CiLinkChecker
+            | Kind::SeoCrawler => self.lookalike(i, a, start, window, &mut rng),
             _ => self.background(i, a, start, window, &mut rng),
         }
     }
@@ -604,6 +683,9 @@ impl Gen<'_> {
                     }
                     t
                 }
+                // Within six hours, or within `window_hours` when set: a
+                // published list walked for days.
+                Kind::NewsSpike if a.window_hours.is_some() => start + rng.range(0, span),
                 Kind::NewsSpike => start + rng.range(0, span.min(6 * 3600)),
                 _ => start,
             };
@@ -866,6 +948,8 @@ impl Gen<'_> {
             Kind::UptimeMonitor => ("uptime_monitor", "api_client"),
             Kind::InternetScanner => ("internet_scanner", "crawler"),
             Kind::LinkPreview => ("link_preview", "crawler"),
+            Kind::CiLinkChecker => ("ci_link_checker", "dev_tool"),
+            Kind::SeoCrawler => ("seo_crawler", "crawler"),
             _ => ("feed_poller", "crawler"),
         };
         let pool: Vec<Template> = self
@@ -882,10 +966,36 @@ impl Gen<'_> {
         let ok = move |code: u16| (basis == Basis::Request).then_some(code);
         let net = rng.below(CLOUD_ASNS.len());
         let prefix = rng.pick(NETS).copied().unwrap_or("192.0.2");
-        let specs: Vec<RunSpec> = (0..n)
-            .map(|k| {
+        // An SEO vendor's shards are clients of one run.
+        let clients = if a.kind == Kind::SeoCrawler {
+            n * SEO_SHARDS
+        } else {
+            n
+        };
+        let specs: Vec<RunSpec> = (0..clients)
+            .map(|c| {
+                let k = if a.kind == Kind::SeoCrawler {
+                    c / SEO_SHARDS
+                } else {
+                    c
+                };
                 let other_net = CLOUD_ASNS[(net + k) % CLOUD_ASNS.len()];
                 let client = match a.kind {
+                    Kind::CiLinkChecker => Client {
+                        ua: LINK_CHECKER_UA.into(),
+                        asn: other_net,
+                        ip: address(rng),
+                    },
+                    // Each vendor's network, consecutive addresses.
+                    Kind::SeoCrawler => Client {
+                        ua: SEO_UAS[k % SEO_UAS.len()].into(),
+                        asn: other_net,
+                        ip: format!(
+                            "{}.{}",
+                            NETS[(k / 40) % NETS.len()],
+                            10 + (k % 40) * SEO_SHARDS + c % SEO_SHARDS
+                        ),
+                    },
                     Kind::UptimeMonitor => Client {
                         ua: MONITOR_UA.into(),
                         asn: other_net,
@@ -958,6 +1068,42 @@ impl Gen<'_> {
                         let url = rewrite(tpl, host, spec, &mut ids, None);
                         self.emit(spec, &tpl.origin, url, t, ok(200), basis);
                         t += gap(rng, Pace::Tool);
+                    }
+                }
+            }
+            Kind::CiLinkChecker => {
+                // One published list, its URLs in sorted order; every
+                // repository's job starts on the hour (its runner a few
+                // seconds late) and checks them in turn.
+                let hosts = self.hosts(&format!("a{i}"), a.hosts);
+                let checks: Vec<(Template, String)> =
+                    hosts.iter().map(|h| (pick(rng), h.clone())).collect();
+                let hour = begin - begin.rem_euclid(3600) + 3600;
+                for spec in &specs {
+                    let mut t = hour + rng.range(0, 20);
+                    for c in 0..a.records {
+                        let (tpl, host) = &checks[c % checks.len()];
+                        let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                        self.emit(spec, &tpl.origin, url, t, ok(200), basis);
+                        t += gap(rng, Pace::Tool);
+                    }
+                }
+            }
+            Kind::SeoCrawler => {
+                // One site's sitemap, in sitemap order; each vendor splits it
+                // over its shards, every shard starting at once.
+                let sitemap = self.hosts(&format!("a{i}"), a.hosts);
+                let pages: Vec<(Template, String)> =
+                    sitemap.iter().map(|h| (pick(rng), h.clone())).collect();
+                for vendor in specs.chunks(SEO_SHARDS) {
+                    let at = start + rng.range(0, window);
+                    for (s, spec) in vendor.iter().enumerate() {
+                        let mut t = at + rng.range(0, 3);
+                        for (tpl, host) in pages.iter().skip(s).step_by(SEO_SHARDS) {
+                            let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                            self.emit(spec, &tpl.origin, url, t, ok(200), basis);
+                            t += gap(rng, Pace::Tool);
+                        }
                     }
                 }
             }
@@ -1171,11 +1317,32 @@ impl Gen<'_> {
     }
 
     /// Emits one run; returns its last timestamp.
-    fn run(&mut self, spec: RunSpec, rng: &mut Rng) -> i64 {
+    fn run(&mut self, mut spec: RunSpec, rng: &mut Rng) -> i64 {
         let mut t = spec.start;
         let mut step = 0usize;
         let mut ids = Ids::new(self.seed);
         let basis = self.scenario.basis;
+        let opts = self.opts.clone();
+        let per_request = opts.tags == Some(TagScope::PerRequest);
+        if let Some(scope) = opts.tags {
+            spec.tag = scope != TagScope::None;
+        }
+        let mut stalled = 0;
+        // A rotating client is drawn from its own stream per request, so the
+        // run's other draws stay as they were.
+        let (seed, rotating) = (self.seed, opts.rotate);
+        let rotate = |spec: &RunSpec, step: usize| {
+            rotating.then(|| {
+                let mut r = Rng::new(seed)
+                    .fork("rotate")
+                    .fork(&spec.scope)
+                    .fork(&step.to_string());
+                RunSpec {
+                    client: agent_client(&mut r),
+                    ..spec.clone()
+                }
+            })
+        };
         if let Some(f) = &spec.fetches {
             let mut url = f.clone();
             if spec.tag {
@@ -1231,9 +1398,24 @@ impl Gen<'_> {
                         t = t.max(sched);
                     }
                     None => {
-                        t += gap(rng, spec.pace);
+                        t += match opts.gap_secs {
+                            Some(g) => g + rng.range(-g / 10, g / 10),
+                            None => gap(rng, spec.pace),
+                        };
                         sched = t;
                     }
+                }
+            }
+            // The operator's stalls: a request due inside one leaves at its
+            // end, and the rest of the run moves with it.
+            while let Some(&(from, secs)) = opts.stalls.get(stalled) {
+                if t < from {
+                    break;
+                }
+                stalled += 1;
+                if t < from + secs {
+                    t += secs;
+                    sched += secs;
                 }
             }
             let error = rng.chance(spec.retry);
@@ -1263,18 +1445,28 @@ impl Gen<'_> {
                     url = add_param(&url, "query", &text.replace(' ', "%20"));
                 }
                 if spec.tag && u != &Use::Benign {
-                    let tag = ids.token(&spec.scope, "uqtag", 10);
+                    let tag = if per_request {
+                        ids.token(&format!("{}:{step}", spec.scope), "uqtag", 10)
+                    } else {
+                        ids.token(&spec.scope, "uqtag", 10)
+                    };
                     url = add_param(&url, "uqtag", &format!("r{tag}"));
                 }
                 if let Some(w) = &spec.writes {
                     url = add_param(&url, "notes", w);
+                }
+                if let Some(s) = &opts.secret {
+                    url = add_param(&url, SECRET_PARAM, s);
                 }
                 let status = (basis == Basis::Request).then_some(if error && k + 1 < tries {
                     404
                 } else {
                     200
                 });
-                self.emit(&spec, &tpl.origin, url, t, status, basis);
+                match rotate(&spec, step) {
+                    Some(moved) => self.emit(&moved, &tpl.origin, url, t, status, basis),
+                    None => self.emit(&spec, &tpl.origin, url, t, status, basis),
+                }
                 step += 1;
             }
         }
@@ -1830,6 +2022,7 @@ mod tests {
             out: Vec::new(),
             shapes: BTreeMap::new(),
             times: BTreeMap::new(),
+            opts: RunOpts::default(),
         };
         let mut rng = Rng::new(2);
         let spec = |gaps: Vec<i64>, rng: &mut Rng| RunSpec {

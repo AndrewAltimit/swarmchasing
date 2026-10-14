@@ -45,7 +45,7 @@ impl Route {
 /// Escalation settings (`[escalation]` in the rules file). The route lists
 /// name rules by id; `prefix.*` names every rule whose id starts `prefix.`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct EscalationOptions {
     /// Requests for one target further apart than this start a new sequence.
     pub window_secs: i64,

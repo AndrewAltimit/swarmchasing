@@ -100,6 +100,44 @@ pub fn render(m: &Measurement) -> String {
     if m.unplaced > 0 {
         let _ = writeln!(s, "\nUnplaced (a side with no truth): {}", m.unplaced);
     }
+    let c = &m.clustering;
+    if let Some((p, r, f)) = c.bcubed() {
+        let _ = writeln!(
+            s,
+            "\nClusters against true runs ({} agent records): B-cubed precision {p:.3} recall {r:.3} F1 {f:.3} · adjusted Rand index {}",
+            c.records,
+            c.ari()
+                .map_or_else(|| "-".to_string(), |x| format!("{x:.3}"))
+        );
+    }
+    let d = &m.detection;
+    if d.runs > 0 {
+        let q = |xs: &[f64], p: f64| {
+            crate::measure::quantile(xs, p).map_or_else(|| "-".to_string(), |x| format!("{x:.0}"))
+        };
+        let records: Vec<f64> = d.records_to_flag.iter().map(|&n| n as f64).collect();
+        let _ = writeln!(
+            s,
+            "Time to detect: {} of {} agent runs flagged suggestive or above; records to the first flag median {} p90 {}; minutes median {} p90 {}.",
+            d.records_to_flag.len(),
+            d.runs,
+            q(&records, 0.5),
+            q(&records, 0.9),
+            q(&d.minutes_to_flag, 0.5),
+            q(&d.minutes_to_flag, 0.9),
+        );
+        if d.checkpoints > 0 {
+            let _ = writeln!(
+                s,
+                "  to L2 or a candidate fleet ({} checkpoints, an upper bound): {} of {} runs; minutes median {} p90 {}.",
+                d.checkpoints,
+                d.minutes_to_escalate.len(),
+                d.runs,
+                q(&d.minutes_to_escalate, 0.5),
+                q(&d.minutes_to_escalate, 0.9),
+            );
+        }
+    }
     let cols = sc_core::eval::grades::COLUMNS;
     let _ = writeln!(
         s,

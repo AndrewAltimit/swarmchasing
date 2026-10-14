@@ -107,6 +107,7 @@ fn one() -> i32 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Thresholds {
     pub suggestive: i32,
     pub significant: i32,
@@ -122,7 +123,7 @@ impl Default for Thresholds {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Linking {
     pub strong_params: Vec<String>,
     /// A shared feature joins records at most this far apart (0: no limit).
@@ -170,6 +171,7 @@ impl Default for Linking {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Meta {
     #[serde(default)]
     pub version: String,
@@ -469,6 +471,34 @@ mod tests {
         let r = Rules::default_rules();
         assert!(r.compiled.len() > 30);
         assert_eq!(r.asn_org(132203), Some("Tencent Cloud"));
+    }
+
+    /// A misspelt key in a settings table fails to load, instead of leaving
+    /// the default in force.
+    #[test]
+    fn a_misspelt_setting_fails() {
+        for table in [
+            "meta",
+            "thresholds",
+            "linking",
+            "chains",
+            "fanout",
+            "cut_lengths",
+            "paths",
+            "escalation",
+            "soft_links",
+            "scaffold",
+            "co_activity",
+            "co_target",
+            "prompt_echo",
+            "swarm",
+            "agentness",
+        ] {
+            let text = format!("[{table}]\nno_such_setting = 1\n");
+            let e = Rules::from_toml(&text).err().unwrap_or_default();
+            assert!(e.contains("unknown field"), "[{table}]: {e}");
+        }
+        assert!(Rules::from_toml("[soft_links]\nrerun = 2.0\n").is_ok());
     }
 
     /// A rules file without these sections (one a case pinned earlier) gets

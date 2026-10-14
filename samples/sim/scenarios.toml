@@ -5,6 +5,23 @@
 # the kinds a scenario is built to produce, with bounds set at or just below
 # what it measures; they only go up.
 
+# Every scenario holds these unless its own `expect` sets the key: no
+# person's record in a cluster graded L3 or above, and no benign or tool
+# record graded L2 or above. Scenarios with people pasting payloads or
+# planting records set their own ceilings.
+[defaults]
+expect.human_high = { max_records = 0 }
+expect.benign_high = { max_records = 0 }
+
+# Soft-link kinds the bundled rules give a ratio above 1 that no scenario
+# measures, each with the reason. `sim calibrate --check` fails on any other.
+[calibration.unmeasured]
+preamble = "the generator copies records one by one and writes no run's opening sequence of paths"
+path_set = "request paths come from the palette records unchanged, so no run sends an unusual path set of its own"
+cut_length = "generated requests are never cut at a model's output length"
+header_set = "generated records carry no request headers"
+common_feature = "every generated run gets identifiers of its own, so none is common to many clusters"
+
 [[scenario]]
 name = "sink"
 seed = 11
@@ -120,6 +137,7 @@ name = "planted"
 seed = 61
 seeds = 4
 expect.S1 = { min_precision = 0.33, min_recall = 1.0 }
+expect.human_high = { max_records = 3 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 2
@@ -286,6 +304,7 @@ name = "null-background"
 seed = 201
 seeds = 12
 null = true
+expect.human_high = { max_records = 7 }
 [[scenario.actor]]
 kind = "agent"
 agents = 12
@@ -751,3 +770,153 @@ agents = 150
 retry = 0.2
 palette_share = 0.05
 prose = "own"
+
+# One operator rerunning a task: each of three agents walks its host list,
+# then walks it again in the same order the next day from a new client with
+# new tags. The three run together on the first day, and the operator's
+# quota running out stalls them at once, twice. Beside them: feed readers backing
+# off through one outage, an uptime service, and unrelated agents walking
+# one published list in one order over two days, which rerun it as one
+# operator would: the rerun link's precision here is theirs.
+[[scenario]]
+name = "rerun"
+seed = 371
+seeds = 4
+span_hours = 72
+expect.rerun = { min_precision = 0.28, min_recall = 0.2 }
+expect.shared_pause = { min_precision = 1.0, min_recall = 0.15 }
+expect.candidate_fleet = { min_precision = 1.0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 24
+hosts = 8
+interval_hours = 0
+window_hours = 0.01
+off_hour = true
+rerun_after_hours = 30
+stall_minutes = 200
+[[scenario.actor]]
+kind = "feed_poller"
+agents = 5
+records = 48
+hosts = 4
+[[scenario.actor]]
+kind = "uptime_monitor"
+agents = 4
+records = 60
+hosts = 5
+[[scenario.actor]]
+kind = "news_spike"
+agents = 6
+records = 8
+hosts = 8
+in_order = true
+window_hours = 48
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+# One captured token reused by every run of a fleet, days apart. The hard
+# negative: unrelated agents sending one API's documented demo key, a stock
+# value that must tie nothing.
+[[scenario]]
+name = "shared-secret"
+seed = 381
+seeds = 4
+span_hours = 120
+expect.shared_secret = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+shared_secret = true
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+stock_secret = true
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+# Repositories running one link checker from cloud runners on a cron at the
+# top of the hour, over one published list in sorted order, with one
+# scripted user agent: no two runs related. The checkers alone, so what the
+# null ceilings count here is theirs.
+[[scenario]]
+name = "ci-link-checker"
+seed = 391
+seeds = 4
+null = true
+expect.S3 = { max_pairs = 0 }
+expect.co_target = { max_pairs = 0 }
+expect.ordered_co_target = { max_pairs = 0 }
+expect.candidate_fleet = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "ci_link_checker"
+agents = 30
+records = 12
+hosts = 12
+
+# SEO audit vendors walking one site's sitemap in sitemap order, each
+# sharded over consecutive addresses of its own network.
+[[scenario]]
+name = "seo-crawler"
+seed = 401
+seeds = 4
+expect.ordered_co_target = { max_pairs = 0 }
+expect.S5 = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "seo_crawler"
+agents = 4
+hosts = 24
+window_hours = 6
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+# The sink swarm again, evading: a new run tag on every request and a new
+# client (address, network, user agent) for every request. It measures how
+# linking degrades when only the shared inbox is left.
+[[scenario]]
+name = "evasive-swarm"
+seed = 411
+seeds = 4
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["sink"]
+records = 8
+tag_scope = "per_request"
+rotate_clients = true
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 12
+records = 3
+
+# Low and slow: one run whose requests come three to four days apart, past
+# the feature link window, over about two weeks. It measures how such a run
+# splits.
+[[scenario]]
+name = "low-and-slow"
+seed = 421
+seeds = 4
+span_hours = 336
+[[scenario.actor]]
+kind = "agent"
+agents = 1
+records = 5
+gap_hours = 80
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
