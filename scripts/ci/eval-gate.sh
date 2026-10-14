@@ -80,7 +80,7 @@ cargo run --quiet "$@" -p swarmchase -- sim bench samples/sim/scenarios.toml \
     --max-null-fleet-pairs 3 \
     --min-link-cross-run-precision 0.27 \
     --min-fleet-cross-run-precision 0.91 \
-    --max-benign-high 2429 \
+    --max-benign-high 0 \
     --max-human-high 10 \
     --expect \
     | sed -n '/^Null scenarios/,$p'

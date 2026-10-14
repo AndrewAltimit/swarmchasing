@@ -10,7 +10,8 @@
 //! - **L1** self-described: a model or vendor name, or an agent test tag,
 //!   which anyone can write, so it reads like L0;
 //! - **L2** model-written: residue, prose, invented identifiers, repeated cut
-//!   lengths, stale knowledge or stale date tags;
+//!   lengths, stale knowledge or stale date tags (page-borne residue, which a
+//!   broken page carries in its own links, is listed but never sets L2);
 //! - **L3** adaptive: L2 plus behaviour that answers responses (a changed
 //!   request after an error, a route escalation, a probe chain at model
 //!   pace), read only from request or submit times;
@@ -34,12 +35,42 @@ use crate::analyze::{Cluster, ObsResult};
 use crate::chains::{Chain, ChainOptions, Pace};
 use crate::escalation::Escalation;
 use crate::model::{Hit, IndicatorKind, TsKind};
+use crate::swarm::client_key;
 use crate::timing::{RhythmVerdict, TimeBasis};
 use serde::{Deserialize, Serialize};
 
 /// Agent-tag rules: an agent describing itself, like a vendor name. Every
 /// other artifact rule of kind `agent_marker` is model-output residue.
 pub const SELF_DESCRIBED: &[&str] = &["marker.uq_tags", "marker.test_tag", "marker.oai_tag"];
+
+/// Residue rules a page carries in its own links. A front-end that fails to
+/// render writes `/p/{{item.slug}}` into its hrefs, and every crawler,
+/// preview bot and feed poller following them sends it, so the match shows
+/// a link was followed, not who wrote it. Listed as page-borne residue, it
+/// never sets L2 on its own.
+pub const PAGE_BORNE: &[&str] = &["marker.template_unrendered"];
+
+/// Self-identification rules that say where a URL came from, not who sent
+/// it: an assistant's citation tag (`utm_source=chatgpt.com`) rides along
+/// on every click and every copy of a cited link. Never self-description.
+pub const NOT_SELF_DESCRIBED: &[&str] = &["marker.assistant_citation"];
+
+/// The referral parameter a citing site writes its own name into. A vendor
+/// name matched in its value is the citation, not the client naming itself.
+const REFERRAL_PARAM: &str = "utm_source=";
+
+/// Whether hit `h` is the client describing itself (L1).
+fn self_described(h: &Hit) -> bool {
+    let id = h.rule_id.as_str();
+    if NOT_SELF_DESCRIBED.contains(&id) {
+        return false;
+    }
+    let referral = h
+        .matched
+        .get(..REFERRAL_PARAM.len())
+        .is_some_and(|p| p.eq_ignore_ascii_case(REFERRAL_PARAM));
+    (h.kind == IndicatorKind::SelfId || SELF_DESCRIBED.contains(&id)) && !referral
+}
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
@@ -123,6 +154,8 @@ pub enum SignalKind {
     VerifiedPlatform,
     // L2
     Residue,
+    /// Listed beside the L2 signals; never sets the grade.
+    PageResidue,
     Prose,
     FabricatedIds,
     CutLengths,
@@ -149,14 +182,19 @@ pub enum SignalKind {
 }
 
 impl SignalKind {
+    /// Whether the signal can set its rung. Page-borne residue is listed
+    /// under L2 but leaves the grade where the other signals put it.
+    pub fn grades(self) -> bool {
+        self != Self::PageResidue
+    }
+
     /// The rung this signal supports; `None` for a counter-signal.
     pub fn level(self) -> Option<AgentLevel> {
         use SignalKind::*;
         Some(match self {
             SelfId | VerifiedPlatform => AgentLevel::SelfDescribed,
-            Residue | Prose | FabricatedIds | CutLengths | StaleKnowledge | StaleDates => {
-                AgentLevel::ModelWritten
-            }
+            Residue | PageResidue | Prose | FabricatedIds | CutLengths | StaleKnowledge
+            | StaleDates => AgentLevel::ModelWritten,
             RetryAfterError | Escalation | ModelPaceChain => AgentLevel::Adaptive,
             MachinePace | FanOut | CrossService | RoundTheClock | PerFetchRobots | RateCeiling => {
                 AgentLevel::AgentLikely
@@ -178,6 +216,9 @@ impl SignalKind {
                 "sent by a provider's agent platform, verified by its published key or address range (it shows who relayed the request, not that a model chose it)"
             }
             Residue => "model-output residue in requests",
+            PageResidue => {
+                "residue a broken page also carries in its links, such as an unrendered template (it never sets the grade alone: any client following the link sends it)"
+            }
             Prose => "natural-language prose in parameters",
             FabricatedIds => "identifiers no generator produces",
             CutLengths => "URLs cut at one repeated length, like an output limit",
@@ -285,16 +326,32 @@ fn timed(b: TimeBasis) -> bool {
     !matches!(b, TimeBasis::Capture | TimeBasis::Mixed)
 }
 
-/// The rule ids among `hits` that self-describe (L1) and that are
-/// model-output residue (L2).
-fn hit_marks(hits: &[Hit]) -> (Vec<&str>, Vec<&str>) {
-    let (mut tags, mut residue) = (Vec::new(), Vec::new());
+/// The rule ids among `hits` that self-describe (L1), that are
+/// model-output residue (L2) and that are page-borne residue.
+struct Marks<'a> {
+    tags: Vec<&'a str>,
+    residue: Vec<&'a str>,
+    page: Vec<&'a str>,
+}
+
+fn hit_marks(hits: &[Hit]) -> Marks<'_> {
+    let mut m = Marks {
+        tags: Vec::new(),
+        residue: Vec::new(),
+        page: Vec::new(),
+    };
     for h in hits {
         let id = h.rule_id.as_str();
-        let list = if h.kind == IndicatorKind::SelfId || SELF_DESCRIBED.contains(&id) {
-            &mut tags
+        let list = if self_described(h) {
+            &mut m.tags
+        } else if h.kind == IndicatorKind::SelfId {
+            continue;
         } else if h.artifact && h.kind == IndicatorKind::AgentMarker {
-            &mut residue
+            if PAGE_BORNE.contains(&id) {
+                &mut m.page
+            } else {
+                &mut m.residue
+            }
         } else {
             continue;
         };
@@ -302,16 +359,21 @@ fn hit_marks(hits: &[Hit]) -> (Vec<&str>, Vec<&str>) {
             list.push(id);
         }
     }
-    (tags, residue)
+    m
 }
 
 /// Grade a flagged record that is in no cluster, from its own hits:
-/// self-description (L1) and model-output residue (L2). One record shows no
+/// self-description (L1) and model-output residue (L2; page-borne residue is
+/// listed and leaves the grade alone). One record shows no
 /// pace, retries or rhythm, so it never reaches L3; an archive capture is
 /// capped as a cluster of captures is.
 pub fn assess_record(r: &ObsResult) -> AgentAssessment {
     let mut out = AgentAssessment::default();
-    let (tags, residue) = hit_marks(&r.hits);
+    let Marks {
+        tags,
+        residue,
+        page,
+    } = hit_marks(&r.hits);
     let mut push = |kind: SignalKind, ids: &[&str]| {
         if !ids.is_empty() {
             out.signals.push(AgentSignal {
@@ -323,6 +385,7 @@ pub fn assess_record(r: &ObsResult) -> AgentAssessment {
     };
     push(SignalKind::SelfId, &tags);
     push(SignalKind::Residue, &residue);
+    push(SignalKind::PageResidue, &page);
     if r.obs.ts_kind == TsKind::Capture {
         out.caps.push(AgentCap::CaptureTimes);
     }
@@ -364,25 +427,28 @@ pub fn assess(
     };
 
     // L1 and residue, from the members' hits.
-    let (mut tags, mut residue): (Vec<&str>, Vec<&str>) = (Vec::new(), Vec::new());
-    let (mut n_tag, mut n_res) = (0, 0);
-    for &i in &c.members {
-        let (t, r) = hit_marks(&results[i].hits);
-        n_tag += usize::from(!t.is_empty());
-        n_res += usize::from(!r.is_empty());
-        for id in t {
-            if !tags.contains(&id) {
-                tags.push(id);
-            }
-        }
-        for id in r {
-            if !residue.contains(&id) {
-                residue.push(id);
+    let (mut tags, mut residue, mut page): (Vec<&str>, Vec<&str>, Vec<&str>) =
+        (Vec::new(), Vec::new(), Vec::new());
+    let (mut n_tag, mut n_res, mut n_page) = (0, 0, 0);
+    fn add<'a>(all: &mut Vec<&'a str>, ids: Vec<&'a str>) {
+        for id in ids {
+            if !all.contains(&id) {
+                all.push(id);
             }
         }
     }
+    for &i in &c.members {
+        let m = hit_marks(&results[i].hits);
+        n_tag += usize::from(!m.tags.is_empty());
+        n_res += usize::from(!m.residue.is_empty());
+        n_page += usize::from(!m.page.is_empty());
+        add(&mut tags, m.tags);
+        add(&mut residue, m.residue);
+        add(&mut page, m.page);
+    }
     push(SignalKind::SelfId, n_tag, tags.join(", "));
     push(SignalKind::Residue, n_res, residue.join(", "));
+    push(SignalKind::PageResidue, n_page, page.join(", "));
 
     // L2 from the cluster's hints. One prose value can be a person's search;
     // two, or one in a foreign language for its target, count.
@@ -522,7 +588,11 @@ pub fn assess(
     }
 
     // The strongest rung whose every lower rung from L2 holds.
-    let has = |l: AgentLevel| out.signals.iter().any(|s| s.kind.level() == Some(l));
+    let has = |l: AgentLevel| {
+        out.signals
+            .iter()
+            .any(|s| s.kind.grades() && s.kind.level() == Some(l))
+    };
     let mut level = if has(AgentLevel::SelfDescribed) {
         AgentLevel::SelfDescribed
     } else {
@@ -604,21 +674,10 @@ const MCP_FETCH_RULE: &str = "header.mcp_fetch_ua";
 /// Requests read per client and run, earliest first.
 const MAX_EVENTS: usize = 2000;
 
-/// Who sent a record: its user agent and network, or `None` when neither is
-/// known.
-fn client_key(r: &ObsResult) -> Option<String> {
-    let o = &r.obs;
-    (o.user_agent.is_some() || o.asn.is_some()).then(|| {
-        format!(
-            "{}|{}",
-            o.user_agent.as_deref().unwrap_or(""),
-            o.asn.map(|a| a.to_string()).unwrap_or_default()
-        )
-    })
-}
-
-/// Every record with a request or submit time and a known client, by
-/// client then time: how a cluster's clients' unflagged requests are found.
+/// Every record in no cluster with a request or submit time and a known
+/// client (user agent, network and header set, as runs and strands key it),
+/// by client then time: how a cluster's clients' unflagged requests are
+/// found. Records of other clusters are never read for this one.
 #[derive(Debug, Default)]
 pub struct ClientIndex {
     rows: Vec<(String, i64, usize)>,
@@ -629,7 +688,9 @@ impl ClientIndex {
         let mut rows: Vec<(String, i64, usize)> = results
             .iter()
             .enumerate()
-            .filter(|(_, r)| r.obs.ts > 0 && crate::timing::request_like(r.obs.ts_kind))
+            .filter(|(_, r)| {
+                r.cluster.is_none() && r.obs.ts > 0 && crate::timing::request_like(r.obs.ts_kind)
+            })
             .filter_map(|(i, r)| client_key(r).map(|k| (k, r.obs.ts, i)))
             .collect();
         crate::sort::sort(&mut rows);
@@ -677,8 +738,12 @@ fn merge(slot: &mut Option<Habit>, h: Habit) {
 }
 
 /// Per-fetch robots and the rate ceiling, over each run of `c` and each of
-/// its clients there. Records without a client feed the ceiling only, as
-/// one group of the run's own members.
+/// its clients there: the run's own members from that client and the
+/// client's requests in no cluster (at most `MAX_EVENTS` of those, earliest
+/// first). A habit counts only when some of what it rests on is the
+/// cluster's own: a preceded page, or a request in a window at the ceiling.
+/// Records without a client feed the ceiling only, as one group of the
+/// run's own members.
 fn client_habits(
     c: &Cluster,
     results: &[ObsResult],
@@ -687,7 +752,7 @@ fn client_habits(
 ) -> Habits {
     let mut out = Habits::default();
     for (n, span) in c.runs.iter().enumerate() {
-        let mut keys: Vec<String> = Vec::new();
+        let mut keys: Vec<(String, usize)> = Vec::new();
         let mut anonymous: Vec<usize> = Vec::new();
         for &m in &c.members {
             let r = &results[m];
@@ -699,29 +764,29 @@ fn client_habits(
                 continue;
             }
             match client_key(r) {
-                Some(k) if !keys.contains(&k) => keys.push(k),
-                Some(_) => {}
+                Some(k) => keys.push((k, m)),
                 None => anonymous.push(m),
             }
         }
         crate::sort::sort(&mut keys);
         let label = format!("{}#{}", c.key, n + 1);
-        for k in &keys {
+        for g in keys.chunk_by(|a, b| a.0 == b.0) {
+            let k = g[0].0.as_str();
+            let own: Vec<usize> = g.iter().map(|x| x.1).collect();
             let from = span.start - ao.robots_window_secs.max(0);
-            let recs: Vec<usize> = clients.span(k, from, span.end).take(MAX_EVENTS).collect();
-            if let Some(h) = per_fetch_robots(&recs, results, ao) {
+            let mut recs: Vec<usize> = clients.span(k, from, span.end).take(MAX_EVENTS).collect();
+            recs.extend(&own);
+            crate::sort::by_key(&mut recs, |&i| (results[i].obs.ts, i));
+            if let Some(h) = per_fetch_robots(&recs, &own, results, ao) {
                 merge(&mut out.robots, h);
             }
-            let in_span: Vec<usize> = recs
-                .into_iter()
-                .filter(|&i| results[i].obs.ts >= span.start)
-                .collect();
-            if let Some(h) = rate_ceiling(&in_span, results, ao, &[&label, k]) {
+            recs.retain(|&i| results[i].obs.ts >= span.start);
+            if let Some(h) = rate_ceiling(&recs, &own, results, ao, &[&label, k]) {
                 merge(&mut out.ceiling, h);
             }
         }
         anonymous.truncate(MAX_EVENTS);
-        if let Some(h) = rate_ceiling(&anonymous, results, ao, &[&label, ""]) {
+        if let Some(h) = rate_ceiling(&anonymous, &anonymous, results, ao, &[&label, ""]) {
             merge(&mut out.ceiling, h);
         }
     }
@@ -731,11 +796,17 @@ fn client_habits(
 /// One client's requests in a run: whether nearly every page request comes
 /// right after a `/robots.txt` request on its host, robots.txt read again
 /// for each page. Chance: the robots requests placed at random over the
-/// client's span, as a Poisson-binomial tail over its pages.
-fn per_fetch_robots(recs: &[usize], results: &[ObsResult], ao: &AgentnessOptions) -> Option<Habit> {
+/// client's span, as a Poisson-binomial tail over its pages. At least one
+/// preceded page must be in `own`, the cluster's members.
+fn per_fetch_robots(
+    recs: &[usize],
+    own: &[usize],
+    results: &[ObsResult],
+    ao: &AgentnessOptions,
+) -> Option<Habit> {
     let w = ao.robots_window_secs.max(0);
     let mut robots: Vec<(String, i64, bool)> = Vec::new();
-    let mut pages: Vec<(String, i64)> = Vec::new();
+    let mut pages: Vec<(String, i64, bool)> = Vec::new();
     for &i in recs {
         let o = &results[i].obs;
         let Some(u) = crate::weburl::WebUrl::parse(&o.url) else {
@@ -747,7 +818,7 @@ fn per_fetch_robots(recs: &[usize], results: &[ObsResult], ao: &AgentnessOptions
         if u.path.eq_ignore_ascii_case("/robots.txt") {
             robots.push((host, o.ts, false));
         } else {
-            pages.push((host, o.ts));
+            pages.push((host, o.ts, own.contains(&i)));
         }
     }
     if pages.len() < ao.robots_min_pages.max(1) || robots.is_empty() {
@@ -755,9 +826,9 @@ fn per_fetch_robots(recs: &[usize], results: &[ObsResult], ao: &AgentnessOptions
     }
     // Each page takes the latest unused robots request on its host within
     // the window before it.
-    let mut preceded = 0usize;
+    let (mut preceded, mut preceded_own) = (0usize, 0usize);
     let mut per_host: Vec<(String, usize)> = Vec::new();
-    for (h, t) in &pages {
+    for (h, t, mine) in &pages {
         let pick = robots
             .iter()
             .enumerate()
@@ -767,6 +838,7 @@ fn per_fetch_robots(recs: &[usize], results: &[ObsResult], ao: &AgentnessOptions
         if let Some(j) = pick {
             robots[j].2 = true;
             preceded += 1;
+            preceded_own += usize::from(*mine);
             match per_host.iter_mut().find(|x| x.0 == *h) {
                 Some(x) => x.1 += 1,
                 None => per_host.push((h.clone(), 1)),
@@ -775,7 +847,9 @@ fn per_fetch_robots(recs: &[usize], results: &[ObsResult], ao: &AgentnessOptions
     }
     let repeats = per_host.iter().map(|x| x.1).max().unwrap_or(0);
     let n = pages.len();
-    if (preceded as f64) < ao.robots_min_share * n as f64 || repeats < ao.robots_min_repeats.max(1)
+    if (preceded as f64) < ao.robots_min_share * n as f64
+        || repeats < ao.robots_min_repeats.max(1)
+        || preceded_own == 0
     {
         return None;
     }
@@ -792,7 +866,7 @@ fn per_fetch_robots(recs: &[usize], results: &[ObsResult], ao: &AgentnessOptions
     let s = (last - first).max(1) as f64;
     let ps: Vec<f64> = pages
         .iter()
-        .map(|(h, _)| {
+        .map(|(h, _, _)| {
             let r = robots.iter().filter(|x| x.0 == *h).count() as f64;
             (r * (w + 1) as f64 / s).min(1.0)
         })
@@ -836,26 +910,34 @@ fn ceiling_of(ts: &[i64], w: i64) -> usize {
 /// next request within `press` of the window's end), counted without
 /// overlap.
 fn saturated(ts: &[i64], w: i64, cap: usize, press: i64) -> usize {
-    let (mut i, mut n) = (0, 0);
+    saturated_windows(ts, w, cap, press).len()
+}
+
+/// The windows [`saturated`] counts, as index ranges into `ts`.
+fn saturated_windows(ts: &[i64], w: i64, cap: usize, press: i64) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut i = 0;
     while i < ts.len() {
         let j = ts.partition_point(|&t| t < ts[i] + w);
         if j - i >= cap && j < ts.len() && ts[j] < ts[i] + w + press {
-            n += 1;
+            out.push(i..j);
             i = j;
         } else {
             i += 1;
         }
     }
-    n
+    out
 }
 
 /// A run's requests that reach one ceiling per window again and again, the
 /// client pressing on each time, and never pass it, as a client-side rate
 /// limiter allows. Chance: the run's own gaps permuted (seeded from `seed`),
 /// the share holding the ceiling as well. A run that got a 429 response was
-/// limited by the server, not itself, and is not read.
+/// limited by the server, not itself, and is not read. At least one window
+/// at the ceiling must hold a request in `own`, the cluster's members.
 fn rate_ceiling(
     recs: &[usize],
+    own: &[usize],
     results: &[ObsResult],
     ao: &AgentnessOptions,
     seed: &[&str],
@@ -866,12 +948,18 @@ fn rate_ceiling(
     if recs.len() < cap0 * k0 + 1 || recs.iter().any(|&i| results[i].obs.status == Some(429)) {
         return None;
     }
-    let mut ts: Vec<i64> = recs.iter().map(|&i| results[i].obs.ts).collect();
-    crate::sort::sort(&mut ts);
+    let mut timed: Vec<(i64, bool)> = recs
+        .iter()
+        .map(|&i| (results[i].obs.ts, own.contains(&i)))
+        .collect();
+    crate::sort::sort(&mut timed);
+    let ts: Vec<i64> = timed.iter().map(|x| x.0).collect();
     let cap = ceiling_of(&ts, w);
     let press = ao.rate_press_secs.max(0);
-    let k = saturated(&ts, w, cap, press);
-    if cap < cap0 || k < k0 {
+    let windows = saturated_windows(&ts, w, cap, press);
+    let k = windows.len();
+    let own_window = windows.iter().any(|r| timed[r.clone()].iter().any(|x| x.1));
+    if cap < cap0 || k < k0 || !own_window {
         return None;
     }
     let mut gaps: Vec<i64> = ts.windows(2).map(|x| x[1] - x[0]).collect();
@@ -1048,6 +1136,117 @@ mod tests {
     }
 
     #[test]
+    fn an_assistant_citation_tag_is_not_self_description() {
+        let t0 = 1_791_000_000;
+        let a = run(
+            &[
+                (
+                    t0,
+                    "https://records.agency.example/search?q=1%27%20OR%20%271%27=%271&utm_source=chatgpt.com",
+                    None,
+                ),
+                (
+                    t0 + 9_000,
+                    "https://records.agency.example/permits?id=4471&utm_source=chatgpt.com&uqtag=cite7a",
+                    None,
+                ),
+            ],
+            TsKind::Capture,
+        );
+        let g = |i: usize| a.results[i].agent.clone().expect("flagged");
+        let fired = |i: usize, id: &str| a.results[i].hits.iter().any(|h| h.rule_id == id);
+        // The tag and the vendor name inside it fire, and neither describes
+        // the client.
+        assert!(fired(0, "marker.assistant_citation") && fired(0, "selfid.vendor_name"));
+        assert_eq!(g(0).level, AgentLevel::PayloadsOnly, "{:?}", g(0));
+        assert!(g(0).signals.is_empty(), "{:?}", g(0));
+        // A run tag beside it still does, alone.
+        assert_eq!(g(1).level, AgentLevel::SelfDescribed, "{:?}", g(1));
+        assert_eq!(g(1).signals[0].detail, "marker.uq_tags", "{:?}", g(1));
+        let r = Rules::default_rules();
+        for id in NOT_SELF_DESCRIBED {
+            assert!(r.rule(id).is_some(), "{id}");
+        }
+    }
+
+    #[test]
+    fn page_borne_rules_are_residue_rules() {
+        let r = Rules::default_rules();
+        for id in PAGE_BORNE {
+            let rule = r.rule(id).unwrap_or_else(|| panic!("{id}"));
+            assert!(
+                rule.artifact && rule.kind == IndicatorKind::AgentMarker,
+                "{id}"
+            );
+            assert!(!SELF_DESCRIBED.contains(id), "{id}");
+        }
+    }
+
+    /// Four requests to one path through a relay, the first three answered
+    /// with errors and changed after each, carrying `extra` in the path.
+    fn retried(extra: &str) -> crate::Analysis {
+        let t0 = 1_791_000_000;
+        let base =
+            "https://r.jina.ai/https://records.agency.example/p/%7B%7Bitem.slug%7D%7D/search";
+        let urls: Vec<(i64, String, Option<u16>)> = (0..4)
+            .map(|i| {
+                (
+                    t0 + i * 20,
+                    format!("{base}?q={i}%27%20OR%201=1--{extra}&page={i}"),
+                    Some(if i < 3 { 500 } else { 200 }),
+                )
+            })
+            .collect();
+        let refs: Vec<(i64, &str, Option<u16>)> =
+            urls.iter().map(|(t, u, s)| (*t, u.as_str(), *s)).collect();
+        run(&refs, TsKind::Request)
+    }
+
+    #[test]
+    fn page_borne_residue_alone_sets_no_grade() {
+        // An unrendered front-end template is in the page's own links:
+        // listed, but it does not make the requests model-written, so the
+        // retries after errors have no L2 to stand on.
+        let a = retried("");
+        let c = &a.clusters[0];
+        let kinds: Vec<SignalKind> = c.agent.signals.iter().map(|s| s.kind).collect();
+        assert!(kinds.contains(&SignalKind::PageResidue), "{:?}", c.agent);
+        assert!(!kinds.contains(&SignalKind::Residue), "{:?}", c.agent);
+        assert!(
+            kinds.contains(&SignalKind::RetryAfterError),
+            "{:?}",
+            c.agent
+        );
+        assert_eq!(c.agent.level, AgentLevel::PayloadsOnly, "{:?}", c.agent);
+        assert!(!SignalKind::PageResidue.grades());
+
+        // Beside model-output residue the same cluster grades as before.
+        let a = retried("%20YOUR_API_KEY");
+        let c = &a.clusters[0];
+        let kinds: Vec<SignalKind> = c.agent.signals.iter().map(|s| s.kind).collect();
+        assert!(kinds.contains(&SignalKind::PageResidue), "{:?}", c.agent);
+        assert!(kinds.contains(&SignalKind::Residue), "{:?}", c.agent);
+        assert_eq!(c.agent.level, AgentLevel::Adaptive, "{:?}", c.agent);
+    }
+
+    #[test]
+    fn an_unclustered_page_borne_record_stays_l0() {
+        let a = run(
+            &[(
+                1_791_000_000,
+                "https://www.shop.example/product/%7B%7Bitem.slug%7D%7D",
+                None,
+            )],
+            TsKind::Capture,
+        );
+        let g = a.results[0].agent.as_ref().expect("flagged");
+        assert_eq!(g.level, AgentLevel::PayloadsOnly, "{g:?}");
+        assert_eq!(g.signals.len(), 1, "{g:?}");
+        assert_eq!(g.signals[0].kind, SignalKind::PageResidue);
+        assert_eq!(g.signals[0].detail, "marker.template_unrendered");
+    }
+
+    #[test]
     fn slow_working_hours_cap_at_l2() {
         // Four days, one request an hour from 10:00 to 15:00 UTC.
         let day0 = 1_790_985_600; // a UTC midnight
@@ -1161,6 +1360,60 @@ mod tests {
                 ]
             })
             .collect();
+        let a = client(&reqs, "python-httpx/0.27");
+        assert_eq!(signal(&a, SignalKind::PerFetchRobots), None);
+    }
+
+    /// The cluster holding the record with URL `url`.
+    fn cluster_of<'a>(a: &'a crate::Analysis, url: &str) -> &'a crate::analyze::Cluster {
+        let r = a.results.iter().find(|r| r.obs.url == url).unwrap();
+        &a.clusters[r.cluster.expect("clustered")]
+    }
+
+    #[test]
+    fn another_clusters_habit_is_not_inherited() {
+        // A fetch tool's tagged pages form one cluster; two probes with
+        // another tag, from the same user agent and network in the same
+        // minutes, form another and must not read the first one's pages.
+        let mut reqs = fetches(&|_, _| true);
+        let probes = [
+            "https://shop9.example/item?id=1%20UNION%20SELECT%201&uqtag=other9",
+            "https://shop9.example/item?id=2%20UNION%20SELECT%202&uqtag=other9",
+        ];
+        reqs.push((T + 30, probes[0].into(), Some(200)));
+        reqs.push((T + 290, probes[1].into(), Some(200)));
+        let a = client(&reqs, "python-requests/2.31.0");
+        let fetch = cluster_of(&a, &reqs[1].1);
+        let probe = cluster_of(&a, probes[0]);
+        assert_ne!(fetch.id, probe.id);
+        let has = |c: &crate::analyze::Cluster| {
+            c.agent
+                .signals
+                .iter()
+                .any(|s| s.kind == SignalKind::PerFetchRobots)
+        };
+        assert!(has(fetch), "{:?}", fetch.agent);
+        assert!(!has(probe), "{:?}", probe.agent);
+    }
+
+    #[test]
+    fn a_habit_must_rest_on_the_clusters_own_requests() {
+        // The client's unflagged pages each follow a robots.txt request, but
+        // none of the cluster's own requests does.
+        let mut reqs: Vec<(i64, String, Option<u16>)> = fetches(&|_, _| true)
+            .into_iter()
+            .map(|(t, u, s)| (t, u.replace("?uqtag=fetch7", ""), s))
+            .collect();
+        reqs.push((
+            T + 20,
+            "https://shop9.example/item?id=1%20UNION%20SELECT%201&uqtag=own3".into(),
+            Some(200),
+        ));
+        reqs.push((
+            T + 300,
+            "https://shop9.example/item?id=2%20UNION%20SELECT%202&uqtag=own3".into(),
+            Some(200),
+        ));
         let a = client(&reqs, "python-httpx/0.27");
         assert_eq!(signal(&a, SignalKind::PerFetchRobots), None);
     }
