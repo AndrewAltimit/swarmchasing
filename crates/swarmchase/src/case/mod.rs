@@ -43,6 +43,7 @@ pub(crate) mod status;
 
 pub use cli::{CaseArgs, run};
 pub(crate) use indicators::{CaseIndicators, indicators};
+pub(crate) use report::find_contact;
 #[cfg(test)]
 pub(crate) use report::{draft, report};
 pub use sc_case::evidence::Scope;
@@ -226,7 +227,7 @@ fn records_in_scope(
     for e in c
         .evidence
         .iter()
-        .filter(|e| e.in_scope(scope, &sc_collect::psl::registrable_domain))
+        .filter(|e| e.in_scope(scope, c, &sc_collect::psl::registrable_domain))
     {
         let p = crate::evidence::file(&dir, &e.id);
         let text =
@@ -259,11 +260,29 @@ impl<'a> Pinned<'a> {
     /// The analysis of the records `scope` allows, each cluster's client
     /// addresses described from the network ranges held beside the cases
     /// (so a Tor exit's network is in no hosting claim of a sent report).
+    ///
+    /// An analysis of fewer records than the case holds (one operator's,
+    /// or the notice's without private logs) clusters them afresh, so each
+    /// of its clusters takes the key of the case's cluster holding most of
+    /// its records: fleets, wider counts and exports then speak of one set
+    /// of keys. Only keys move; what the analysis holds stays in scope.
     pub fn analysis(&self, scope: &Scope) -> Result<Analysis> {
         let mut a = analyze(
             records_in_scope(self.root, self.case, scope, Some(&self.rules))?,
             &self.rules,
         );
+        let narrower = match scope {
+            Scope::All => false,
+            Scope::Operator { .. } => true,
+            Scope::Public => self.case.evidence.iter().any(|e| e.public.is_none()),
+        };
+        if narrower {
+            let all = analyze(
+                records_in_scope(self.root, self.case, &Scope::All, Some(&self.rules))?,
+                &self.rules,
+            );
+            a.rekey_from(&all);
+        }
         let data = self.root.parent().unwrap_or(self.root);
         crate::commands::netranges::annotate_in(data, &mut a);
         Ok(a)
@@ -843,6 +862,7 @@ mod tests {
             Audience::Affected,
             "security@portal.example.gov",
             None,
+            None,
             "2026-10-14",
             false,
         )
@@ -868,6 +888,7 @@ mod tests {
             "s-1",
             Audience::Affected,
             "ops@nowhere.example",
+            None,
             None,
             "2026-10-14",
             false,
@@ -897,6 +918,7 @@ mod tests {
                 "d-1",
                 Audience::Provider,
                 to,
+                None,
                 None,
                 "2026-10-14",
                 force,
@@ -1108,6 +1130,7 @@ mod tests {
                 Audience::Affected,
                 "x@y.example",
                 None,
+                None,
                 "d",
                 false
             )
@@ -1135,6 +1158,7 @@ mod tests {
                 Audience::Internal,
                 "security@portal.example.gov",
                 None,
+                None,
                 "d",
                 false
             )
@@ -1145,6 +1169,7 @@ mod tests {
             "t-1",
             Audience::Affected,
             "SECURITY@portal.example.gov",
+            None,
             None,
             "2026-10-14",
             false,
@@ -1168,6 +1193,7 @@ mod tests {
                 "t-1",
                 Audience::Public,
                 "security@portal.example.gov",
+                None,
                 None,
                 "d",
                 false

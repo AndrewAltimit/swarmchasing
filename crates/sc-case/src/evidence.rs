@@ -109,20 +109,15 @@ impl Scope<'_> {
 }
 
 impl OperatorEvidence {
-    /// Whether a rendering for `scope` may use these logs. For an operator:
-    /// logs of its own endpoint, or of its organisation under the same
-    /// registrable domain (`site`); with no endpoint to compare, the
-    /// organisation's name alone.
-    pub fn in_scope(&self, scope: &Scope, site: Registrable) -> bool {
+    /// Whether a rendering for `scope` of case `c` may use these logs. For
+    /// an operator: logs of a host its report covers ([`Scope::hosts`]),
+    /// and no other, so its evidence, host set and wider counts agree.
+    pub fn in_scope(&self, scope: &Scope, c: &Case, site: Registrable) -> bool {
         match scope {
             Scope::All => true,
-            Scope::Operator { org, host } => match host {
-                Some(h) => {
-                    self.host.eq_ignore_ascii_case(h)
-                        || (self.org.eq_ignore_ascii_case(org) && same_site(&self.host, h, site))
-                }
-                None => self.org.eq_ignore_ascii_case(org),
-            },
+            Scope::Operator { .. } => scope
+                .hosts(c, site)
+                .is_some_and(|h| h.contains(&self.host.trim().to_ascii_lowercase())),
             Scope::Public => self.public.is_some(),
         }
     }
@@ -132,46 +127,74 @@ impl OperatorEvidence {
 mod tests {
     use super::*;
 
-    #[test]
-    fn scope_follows_the_audience() {
-        let e = OperatorEvidence {
+    fn affected(org: &str, host: &str) -> Contact {
+        Contact {
+            org: org.into(),
+            role: ContactRole::Affected,
+            endpoint: Some(host.into()),
+            channel: "email".into(),
+            address: format!("security@{host}"),
+            source: String::new(),
+            confidence: "medium".into(),
+            found_on: "d".into(),
+            purpose: None,
+        }
+    }
+
+    fn logs(org: &str, host: &str) -> OperatorEvidence {
+        OperatorEvidence {
             id: "e1".into(),
-            org: "Portal".into(),
-            host: "portal.example.gov".into(),
+            org: org.into(),
+            host: host.into(),
             received: "d".into(),
             sha256: "00".into(),
             lines: 1,
             kept: 1,
             public: None,
             note: None,
-        };
+        }
+    }
+
+    #[test]
+    fn scope_follows_the_audience() {
+        let mut c = Case::new("t-1", "t", "d", None);
+        c.contacts = vec![
+            affected("Portal", "portal.example.gov"),
+            affected("Portal", "pay.example.gov"),
+            affected("Portal", "portal.unrelated.example"),
+            affected("other", "PORTAL.example.gov"),
+        ];
+        let e = logs("Portal", "portal.example.gov");
         let site = &last_two;
-        assert!(e.in_scope(&Scope::for_audience(Audience::Provider, None), site));
-        assert!(!e.in_scope(&Scope::for_audience(Audience::Public, None), site));
-        assert!(!e.in_scope(&Scope::for_audience(Audience::Affected, None), site));
-        assert!(e.in_scope(
-            &Scope::Operator {
-                org: "other",
-                host: Some("PORTAL.example.gov")
-            },
-            site
-        ));
+        let to = |i: usize| Scope::for_audience(Audience::Affected, Some(&c.contacts[i]));
+        assert!(e.in_scope(&Scope::for_audience(Audience::Provider, None), &c, site));
+        assert!(!e.in_scope(&Scope::for_audience(Audience::Public, None), &c, site));
+        assert!(!e.in_scope(&Scope::for_audience(Audience::Affected, None), &c, site));
+        // Its own endpoint, whatever the organisation is called.
+        assert!(e.in_scope(&to(3), &c, site));
         // Same organisation and registrable domain: its other host's logs.
-        assert!(e.in_scope(
-            &Scope::Operator {
-                org: "portal",
-                host: Some("pay.example.gov")
-            },
-            site
-        ));
+        assert!(e.in_scope(&to(1), &c, site));
         // Same name, another operator's domain: nothing.
-        assert!(!e.in_scope(
-            &Scope::Operator {
-                org: "Portal",
-                host: Some("portal.unrelated.example")
-            },
-            site
-        ));
+        assert!(!e.in_scope(&to(2), &c, site));
+    }
+
+    #[test]
+    fn logs_of_a_host_no_report_covers_reach_no_operator() {
+        // The organisation's logs for a host with no affected contact: the
+        // operator's report covers its listed endpoints only, so neither
+        // its host set nor its evidence takes them in.
+        let mut c = Case::new("t-1", "t", "d", None);
+        c.contacts = vec![
+            affected("Portal", "portal.example.gov"),
+            affected("Portal", "pay.example.gov"),
+        ];
+        let site = &last_two;
+        let scope = Scope::for_audience(Audience::Affected, Some(&c.contacts[1]));
+        let hosts = scope.hosts(&c, site).unwrap();
+        assert!(!hosts.contains("extra.example.gov"));
+        assert!(!logs("Portal", "extra.example.gov").in_scope(&scope, &c, site));
+        assert!(logs("Portal", "portal.example.gov").in_scope(&scope, &c, site));
+        assert!(logs("Portal", "Pay.example.gov ").in_scope(&scope, &c, site));
     }
 
     /// The last two labels, standing in for the Public Suffix List.

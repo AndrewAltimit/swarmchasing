@@ -336,16 +336,38 @@ mod tests {
             note: None,
         };
         let site = &sc_collect::psl::registrable_domain;
-        assert!(e.in_scope(&Scope::All, site));
-        assert!(!e.in_scope(&Scope::Public, site));
-        let op = |org, host| Scope::Operator { org, host };
-        assert!(e.in_scope(&op("other", Some("PORTAL.example.gov")), site));
-        assert!(!e.in_scope(&op("other", None), site));
+        let contact = |org: &str, host: &str| Contact {
+            org: org.into(),
+            role: sc_case::model::ContactRole::Affected,
+            endpoint: Some(host.into()),
+            channel: "email".into(),
+            address: format!("security@{host}"),
+            source: String::new(),
+            confidence: "medium".into(),
+            found_on: "d".into(),
+            purpose: None,
+        };
+        let mut c = sc_case::model::Case::new("t-1", "t", "d", None);
+        c.contacts = vec![
+            contact("Portal", "portal.example.gov"),
+            contact("Portal", "pay.example.gov"),
+            contact("Portal", "portal.hosting.example"),
+            contact("other", "PORTAL.example.gov"),
+        ];
+        let to = |i: usize| Scope::for_audience(Audience::Affected, Some(&c.contacts[i]));
+        assert!(e.in_scope(&Scope::All, &c, site));
+        assert!(!e.in_scope(&Scope::Public, &c, site));
+        assert!(e.in_scope(&to(3), &c, site));
+        let none = Scope::Operator {
+            org: "other",
+            host: None,
+        };
+        assert!(!e.in_scope(&none, &c, site));
         // Same organisation and registrable domain; same name elsewhere.
-        assert!(e.in_scope(&op("portal", Some("pay.example.gov")), site));
-        assert!(!e.in_scope(&op("Portal", Some("portal.hosting.example")), site));
+        assert!(e.in_scope(&to(1), &c, site));
+        assert!(!e.in_scope(&to(2), &c, site));
         e.public = Some("2026-10-21: reply".into());
-        assert!(e.in_scope(&Scope::Public, site));
+        assert!(e.in_scope(&Scope::Public, &c, site));
     }
 
     #[test]

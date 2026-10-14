@@ -535,12 +535,29 @@ pub fn report_section(c: &Case, a: &Analysis, audience: Audience) -> String {
                 }
                 _ => String::new(),
             };
+            // An operator's analysis holds its own clusters only: runs of
+            // others are counted, never listed.
+            let (shown, elsewhere): (Vec<&String>, Vec<&String>) = e.runs.iter().partition(|r| {
+                audience != Audience::Affected
+                    || keys.contains(r.split('#').next().unwrap_or_default())
+            });
+            if shown.is_empty() {
+                continue;
+            }
+            let elsewhere = match elsewhere.len() {
+                0 => String::new(),
+                n => format!(" and {n} run(s) elsewhere"),
+            };
             let _ = writeln!(
                 s,
-                "  - interaction (Inference): {} {}, runs {}{note}",
+                "  - interaction (Inference): {} {}, runs {}{elsewhere}{note}",
                 e.kind.id(),
                 e.kind.label(),
-                e.runs.join(", ")
+                shown
+                    .iter()
+                    .map(|r| r.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
     }

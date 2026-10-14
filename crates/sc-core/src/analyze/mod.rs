@@ -391,6 +391,82 @@ impl Analysis {
             })
             .collect()
     }
+
+    /// Give each cluster the key of the cluster in `reference` that holds
+    /// most of its members (by record id), so an analysis of a subset of
+    /// `reference`'s records speaks of its clusters in `reference`'s key
+    /// space. Clusters are taken largest first; when two share a reference
+    /// cluster, the larger keeps its key and the other keeps its own (or,
+    /// should its own be one taken here, its own with a `-s<n>` suffix). Run
+    /// and onset references to cluster keys follow. Only the keys change:
+    /// members, scores and ids stay as analysed.
+    pub fn rekey_from(&mut self, reference: &Analysis) {
+        use std::collections::BTreeSet;
+        let mut home: BTreeMap<&str, usize> = BTreeMap::new();
+        for r in &reference.results {
+            if let Some(ci) = r.cluster {
+                home.entry(r.obs.id.as_str()).or_insert(ci);
+            }
+        }
+        let mut order: Vec<usize> = (0..self.clusters.len()).collect();
+        crate::sort::by_key(&mut order, |&ci| {
+            (std::cmp::Reverse(self.clusters[ci].members.len()), ci)
+        });
+        let mut wanted: Vec<Option<String>> = vec![None; self.clusters.len()];
+        let mut taken: BTreeSet<String> = BTreeSet::new();
+        for &ci in &order {
+            let mut votes: BTreeMap<usize, usize> = BTreeMap::new();
+            for &m in &self.clusters[ci].members {
+                if let Some(&rc) = home.get(self.results[m].obs.id.as_str()) {
+                    *votes.entry(rc).or_default() += 1;
+                }
+            }
+            let best = votes
+                .iter()
+                .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))
+                .map(|(&rc, _)| reference.clusters[rc].key.clone());
+            if let Some(k) = best.filter(|k| !k.is_empty() && !taken.contains(k)) {
+                taken.insert(k.clone());
+                wanted[ci] = Some(k);
+            }
+        }
+        let mut map: BTreeMap<String, String> = BTreeMap::new();
+        for &ci in &order {
+            let old = self.clusters[ci].key.clone();
+            let new = match wanted[ci].take() {
+                Some(k) => k,
+                None => {
+                    let mut k = old.clone();
+                    let mut n = 1;
+                    while taken.contains(&k) {
+                        n += 1;
+                        k = format!("{old}-s{n}");
+                    }
+                    taken.insert(k.clone());
+                    k
+                }
+            };
+            if new != old {
+                map.insert(old, new.clone());
+            }
+            self.clusters[ci].key = new;
+        }
+        if map.is_empty() {
+            return;
+        }
+        let swap = |k: &mut String| {
+            if let Some(n) = map.get(k.as_str()) {
+                *k = n.clone();
+            }
+        };
+        for e in &mut self.swarm_edges {
+            swap(&mut e.a.key);
+            swap(&mut e.b.key);
+        }
+        for g in &mut self.onset_groups {
+            g.keys.iter_mut().for_each(swap);
+        }
+    }
 }
 
 /// Score, link and describe `observations` under `rules`.

@@ -100,6 +100,37 @@ fn a_planted_record_with_a_smaller_id_keeps_the_key() {
 }
 
 #[test]
+fn a_subset_analysis_takes_the_whole_ones_keys() {
+    let rec = |id: &str, ts: i64, host: &str| Observation {
+        id: id.into(),
+        ..o(
+            ts,
+            &format!("https://r.jina.ai/https://{host}/q?id={ts}%20UNION%20SELECT%201&uqtag=zz9"),
+        )
+    };
+    // One run over two hosts: its key comes from the earliest record,
+    // which is on the other host.
+    let all: Vec<Observation> = (0..6)
+        .map(|i| {
+            let host = if i % 2 == 0 { "a.example" } else { "b.example" };
+            rec(&format!("r{i}"), 1000 + i * 30, host)
+        })
+        .collect();
+    let whole = analyze(all.clone(), &Rules::default_rules());
+    assert_eq!(whole.clusters.len(), 1);
+    let only_b: Vec<Observation> = all
+        .into_iter()
+        .filter(|o| o.url.contains("b.example"))
+        .collect();
+    let mut part = analyze(only_b, &Rules::default_rules());
+    assert_eq!(part.clusters.len(), 1);
+    assert_ne!(part.clusters[0].key, whole.clusters[0].key);
+    part.rekey_from(&whole);
+    assert_eq!(part.clusters[0].key, whole.clusters[0].key);
+    assert_eq!(part.clusters[0].id, "C1");
+}
+
+#[test]
 fn a_record_sharing_only_a_context_rule_does_not_join_by_timing() {
     // A run on one host, joined by its run tag, and a record placed two
     // minutes later through the same relay (or with the same cache
