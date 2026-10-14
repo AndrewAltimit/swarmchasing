@@ -14,7 +14,7 @@ import { layersTable } from "../lib/layers.js";
 import { agentLadder as ladderOf } from "../lib/agent.js";
 import { scopePanel } from "../lib/scope.js";
 import { sightingsPanel, resetSightings } from "../lib/sightings.js";
-import { bigSetOk, dropZone, fileOf, needsSet, picked, runProgress, setPanel, setSummary } from "../lib/fileset.js";
+import { bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, runProgress, setPanel, setSummary } from "../lib/fileset.js";
 import { runner, Cancelled } from "../lib/runner.js";
 
 const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
@@ -1415,7 +1415,9 @@ dropZone($("drop"), takeFiles);
 /**
  * The logs Check my logs handed over in this tab, read once: the stored
  * copy and the hash's flag are removed whether or not one was there.
- * `{ log, map }` for one pasted log (v1), `{ files, map }` for a set (v2).
+ * `{ log, format, map }` for one pasted log (v1), `{ files, map }` for a
+ * set (v2). A pasted log is read in the format Check my logs read it in,
+ * or, from a page that did not say, the one it would have picked.
  */
 function takeHandoff() {
   let got = null;
@@ -1427,7 +1429,10 @@ function takeHandoff() {
   }
   history.replaceState(null, "", "#preset=access-log");
   const map = typeof got?.map === "string" ? got.map : "";
-  if (got?.v === 1 && typeof got.log === "string" && got.log.trim()) return { log: got.log, map };
+  if (got?.v === 1 && typeof got.log === "string" && got.log.trim()) {
+    const known = [...$("format").options].some((o) => o.value === got.format);
+    return { log: got.log, format: known ? got.format : logFormat(got.log), map };
+  }
   if (got?.v === 2 && Array.isArray(got.files)) {
     const files = got.files.filter((f) => typeof f?.name === "string" && typeof f?.text === "string").map((f) => ({ name: f.name, text: f.text }));
     if (files.length) return { files, map };
@@ -1451,7 +1456,11 @@ async function applyHash() {
     if (carried) {
       $("map").value = carried.map;
       if (carried.files) await useSet(carried.files);
-      else await useText(carried.log);
+      else {
+        $("format").value = carried.format;
+        syncPlaceholder();
+        await useText(carried.log);
+      }
     } else {
       $("input").focus();
       warm();

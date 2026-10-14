@@ -19,7 +19,7 @@ const MAX_LISTED = 8;
 const HANDOFF_CHARS = 4 * 1024 * 1024;
 let example = false;
 let snapshot = null; // the providers' files the build embedded, once read
-// The last logs checked, for the workbench: { log, map } for pasted text,
+// The last logs checked, for the workbench: { log, format, map } for pasted text,
 // { files: [{ name, text }], map } for a set, { tooBig: true } for a set
 // past what the hand-over carries.
 let checked = null;
@@ -42,7 +42,7 @@ function toWorkbench() {
   };
   if (checked.tooBig) return tooBig();
   try {
-    const payload = checked.files ? { v: 2, files: checked.files, map: checked.map } : { v: 1, log: checked.log, map: checked.map };
+    const payload = checked.files ? { v: 2, files: checked.files, map: checked.map } : { v: 1, log: checked.log, format: checked.format, map: checked.map };
     sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(payload));
   } catch {
     return tooBig();
@@ -127,7 +127,7 @@ async function check() {
     showAlert($("cl-alert"), "Nothing was read from this input: no line held a request.", FORMATS);
     return;
   }
-  checked = { log: input, map };
+  checked = { log: input, format, map };
   document.body.dataset.analysedIn = engine.mode;
   render(sc, analysis, ident, host, null);
 }

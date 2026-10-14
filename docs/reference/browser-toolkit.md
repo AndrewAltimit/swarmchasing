@@ -121,11 +121,15 @@ It ends with what to do next: look closer in the workbench or on the identity pa
 
 It takes a [set of files](#sets-of-files) as the workbench does. A pasted log is read as an access log, or detected when it starts as JSON; so is each file of a set.
 
-The workbench link under the flagged requests, and the next steps' link to the access-log preset, carry the logs over: the page puts the log (or each file's name and text) and the host's field map in the tab's `sessionStorage` (`{v: 1, log, map}` or `{v: 2, files, map}`) and opens `/analyze/#preset=access-log&from=check-logs`. The workbench reads it once, removes it and the flag, and analyses it. The logs are never in the URL; a set past about 4 MB of text, or one too large for the browser's session storage, is not carried, and the page says to load the files in the workbench. A file over 50 MB is read only after the visitor confirms, and *Check my log* is disabled while it runs.
+The workbench link under the flagged requests, and the next steps' link to the access-log preset, carry the logs over: the page puts the log and the format it read it in (or each file's name and text) and the host's field map in the tab's `sessionStorage` (`{v: 1, log, format, map}` or `{v: 2, files, map}`) and opens `/analyze/#preset=access-log&from=check-logs`. The workbench reads it once, removes it and the flag, and analyses it in that format; a log carried without one is read in the format *Check my logs* picks for it.
+
+The logs are never in the URL; a set past about 4 MB of text, or one too large for the browser's session storage, is not carried, and the page says to load the files in the workbench. A file over 50 MB is read only after the visitor confirms, and *Check my log* is disabled while it runs.
 
 ## Sets of files
 
 *Check my logs* and the workbench take several files at once, a folder (*Load folder*, or files and folders dropped on the log area), and archives: `.zip` (stored or deflate, ZIP64 read), `.tar` (ustar, GNU long names, pax paths), `.tar.gz`, `.tgz` and `.gz`. An archive inside an archive is read one level deep. The kind is read from the first bytes, not the name. [`archive.js`](../../site/js/lib/archive.js) unpacks them with the browser's `DecompressionStream`, a stream at a time, in the [analysis worker](#the-analysis-worker) with the rest of the analysis; [`inputs.js`](../../site/js/lib/inputs.js) reads them into the module, and the progress line names the files read, the bytes unpacked and the records so far.
+
+A `.gz` of several members (logs joined with `cat`, `bgzip`, `pigz`) reads as their texts joined: the reader finds each member's end by its header and deflate blocks and hands the browser's decompressor one member at a time, because some browsers stop at the first member. Zeros after the last member are ignored.
 
 Each file is parsed on its own (`inputs_add` in [`sc-wasm`](../../crates/sc-wasm/README.md)), in its own format under auto-detect, with one field map for all of them; then one analysis runs over every record (`inputs_analyze`), so clusters and timing span files. The module numbers each record's id by its file (`f2:log-17`); file names stay in the page. A per-file table follows: file (its path inside the archive), the format it was read as, lines, records, lines skipped and the first problem, then each entry not read with why. In the workbench, the record's context names its file, a *File* filter narrows the flagged records, the text filter matches file names, and the records CSV gains a `file` column.
 
@@ -135,9 +139,11 @@ Each file is parsed on its own (`inputs_add` in [`sc-wasm`](../../crates/sc-wasm
 | Files and entries | 10,000; the set stops there |
 | One file or entry, unpacked | 256 MB; that entry is skipped |
 | Unpacked to packed ratio | 400, past the first 8 MB of an entry; that entry is skipped |
-| Tar entries passed over unread | Count toward the unpacked limit and, in a compressed tar, the ratio; past either, the rest of that archive is not read |
+| Tar headers and entries passed over unread | Count toward the unpacked limit and, in a compressed tar, the ratio; past either, the rest of that archive is not read |
+| Tar directories, links and other entries that are not files | Count toward the files and entries limit |
+| A zip inside an archive | Held in memory to be read; counts toward the unpacked limit and its enclosing entry's ratio |
 
-Entries are skipped, with the reason shown, when they look binary (a NUL or many control bytes in the first 8 KB), are encrypted, use a zip method other than stored or deflate, or are tar links, devices or pipes; directories and macOS metadata (`__MACOSX/`, `._*`) are left out silently. Entry names are labels, shown as text and never used as paths, so a name that climbs out of the archive or carries markup is harmless. A pax path is read by its byte lengths, so a name in any script comes through whole. Payloads stay inert as everywhere on the site. No outside library and no request is involved.
+Entries are skipped, with the reason shown, when they look binary (a NUL or many control bytes in the first 8 KB), are encrypted, use a zip method other than stored or deflate, or are tar links, devices or pipes; a tar that ends before its end blocks says so; directories and macOS metadata (`__MACOSX/`, `._*`) are left out silently. Entry names are labels, shown as text and never used as paths, so a name that climbs out of the archive or carries markup is harmless. A pax path is read by its byte lengths, so a name in any script comes through whole. Payloads stay inert as everywhere on the site. No outside library and no request is involved.
 
 [`check-archive.mjs`](../../scripts/ci/check-archive.mjs) tests the reader in Node on archives built at run time; the XSS check loads a hostile archive on both pages.
 
