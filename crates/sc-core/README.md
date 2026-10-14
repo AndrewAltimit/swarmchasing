@@ -67,7 +67,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`paths`](src/paths.rs) | Path sets per host and fabricated-looking identifiers. |
 | [`dialect`](src/dialect.rs) | Payload dialect, shared dialects between clusters, repeated cut lengths. |
 | [`fanout`](src/fanout.rs) | Parallel fan-out width. |
-| [`fleets`](src/fleets.rs) | Soft links as likelihood ratios by family, and the candidate fleets they suggest; never merges. |
+| [`fleets`](src/fleets.rs) | Soft links as likelihood ratios by family under joint caps, and the candidate fleets they suggest; never merges. |
 | [`scaffold`](src/scaffold.rs) | Request templates with values as slot types, and cluster pairs sharing them beyond chance. |
 | [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
 | [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model, and in the same order beyond a random order. |

@@ -24,6 +24,7 @@ pub use calibrate::{
     Calibration, RuleCheck, Stratified, calibrate, calibrate_by_scenario, check_rules,
     render_calibration, render_stratified, stratified,
 };
+pub use calibrate::{JointCheck, check_joint, stratified_joint};
 pub use gate::{Check, Gate, NullCounts, null_counts};
 pub use generate::{generate, to_ndjson};
 pub use measure::{Clustering, Detection, KindStat, Measurement, PairCounts, measure};

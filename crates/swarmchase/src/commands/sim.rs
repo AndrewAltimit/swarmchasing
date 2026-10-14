@@ -6,8 +6,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_sim::{
     BenchOptions, Calibration, Gate, Measurement, Palette, ScenarioFile, Truth, bench_with,
-    calibrate_by_scenario, check_rules, generate, measure, null_counts, render, render_stratified,
-    to_ndjson,
+    calibrate_by_scenario, check_joint, check_rules, generate, measure, null_counts, render,
+    render_stratified, to_ndjson,
 };
 use std::path::PathBuf;
 
@@ -306,6 +306,10 @@ fn calibration_check(
 ) -> usize {
     let mut failed = 0;
     for c in check_rules(strata, rules, &file.calibration.unmeasured) {
+        println!("{}", c.line());
+        failed += usize::from(!c.ok);
+    }
+    for c in check_joint(strata, rules) {
         println!("{}", c.line());
         failed += usize::from(!c.ok);
     }

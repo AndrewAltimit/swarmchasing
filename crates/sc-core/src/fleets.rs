@@ -26,6 +26,14 @@
 //! families the ratios multiply (their logs add). A link's `strength` is
 //! `1 - 1 / ratio`, 0 to 1.
 //!
+//! **Joint caps.** Families are not independent either: two clusters
+//! running at the same time draw both co-activity (timeline) and co-targets
+//! (targets) from that one fact. `[soft_links.joint]` caps a family pair's
+//! combined ratio at what the simulation measures for the pair firing
+//! together ([`JointCaps`]); the product is bounded by each capped pair's cap
+//! times the other families' ratios, and the smallest bound holds
+//! ([`combine`]).
+//!
 //! **Fleets.** Pairs whose combined ratio reaches `fleet_min_lr` are the
 //! edges of a graph of clusters, weighted by the log of the ratio. The
 //! graph is reduced to its backbone and split into communities under the
@@ -263,6 +271,84 @@ pub struct SoftLinkOptions {
     pub co_group: f64,
     /// A pair kept by the generator chance model ([`crate::generator`]).
     pub generator: f64,
+    /// Caps on two families' combined ratio (`[soft_links.joint]`).
+    pub joint: JointCaps,
+}
+
+/// Caps on the combined ratio of two families (`[soft_links.joint]`), one
+/// per family pair, named in [`Family`] order: harness, timeline, targets,
+/// identifiers. A pair with links in both families counts at most the cap
+/// for the two together, and never less than the stronger alone. A cap is
+/// at most the measured joint ratio's conservative value (`sim calibrate`);
+/// a family pair without one multiplies as if independent.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct JointCaps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub harness_timeline: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub harness_targets: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub harness_identifiers: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeline_targets: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeline_identifiers: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub targets_identifiers: Option<f64>,
+}
+
+impl JointCaps {
+    fn slot(&mut self, f: Family, g: Family) -> Option<&mut Option<f64>> {
+        use Family::*;
+        Some(match (f.min(g), f.max(g)) {
+            (Harness, Timeline) => &mut self.harness_timeline,
+            (Harness, Targets) => &mut self.harness_targets,
+            (Harness, Identifiers) => &mut self.harness_identifiers,
+            (Timeline, Targets) => &mut self.timeline_targets,
+            (Timeline, Identifiers) => &mut self.timeline_identifiers,
+            (Targets, Identifiers) => &mut self.targets_identifiers,
+            _ => return None,
+        })
+    }
+
+    /// The cap on families `f` and `g` together, in either order.
+    pub fn get(&self, f: Family, g: Family) -> Option<f64> {
+        use Family::*;
+        match (f.min(g), f.max(g)) {
+            (Harness, Timeline) => self.harness_timeline,
+            (Harness, Targets) => self.harness_targets,
+            (Harness, Identifiers) => self.harness_identifiers,
+            (Timeline, Targets) => self.timeline_targets,
+            (Timeline, Identifiers) => self.timeline_identifiers,
+            (Targets, Identifiers) => self.targets_identifiers,
+            _ => None,
+        }
+    }
+
+    /// Set (or, with `None`, clear) the cap on `f` and `g`. A family with
+    /// itself has no cap.
+    pub fn set(&mut self, f: Family, g: Family, cap: Option<f64>) {
+        if let Some(s) = self.slot(f, g) {
+            *s = cap;
+        }
+    }
+
+    /// The key naming a family pair in `[soft_links.joint]`
+    /// (`timeline_targets`).
+    pub fn key(f: Family, g: Family) -> String {
+        format!("{}_{}", f.min(g).label(), f.max(g).label())
+    }
+}
+
+impl Family {
+    /// Every family, in order.
+    pub const ALL: [Family; 4] = [
+        Family::Harness,
+        Family::Timeline,
+        Family::Targets,
+        Family::Identifiers,
+    ];
 }
 
 impl Default for SoftLinkOptions {
@@ -296,6 +382,12 @@ impl Default for SoftLinkOptions {
             prompt_echo: 20.0,
             co_group: 20.0,
             generator: 20.0,
+            joint: JointCaps {
+                harness_timeline: Some(20.0),
+                harness_identifiers: Some(90.0),
+                timeline_targets: Some(34.0),
+                ..JointCaps::default()
+            },
         }
     }
 }
@@ -426,20 +518,65 @@ pub struct CandidateFleet {
 }
 
 /// One pair's soft links combined: the strongest link of each family, and
-/// the product of their ratios.
+/// the product of their ratios under the joint caps.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PairEvidence {
     pub a: String,
     pub b: String,
     /// Each family's strongest link: kind and ratio.
     pub families: Vec<(Family, SoftLinkKind, f64)>,
-    /// Product of the families' ratios.
+    /// Product of the families' ratios, at most what the tightest joint
+    /// cap allows.
     pub lr: f64,
+    /// The family pair whose joint cap set `lr`, when one did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capped: Option<(Family, Family)>,
 }
 
 /// Every linked pair's combined evidence, by `(a, b)` as the links name
-/// them.
+/// them, under the bundled joint caps (for views that hold an analysis but
+/// not its rules; candidate fleets use the rules' own, [`pair_evidence_with`]).
 pub fn pair_evidence(links: &[SoftLink]) -> BTreeMap<(String, String), PairEvidence> {
+    pair_evidence_with(links, &SoftLinkOptions::default().joint)
+}
+
+/// The combined log ratio of families' ratios under `caps`, and the family
+/// pair whose cap bound it. The independent product is `sum(ln r)`; each
+/// capped pair `(f, g)` bounds it by the pair's own term plus the other
+/// families' logs, where the pair's term is `ln cap` but never below the
+/// stronger family's log and never above their sum. The smallest bound
+/// holds, so the result does not depend on the order of families or caps,
+/// and adding a family never lowers it.
+pub fn combine(fams: &[(Family, f64)], caps: &JointCaps) -> (f64, Option<(Family, Family)>) {
+    let logs: Vec<(Family, f64)> = fams.iter().map(|&(f, r)| (f, r.max(1.0).ln())).collect();
+    let total: f64 = logs.iter().map(|x| x.1).sum();
+    let mut best = (total, None);
+    for (i, &(f, lf)) in logs.iter().enumerate() {
+        for &(g, lg) in &logs[i + 1..] {
+            let Some(cap) = caps.get(f, g) else {
+                continue;
+            };
+            let pair = cap.max(1.0).ln().clamp(lf.max(lg), lf + lg);
+            let bound = total - lf - lg + pair;
+            let key = (f.min(g), f.max(g));
+            // Ties go to the first family pair, so the pair named does not
+            // depend on the order families came in.
+            if bound < best.0 - 1e-12
+                || (bound <= best.0 + 1e-12 && best.1.is_some_and(|b| key < b))
+            {
+                best = (bound.min(best.0), Some(key));
+            }
+        }
+    }
+    best
+}
+
+/// Every linked pair's combined evidence under `caps` ([`combine`]), by
+/// `(a, b)` as the links name them.
+pub fn pair_evidence_with(
+    links: &[SoftLink],
+    caps: &JointCaps,
+) -> BTreeMap<(String, String), PairEvidence> {
     let mut best: BTreeMap<(String, String), BTreeMap<Family, (SoftLinkKind, f64)>> =
         BTreeMap::new();
     for l in links {
@@ -451,9 +588,17 @@ pub fn pair_evidence(links: &[SoftLink]) -> BTreeMap<(String, String), PairEvide
     }
     best.into_iter()
         .map(|((a, b), fam)| {
-            let lr = fam.values().map(|x| x.1.max(1.0).ln()).sum::<f64>().exp();
+            let rs: Vec<(Family, f64)> = fam.iter().map(|(&f, x)| (f, x.1)).collect();
+            let (log, capped) = combine(&rs, caps);
             let families = fam.into_iter().map(|(f, (k, r))| (f, k, r)).collect();
-            ((a.clone(), b.clone()), PairEvidence { a, b, families, lr })
+            let e = PairEvidence {
+                a: a.clone(),
+                b: b.clone(),
+                families,
+                lr: log.exp(),
+                capped,
+            };
+            ((a, b), e)
         })
         .collect()
 }
@@ -887,7 +1032,7 @@ pub(crate) fn candidate_fleets(
     let min = opts.fleet_min_lr.max(1.0 + 1e-9);
     let mut edges: Vec<crate::community::Edge> = Vec::new();
     let mut edge_lr: BTreeMap<(usize, usize), f64> = BTreeMap::new();
-    for ((a, b), e) in pair_evidence(links) {
+    for ((a, b), e) in pair_evidence_with(links, &opts.joint) {
         let (Some(&x), Some(&y)) = (pos.get(a.as_str()), pos.get(b.as_str())) else {
             continue;
         };
@@ -1007,6 +1152,56 @@ mod tests {
             assert_eq!(o.lr(k), 7.0, "{k:?}");
         }
         assert_eq!(SoftLinkKind::CallbackService.family(), Family::Identifiers);
+    }
+
+    #[test]
+    fn joint_caps_bound_two_families_in_any_order() {
+        use Family::*;
+        let mut caps = JointCaps::default();
+        caps.set(Targets, Timeline, Some(300.0));
+        assert_eq!(caps.get(Timeline, Targets), Some(300.0));
+        assert_eq!(caps.timeline_targets, Some(300.0));
+        assert_eq!(caps.get(Harness, Harness), None);
+        assert_eq!(JointCaps::key(Targets, Timeline), "timeline_targets");
+        let lr = |fams: &[(Family, f64)], caps: &JointCaps| combine(fams, caps).0.exp();
+        // Uncapped: the product.
+        let tt = [(Timeline, 25.0), (Targets, 34.0)];
+        assert!((lr(&tt, &JointCaps::default()) - 850.0).abs() < 1e-6);
+        // Capped, in either order.
+        let (log, by) = combine(&tt, &caps);
+        assert!((log.exp() - 300.0).abs() < 1e-6);
+        assert_eq!(by, Some((Timeline, Targets)));
+        let rev = [(Targets, 34.0), (Timeline, 25.0)];
+        assert_eq!(combine(&rev, &caps), combine(&tt, &caps));
+        // Never below the stronger family alone.
+        caps.set(Timeline, Targets, Some(5.0));
+        assert!((lr(&tt, &caps) - 34.0).abs() < 1e-9);
+        // A third family multiplies in; the tightest pair bound holds, and
+        // adding a family never lowers the ratio.
+        caps.set(Timeline, Targets, Some(40.0));
+        caps.set(Harness, Targets, Some(100.0));
+        let three = [(Harness, 20.0), (Timeline, 25.0), (Targets, 34.0)];
+        // Timeline-targets bounds it at 40 * 20 = 800, harness-targets at
+        // 100 * 25 = 2500; the product is 17000.
+        let (log, by) = combine(&three, &caps);
+        assert!((log.exp() - 800.0).abs() < 1e-6, "{}", log.exp());
+        assert_eq!(by, Some((Timeline, Targets)));
+        assert!(log.exp() >= lr(&tt, &caps));
+        let mut shuffled = three;
+        shuffled.reverse();
+        assert_eq!(combine(&shuffled, &caps), combine(&three, &caps));
+        // Pair evidence carries the cap that set it.
+        let links = vec![
+            link("C1", "C2", SoftLinkKind::CoActivity, 25.0),
+            link("C1", "C2", SoftLinkKind::CoTarget, 34.0),
+        ];
+        let e = &pair_evidence_with(&links, &caps)[&("C1".to_string(), "C2".to_string())];
+        assert!((e.lr - 40.0).abs() < 1e-9, "{e:?}");
+        assert_eq!(e.capped, Some((Timeline, Targets)));
+        // The rules file names them under [soft_links.joint]; unknown keys fail.
+        let r = Rules::from_toml("[soft_links.joint]\ntimeline_targets = 12.0\n").unwrap();
+        assert_eq!(r.set.soft_links.joint.get(Targets, Timeline), Some(12.0));
+        assert!(Rules::from_toml("[soft_links.joint]\ntargets_timeline = 12.0\n").is_err());
     }
 
     #[test]

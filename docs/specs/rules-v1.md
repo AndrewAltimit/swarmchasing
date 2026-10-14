@@ -32,6 +32,8 @@ A rules file is TOML. Its JSON value (the TOML read as JSON) **must** validate a
 
 A missing settings table takes the defaults the toolkit's bundled file carries, so a case pinned to an older file renders the same. The meaning of each setting is in [methodology](../methodology.md); this spec fixes only its name and type.
 
+`[soft_links.joint]` holds caps on two soft-link families' combined likelihood ratio, each a number keyed by the two family names joined by `_` in the order harness, timeline, targets, identifiers (`timeline_targets`). An engine **must** reject any other key, and **must** combine a pair's families so that the result is at most each capped pair's cap times the other families' ratios, never below the stronger capped family alone, and the same whatever order the families come in ([FM-5.17](../manual/05-linking.md#fm-517-weighing-soft-links)).
+
 The version is an opaque string. This project uses a date. Two files with the same version **must** be byte-identical in their rules; a change to any rule, threshold or setting takes a new version.
 
 ## Rule fields
