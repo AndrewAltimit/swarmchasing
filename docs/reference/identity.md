@@ -19,6 +19,8 @@ The platform pass reads `[[github_app]]`: those Apps' events are tallied by prod
 
 Every entry cites the provider page (`source`) that names the file. Adding one is a review decision, as for a rule: cite the page, keep the URL the page gives (or the host it redirects to, said in a comment), and run the tests. The catalog is compiled into the CLI and the browser module.
 
+A product whose provider publishes no range file, or publishes its addresses only as a web page the refresh cannot parse (Amazon's), is listed without ranges: its user agent stays a claim, never verified and never called spoofed. A key directory whose `Signature-Agent` value and URL the provider's public documentation does not give is left out.
+
 ## Passivity
 
 `identity refresh` fetches only the catalog's URLs, over HTTPS, following redirects within the same host. These are the providers' own documents about their agents, read like a security.txt: no agent infrastructure is touched. A `Signature-Agent` URI in a request is an address the agent supplied and is never fetched, whatever it names ([FM-2.1](../manual/02-principles.md#fm-21-passive-only)). A signer whose directory is not in the catalog stays unverified.

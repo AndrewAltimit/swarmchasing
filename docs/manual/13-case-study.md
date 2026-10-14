@@ -229,13 +229,13 @@ Two of the sources fall outside this manual: reading an agent's inbox fails the 
 | Shape the write-up publishes | Rules |
 |---|---|
 | `uqtag=` and `uqscan=` parameters | `marker.uq_tags`; both names are run-tag parameters, so equal values link |
-| Label-plus-date tag values, such as `research20261004final` | The values link only when equal; the write-up counts over 1,100 distinct ones |
+| Label-plus-date tag values, such as `research20261004final` | `selfid.vendor_name` (weight 1) when the label is a vendor or task word; the values link only when equal, and the write-up counts over 1,100 distinct ones |
 | `bx-ua`, `bx_et` anti-bot tokens | `antibot.baxia` |
 | `kind=body1-0` on inbox requests | `marker.callback_seq` (not `kind=start`) |
 | webhook.site inbox URLs | `exfil.webhook_site` (links) |
 | A `Via` header ending `(hysandbox-ats)` | `header.via_hysandbox` (significant), `header.via_ats`; one `proxy_headers` group |
 | `python-requests/2.32.5`, `curl/8.14.1`, bare `Accept-Encoding: gzip` | `header.scripted_ua`, `header.gzip_only_requests` (weight 1 each) |
-| "claude" inside a tag value | None: `selfid.vendor_name` needs a whole word, and would be level 1 if it fired |
+| "claude" inside a tag value | `selfid.vendor_name` (level 1) only on the label-plus-date shape (`claude20261001a`); elsewhere it needs a whole word |
 
 The header shapes come from inbox logs. Scan-service records rarely keep request headers, so these rules fire for a practitioner only on an affected operator's own logs ([FM-10.7](10-disclosure.md#fm-107-operator-supplied-logs)).
 

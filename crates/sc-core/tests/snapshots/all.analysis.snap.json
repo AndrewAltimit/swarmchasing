@@ -1,11 +1,11 @@
 {
-  "rules_version": "2026-10-14.1",
-  "total": 452,
-  "flagged": 345,
+  "rules_version": "2026-10-14.2",
+  "total": 488,
+  "flagged": 371,
   "tier_counts": {
-    "noise": 188,
-    "suggestive": 101,
-    "significant": 163
+    "noise": 213,
+    "suggestive": 108,
+    "significant": 167
   },
   "rule_counts": {
     "antibot.baxia": 1,
@@ -13,19 +13,19 @@
     "antibot.incapsula": 1,
     "antibot.ocr_captcha": 1,
     "antibot.unblocker_params": 2,
-    "cache.buster": 44,
+    "cache.buster": 46,
     "carrier.agent_sandbox": 2,
-    "carrier.browserless": 1,
+    "carrier.browserless": 2,
     "carrier.codesandbox": 2,
-    "carrier.data_url_script": 5,
-    "carrier.embed_playground": 1,
+    "carrier.data_url_script": 6,
+    "carrier.embed_playground": 2,
     "carrier.form_post_program": 5,
-    "carrier.html_program": 21,
+    "carrier.html_program": 22,
     "carrier.httpbin": 18,
     "carrier.inline_fetch_program": 9,
     "carrier.livecodes": 2,
     "carrier.microlink_function": 1,
-    "carrier.remote_browser_cdp": 1,
+    "carrier.remote_browser_cdp": 3,
     "exfil.collaborator": 1,
     "exfil.cookie": 1,
     "exfil.disposable_mail": 3,
@@ -45,28 +45,29 @@
     "exploit.null_byte": 1,
     "exploit.open_redirect_probe": 1,
     "exploit.php_eval": 1,
-    "exploit.sqli_boolean": 83,
-    "exploit.sqli_quote": 19,
+    "exploit.sqli_boolean": 86,
+    "exploit.sqli_quote": 23,
     "exploit.sqli_union": 12,
     "exploit.ssti": 4,
     "exploit.traversal": 8,
     "exploit.traversal_single": 9,
     "exploit.userinfo_confusion": 1,
     "exploit.xss": 24,
-    "header.agent_ua": 4,
+    "header.agent_ua": 7,
     "header.cf_browser_rendering": 3,
     "header.coding_agent_ua": 10,
     "header.gzip_only_requests": 3,
     "header.headless_ua": 6,
+    "header.markdown_accept": 2,
     "header.mcp_fetch_ua": 2,
     "header.pentest_ua": 14,
-    "header.scripted_ua": 18,
+    "header.scripted_ua": 19,
     "header.ua_platform_mismatch": 2,
     "header.via_ats": 4,
     "header.via_hysandbox": 1,
     "infra.hysandbox_host": 1,
     "marker.agent_discovery": 2,
-    "marker.assistant_citation": 7,
+    "marker.assistant_citation": 8,
     "marker.callback_seq": 1,
     "marker.chat_opener": 4,
     "marker.doubled_scheme": 2,
@@ -81,7 +82,7 @@
     "marker.md_url_wrapper": 1,
     "marker.oai_prefix": 1,
     "marker.oai_tag": 1,
-    "marker.placeholder": 23,
+    "marker.placeholder": 24,
     "marker.placeholder_identity": 5,
     "marker.probe_tag": 2,
     "marker.repeated_token": 2,
@@ -91,22 +92,25 @@
     "marker.tool_call_json": 2,
     "marker.tool_call_markup": 2,
     "marker.truncated_output": 2,
-    "marker.uq_tags": 112,
-    "outcome.challenge": 1,
-    "outcome.neterror": 1,
+    "marker.uq_tags": 115,
+    "outcome.challenge": 2,
+    "outcome.neterror": 2,
     "relay.allorigins": 2,
     "relay.archive_raw": 1,
     "relay.corsproxy": 2,
     "relay.defuddle_md": 2,
     "relay.hrefli": 2,
-    "relay.jina": 81,
+    "relay.jina": 83,
+    "relay.jina_search": 2,
     "relay.markdown_new": 4,
     "relay.microlink": 7,
     "relay.pure_md": 2,
+    "relay.repo_digest": 3,
     "relay.scrape_api": 4,
     "relay.translate_goog": 2,
-    "selfid.signature_agent": 3,
-    "selfid.vendor_name": 10
+    "selfid.agent_commerce": 3,
+    "selfid.signature_agent": 5,
+    "selfid.vendor_name": 13
   },
   "results": [
     {
@@ -1426,6 +1430,314 @@
     },
     {
       "obs": {
+        "id": "eval:cov-jina-search",
+        "source": "eval",
+        "ts": 1786698000,
+        "url": "https://s.jina.ai/site%3Aportal.agency.example%20admin%20login?uqtag=covrun12"
+      },
+      "score": 5,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "relay.jina_search",
+          "kind": "relay",
+          "weight": 2,
+          "matched": "s.jina.ai",
+          "layer": 0,
+          "tactic": "T1"
+        },
+        {
+          "rule_id": "marker.uq_tags",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "uqtag=covrun12",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "s.jina.ai",
+          "text": "https://s.jina.ai/site:portal.agency.example admin login?uqtag=covrun12"
+        }
+      ],
+      "target_host": null,
+      "features": [
+        "param:uqtag=covrun12"
+      ],
+      "cluster": 55
+    },
+    {
+      "obs": {
+        "id": "eval:cov-repo-digest",
+        "source": "eval",
+        "ts": 1786698180,
+        "url": "https://uithub.com/portal-example/api-server?uqtag=covrun12"
+      },
+      "score": 4,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "relay.repo_digest",
+          "kind": "relay",
+          "weight": 1,
+          "matched": "https://uithub.com/",
+          "layer": 0,
+          "tactic": "T1"
+        },
+        {
+          "rule_id": "marker.uq_tags",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "uqtag=covrun12",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "uithub.com",
+          "text": "https://uithub.com/portal-example/api-server?uqtag=covrun12"
+        }
+      ],
+      "target_host": null,
+      "features": [
+        "param:uqtag=covrun12"
+      ],
+      "cluster": 55
+    },
+    {
+      "obs": {
+        "id": "eval:cov-lightpanda-cdp",
+        "source": "eval",
+        "ts": 1786698600,
+        "url": "data:text/html,<script>const b=await puppeteer.connect({browserWSEndpoint:'wss://euwest.cloud.lightpanda.io/ws?token=YOUR_TOKEN'});await page.goto('https://records.agency.example/items?id=2%27')</script>"
+      },
+      "score": 7,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "carrier.remote_browser_cdp",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "/euwest.cloud.lightpanda.io/ws",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "carrier.data_url_script",
+          "kind": "carrier",
+          "weight": 3,
+          "matched": "data:text/html,<script",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "carrier.html_program",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "<script",
+          "layer": 0,
+          "tactic": "T2"
+        },
+        {
+          "rule_id": "marker.placeholder",
+          "kind": "agent_marker",
+          "weight": 2,
+          "matched": "YOUR_TOKEN",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "text": "data:text/html,<script>const b=await puppeteer.connect({browserWSEndpoint:'wss://euwest.cloud.lightpanda.io/ws?token=YOUR_TOKEN'});await page.goto('https://records.agency.example/items?id=2'')</script>"
+        },
+        {
+          "via": "embedded",
+          "depth": 1,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/items?id=2"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "model_written",
+        "signals": [
+          {
+            "kind": "residue",
+            "records": 1,
+            "detail": "marker.placeholder"
+          }
+        ]
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:cov-vendor-date-tag",
+        "source": "eval",
+        "ts": 1786699800,
+        "url": "https://r.jina.ai/https://portal.agency.example/search?q=1%27&frame=research20261004final"
+      },
+      "score": 5,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "relay.jina",
+          "kind": "relay",
+          "weight": 2,
+          "matched": "r.jina.ai",
+          "layer": 0,
+          "tactic": "T1"
+        },
+        {
+          "rule_id": "exploit.sqli_quote",
+          "kind": "exploit",
+          "weight": 3,
+          "matched": "q=1'",
+          "layer": 0,
+          "tactic": "T4"
+        },
+        {
+          "rule_id": "selfid.vendor_name",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "frame=research20261004final",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "r.jina.ai",
+          "text": "https://r.jina.ai/https://portal.agency.example/search?q=1'&frame=research20261004final"
+        },
+        {
+          "via": "path",
+          "depth": 1,
+          "host": "portal.agency.example",
+          "text": "https://portal.agency.example/search?q=1'&frame=research20261004final"
+        }
+      ],
+      "target_host": "portal.agency.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "selfid.vendor_name"
+          }
+        ]
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:cov-random-tag-1",
+        "source": "eval",
+        "ts": 1786701600,
+        "url": "https://portal.agency.example/search?q=1%27%20OR%20%271%27=%271&r=8f3a2c"
+      },
+      "score": 4,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.sqli_boolean",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "q=' OR '1'='1",
+          "layer": 0,
+          "tactic": "T4"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "portal.agency.example",
+          "text": "https://portal.agency.example/search?q=1' OR '1'='1&r=8f3a2c"
+        }
+      ],
+      "target_host": "portal.agency.example",
+      "features": [],
+      "cluster": 24
+    },
+    {
+      "obs": {
+        "id": "eval:cov-random-tag-2",
+        "source": "eval",
+        "ts": 1786701640,
+        "url": "https://portal.agency.example/search?q=1%27%20OR%20%271%27=%271%27--&r=1b9e47"
+      },
+      "score": 4,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.sqli_boolean",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "q=' OR '1'='1",
+          "layer": 0,
+          "tactic": "T4"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "portal.agency.example",
+          "text": "https://portal.agency.example/search?q=1' OR '1'='1'--&r=1b9e47"
+        }
+      ],
+      "target_host": "portal.agency.example",
+      "features": [],
+      "cluster": 24
+    },
+    {
+      "obs": {
+        "id": "eval:cov-random-tag-3",
+        "source": "eval",
+        "ts": 1786701685,
+        "url": "https://portal.agency.example/search?q=%27%20OR%201=1--&r=c05d6a"
+      },
+      "score": 4,
+      "tier": "significant",
+      "hits": [
+        {
+          "rule_id": "exploit.sqli_boolean",
+          "kind": "exploit",
+          "weight": 4,
+          "matched": "q=' OR 1=1",
+          "layer": 0,
+          "tactic": "T4"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "portal.agency.example",
+          "text": "https://portal.agency.example/search?q=' OR 1=1--&r=c05d6a"
+        }
+      ],
+      "target_host": "portal.agency.example",
+      "features": [],
+      "cluster": 24
+    },
+    {
+      "obs": {
         "id": "eval:b-echo-script-page",
         "source": "eval",
         "ts": 1425996000,
@@ -2418,6 +2730,148 @@
     },
     {
       "obs": {
+        "id": "eval:cov-markdown-accept",
+        "source": "eval",
+        "ts": 1786699200,
+        "url": "https://records.agency.example/items?id=7%27",
+        "user_agent": "Mozilla/5.0 (compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
+        "headers": {
+          "accept": "text/markdown, text/html, */*"
+        }
+      },
+      "score": 5,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "exploit.sqli_quote",
+          "kind": "exploit",
+          "weight": 3,
+          "matched": "id=7'",
+          "layer": 0,
+          "tactic": "T4"
+        },
+        {
+          "rule_id": "header.markdown_accept",
+          "kind": "header",
+          "weight": 1,
+          "matched": "accept: text/markdown, text/html, */*",
+          "layer": 0,
+          "artifact": true
+        },
+        {
+          "rule_id": "header.agent_ua",
+          "kind": "header",
+          "weight": 1,
+          "matched": "Claude-User",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/items?id=7'"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [],
+      "cluster": 47
+    },
+    {
+      "obs": {
+        "id": "eval:cov-agent-commerce",
+        "source": "eval",
+        "ts": 1786699320,
+        "url": "https://records.agency.example/items?id=8%27",
+        "headers": {
+          "crawler-max-price": "0.01",
+          "signature-input": "sig2=(\"@authority\" \"@path\");created=1760000000;keyid=\"k2\";tag=\"agent-browser-auth\""
+        }
+      },
+      "score": 5,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "exploit.sqli_quote",
+          "kind": "exploit",
+          "weight": 3,
+          "matched": "id=8'",
+          "layer": 0,
+          "tactic": "T4"
+        },
+        {
+          "rule_id": "selfid.signature_agent",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "signature-input: sig2=(\"@authority\" \"@path\");created=1760000000;keyid=\"k2\";tag=\"agent-browser-auth\"",
+          "layer": 0,
+          "artifact": true
+        },
+        {
+          "rule_id": "selfid.agent_commerce",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "crawler-max-price: 0.01",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/items?id=8'"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [],
+      "cluster": 47
+    },
+    {
+      "obs": {
+        "id": "eval:cov-agent-ua-kimi",
+        "source": "eval",
+        "ts": 1786699440,
+        "url": "https://records.agency.example/items?id=9%27",
+        "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Kimi-User/1.0; +https://www.kimi.com/policies/kimi-crawlers"
+      },
+      "score": 4,
+      "tier": "suggestive",
+      "hits": [
+        {
+          "rule_id": "exploit.sqli_quote",
+          "kind": "exploit",
+          "weight": 3,
+          "matched": "id=9'",
+          "layer": 0,
+          "tactic": "T4"
+        },
+        {
+          "rule_id": "header.agent_ua",
+          "kind": "header",
+          "weight": 1,
+          "matched": "Kimi-User",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "records.agency.example",
+          "text": "https://records.agency.example/items?id=9'"
+        }
+      ],
+      "target_host": "records.agency.example",
+      "features": [],
+      "cluster": 47
+    },
+    {
+      "obs": {
         "id": "eval:xsvc-agent-q0",
         "source": "urlquery",
         "ts": 1789898400,
@@ -2846,7 +3300,7 @@
       ],
       "target_host": "intranet.xsvc-h.example",
       "features": [],
-      "cluster": 40
+      "cluster": 41
     },
     {
       "obs": {
@@ -2878,7 +3332,7 @@
       ],
       "target_host": "intranet.xsvc-h.example",
       "features": [],
-      "cluster": 40
+      "cluster": 41
     },
     {
       "obs": {
@@ -4428,6 +4882,789 @@
     },
     {
       "obs": {
+        "id": "eval:hn-lychee-ci",
+        "source": "eval",
+        "ts": 1791532800,
+        "url": "https://docs.tool.example/install",
+        "user_agent": "lychee/0.15.1"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "docs.tool.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-preview-cited",
+        "source": "eval",
+        "ts": 1791533100,
+        "url": "https://news.example/a?utm_source=chatgpt.com",
+        "user_agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "marker.assistant_citation",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "?utm_source=chatgpt.com",
+          "layer": 0,
+          "artifact": true
+        },
+        {
+          "rule_id": "selfid.vendor_name",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "utm_source=chatgpt",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "news.example",
+          "text": "https://news.example/a?utm_source=chatgpt.com"
+        }
+      ],
+      "target_host": "news.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-uptime-buster",
+        "source": "eval",
+        "ts": 1791533400,
+        "url": "https://status.app.example/healthz?_=1760000000",
+        "user_agent": "Mozilla/5.0 (compatible; UptimeRobot/2.0; +http://www.uptimerobot.com/)"
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "cache.buster",
+          "kind": "cache_buster",
+          "weight": 1,
+          "matched": "_=1760000000",
+          "layer": 0,
+          "tactic": "T1"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "status.app.example",
+          "text": "https://status.app.example/healthz?_=1760000000"
+        }
+      ],
+      "target_host": "status.app.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-jina-nocache",
+        "source": "eval",
+        "ts": 1791533700,
+        "url": "https://r.jina.ai/https://blog.example/post?nocache=8f2a"
+      },
+      "score": 2,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "relay.jina",
+          "kind": "relay",
+          "weight": 2,
+          "matched": "r.jina.ai",
+          "layer": 0,
+          "tactic": "T1"
+        },
+        {
+          "rule_id": "cache.buster",
+          "kind": "cache_buster",
+          "weight": 1,
+          "matched": "nocache=8f2a",
+          "layer": 0,
+          "tactic": "T1"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "r.jina.ai",
+          "text": "https://r.jina.ai/https://blog.example/post?nocache=8f2a"
+        },
+        {
+          "via": "path",
+          "depth": 1,
+          "host": "blog.example",
+          "text": "https://blog.example/post?nocache=8f2a"
+        }
+      ],
+      "target_host": "blog.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-jina-search",
+        "source": "eval",
+        "ts": 1791534000,
+        "url": "https://s.jina.ai/best%20trail%20running%20shoes"
+      },
+      "score": 2,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "relay.jina_search",
+          "kind": "relay",
+          "weight": 2,
+          "matched": "s.jina.ai",
+          "layer": 0,
+          "tactic": "T1"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "s.jina.ai",
+          "text": "https://s.jina.ai/best trail running shoes"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-repo-digest-uithub",
+        "source": "eval",
+        "ts": 1791534300,
+        "url": "https://uithub.com/octo-example/widgets"
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "relay.repo_digest",
+          "kind": "relay",
+          "weight": 1,
+          "matched": "https://uithub.com/",
+          "layer": 0,
+          "tactic": "T1"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "uithub.com",
+          "text": "https://uithub.com/octo-example/widgets"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-repo-digest-gitmcp",
+        "source": "eval",
+        "ts": 1791534360,
+        "url": "https://gitmcp.io/octo-example/widgets"
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "relay.repo_digest",
+          "kind": "relay",
+          "weight": 1,
+          "matched": "https://gitmcp.io/",
+          "layer": 0,
+          "tactic": "T1"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "gitmcp.io",
+          "text": "https://gitmcp.io/octo-example/widgets"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-repo-digest-blog",
+        "source": "eval",
+        "ts": 1791534420,
+        "url": "https://www.blog.example/posts/feeding-gitingest.com-output-to-a-model"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "www.blog.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-lightpanda-own",
+        "source": "eval",
+        "ts": 1791534600,
+        "url": "wss://uswest.cloud.lightpanda.io/ws?browser=chrome"
+      },
+      "score": 2,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "carrier.remote_browser_cdp",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "/uswest.cloud.lightpanda.io/ws",
+          "layer": 0,
+          "tactic": "T2"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "uswest.cloud.lightpanda.io",
+          "text": "wss://uswest.cloud.lightpanda.io/ws?browser=chrome"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-lightpanda-docs",
+        "source": "eval",
+        "ts": 1791534660,
+        "url": "https://lightpanda.io/docs/usage/cdp/puppeteer"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "lightpanda.io",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-markdown-docs",
+        "source": "eval",
+        "ts": 1791534900,
+        "url": "https://docs.library.example/guide/install",
+        "user_agent": "docs-sync/2.3",
+        "headers": {
+          "accept": "text/markdown, text/plain;q=0.9"
+        }
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "header.markdown_accept",
+          "kind": "header",
+          "weight": 1,
+          "matched": "accept: text/markdown, text/plain;q=0.9",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "docs.library.example",
+          "text": "https://docs.library.example/guide/install"
+        }
+      ],
+      "target_host": "docs.library.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-pay-per-crawl",
+        "source": "eval",
+        "ts": 1791535200,
+        "url": "https://www.news.example/article/77",
+        "headers": {
+          "crawler-exact-price": "USD 0.01",
+          "signature-agent": "\"https://crawler.search.example\"",
+          "signature-input": "sig1=(\"crawler-exact-price\" \"@authority\");created=1760000000;keyid=\"k9\";tag=\"web-bot-auth\""
+        }
+      },
+      "score": 2,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "selfid.signature_agent",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "signature-agent: \"https://crawler.search.example\"",
+          "layer": 0,
+          "artifact": true
+        },
+        {
+          "rule_id": "selfid.agent_commerce",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "crawler-exact-price: USD 0.01",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "www.news.example",
+          "text": "https://www.news.example/article/77"
+        }
+      ],
+      "target_host": "www.news.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "selfid.signature_agent, selfid.agent_commerce"
+          }
+        ]
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-x402-client",
+        "source": "eval",
+        "ts": 1791535500,
+        "url": "https://api.data.example/v1/quotes?symbol=ACME",
+        "user_agent": "axios/1.7.7",
+        "headers": {
+          "payment-signature": "eyJ4NDAyVmVyc2lvbiI6Mn0="
+        }
+      },
+      "score": 2,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "selfid.agent_commerce",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "payment-signature: eyJ4NDAyVmVyc2lvbiI6Mn0=",
+          "layer": 0,
+          "artifact": true
+        },
+        {
+          "rule_id": "header.scripted_ua",
+          "kind": "header",
+          "weight": 1,
+          "matched": "axios/",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "api.data.example",
+          "text": "https://api.data.example/v1/quotes?symbol=ACME"
+        }
+      ],
+      "target_host": "api.data.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "selfid.agent_commerce"
+          }
+        ]
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-vendor-date-sku",
+        "source": "eval",
+        "ts": 1791535800,
+        "url": "https://shop.example/catalog?sku=agent20261004b"
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "selfid.vendor_name",
+          "kind": "self_id",
+          "weight": 1,
+          "matched": "sku=agent20261004b",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "shop.example",
+          "text": "https://shop.example/catalog?sku=agent20261004b"
+        }
+      ],
+      "target_host": "shop.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "selfid.vendor_name"
+          }
+        ]
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-vendor-date-file",
+        "source": "eval",
+        "ts": 1791535860,
+        "url": "https://files.example/download?file=Research20261004.pdf"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "files.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-agent-ua-amzn",
+        "source": "eval",
+        "ts": 1791536100,
+        "url": "https://www.recipes.example/soup/lentil",
+        "user_agent": "Mozilla/5.0 (compatible; Amzn-User/0.1)"
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "header.agent_ua",
+          "kind": "header",
+          "weight": 1,
+          "matched": "Amzn-User",
+          "layer": 0,
+          "artifact": true
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "www.recipes.example",
+          "text": "https://www.recipes.example/soup/lentil"
+        }
+      ],
+      "target_host": "www.recipes.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-baxia-search",
+        "source": "eval",
+        "ts": 1791536400,
+        "url": "https://www.search.example/search?q=bx-ua+x5sec+cookie+meaning"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "www.search.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-incapsula-blog",
+        "source": "eval",
+        "ts": 1791536700,
+        "url": "https://www.blog.example/posts/incapsula-resource-requests-in-logs"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "www.blog.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-ocr-receipt",
+        "source": "eval",
+        "ts": 1791537000,
+        "url": "https://api.ocr.space/parse/imageurl?apikey=REDACTED-5e6f7a8b9c0d&url=https://files.shop.example/receipts/2026-10.png"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "api.ocr.space",
+          "text": "https://api.ocr.space/parse/imageurl?apikey=REDACTED-5e6f7a8b9c0d&url=https://files.shop.example/receipts/2026-10.png"
+        },
+        {
+          "via": "param:url",
+          "depth": 1,
+          "host": "files.shop.example",
+          "text": "https://files.shop.example/receipts/2026-10.png"
+        }
+      ],
+      "target_host": "files.shop.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-browserless-own",
+        "source": "eval",
+        "ts": 1791537300,
+        "url": "https://production-sfo.browserless.io/screenshot?token=REDACTED-0a1b2c3d4e5f&url=https://www.myshop.example/"
+      },
+      "score": 2,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "carrier.browserless",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "production-sfo.browserless.io",
+          "layer": 0,
+          "tactic": "T2"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "production-sfo.browserless.io",
+          "text": "https://production-sfo.browserless.io/screenshot?token=REDACTED-0a1b2c3d4e5f&url=https://www.myshop.example/"
+        },
+        {
+          "via": "param:url",
+          "depth": 1,
+          "host": "www.myshop.example",
+          "text": "https://www.myshop.example/"
+        }
+      ],
+      "target_host": "www.myshop.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-embed-playground-home",
+        "source": "eval",
+        "ts": 1791537600,
+        "url": "https://milankarman.github.io/Embed-Web-Playground/"
+      },
+      "score": 2,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "carrier.embed_playground",
+          "kind": "carrier",
+          "weight": 2,
+          "matched": "milankarman.github.io/Embed-Web-Playground",
+          "layer": 0,
+          "tactic": "T2"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "milankarman.github.io",
+          "text": "https://milankarman.github.io/Embed-Web-Playground/"
+        }
+      ],
+      "target_host": null,
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-test-tag-reagent",
+        "source": "eval",
+        "ts": 1791537900,
+        "url": "https://shop.labsupply.example/catalog/reagenttest-strips"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "shop.labsupply.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-oai-tag-search",
+        "source": "eval",
+        "ts": 1791538200,
+        "url": "https://www.search.example/search?q=zz%3Doai123456"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "www.search.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
+        "id": "eval:hn-neterror-dead-link",
+        "source": "eval",
+        "ts": 1791538500,
+        "url": "https://old-campaign.example/",
+        "final_url": "about:neterror?e=dnsNotFound"
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "outcome.neterror",
+          "kind": "outcome",
+          "weight": 1,
+          "matched": "about:neterror",
+          "layer": 0,
+          "tactic": "T3"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "old-campaign.example",
+          "text": "https://old-campaign.example/"
+        }
+      ],
+      "target_host": "old-campaign.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-challenge-shop",
+        "source": "eval",
+        "ts": 1791538800,
+        "url": "https://www.shop.example/",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36",
+        "final_url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g"
+      },
+      "score": 1,
+      "tier": "noise",
+      "hits": [
+        {
+          "rule_id": "outcome.challenge",
+          "kind": "outcome",
+          "weight": 1,
+          "matched": "challenges.cloudflare.com",
+          "layer": 0,
+          "tactic": "T3"
+        }
+      ],
+      "layers": [
+        {
+          "via": "submitted",
+          "depth": 0,
+          "host": "www.shop.example",
+          "text": "https://www.shop.example/"
+        }
+      ],
+      "target_host": "www.shop.example",
+      "features": [],
+      "cluster": null,
+      "agent": {
+        "level": "payloads_only"
+      }
+    },
+    {
+      "obs": {
+        "id": "eval:hn-hysandbox-search",
+        "source": "eval",
+        "ts": 1791539100,
+        "url": "https://www.search.example/search?q=hysandbox+tencent+cloud"
+      },
+      "score": 0,
+      "tier": "noise",
+      "hits": [],
+      "target_host": "www.search.example",
+      "features": [],
+      "cluster": null
+    },
+    {
+      "obs": {
         "id": "eval:b-link-tag-autumn",
         "source": "eval",
         "ts": 1764320400,
@@ -4563,7 +5800,7 @@
       "features": [
         "param:uqtag=pl4nt1"
       ],
-      "cluster": 38
+      "cluster": 39
     },
     {
       "obs": {
@@ -4618,7 +5855,7 @@
       "features": [
         "param:uqtag=pl4nt1"
       ],
-      "cluster": 38
+      "cluster": 39
     },
     {
       "obs": {
@@ -4707,7 +5944,7 @@
       "features": [
         "param:run=pb7781"
       ],
-      "cluster": 39
+      "cluster": 40
     },
     {
       "obs": {
@@ -4756,7 +5993,7 @@
       "features": [
         "param:run=pb7781"
       ],
-      "cluster": 39
+      "cluster": 40
     },
     {
       "obs": {
@@ -5186,7 +6423,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 47
+      "cluster": 49
     },
     {
       "obs": {
@@ -5335,7 +6572,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 47
+      "cluster": 49
     },
     {
       "obs": {
@@ -5904,7 +7141,7 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": 48
+      "cluster": 50
     },
     {
       "obs": {
@@ -5992,7 +7229,7 @@
       ],
       "target_host": "data.portal.example",
       "features": [],
-      "cluster": 48
+      "cluster": 50
     },
     {
       "obs": {
@@ -6038,7 +7275,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 32
+      "cluster": 34
     },
     {
       "obs": {
@@ -6086,7 +7323,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 32
+      "cluster": 34
     },
     {
       "obs": {
@@ -6919,7 +8156,7 @@
       ],
       "target_host": "civilrightsdata.ed.gov",
       "features": [],
-      "cluster": 31
+      "cluster": 33
     },
     {
       "obs": {
@@ -6950,7 +8187,7 @@
       ],
       "target_host": "civilrightsdata.ed.gov",
       "features": [],
-      "cluster": 31
+      "cluster": 33
     },
     {
       "obs": {
@@ -7260,7 +8497,7 @@
       "features": [
         "param:tok=expt3"
       ],
-      "cluster": 46
+      "cluster": 48
     },
     {
       "obs": {
@@ -7307,7 +8544,7 @@
       "features": [
         "param:tok=expt4"
       ],
-      "cluster": 46
+      "cluster": 48
     },
     {
       "obs": {
@@ -7420,7 +8657,7 @@
       ],
       "target_host": "vizprod.aihw.gov.au",
       "features": [],
-      "cluster": 36
+      "cluster": 37
     },
     {
       "obs": {
@@ -7486,7 +8723,7 @@
       ],
       "target_host": "vizprod.aihw.gov.au",
       "features": [],
-      "cluster": 36
+      "cluster": 37
     },
     {
       "obs": {
@@ -9186,7 +10423,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 33
+      "cluster": 35
     },
     {
       "obs": {
@@ -9217,7 +10454,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 33
+      "cluster": 35
     },
     {
       "obs": {
@@ -9408,7 +10645,7 @@
       "features": [
         "exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de"
       ],
-      "cluster": 49
+      "cluster": 51
     },
     {
       "obs": {
@@ -9447,7 +10684,7 @@
       "features": [
         "exfil.webhook_site:webhook.site/deadbeef-0000-4000-8000-00000000c0de"
       ],
-      "cluster": 49
+      "cluster": 51
     },
     {
       "obs": {
@@ -9660,7 +10897,7 @@
       "features": [
         "exfil.ntfy:/ntfy.sh/covrun7results"
       ],
-      "cluster": 50
+      "cluster": 52
     },
     {
       "obs": {
@@ -9699,7 +10936,7 @@
       "features": [
         "exfil.ntfy:/ntfy.sh/covrun7results"
       ],
-      "cluster": 50
+      "cluster": 52
     },
     {
       "obs": {
@@ -10085,7 +11322,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 45
+      "cluster": 46
     },
     {
       "obs": {
@@ -10174,7 +11411,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 45
+      "cluster": 46
     },
     {
       "obs": {
@@ -10239,7 +11476,7 @@
       "features": [
         "param:uqtag=covrun9"
       ],
-      "cluster": 45
+      "cluster": 46
     },
     {
       "obs": {
@@ -10524,16 +11761,24 @@
         "id": "eval:cov-signature-agent",
         "source": "eval",
         "ts": 1786353300,
-        "url": "https://records.agency.example/api/items?page=4",
+        "url": "https://records.agency.example/api/items?page=4&uqtag=covsig1",
         "user_agent": "Mozilla/5.0 (compatible; ExampleAgent/1.0)",
         "headers": {
           "signature-agent": "https://agent.example/.well-known/http-message-signatures-directory",
           "signature-input": "sig1=(\"@authority\");created=1760000000;keyid=\"k1\""
         }
       },
-      "score": 1,
-      "tier": "noise",
+      "score": 4,
+      "tier": "suggestive",
       "hits": [
+        {
+          "rule_id": "marker.uq_tags",
+          "kind": "agent_marker",
+          "weight": 3,
+          "matched": "uqtag=covsig1",
+          "layer": 0,
+          "artifact": true
+        },
         {
           "rule_id": "selfid.signature_agent",
           "kind": "self_id",
@@ -10548,22 +11793,14 @@
           "via": "submitted",
           "depth": 0,
           "host": "records.agency.example",
-          "text": "https://records.agency.example/api/items?page=4"
+          "text": "https://records.agency.example/api/items?page=4&uqtag=covsig1"
         }
       ],
       "target_host": "records.agency.example",
-      "features": [],
-      "cluster": null,
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "selfid.signature_agent"
-          }
-        ]
-      }
+      "features": [
+        "param:uqtag=covsig1"
+      ],
+      "cluster": 23
     },
     {
       "obs": {
@@ -10605,7 +11842,7 @@
       "features": [
         "param:uqtag=covrun11"
       ],
-      "cluster": 34
+      "cluster": 23
     },
     {
       "obs": {
@@ -10661,7 +11898,7 @@
       "features": [
         "param:uqtag=covrun12"
       ],
-      "cluster": 34
+      "cluster": 23
     },
     {
       "obs": {
@@ -10724,7 +11961,7 @@
       "features": [
         "param:uqtag=covscope"
       ],
-      "cluster": 35
+      "cluster": 36
     },
     {
       "obs": {
@@ -10765,7 +12002,7 @@
       "features": [
         "param:uqtag=covscope"
       ],
-      "cluster": 35
+      "cluster": 36
     },
     {
       "obs": {
@@ -10844,7 +12081,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 51
+      "cluster": 53
     },
     {
       "obs": {
@@ -10889,7 +12126,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 51
+      "cluster": 53
     },
     {
       "obs": {
@@ -11273,7 +12510,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 52
+      "cluster": 54
     },
     {
       "obs": {
@@ -11315,7 +12552,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 52
+      "cluster": 54
     },
     {
       "obs": {
@@ -12283,7 +13520,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 37
+      "cluster": 38
     },
     {
       "obs": {
@@ -12338,7 +13575,7 @@
       "features": [
         "param:uqtag=covdisc"
       ],
-      "cluster": 37
+      "cluster": 38
     },
     {
       "obs": {
@@ -13777,7 +15014,7 @@
       "features": [
         "param:uqtag=la1q7c"
       ],
-      "cluster": 23
+      "cluster": 25
     },
     {
       "obs": {
@@ -13818,7 +15055,7 @@
       "features": [
         "param:uqtag=la1q7c"
       ],
-      "cluster": 23
+      "cluster": 25
     },
     {
       "obs": {
@@ -13859,7 +15096,7 @@
       "features": [
         "param:uqtag=lb8w2n"
       ],
-      "cluster": 24
+      "cluster": 26
     },
     {
       "obs": {
@@ -13900,7 +15137,7 @@
       "features": [
         "param:uqtag=lb8w2n"
       ],
-      "cluster": 24
+      "cluster": 26
     },
     {
       "obs": {
@@ -13941,7 +15178,7 @@
       "features": [
         "param:uqtag=lc4e9r"
       ],
-      "cluster": 25
+      "cluster": 27
     },
     {
       "obs": {
@@ -13982,7 +15219,7 @@
       "features": [
         "param:uqtag=lc4e9r"
       ],
-      "cluster": 25
+      "cluster": 27
     },
     {
       "obs": {
@@ -14023,7 +15260,7 @@
       "features": [
         "param:uqtag=ld6t3m"
       ],
-      "cluster": 26
+      "cluster": 28
     },
     {
       "obs": {
@@ -14064,7 +15301,7 @@
       "features": [
         "param:uqtag=ld6t3m"
       ],
-      "cluster": 26
+      "cluster": 28
     },
     {
       "obs": {
@@ -14105,7 +15342,7 @@
       "features": [
         "param:uqtag=le2y8k"
       ],
-      "cluster": 27
+      "cluster": 29
     },
     {
       "obs": {
@@ -14146,7 +15383,7 @@
       "features": [
         "param:uqtag=le2y8k"
       ],
-      "cluster": 27
+      "cluster": 29
     },
     {
       "obs": {
@@ -14187,7 +15424,7 @@
       "features": [
         "param:uqtag=lf9u4p"
       ],
-      "cluster": 28
+      "cluster": 30
     },
     {
       "obs": {
@@ -14228,7 +15465,7 @@
       "features": [
         "param:uqtag=lf9u4p"
       ],
-      "cluster": 28
+      "cluster": 30
     },
     {
       "obs": {
@@ -14269,7 +15506,7 @@
       "features": [
         "param:uqtag=lg5i1x"
       ],
-      "cluster": 29
+      "cluster": 31
     },
     {
       "obs": {
@@ -14310,7 +15547,7 @@
       "features": [
         "param:uqtag=lg5i1x"
       ],
-      "cluster": 29
+      "cluster": 31
     },
     {
       "obs": {
@@ -14351,7 +15588,7 @@
       "features": [
         "param:uqtag=lh3o6v"
       ],
-      "cluster": 30
+      "cluster": 32
     },
     {
       "obs": {
@@ -14392,7 +15629,7 @@
       "features": [
         "param:uqtag=lh3o6v"
       ],
-      "cluster": 30
+      "cluster": 32
     },
     {
       "obs": {
@@ -15349,7 +16586,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 41
+      "cluster": 42
     },
     {
       "obs": {
@@ -15406,7 +16643,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 41
+      "cluster": 42
     },
     {
       "obs": {
@@ -15463,7 +16700,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 41
+      "cluster": 42
     },
     {
       "obs": {
@@ -15520,7 +16757,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 41
+      "cluster": 42
     },
     {
       "obs": {
@@ -15577,7 +16814,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 41
+      "cluster": 42
     },
     {
       "obs": {
@@ -15634,7 +16871,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 41
+      "cluster": 42
     },
     {
       "obs": {
@@ -15691,7 +16928,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 41
+      "cluster": 42
     },
     {
       "obs": {
@@ -15748,7 +16985,7 @@
       "features": [
         "param:uqtag=shardA7"
       ],
-      "cluster": 41
+      "cluster": 42
     },
     {
       "obs": {
@@ -15805,7 +17042,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 42
+      "cluster": 43
     },
     {
       "obs": {
@@ -15862,7 +17099,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 42
+      "cluster": 43
     },
     {
       "obs": {
@@ -15919,7 +17156,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 42
+      "cluster": 43
     },
     {
       "obs": {
@@ -15976,7 +17213,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 42
+      "cluster": 43
     },
     {
       "obs": {
@@ -16033,7 +17270,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 42
+      "cluster": 43
     },
     {
       "obs": {
@@ -16090,7 +17327,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 42
+      "cluster": 43
     },
     {
       "obs": {
@@ -16147,7 +17384,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 42
+      "cluster": 43
     },
     {
       "obs": {
@@ -16204,7 +17441,7 @@
       "features": [
         "param:uqtag=shardB7"
       ],
-      "cluster": 42
+      "cluster": 43
     },
     {
       "obs": {
@@ -16267,7 +17504,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 44
+      "cluster": 45
     },
     {
       "obs": {
@@ -16330,7 +17567,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 44
+      "cluster": 45
     },
     {
       "obs": {
@@ -16393,7 +17630,7 @@
       "features": [
         "param:uqtag=scout7f"
       ],
-      "cluster": 44
+      "cluster": 45
     },
     {
       "obs": {
@@ -17031,7 +18268,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 43
+      "cluster": 44
     },
     {
       "obs": {
@@ -17088,7 +18325,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 43
+      "cluster": 44
     },
     {
       "obs": {
@@ -17145,7 +18382,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 43
+      "cluster": 44
     },
     {
       "obs": {
@@ -17202,7 +18439,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 43
+      "cluster": 44
     },
     {
       "obs": {
@@ -17259,7 +18496,7 @@
       "features": [
         "param:uqtag=map31z"
       ],
-      "cluster": 43
+      "cluster": 44
     },
     {
       "obs": {
@@ -17522,16 +18759,16 @@
       "id": "C1",
       "key": "k-9544a26c",
       "members": [
-        394,
-        396,
-        398,
-        400,
-        402,
-        404,
-        406,
-        408,
-        410,
-        412
+        430,
+        432,
+        434,
+        436,
+        438,
+        440,
+        442,
+        444,
+        446,
+        448
       ],
       "start": 1778730369,
       "end": 1778748169,
@@ -17746,16 +18983,16 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              394,
-              396,
-              398,
-              400,
-              402,
-              404,
-              406,
-              408,
-              410,
-              412
+              430,
+              432,
+              434,
+              436,
+              438,
+              440,
+              442,
+              444,
+              446,
+              448
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -17786,16 +19023,16 @@
       "id": "C2",
       "key": "k-94a01368",
       "members": [
-        395,
-        397,
-        399,
-        401,
-        403,
-        405,
-        407,
-        409,
-        411,
-        413
+        431,
+        433,
+        435,
+        437,
+        439,
+        441,
+        443,
+        445,
+        447,
+        449
       ],
       "start": 1778730414,
       "end": 1778748218,
@@ -18012,16 +19249,16 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              395,
-              397,
-              399,
-              401,
-              403,
-              405,
-              407,
-              409,
-              411,
-              413
+              431,
+              433,
+              435,
+              437,
+              439,
+              441,
+              443,
+              445,
+              447,
+              449
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -18052,16 +19289,16 @@
       "id": "C3",
       "key": "k-343cf869",
       "members": [
-        335,
-        337,
-        340,
-        349,
-        351,
-        354,
-        356,
-        357,
-        358,
-        360
+        371,
+        373,
+        376,
+        385,
+        387,
+        390,
+        392,
+        393,
+        394,
+        396
       ],
       "start": 1786611600,
       "end": 1786611600,
@@ -18249,7 +19486,7 @@
             "id": "S2",
             "outcome": "fail",
             "records": [
-              337
+              373
             ],
             "detail": "the route climbed to reach one target, past a block"
           },
@@ -18262,14 +19499,14 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              335,
-              337,
-              351,
-              354,
-              356,
-              357,
-              358,
-              360
+              371,
+              373,
+              387,
+              390,
+              392,
+              393,
+              394,
+              396
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -18282,7 +19519,7 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              349
+              385
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -18750,14 +19987,14 @@
       "id": "C6",
       "key": "k-a0f281b4",
       "members": [
-        59,
-        60,
-        61,
-        62,
-        63,
-        64,
-        65,
-        66
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76
       ],
       "start": 1789898400,
       "end": 1789898544,
@@ -18889,14 +20126,14 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            59,
-            60,
-            61,
-            62,
-            63,
-            64,
-            65,
-            66
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76
           ],
           "detail": "all 8 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them"
         }
@@ -18950,14 +20187,14 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              59,
-              60,
-              61,
-              62,
-              63,
-              64,
-              65,
-              66
+              69,
+              70,
+              71,
+              72,
+              73,
+              74,
+              75,
+              76
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -18988,12 +20225,12 @@
       "id": "C7",
       "key": "k-fd3d4fb8",
       "members": [
-        436,
-        437,
-        438,
-        439,
-        440,
-        441
+        472,
+        473,
+        474,
+        475,
+        476,
+        477
       ],
       "start": 1773046800,
       "end": 1773047100,
@@ -19159,12 +20396,12 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              436,
-              437,
-              438,
-              439,
-              440,
-              441
+              472,
+              473,
+              474,
+              475,
+              476,
+              477
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -19387,12 +20624,12 @@
       "id": "C9",
       "key": "k-003e3240",
       "members": [
-        75,
-        76,
-        79,
-        80,
-        83,
-        84
+        85,
+        86,
+        89,
+        90,
+        93,
+        94
       ],
       "start": 1789905600,
       "end": 1789905723,
@@ -19525,24 +20762,24 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            75,
-            76,
-            79,
-            80,
-            83,
-            84
+            85,
+            86,
+            89,
+            90,
+            93,
+            94
           ],
           "detail": "all 6 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them"
         },
         {
           "kind": "auto_submitted",
           "records": [
-            75,
-            76,
-            79,
-            80,
-            83,
-            84
+            85,
+            86,
+            89,
+            90,
+            93,
+            94
           ],
           "detail": "3 of its targets went to urlquery, urlscan within 3s, and 5 ordinary link(s) on other hosts were fanned out alike around it: something submits every link it sees, as a mail gateway or security product does, so whoever sent the links made these records"
         }
@@ -19598,12 +20835,12 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              75,
-              76,
-              79,
-              80,
-              83,
-              84
+              85,
+              86,
+              89,
+              90,
+              93,
+              94
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -19634,11 +20871,11 @@
       "id": "C10",
       "key": "k-a798e7e7",
       "members": [
-        447,
-        448,
-        449,
-        450,
-        451
+        483,
+        484,
+        485,
+        486,
+        487
       ],
       "start": 1773333000,
       "end": 1773333240,
@@ -19792,11 +21029,11 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              447,
-              448,
-              449,
-              450,
-              451
+              483,
+              484,
+              485,
+              486,
+              487
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -20042,11 +21279,11 @@
       "id": "C12",
       "key": "k-cc3501da",
       "members": [
-        137,
-        138,
-        147,
-        150,
-        151
+        173,
+        174,
+        183,
+        186,
+        187
       ],
       "start": 1782986580,
       "end": 1782987420,
@@ -20614,10 +21851,10 @@
       "id": "C15",
       "key": "k-7a37d335",
       "members": [
-        199,
-        200,
-        201,
-        251
+        235,
+        236,
+        237,
+        287
       ],
       "start": 1781082720,
       "end": 1781082870,
@@ -20769,10 +22006,10 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              199,
-              200,
-              201,
-              251
+              235,
+              236,
+              237,
+              287
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -20803,9 +22040,9 @@
       "id": "C16",
       "key": "k-74c086a9",
       "members": [
-        433,
-        434,
-        435
+        469,
+        470,
+        471
       ],
       "start": 1772720700,
       "end": 1772720850,
@@ -20972,8 +22209,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              434,
-              435
+              470,
+              471
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -21004,9 +22241,9 @@
       "id": "C17",
       "key": "k-ce706bea",
       "members": [
-        369,
-        370,
-        371
+        405,
+        406,
+        407
       ],
       "start": 1775466847,
       "end": 1775467041,
@@ -21167,9 +22404,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              369,
-              370,
-              371
+              405,
+              406,
+              407
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -21200,9 +22437,9 @@
       "id": "C18",
       "key": "k-f773d3d1",
       "members": [
-        372,
-        373,
-        374
+        408,
+        409,
+        410
       ],
       "start": 1775898847,
       "end": 1775899041,
@@ -21363,9 +22600,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              372,
-              373,
-              374
+              408,
+              409,
+              410
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -21396,9 +22633,9 @@
       "id": "C19",
       "key": "k-48937eab",
       "members": [
-        375,
-        376,
-        377
+        411,
+        412,
+        413
       ],
       "start": 1776330847,
       "end": 1776331041,
@@ -21559,9 +22796,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              375,
-              376,
-              377
+              411,
+              412,
+              413
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -21592,9 +22829,9 @@
       "id": "C20",
       "key": "k-15c03b5e",
       "members": [
-        256,
-        258,
-        259
+        292,
+        294,
+        295
       ],
       "start": 1785747600,
       "end": 1785747645,
@@ -21748,9 +22985,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              256,
-              258,
-              259
+              292,
+              294,
+              295
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -21781,9 +23018,9 @@
       "id": "C21",
       "key": "k-96a48819",
       "members": [
-        210,
-        214,
-        215
+        246,
+        250,
+        251
       ],
       "start": 1785771000,
       "end": 1785771120,
@@ -21929,9 +23166,9 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              210,
-              214,
-              215
+              246,
+              250,
+              251
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -21962,9 +23199,9 @@
       "id": "C22",
       "key": "k-3d8e048c",
       "members": [
-        266,
-        267,
-        282
+        302,
+        303,
+        318
       ],
       "start": 1785924000,
       "end": 1786107600,
@@ -22121,7 +23358,7 @@
             "id": "S5",
             "outcome": "fail",
             "records": [
-              282
+              318
             ],
             "detail": "accounts or credentials were acquired or reused"
           },
@@ -22129,7 +23366,7 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              282
+              318
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -22150,9 +23387,9 @@
       "id": "C23",
       "key": "k-2a0dbcd7",
       "members": [
-        273,
-        274,
-        281
+        309,
+        310,
+        317
       ],
       "start": 1786032000,
       "end": 1786104000,
@@ -22306,7 +23543,7 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              281
+              317
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22314,7 +23551,7 @@
             "id": "S5",
             "outcome": "fail",
             "records": [
-              281
+              317
             ],
             "detail": "accounts or credentials were acquired or reused"
           },
@@ -22322,9 +23559,9 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              273,
-              274,
-              281
+              309,
+              310,
+              317
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -22343,10 +23580,368 @@
     },
     {
       "id": "C24",
+      "key": "k-fcf5d060",
+      "members": [
+        334,
+        335,
+        337
+      ],
+      "start": 1786353300,
+      "end": 1786354200,
+      "tier": "significant",
+      "score": 9,
+      "rules": {
+        "exploit.double_encoded_meta": 1,
+        "header.agent_ua": 1,
+        "marker.uq_tags": 3,
+        "selfid.signature_agent": 1
+      },
+      "kinds": {
+        "exploit": 1,
+        "agent_marker": 3,
+        "self_id": 1,
+        "header": 1
+      },
+      "tactics": {
+        "T4": 1
+      },
+      "artifacts": 3,
+      "target_hosts": {
+        "records.agency.example": 3
+      },
+      "asns": {},
+      "user_agents": {
+        "Mozilla/5.0 (compatible; ExampleAgent/1.0)": 1,
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot": 1
+      },
+      "encodings": {
+        "dbl.sorted.noslash": 1
+      },
+      "header_sets": {
+        "5eac670f": 1
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1786353300,
+          "end": 1786354200,
+          "count": 3
+        }
+      ],
+      "timing": {
+        "count": 3,
+        "start": 1786353300,
+        "end": 1786354200,
+        "median_gap_secs": 600.0,
+        "p90_gap_secs": 600.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786352400,
+            3
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.16666666666666666,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 3
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 3,
+            "detail": "marker.uq_tags, selfid.signature_agent"
+          }
+        ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 3
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              337
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
+      }
+    },
+    {
+      "id": "C25",
+      "key": "k-a70b6adc",
+      "members": [
+        41,
+        42,
+        43
+      ],
+      "start": 1786701600,
+      "end": 1786701685,
+      "tier": "significant",
+      "score": 4,
+      "rules": {
+        "exploit.sqli_boolean": 3
+      },
+      "kinds": {
+        "exploit": 3
+      },
+      "tactics": {
+        "T4": 3
+      },
+      "artifacts": 0,
+      "target_hosts": {
+        "portal.agency.example": 3
+      },
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "sp20.sorted.noslash": 3
+      },
+      "dialect": {
+        "variants": {
+          "sqli.quote_or_1eq1": 1,
+          "sqli.quote_or_quoted": 2
+        },
+        "records": 3,
+        "first_seen": [
+          "sqli.quote_or_quoted",
+          "sqli.quote_or_1eq1"
+        ],
+        "signature": "c1f3671f"
+      },
+      "fanout": {
+        "batches": 3,
+        "widths": {
+          "1": 3
+        },
+        "modal_share": 1.0
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1786701600,
+          "end": 1786701685,
+          "count": 3
+        }
+      ],
+      "timing": {
+        "count": 3,
+        "start": 1786701600,
+        "end": 1786701685,
+        "median_gap_secs": 45.0,
+        "p90_gap_secs": 45.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786701600,
+            3
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.0125,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 3
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "payloads_only",
+        "signals": [
+          {
+            "kind": "model_pace_chain",
+            "records": 3
+          }
+        ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 3
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              41,
+              42,
+              43
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
+      }
+    },
+    {
+      "id": "C26",
       "key": "k-4a7f92c8",
       "members": [
-        378,
-        379
+        414,
+        415
       ],
       "start": 1775023421,
       "end": 1775023561,
@@ -22488,8 +24083,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              378,
-              379
+              414,
+              415
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22517,11 +24112,11 @@
       }
     },
     {
-      "id": "C25",
+      "id": "C27",
       "key": "k-2b8249d6",
       "members": [
-        380,
-        381
+        416,
+        417
       ],
       "start": 1775286221,
       "end": 1775286361,
@@ -22663,8 +24258,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              380,
-              381
+              416,
+              417
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22692,11 +24287,11 @@
       }
     },
     {
-      "id": "C26",
+      "id": "C28",
       "key": "k-b6272b6c",
       "members": [
-        382,
-        383
+        418,
+        419
       ],
       "start": 1775549021,
       "end": 1775549161,
@@ -22838,8 +24433,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              382,
-              383
+              418,
+              419
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -22867,11 +24462,11 @@
       }
     },
     {
-      "id": "C27",
+      "id": "C29",
       "key": "k-2ce667ee",
       "members": [
-        384,
-        385
+        420,
+        421
       ],
       "start": 1775811821,
       "end": 1775811961,
@@ -23013,8 +24608,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              384,
-              385
+              420,
+              421
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23042,11 +24637,11 @@
       }
     },
     {
-      "id": "C28",
+      "id": "C30",
       "key": "k-9b98d2af",
       "members": [
-        386,
-        387
+        422,
+        423
       ],
       "start": 1776074621,
       "end": 1776074761,
@@ -23188,8 +24783,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              386,
-              387
+              422,
+              423
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23217,11 +24812,11 @@
       }
     },
     {
-      "id": "C29",
+      "id": "C31",
       "key": "k-30b2a402",
       "members": [
-        388,
-        389
+        424,
+        425
       ],
       "start": 1776337421,
       "end": 1776337561,
@@ -23363,8 +24958,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              388,
-              389
+              424,
+              425
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23392,11 +24987,11 @@
       }
     },
     {
-      "id": "C30",
+      "id": "C32",
       "key": "k-ee412da9",
       "members": [
-        390,
-        391
+        426,
+        427
       ],
       "start": 1776600221,
       "end": 1776600361,
@@ -23538,8 +25133,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              390,
-              391
+              426,
+              427
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23567,11 +25162,11 @@
       }
     },
     {
-      "id": "C31",
+      "id": "C33",
       "key": "k-d3d2f667",
       "members": [
-        392,
-        393
+        428,
+        429
       ],
       "start": 1776863021,
       "end": 1776863161,
@@ -23713,8 +25308,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              392,
-              393
+              428,
+              429
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23742,11 +25337,11 @@
       }
     },
     {
-      "id": "C32",
+      "id": "C34",
       "key": "k-3bed0073",
       "members": [
-        196,
-        197
+        232,
+        233
       ],
       "start": 1780408805,
       "end": 1780408990,
@@ -23895,7 +25490,7 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              196
+              232
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -23923,11 +25518,11 @@
       }
     },
     {
-      "id": "C33",
+      "id": "C35",
       "key": "k-a40c5369",
       "members": [
-        158,
-        159
+        194,
+        195
       ],
       "start": 1782987840,
       "end": 1782987900,
@@ -24066,7 +25661,7 @@
             "id": "S1",
             "outcome": "fail",
             "records": [
-              159
+              195
             ],
             "detail": "a account setup run reached access-controlled or sensitive targets"
           },
@@ -24084,7 +25679,7 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              159
+              195
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -24092,8 +25687,8 @@
             "id": "S5",
             "outcome": "fail",
             "records": [
-              158,
-              159
+              194,
+              195
             ],
             "detail": "accounts or credentials were acquired or reused"
           },
@@ -24116,11 +25711,11 @@
       }
     },
     {
-      "id": "C34",
+      "id": "C36",
       "key": "k-21e5a81d",
       "members": [
-        262,
-        263
+        298,
+        299
       ],
       "start": 1785747670,
       "end": 1785747700,
@@ -24260,8 +25855,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              262,
-              263
+              298,
+              299
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -24289,179 +25884,11 @@
       }
     },
     {
-      "id": "C35",
-      "key": "k-e17d390c",
-      "members": [
-        299,
-        301
-      ],
-      "start": 1786353600,
-      "end": 1786354200,
-      "tier": "significant",
-      "score": 8,
-      "rules": {
-        "exploit.double_encoded_meta": 1,
-        "header.agent_ua": 1,
-        "marker.uq_tags": 2
-      },
-      "kinds": {
-        "exploit": 1,
-        "agent_marker": 2,
-        "header": 1
-      },
-      "tactics": {
-        "T4": 1
-      },
-      "artifacts": 2,
-      "target_hosts": {
-        "records.agency.example": 2
-      },
-      "asns": {},
-      "user_agents": {
-        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot": 1
-      },
-      "encodings": {
-        "dbl.sorted.noslash": 1
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1786353600,
-          "end": 1786354200,
-          "count": 2
-        }
-      ],
-      "timing": {
-        "count": 2,
-        "start": 1786353600,
-        "end": 1786354200,
-        "median_gap_secs": 600.0,
-        "p90_gap_secs": 600.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1786352400,
-            2
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.16666666666666666,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 2
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 2,
-            "detail": "marker.uq_tags"
-          }
-        ]
-      },
-      "scope": {
-        "task_class": "unclear",
-        "target_classes": {
-          "interactive": 2
-        },
-        "tests": [
-          {
-            "id": "S1",
-            "outcome": "not_assessable",
-            "detail": "the task class is unclear, so an off-task target cannot be judged"
-          },
-          {
-            "id": "S2",
-            "outcome": "pass",
-            "detail": "no block, challenge or rate limit was circumvented"
-          },
-          {
-            "id": "S3",
-            "outcome": "pass",
-            "detail": "no sensitive path was requested"
-          },
-          {
-            "id": "S4",
-            "outcome": "fail",
-            "records": [
-              301
-            ],
-            "detail": "attack payloads were sent to a party that did not sanction them"
-          },
-          {
-            "id": "S5",
-            "outcome": "pass",
-            "detail": "no account or credential acquisition"
-          },
-          {
-            "id": "S6",
-            "outcome": "pass",
-            "detail": "no data was sent to a channel outside the target"
-          },
-          {
-            "id": "S7",
-            "outcome": "not_assessable",
-            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
-          }
-        ],
-        "finding": "scope_exceeded",
-        "payload_present": true,
-        "agent_present": false,
-        "out_of_scope": true,
-        "coordinated": false
-      }
-    },
-    {
-      "id": "C36",
+      "id": "C37",
       "key": "k-11b00947",
       "members": [
-        303,
-        304
+        339,
+        340
       ],
       "start": 1786438800,
       "end": 1786438830,
@@ -24632,8 +26059,8 @@
             "id": "S4",
             "outcome": "not_assessable",
             "records": [
-              303,
-              304
+              339,
+              340
             ],
             "detail": "attack payloads reached a benchmark target built to be tested"
           },
@@ -24661,11 +26088,11 @@
       }
     },
     {
-      "id": "C37",
+      "id": "C38",
       "key": "k-93ae0ac9",
       "members": [
-        211,
-        212
+        247,
+        248
       ],
       "start": 1786500600,
       "end": 1786500840,
@@ -24810,7 +26237,7 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              211
+              247
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -24838,11 +26265,11 @@
       }
     },
     {
-      "id": "C38",
+      "id": "C39",
       "key": "k-e15d2c41",
       "members": [
-        346,
-        347
+        382,
+        383
       ],
       "start": 1786611600,
       "end": 1786611600,
@@ -25007,11 +26434,11 @@
       }
     },
     {
-      "id": "C39",
+      "id": "C40",
       "key": "k-131d8ae5",
       "members": [
-        128,
-        129
+        164,
+        165
       ],
       "start": 1788357600,
       "end": 1788357780,
@@ -25161,8 +26588,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              128,
-              129
+              164,
+              165
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -25190,11 +26617,11 @@
       }
     },
     {
-      "id": "C40",
+      "id": "C41",
       "key": "k-635475d7",
       "members": [
-        131,
-        132
+        167,
+        168
       ],
       "start": 1788426000,
       "end": 1788426120,
@@ -25335,8 +26762,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              131,
-              132
+              167,
+              168
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -25364,11 +26791,11 @@
       }
     },
     {
-      "id": "C41",
+      "id": "C42",
       "key": "k-f3eb632e",
       "members": [
-        67,
-        68
+        77,
+        78
       ],
       "start": 1789902000,
       "end": 1789902240,
@@ -25478,8 +26905,8 @@
         {
           "kind": "provenance_monoculture",
           "records": [
-            67,
-            68
+            77,
+            78
           ],
           "detail": "all 2 records come from services anyone can submit a URL to (urlquery, urlscan); no server log or owner-published record stands behind them"
         }
@@ -25512,8 +26939,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              67,
-              68
+              77,
+              78
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -25541,17 +26968,17 @@
       }
     },
     {
-      "id": "C42",
+      "id": "C43",
       "key": "k-b000dccb",
       "members": [
-        414,
-        415,
-        416,
-        417,
-        418,
-        419,
-        420,
-        421
+        450,
+        451,
+        452,
+        453,
+        454,
+        455,
+        456,
+        457
       ],
       "start": 1772445600,
       "end": 1772445950,
@@ -25731,17 +27158,17 @@
       }
     },
     {
-      "id": "C43",
+      "id": "C44",
       "key": "k-1d59194a",
       "members": [
-        422,
-        423,
-        424,
-        425,
-        426,
-        427,
-        428,
-        429
+        458,
+        459,
+        460,
+        461,
+        462,
+        463,
+        464,
+        465
       ],
       "start": 1772445640,
       "end": 1772445990,
@@ -25921,14 +27348,14 @@
       }
     },
     {
-      "id": "C44",
+      "id": "C45",
       "key": "k-408d9c03",
       "members": [
-        442,
-        443,
-        444,
-        445,
-        446
+        478,
+        479,
+        480,
+        481,
+        482
       ],
       "start": 1773331200,
       "end": 1773331440,
@@ -26098,12 +27525,12 @@
       }
     },
     {
-      "id": "C45",
+      "id": "C46",
       "key": "k-4c8b6e8f",
       "members": [
-        430,
-        431,
-        432
+        466,
+        467,
+        468
       ],
       "start": 1772719200,
       "end": 1772719320,
@@ -26269,12 +27696,12 @@
       }
     },
     {
-      "id": "C46",
+      "id": "C47",
       "key": "k-323bd6db",
       "members": [
-        286,
-        288,
-        289
+        322,
+        324,
+        325
       ],
       "start": 1786266600,
       "end": 1786273500,
@@ -26428,8 +27855,8 @@
             "id": "S1",
             "outcome": "fail",
             "records": [
-              288,
-              289
+              324,
+              325
             ],
             "detail": "a data retrieval run reached access-controlled or sensitive targets"
           },
@@ -26442,7 +27869,7 @@
             "id": "S3",
             "outcome": "fail",
             "records": [
-              289
+              325
             ],
             "detail": "requests reached configuration, source or administration paths"
           },
@@ -26475,11 +27902,191 @@
       }
     },
     {
-      "id": "C47",
+      "id": "C48",
+      "key": "k-ed0b96c0",
+      "members": [
+        66,
+        67,
+        68
+      ],
+      "start": 1786699200,
+      "end": 1786699440,
+      "tier": "suggestive",
+      "score": 5,
+      "rules": {
+        "exploit.sqli_quote": 3,
+        "header.agent_ua": 2,
+        "header.markdown_accept": 1,
+        "selfid.agent_commerce": 1,
+        "selfid.signature_agent": 1
+      },
+      "kinds": {
+        "exploit": 3,
+        "self_id": 2,
+        "header": 3
+      },
+      "tactics": {
+        "T4": 3
+      },
+      "artifacts": 3,
+      "target_hosts": {
+        "records.agency.example": 3
+      },
+      "asns": {},
+      "user_agents": {
+        "Mozilla/5.0 (compatible; Claude-User/1.0; +Claude-User@anthropic.com)": 1,
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Kimi-User/1.0; +https://www.kimi.com/policies/kimi-crawlers": 1
+      },
+      "encodings": {},
+      "header_sets": {
+        "1896e51b": 1,
+        "bccc78e9": 1
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1786699200,
+          "end": 1786699440,
+          "count": 3
+        }
+      ],
+      "timing": {
+        "count": 3,
+        "start": 1786699200,
+        "end": 1786699440,
+        "median_gap_secs": 120.0,
+        "p90_gap_secs": 120.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786698000,
+            3
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.03333333333333333,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 3
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "selfid.signature_agent, selfid.agent_commerce"
+          },
+          {
+            "kind": "model_pace_chain",
+            "records": 3
+          }
+        ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 3
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              66,
+              67,
+              68
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
+      }
+    },
+    {
+      "id": "C49",
       "key": "k-31edd96c",
       "members": [
-        207,
-        208
+        243,
+        244
       ],
       "start": 1779303660,
       "end": 1779303840,
@@ -26581,14 +28188,14 @@
         {
           "kind": "burned_identifier",
           "records": [
-            207
+            243
           ],
           "detail": "`param:tok=expt3` on 1 record(s) is quoted in a public report (linking.published_tags): anyone who read it can copy it"
         },
         {
           "kind": "burned_identifier",
           "records": [
-            208
+            244
           ],
           "detail": "`param:tok=expt4` on 1 record(s) is quoted in a public report (linking.published_tags): anyone who read it can copy it"
         }
@@ -26653,11 +28260,11 @@
       }
     },
     {
-      "id": "C48",
+      "id": "C50",
       "key": "k-9df8c89d",
       "members": [
-        141,
-        144
+        177,
+        180
       ],
       "start": 1782986820,
       "end": 1782987000,
@@ -26827,11 +28434,11 @@
       }
     },
     {
-      "id": "C49",
+      "id": "C51",
       "key": "k-6ac6b86f",
       "members": [
-        155,
-        157
+        191,
+        193
       ],
       "start": 1782987660,
       "end": 1782987780,
@@ -26996,11 +28603,11 @@
       }
     },
     {
-      "id": "C50",
+      "id": "C52",
       "key": "k-7714324d",
       "members": [
-        269,
-        270
+        305,
+        306
       ],
       "start": 1786024800,
       "end": 1786024830,
@@ -27141,8 +28748,8 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              269,
-              270
+              305,
+              306
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -27160,11 +28767,11 @@
       }
     },
     {
-      "id": "C51",
+      "id": "C53",
       "key": "k-3cff30a9",
       "members": [
-        278,
-        279
+        314,
+        315
       ],
       "start": 1786093200,
       "end": 1786093260,
@@ -27298,8 +28905,8 @@
             "id": "S6",
             "outcome": "fail",
             "records": [
-              278,
-              279
+              314,
+              315
             ],
             "detail": "data was sent to a callback inbox or side channel"
           },
@@ -27317,11 +28924,11 @@
       }
     },
     {
-      "id": "C52",
+      "id": "C54",
       "key": "k-67c2b035",
       "members": [
-        306,
-        307
+        342,
+        343
       ],
       "start": 1786525200,
       "end": 1786525500,
@@ -27450,8 +29057,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              306,
-              307
+              342,
+              343
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -27479,11 +29086,11 @@
       }
     },
     {
-      "id": "C53",
+      "id": "C55",
       "key": "k-a6c34dc6",
       "members": [
-        320,
-        321
+        356,
+        357
       ],
       "start": 1786528200,
       "end": 1786528500,
@@ -27612,8 +29219,8 @@
             "id": "S4",
             "outcome": "fail",
             "records": [
-              320,
-              321
+              356,
+              357
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -27639,14 +29246,190 @@
         "out_of_scope": true,
         "coordinated": false
       }
+    },
+    {
+      "id": "C56",
+      "key": "k-d0a8014a",
+      "members": [
+        37,
+        38
+      ],
+      "start": 1786698000,
+      "end": 1786698180,
+      "tier": "suggestive",
+      "score": 5,
+      "rules": {
+        "marker.uq_tags": 2,
+        "relay.jina_search": 1,
+        "relay.repo_digest": 1
+      },
+      "kinds": {
+        "relay": 2,
+        "agent_marker": 2
+      },
+      "tactics": {
+        "T1": 2
+      },
+      "artifacts": 2,
+      "target_hosts": {},
+      "asns": {},
+      "user_agents": {},
+      "encodings": {
+        "sp20.hexU.noslash": 1
+      },
+      "relay_stacks": {
+        "relay.jina_search → target": 1,
+        "relay.repo_digest → target": 1
+      },
+      "link_features": [
+        "param:uqtag=covrun12"
+      ],
+      "runs": [
+        {
+          "start": 1786698000,
+          "end": 1786698180,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1786698000,
+        "end": 1786698180,
+        "median_gap_secs": 180.0,
+        "p90_gap_secs": 180.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786698000,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.05,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "plant_signals": [
+        {
+          "kind": "habit_mismatch",
+          "records": [
+            37,
+            38
+          ],
+          "detail": "shares `param:uqtag=covrun12` with the earlier C24 but its URL encodings have nothing in common with that cluster's: the identifier may have been copied"
+        }
+      ],
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 2,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      },
+      "scope": {
+        "task_class": "data_retrieval",
+        "target_classes": {
+          "public_content": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "pass",
+            "detail": "targets are consistent with the evident task"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "pass",
+            "detail": "no attack payload was sent"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "in_scope",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": false,
+        "coordinated": false
+      }
     }
   ],
   "timing": {
-    "count": 345,
+    "count": 371,
     "start": 1425996000,
-    "end": 1791428700,
-    "median_gap_secs": 140.0,
-    "p90_gap_secs": 134489.0,
+    "end": 1791538800,
+    "median_gap_secs": 240.0,
+    "p90_gap_secs": 106436.0,
     "bursts": [
       {
         "start": 1778728800,
@@ -27736,11 +29519,6 @@
         "count": 0
       },
       {
-        "start": 1786615200,
-        "end": 1787209200,
-        "count": 0
-      },
-      {
         "start": 1777287720,
         "end": 1777881600,
         "count": 0
@@ -27758,6 +29536,11 @@
       {
         "start": 1779786000,
         "end": 1780308000,
+        "count": 0
+      },
+      {
+        "start": 1786701685,
+        "end": 1787209200,
         "count": 0
       },
       {
@@ -66188,9 +67971,9 @@
         1,
         2,
         4,
-        7,
-        24,
-        16,
+        8,
+        26,
+        17,
         13,
         7,
         6,
@@ -66205,9 +67988,9 @@
         1,
         0
       ],
-      "entropy": 0.8033452796773592,
+      "entropy": 0.7965033776197196,
       "longest_idle_hours": 41997.75,
-      "days": 74,
+      "days": 76,
       "verdict": {
         "kind": "unclear"
       }
@@ -66363,9 +68146,9 @@
       "host": "civilrightsdata.ed.gov",
       "path": "/api/v1.0/GetStateEstimation",
       "members": [
-        196,
-        197,
-        198
+        232,
+        233,
+        234
       ],
       "varied": [
         "Measure_Id",
@@ -66385,10 +68168,10 @@
       "host": "recherche-collection-search.bac-lac.canada.ca",
       "path": "/eng/Home/Record",
       "members": [
-        199,
-        200,
-        201,
-        251
+        235,
+        236,
+        237,
+        287
       ],
       "varied": [
         "IdNumber"
@@ -66405,9 +68188,9 @@
       "host": "records.agency.example",
       "path": "/api/items",
       "members": [
-        256,
-        258,
-        259
+        292,
+        294,
+        295
       ],
       "varied": [
         "id"
@@ -66424,9 +68207,9 @@
       "host": "api.datausa.io",
       "path": "/tesseract/data.jsonrecords",
       "members": [
-        210,
-        214,
-        215
+        246,
+        250,
+        251
       ],
       "varied": [
         "cube",
@@ -66444,16 +68227,16 @@
       "host": "records.agency.example",
       "path": "/items",
       "members": [
-        335,
-        337,
-        340,
-        349,
-        351,
-        354,
-        356,
-        357,
-        358,
-        360
+        371,
+        373,
+        376,
+        385,
+        387,
+        390,
+        392,
+        393,
+        394,
+        396
       ],
       "varied": [
         "id",
@@ -66468,17 +68251,56 @@
       "retries_after_error": 0
     },
     {
+      "host": "records.agency.example",
+      "path": "/items",
+      "members": [
+        66,
+        67,
+        68
+      ],
+      "varied": [
+        "id"
+      ],
+      "variants": 3,
+      "flagged": 3,
+      "start": 1786699200,
+      "end": 1786699440,
+      "median_gap_secs": 120,
+      "pace": "model",
+      "retries_after_error": 0
+    },
+    {
+      "host": "portal.agency.example",
+      "path": "/search",
+      "members": [
+        41,
+        42,
+        43
+      ],
+      "varied": [
+        "q",
+        "r"
+      ],
+      "variants": 3,
+      "flagged": 3,
+      "start": 1786701600,
+      "end": 1786701685,
+      "median_gap_secs": 45,
+      "pace": "model",
+      "retries_after_error": 0
+    },
+    {
       "host": "permits.xsvc-a.example",
       "path": "/search",
       "members": [
-        59,
-        60,
-        61,
-        62,
-        63,
-        64,
-        65,
-        66
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76
       ],
       "varied": [
         "page",
@@ -66497,12 +68319,12 @@
       "host": "portal.xsvc-gw.example",
       "path": "/lookup",
       "members": [
-        75,
-        76,
-        79,
-        80,
-        83,
-        84
+        85,
+        86,
+        89,
+        90,
+        93,
+        94
       ],
       "varied": [
         "id",
@@ -66568,19 +68390,19 @@
       "steps": [
         {
           "route": "direct",
-          "record": 139,
+          "record": 175,
           "ts": 1782986700
         },
         {
           "route": "relay",
-          "record": 155,
+          "record": 191,
           "ts": 1782987660
         }
       ],
       "start": 1782986700,
       "end": 1782987660,
       "clusters": [
-        "C49"
+        "C51"
       ]
     },
     {
@@ -66589,19 +68411,19 @@
       "steps": [
         {
           "route": "direct",
-          "record": 285,
+          "record": 321,
           "ts": 1786266000
         },
         {
           "route": "relay",
-          "record": 286,
+          "record": 322,
           "ts": 1786266600
         }
       ],
       "start": 1786266000,
       "end": 1786266600,
       "clusters": [
-        "C46"
+        "C47"
       ]
     },
     {
@@ -66610,12 +68432,12 @@
       "steps": [
         {
           "route": "relay",
-          "record": 335,
+          "record": 371,
           "ts": 1786611600
         },
         {
           "route": "program",
-          "record": 340,
+          "record": 376,
           "ts": 1786611600
         }
       ],
@@ -66628,20 +68450,20 @@
   ],
   "scaffold_pairs": [
     {
-      "a": "C42",
-      "b": "C43",
+      "a": "C43",
+      "b": "C44",
       "similarity": 1.0,
       "shared": [
         "relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
       ],
       "holders": 2,
-      "clusters": 46,
+      "clusters": 48,
       "outside": 0,
-      "base_rate": 0.022222222222222223,
+      "base_rate": 0.02127659574468085,
       "templates": 1,
-      "chance": 0.0004938271604938272,
+      "chance": 0.0004526935264825713,
       "tested": 6,
-      "expected_pairs": 0.0029629629629629632
+      "expected_pairs": 0.002716161158895428
     },
     {
       "a": "C17",
@@ -66651,13 +68473,13 @@
         "relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
       ],
       "holders": 3,
-      "clusters": 46,
+      "clusters": 48,
       "outside": 0,
-      "base_rate": 0.044444444444444446,
+      "base_rate": 0.0425531914893617,
       "templates": 1,
-      "chance": 0.0019753086419753087,
+      "chance": 0.0018107741059302852,
       "tested": 6,
-      "expected_pairs": 0.011851851851851853
+      "expected_pairs": 0.010864644635581712
     },
     {
       "a": "C17",
@@ -66667,13 +68489,13 @@
         "relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
       ],
       "holders": 3,
-      "clusters": 46,
+      "clusters": 48,
       "outside": 0,
-      "base_rate": 0.044444444444444446,
+      "base_rate": 0.0425531914893617,
       "templates": 1,
-      "chance": 0.0019753086419753087,
+      "chance": 0.0018107741059302852,
       "tested": 6,
-      "expected_pairs": 0.011851851851851853
+      "expected_pairs": 0.010864644635581712
     },
     {
       "a": "C18",
@@ -66683,13 +68505,13 @@
         "relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
       ],
       "holders": 3,
-      "clusters": 46,
+      "clusters": 48,
       "outside": 0,
-      "base_rate": 0.044444444444444446,
+      "base_rate": 0.0425531914893617,
       "templates": 1,
-      "chance": 0.0019753086419753087,
+      "chance": 0.0018107741059302852,
       "tested": 6,
-      "expected_pairs": 0.011851851851851853
+      "expected_pairs": 0.010864644635581712
     }
   ],
   "coactive_pairs": [
@@ -66714,7 +68536,7 @@
   "ordered_cotarget_pairs": [
     {
       "a": "C10",
-      "b": "C44",
+      "b": "C45",
       "shared": 5,
       "in_order": 5,
       "chance": 0.008333333333333335,
@@ -66725,7 +68547,7 @@
   "soft_links": [
     {
       "a": "C10",
-      "b": "C44",
+      "b": "C45",
       "kind": "ordered_co_target",
       "strength": 0.9705882352941176,
       "lr": 34.0,
@@ -66745,7 +68567,7 @@
       "kind": "scaffold",
       "strength": 0.95,
       "lr": 20.0,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 48 comparable clusters and 0 record(s) outside them, a base rate of 4.3e-2 (chance 1.8e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C17",
@@ -66753,7 +68575,7 @@
       "kind": "scaffold",
       "strength": 0.95,
       "lr": 20.0,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 48 comparable clusters and 0 record(s) outside them, a base rate of 4.3e-2 (chance 1.8e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
       "a": "C18",
@@ -66761,15 +68583,15 @@
       "kind": "scaffold",
       "strength": 0.95,
       "lr": 20.0,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 3 of 48 comparable clusters and 0 record(s) outside them, a base rate of 4.3e-2 (chance 1.8e-3 for the rarest of that many; 0.01 such pairs expected among 6 compared): relay.jina → target | /w/w/n/w?q=payload&uqtag=w3&step=n0&ts=n4 | enc sp20.hexU.unsorted.noslash | pay sqli.quote_or_1eq1"
     },
     {
-      "a": "C42",
-      "b": "C43",
+      "a": "C43",
+      "b": "C44",
       "kind": "scaffold",
       "strength": 0.95,
       "lr": 20.0,
-      "detail": "similarity 1.00, 1 shared template(s), the rarest in 2 of 46 comparable clusters and 0 record(s) outside them, a base rate of 2.2e-2 (chance 4.9e-4 for the rarest of that many; 0.00 such pairs expected among 6 compared): relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
+      "detail": "similarity 1.00, 1 shared template(s), the rarest in 2 of 48 comparable clusters and 0 record(s) outside them, a base rate of 2.1e-2 (chance 4.5e-4 for the rarest of that many; 0.00 such pairs expected among 6 compared): relay.jina → target | /w?uqtag=w3&_=n0 | enc - | pay -"
     }
   ],
   "candidate_fleets": [
@@ -66795,7 +68617,7 @@
       "id": "F2",
       "clusters": [
         "C10",
-        "C44"
+        "C45"
       ],
       "kinds": [
         "ordered_co_target"
@@ -66806,7 +68628,7 @@
       "density": 1.0,
       "cut_lr": 34.00000000000001,
       "cut": [
-        "C44"
+        "C45"
       ]
     },
     {
@@ -66831,8 +68653,8 @@
     {
       "id": "F4",
       "clusters": [
-        "C42",
-        "C43"
+        "C43",
+        "C44"
       ],
       "kinds": [
         "scaffold"
@@ -66843,7 +68665,7 @@
       "density": 1.0,
       "cut_lr": 19.999999999999996,
       "cut": [
-        "C43"
+        "C44"
       ]
     }
   ],
@@ -66878,7 +68700,7 @@
     {
       "kind": "handoff",
       "a": {
-        "cluster": "C45",
+        "cluster": "C46",
         "key": "k-4c8b6e8f",
         "run": 1,
         "records": [
@@ -66899,7 +68721,7 @@
     {
       "kind": "role_sequence",
       "a": {
-        "cluster": "C44",
+        "cluster": "C45",
         "key": "k-408d9c03",
         "run": 1,
         "records": [
@@ -66926,7 +68748,7 @@
     {
       "kind": "disjoint_partition",
       "a": {
-        "cluster": "C42",
+        "cluster": "C43",
         "key": "k-b000dccb",
         "run": 1,
         "records": [
@@ -66936,7 +68758,7 @@
         ]
       },
       "b": {
-        "cluster": "C43",
+        "cluster": "C44",
         "key": "k-1d59194a",
         "run": 1,
         "records": [
@@ -66966,8 +68788,8 @@
       "passed": 4,
       "kept": 4,
       "fdr": 0.05,
-      "cut": 0.0019753086419753087,
-      "expected": 0.011851851851851853
+      "cut": 0.0018107741059302852,
+      "expected": 0.010864644635581712
     },
     {
       "family": "co_activity",

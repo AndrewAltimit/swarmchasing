@@ -47,22 +47,22 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (222, 0, 6, 179),
+        (233, 0, 5, 205),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (123, 0, 105, 179), "significant");
+    assert_eq!(counts(Tier::Significant), (127, 0, 111, 205), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 452);
+    assert_eq!(a.total, 488);
     assert_eq!(
         tiers,
-        [188, 101, 163],
+        [213, 108, 167],
         "records per tier (noise, suggestive, significant)"
     );
-    assert_eq!(a.clusters.len(), 53, "clusters");
+    assert_eq!(a.clusters.len(), 56, "clusters");
 
     // Agent grades by actor: no scanner run and no hand-typed pentest grades
     // above L0; a person pasting chatbot payloads reaches L3, the grade's

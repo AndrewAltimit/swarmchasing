@@ -178,6 +178,11 @@ mod tests {
             ("relay.hrefli", "WordPress outbound links: far too common"),
             ("relay.translate_goog", "translated pages: far too common"),
             ("relay.scrape_api", "named all day by its own users"),
+            (
+                "relay.jina_search",
+                "its path is a search query, not a target",
+            ),
+            ("relay.repo_digest", "repository READMEs link it all day"),
             ("carrier.codesandbox", "named all day by its own users"),
             (
                 "carrier.agent_sandbox",

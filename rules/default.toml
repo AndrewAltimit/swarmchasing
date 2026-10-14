@@ -47,7 +47,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-14.1"
+version = "2026-10-14.2"
 
 [thresholds]
 suggestive = 3
@@ -411,6 +411,35 @@ weight = 2
 description = "Jina Reader: fetches a page server-side and returns Markdown"
 
 [[rule]]
+id = "relay.jina_search"
+group = "relay"
+kind = "relay"
+tactic = "T1"
+target = "host"
+# Jina's search relay: `https://s.jina.ai/<query>` searches the web, fetches
+# the top results and returns each through r.jina.ai
+# (https://github.com/jina-ai/reader).
+pattern = "s.jina.ai"
+weight = 2
+description = "Jina search relay: searches, fetches the top results server-side and returns Markdown"
+
+[[rule]]
+id = "relay.repo_digest"
+group = "relay"
+kind = "relay"
+tactic = "T1"
+target = "url"
+# Services that turn a code repository into one text digest for a model, by
+# swapping the host in a GitHub URL: Gitingest (https://gitingest.com/),
+# uithub (https://uithub.com/) and GitMCP, an MCP server per repository
+# (https://gitmcp.io/, also `<owner>.gitmcp.io/<repo>`). Developers read
+# repositories through them by hand too, so weight 1. Anchored on the layer's
+# own host so a page mentioning one does not match.
+pattern = "^https?://([a-z0-9-]+\\.)?(gitingest\\.com|uithub\\.com|gitmcp\\.io)([/:?#]|$)"
+weight = 1
+description = "Repository-to-text digest service (Gitingest, uithub, GitMCP)"
+
+[[rule]]
 id = "relay.markdown_new"
 group = "relay"
 kind = "relay"
@@ -587,12 +616,15 @@ target = "url"
 # (https://docs.browser-use.com/cloud/guides/browser-api),
 # wss://connect.browserbase.com
 # (https://docs.browserbase.com/reference/api/connect) and
-# wss://connect.hyperbrowser.ai (https://github.com/hyperbrowserai/examples).
+# wss://connect.hyperbrowser.ai (https://github.com/hyperbrowserai/examples),
+# and Lightpanda Cloud's regional `wss://<region>.cloud.lightpanda.io/ws`
+# (https://lightpanda.io/docs/usage/cdp/puppeteer).
 # The `apiKey`, `sessionId` and `token` parameters are redacted at ingest.
-# Not a subdomain, so docs and status hosts do not match.
-pattern = "(^|[^a-z0-9.-])connect\\.(steel\\.dev|browser-use\\.com|browserbase\\.com|hyperbrowser\\.ai)\\b"
+# Not a subdomain, and Lightpanda only on its `/ws` path, so docs and status
+# hosts do not match.
+pattern = "(^|[^a-z0-9.-])(connect\\.(steel\\.dev|browser-use\\.com|browserbase\\.com|hyperbrowser\\.ai)\\b|([a-z0-9-]+\\.)?cloud\\.lightpanda\\.io/ws\\b)"
 weight = 2
-description = "Hosted-browser DevTools connect endpoint (Steel, Browser Use, Browserbase, Hyperbrowser)"
+description = "Hosted-browser DevTools connect endpoint (Steel, Browser Use, Browserbase, Hyperbrowser, Lightpanda)"
 
 [[rule]]
 id = "carrier.agent_sandbox"
@@ -873,8 +905,9 @@ group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "url"
-# Test tags that carry a run number, so the match distinguishes one run.
-pattern = "chatgpttest\\d*|agenttest\\d*"
+# Test tags that carry a run number, so the match distinguishes one run. The
+# tag starts a word, so `reagenttest` in a lab-supply slug is not one.
+pattern = "\\b(chatgpttest|agenttest)\\d*"
 weight = 3
 link = true
 description = "Test tags agents add to URLs (with a run number)"
@@ -1195,7 +1228,11 @@ artifact = true
 target = "param_value"
 # Also `OpenAIResearcher` and `OpenAI Research`, the identity Transluce
 # documented an agent registering under (https://transluce.org/us-canada-gov).
-pattern = "\\b(claude|chatgpt|openai|gpt-?[45o]|gemini|anthropic|hunyuan|qwen|deepseek|glm|kimi)\\b|openai[\\s-]?research(er)?"
+# And a whole value of a lower-case vendor or task word fused to an
+# eight-digit date and a short suffix (`claude20261001a`,
+# `research20261004final`), the run-tag shape in
+# https://swarmcha.se/posts/chinese-agent-fleet ; matched case-sensitively.
+pattern = "\\b(claude|chatgpt|openai|gpt-?[45o]|gemini|anthropic|hunyuan|qwen|deepseek|glm|kimi)\\b|openai[\\s-]?research(er)?|(?-i:^(claude|gpt|gemini|qwen|deepseek|kimi|agent|research)\\d{8}[a-z0-9]{0,24}$)"
 weight = 1
 description = "Model/vendor name in a request parameter (e.g. ?agent=claude, org=OpenAI Research). Unreliable for attribution."
 
@@ -1619,9 +1656,48 @@ target = "user_agent"
 # (https://github.com/firecrawl/firecrawl/blob/main/apps/api/src/lib/robots-txt.ts).
 # CloudflareBrowserRenderingCrawler: the Browser Rendering crawl endpoint
 # (https://developers.cloudflare.com/browser-rendering/reference/automatic-request-headers/).
-pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|meta-externalagent|meta-externalfetcher|ExaSearchBot|FirecrawlAgent|CloudflareBrowserRenderingCrawler"
+# Amzn-User, Amzn-SearchBot: https://developer.amazon.com/amazonbot . KimiBot,
+# Kimi-User, Kimi-SearchBot: https://www.kimi.ai/policies/kimi-crawlers .
+# meta-webindexer, meta-externalads:
+# https://developers.facebook.com/docs/sharing/webmasters/web-crawlers .
+# Google-Pinpoint:
+# https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers .
+# Applebot: https://support.apple.com/en-us/119829 .
+pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|Google-Pinpoint|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|Amzn-User|Amzn-SearchBot|KimiBot|Kimi-User|Kimi-SearchBot|meta-externalagent|meta-externalfetcher|meta-webindexer|meta-externalads|Applebot|ExaSearchBot|FirecrawlAgent|CloudflareBrowserRenderingCrawler"
 weight = 1
 description = "Known agent product in the user agent (FM-7.11 declared identity)"
+
+[[rule]]
+id = "header.markdown_accept"
+kind = "header"
+artifact = true
+target = "header"
+# An Accept header that lists Markdown first: coding agents ask for it so a
+# site can answer in Markdown. Claude Code and OpenCode send it
+# (https://blog.cloudflare.com/markdown-for-agents/), and so does Cursor
+# (https://www.checklyhq.com/blog/state-of-ai-agent-content-negotation).
+# Documentation tooling asks for Markdown too, so weight 1.
+pattern = "^accept:\\s*text/markdown\\b"
+weight = 1
+description = "Accept header asking for Markdown first (coding-agent content negotiation)"
+
+[[rule]]
+id = "selfid.agent_commerce"
+kind = "self_id"
+artifact = true
+target = "header"
+# Headers an agent sends when it browses or pays as a declared agent: a Web
+# Bot Auth signature tagged `agent-browser-auth` or `agent-payer-auth`
+# (https://blog.cloudflare.com/secure-agentic-commerce/), Cloudflare
+# pay-per-crawl's price headers
+# (https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-ai-owner/crawl-pages/)
+# and the x402 payment header, `PAYMENT-SIGNATURE` in version 2
+# (https://docs.x402.org/core-concepts/http-402) and `X-PAYMENT` in version 1
+# (https://docs.cdp.coinbase.com/x402/migration-guide). Paying crawlers send
+# them on ordinary pages, so weight 1.
+pattern = "^signature-input:.*tag=\"agent-(browser|payer)-auth\"|^crawler-(max|exact)-price:|^(payment-signature|x-payment):"
+weight = 1
+description = "Agentic-commerce headers (agent-browser-auth or agent-payer-auth signature, pay-per-crawl price, x402 payment)"
 
 [[rule]]
 id = "header.coding_agent_ua"
@@ -1753,6 +1829,12 @@ id = "google_firing_range"
 # https://github.com/google/firing-range
 pattern = "://public-firing-range\\.appspot\\.com\\b"
 note = "Google Firing Range, a test bed for web scanners"
+
+[[benchmark]]
+id = "google_xss_game"
+# https://xss-game.appspot.com/ (Google's XSS training game)
+pattern = "://xss-game\\.appspot\\.com\\b"
+note = "Google's XSS game, a deliberately vulnerable training site"
 
 [[benchmark]]
 id = "hack_yourself_first"

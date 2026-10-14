@@ -48,7 +48,8 @@ pub const TEXT_RESIDUE: [(&str, &str); 5] = [
 /// case-insensitive. Weak context, never strong evidence: people run these
 /// harnesses for their own work every day, and anyone can paste the text.
 /// Kept apart from residue so it never makes a group residue-heavy.
-pub const SELF_ID: [(&str, &str); 7] = [
+/// Patterns read the whole text; `(?m:^...)` anchors a trailer at a line.
+pub const SELF_ID: [(&str, &str); 13] = [
     (
         "selfid.claude_code",
         r"generated with \[?claude code\]?|co-authored-by:\s*claude\b|claude\.ai/code\b",
@@ -62,12 +63,45 @@ pub const SELF_ID: [(&str, &str); 7] = [
         "selfid.copilot",
         r"co-authored-by:\s*copilot\b|copilot-swe-agent\b",
     ),
+    // The cloud agent's commit identity `Cursor Agent <cursoragent@cursor.com>`
+    // and the `Made-with: Cursor` trailer the editor's agent adds (both
+    // described by Cursor staff on forum.cursor.com).
     (
         "selfid.cursor",
-        r"cursor\.com/(background-agent|agents)\b|co-authored-by:\s*cursor\s+agent\b",
+        r"cursor\.com/(background-agent|agents)\b|co-authored-by:\s*cursor\s+agent\b|<cursoragent@cursor\.com>|(?m:^\s*made-with:\s*cursor\b)",
     ),
     ("selfid.jules", r"jules\.google(\.com)?/task/"),
     ("selfid.aider", r"co-authored-by:\s*aider\b"),
+    // Amp's default trailers: a thread link (https://ampcode.com/threads/T-...)
+    // and `Co-authored-by: Amp <amp@ampcode.com>`.
+    (
+        "selfid.amp",
+        r"amp-thread-id:\s*https://ampcode\.com/threads/T-|co-authored-by:\s*amp\s*<amp@ampcode\.com>",
+    ),
+    // OpenHands' default git identity (github.com/OpenHands/OpenHands,
+    // `openhands <openhands@all-hands.dev>`) as a co-author.
+    (
+        "selfid.openhands",
+        r"co-authored-by:\s*openhands\s*<openhands@all-hands\.dev>",
+    ),
+    // Factory's Droid GitHub App (https://github.com/apps/factory-droid).
+    ("selfid.factory", r"factory-droid\[bot\]"),
+    // Crush's `Generated with Crush` line and `Assisted-by: Crush:<model>`
+    // trailer (github.com/charmbracelet/crush, README "attribution").
+    (
+        "selfid.crush",
+        r"generated with crush\b|assisted-by:\s*crush:",
+    ),
+    // The hidden markers GitHub Agentic Workflows append to what they post
+    // (github.com/github/gh-aw, docs reference/footers.md).
+    (
+        "selfid.gh_aw",
+        r"<!--\s*gh-aw-(workflow-id|tracker-id|execution):",
+    ),
+    // The generic `Assisted-by:` trailer the Linux kernel asks AI-assisted
+    // patches to carry (https://docs.kernel.org/process/coding-assistants.html),
+    // which other harnesses adopt. Any harness, so it names none.
+    ("selfid.assisted_by", r"(?m:^\s*assisted-by:\s*\S)"),
 ];
 
 fn self_id_set() -> &'static [(&'static str, Regex)] {
@@ -192,6 +226,58 @@ mod tests {
             "I asked Claude about this and it agreed.",
             "The cursor jumps to the end of the line.",
             "Our code review found a copilot setting.",
+        ] {
+            assert!(self_id(t).is_empty(), "{t}: {:?}", self_id(t));
+        }
+    }
+
+    #[test]
+    fn harness_trailers_and_markers() {
+        let one = |t: &str, id: &str| assert_eq!(self_id(t), [id], "{t}");
+        one(
+            "Fix flaky test\n\nCo-authored-by: Cursor Agent <cursoragent@cursor.com>",
+            "selfid.cursor",
+        );
+        one("Tidy imports\n\nMade-with: Cursor", "selfid.cursor");
+        one(
+            "Add retries\n\nAmp-Thread-ID: https://ampcode.com/threads/T-0199aa11-2233-7444-8555-666677778888",
+            "selfid.amp",
+        );
+        one(
+            "Add retries\n\nCo-authored-by: Amp <amp@ampcode.com>",
+            "selfid.amp",
+        );
+        one(
+            "Bump deps\n\nCo-authored-by: openhands <openhands@all-hands.dev>",
+            "selfid.openhands",
+        );
+        one(
+            "Reviewed by factory-droid[bot] on this pull request.",
+            "selfid.factory",
+        );
+        one("Fix the parser.\n\nGenerated with Crush", "selfid.crush");
+        one(
+            "Weekly triage summary.\n\n<!-- gh-aw-workflow-id: issue-triage -->",
+            "selfid.gh_aw",
+        );
+        one("Done.\n<!--gh-aw-tracker-id: triage-7 -->", "selfid.gh_aw");
+        one(
+            "mm: fix a leak\n\nAssisted-by: LLM coccinelle sparse",
+            "selfid.assisted_by",
+        );
+        // Crush's trailer is both its own and the generic convention.
+        assert_eq!(
+            self_id("Fix.\n\nAssisted-by: Crush:model-x"),
+            ["selfid.crush", "selfid.assisted_by"]
+        );
+        for t in [
+            "The amp in the lab hums when the cursor moves.",
+            "I made this with Cursor and it works: made with cursor.",
+            "Assisted-by is a trailer the kernel documents.",
+            "We crush the image before upload; generated with crushed ice.",
+            "<!-- workflow-id: build -->",
+            "Our droid factory ships on Friday.",
+            "Co-authored-by: Amp Lee <amp.lee@mail.example>",
         ] {
             assert!(self_id(t).is_empty(), "{t}: {:?}", self_id(t));
         }
