@@ -37,6 +37,7 @@ mod eval;
 mod runs;
 
 pub use eval::{SwarmEval, swarm_eval};
+pub(crate) use runs::client_key;
 
 use crate::analyze::{Cluster, ObsResult};
 use crate::chance::TestFamily;

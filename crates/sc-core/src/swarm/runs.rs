@@ -30,7 +30,7 @@ fn dims(r: &ObsResult) -> [Option<String>; 5] {
 /// Who sent a record: its user agent, network and header set, whatever
 /// relay it went through. `None` when neither the user agent nor the network
 /// is known, so no client can be told apart.
-fn client_key(r: &ObsResult) -> Option<String> {
+pub(crate) fn client_key(r: &ObsResult) -> Option<String> {
     let d = dims(r);
     let mut key = String::new();
     for x in &d[1..4] {

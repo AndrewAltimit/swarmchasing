@@ -76,6 +76,7 @@ export const levelOf = (id) => AGENT_LEVELS.find((l) => l.id === id) ?? null;
 export const AGENT_SIGNALS = {
   self_id: ["self_described", "names a model or vendor, or carries an agent test tag (anyone can write this)"],
   residue: ["model_written", "model-output residue in requests"],
+  page_residue: ["model_written", "residue a broken page also carries in its links, such as an unrendered template (it never sets the grade alone: any client following the link sends it)"],
   prose: ["model_written", "natural-language prose in parameters"],
   fabricated_ids: ["model_written", "identifiers no generator produces"],
   cut_lengths: ["model_written", "URLs cut at one repeated length, like an output limit"],
@@ -96,6 +97,8 @@ export const AGENT_SIGNALS = {
 };
 export const signalLabel = (k) => AGENT_SIGNALS[k]?.[1] ?? (trunc(String(k ?? "?").replace(/_/g, " "), 60) || "?");
 export const signalRung = (k) => AGENT_SIGNALS[k]?.[0] ?? null;
+/** Signals listed on a rung that never set the grade (the engine's `grades()`). */
+export const signalGrades = (k) => k !== "page_residue";
 
 /** Cap id → [ceiling level id, label]. */
 export const AGENT_CAPS = {

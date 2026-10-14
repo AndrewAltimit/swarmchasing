@@ -609,6 +609,7 @@ fn grade_step(a: &Analysis, links: &FmLinks) -> String {
                 .agent
                 .signals
                 .iter()
+                .filter(|s| s.kind.grades())
                 .filter_map(|s| s.kind.level())
                 .map(|l| l as usize)
                 .max()

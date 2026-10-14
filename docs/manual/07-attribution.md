@@ -128,6 +128,10 @@ Caps:
 - **must** stop at L2 when a working-hours rhythm meets slow pace, and the report says the activity is possibly human-operated with model help;
 - **should** stop at L3 under any working-hours rhythm.
 
+A referral tag **must not** count as self-description: an assistant's citation tag (`utm_source=chatgpt.com`) names where the link came from, and anyone following or copying the link sends it.
+
+Page-borne residue **must not** set L2 on its own. Residue a page carries in its own links, such as an unrendered front-end template (`{{item.slug}}` in a path), is sent by every crawler, preview bot and feed poller that follows the link; it shows a link was followed, not who wrote it. It is reported beside the L2 evidence and counts only where another L2 signal already holds.
+
 Declared testing and benchmark targets ([FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing)) are reported as counter-signals and do not move the grade: anyone can declare a test. A declared agent product from outside its provider's published ranges is a counter-signal too, and a verified provider identity supports L1 and nothing higher ([FM-7.13](#fm-713-published-address-ranges)).
 
 The rungs are ordered by the kind of evidence, not by measured likelihood. Nothing guarantees that a higher rung is more often an agent: a person working a request by hand through a repeater tool changes requests after errors and sends variants at model pace, which is the adaptive rung's evidence, and labelled human runs do reach L3. A grade is therefore read with the competing hypotheses it leaves open ([FM-7.12](#fm-712-competing-hypotheses)), and is a probability only once measured ([FM-9.12](09-evaluation.md#fm-912-calibrated-public-language)).

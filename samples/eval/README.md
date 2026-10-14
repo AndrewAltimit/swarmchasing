@@ -57,7 +57,7 @@ Synthetic records that give every rule at least one labelled positive, and the s
 Synthetic records for the client-trace rules, each marked `"synthetic": true`, on reserved `.example` hosts (and the Aider site the rule cites), written by hand:
 
 - **Coding-harness user agents** (`header.coding_agent_ua`): agent runs sending probes through Gemini CLI, Qwen Code, Aider (its browser and its plain HTTP client) and Crush, with the user agents those tools' source code sets. The hard negatives are developers reading documentation, a README and a package registry with the same tools, and a person reading the Aider site in a browser.
-- **Assistant citation tag** (`marker.assistant_citation`): an agent reusing a ChatGPT-cited URL, `utm_source=chatgpt.com` and all, for a probe and with its run tag. The hard negatives, class `ai_referral`, are people clicking cited news, documentation and recipe links; one reads a cited article through a relay (the relay and the tag stay under the context cap), and an analyst filters referral traffic by the tag.
+- **Assistant citation tag** (`marker.assistant_citation`): an agent reusing a ChatGPT-cited URL, `utm_source=chatgpt.com` and all, for a probe and with its run tag; the tag scores as context and never grades as self-description, so the probe alone is L0 and the run tag alone sets L1. The hard negatives, class `ai_referral`, are people clicking cited news, documentation and recipe links; one reads a cited article through a relay (the relay and the tag stay under the context cap), and an analyst filters referral traffic by the tag.
 
 ## `hard-negatives.ndjson`
 

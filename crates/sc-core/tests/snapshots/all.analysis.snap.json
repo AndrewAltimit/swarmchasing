@@ -2120,14 +2120,7 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "marker.assistant_citation, selfid.vendor_name"
-          }
-        ]
+        "level": "payloads_only"
       }
     },
     {
@@ -2193,7 +2186,7 @@
           {
             "kind": "self_id",
             "records": 1,
-            "detail": "marker.assistant_citation, selfid.vendor_name, marker.uq_tags"
+            "detail": "marker.uq_tags"
           }
         ]
       }
@@ -2238,14 +2231,7 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "marker.assistant_citation, selfid.vendor_name"
-          }
-        ]
+        "level": "payloads_only"
       }
     },
     {
@@ -2288,14 +2274,7 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "marker.assistant_citation, selfid.vendor_name"
-          }
-        ]
+        "level": "payloads_only"
       }
     },
     {
@@ -2337,14 +2316,7 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "marker.assistant_citation, selfid.vendor_name"
-          }
-        ]
+        "level": "payloads_only"
       }
     },
     {
@@ -2400,14 +2372,7 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "marker.assistant_citation, selfid.vendor_name"
-          }
-        ]
+        "level": "payloads_only"
       }
     },
     {
@@ -5168,10 +5133,10 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "model_written",
+        "level": "payloads_only",
         "signals": [
           {
-            "kind": "residue",
+            "kind": "page_residue",
             "records": 1,
             "detail": "marker.template_unrendered"
           }
@@ -6341,10 +6306,10 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "model_written",
+        "level": "payloads_only",
         "signals": [
           {
-            "kind": "residue",
+            "kind": "page_residue",
             "records": 1,
             "detail": "marker.template_unrendered"
           }
@@ -11516,10 +11481,10 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "model_written",
+        "level": "payloads_only",
         "signals": [
           {
-            "kind": "residue",
+            "kind": "page_residue",
             "records": 1,
             "detail": "marker.template_unrendered"
           }
@@ -13089,14 +13054,7 @@
       "features": [],
       "cluster": null,
       "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 1,
-            "detail": "marker.assistant_citation, selfid.vendor_name"
-          }
-        ]
+        "level": "payloads_only"
       }
     },
     {

@@ -4,7 +4,7 @@
 // defangs and cuts them, and they go in as text.
 import { el } from "./dom.js";
 import { arr, obj, num, plural } from "./fmt.js";
-import { AGENT_LEVELS, AGENT_CAPS, levelOf, signalLabel, signalRung, capLabel } from "./hints.js";
+import { AGENT_LEVELS, AGENT_CAPS, levelOf, signalLabel, signalRung, signalGrades, capLabel } from "./hints.js";
 
 const LEVEL_IDS = AGENT_LEVELS.map((l) => l.id);
 const rank = (id) => LEVEL_IDS.indexOf(id);
@@ -14,7 +14,7 @@ export function agentLadder(ag, safe) {
   ag = obj(ag);
   const level = levelOf(ag.level) ?? AGENT_LEVELS[0];
   const signals = arr(ag.signals);
-  const reach = Math.max(0, ...signals.map((s) => rank(signalRung(s.kind))).filter((x) => x >= 0));
+  const reach = Math.max(0, ...signals.filter((s) => signalGrades(s.kind)).map((s) => rank(signalRung(s.kind))).filter((x) => x >= 0));
   const caps = arr(ag.caps);
   const capAt = caps.length ? Math.min(...caps.map((k) => rank(AGENT_CAPS[k]?.[0])).filter((x) => x >= 0)) : -1;
   const sig = (s) => el("li", {}, signalLabel(s.kind), el("span", { class: "hint" }, ` · ${plural(num(s.records) ?? 0, "record")}${s.detail ? ` · ${safe(s.detail, 120)}` : ""}`));
