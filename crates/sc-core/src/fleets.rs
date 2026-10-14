@@ -263,17 +263,17 @@ impl Default for SoftLinkOptions {
             fanout: 1.0,
             cut_length: 2.0,
             header_set: 2.0,
-            escalation: 30.0,
+            escalation: 28.0,
             common_feature: 2.0,
             shared_secret: 50.0,
             relay_stack: 1.0,
             callback_service: 1.0,
             scaffold: 20.0,
             co_activity: 25.0,
-            co_target: 40.0,
-            ordered_co_target: 3.0,
-            scaffold_lineage: 3.0,
-            prompt_echo: 3.0,
+            co_target: 34.0,
+            ordered_co_target: 34.0,
+            scaffold_lineage: 20.0,
+            prompt_echo: 20.0,
         }
     }
 }

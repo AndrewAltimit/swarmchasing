@@ -318,7 +318,9 @@ pub struct PromptEchoPair {
     /// Its base rate: other holders and outside records over the other
     /// comparable clusters.
     pub base_rate: f64,
-    /// `1 - (1 - base_rate²)^templates`.
+    /// The chance that an unrelated cluster shares as many template
+    /// families with one side as the other does, each family at its base
+    /// rate (a Poisson-binomial tail); the larger of the two sides.
     pub chance: f64,
     /// Pairs compared, and pairs this unlikely expected among them.
     pub tested: usize,
@@ -369,7 +371,9 @@ fn param_values(r: &crate::analyze::ObsResult) -> Vec<String> {
 
 /// Words of a target host that name it, slotted out of prose: the host
 /// and its labels of three letters or more, the top-level one and `www`
-/// aside.
+/// aside, and for a label with hyphens its parts of three letters or more
+/// and the parts joined (`acme-corp` gives `acme`, `corp` and `acmecorp`),
+/// as prose writes the name.
 fn host_words(host: Option<&str>) -> Vec<String> {
     let Some(h) = host else {
         return Vec::new();
@@ -377,8 +381,13 @@ fn host_words(host: Option<&str>) -> Vec<String> {
     let labels: Vec<&str> = h.split('.').collect();
     let mut out = vec![h.to_string()];
     for l in &labels[..labels.len().saturating_sub(1)] {
-        if l.len() >= 3 && *l != "www" {
-            out.push(l.to_string());
+        if l.len() < 3 || *l == "www" {
+            continue;
+        }
+        out.push(l.to_string());
+        if l.contains('-') {
+            out.extend(l.split('-').filter(|p| p.len() >= 3).map(str::to_string));
+            out.push(l.replace('-', ""));
         }
     }
     out
@@ -408,11 +417,16 @@ fn union(parent: &mut [usize], x: usize, y: usize) {
 /// similarity reaches `min_similarity`. A template matching one of
 /// `common_templates` is public and ties none; one carried by more than
 /// `max_holders` senders (clusters, and records outside them) or
-/// `max_shared` clusters is common. The chance is the scaffold model's: a
-/// template's base rate is its other holders and outside records over the
-/// other clusters writing prose, and a pair's chance is the base rate
-/// squared for the rarest template it shares, corrected for how many it
-/// shares, then cut at false discovery rate `fdr`.
+/// `max_shared` clusters is common. A template's base rate is its other
+/// holders and outside records over the other clusters writing prose.
+/// Templates carried by the same clusters count as one family, at its
+/// highest rate, and a pair's chance is that an unrelated cluster shares as
+/// many of one side's families as the other does, the larger of the two
+/// sides, as for scaffold lineage: the rarest shared template's rate
+/// squared reads the chance of that one template, not of any of the many a
+/// cluster writes, and lets a few unrelated clusters copying one prompt
+/// pass among a few dozen writers. Kept at `max_chance`, then cut at false
+/// discovery rate `fdr`.
 pub(crate) fn prompt_echo_pairs(
     clusters: &[crate::analyze::Cluster],
     results: &[crate::analyze::ObsResult],
@@ -548,13 +562,33 @@ pub(crate) fn prompt_echo_pairs(
         }
     }
     let tested = shared.len();
+    // Each cluster's usable templates as families: templates carried by
+    // the same clusters are one prompt seen several times and count once,
+    // at the family's highest base rate.
+    let mut families: Vec<BTreeMap<Vec<usize>, f64>> = vec![BTreeMap::new(); shown.len()];
+    for g in groups.values().filter(|g| usable(g)) {
+        let ids: Vec<usize> = g.clusters.iter().copied().collect();
+        for &c in &ids {
+            let e = families[c].entry(ids.clone()).or_insert(0.0);
+            *e = e.max(rate(g));
+        }
+    }
+    // Conditioned on one side's families, the chance that an unrelated
+    // cluster meets it in as many of them as the other does.
+    let both = |c: usize, o: usize| {
+        crate::scaffold::family_chance(
+            families[c].iter().map(|(ids, r)| (ids.as_slice(), *r)),
+            c,
+            o,
+        )
+    };
     let mut out = Vec::new();
     for ((x, y), gs) in shared {
         let Some(rarest) = gs.iter().min_by(|p, q| rate(p).total_cmp(&rate(q))) else {
             continue;
         };
         let r = rate(rarest);
-        let chance = crate::chance::sidak(r * r, gs.len());
+        let chance = both(x, y).max(both(y, x));
         if chance > opts.max_chance {
             continue;
         }
@@ -662,6 +696,41 @@ mod tests {
     }
 
     #[test]
+    fn target_names_are_slotted_as_prose_writes_them() {
+        use crate::platform::text::slot_tokens;
+        let slotted = |host: &str, v: &str| {
+            let words = host_words(Some(host));
+            let ctx: Vec<&str> = words.iter().map(String::as_str).collect();
+            slot_tokens(v, &ctx).join(" ")
+        };
+        let want = "list every staff page on <user> site and its login form";
+        for (host, v) in [
+            (
+                "www.acme-corp.example",
+                "list every staff page on Acme Corp site and its login form",
+            ),
+            (
+                "www.acme-corp.example",
+                "list every staff page on AcmeCorp's site and its login form",
+            ),
+            (
+                "shop.brightway.example",
+                "list every staff page on brightway\u{2019}s site and its login form",
+            ),
+            (
+                "shop.brightway.example",
+                "list every staff page on brightway's site and its login form",
+            ),
+        ] {
+            let t = slotted(host, v);
+            assert_eq!(t, want, "{host}: {v}");
+        }
+        // Other possessives stay words as written.
+        let other = slotted("www.acme-corp.example", "the company's own staff list page");
+        assert!(other.contains("company's"), "{other}");
+    }
+
+    #[test]
     fn loops_and_near_misses() {
         for v in [
             "building permit permit permit permit permit permit records",
@@ -759,18 +828,19 @@ mod tests {
     #[test]
     fn one_prompt_across_clusters_is_an_echo_pair() {
         let rules = crate::rules::Rules::default_rules();
-        let a = crate::analyze::analyze(echo_records(3, 40), &rules);
-        assert_eq!(a.clusters.len(), 43, "{}", a.clusters.len());
+        let a = crate::analyze::analyze(echo_records(2, 150), &rules);
+        assert_eq!(a.clusters.len(), 152, "{}", a.clusters.len());
         let p = &a.prompt_echo_pairs;
-        assert_eq!(p.len(), 3, "{p:?}");
-        let rate = 2.0 / 42.0;
+        assert_eq!(p.len(), 1, "{p:?}");
+        let rate = 1.0 / 151.0;
         for x in p {
             assert_eq!(
                 (x.holders, x.clusters, x.outside, x.tested),
-                (3, 43, 0, 3),
+                (2, 152, 0, 1),
                 "{x:?}"
             );
-            assert!((x.chance - rate * rate).abs() < 1e-12, "{x:?}");
+            assert!((x.base_rate - rate).abs() < 1e-12, "{x:?}");
+            assert!((x.chance - rate).abs() < 1e-12, "{x:?}");
             assert!(
                 x.excerpt
                     .starts_with("find the staff login portal for <user>"),
@@ -787,14 +857,19 @@ mod tests {
             a.soft_links
         );
         let f = a.multiplicity.iter().find(|f| f.family == "prompt_echo");
-        assert_eq!(f.map(|f| (f.kept, f.tested)), Some((3, 3)), "{f:?}");
+        assert_eq!(f.map(|f| (f.kept, f.tested)), Some((1, 1)), "{f:?}");
 
         // A published query ties nobody.
         let mut rules = crate::rules::Rules::default_rules();
         rules.set.prompt_echo.common_templates =
             vec!["Find the staff login portal for {site} and list every exposed admin page".into()];
-        let b = crate::analyze::analyze(echo_records(3, 40), &rules);
+        let b = crate::analyze::analyze(echo_records(2, 150), &rules);
         assert!(b.prompt_echo_pairs.is_empty(), "{:?}", b.prompt_echo_pairs);
+        // Nor does one prompt three clusters copy among a few dozen writing
+        // prose: each meets the others at a base rate of 2 in 42, though
+        // that rate squared is under the limit.
+        let v = crate::analyze::analyze(echo_records(3, 40), &crate::rules::Rules::default_rules());
+        assert!(v.prompt_echo_pairs.is_empty(), "{:?}", v.prompt_echo_pairs);
         // Nor does one six clusters write.
         let c = crate::analyze::analyze(echo_records(6, 40), &crate::rules::Rules::default_rules());
         assert!(c.prompt_echo_pairs.is_empty(), "{:?}", c.prompt_echo_pairs);

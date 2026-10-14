@@ -47,7 +47,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-13.3"
+version = "2026-10-14.1"
 
 [thresholds]
 suggestive = 3
@@ -189,8 +189,8 @@ common_feature = 2.0
 # of records, as with dialect. It does not produce fan-out.
 encoding = 1.0
 fanout = 1.0
-# Simulation.
-escalation = 30.0
+# Simulation (escalation, hub, ordered-list).
+escalation = 28.0
 # Judgment: the same redacted secret (REDACTED-<hash>) in records of both
 # clusters, a captured token reused. Stock passwords do not count.
 shared_secret = 50.0
@@ -207,19 +207,22 @@ scaffold = 20.0
 # Simulation: active in the same minutes beyond the co-activity chance model.
 # A pair tied by shared pauses gets no co-activity link.
 co_activity = 25.0
-# Simulation: the same rare targets in the same hours beyond the co-target
-# chance model.
-co_target = 40.0
-# Set by judgment; not yet measured by the simulator. Shared rare hosts first
-# touched in the same order by concurrent clusters, beyond the ordered
-# co-target chance model.
-ordered_co_target = 3.0
-# Set by judgment; not yet measured by the simulator. Templates one structural
-# part apart, beyond the scaffold lineage chance model.
-scaffold_lineage = 3.0
-# Set by judgment; not yet measured by the simulator. Prose parameter values
-# from one template, beyond the prompt echo chance model.
-prompt_echo = 3.0
+# Simulation (target-list, news-spike-list, hub, ordered-list): the same rare
+# targets in the same hours beyond the co-target chance model.
+co_target = 34.0
+# Simulation (ordered-list), held at co-target's ratio, below its bound: shared
+# rare hosts first touched in the same order by concurrent clusters, beyond the
+# ordered co-target chance model. Its pairs are co-target pairs with order
+# added, measured on one scenario.
+ordered_co_target = 34.0
+# Simulation (harness-crowd), held at the scaffold's ratio, below its bound:
+# templates one structural part apart, beyond the scaffold lineage chance
+# model. A weaker form of a shared scaffold, measured on one crowded scenario.
+scaffold_lineage = 20.0
+# Simulation (harness-crowd), held at the scaffold's ratio, below its bound:
+# prose parameter values from one template, beyond the prompt echo chance
+# model, measured on one crowded scenario of synthetic prose.
+prompt_echo = 20.0
 
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least
@@ -295,8 +298,10 @@ order_min_hosts = 5
 # template when their slotted text is equal or a MinHash band agrees with an
 # estimated similarity of at least `min_similarity`. A template carried by more
 # than `max_holders` senders (clusters, and records outside them), or matching
-# one of `common_templates`, ties none. The chance is the scaffold model's over
-# the clusters writing prose, kept at `max_chance` and cut at `fdr`.
+# one of `common_templates`, ties none. The chance is scaffold lineage's over
+# the clusters writing prose: that an unrelated cluster meets one side in as
+# many of its template families as the other does, each at its base rate, kept
+# at `max_chance` and cut at `fdr`.
 # `common_templates` lists published query lists (dork lists, benchmark
 # prompts), each entry with its source in a comment.
 [prompt_echo]

@@ -72,7 +72,8 @@ pub struct Scenario {
     /// (`S3` or `synchronized_start`), a soft-link kind (`co_target`) or
     /// `candidate_fleet`, each with the bounds it must meet on this
     /// scenario's own measurement (`expect.S3 = { min_recall = 0.8 }`). An
-    /// expected kind that draws nothing fails.
+    /// expected kind that draws nothing fails, unless it sets `max_pairs`
+    /// (`expect.S3 = { max_pairs = 0 }`: built not to fire).
     #[serde(default)]
     pub expect: BTreeMap<String, Expect>,
     #[serde(default)]
@@ -93,6 +94,10 @@ pub struct Expect {
     /// rejoins, of those split.
     #[serde(default)]
     pub min_rejoined: Option<f64>,
+    /// Pairs it may draw at most: `0` for a kind the scenario is built to
+    /// show does not fire. With it set, drawing nothing passes.
+    #[serde(default)]
+    pub max_pairs: Option<usize>,
 }
 
 /// The measurement key an `expect` names (an edge kind's serialised name,
@@ -266,6 +271,17 @@ pub enum Kind {
     /// through one outage of the feed host: benign, and a look-alike of
     /// reruns and shared pauses.
     FeedPoller,
+    /// Several agents of one operator writing the intent of each request as
+    /// prose from the operator's prompt templates (`prose`, `operator` by
+    /// default), each with its own client, inbox, tags, hosts and habits,
+    /// over the scenario's span: one operator, no interaction, no shared
+    /// harness.
+    PromptFleet,
+    /// Agents of unrelated operators on one agent framework: the
+    /// framework's templates and step counter, each operator adding one
+    /// parameter of its own, so any two are one structural part apart; each
+    /// agent its own operator, over the scenario's span.
+    Framework,
 }
 
 impl Kind {
@@ -280,6 +296,7 @@ impl Kind {
                 | Self::Planter
                 | Self::Mimic
                 | Self::TargetList
+                | Self::PromptFleet
         )
     }
 }
@@ -355,6 +372,32 @@ pub struct Actor {
     /// target do.
     #[serde(default)]
     pub same_family: bool,
+    /// For target lists, news spikes and hubs: every agent walks the hosts
+    /// in one order (one list handed to all), instead of each in its own.
+    #[serde(default)]
+    pub in_order: bool,
+    /// For target lists, news spikes and hubs: every agent walks the hosts
+    /// in their sorted order, as a published sorted list gives it.
+    #[serde(default)]
+    pub sorted: bool,
+    /// Requests carry the run's intent as prose in a `query` parameter,
+    /// written from prompt templates of the run's own, its operator's or
+    /// the actor's.
+    #[serde(default)]
+    pub prose: Option<Prose>,
+}
+
+/// Whose prompt templates a run's prose comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Prose {
+    /// Its own: no other run writes from them.
+    Own,
+    /// Its operator's (a fleet's or swarm's); a single agent's own.
+    Operator,
+    /// The actor's, whoever runs it: a viral prompt or a published query
+    /// list copied by unrelated operators.
+    Shared,
 }
 
 fn default_records() -> usize {
