@@ -20,6 +20,9 @@ export const SOFT_KINDS = {
   relay_stack: "relay stack",
   callback_service: "callback service",
   co_target: "shared rare targets",
+  ordered_co_target: "ordered rare targets",
+  scaffold_lineage: "scaffold lineage",
+  prompt_echo: "prompt echo",
 };
 
 /** A safe class suffix and a label for a soft-link kind id. */

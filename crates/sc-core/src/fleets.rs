@@ -13,7 +13,8 @@
 //! **Evidence.** Each kind has a likelihood ratio in `[soft_links]`: how
 //! much likelier the link is between two clusters of one operator than
 //! between unrelated ones. A pair that passed a chance test (shared pauses,
-//! scaffolds, co-activity, co-targets) carries its kind's ratio in full.
+//! scaffolds, scaffold lineage, prompt echoes, co-activity, co-targets,
+//! ordered co-targets) carries its kind's ratio in full.
 //! Any other link's ratio is the kind's raised to its similarity (where it
 //! has one) times its rarity: a shared value held by
 //! `n` of the `N` clusters above noise counts `ln(N / n) / ln(N / 2)` of
@@ -81,6 +82,16 @@ pub enum SoftLinkKind {
     /// The same rare targets worked in the same hours, beyond chance
     /// ([`crate::cotarget`]).
     CoTarget,
+    /// Shared rare hosts first touched in the same order by concurrent
+    /// clusters, beyond chance ([`crate::cotarget::ordered_pairs`]).
+    OrderedCoTarget,
+    /// Request templates one structural part apart, sharing none outright,
+    /// beyond chance: one harness changed mid-fleet
+    /// ([`crate::scaffold::lineage_pairs`]).
+    ScaffoldLineage,
+    /// Prose parameter values from one template, beyond chance
+    /// ([`crate::prose::prompt_echo_pairs`]).
+    PromptEcho,
 }
 
 /// Kinds that read one underlying habit: a pair counts only its strongest
@@ -89,12 +100,13 @@ pub enum SoftLinkKind {
 #[serde(rename_all = "snake_case")]
 pub enum Family {
     /// How requests are built: encoding, header set, relay stack,
-    /// scaffold, payload dialect, cut length, fan-out width.
+    /// scaffold, scaffold lineage, prompt echo, payload dialect, cut
+    /// length, fan-out width.
     Harness,
     /// When clusters are active: shared pauses, co-activity.
     Timeline,
     /// What they go after: reruns, path sets, recon preambles, co-targets,
-    /// route escalations.
+    /// ordered co-targets, route escalations.
     Targets,
     /// What they hold: captured secrets, common features, callback
     /// services.
@@ -114,7 +126,7 @@ impl Family {
 
 impl SoftLinkKind {
     /// Every kind.
-    pub const ALL: [SoftLinkKind; 17] = {
+    pub const ALL: [SoftLinkKind; 20] = {
         use SoftLinkKind::*;
         [
             SharedPause,
@@ -134,6 +146,9 @@ impl SoftLinkKind {
             Scaffold,
             CoActivity,
             CoTarget,
+            OrderedCoTarget,
+            ScaffoldLineage,
+            PromptEcho,
         ]
     };
 
@@ -156,6 +171,9 @@ impl SoftLinkKind {
             SoftLinkKind::Scaffold => "shared scaffold",
             SoftLinkKind::CoActivity => "co-activity",
             SoftLinkKind::CoTarget => "co-target",
+            SoftLinkKind::OrderedCoTarget => "ordered co-target",
+            SoftLinkKind::ScaffoldLineage => "scaffold lineage",
+            SoftLinkKind::PromptEcho => "prompt echo",
         }
     }
 
@@ -163,11 +181,10 @@ impl SoftLinkKind {
     pub fn family(self) -> Family {
         use SoftLinkKind::*;
         match self {
-            Encoding | HeaderSet | RelayStack | Scaffold | Dialect | CutLength | FanOut => {
-                Family::Harness
-            }
+            Encoding | HeaderSet | RelayStack | Scaffold | ScaffoldLineage | PromptEcho
+            | Dialect | CutLength | FanOut => Family::Harness,
             SharedPause | CoActivity => Family::Timeline,
-            Rerun | PathSet | Preamble | CoTarget | Escalation => Family::Targets,
+            Rerun | PathSet | Preamble | CoTarget | OrderedCoTarget | Escalation => Family::Targets,
             SharedSecret | CommonFeature | CallbackService => Family::Identifiers,
         }
     }
@@ -217,6 +234,15 @@ pub struct SoftLinkOptions {
     pub co_activity: f64,
     /// A pair kept by the co-target chance model ([`crate::cotarget`]).
     pub co_target: f64,
+    /// A pair kept by the ordered co-target chance model
+    /// ([`crate::cotarget::ordered_pairs`]).
+    pub ordered_co_target: f64,
+    /// A pair kept by the scaffold lineage chance model
+    /// ([`crate::scaffold::lineage_pairs`]).
+    pub scaffold_lineage: f64,
+    /// A pair kept by the prompt echo chance model
+    /// ([`crate::prose::prompt_echo_pairs`]).
+    pub prompt_echo: f64,
 }
 
 impl Default for SoftLinkOptions {
@@ -245,6 +271,9 @@ impl Default for SoftLinkOptions {
             scaffold: 20.0,
             co_activity: 25.0,
             co_target: 40.0,
+            ordered_co_target: 3.0,
+            scaffold_lineage: 3.0,
+            prompt_echo: 3.0,
         }
     }
 }
@@ -271,6 +300,9 @@ impl SoftLinkOptions {
             Scaffold => self.scaffold,
             CoActivity => self.co_activity,
             CoTarget => self.co_target,
+            OrderedCoTarget => self.ordered_co_target,
+            ScaffoldLineage => self.scaffold_lineage,
+            PromptEcho => self.prompt_echo,
         }
     }
 
@@ -295,6 +327,9 @@ impl SoftLinkOptions {
             Scaffold => &mut self.scaffold,
             CoActivity => &mut self.co_activity,
             CoTarget => &mut self.co_target,
+            OrderedCoTarget => &mut self.ordered_co_target,
+            ScaffoldLineage => &mut self.scaffold_lineage,
+            PromptEcho => &mut self.prompt_echo,
         };
         *f = lr;
     }
@@ -397,6 +432,9 @@ pub(crate) struct Signals<'a> {
     pub scaffold_pairs: &'a [crate::scaffold::ScaffoldPair],
     pub coactive_pairs: &'a [crate::coactivity::CoActivePair],
     pub cotarget_pairs: &'a [crate::cotarget::CoTargetPair],
+    pub ordered_cotarget_pairs: &'a [crate::cotarget::OrderedCoTargetPair],
+    pub lineage_pairs: &'a [crate::scaffold::LineagePair],
+    pub prompt_echo_pairs: &'a [crate::prose::PromptEchoPair],
 }
 
 /// How much of its kind a value held by `n` of `total` clusters counts:
@@ -503,6 +541,15 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
     }
     for p in s.cotarget_pairs {
         push(&p.a, &p.b, SoftLinkKind::CoTarget, 1.0, p.detail());
+    }
+    for p in s.ordered_cotarget_pairs {
+        push(&p.a, &p.b, SoftLinkKind::OrderedCoTarget, 1.0, p.detail());
+    }
+    for p in s.lineage_pairs {
+        push(&p.a, &p.b, SoftLinkKind::ScaffoldLineage, 1.0, p.detail());
+    }
+    for p in s.prompt_echo_pairs {
+        push(&p.a, &p.b, SoftLinkKind::PromptEcho, 1.0, p.detail());
     }
     for e in s.escalations {
         for (i, x) in e.clusters.iter().enumerate() {
@@ -892,8 +939,16 @@ mod tests {
             ]
         );
         // Every kind has a family, and the kinds list is complete.
-        assert_eq!(SoftLinkKind::ALL.len(), 17);
+        assert_eq!(SoftLinkKind::ALL.len(), 20);
         assert_eq!(SoftLinkKind::CoTarget.family(), Family::Targets);
+        assert_eq!(SoftLinkKind::OrderedCoTarget.family(), Family::Targets);
+        assert_eq!(SoftLinkKind::ScaffoldLineage.family(), Family::Harness);
+        assert_eq!(SoftLinkKind::PromptEcho.family(), Family::Harness);
+        let mut o = SoftLinkOptions::default();
+        for k in SoftLinkKind::ALL {
+            o.set_lr(k, 7.0);
+            assert_eq!(o.lr(k), 7.0, "{k:?}");
+        }
         assert_eq!(SoftLinkKind::CallbackService.family(), Family::Identifiers);
     }
 

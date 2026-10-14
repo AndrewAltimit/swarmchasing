@@ -69,7 +69,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`fleets`](src/fleets.rs) | Soft links as likelihood ratios by family, and the candidate fleets they suggest; never merges. |
 | [`scaffold`](src/scaffold.rs) | Request templates with values as slot types, and cluster pairs sharing them beyond chance. |
 | [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
-| [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model. |
+| [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model, and in the same order beyond a random order. |
 | [`community`](src/community.rs) | Backbone filter, deterministic Leiden (CPM) and minimum cut for candidate fleets. |
 | [`fleet_track`](src/fleet_track.rs) | Candidate fleets across analyses: `FK-` keys, matching, pair evidence accumulated over windows. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |

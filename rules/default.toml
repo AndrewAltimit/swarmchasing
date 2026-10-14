@@ -201,6 +201,16 @@ co_activity = 25.0
 # Simulation: the same rare targets in the same hours beyond the co-target
 # chance model.
 co_target = 40.0
+# Set by judgment; not yet measured by the simulator. Shared rare hosts first
+# touched in the same order by concurrent clusters, beyond the ordered
+# co-target chance model.
+ordered_co_target = 3.0
+# Set by judgment; not yet measured by the simulator. Templates one structural
+# part apart, beyond the scaffold lineage chance model.
+scaffold_lineage = 3.0
+# Set by judgment; not yet measured by the simulator. Prose parameter values
+# from one template, beyond the prompt echo chance model.
+prompt_echo = 3.0
 
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least
@@ -214,7 +224,13 @@ co_target = 40.0
 # over the other clusters that send a specific template at all. Outside
 # records never enlarge the population, so unrelated traffic cannot make a
 # shape rare. The kept pairs are then cut at false discovery rate `fdr`
-# (Benjamini-Hochberg) over the pairs compared.
+# (Benjamini-Hochberg) over the pairs compared. Scaffold lineage reads the
+# same settings: two clusters sharing no specific template but a template one
+# structural part apart (a parameter, the encoding, the payloads, the route or
+# the cut), each key's base rate read as a template's. Its chance is that an
+# unrelated cluster holds as many of one side's keys as the other does, combined
+# with that of the handover: only pairs where one cluster ended before the other
+# started are compared.
 [scaffold]
 min_specificity = 3
 min_similarity = 0.5
@@ -249,7 +265,12 @@ clock_weight = 0.25
 # (clusters, and records outside them) ties none. A pair needs shared items on
 # `min_hosts` hosts and a hypergeometric chance of at most `max_chance` over
 # the rare items any cluster was active on while both were, then a false
-# discovery rate cut at `fdr` over the pairs tested.
+# discovery rate cut at `fdr` over the pairs tested. Ordered co-target: two
+# clusters sharing at least `order_min_hosts` rare hosts, first touched within
+# `bin_secs` of each other's span, are tested on the longest run of those hosts
+# both first touched in the same order, against a random order; a pair whose
+# orders both follow the hosts' sorted order as far ties nothing. Kept at
+# `max_chance` and cut at `fdr`.
 [co_target]
 bin_secs = 3600
 max_lag_bins = 1
@@ -257,6 +278,24 @@ min_hosts = 3
 max_holders = 4
 max_chance = 0.01
 fdr = 0.05
+order_min_hosts = 5
+
+# Prompt echo: prose parameter values of at least `min_words` words, slotted
+# (the target host's words, numbers, URLs and identifiers replaced), are one
+# template when their slotted text is equal or a MinHash band agrees with an
+# estimated similarity of at least `min_similarity`. A template carried by more
+# than `max_holders` senders (clusters, and records outside them), or matching
+# one of `common_templates`, ties none. The chance is the scaffold model's over
+# the clusters writing prose, kept at `max_chance` and cut at `fdr`.
+# `common_templates` lists published query lists (dork lists, benchmark
+# prompts), each entry with its source in a comment.
+[prompt_echo]
+min_words = 6
+min_similarity = 0.6
+max_holders = 5
+max_chance = 0.01
+fdr = 0.05
+common_templates = []
 
 # Interaction edges (SC-T9). S3 synchronized start: two runs of different
 # clients whose requests, unflagged ones of the same client included, line up
