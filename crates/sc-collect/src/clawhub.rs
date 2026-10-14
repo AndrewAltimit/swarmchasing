@@ -16,7 +16,9 @@
 //! topics, version and times. Skill files are never downloaded, and no URL
 //! in a listing is fetched. A pull pages back from the newest skill to the
 //! checkpoint (the newest creation time read, in ms), at most `scan` pages
-//! of `page_size` skills.
+//! of `page_size` skills. When more skills (or their records) are found
+//! than a pull keeps, the oldest are kept and the checkpoint moves only to
+//! the newest of those, so the rest come on the next run.
 //!
 //! Terms: the ClawHub API documentation
 //! (<https://docs.openclaw.ai/clawhub/api>) allows catalogs built on the
@@ -144,8 +146,9 @@ pub struct Walked {
 }
 
 /// Page the newest-first listing back from now to the checkpoint `mark`
-/// (ms), at most `pages` pages and `max` skills. `fetch` answers one page
-/// given the cursor of the page before.
+/// (ms), at most `pages` pages, keeping at most `max` skills: the oldest,
+/// with the checkpoint at the newest kept ([`keep_oldest`]). `fetch`
+/// answers one page given the cursor of the page before.
 pub fn walk(
     mark: Option<u64>,
     pages: usize,
@@ -169,7 +172,7 @@ pub fn walk(
         for s in page.skills {
             newest = newest.max(Some(s.created_ms));
             reached = reached.min(s.created_ms);
-            if s.created_ms > start && out.skills.len() < max {
+            if s.created_ms > start {
                 out.skills.push(s);
             }
         }
@@ -177,18 +180,38 @@ pub fn walk(
             done = true;
             break;
         }
-        if out.skills.len() >= max {
-            break;
-        }
         cursor = page.next;
     }
     // Read from `reached` up to now; what lies between the checkpoint and
-    // `reached` was not reached when the pages or the cap ran out.
+    // `reached` was not reached when the pages ran out.
     let gap = if done { 0 } else { (reached - start).max(0) };
     out.coverage = minutes(start, now_ms - gap, now_ms, skipped, read > 0);
     out.coverage.skipped += (gap / 60_000) as u64;
     out.coverage.next = Some(newest.unwrap_or(start).max(start).max(0) as u64);
+    keep_oldest(&mut out, max);
     Ok(out)
+}
+
+/// Keep the oldest `n` of `w`'s skills (newest first) and move the
+/// checkpoint back to the newest kept, so the skills left out are read on
+/// the next run rather than passed over. A skill left out at the same
+/// creation time as the newest kept moves it one millisecond earlier: the
+/// next run reads that time again, and records seen before are not stored
+/// twice. Coverage then counts as read only the span up to the checkpoint.
+pub(crate) fn keep_oldest(w: &mut Walked, n: usize) -> bool {
+    let n = n.max(1);
+    if w.skills.len() <= n {
+        return false;
+    }
+    let left_out = w.skills.drain(..w.skills.len() - n).collect::<Vec<_>>();
+    let kept_newest = w.skills.iter().map(|s| s.created_ms).max().unwrap_or(0);
+    let tie = left_out.iter().any(|s| s.created_ms <= kept_newest);
+    let mark = if tie { kept_newest - 1 } else { kept_newest };
+    let m = |ms: i64| (ms.max(0) / 60_000) as u64;
+    let unread = m(w.coverage.next.map_or(0, |x| x as i64) - mark);
+    w.coverage.read = w.coverage.read.saturating_sub(unread);
+    w.coverage.next = Some(mark.max(0) as u64);
+    true
 }
 
 fn fetch_page(client: &Client, size: usize, cursor: Option<&str>) -> Result<String> {
@@ -333,20 +356,33 @@ impl Source for ClawHub {
         let per = self.query.page_size.clamp(1, MAX_PAGE);
         let pages = self.query.scan.unwrap_or(DEFAULT_PAGES).clamp(1, 20);
         let now_ms = crate::client::now_secs() * 1000;
-        let w = walk(mark, pages, usize::MAX, now_ms, &mut |c| {
+        let mut w = walk(mark, pages, usize::MAX, now_ms, &mut |c| {
             fetch_page(client, per, c)
         })?;
         let needles = Needles::new(&self.query.pattern);
-        let mut records: Vec<Observation> = w
+        // The oldest skills whose records fit in `size` (at least one), so a
+        // cut leaves the checkpoint at the last skill kept.
+        let per_skill: Vec<Vec<Observation>> = w
             .skills
             .iter()
-            .flat_map(|s| skill_records(s, &needles))
+            .map(|s| skill_records(s, &needles))
             .collect();
+        let (mut fit, mut total) = (0, 0);
+        for r in per_skill.iter().rev() {
+            if fit > 0 && total + r.len() > size {
+                break;
+            }
+            total += r.len();
+            fit += 1;
+        }
+        let skip = per_skill.len() - fit;
+        let cut = keep_oldest(&mut w, fit);
+        let mut records: Vec<Observation> = per_skill.into_iter().skip(skip).flatten().collect();
         records.truncate(size);
         Ok(Page {
             records,
             next: None,
-            truncated: false,
+            truncated: cut,
             coverage: Some(w.coverage),
         })
     }
@@ -464,6 +500,26 @@ mod tests {
         // One page allowed: the rest of the span is counted as skipped.
         let w = walk(Some(mark), 1, 100, now, &mut |_| Ok(pages[0].clone())).unwrap();
         assert!(w.coverage.skipped > 0, "{:?}", w.coverage);
+        // Two skills kept of four: the oldest two, and the checkpoint at the
+        // newer of them, so the two newest come next run.
+        let all = walk(Some(mark), 5, 100, now, &mut |c| {
+            Ok(pages[usize::from(c.is_some())].clone())
+        })
+        .unwrap();
+        let w = walk(Some(mark), 5, 2, now, &mut |c| {
+            Ok(pages[usize::from(c.is_some())].clone())
+        })
+        .unwrap();
+        let kept: Vec<&str> = w.skills.iter().map(|s| s.slug.as_str()).collect();
+        assert_eq!(kept, ["x", "reach-check-0041"]);
+        let newest_kept = w.skills.iter().map(|s| s.created_ms).max().unwrap();
+        let mark2 = w.coverage.next.unwrap() as i64;
+        assert!(mark2 <= newest_kept, "{mark2} {newest_kept}");
+        assert!(
+            all.skills[..2].iter().all(|s| s.created_ms > mark2),
+            "the newest two are after the new checkpoint"
+        );
+        assert!(w.coverage.read <= all.coverage.read);
         // A first page that fails is an error; a later one ends the walk.
         assert!(walk(None, 2, 100, now, &mut |_| anyhow::bail!("HTTP 503")).is_err());
     }

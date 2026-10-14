@@ -373,7 +373,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         }
         for r in rules.matching(Target::Url, &layer.text) {
             if let Matcher::Re(re) = &r.matcher
-                && let Some(m) = re.find(&layer.text)
+                && let Some(m) = kept_match(re, &layer.text)
             {
                 // A URL rule marks the layer as an intermediary only when it matched the host part.
                 let host_end = layer
@@ -392,7 +392,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             }
             for r in rules.matching(Target::ParamValue, v) {
                 if let Matcher::Re(re) = &r.matcher
-                    && let Some(m) = re.find(v)
+                    && let Some(m) = kept_match(re, v)
                     && r.def.check.is_none_or(|c| c.passes(v, ua))
                 {
                     push(
@@ -434,7 +434,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     if let Some(ua) = ua {
         for r in rules.matching(Target::UserAgent, ua) {
             if let Matcher::Re(re) = &r.matcher
-                && let Some(m) = re.find(ua)
+                && let Some(m) = kept_match(re, ua)
             {
                 push(&mut hits, &mut features, r, m.as_str(), 0);
             }
@@ -443,7 +443,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     if let Some(fin) = &obs.final_url {
         for r in rules.matching(Target::FinalUrl, fin) {
             if let Matcher::Re(re) = &r.matcher
-                && let Some(m) = re.find(fin)
+                && let Some(m) = kept_match(re, fin)
             {
                 push(&mut hits, &mut features, r, m.as_str(), 0);
             }
@@ -535,6 +535,19 @@ pub fn defang(s: &str) -> String {
         format!("{}xx{}://{}", &c[1], &c[2], c[3].replace('.', "[.]"))
     })
     .into_owned()
+}
+
+/// Where `re` matches `text`: the group named `m` when the pattern has one,
+/// else the whole match. The group lets a pattern see context it does not
+/// keep (`(^|[^a-z])(?P<m>agenttest\d*)`: no letter before the tag), since
+/// the matched text is what a linking rule links on.
+fn kept_match<'t>(re: &regex::Regex, text: &'t str) -> Option<regex::Match<'t>> {
+    if re.capture_names().any(|n| n == Some("m")) {
+        let c = re.captures(text)?;
+        c.name("m").or_else(|| c.get(0))
+    } else {
+        re.find(text)
+    }
 }
 
 #[cfg(test)]

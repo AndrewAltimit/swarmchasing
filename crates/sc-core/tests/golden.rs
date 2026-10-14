@@ -47,19 +47,19 @@ fn evaluation_set_numbers_hold() {
     };
     assert_eq!(
         counts(Tier::Suggestive),
-        (233, 0, 5, 205),
+        (234, 0, 5, 205),
         "suggestive or above"
     );
-    assert_eq!(counts(Tier::Significant), (127, 0, 111, 205), "significant");
+    assert_eq!(counts(Tier::Significant), (127, 0, 112, 205), "significant");
 
     let tiers: Vec<usize> = [Tier::Noise, Tier::Suggestive, Tier::Significant]
         .iter()
         .map(|t| a.tier_counts.get(t).copied().unwrap_or(0))
         .collect();
-    assert_eq!(a.total, 488);
+    assert_eq!(a.total, 489);
     assert_eq!(
         tiers,
-        [213, 108, 167],
+        [213, 109, 167],
         "records per tier (noise, suggestive, significant)"
     );
     assert_eq!(a.clusters.len(), 56, "clusters");

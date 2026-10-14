@@ -7,11 +7,14 @@
 //! noise whose records name a client (a user agent or a network) is one
 //! **point**, at its first request or submit time; capture times never
 //! count. The densest `window_secs` window holds `m` points of different
-//! clients (no two clusters sharing a client: one user agent, network and
-//! header set together, [`super::client_key`]), of `N` points over the
-//! analysis span `S`. Its chance is the scan
-//! statistic's, by Alm's approximation for a Poisson process with
-//! `psi = N * window / S` points expected per window:
+//! clients (each point counted when it is the first in the window to name
+//! each of its clients: one user agent, network and header set together,
+//! [`super::client_key`]), of `N` points over the active span `S`: the
+//! gaps between consecutive onsets summed, each capped at four times the
+//! median gap or six hours, whichever is longer, so one cluster dated
+//! years back adds a capped gap and does not stretch the rate thin. Its chance
+//! is the scan statistic's, by Alm's approximation for a Poisson process
+//! with `psi = N * window / S` points expected per window:
 //! `1 - F(m - 1; psi) * exp(-((m - psi) / m) * psi * (S / window - 1) * p(m - 1; psi))`,
 //! which is at least the `(S / window) * P(Poisson >= m)` the platform burst
 //! test reads and grows with the number of windows. A window starting on a
@@ -43,11 +46,11 @@ use crate::extract::defang_host;
 use crate::model::Tier;
 use crate::timing::request_like;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 /// Onset settings (`[onset]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct OnsetOptions {
     /// Width of the scan window.
     pub window_secs: i64,
@@ -81,6 +84,11 @@ impl Default for OnsetOptions {
 pub(crate) const MAX_GROUPS: usize = 8;
 /// Shared families named per group.
 const MAX_HOSTS: usize = 5;
+/// A gap between onsets counts towards the active span up to this many
+/// times the median gap ...
+const GAP_CAP_MEDIANS: i64 = 4;
+/// ... or this, whichever is longer.
+const MIN_GAP_CAP_SECS: i64 = 21_600;
 
 /// Clusters of different clients that began within one window, beyond
 /// chance.
@@ -92,7 +100,8 @@ pub struct OnsetGroup {
     /// The window's first onset.
     pub start: i64,
     pub window_secs: i64,
-    /// Points in the analysis, and over what span.
+    /// Points in the analysis, and the active span they fill (the gaps
+    /// between onsets, each capped).
     pub of: usize,
     pub span_secs: i64,
     /// Points expected per window.
@@ -119,7 +128,7 @@ pub struct OnsetGroup {
 impl OnsetGroup {
     pub fn detail(&self) -> String {
         let mut s = format!(
-            "{} clusters of different clients began within {} min ({} of {} onsets over {:.1} h, {:.2} expected per window; chance {:.1e}{})",
+            "{} clusters of different clients began within {} min ({} of {} onsets over {:.1} active h, {:.2} expected per window; chance {:.1e}{})",
             self.clusters.len(),
             self.window_secs / 60,
             self.clusters.len(),
@@ -156,16 +165,78 @@ struct Point<'a> {
     families: BTreeSet<&'a str>,
 }
 
-/// Points of different clients among `pts` (in time order), each kept when
-/// it shares no client with one kept before it.
+/// Points of different clients among `pts` (in time order): each kept when
+/// no point before it names any of its clients.
 fn distinct<'p>(pts: &[&'p Point<'p>]) -> Vec<&'p Point<'p>> {
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
     let mut kept: Vec<&Point> = Vec::new();
     for p in pts {
-        if kept.iter().all(|k| k.clients.is_disjoint(&p.clients)) {
+        if p.clients.iter().all(|c| !seen.contains(c.as_str())) {
             kept.push(p);
         }
+        seen.extend(p.clients.iter().map(String::as_str));
     }
     kept
+}
+
+/// The span the onsets fill (`points` in time order): the gaps between
+/// consecutive onsets summed, each capped at [`GAP_CAP_MEDIANS`] times the
+/// median gap or [`MIN_GAP_CAP_SECS`], whichever is longer, never under
+/// one window. Onsets spread evenly keep their whole span; one dated years
+/// before the rest adds one capped gap, not years.
+fn active_span(points: &[Point], w: i64) -> i64 {
+    let mut gaps: Vec<i64> = points.windows(2).map(|p| p[1].ts - p[0].ts).collect();
+    if gaps.is_empty() {
+        return w;
+    }
+    gaps.sort_unstable();
+    let cap = (gaps[gaps.len() / 2] * GAP_CAP_MEDIANS).max(MIN_GAP_CAP_SECS);
+    gaps.iter().map(|&g| g.min(cap)).sum::<i64>().max(w)
+}
+
+/// For each window start `j`, the window `left[j..end]` (onsets within `w`
+/// of `left[j]`) and how many of its points [`distinct`] keeps, by one pass
+/// that slides the window: each client keeps the window's points naming
+/// it, in time order, and a point counts while it heads the queue of every
+/// client it names.
+fn windows<'p>(left: &[&'p Point<'p>], w: i64) -> Vec<(usize, usize)> {
+    let mut queues: BTreeMap<&str, VecDeque<usize>> = BTreeMap::new();
+    // Clients of each point that an earlier point in the window names.
+    let mut behind = vec![0usize; left.len()];
+    let (mut counted, mut end) = (0usize, 0usize);
+    let mut out = Vec::with_capacity(left.len());
+    for j in 0..left.len() {
+        while end < left.len() && left[end].ts - left[j].ts <= w {
+            for c in &left[end].clients {
+                let q = queues.entry(c.as_str()).or_default();
+                if !q.is_empty() {
+                    behind[end] += 1;
+                }
+                q.push_back(end);
+            }
+            if behind[end] == 0 {
+                counted += 1;
+            }
+            end += 1;
+        }
+        out.push((end, counted));
+        if behind[j] == 0 {
+            counted -= 1;
+        }
+        for c in &left[j].clients {
+            let Some(q) = queues.get_mut(c.as_str()) else {
+                continue;
+            };
+            q.pop_front();
+            if let Some(&next) = q.front() {
+                behind[next] -= 1;
+                if behind[next] == 0 {
+                    counted += 1;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// `p(k; lambda)`.
@@ -257,7 +328,7 @@ pub(crate) fn onset_groups(
     if n < opts.min_clusters.max(2) {
         return Vec::new();
     }
-    let span = (points[n - 1].ts - points[0].ts).max(w);
+    let span = active_span(&points, w);
     let psi = n as f64 * w as f64 / span as f64;
     let windows = span as f64 / w as f64;
     // Holders of each family among the points.
@@ -272,31 +343,25 @@ pub(crate) fn onset_groups(
     let mut out = Vec::new();
     for _ in 0..MAX_GROUPS {
         // The densest window of different clients.
-        let mut best: Option<(f64, usize, Vec<&Point>)> = None;
-        let mut i = 0;
-        for j in 0..left.len() {
-            // The window starting at `left[j]` holds `left[j..=i]`.
-            i = i.max(j);
-            while i + 1 < left.len() && left[i + 1].ts - left[j].ts <= w {
-                i += 1;
-            }
-            let group = distinct(&left[j..=i]);
+        let mut best: Option<(f64, usize, usize, usize)> = None;
+        for (j, (end, size)) in self::windows(&left, w).into_iter().enumerate() {
             let r = left[j].ts.rem_euclid(3600);
             let tol = opts.clock_tolerance_secs.max(0);
             let hourly = r <= tol || r >= 3600 - tol;
             let m = if hourly {
-                (group.len() as f64 * opts.clock_weight).floor() as usize
+                (size as f64 * opts.clock_weight).floor() as usize
             } else {
-                group.len()
+                size
             };
             let chance = scan_chance(psi, windows, m);
-            if group.len() >= opts.min_clusters && best.as_ref().is_none_or(|b| chance < b.0) {
-                best = Some((chance, usize::from(hourly), group));
+            if size >= opts.min_clusters && best.as_ref().is_none_or(|b| chance < b.0) {
+                best = Some((chance, usize::from(hourly), j, end));
             }
         }
-        let Some((chance, hourly, group)) = best else {
+        let Some((chance, hourly, j, end)) = best else {
             break;
         };
+        let group = distinct(&left[j..end]);
         if chance > opts.max_chance {
             break;
         }
@@ -478,7 +543,7 @@ mod tests {
         let g = launch(|k| format!("h{k}.own-launch{k}.example"));
         assert_eq!(g.len(), 1, "{g:?}");
         assert_eq!(g[0].clusters, ["C1", "C2", "C3", "C4", "C5", "C6"]);
-        assert!(!g[0].common_trigger && g[0].chance < 1e-4, "{g:?}");
+        assert!(!g[0].common_trigger && g[0].chance < 1e-3, "{g:?}");
         assert!(g[0].detail().contains("one launch"));
         // The same six on one site: one trigger, listed, not kept.
         let g = launch(|k| format!("h{k}.news.example"));
@@ -518,6 +583,85 @@ mod tests {
             r.obs.asn = None;
         }
         assert!(onset_groups(&clusters, &results, &OnsetOptions::default()).is_empty());
+    }
+
+    #[test]
+    fn one_old_cluster_does_not_thin_the_rate() {
+        // Thirty clusters spread over a day, four more of different
+        // clients within ten minutes: ordinary for that rate.
+        let (mut clusters, mut results) = (Vec::new(), Vec::new());
+        let t0 = 1_772_000_000 + 1_234;
+        for k in 0..4 {
+            push(
+                &mut clusters,
+                &mut results,
+                k,
+                t0 + 150 * k as i64,
+                &format!("h.q{k}.example"),
+            );
+        }
+        for k in 4..34 {
+            push(
+                &mut clusters,
+                &mut results,
+                k,
+                t0 - 43_200 + 2_880 * (k as i64 - 4),
+                &format!("h.o{k}.example"),
+            );
+        }
+        // Every window read, to compare chances.
+        let all = OnsetOptions {
+            max_chance: 1.0,
+            ..OnsetOptions::default()
+        };
+        let before = onset_groups(&clusters, &results, &all)[0].chance;
+        assert!(before > 0.01, "{before}");
+        // One cluster dated two years back leaves the rate where it was;
+        // over the whole span it would put the window near 1e-10.
+        push(
+            &mut clusters,
+            &mut results,
+            99,
+            t0 - 2 * 365 * 86_400,
+            "h.old.example",
+        );
+        let after = onset_groups(&clusters, &results, &all)[0].chance;
+        assert!(after > before / 2.0, "{before} {after}");
+    }
+
+    #[test]
+    fn the_sliding_count_matches_each_window_read_afresh() {
+        // Points with one or two clients from a small pool, so clients
+        // repeat inside windows and a point can be held back by one it
+        // shares only one of its clients with.
+        let mut mix = crate::chance::Mix(11);
+        let mut pts: Vec<Point> = Vec::new();
+        let mut ts = 0;
+        for i in 0..300 {
+            ts += (mix.next() % 400) as i64;
+            let mut clients = BTreeSet::new();
+            clients.insert(format!("c{}", mix.next() % 9));
+            if i % 3 == 0 {
+                clients.insert(format!("c{}", mix.next() % 9));
+            }
+            pts.push(Point {
+                ts,
+                cluster: i,
+                clients,
+                families: BTreeSet::new(),
+            });
+        }
+        let left: Vec<&Point> = pts.iter().collect();
+        let w = 900;
+        for (j, (end, size)) in windows(&left, w).into_iter().enumerate() {
+            let naive_end = (j..left.len())
+                .take_while(|&i| left[i].ts - left[j].ts <= w)
+                .last()
+                .unwrap()
+                + 1;
+            assert_eq!(end, naive_end, "window {j}");
+            assert_eq!(size, distinct(&left[j..end]).len(), "window {j}");
+        }
     }
 
     #[test]

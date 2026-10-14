@@ -16,7 +16,8 @@
 //!   listed apart.
 //! - **False splits**: runs whose records sit in more than one predicted group.
 //!
-//! Report only: no gate reads these numbers.
+//! The eval gate holds a floor on B-cubed F1 (`--min-bcubed-f1`); the other
+//! numbers here are reported only.
 
 use super::{Label, LabelSet};
 use crate::analyze::Analysis;

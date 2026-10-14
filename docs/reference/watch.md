@@ -98,6 +98,8 @@ A `ghsearch` source fills the gap GitHub's trimmed payloads leave: it searches p
 
 Each search reads oldest first, from three hours before the checkpoint (for items indexed late and commits dated before their push; seen IDs drop the repeats) to ten minutes ago. The checkpoint moves only as far as every search read: a search cut short by the request budget, a failed request or GitHub's 1000-result cap holds it at the newest item that search reached, and the next run reads on from there. A rate limit GitHub answers with HTTP 403 is waited out like a 429, within the client's retry cap. A search GitHub answered with `incomplete_results` counts as skipped, and so does every search when a checkpoint older than 48 hours is skipped to the newest six hours.
 
+A `clawhub` source that finds more matching skills than its `limit` keeps the oldest and moves its checkpoint only to the newest of those, so the rest are read on the next run; the pull prints a warning when that happens.
+
 A `bluesky` source reads Jetstream's posts for a sampled stretch: from its checkpoint, or the newest half hour when the checkpoint is older, for at most `scan` wall-clock minutes. Links posted outside the stretch are never seen, and the digest's coverage shows minutes read against minutes since the last run. Each link in a post's link facets or link card that matches is a record whose reference is the post's page; a post deleted during the read is dropped.
 
 A `wikimedia` source reads the `mediawiki.page-links-change` stream

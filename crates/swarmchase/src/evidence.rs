@@ -335,18 +335,17 @@ mod tests {
             public: None,
             note: None,
         };
-        assert!(e.in_scope(&Scope::All));
-        assert!(!e.in_scope(&Scope::Public));
-        assert!(e.in_scope(&Scope::Operator {
-            org: "other",
-            host: Some("PORTAL.example.gov")
-        }));
-        assert!(!e.in_scope(&Scope::Operator {
-            org: "other",
-            host: None
-        }));
+        let site = &sc_collect::psl::registrable_domain;
+        assert!(e.in_scope(&Scope::All, site));
+        assert!(!e.in_scope(&Scope::Public, site));
+        let op = |org, host| Scope::Operator { org, host };
+        assert!(e.in_scope(&op("other", Some("PORTAL.example.gov")), site));
+        assert!(!e.in_scope(&op("other", None), site));
+        // Same organisation and registrable domain; same name elsewhere.
+        assert!(e.in_scope(&op("portal", Some("pay.example.gov")), site));
+        assert!(!e.in_scope(&op("Portal", Some("portal.hosting.example")), site));
         e.public = Some("2026-10-21: reply".into());
-        assert!(e.in_scope(&Scope::Public));
+        assert!(e.in_scope(&Scope::Public, site));
     }
 
     #[test]

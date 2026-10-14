@@ -368,14 +368,15 @@ common_templates = []
 # in its hours, for a host family), contains the whole group. The null draws
 # `swaps` matrices by degree-preserving swap randomisation (host features only
 # to clusters active in their hours); a group's chance is (ge + 1) / (swaps +
-# 1) for ge the matrices whose strongest group scores as high. Kept at
-# `max_chance`, then cut at false discovery rate `fdr` over the groups found.
+# 1) for ge the matrices whose strongest group scores as high, familywise over
+# every group mined from the matrix. Kept at `max_chance`, then cut at false
+# discovery rate `fdr` over the matrices mined, each at its strongest group's.
 [biclique]
 window_secs = 21600
 min_clusters = 3
 min_features = 4
 max_holders = 30
-swaps = 199
+swaps = 999
 max_chance = 0.01
 fdr = 0.05
 
@@ -386,14 +387,15 @@ fdr = 0.05
 # `max_skew_secs` of the record (as must a ULID's or KSUID's); a
 # strong-parameter value ending in three or more digits, at least 100, a counter
 # stem and number. Pairs share a node id (chance 2^-47), a worker (2^-10), a
-# clock skew stable over a cluster's values within `skew_tolerance_secs`, at
-# least `min_skew_secs` and clear of whole quarter hours (chance of two skews
-# spread evenly over the widest seen meeting that closely), or a counter stem
-# with numbers within `counter_max_gap` (chance of numbers of that many digits
-# meeting that closely). A key carried by more than `max_holders` senders ties
-# none, and a node id seen only in one site's URLs outside a strong parameter
-# is the site's. Kept at `max_chance`, cut at `fdr`. Node ids are shown only as
-# a truncated hash.
+# clock skew read from strong-parameter values only, stable within
+# `skew_tolerance_secs`, at least `min_skew_secs` and clear of whole quarter
+# hours (chance under a prior log-uniform in magnitude between `min_skew_secs`
+# and `max_skew_secs`), or a counter stem with numbers within
+# `counter_max_gap` (chance of numbers of that many digits meeting that
+# closely). A key carried by more than `max_holders` senders ties none, and a
+# node id seen only in one site's URLs outside a strong parameter is the
+# site's. Kept at `max_chance`, cut at `fdr`. Node ids are shown only as an
+# ordinal label per analysis.
 [generator]
 max_skew_secs = 172800
 min_skew_secs = 60
@@ -439,8 +441,9 @@ fdr = 0.05
 # first request or submit time (never a capture time). The densest
 # `window_secs` window of points of different clients is a group when it holds
 # at least `min_clusters` and its scan chance (Alm's approximation over the
-# analysis span) is at most `max_chance`, a window starting within
-# `clock_tolerance_secs` of a clock hour counting `clock_weight` of its points;
+# active span, the gaps between onsets each capped) is at most `max_chance`, a window
+# starting within `clock_tolerance_secs` of a clock hour counting
+# `clock_weight` of its points;
 # the scan repeats on the points left. A group whose members share target
 # families (last two labels) beyond their holders across the analysis, at
 # `trigger_max_chance` or below, is one common trigger: listed, not kept.
@@ -1013,9 +1016,11 @@ group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "url"
-# Test tags that carry a run number, so the match distinguishes one run. The
-# tag starts a word, so `reagenttest` in a lab-supply slug is not one.
-pattern = "\\b(chatgpttest|agenttest)\\d*"
+# Test tags that carry a run number, so the match distinguishes one run. No
+# letter comes before the tag, so `reagenttest` in a lab-supply slug is not
+# one, while `uq_agenttest42` is (an underscore is not a letter). The match,
+# and what links, is the `m` group: the tag without the character before it.
+pattern = "(^|[^a-z])(?P<m>(chatgpttest|agenttest)\\d*)"
 weight = 3
 link = true
 description = "Test tags agents add to URLs (with a run number)"

@@ -32,6 +32,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 pub(crate) const MAX_STRANDS: usize = 32;
 /// Seams kept per cluster, the most even split first.
 const MAX_SEAMS: usize = 3;
+/// Articulation records whose pieces are built and read per cluster, the
+/// most even split first.
+const MAX_JOINTS: usize = 32;
 /// Ties named per seam.
 const MAX_VIA: usize = 4;
 
@@ -149,20 +152,26 @@ impl Graph {
         out
     }
 
-    /// The record nodes whose removal disconnects the graph, each with the
-    /// pieces left (records, local indexes), largest first. Iterative
-    /// Tarjan from record 0; a piece below an articulation point is a
-    /// contiguous run of the DFS preorder.
-    fn articulations(&self) -> Vec<(usize, Vec<Vec<usize>>)> {
+    /// A depth-first search from record 0 (iterative Tarjan): what finding
+    /// the articulation records and their pieces needs.
+    fn dfs(&self) -> Dfs {
         let total = self.adj.len();
-        if self.n < 3 {
-            return Vec::new();
-        }
-        const NONE: usize = usize::MAX;
         let (mut disc, mut low) = (vec![NONE; total], vec![0usize; total]);
         let mut parent = vec![NONE; total];
         let mut size = vec![1usize; total];
+        let mut records: Vec<usize> = (0..total).map(|v| usize::from(v < self.n)).collect();
         let mut order: Vec<usize> = Vec::with_capacity(total);
+        if self.n == 0 {
+            return Dfs {
+                disc,
+                low,
+                parent,
+                size,
+                records,
+                order,
+                children: vec![Vec::new(); total],
+            };
+        }
         // (node, next neighbour index)
         let mut stack: Vec<(usize, usize)> = vec![(0, 0)];
         disc[0] = 0;
@@ -187,52 +196,109 @@ impl Graph {
                 if p != NONE {
                     low[p] = low[p].min(low[v]);
                     size[p] += size[v];
+                    records[p] += records[v];
                 }
             }
         }
-        // Children of each node in the DFS tree.
         let mut children: Vec<Vec<usize>> = vec![Vec::new(); total];
         for &w in &order[1..] {
             children[parent[w]].push(w);
         }
+        Dfs {
+            disc,
+            low,
+            parent,
+            size,
+            records,
+            order,
+            children,
+        }
+    }
+
+    /// The children of `v` in the DFS tree whose subtrees removing `v` cuts
+    /// off.
+    fn cut_children(&self, d: &Dfs, v: usize) -> Vec<usize> {
+        d.children[v]
+            .iter()
+            .copied()
+            .filter(|&c| d.low[c] >= d.disc[v])
+            .collect()
+    }
+
+    /// The record nodes whose removal disconnects the graph, each with the
+    /// record counts of the pieces left, largest first. Linear in the
+    /// graph: the pieces themselves are built only for the joints read
+    /// ([`Graph::pieces_at`]), since a long chained cluster has an
+    /// articulation record at nearly every link and all their pieces would
+    /// be quadratic.
+    fn articulations(&self, d: &Dfs) -> Vec<(usize, Vec<usize>)> {
+        if self.n < 3 {
+            return Vec::new();
+        }
+        let reached = d.records[0];
         let mut out = Vec::new();
         for v in 0..self.n {
-            if disc[v] == NONE {
+            if d.disc[v] == NONE {
                 continue;
             }
-            let cut: Vec<usize> = children[v]
-                .iter()
-                .copied()
-                .filter(|&c| low[c] >= disc[v])
-                .collect();
-            let root = parent[v] == NONE;
+            let cut = self.cut_children(d, v);
+            let root = d.parent[v] == NONE;
             if (root && cut.len() < 2) || (!root && cut.is_empty()) {
                 continue;
             }
-            let mut inside = vec![false; total];
-            let mut pieces: Vec<Vec<usize>> = Vec::new();
-            for &c in &cut {
-                let range = &order[disc[c]..disc[c] + size[c]];
-                for &x in range {
-                    inside[x] = true;
-                }
-                pieces.push(range.iter().copied().filter(|&x| x < self.n).collect());
-            }
+            let mut sizes: Vec<usize> = cut.iter().map(|&c| d.records[c]).collect();
             if !root {
-                pieces.push(
-                    (0..self.n)
-                        .filter(|&x| x != v && !inside[x] && disc[x] != NONE)
-                        .collect(),
-                );
+                sizes.push(reached - 1 - sizes.iter().sum::<usize>());
             }
-            for p in &mut pieces {
-                p.sort_unstable();
-            }
-            crate::sort::by(&mut pieces, |a, b| b.len().cmp(&a.len()).then(a.cmp(b)));
-            out.push((v, pieces));
+            sizes.sort_unstable_by(|a, b| b.cmp(a));
+            out.push((v, sizes));
         }
         out
     }
+
+    /// The pieces left without articulation record `v` (local indexes),
+    /// largest first; a piece below `v` is a contiguous run of the DFS
+    /// preorder.
+    fn pieces_at(&self, d: &Dfs, v: usize) -> Vec<Vec<usize>> {
+        let total = self.adj.len();
+        let cut = self.cut_children(d, v);
+        let mut inside = vec![false; total];
+        let mut pieces: Vec<Vec<usize>> = Vec::new();
+        for &c in &cut {
+            let range = &d.order[d.disc[c]..d.disc[c] + d.size[c]];
+            for &x in range {
+                inside[x] = true;
+            }
+            pieces.push(range.iter().copied().filter(|&x| x < self.n).collect());
+        }
+        if d.parent[v] != NONE {
+            pieces.push(
+                (0..self.n)
+                    .filter(|&x| x != v && !inside[x] && d.disc[x] != NONE)
+                    .collect(),
+            );
+        }
+        for p in &mut pieces {
+            p.sort_unstable();
+        }
+        crate::sort::by(&mut pieces, |a, b| b.len().cmp(&a.len()).then(a.cmp(b)));
+        pieces
+    }
+}
+
+const NONE: usize = usize::MAX;
+
+/// A depth-first search of a cluster's link graph: discovery and low
+/// numbers, parents, subtree sizes (all nodes, and records alone), the
+/// preorder and each node's children in the tree.
+struct Dfs {
+    disc: Vec<usize>,
+    low: Vec<usize>,
+    parent: Vec<usize>,
+    size: Vec<usize>,
+    records: Vec<usize>,
+    order: Vec<usize>,
+    children: Vec<Vec<usize>>,
 }
 
 /// The relay stacks, encoding styles and payload variants of `records`.
@@ -334,9 +400,27 @@ pub(crate) fn seams(
             }
         }
     }
-    for (v, pieces) in g.articulations() {
-        if !in_seam[v] {
-            consider(vec![v], false, pieces);
+    // Articulation records whose second piece is large enough, the most
+    // even split first (as seams are ranked), pieces built for at most
+    // MAX_JOINTS of them and only until MAX_SEAMS are kept: any later one
+    // would rank below those.
+    let d = g.dfs();
+    let mut joints: Vec<(usize, usize)> = g
+        .articulations(&d)
+        .into_iter()
+        .filter(|(v, sizes)| !in_seam[*v] && sizes.get(1).is_some_and(|&s| s >= min_side))
+        .map(|(v, sizes)| (v, sizes[1]))
+        .collect();
+    crate::sort::by(&mut joints, |a, b| {
+        b.1.cmp(&a.1).then(members[a.0].cmp(&members[b.0]))
+    });
+    let mut kept = 0;
+    for (v, _) in joints.into_iter().take(MAX_JOINTS) {
+        if kept == MAX_SEAMS {
+            break;
+        }
+        if consider(vec![v], false, g.pieces_at(&d, v)) {
+            kept += 1;
         }
     }
     crate::sort::by(&mut out, |a, b| {
@@ -445,6 +529,33 @@ mod tests {
     }
 
     #[test]
+    fn a_long_chain_is_read_without_building_every_split() {
+        // Twenty thousand records chained one to the next: nearly every
+        // record is an articulation record. One client's records, then a
+        // joint, then another's.
+        let n = 20_001;
+        let results: Vec<ObsResult> = (0..n)
+            .map(|i| match i.cmp(&(n / 2)) {
+                std::cmp::Ordering::Less => rec("agent-a/1.0", 64_500),
+                std::cmp::Ordering::Equal => rec("agent-c/1.0", 64_502),
+                std::cmp::Ordering::Greater => rec("agent-b/1.0", 64_501),
+            })
+            .collect();
+        let members: Vec<usize> = (0..n).collect();
+        let ties: Vec<Tie> = (0..n - 1)
+            .map(|i| tie(&[i, i + 1], &format!("t{i}")))
+            .collect();
+        let refs: Vec<&Tie> = ties.iter().collect();
+        let s = seams(&results, &members, &refs, 3);
+        // The joint, and its neighbours, which also leave one client on
+        // each side.
+        let joints: Vec<&Vec<usize>> = s.iter().map(|x| &x.joint).collect();
+        assert_eq!(joints, [&vec![n / 2], &vec![n / 2 - 1], &vec![n / 2 + 1]]);
+        assert_eq!((s[0].sides[0].len(), s[0].sides[1].len()), (n / 2, n / 2));
+        assert!(s[0].differs.contains(&"clients"), "{:?}", s[0].differs);
+    }
+
+    #[test]
     fn articulations_match_removing_each_record() {
         // A path of ties with a cycle: 0-1-2, 2-3, 3-4-5, 5-2 (cycle 2..5),
         // 5-6, 6-7.
@@ -459,7 +570,16 @@ mod tests {
         ];
         let refs: Vec<&Tie> = ties.iter().collect();
         let g = Graph::new(&members, &refs);
-        let fast: BTreeMap<usize, Vec<Vec<usize>>> = g.articulations().into_iter().collect();
+        let d = g.dfs();
+        let fast: BTreeMap<usize, Vec<Vec<usize>>> = g
+            .articulations(&d)
+            .into_iter()
+            .map(|(v, sizes)| {
+                let pieces = g.pieces_at(&d, v);
+                assert_eq!(pieces.iter().map(Vec::len).collect::<Vec<_>>(), sizes);
+                (v, pieces)
+            })
+            .collect();
         for v in 0..8 {
             let mut removed = vec![false; 8];
             removed[v] = true;

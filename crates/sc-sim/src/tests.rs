@@ -60,6 +60,11 @@ fn committed_scenarios_parse() {
     let f = ScenarioFile::parse(SCENARIOS).unwrap();
     assert!(f.scenario.len() >= 5);
     assert!(ScenarioFile::parse("[[scenario]]\nname = \"x\"\n").is_err());
+    // A misspelt top-level table would drop the grade ceilings silently.
+    let e = ScenarioFile::parse("[default.expect]\nhuman_high = { max_records = 0 }\n")
+        .err()
+        .unwrap();
+    assert!(e.contains("unknown field"), "{e}");
 }
 
 #[test]

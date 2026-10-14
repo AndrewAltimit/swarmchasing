@@ -4,7 +4,7 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-20 12:02:03 UTC
-- **Records:** 209 linked public records in 56 cluster(s) (of 488 records reviewed, 371 flagged)
+- **Records:** 209 linked public records in 56 cluster(s) (of 489 records reviewed, 372 flagged)
 - **Evidence tier:** significant
 - **Method:** swarmchasing 0.1.0, rules version 2026-10-14.3
 
@@ -250,7 +250,7 @@ Every flagged request to each host, including requests outside the linked cluste
 
 | Host | Hits | First seen | Last seen | Status | Attack payloads |
 |---|---|---|---|---|---|
-| `records[.]agency[.]example` | 60 | 2026-07-02 10:00:00 UTC | 2026-10-06 08:16:00 UTC | ongoing | `exploit.cmdi`, `exploit.double_encoded_meta`, `exploit.double_encoded_path`, `exploit.php_eval`, `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.sqli_union`, `exploit.userinfo_confusion`, `exploit.xss` |
+| `records[.]agency[.]example` | 61 | 2026-07-02 10:00:00 UTC | 2026-10-06 08:16:00 UTC | ongoing | `exploit.cmdi`, `exploit.double_encoded_meta`, `exploit.double_encoded_path`, `exploit.php_eval`, `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.sqli_union`, `exploit.userinfo_confusion`, `exploit.xss` |
 | `data[.]portal[.]example` | 11 | 2026-07-02 10:01:00 UTC | 2026-08-07 09:01:00 UTC | historical | `exploit.sqli_boolean`, `exploit.traversal`, `exploit.traversal_single` |
 | `files[.]depot[.]example` | 10 | 2026-05-15 22:05:07 UTC | 2026-10-03 14:20:00 UTC | ongoing | `exploit.null_byte`, `exploit.sqli_boolean`, `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single`, `exploit.xss` |
 | `portal[.]agency[.]example` | 9 | 2026-08-05 10:00:00 UTC | 2026-08-14 10:01:25 UTC | historical | `exploit.sqli_boolean`, `exploit.sqli_quote` |

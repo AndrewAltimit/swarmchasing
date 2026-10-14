@@ -1,0 +1,700 @@
+# Default swarmchasing indicator rules.
+#
+# Shared by the CLI and the browser (WASM) tool, embedded at compile time.
+# Derived from techniques documented in public incident reports:
+#   - https://swarmcha.se/posts/chinese-agent-fleet
+#   - https://transluce.org/agent-activity
+#   - https://transluce.org/us-canada-gov
+#
+# Rule fields
+#   id          unique, dotted: <kind>.<name>
+#   kind        relay | carrier | exploit | agent_marker | cache_buster | self_id |
+#               exfil | header | outcome | anti_bot | infra
+#   target      host        - suffix match on the host of each (unwrapped) URL layer
+#               url         - regex on each layer's decoded text (URL, data: body, base64 payload)
+#               param_name  - regex on query parameter names
+#               param_value - regex on query parameter values
+#               header      - regex on "name: value" request headers
+#               user_agent  - regex on the user agent
+#               final_url   - regex on where the scan ended up
+#   pattern     host suffix, or a case-insensitive regex
+#   weight      contribution to the observation score
+#   significant true = a single match is enough for the "significant" tier
+#   link        true = the matched text links observations into one cluster
+#               (use for inbox IDs, unique tags - things only one operator would share)
+#
+# A single relay hit is NOT evidence of an agent: people use these services too.
+# Weights are tuned so evidence must stack up.
+
+[meta]
+version = "2026-10-15"
+
+[thresholds]
+suggestive = 3
+significant = 6
+
+[linking]
+# Parameter names whose *values* link observations to the same run/operator.
+strong_params = ["uqtag", "uqscan", "tok", "tag", "run", "runid", "run_id", "session", "sid", "nonce", "cb_tag"]
+# Observations of the same target host closer than this are joined.
+window_secs = 600
+# Within a cluster, a gap longer than this starts a new run.
+run_gap_secs = 900
+# Bursts: at least `burst_min` requests each within `burst_gap_secs` of the last.
+burst_gap_secs = 5
+burst_min = 5
+# Gaps at least this long (and >= 10x the median gap) are reported as pauses.
+pause_min_secs = 600
+# Archive bursts in the watch digest: at least `archive_burst_min` captures of
+# one host, each within `archive_burst_gap_secs` of the last, holding at least
+# `archive_burst_ratio` times the host's usual captures per day.
+archive_burst_gap_secs = 180
+archive_burst_min = 5
+archive_burst_ratio = 10.0
+
+# ── Relays: fetch-through / conversion services ────────────────────────────
+[[rule]]
+id = "relay.jina"
+kind = "relay"
+target = "host"
+pattern = "r.jina.ai"
+weight = 2
+description = "Jina Reader: fetches a page server-side and returns Markdown"
+
+[[rule]]
+id = "relay.markdown_new"
+kind = "relay"
+target = "host"
+pattern = "markdown.new"
+weight = 2
+description = "URL-to-Markdown converter"
+
+[[rule]]
+id = "relay.microlink"
+kind = "relay"
+target = "host"
+pattern = "api.microlink.io"
+weight = 2
+description = "Microlink headless fetch API"
+
+[[rule]]
+id = "relay.hrefli"
+kind = "relay"
+target = "host"
+pattern = "href.li"
+weight = 1
+description = "Referrer-stripping redirector"
+
+[[rule]]
+id = "relay.translate_goog"
+kind = "relay"
+target = "host"
+pattern = "translate.goog"
+weight = 2
+description = "Google Translate proxy host rewriting"
+
+[[rule]]
+id = "relay.allorigins"
+kind = "relay"
+target = "host"
+pattern = "allorigins.win"
+weight = 2
+description = "CORS proxy"
+
+[[rule]]
+id = "relay.corsproxy"
+kind = "relay"
+target = "url"
+pattern = "corsproxy\\.io|cors-anywhere|thingproxy|codetabs\\.com/v1/proxy"
+weight = 2
+description = "Public CORS proxies"
+
+# ── Carriers: echo / sandbox / code-hosting services ───────────────────────
+[[rule]]
+id = "carrier.httpbin"
+kind = "carrier"
+target = "url"
+pattern = "httpbin\\.org|httpbun\\.(com|org)"
+weight = 2
+description = "Request echo service, used to turn GETs into POSTs or inspect headers"
+
+[[rule]]
+id = "carrier.livecodes"
+kind = "carrier"
+target = "host"
+pattern = "livecodes.io"
+weight = 2
+description = "In-browser code playground used to run fetch programs"
+
+[[rule]]
+id = "carrier.codesandbox"
+kind = "carrier"
+target = "url"
+pattern = "codesandbox\\.io|csb\\.app"
+weight = 1
+description = "CodeSandbox"
+
+[[rule]]
+id = "carrier.data_url_script"
+kind = "carrier"
+target = "url"
+pattern = "^data:text/html.*(<script|fetch\\(|XMLHttpRequest)"
+weight = 3
+description = "data: URL carrying an HTML program that makes requests"
+
+[[rule]]
+id = "carrier.inline_fetch_program"
+kind = "carrier"
+target = "url"
+# `(https?:)?//`: programs also fetch scheme-relative (`fetch('//r.jina.ai/...')`).
+pattern = "fetch\\(\\s*['\"`](https?:)?//|new XMLHttpRequest|navigator\\.sendBeacon"
+weight = 3
+description = "Inline program fetching other URLs from inside a remote browser"
+
+[[rule]]
+id = "carrier.form_post_program"
+kind = "carrier"
+target = "url"
+# An HTML form that POSTs to another site, usually submitted on load. Used to
+# turn a GET-only fetch into a POST against an API (Transluce, agent activity).
+pattern = "<form\\b[^>]*\\bmethod\\s*=\\s*['\"]?post|forms\\[\\d+\\]\\.submit\\(|\\.submit\\(\\)"
+weight = 3
+description = "Self-submitting POST form delivered as a program"
+
+[[rule]]
+id = "carrier.html_program"
+kind = "carrier"
+target = "url"
+# Script markup inside a URL or a decoded payload: a page built to run in a
+# remote browser, not a link to one.
+pattern = "<script\\b"
+weight = 2
+description = "HTML page with script carried inside the request"
+
+# ── Exploit payloads ───────────────────────────────────────────────────────
+[[rule]]
+id = "exploit.sqli_union"
+kind = "exploit"
+target = "url"
+pattern = "union(\\s|\\+|/\\*.*?\\*/)+(all(\\s|\\+)+)?select"
+weight = 5
+significant = true
+description = "SQL injection: UNION SELECT"
+
+[[rule]]
+id = "exploit.sqli_boolean"
+kind = "exploit"
+target = "param_value"
+# The second alternative is the unquoted numeric probe (`State_Id=1 OR 1=1`),
+# which Transluce documented at scale against civilrightsdata.ed.gov.
+pattern = "'\\s*(or|and)\\s+'?\\d+'?\\s*=\\s*'?\\d|^\\s*-?\\d+\\)?\\s+(or|and)\\s+\\d+\\s*=\\s*\\d+|'\\s*--|\\bsleep\\(\\d+\\)|waitfor\\s+delay|benchmark\\("
+weight = 4
+significant = true
+description = "SQL injection: boolean / time-based probe"
+
+[[rule]]
+id = "exploit.traversal"
+kind = "exploit"
+target = "url"
+pattern = "(\\.\\./|\\.\\.%2f|%2e%2e/){2,}|/etc/passwd|win\\.ini|boot\\.ini"
+weight = 5
+significant = true
+description = "Path traversal / sensitive file probe"
+
+[[rule]]
+id = "exploit.traversal_single"
+kind = "exploit"
+target = "url"
+# One `../` step that survived into the submitted URL. Clients normalise `/../`
+# out of paths, so a surviving one was usually encoded (`..%2F`) on purpose.
+pattern = "/\\.\\./"
+weight = 4
+description = "Single path-traversal step (often encoded as ..%2F)"
+
+[[rule]]
+id = "exploit.sqli_quote"
+kind = "exploit"
+target = "param_value"
+# A value that is, or ends in, a bare quote: the first probe for SQL injection.
+pattern = "^[^'\"]{0,20}['\"]\\)?$"
+weight = 3
+description = "Lone quote in a parameter value (SQL injection probe)"
+
+[[rule]]
+id = "exploit.xss"
+kind = "exploit"
+target = "param_value"
+pattern = "<script|javascript:|onerror\\s*=|onload\\s*=|<svg[^>]*on\\w+="
+weight = 4
+significant = true
+description = "Cross-site scripting probe"
+
+[[rule]]
+id = "exploit.ssti"
+kind = "exploit"
+target = "param_value"
+pattern = "\\{\\{\\s*\\d+\\s*\\*\\s*\\d+\\s*\\}\\}|\\$\\{\\s*\\d+\\s*\\*\\s*\\d+\\s*\\}|<%=\\s*\\d+\\s*\\*"
+weight = 4
+significant = true
+description = "Template injection probe ({{7*7}})"
+
+[[rule]]
+id = "exploit.cmdi"
+kind = "exploit"
+target = "param_value"
+pattern = "[;|`]\\s*(id|whoami|uname|cat\\s+/etc)\\b|\\$\\((id|whoami)\\)"
+weight = 4
+significant = true
+description = "Command injection probe"
+
+[[rule]]
+id = "exploit.boundary_ids"
+kind = "exploit"
+target = "param_value"
+pattern = "^-\\d+$|^9{6,}$|^0{4,}$|^(2147483648|4294967296|9223372036854775808)$"
+weight = 1
+description = "Out-of-range ID values (often precede injection probes)"
+
+# ── Agent markers / tags ───────────────────────────────────────────────────
+[[rule]]
+id = "marker.uq_tags"
+kind = "agent_marker"
+target = "param_name"
+pattern = "^(uqscan|uqtag|uq_tag|uq)$"
+weight = 3
+description = "urlquery cache-busting / tracking tags seen in agent fleets"
+
+[[rule]]
+id = "marker.test_tag"
+kind = "agent_marker"
+target = "url"
+pattern = "chatgpttest\\d*|agenttest\\d*|tok=expt|archive_test="
+weight = 3
+link = true
+description = "Test tags agents add to URLs"
+
+[[rule]]
+id = "marker.oai_tag"
+kind = "agent_marker"
+target = "url"
+pattern = "[?&]zz=oai\\d{6,}"
+weight = 3
+description = "`zz=oai<digits>` request tag (Transluce, US/Canada government report)"
+
+[[rule]]
+id = "marker.callback_seq"
+kind = "agent_marker"
+target = "param_value"
+pattern = "^(headers\\d+|body\\d+-\\d+|done|chunk\\d+|part\\d+of\\d+)$"
+weight = 3
+description = "Sequenced callback labels (headers0, body0-0, done)"
+
+[[rule]]
+id = "marker.title_write"
+kind = "agent_marker"
+target = "url"
+pattern = "document\\.title\\s*="
+weight = 2
+description = "Program writes its result into the page title"
+
+# ── Language-model output residue ──────────────────────────────────────────
+# Text a model wrote around a URL that ended up inside the request: Markdown,
+# unfilled placeholders, tool-call JSON or markup, and cut-off output. `url`
+# rules see the decoded text, so `%5D%28http` is matched as `](http`.
+# A person pasting a chatbot answer into a scan form produces the same residue,
+# so these rules are weak alone and never link: many unrelated runs share them.
+
+[[rule]]
+id = "marker.md_link"
+kind = "agent_marker"
+target = "url"
+pattern = "\\]\\(https?://"
+weight = 2
+description = "Markdown link syntax `[text](https://...)` inside a request URL"
+
+[[rule]]
+id = "marker.md_url_wrapper"
+kind = "agent_marker"
+target = "url"
+# A URL opened by a backtick, `**` or `<` (after `=`, `/` or `(`), or one that
+# ends in a backtick, `**`, or a `)` with no `(` anywhere before it: the
+# closing half of a Markdown link or code span. A trailing `>` alone is left
+# out: crawlers capture it from malformed HTML (`/catalog">`).
+pattern = "(^|[=/(])(`|\\*\\*|<)https?://|^https?://[^\\s()<>`]*(`|\\*\\*|\\))$"
+weight = 1
+description = "URL wrapped in Markdown code, emphasis or autolink markup"
+
+[[rule]]
+id = "marker.placeholder"
+kind = "agent_marker"
+target = "url"
+# Upper-case constants are matched case-sensitively; `your-api-key` in a docs
+# page slug is ordinary prose.
+pattern = "(?-i:\\bYOUR_[A-Z0-9_]*(KEY|TOKEN|SECRET|ID|USERNAME|PASSWORD|DOMAIN|URL)\\b|\\bINSERT_[A-Z0-9_]+_HERE\\b|\\bREPLACE_ME\\b|<(TARGET|HOST|DOMAIN|URL|IP|ID|TOKEN|API_KEY|USERNAME|PASSWORD)>)|<your[-_ ][a-z0-9_ -]{2,30}>|\\[your[-_ ][a-z0-9_ -]{2,30}\\]"
+weight = 2
+description = "Unfilled template placeholder (YOUR_API_KEY, <your-token>, INSERT_ID_HERE, REPLACE_ME)"
+
+[[rule]]
+id = "marker.template_unrendered"
+kind = "agent_marker"
+target = "url"
+# Web crawls also capture unrendered front-end templates (`/p/{{item.slug}}`),
+# so this stays at weight 1.
+pattern = "\\{\\{\\s*[a-z_][\\w.]*\\s*\\}\\}|\\$\\{\\s*[a-z_][\\w.]*\\s*\\}"
+weight = 1
+description = "Unrendered template variable ({{target}}, ${HOST})"
+
+[[rule]]
+id = "marker.example_host_value"
+kind = "agent_marker"
+target = "url"
+# Only a redirect or callback parameter set to the reserved example domain.
+# Fetching example.com through a relay (`?url=https://example.com/`) is how
+# people try a tool out, and pages that mention it in paths or search text are
+# ordinary.
+pattern = "[?&](redirect(_ur[il])?|redirect_to|return(_?to|_?url)?|next|continue|callback(_?url)?|dest(ination)?|goto|target)=((https?:)?//)?([a-z0-9-]+\\.)*example\\.(com|org|net)([/:?#&]|$)"
+weight = 1
+description = "Redirect or callback parameter left pointing at example.com (template default or redirect probe)"
+
+[[rule]]
+id = "marker.tool_call_markup"
+kind = "agent_marker"
+target = "url"
+pattern = "</?(tool_call|tool_use|function_calls|invoke|parameter)\\b|<function=|<\\|(im_start|im_end|tool_call|python_tag)\\|>|\"(tool_calls|function_call|tool_use)\"\\s*:"
+weight = 4
+description = "Function-call wrapper markup or tool-call fields from a model's output"
+
+[[rule]]
+id = "marker.tool_call_json"
+kind = "agent_marker"
+target = "url"
+# Tool arguments as JSON: an object opening on a URL or command key, an
+# `"arguments":` field, or JSON escaped inside a JSON string. Generic keys that
+# GET APIs take as JSON (`{"query":` for Elasticsearch, `{"input":` for GraphQL
+# variables, `{"where":`/`{"name":` for filters) are left out.
+pattern = "\\{\\s*\"(url|uri|href|link|command|cmd|tool|tool_name|function)\"\\s*:|\"arguments\"\\s*:|\\\\\"(url|query|q|arguments|command)\\\\\"\\s*:"
+weight = 3
+description = "Tool-call JSON arguments inside a request ({\"url\": ..., \"arguments\": ...)"
+
+[[rule]]
+id = "marker.json_quote_residue"
+kind = "agent_marker"
+target = "url"
+# The tail of a JSON string (`..."}`, `...",`) left on a URL, or a parameter
+# whose value is a quoted URL, opened or closed: an argument copied with its
+# quotes. ` href="https://` in an HTML program is not preceded by `?` or `&`.
+pattern = "^https?://[^\\s\"]+\"\\s*[,}\\]]+\\s*$|[?&][\\w.-]+=[\"']https?://"
+weight = 2
+description = "JSON or string quoting left around a URL or a URL parameter"
+
+[[rule]]
+id = "marker.escaped_newline"
+kind = "agent_marker"
+target = "url"
+# A literal backslash-n (`%5Cn`) not followed by a letter, so Windows paths
+# such as `C:\notes` do not match.
+pattern = "\\\\n(\\\\n|[^a-z0-9_]|$)"
+weight = 1
+description = "Escaped newline (\\n) from a model's string output left in the URL"
+
+[[rule]]
+id = "marker.truncated_output"
+kind = "agent_marker"
+target = "url"
+# Ends in half a percent escape (`%2`) or the ellipsis character. A decoded
+# `%` alone is not matched: `50%25` decodes to `50%`.
+pattern = "%[0-9a-f]$|\\x{2026}$"
+weight = 1
+description = "URL cut off mid escape or ending in an ellipsis (truncated model output)"
+
+[[rule]]
+id = "marker.chat_opener"
+kind = "agent_marker"
+target = "url"
+# A chat reply's opening words ("Sure, here is", "Certainly!", "I'll ",
+# "As an AI") at the start of a parameter value or path segment, followed in
+# the same value by a URL or a colon that introduces one. People type "here is
+# the" and "I'll be there" into search boxes; without the URL or colon that
+# follows, those are left alone.
+pattern = "(^|[/=])[\"'`]?(sure[,!.]?[\\s+]+here|certainly[!,.]|of[\\s+]+course[!,.]|i['\\x{2019}]ll[\\s+]|i[\\s+]+will[\\s+]|here(['\\x{2019}]s|[\\s+]+(is|are))[\\s+]+the[\\s+]|as[\\s+]+an[\\s+]+ai\\b)[^&#]{0,200}?(https?://|:[\\s+]*$|:[\\s+]*[\\[{<`\"'])"
+weight = 2
+description = "Chat reply opener (\"Sure, here is\", \"Certainly!\", \"As an AI\") before a URL in a parameter"
+
+[[rule]]
+id = "marker.doubled_scheme"
+kind = "agent_marker"
+target = "url"
+# Two schemes back to back (`https://https://`, `http://https%3A//`). A
+# redirect parameter carrying an encoded URL has one scheme after `=`, not two
+# in a row, and a host such as `https-portal.example` is not a scheme.
+pattern = "https?:/+https?(:/*|//)"
+weight = 2
+description = "Doubled scheme (https://https://) in a request a model built"
+
+[[rule]]
+id = "marker.garbled_scheme"
+kind = "agent_marker"
+target = "url"
+# A parameter set to a URL missing its colon (`?url=https//`), or a defanged
+# `hxxps://` URL passed to a relay path or a URL parameter. Analysts search
+# for defanged indicators, so `?q=hxxps://` is not matched, and crawlers
+# capture broken `href="http//..."` links as paths, so a bare `/https//` is
+# not either.
+pattern = "[?&][\\w.-]+=https?//[a-z0-9]|(^|/|[?&](url|uri|u|target|link|src|source|page|href)=)hxxps?(://|\\[:\\]//)"
+weight = 1
+description = "Garbled or defanged scheme (https//, hxxps://) in a request URL"
+
+[[rule]]
+id = "marker.impossible_date"
+kind = "agent_marker"
+target = "url"
+# A date parameter (name contains date, day, from, to, since, until, start,
+# end, dt, after, before, when or time) set to a date no calendar has: Feb 30
+# or 31, the 31st of a 30-day month, month 13 or more, day 32 or more. Slashed
+# dates are only matched when invalid in both day/month orders. Versions and
+# IDs shaped like dates sit under other parameter names.
+pattern = "[?&][\\w.\\[\\]-]*(date|day|from|to|since|until|start|end|dt|after|before|when|time)[\\w.\\[\\]-]*=(\\d{4}-(02-3[01]|(04|06|09|11)-31|(1[3-9]|[2-9]\\d)-\\d{2}|\\d{2}-(3[2-9]|[4-9]\\d))|(02[/-]3[01]|3[01][/-]02|(0?4|0?6|0?9|11)[/-]31|31[/-](0?4|0?6|0?9|11)|\\d{1,2}[/-](3[2-9]|[4-9]\\d)|(3[2-9]|[4-9]\\d)[/-]\\d{1,2})[/-]\\d{4})([T\\s+&#]|$)"
+weight = 2
+description = "Impossible calendar date (2026-02-30, 2026-13-01) in a date parameter"
+
+[[rule]]
+id = "marker.placeholder_identity"
+kind = "agent_marker"
+target = "param_value"
+# Stock example identities a model fills forms with. Real forms, documentation
+# links and QA environments use them too, so this stays at weight 1.
+pattern = "^(john|jane)[._-]?doe@|^(user|test|foo|someone|name|email|me|you|your[._-]?name|username)@(example|test|domain|your-?domain|company|foo|bar|email)\\.(com|org|net)$|(^|[@./])your-?(domain|website|site|company)\\.(com|org|net)\\b|^test123$|^123\\s+main\\s+st(reet)?\\b|(^|[^\\d])555[-.\\s]?01\\d\\d($|[^\\d])"
+weight = 1
+description = "Placeholder identity (john.doe@, user@example.com, test123, 123 Main St, 555-01xx)"
+
+# ── Cache busters ──────────────────────────────────────────────────────────
+[[rule]]
+id = "cache.buster"
+kind = "cache_buster"
+target = "param_name"
+pattern = "^(_|cb|cachebust|cache_bust|nocache|bust|_t|ts|rnd|rand|uniq\\d*)$"
+weight = 1
+description = "Cache-busting parameter"
+
+# ── Self identification (weak; agents misreport who built them) ────────────
+[[rule]]
+id = "selfid.vendor_name"
+kind = "self_id"
+# Parameter values only: a vendor name in the target host (reading claude.ai
+# through a relay) is ordinary browsing, not an agent naming itself.
+target = "param_value"
+pattern = "\\b(claude|chatgpt|openai|gpt-?[45o]|gemini|anthropic|hunyuan|qwen|deepseek|glm|kimi)\\b"
+weight = 1
+description = "Model/vendor name in a request parameter (e.g. ?agent=claude). Unreliable for attribution."
+
+# ── Exfil / callback channels ──────────────────────────────────────────────
+[[rule]]
+id = "exfil.webhook_site"
+kind = "exfil"
+target = "url"
+pattern = "webhook\\.site/(token/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+weight = 3
+link = true
+description = "webhook.site inbox (callback / exfil channel)"
+
+[[rule]]
+id = "exfil.requestbin"
+kind = "exfil"
+target = "url"
+pattern = "[a-z0-9]+\\.(m\\.pipedream\\.net|requestcatcher\\.com|requestbin\\.net|beeceptor\\.com|interact\\.sh|oast\\.(fun|me|pro|live|site|online))"
+weight = 3
+link = true
+description = "Request-catcher / OAST inbox (a per-user subdomain on the service)"
+
+[[rule]]
+id = "exfil.oast_service"
+kind = "exfil"
+target = "url"
+# The bare service name, not preceded by a subdomain. Many unrelated users
+# share it, so it scores but never links records.
+pattern = "(^|[^a-z0-9.-])(interact\\.sh|oast\\.(fun|me|pro|live|site|online))\\b"
+weight = 3
+description = "OAST service named without an inbox subdomain"
+
+[[rule]]
+id = "exfil.ntfy"
+kind = "exfil"
+target = "url"
+pattern = "ntfy\\.sh/[A-Za-z0-9_-]{4,}"
+weight = 3
+link = true
+description = "ntfy topic used as a beacon channel (do not read or post to topics)"
+
+[[rule]]
+id = "exfil.paste"
+kind = "exfil"
+target = "url"
+pattern = "catbox\\.moe|litterbox\\.catbox|bytebin\\.lucko\\.me|paste\\.rs|dpaste|transfer\\.sh|0x0\\.st"
+weight = 2
+description = "Paste / file drop used as an output channel"
+
+[[rule]]
+id = "exfil.cookie"
+kind = "exfil"
+target = "url"
+pattern = "document\\.cookie|[?&](cookie|cookies|ck)=[^&]{20,}"
+weight = 3
+description = "Cookie values sent onward"
+
+[[rule]]
+id = "exfil.disposable_mail"
+kind = "exfil"
+target = "url"
+pattern = "mail\\.tm|guerrillamail|10minutemail|temp-mail|tempmail|mailinator|maildrop\\.cc|1secmail"
+weight = 2
+description = "Disposable inbox (account/API key acquisition)"
+
+# ── Anti-bot ───────────────────────────────────────────────────────────────
+[[rule]]
+id = "antibot.baxia"
+kind = "anti_bot"
+target = "param_name"
+pattern = "^(bx-ua|bx_et|bx-umidtoken|umidtoken|x5sec)$"
+weight = 3
+description = "Alibaba Baxia anti-bot tokens"
+
+[[rule]]
+id = "antibot.captcha_solver"
+kind = "anti_bot"
+target = "url"
+pattern = "2captcha\\.com|anti-captcha\\.com|capsolver\\.com|capmonster"
+weight = 3
+description = "CAPTCHA-solving service"
+
+[[rule]]
+id = "antibot.ocr_captcha"
+kind = "anti_bot"
+target = "url"
+pattern = "ocr\\.space.*captcha|captcha.*ocr\\.space"
+weight = 3
+description = "General-purpose OCR API pointed at a CAPTCHA image"
+
+# ── Header fingerprints ────────────────────────────────────────────────────
+[[rule]]
+id = "header.via_hysandbox"
+kind = "header"
+target = "header"
+pattern = "^via:.*hysandbox"
+weight = 4
+significant = true
+description = "Via header from a hysandbox Apache Traffic Server proxy"
+
+[[rule]]
+id = "header.via_ats"
+kind = "header"
+target = "header"
+pattern = "^via:.*(ApacheTrafficServer|\\(ats\\)|-ats\\))"
+weight = 1
+description = "Request passed through Apache Traffic Server"
+
+[[rule]]
+id = "header.gzip_only_requests"
+kind = "header"
+target = "header"
+pattern = "^accept-encoding:\\s*gzip\\s*$"
+weight = 1
+description = "Accept-Encoding normalised to bare gzip (ATS normalize_ae), unusual for python-requests"
+
+[[rule]]
+id = "header.scripted_ua"
+kind = "header"
+target = "user_agent"
+pattern = "python-requests|python-httpx|aiohttp|node-fetch|undici|Go-http-client|curl/|axios/"
+weight = 1
+description = "Scripted HTTP client user agent"
+
+[[rule]]
+id = "header.headless_ua"
+kind = "header"
+target = "user_agent"
+pattern = "HeadlessChrome|PhantomJS|Playwright"
+weight = 1
+description = "Headless browser user agent"
+
+# ── Outcomes ───────────────────────────────────────────────────────────────
+[[rule]]
+id = "outcome.neterror"
+kind = "outcome"
+target = "final_url"
+pattern = "^about:(neterror|privatebrowsing|blank#blocked)"
+weight = 1
+description = "Remote browser ended on an error/blank page"
+
+[[rule]]
+id = "outcome.challenge"
+kind = "outcome"
+target = "final_url"
+pattern = "challenges\\.cloudflare\\.com|/cdn-cgi/challenge|captcha|/_incapsula_|perimeterx"
+weight = 1
+description = "Ended on a bot challenge"
+
+# ── Infrastructure ─────────────────────────────────────────────────────────
+[[rule]]
+id = "infra.hysandbox_host"
+kind = "infra"
+target = "url"
+pattern = "hysandbox\\.tencent-cloud\\.com"
+weight = 3
+description = "Tencent hysandbox hostnames"
+
+# ── ASN → organisation hints (attribution context, never proof) ────────────
+[[asn]]
+asn = 132203
+org = "Tencent Cloud"
+
+[[asn]]
+asn = 45090
+org = "Tencent (Shenzhen)"
+
+[[asn]]
+asn = 37963
+org = "Alibaba Cloud (CN)"
+
+[[asn]]
+asn = 45102
+org = "Alibaba Cloud (intl)"
+
+[[asn]]
+asn = 55990
+org = "Huawei Cloud"
+
+[[asn]]
+asn = 16509
+org = "Amazon AWS"
+
+[[asn]]
+asn = 14618
+org = "Amazon AWS"
+
+[[asn]]
+asn = 8075
+org = "Microsoft Azure"
+
+[[asn]]
+asn = 396982
+org = "Google Cloud"
+
+[[asn]]
+asn = 15169
+org = "Google"
+
+[[asn]]
+asn = 13335
+org = "Cloudflare"
+
+[[asn]]
+asn = 14061
+org = "DigitalOcean"
+
+[[asn]]
+asn = 24940
+org = "Hetzner"
+
+[[asn]]
+asn = 16276
+org = "OVH"
