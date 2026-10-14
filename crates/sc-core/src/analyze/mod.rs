@@ -279,7 +279,7 @@ pub struct Analysis {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub swarm_edges: Vec<crate::swarm::SwarmEdge>,
     /// The multiplicity budget of each family of pairwise tests (shared
-    /// pauses, scaffolds, co-activity, the S3 to S5 edges): pairs tested,
+    /// pauses, scaffolds, co-activity, the S3 to S6 edges): pairs tested,
     /// kept under a false-discovery cut, and expected by chance.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub multiplicity: Vec<crate::chance::TestFamily>,

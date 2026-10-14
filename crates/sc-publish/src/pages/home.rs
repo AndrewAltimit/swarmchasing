@@ -540,7 +540,7 @@ fn time_step(a: &Analysis, links: &FmLinks) -> String {
         id: "time",
         n: 4,
         title: "Time",
-        prose: "<p>Each cluster's records fall into <strong>runs</strong>: stretches of activity without a long pause. Runs give pace, rhythm and concurrency, and they are where agents show they act on each other: one run writing what another reads, runs starting together, a reader mapping hosts before a striker attacks them. Those are <strong>interaction hints</strong> (S1 to S5), each weak alone; a swarm claim needs several and review.</p>".into(),
+        prose: "<p>Each cluster's records fall into <strong>runs</strong>: stretches of activity without a long pause. Runs give pace, rhythm and concurrency, and they are where agents show they act on each other: one run writing what another reads, runs starting together, a reader mapping hosts before a striker attacks them. Those are <strong>interaction hints</strong> (S1 to S6), each weak alone; a swarm claim needs several and review.</p>".into(),
         figure: format!(
             "<div class=\"scroll-x\">{swim}</div><p class=\"legend\"><span><span class=\"key k-sig\"></span>significant</span> <span><span class=\"key k-sug\"></span>suggestive</span> <span><span class=\"key k-pause\"></span>pause</span></p>{legend}<div class=\"scroll-x\">{arcs}</div>"
         ),

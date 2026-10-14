@@ -16,8 +16,9 @@
 //!   pace), read only from request or submit times;
 //! - **L4** agent likely: L3 plus machine pace while adapting, or a pace or
 //!   scale beyond one person (fixed fan-out, one target sent to several scan
-//!   services within seconds, round the clock), with no working-hours rhythm
-//!   against it;
+//!   services within seconds, round the clock), or a machine fetch tool's
+//!   habit (a `/robots.txt` request before every page, a client-side rate
+//!   ceiling), with no working-hours rhythm against it;
 //! - **L5** documented: never computed; only the admin's case decision sets
 //!   it (operator logs matching a harness, a provider's confirmation).
 //!
@@ -136,6 +137,8 @@ pub enum SignalKind {
     FanOut,
     CrossService,
     RoundTheClock,
+    PerFetchRobots,
+    RateCeiling,
     // Counter-signals
     DeclaredTesting,
     Benchmark,
@@ -155,7 +158,9 @@ impl SignalKind {
                 AgentLevel::ModelWritten
             }
             RetryAfterError | Escalation | ModelPaceChain => AgentLevel::Adaptive,
-            MachinePace | FanOut | CrossService | RoundTheClock => AgentLevel::AgentLikely,
+            MachinePace | FanOut | CrossService | RoundTheClock | PerFetchRobots | RateCeiling => {
+                AgentLevel::AgentLikely
+            }
             DeclaredTesting | Benchmark | ScannerPace | AutoSubmitter | WorkingHours
             | SpoofedIdentity => {
                 return None;
@@ -185,6 +190,12 @@ impl SignalKind {
             FanOut => "parallel fan-out of one fixed width",
             CrossService => "one target sent to several scan services within seconds",
             RoundTheClock => "activity round the clock",
+            PerFetchRobots => {
+                "a /robots.txt request before every page, on the same host each time, as an uncached robots-respecting fetch tool sends"
+            }
+            RateCeiling => {
+                "requests hitting one per-window ceiling again and again and never passing it, as a client-side rate limiter allows"
+            }
             DeclaredTesting => "declares authorised testing or research",
             Benchmark => "public benchmark or practice targets",
             ScannerPace => {
@@ -274,8 +285,6 @@ fn timed(b: TimeBasis) -> bool {
     !matches!(b, TimeBasis::Capture | TimeBasis::Mixed)
 }
 
-/// Grade cluster `c`. `chains` and `escalations` are the analysis's; those
-/// touching the cluster are read.
 /// The rule ids among `hits` that self-describe (L1) and that are
 /// model-output residue (L2).
 fn hit_marks(hits: &[Hit]) -> (Vec<&str>, Vec<&str>) {
@@ -327,12 +336,17 @@ pub fn assess_record(r: &ObsResult) -> AgentAssessment {
     out
 }
 
+/// Grade cluster `c`. `chains` and `escalations` are the analysis's; those
+/// touching the cluster are read. `clients` indexes every record by client,
+/// so the unflagged requests of the cluster's clients are read too.
 pub fn assess(
     c: &Cluster,
     results: &[ObsResult],
     chains: &[Chain],
     escalations: &[Escalation],
     opts: &ChainOptions,
+    clients: &ClientIndex,
+    ao: &AgentnessOptions,
 ) -> AgentAssessment {
     let mut out = AgentAssessment::default();
     let mut push = |kind: SignalKind, records: usize, detail: String| {
@@ -457,6 +471,15 @@ pub fn assess(
             push(SignalKind::CrossService, xs.records, detail);
         }
     }
+    // A machine fetch tool's habits, from the requests of the cluster's
+    // clients in each run, unflagged ones included.
+    let tools = client_habits(c, results, clients, ao);
+    if let Some(r) = &tools.robots {
+        push(SignalKind::PerFetchRobots, r.records, r.detail.clone());
+    }
+    if let Some(r) = &tools.ceiling {
+        push(SignalKind::RateCeiling, r.records, r.detail.clone());
+    }
     let rhythm = c.timing.rhythm.verdict;
     let days = c.timing.rhythm.days;
     if rhythm == RhythmVerdict::RoundTheClock {
@@ -519,6 +542,368 @@ pub fn assess(
     }
     out.level = level;
     out
+}
+
+/// Machine fetch-tool habit settings (`[agentness]` in the rules file).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AgentnessOptions {
+    /// Per-fetch robots: a page counts as preceded when a `/robots.txt`
+    /// request on its host comes at most this long before it.
+    pub robots_window_secs: i64,
+    /// Pages one client needs in a run.
+    pub robots_min_pages: usize,
+    /// Share of its pages that must be preceded.
+    pub robots_min_share: f64,
+    /// Robots requests preceding pages on one host, on at least one host: a
+    /// polite crawler reads robots.txt once per host.
+    pub robots_min_repeats: usize,
+    /// Kept when the chance of so many preceded pages, robots requests
+    /// placed at random over the client's span, is at most this.
+    pub robots_max_chance: f64,
+    /// Rate ceiling: the sliding window a client-side limiter counts in.
+    pub rate_window_secs: i64,
+    /// The ceiling (most requests in one window) must be at least this.
+    pub rate_min_cap: usize,
+    /// Windows at the ceiling with the client pressing on after them: the
+    /// next request comes within `rate_press_secs` of the window's end.
+    pub rate_min_saturated: usize,
+    pub rate_press_secs: i64,
+    /// Permutations of the run's own gaps, continued to
+    /// `rate_max_permutations` while none holds the ceiling as well.
+    pub rate_permutations: usize,
+    pub rate_max_permutations: usize,
+    /// Kept when the share of permutations holding the ceiling as well is at
+    /// most this.
+    pub rate_max_chance: f64,
+}
+
+impl Default for AgentnessOptions {
+    fn default() -> Self {
+        Self {
+            robots_window_secs: 2,
+            robots_min_pages: 3,
+            robots_min_share: 0.8,
+            robots_min_repeats: 2,
+            robots_max_chance: 0.01,
+            rate_window_secs: 60,
+            rate_min_cap: 5,
+            rate_min_saturated: 3,
+            rate_press_secs: 60,
+            rate_permutations: 199,
+            rate_max_permutations: 1999,
+            rate_max_chance: 0.001,
+        }
+    }
+}
+
+/// The rule naming the Model Context Protocol reference fetch server's user
+/// agent.
+const MCP_FETCH_RULE: &str = "header.mcp_fetch_ua";
+
+/// Requests read per client and run, earliest first.
+const MAX_EVENTS: usize = 2000;
+
+/// Who sent a record: its user agent and network, or `None` when neither is
+/// known.
+fn client_key(r: &ObsResult) -> Option<String> {
+    let o = &r.obs;
+    (o.user_agent.is_some() || o.asn.is_some()).then(|| {
+        format!(
+            "{}|{}",
+            o.user_agent.as_deref().unwrap_or(""),
+            o.asn.map(|a| a.to_string()).unwrap_or_default()
+        )
+    })
+}
+
+/// Every record with a request or submit time and a known client, by
+/// client then time: how a cluster's clients' unflagged requests are found.
+#[derive(Debug, Default)]
+pub struct ClientIndex {
+    rows: Vec<(String, i64, usize)>,
+}
+
+impl ClientIndex {
+    pub fn new(results: &[ObsResult]) -> Self {
+        let mut rows: Vec<(String, i64, usize)> = results
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.obs.ts > 0 && crate::timing::request_like(r.obs.ts_kind))
+            .filter_map(|(i, r)| client_key(r).map(|k| (k, r.obs.ts, i)))
+            .collect();
+        crate::sort::sort(&mut rows);
+        Self { rows }
+    }
+
+    /// Records of client `key` timed in `[from, to]`.
+    fn span<'a>(&'a self, key: &'a str, from: i64, to: i64) -> impl Iterator<Item = usize> + 'a {
+        let i = self
+            .rows
+            .partition_point(|x| (x.0.as_str(), x.1) < (key, from));
+        self.rows[i..]
+            .iter()
+            .take_while(move |x| x.0 == key && x.1 <= to)
+            .map(|x| x.2)
+    }
+}
+
+/// One habit found, with the pages or requests it rests on.
+#[derive(Debug, Clone, PartialEq)]
+struct Habit {
+    records: usize,
+    chance: f64,
+    detail: String,
+}
+
+#[derive(Debug, Default)]
+struct Habits {
+    robots: Option<Habit>,
+    ceiling: Option<Habit>,
+}
+
+/// Keep the more unlikely of two findings, adding up their records.
+fn merge(slot: &mut Option<Habit>, h: Habit) {
+    match slot {
+        Some(s) => {
+            let records = s.records + h.records;
+            if h.chance < s.chance {
+                *s = h;
+            }
+            s.records = records;
+        }
+        None => *slot = Some(h),
+    }
+}
+
+/// Per-fetch robots and the rate ceiling, over each run of `c` and each of
+/// its clients there. Records without a client feed the ceiling only, as
+/// one group of the run's own members.
+fn client_habits(
+    c: &Cluster,
+    results: &[ObsResult],
+    clients: &ClientIndex,
+    ao: &AgentnessOptions,
+) -> Habits {
+    let mut out = Habits::default();
+    for (n, span) in c.runs.iter().enumerate() {
+        let mut keys: Vec<String> = Vec::new();
+        let mut anonymous: Vec<usize> = Vec::new();
+        for &m in &c.members {
+            let r = &results[m];
+            if r.obs.ts < span.start
+                || r.obs.ts > span.end
+                || r.obs.ts <= 0
+                || !crate::timing::request_like(r.obs.ts_kind)
+            {
+                continue;
+            }
+            match client_key(r) {
+                Some(k) if !keys.contains(&k) => keys.push(k),
+                Some(_) => {}
+                None => anonymous.push(m),
+            }
+        }
+        crate::sort::sort(&mut keys);
+        let label = format!("{}#{}", c.key, n + 1);
+        for k in &keys {
+            let from = span.start - ao.robots_window_secs.max(0);
+            let recs: Vec<usize> = clients.span(k, from, span.end).take(MAX_EVENTS).collect();
+            if let Some(h) = per_fetch_robots(&recs, results, ao) {
+                merge(&mut out.robots, h);
+            }
+            let in_span: Vec<usize> = recs
+                .into_iter()
+                .filter(|&i| results[i].obs.ts >= span.start)
+                .collect();
+            if let Some(h) = rate_ceiling(&in_span, results, ao, &[&label, k]) {
+                merge(&mut out.ceiling, h);
+            }
+        }
+        anonymous.truncate(MAX_EVENTS);
+        if let Some(h) = rate_ceiling(&anonymous, results, ao, &[&label, ""]) {
+            merge(&mut out.ceiling, h);
+        }
+    }
+    out
+}
+
+/// One client's requests in a run: whether nearly every page request comes
+/// right after a `/robots.txt` request on its host, robots.txt read again
+/// for each page. Chance: the robots requests placed at random over the
+/// client's span, as a Poisson-binomial tail over its pages.
+fn per_fetch_robots(recs: &[usize], results: &[ObsResult], ao: &AgentnessOptions) -> Option<Habit> {
+    let w = ao.robots_window_secs.max(0);
+    let mut robots: Vec<(String, i64, bool)> = Vec::new();
+    let mut pages: Vec<(String, i64)> = Vec::new();
+    for &i in recs {
+        let o = &results[i].obs;
+        let Some(u) = crate::weburl::WebUrl::parse(&o.url) else {
+            continue;
+        };
+        let Some(host) = u.host.clone() else {
+            continue;
+        };
+        if u.path.eq_ignore_ascii_case("/robots.txt") {
+            robots.push((host, o.ts, false));
+        } else {
+            pages.push((host, o.ts));
+        }
+    }
+    if pages.len() < ao.robots_min_pages.max(1) || robots.is_empty() {
+        return None;
+    }
+    // Each page takes the latest unused robots request on its host within
+    // the window before it.
+    let mut preceded = 0usize;
+    let mut per_host: Vec<(String, usize)> = Vec::new();
+    for (h, t) in &pages {
+        let pick = robots
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| !r.2 && r.0 == *h && r.1 <= *t && *t - r.1 <= w)
+            .max_by_key(|(_, r)| r.1)
+            .map(|(j, _)| j);
+        if let Some(j) = pick {
+            robots[j].2 = true;
+            preceded += 1;
+            match per_host.iter_mut().find(|x| x.0 == *h) {
+                Some(x) => x.1 += 1,
+                None => per_host.push((h.clone(), 1)),
+            }
+        }
+    }
+    let repeats = per_host.iter().map(|x| x.1).max().unwrap_or(0);
+    let n = pages.len();
+    if (preceded as f64) < ao.robots_min_share * n as f64 || repeats < ao.robots_min_repeats.max(1)
+    {
+        return None;
+    }
+    let first = pages
+        .iter()
+        .map(|p| p.1)
+        .chain(robots.iter().map(|r| r.1))
+        .min()?;
+    let last = pages
+        .iter()
+        .map(|p| p.1)
+        .chain(robots.iter().map(|r| r.1))
+        .max()?;
+    let s = (last - first).max(1) as f64;
+    let ps: Vec<f64> = pages
+        .iter()
+        .map(|(h, _)| {
+            let r = robots.iter().filter(|x| x.0 == *h).count() as f64;
+            (r * (w + 1) as f64 / s).min(1.0)
+        })
+        .collect();
+    let chance = crate::chance::at_least(&ps, preceded);
+    if chance > ao.robots_max_chance {
+        return None;
+    }
+    let mcp = recs
+        .iter()
+        .any(|&i| results[i].hits.iter().any(|h| h.rule_id == MCP_FETCH_RULE));
+    let mut detail = format!(
+        "{preceded} of {n} page requests each came within {w} s after a /robots.txt request on the same host, {repeats} on one host (chance {chance:.1e}): an uncached robots-respecting fetch tool"
+    );
+    if mcp {
+        detail.push_str(
+            "; its user agent is the Model Context Protocol reference fetch server's, which reads robots.txt before every page it fetches autonomously",
+        );
+    }
+    Some(Habit {
+        records: preceded,
+        chance,
+        detail,
+    })
+}
+
+/// The most requests in any window of `w` seconds, `[t, t + w)`.
+fn ceiling_of(ts: &[i64], w: i64) -> usize {
+    let mut j = 0;
+    let mut most = 0;
+    for i in 0..ts.len() {
+        while j < ts.len() && ts[j] < ts[i] + w {
+            j += 1;
+        }
+        most = most.max(j - i);
+    }
+    most
+}
+
+/// Windows holding `cap` requests that the client pressed on after (its
+/// next request within `press` of the window's end), counted without
+/// overlap.
+fn saturated(ts: &[i64], w: i64, cap: usize, press: i64) -> usize {
+    let (mut i, mut n) = (0, 0);
+    while i < ts.len() {
+        let j = ts.partition_point(|&t| t < ts[i] + w);
+        if j - i >= cap && j < ts.len() && ts[j] < ts[i] + w + press {
+            n += 1;
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    n
+}
+
+/// A run's requests that reach one ceiling per window again and again, the
+/// client pressing on each time, and never pass it, as a client-side rate
+/// limiter allows. Chance: the run's own gaps permuted (seeded from `seed`),
+/// the share holding the ceiling as well. A run that got a 429 response was
+/// limited by the server, not itself, and is not read.
+fn rate_ceiling(
+    recs: &[usize],
+    results: &[ObsResult],
+    ao: &AgentnessOptions,
+    seed: &[&str],
+) -> Option<Habit> {
+    let w = ao.rate_window_secs.max(1);
+    let cap0 = ao.rate_min_cap.max(2);
+    let k0 = ao.rate_min_saturated.max(1);
+    if recs.len() < cap0 * k0 + 1 || recs.iter().any(|&i| results[i].obs.status == Some(429)) {
+        return None;
+    }
+    let mut ts: Vec<i64> = recs.iter().map(|&i| results[i].obs.ts).collect();
+    crate::sort::sort(&mut ts);
+    let cap = ceiling_of(&ts, w);
+    let press = ao.rate_press_secs.max(0);
+    let k = saturated(&ts, w, cap, press);
+    if cap < cap0 || k < k0 {
+        return None;
+    }
+    let mut gaps: Vec<i64> = ts.windows(2).map(|x| x[1] - x[0]).collect();
+    let mut rng = crate::chance::Mix(crate::chance::seed(seed));
+    let base = ao.rate_permutations.max(1);
+    let most = ao.rate_max_permutations.max(base);
+    let (mut ge, mut perms) = (0usize, 0usize);
+    let mut shuffled = Vec::with_capacity(ts.len());
+    while perms < base || (ge == 0 && perms < most) {
+        perms += 1;
+        rng.shuffle(&mut gaps);
+        shuffled.clear();
+        shuffled.push(ts[0]);
+        for &g in &gaps {
+            shuffled.push(shuffled[shuffled.len() - 1] + g);
+        }
+        ge += usize::from(
+            ceiling_of(&shuffled, w) <= cap && saturated(&shuffled, w, cap, press) >= k,
+        );
+    }
+    let chance = (1 + ge) as f64 / (1 + perms) as f64;
+    if chance > ao.rate_max_chance {
+        return None;
+    }
+    Some(Habit {
+        records: ts.len(),
+        chance,
+        detail: format!(
+            "{k} windows of {w} s held exactly {cap} requests with more right after, and none held {} (chance {chance:.1e} under {perms} permutations of its own gaps): a client-side rate limiter",
+            cap + 1
+        ),
+    })
 }
 
 #[cfg(test)]
@@ -688,5 +1073,172 @@ mod tests {
                 .iter()
                 .any(|s| s.kind == SignalKind::WorkingHours)
         );
+    }
+
+    /// One client's requests: `(ts, url, status)`.
+    fn client(reqs: &[(i64, String, Option<u16>)], ua: &str) -> crate::Analysis {
+        let obs = reqs
+            .iter()
+            .enumerate()
+            .map(|(i, (ts, url, status))| Observation {
+                id: format!("q:{i}"),
+                ts: *ts,
+                ts_kind: TsKind::Request,
+                url: url.clone(),
+                status: *status,
+                user_agent: Some(ua.into()),
+                asn: Some(16509),
+                ..Default::default()
+            })
+            .collect();
+        crate::analyze(obs, &Rules::default_rules())
+    }
+
+    fn signal(a: &crate::Analysis, kind: SignalKind) -> Option<AgentSignal> {
+        assert_eq!(a.clusters.len(), 1, "{:?}", a.clusters);
+        let c = &a.clusters[0];
+        c.agent.signals.iter().find(|s| s.kind == kind).cloned()
+    }
+
+    const T: i64 = 1_791_000_000 + 1234;
+    const GAPS: [i64; 9] = [23, 41, 17, 35, 29, 52, 19, 44, 31];
+
+    /// Tagged pages on two hosts at model pace; `robots(i, host)` says
+    /// whether page `i` is preceded by a robots.txt request on its host.
+    fn fetches(robots: &dyn Fn(usize, usize) -> bool) -> Vec<(i64, String, Option<u16>)> {
+        let mut out = Vec::new();
+        let mut t = T;
+        for (i, g) in GAPS.iter().enumerate() {
+            t += g;
+            let h = i % 2;
+            if robots(i, h) {
+                out.push((t - 1, format!("https://site{h}.example/robots.txt"), None));
+            }
+            out.push((
+                t,
+                format!("https://site{h}.example/docs/{i}?uqtag=fetch7"),
+                Some(200),
+            ));
+        }
+        out
+    }
+
+    #[test]
+    fn robots_before_every_page_is_an_uncached_fetch_tool() {
+        let a = client(&fetches(&|_, _| true), "python-httpx/0.27");
+        let s = signal(&a, SignalKind::PerFetchRobots).expect("per-fetch robots");
+        assert_eq!(s.records, GAPS.len(), "{s:?}");
+        assert!(
+            s.detail.contains("uncached robots-respecting fetch tool"),
+            "{s:?}"
+        );
+        assert!(!s.detail.contains("Model Context Protocol"), "{s:?}");
+        assert_eq!(s.kind.level(), Some(AgentLevel::AgentLikely));
+        // The reference fetch server's user agent names it.
+        let a = client(
+            &fetches(&|_, _| true),
+            "ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)",
+        );
+        let s = signal(&a, SignalKind::PerFetchRobots).expect("per-fetch robots");
+        assert!(s.detail.contains("Model Context Protocol"), "{s:?}");
+    }
+
+    #[test]
+    fn a_crawler_reading_robots_once_per_host_is_not_a_fetch_tool() {
+        // Once per host, before its first page.
+        let a = client(&fetches(&|i, _| i < 2), "python-httpx/0.27");
+        assert_eq!(signal(&a, SignalKind::PerFetchRobots), None);
+        // One page per host, robots.txt first: polite, never repeated.
+        let mut t = T;
+        let reqs: Vec<(i64, String, Option<u16>)> = GAPS
+            .iter()
+            .enumerate()
+            .flat_map(|(i, g)| {
+                t += g;
+                [
+                    (t - 1, format!("https://h{i}.example/robots.txt"), None),
+                    (t, format!("https://h{i}.example/?uqtag=fetch7"), Some(200)),
+                ]
+            })
+            .collect();
+        let a = client(&reqs, "python-httpx/0.27");
+        assert_eq!(signal(&a, SignalKind::PerFetchRobots), None);
+    }
+
+    /// Requests a client wants at `want` gaps, held by a limiter of `cap`
+    /// per 60 s.
+    fn limited(cap: usize, n: usize, status: Option<u16>) -> Vec<(i64, String, Option<u16>)> {
+        let want = [2, 4, 3, 6, 2, 5, 3, 2, 4, 7, 3];
+        let mut ts: Vec<i64> = Vec::new();
+        let mut t = T;
+        for i in 0..n {
+            t += want[i % want.len()];
+            if i >= cap {
+                t = t.max(ts[i - cap] + 60);
+            }
+            ts.push(t);
+        }
+        ts.iter()
+            .enumerate()
+            .map(|(i, &t)| {
+                (
+                    t,
+                    format!("https://docs{}.example/p/{i}?uqtag=lim3", i % 4),
+                    status,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_client_side_rate_limit_is_a_ceiling() {
+        let a = client(&limited(10, 60, Some(200)), "GeminiCLI/0.1");
+        let s = signal(&a, SignalKind::RateCeiling).expect("rate ceiling");
+        assert!(s.detail.contains("exactly 10 requests"), "{s:?}");
+        assert!(s.detail.contains("none held 11"), "{s:?}");
+        assert_eq!(s.kind.level(), Some(AgentLevel::AgentLikely));
+    }
+
+    #[test]
+    fn server_429s_and_cron_batches_are_no_ceiling() {
+        // The same shape after the server answered 429: its limit, not the
+        // client's.
+        let a = client(&limited(10, 60, Some(429)), "GeminiCLI/0.1");
+        assert_eq!(signal(&a, SignalKind::RateCeiling), None);
+        // A job sending five requests every five minutes: five per window
+        // every time, and nothing pressing after.
+        let reqs: Vec<(i64, String, Option<u16>)> = (0..12)
+            .flat_map(|b| {
+                (0..5).map(move |i| {
+                    (
+                        T + b * 300 + i * 2,
+                        format!("https://api{i}.example/v1/x?uqtag=cron1"),
+                        Some(200),
+                    )
+                })
+            })
+            .collect();
+        let a = client(&reqs, "curl/8.5");
+        assert_eq!(signal(&a, SignalKind::RateCeiling), None);
+        // A steady request every six seconds: its permutations are itself.
+        let reqs: Vec<(i64, String, Option<u16>)> = (0..60)
+            .map(|i| {
+                (
+                    T + i * 6,
+                    format!("https://api.example/v1/{i}?uqtag=steady1"),
+                    Some(200),
+                )
+            })
+            .collect();
+        let a = client(&reqs, "curl/8.5");
+        assert_eq!(signal(&a, SignalKind::RateCeiling), None);
+    }
+
+    #[test]
+    fn ceiling_windows_are_counted_without_overlap() {
+        let ts = [0, 1, 2, 60, 61, 62, 120, 121, 122, 500];
+        assert_eq!(ceiling_of(&ts, 60), 3);
+        // Three full windows, the last with nothing right after.
+        assert_eq!(saturated(&ts, 60, 3, 60), 2);
     }
 }

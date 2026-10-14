@@ -70,7 +70,7 @@ export function figure({ chart, legend = null, caption = null, head = [], rows =
 export const legendKey = (cls, label) => el("span", {}, el("span", { class: `key ${cls}` }), label);
 /** A legend entry drawn with the edge's own classes, so it matches the graph. */
 export const edgeKey = (cls, label) => el("span", {}, svg("svg", { class: "chart key-line", viewBox: "0 0 26 10", width: 26, height: 10, "aria-hidden": "true" }, svg("path", { class: `edge ${cls}`, d: "M1,5 L25,5" })), label);
-/** A legend entry for an interaction-edge kind (S1–S5) or strength. */
+/** A legend entry for an interaction-edge kind (S1–S6) or strength. */
 export const swarmKey = (cls, label) => el("span", {}, svg("svg", { class: "chart key-line", viewBox: "0 0 26 10", width: 26, height: 10, "aria-hidden": "true" }, svg("path", { class: `sedge ${cls}`, d: "M1,5 L25,5" })), label);
 export const legend = (...keys) => el("p", { class: "legend" }, keys);
 export const tierLegend = () => legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"));
@@ -467,7 +467,7 @@ export function hourly({ data, pauses = [], width = 900 }) {
 
 /**
  * Swarm view: runs as nodes on a time axis, one lane per cluster, and the
- * interaction hints between them as arcs styled by kind (S1–S5) and
+ * interaction hints between them as arcs styled by kind (S1–S6) and
  * weighted by strength. `nodes`: {id, lane, t, label, short, sub};
  * `lanes`: {key, label, tier}; `edges`: {a, b, kind, strength, label}.
  */

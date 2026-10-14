@@ -133,6 +133,8 @@ Hard links can hide interaction. A shared inbox joins every record that writes t
 
 Where a signal has a chance model it is stated with the edge: synchronized starts weigh requests lined up step by step against the shorter run placed at random over the analysis span and against its own gaps reordered, and report the larger chance, so two jobs that start together at a steady rate do not qualify; role sequences and partitions draw hosts at random from the analysis's target hosts or target family, and a partition whose hosts split their sorted list in a stride or in blocks is weighed against every split of those hosts into parts of those sizes.
 
+A dispatch star weighs each follower's lagged co-activity with the leader as co-activity does ([FM-6.9](06-timing.md#fm-69-co-activity)), requires the followers' own lags to agree with their lags to the leader, and combines the followers' chances, corrected for the candidates the leader had and for which run of the star leads.
+
 Each such signal is tested on many pairs of runs, so it **must** be cut at a false discovery rate over every pair it read, and the edge states how many pairs that unlikely chance alone would give among them ([FM-5.7](#fm-57-soft-links)).
 
 A reviewer who accepts an edge records it in the case with what the records show; until then the grouping is a fleet ([FM-1.3](01-scope.md#fm-13-groupings)). Toolkit: thresholds are in [methodology](../methodology.md#interaction-between-runs); internal and provider reports list edges under *Possible interaction (SC-T9)*, and affected-operator reports and notices never do.

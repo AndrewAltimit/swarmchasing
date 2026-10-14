@@ -3,7 +3,7 @@
 //! pairs, and the multiplicity budget each family of tests reports.
 //!
 //! Every pairwise test in the analysis (shared pauses, scaffolds,
-//! co-activity, the S3 to S5 interaction edges, platform candidates) belongs
+//! co-activity, the S3 to S6 interaction edges, platform candidates) belongs
 //! to one [`TestFamily`]. A family counts the pairs it tested, keeps those
 //! whose chance passes its own limit and a Benjamini-Hochberg cut over every
 //! pair tested, and states how many pairs that unlikely chance alone would
@@ -55,7 +55,8 @@ pub(crate) fn bh_cut(chances: &[f64], tested: usize, q: f64) -> Option<f64> {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TestFamily {
     /// `shared_pause`, `scaffold`, `co_activity`, `synchronized_start`,
-    /// `role_sequence`, `disjoint_partition`, or `platform:<name>`.
+    /// `role_sequence`, `disjoint_partition`, `dispatch_star`, or
+    /// `platform:<name>`.
     pub family: String,
     /// Pairs (or groups) tested.
     pub tested: usize,
@@ -132,6 +133,58 @@ pub(crate) fn product_chance(p1: f64, p2: f64) -> f64 {
     (x * (1.0 - x.ln())).min(1.0)
 }
 
+/// The chance of a product of `ps` this small or smaller when they are
+/// independent uniform chances (Fisher's method): `x Σ_{j<n} (-ln x)^j / j!`
+/// for the product `x` of `n` chances. Two chances give [`product_chance`].
+pub(crate) fn product_chance_all(ps: &[f64]) -> f64 {
+    if ps.is_empty() {
+        return 1.0;
+    }
+    let x: f64 = ps.iter().map(|p| p.clamp(0.0, 1.0)).product();
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let l = -x.ln();
+    let (mut term, mut sum) = (1.0, 1.0);
+    for j in 1..ps.len() {
+        term *= l / j as f64;
+        sum += term;
+    }
+    (x * sum).min(1.0)
+}
+
+/// A small seeded generator (splitmix64), the same on every platform: the
+/// permutation tests' source, so a chance is reproducible from the records.
+pub(crate) struct Mix(pub(crate) u64);
+
+impl Mix {
+    pub(crate) fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+
+    /// Shuffle `v` in place (Fisher-Yates).
+    pub(crate) fn shuffle<T>(&mut self, v: &mut [T]) {
+        for i in (1..v.len()).rev() {
+            v.swap(i, (self.next() % (i as u64 + 1)) as usize);
+        }
+    }
+}
+
+/// FNV-1a over stable labels: a permutation test's seed.
+pub(crate) fn seed(parts: &[&str]) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for p in parts {
+        for b in p.bytes().chain([0]) {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    h
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +216,15 @@ mod tests {
         assert!((product_chance(0.1, 0.1) - x * (1.0 - x.ln())).abs() < 1e-12);
         assert_eq!(product_chance(1.0, 1.0), 1.0);
         assert_eq!(product_chance(0.0, 0.5), 0.0);
+        // The general form agrees for two, and for one is the chance itself.
+        assert!((product_chance_all(&[0.1, 0.1]) - product_chance(0.1, 0.1)).abs() < 1e-12);
+        assert!((product_chance_all(&[0.03]) - 0.03).abs() < 1e-12);
+        // Three: P(U1 U2 U3 <= x) = x (1 + l + l^2 / 2), l = -ln x.
+        let x: f64 = 0.001;
+        let l = -x.ln();
+        let want = x * (1.0 + l + l * l / 2.0);
+        assert!((product_chance_all(&[0.1, 0.1, 0.1]) - want).abs() < 1e-12);
+        assert_eq!(product_chance_all(&[]), 1.0);
     }
 
     #[test]
