@@ -7,7 +7,10 @@
 //! dashboard lists them too.
 //!
 //! A data directory with no marker at all is one whose digests are not
-//! mailed (a local watch), and nothing is listed.
+//! mailed (a local watch), and nothing is listed. Each run keeps the newest
+//! marked stamp in `state.json` (`last_mailed`, [`newest_marked`]), so
+//! retention deleting the run that held the marker does not make the runs
+//! after it look like a directory that never mails.
 
 use super::priority::Level;
 use serde_json::Value;
@@ -45,18 +48,29 @@ impl Unmailed {
 }
 
 /// Changed runs before `current` that were never mailed, oldest first.
-pub fn unmailed(out: &Path, current: &str) -> Vec<Unmailed> {
-    list(out, Some(current))
+/// `last_mailed` is the newest mailed stamp `state.json` remembers, read
+/// when no run directory holds a marker newer than it.
+pub fn unmailed(out: &Path, current: &str, last_mailed: Option<&str>) -> Vec<Unmailed> {
+    list(out, Some(current), last_mailed)
 }
 
 /// Every changed run never mailed, the newest included (the dashboard).
-pub fn unmailed_all(out: &Path) -> Vec<Unmailed> {
-    list(out, None)
+pub fn unmailed_all(out: &Path, last_mailed: Option<&str>) -> Vec<Unmailed> {
+    list(out, None, last_mailed)
 }
 
-fn list(out: &Path, current: Option<&str>) -> Vec<Unmailed> {
+/// The newest run directory holding a marker, if any.
+pub fn newest_marked(out: &Path) -> Option<String> {
     let runs = out.join("runs");
-    let Ok(entries) = std::fs::read_dir(&runs) else {
+    stamps(&runs, None)
+        .into_iter()
+        .rev()
+        .find(|s| runs.join(s).join(MARKER).exists())
+}
+
+/// Run stamps under `runs`, before `current` when given, oldest first.
+fn stamps(runs: &Path, current: Option<&str>) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(runs) else {
         return Vec::new();
     };
     let mut stamps: Vec<String> = entries
@@ -69,14 +83,22 @@ fn list(out: &Path, current: Option<&str>) -> Vec<Unmailed> {
         })
         .collect();
     stamps.sort();
-    let Some(last_mailed) = stamps
+    stamps
+}
+
+fn list(out: &Path, current: Option<&str>, remembered: Option<&str>) -> Vec<Unmailed> {
+    let runs = out.join("runs");
+    let stamps = stamps(&runs, current);
+    let marked = stamps
         .iter()
         .rposition(|s| runs.join(s).join(MARKER).exists())
-    else {
+        .map(|i| stamps[i].as_str());
+    let Some(last_mailed) = marked.max(remembered) else {
         return Vec::new();
     };
-    let mut out: Vec<Unmailed> = stamps[last_mailed + 1..]
+    let mut out: Vec<Unmailed> = stamps
         .iter()
+        .filter(|s| s.as_str() > last_mailed)
         .filter_map(|s| read(&runs.join(s).join(super::run_summary::FILE), s))
         .collect();
     if out.len() > MAX_RUNS {
@@ -191,12 +213,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&out);
         // No marker anywhere: mail is not in use, nothing is listed.
         run(&out, "20261010T000000Z", true, false);
-        assert!(unmailed(&out, "20261013T000000Z").is_empty());
+        assert!(unmailed(&out, "20261013T000000Z", None).is_empty());
 
         run(&out, "20261011T000000Z", true, true);
         run(&out, "20261011T060000Z", false, false);
         run(&out, "20261011T120000Z", true, false);
-        let got = unmailed(&out, "20261013T000000Z");
+        let got = unmailed(&out, "20261013T000000Z", None);
         // The run before the mailed one is not listed again; the unchanged
         // run never needed mail.
         assert_eq!(got.len(), 1, "{got:?}");
@@ -211,11 +233,32 @@ mod tests {
         assert!(s.contains("high: new significant cluster C1"), "{s}");
         // The current run is never its own unmailed run; the dashboard
         // counts the newest run too.
-        assert!(unmailed(&out, "20261011T120000Z").is_empty());
-        assert_eq!(unmailed_all(&out), got);
+        assert!(unmailed(&out, "20261011T120000Z", None).is_empty());
+        assert_eq!(unmailed_all(&out, None), got);
         // Once a later digest is mailed, they are covered.
         run(&out, "20261012T000000Z", true, true);
-        assert!(unmailed(&out, "20261013T000000Z").is_empty());
+        assert!(unmailed(&out, "20261013T000000Z", None).is_empty());
+        assert_eq!(newest_marked(&out).as_deref(), Some("20261012T000000Z"));
+        std::fs::remove_dir_all(&out).unwrap();
+    }
+
+    #[test]
+    fn a_pruned_marker_is_remembered() {
+        let out =
+            std::env::temp_dir().join(format!("swarmchase-mailed-pruned-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&out);
+        // Retention deleted the run holding the marker; a later run was
+        // never mailed.
+        run(&out, "20261011T060000Z", true, false);
+        run(&out, "20261011T120000Z", true, false);
+        assert_eq!(newest_marked(&out), None);
+        assert!(unmailed(&out, "20261013T000000Z", None).is_empty());
+        let got = unmailed(&out, "20261013T000000Z", Some("20261011T000000Z"));
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert_eq!(unmailed_all(&out, Some("20261011T060000Z")).len(), 1);
+        // A newer marker on disk wins over an older remembered stamp.
+        run(&out, "20261011T120000Z", true, true);
+        assert!(unmailed(&out, "20261013T000000Z", Some("20261011T000000Z")).is_empty());
         std::fs::remove_dir_all(&out).unwrap();
     }
 }

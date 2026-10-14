@@ -8,7 +8,7 @@ Every watch, review and case command works in one data directory: `--data` (`-d`
 
 | Path | Holds |
 |---|---|
-| `state.json` | Each source's time cursor, resume key or stream checkpoint, query fingerprint and health history; records not yet in a digest; state of sources removed from the watchlist. |
+| `state.json` | Each source's time cursor, resume key or stream checkpoint, query fingerprint and health history; rule and slice history; the newest mailed run; records not yet in a digest; state of sources removed from the watchlist. |
 | `state.json.bak` | The previous `state.json`, read when the current one does not parse. |
 | `.lock`, `.lock.owner` | The data directory's writer lock and the command holding it ([one writer at a time](#one-writer-at-a-time)). |
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
@@ -110,7 +110,7 @@ A review file is saved under a lock of its own and merged: a save rereads the fi
 
 ### Interrupted runs
 
-A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written and handed to the workflow (`$GITHUB_OUTPUT`). Case hits, the rule history and alert streaks are saved in that same write, and the ledger and `autonomy.ndjson` just before it, so a run cut short before its digest leaves them as they were and the next run reports its case matches again. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`.
+A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written and handed to the workflow (`$GITHUB_OUTPUT`). Case hits, the rule and slice history and alert streaks are saved in that same write (the saves after each source keep each source's health as the run found it), and the ledger and `autonomy.ndjson` just before it, so a run cut short before its digest leaves them as they were and the next run reports its case matches again. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`.
 
 Steps after collection do not stop a run: a file that cannot be written or a history that cannot be read becomes a `step_failed` health alert, and the run goes on to its digest. A `summary.json` or `ledger.json` that does not parse is read from its `.bak` copy; when that fails too, the damaged file is kept as `.damaged`, the history starts afresh and the digest says so.
 
@@ -157,7 +157,7 @@ The health block comes first, because a source that did not run hides whatever i
 - a source whose canary failed: it answered, but nothing came back in the shape the parser expects;
 - a source skipped for the first time (no API key);
 - a source whose pull falls below a fifth of its median over recent runs, which usually means an API change, an expired key or a spent quota. A source's first pull and a pull spread over several runs are catching up, so they do not count towards the median;
-- a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it;
+- a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it. When the rule's slice is also rising as a [slice onset](#slice-onsets), the alert reads "drift or onset", since a swarm starting below the clustering threshold looks the same; when most of the source's slices rose together, it reads as a source-side change;
 - a store file with lines that cannot be read, with their count. They are moved aside; the other records are read;
 - a step after collection that failed and was skipped, or a `summary.json` or `ledger.json` started afresh because it could not be read ([interrupted runs](#interrupted-runs)).
 
@@ -167,7 +167,17 @@ Any alert gets the digest emailed; lost capability and quiet sources alone do no
 
 ### Digests not mailed
 
-The workflow's mail step writes `runs/<stamp>/mailed` once a digest is sent. A changed run newer than the newest mailed one, without the marker, had a digest that never reached the admin (no mail that run, a refused send, a cancelled job). The next digest lists those runs under *Digests not mailed*, before the health block, with each one's priority reasons and leads, takes the highest of their priorities as a reason of kind `unmailed`, and counts as changed. A data directory with no marker at all is not mailed from, and nothing is listed. The [dashboard](#the-dashboard) lists the same runs.
+The workflow's mail step writes `runs/<stamp>/mailed` once a digest is sent. A changed run newer than the newest mailed one, without the marker, had a digest that never reached the admin (no mail that run, a refused send, a cancelled job). The next digest lists those runs under *Digests not mailed*, before the health block, with each one's priority reasons and leads, takes the highest of their priorities as a reason of kind `unmailed`, and counts as changed. A data directory with no marker at all is not mailed from, and nothing is listed. Each run keeps the newest marked stamp in `state.json` (`last_mailed`), so retention deleting the run that held the marker does not stop the list. The [dashboard](#the-dashboard) lists the same runs.
+
+### Slice onsets
+
+Some swarms never cluster above noise: one agent per tag, a few records a run, each below tier. What they change is a count. Each run counts its new records per slice of each source: per rule they hit and, for flagged records, per specific scaffold template and per target site family (a host's last two labels). It keeps the last 16 runs per source in `state.json`, each with the source's records that run (its exposure) and a few example record IDs per slice.
+
+A slice is rising when a Poisson CUSUM over its newest runs (up to six), against its rate per record over the older runs, reaches the threshold ([methodology](../methodology.md#slice-onsets)). A source that returned more rows at the same rate is not rising. Fewer than three older runs, or fewer than 100 records under them, is no alarm.
+
+*Slice onsets* lists each rising slice: which source and slice, the records in it since the run it started against the source's records over the same runs, the baseline counts and rate, the start run, and example record IDs. Hosts and IDs are defanged. When the source's volume also changed fourfold, the line says so. When at least three of a source's established slices (ones its baseline saw), and most of them, rise together, the section lists one source-side change (pagination, a new crawl, a recovery) instead.
+
+An onset is a lead in the mailed digest only, never a public artifact. It adds a `medium` priority reason of kind `onset` (a source-side change one of kind `source_change`, at `low`) and makes the run count as changed. A slice still rising is mailed again on the 2nd, 4th, 8th... run of its streak, as health alerts are; the section shows the runs between, marked as repeats. The history restarts when the rules change, and runs older than `retain_days` leave it with their example IDs.
 
 ### Sources and coverage
 
@@ -298,7 +308,7 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `durations_ms` | Milliseconds per phase (`collect`, `platform`, `analysis`, `triage`, `report`) and `total` up to this file. |
 | `digest` | The digest's file name in the same directory. |
 
-A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged`, `step_failed` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error`, `skipped` or `deferred`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
+A reason has `level`, `kind` (`lead`, `case_clock`, `unmailed`, `canary`, `onset`, `source_change`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged`, `step_failed` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error`, `skipped` or `deferred`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
 
 ### Lead fields
 
