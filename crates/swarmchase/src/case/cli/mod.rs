@@ -141,6 +141,7 @@ pub enum CaseCmd {
     Bundle {
         /// The case ID: its directory under <data>/cases/ (`case status` lists them).
         id: String,
+        /// Rules file (defaults to the bundled rules/default.toml).
         #[arg(long)]
         rules: Option<PathBuf>,
     },

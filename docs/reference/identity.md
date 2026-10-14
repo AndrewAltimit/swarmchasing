@@ -73,6 +73,8 @@ The page never fetches a provider's file at runtime: the site's policy allows re
 
 ### The snapshot
 
-`sc-site --identity-snapshot <dir>` (or `SITE_IDENTITY_SNAPSHOT` for `scripts/ci/build-site.sh`) embeds the files `identity refresh` wrote into `<dir>`, normally `<data>/identity`, as `assets/identity-snapshot.json` with their URLs and fetch dates. Only `fetched.json` and the files the catalog names are read. A file is embedded only when it parses and its SHA-256 matches `fetched.json`, so the date shown is that file's. The deploy passes the runner's `<data>/identity` when it holds files and fetches nothing itself, so the snapshot is as old as the admin's last `identity refresh` there. Without one, or offline, the build embeds the catalog alone and the page says so.
+`sc-site --identity-snapshot <dir>` (or `SITE_IDENTITY_SNAPSHOT` for `scripts/ci/build-site.sh`) embeds the files `identity refresh` wrote into `<dir>`, normally `<data>/identity`, as `assets/identity-snapshot.json` with their URLs and fetch dates. Only `fetched.json` and the files the catalog names are read. A file is embedded only when it parses and its SHA-256 matches `fetched.json`, so the date shown is that file's.
+
+The deploy passes the runner's `<data>/identity` when it holds files and fetches nothing itself, so the snapshot is as old as the last `identity refresh` there. The scheduled watch workflow runs that refresh once a day, after its digest, as a step that never blocks the watch ([runner](runner.md#watchyml)); the admin can also run it by hand. Without one, or offline, the build embeds the catalog alone and the page says so.
 
 The files are not committed: providers change them, and a copy in git would go stale between commits.

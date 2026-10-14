@@ -33,6 +33,7 @@ pub struct AgreementArgs {
     /// `reviewed.ndjson`.
     #[arg(long)]
     labeller: Option<String>,
+    /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
     /// List up to this many record ids per finding.

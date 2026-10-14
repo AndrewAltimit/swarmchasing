@@ -4,7 +4,7 @@ How `swarmchase watch` collects and reports, and how `swarmchase review` labels 
 
 ## The data directory
 
-Every watch, review and case command works in one data directory: `--out` (or `--data`), else `SWARMCHASE_DATA`, else `data/` relative to where the command runs. On the runner it is `$SWARMCHASE_DATA` outside the checkout ([runner](runner.md)). It is gitignored and never committed. A command that reads existing data (`review`, `case`, `notice add`) prints a hint naming the directory it resolved when that directory holds no watch data, labels or cases. A watch run refuses such a directory unless given `--init`, so an unset or mistyped `SWARMCHASE_DATA` never starts a fresh store beside the real one. Start a data directory once with `swarmchase watch --init`; on the runner, run the watch workflow by hand with its `init` input ([runner](runner.md#watchyml)).
+Every watch, review and case command works in one data directory: `--data` (`-d`; the watch also takes `--out` and `-o`), else `SWARMCHASE_DATA`, else `data/` relative to where the command runs. On the runner it is `$SWARMCHASE_DATA` outside the checkout ([runner](runner.md)). It is gitignored and never committed. A command that reads existing data (`review`, `case`, `notice add`) prints a hint naming the directory it resolved when that directory holds no watch data, labels or cases. A watch run refuses such a directory unless given `--init`, so an unset or mistyped `SWARMCHASE_DATA` never starts a fresh store beside the real one. Start a data directory once with `swarmchase watch --init`; on the runner, run the watch workflow by hand with its `init` input ([runner](runner.md#watchyml)).
 
 | Path | Holds |
 |---|---|
@@ -12,10 +12,12 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `state.json.bak` | The previous `state.json`, read when the current one does not parse. |
 | `.lock`, `.lock.owner` | The data directory's writer lock and the command holding it ([one writer at a time](#one-writer-at-a-time)). |
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
+| `store/<source>.damaged` | Store lines that could not be read, moved aside ([collection](#collection)). |
 | `runs/<stamp>/digest.md` | One directory per run, with its digest. |
 | `runs/<stamp>/analysis.json`, `case-notes.md` | The run's full analysis and its Markdown report; only the newest runs keep them ([retention](#retention)). |
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
 | `runs/<stamp>/attention.json` | The run's [attention queue](#the-attention-queue). |
+| `runs/<stamp>/mailed` | Written by the workflow's mail step once the digest is sent ([digests not mailed](#digests-not-mailed)). |
 | `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
 | `summary.json`, `ledger.json` (`.bak`, `.damaged`) | The previous copy, and a copy that could not be read, set aside ([interrupted runs](#interrupted-runs)). |
 | `autonomy.ndjson` | What each [autonomy](#autonomy) level did or would have done. |
@@ -48,7 +50,8 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 - **urlquery.** urlquery sources need `URLQUERY_APIKEY`. Without it they are skipped and the digest says so ([configuration](configuration.md#urlquerynet)).
 - **GitHub search.** `ghsearch` sources need `GITHUB_TOKEN`. Without it they are skipped and the digest says so.
 - **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss. Cached bodies are raw answers, not redacted records, so every run deletes entries older than the TTL, and at least a day ([retention](#retention)).
-- **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is skipped and counted in a `store_damaged` health alert; the other lines are read. Before an append, a last line without its newline is ended, so it never swallows the next record.
+- **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is moved to `store/<source>.damaged` the first time a run sees it, with a `store_damaged` health alert; the other lines are read, and later runs do not alert on it again. Retention deletes a `.damaged` file once it was last written before the cutoff. Before an append, a last line without its newline is ended, so it never swallows the next record.
+- **Deadline.** Collection stops starting sources after `collect_deadline_mins` (default 90; 0 turns it off). A source already pulling finishes; the rest are reported as `deferred`, with what their absence costs, and go first next run. Analysis and the digest still run.
 - **ASN.** Once `swarmchase asn fetch` has put the IP-to-ASN table in `asn/`, records that carry an IP but no network get one ([configuration](configuration.md#ip-to-asn-table)).
 - **Redaction.** Collectors redact what they return, and the watch redacts every pulled record again before it reaches the run directory or the store, so a collector that misses a field cannot put a secret in the store. Redaction is idempotent: a record redacted once passes through unchanged.
 
@@ -100,11 +103,11 @@ A review file is saved under a lock of its own and merged: a save rereads the fi
 
 ### Interrupted runs
 
-A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written, and the ledger and `autonomy.ndjson` are saved just before that, so a run cut short before its digest leaves them as they were. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`.
+A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written and handed to the workflow (`$GITHUB_OUTPUT`). Case hits, the rule history and alert streaks are saved in that same write, and the ledger and `autonomy.ndjson` just before it, so a run cut short before its digest leaves them as they were and the next run reports its case matches again. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`.
 
 Steps after collection do not stop a run: a file that cannot be written or a history that cannot be read becomes a `step_failed` health alert, and the run goes on to its digest. A `summary.json` or `ledger.json` that does not parse is read from its `.bak` copy; when that fails too, the damaged file is kept as `.damaged`, the history starts afresh and the digest says so.
 
-A step after the digest that fails (the run's `summary.json`, `LATEST`, retention) ends the run with an error, having lost nothing the digest reported.
+A step after the digest that fails (the public log, `state.json`, the run's `summary.json`, `LATEST`, retention) ends the run with an error, having lost nothing the digest reported: the workflow already has `changed`, so the digest is mailed. Should `state.json` fail to save, the next run reports the records again.
 
 ### One source, or starting one over
 
@@ -142,18 +145,22 @@ The next block counts the [attention queue](#the-attention-queue) by band and li
 
 The health block comes first, because a source that did not run hides whatever it would have found. Its alerts are:
 
-- a source that failed this run, with a short reason such as `HTTP 504 after 3 attempts`, and how many runs in a row it has failed. One failure is enough, so every failure reaches the admin within one run;
+- a source that failed this run, with a short reason such as `HTTP 504 after 3 attempts`, and how many runs in a row it has failed. One failure is enough, so a failure reaches the admin within one run;
 - a host that stayed unavailable through its retries, so the run stopped sending to it;
 - a source whose canary failed: it answered, but nothing came back in the shape the parser expects;
 - a source skipped for the first time (no API key);
 - a source whose pull falls below a fifth of its median over recent runs, which usually means an API change, an expired key or a spent quota. A source's first pull and a pull spread over several runs are catching up, so they do not count towards the median;
 - a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it;
-- a store file with lines that cannot be read, with their count. They are skipped; the other records are read;
+- a store file with lines that cannot be read, with their count. They are moved aside; the other records are read;
 - a step after collection that failed and was skipped, or a `summary.json` or `ledger.json` started afresh because it could not be read ([interrupted runs](#interrupted-runs)).
 
 Under *Capability lost this run* it lists each skipped, failed or stopped source with what its absence costs, and the part of a stream it skipped. When no submit-time source ran (urlquery is the only one scheduled), it says so first: without submission times, timing links, pace, agent grades above L2 and interaction edges are unavailable. *Quiet sources* notes a source that has pulled nothing for several runs, and whether its canary passed.
 
-Any alert gets the digest emailed; lost capability and quiet sources alone do not. A failed source's reason never includes the request URL; the full error is in the run's log and in `state.json`.
+Any alert gets the digest emailed; lost capability and quiet sources alone do not. A failure that repeats (a source, a host, a canary) alerts on the 1st, 2nd, 4th, 8th and later powers of two of its streak; on the runs between, the sources table still shows the error and a note gives the streak, without mailing a digest for it. A failed source's reason never includes the request URL; the full error is in the run's log and in `state.json`.
+
+### Digests not mailed
+
+The workflow's mail step writes `runs/<stamp>/mailed` once a digest is sent. A changed run newer than the newest mailed one, without the marker, had a digest that never reached the admin (no mail that run, a refused send, a cancelled job). The next digest lists those runs under *Digests not mailed*, before the health block, with each one's priority reasons and leads, takes the highest of their priorities as a reason of kind `unmailed`, and counts as changed. A data directory with no marker at all is not mailed from, and nothing is listed. The [dashboard](#the-dashboard) lists the same runs.
 
 ### Sources and coverage
 
@@ -283,7 +290,7 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `durations_ms` | Milliseconds per phase (`collect`, `platform`, `analysis`, `triage`, `report`) and `total` up to this file. |
 | `digest` | The digest's file name in the same directory. |
 
-A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged`, `step_failed` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
+A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged`, `step_failed` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error`, `skipped` or `deferred`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
 
 ### Lead fields
 
@@ -388,7 +395,7 @@ A lead's thread counts with every thread it was merged into. For `draft_case`, *
 
 ## Retention
 
-At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones.
+At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points, autonomy lines and `summary.json` endpoints last seen before that. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones.
 
 The platform pass keeps its carried events for `carry_hours` only. Cached HTTP responses older than `http_cache_ttl_secs`, and at least a day, are deleted on every run, before the digest; `watch prune-cache` does the same on demand. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
 
@@ -412,6 +419,7 @@ It answers these questions:
 - **How leads move.** The activity timeline draws each thread from the ledger as a row over the window: a bar per run, its height the records, its colour the band, solid when that run collected records for it, with dots for events.
 - **What ties leads together.** The link graph draws the latest analysis's clusters above noise that something ties: soft links as grey lines, thicker for a stronger pair (combined as candidate fleets combine them), possible interaction (S1 to S6) as red dashed lines, interaction inside one cluster as a ring, and candidate fleets as shaded areas. Groups of tied clusters are laid out apart, largest first, and the same overview always draws the same picture. It can show only interaction or only fleets; selecting a cluster or a line lists each tie with its strength and defanged detail, and the table under it lists every tie. Up to 60 clusters are drawn, the queue's top ones first. A tie is a lead to check, never a merge.
 - **How autonomy would have done.** Each level's mode and record (agreed, disagreed, pending, held back, never proposed) and its latest lines with their outcome ([reading a level's record](#reading-a-levels-record)).
+- **What never reached the admin.** Changed runs whose digest was not mailed, as the next digest folds them in ([digests not mailed](#digests-not-mailed)).
 - **What to run next.** Each item comes with its command, with the data directory filled in: `review --serve`, `case … new --cluster <key>`, a case's next step, or `scan` on a drifting source's records.
 
 `d` shows the latest digest; `1` to `8` jump to the sections; `?` lists the keys.
@@ -436,6 +444,7 @@ The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<sta
 | `timeline` | `from`, `to`, `total` and up to 40 `rows`: each thread's `points`, `events`, `band`, `trajectory`, `peak_grade` and queue `rank`. |
 | `graph` | `clusters` above noise, `linked` (those with a tie), and the drawn `nodes` (`id`, `key`, `tier`, `grade`, queue `band` and `rank`, `records`, `targets`, `top_target`, `fleet`, `links`, `inner`), `links` (each pair's `soft` links and `soft_strength`, `swarm` edges and `swarm_strength`, shared `fleet`) and candidate `fleets`. |
 | `autonomy` | `modes`, each level's record under `levels`, the log's `lines`, and the `recent` lines with their `outcome`. |
+| `unmailed` | Changed runs whose digest was never mailed ([digests not mailed](#digests-not-mailed)): `stamp`, `priority`, `reasons`, `leads`, `digest`. |
 | `actions` | The next steps, most urgent first: `kind`, `title`, `detail`, `command`. |
 
 ## Reviewing leads
@@ -445,12 +454,13 @@ The page reads one JSON document, `GET /api/overview` (`/api/overview/since/<sta
 | Key | Does |
 |---|---|
 | `a` / `b` / `u` | Labels the record agent, benign or unsure. |
-| `A` / `B` / `U` | Labels every queued record in the cluster. |
+| `A` / `B` / `U` | Labels every queued record in the cluster, asking `[y/N]` first when that is more than 5. |
 | `s` / `q` | Skips the record, or quits. |
+| `z` | Takes back the last label or skip, and shows that record again; repeat to go further back. |
 | `c` | Opens a case from the shown record's cluster. |
 | `c <case-id>` | Adds the cluster to an open case. |
 
-Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing.
+Text after the key is saved as a note (`b ordinary article read`). Answers are saved one at a time, so quitting loses nothing. A label line that does not read (a write cut short, a hand edit) is skipped with a warning, and the next save moves it to `<file>.damaged` beside the review file.
 
 Each record shows its agent grade. Labelling agent below L2 prints the grade, its signals and caps and the labelling rule, then asks for a reason, saved as the note: Enter saves the label with none, and `u` labels unsure instead. A note typed after the key is taken as the reason.
 

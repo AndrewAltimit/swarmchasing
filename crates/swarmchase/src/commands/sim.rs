@@ -27,6 +27,7 @@ enum SimCmd {
         scenarios: PathBuf,
         #[arg(short, long)]
         out: PathBuf,
+        /// Rules file (defaults to the bundled rules/default.toml).
         #[arg(long)]
         rules: Option<PathBuf>,
     },
@@ -36,6 +37,7 @@ enum SimCmd {
     /// is not met.
     Bench {
         scenarios: PathBuf,
+        /// Rules file (defaults to the bundled rules/default.toml).
         #[arg(long)]
         rules: Option<PathBuf>,
         /// Print only the summed measurement.
@@ -53,6 +55,7 @@ enum SimCmd {
     /// scenario and each scenario's, beside the ones the rules set.
     Calibrate {
         scenarios: PathBuf,
+        /// Rules file (defaults to the bundled rules/default.toml).
         #[arg(long)]
         rules: Option<PathBuf>,
         /// Exit non-zero when a ratio the rules set is above the

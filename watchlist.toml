@@ -10,6 +10,7 @@ analysis_window_days = 30
 retain_days = 180           # delete runs and stored records older than this (docs/policies.md)
 contained_after_days = 14   # digest proposes "contained" for an active notice after this long with no matching record
 http_cache_ttl_secs = 3600  # reuse cached responses (<data>/cache/http) this long, then revalidate; 0 = off
+collect_deadline_mins = 90  # sources not started by then are deferred to the next run (within watch.yml's 150-minute job); 0 = off
 
 # What the watch may do on its own about the attention queue
 # (docs/reference/watch.md#autonomy). Shadow only logs what a level would have

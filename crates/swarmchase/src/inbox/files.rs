@@ -107,7 +107,9 @@ pub fn load(data: &Path, id: &str) -> Result<Stored> {
     })
 }
 
-/// Every stored submission, oldest first.
+/// Every stored submission that loads, oldest first. One that does not (a
+/// damaged `intake.json`, a stray directory) is skipped with a warning, so
+/// it never stops the commands that list the inbox.
 pub fn all(data: &Path) -> Result<Vec<Stored>> {
     let mut out = Vec::new();
     if let Ok(entries) = std::fs::read_dir(root(data)) {
@@ -115,7 +117,10 @@ pub fn all(data: &Path) -> Result<Vec<Stored>> {
             let p = e?.path();
             if p.join("intake.json").is_file() {
                 let id = p.file_name().unwrap_or_default().to_string_lossy();
-                out.push(load(data, &id)?);
+                match load(data, &id) {
+                    Ok(s) => out.push(s),
+                    Err(e) => eprintln!("warning: inbox: skipped {}: {e:#}", p.display()),
+                }
             }
         }
     }
@@ -165,5 +170,22 @@ pub fn read_ndjson(p: &Path) -> Result<Vec<Observation>> {
             .collect(),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(e).with_context(|| format!("reading {}", p.display())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_damaged_submission_is_skipped_not_fatal() {
+        let d = std::env::temp_dir().join(format!("swarmchase-inbox-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let sub = root(&d).join("sub-broken");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("intake.json"), "{ torn").unwrap();
+        assert!(load(&d, "sub-broken").is_err());
+        assert!(all(&d).unwrap().is_empty());
+        std::fs::remove_dir_all(&d).unwrap();
     }
 }
