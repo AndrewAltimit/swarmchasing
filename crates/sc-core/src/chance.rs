@@ -273,19 +273,24 @@ fn ln_hooks(lambda: &[usize]) -> f64 {
 
 /// The longest chain of `points` increasing strictly in both coordinates:
 /// the longest increasing subsequence of one order read in the other, with
-/// ties in either order never counted as agreement.
+/// ties in either order never counted as agreement. Patience sorting in
+/// `O(n log n)`: points by the first coordinate, ties in it by the second
+/// descending so no two of them chain, then the longest strictly increasing
+/// run of second coordinates.
 pub(crate) fn longest_chain(points: &[(i64, i64)]) -> usize {
     let mut p = points.to_vec();
-    p.sort();
-    let mut best = vec![1usize; p.len()];
-    for j in 0..p.len() {
-        for i in 0..j {
-            if p[i].0 < p[j].0 && p[i].1 < p[j].1 {
-                best[j] = best[j].max(best[i] + 1);
-            }
+    crate::sort::by(&mut p, |a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+    // tails[k]: the smallest last second coordinate of a chain of k + 1.
+    let mut tails: Vec<i64> = Vec::new();
+    for (_, y) in p {
+        let i = tails.partition_point(|&t| t < y);
+        if i == tails.len() {
+            tails.push(y);
+        } else {
+            tails[i] = y;
         }
     }
-    best.into_iter().max().unwrap_or(0)
+    tails.len()
 }
 
 #[cfg(test)]
@@ -332,6 +337,39 @@ mod tests {
         // Ties never count as agreement.
         assert_eq!(longest_chain(&[(0, 0), (0, 1), (1, 0)]), 1);
         assert_eq!(longest_chain(&[(0, 0), (1, 1), (2, 2)]), 3);
+    }
+
+    /// The quadratic chain the patience sort replaces, as a reference.
+    fn chain_by_pairs(points: &[(i64, i64)]) -> usize {
+        let mut p = points.to_vec();
+        p.sort();
+        let mut best = vec![1usize; p.len()];
+        for j in 0..p.len() {
+            for i in 0..j {
+                if p[i].0 < p[j].0 && p[i].1 < p[j].1 {
+                    best[j] = best[j].max(best[i] + 1);
+                }
+            }
+        }
+        best.into_iter().max().unwrap_or(0)
+    }
+
+    #[test]
+    fn the_patience_chain_matches_the_quadratic_one() {
+        let mut mix = Mix(7);
+        assert_eq!(longest_chain(&[]), 0);
+        for round in 0..3000 {
+            let n = (mix.next() % 13) as usize;
+            // Small ranges so ties in either coordinate are common.
+            let range = 1 + (round % 9) as u64;
+            let pts: Vec<(i64, i64)> = (0..n)
+                .map(|_| ((mix.next() % range) as i64, (mix.next() % range) as i64))
+                .collect();
+            assert_eq!(longest_chain(&pts), chain_by_pairs(&pts), "{pts:?}");
+        }
+        // Many points stay fast: a long increasing run with ties mixed in.
+        let big: Vec<(i64, i64)> = (0..200_000i64).map(|i| (i / 2, i)).collect();
+        assert_eq!(longest_chain(&big), 100_000);
     }
 
     #[test]
