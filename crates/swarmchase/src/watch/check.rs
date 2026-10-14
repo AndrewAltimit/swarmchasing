@@ -167,6 +167,85 @@ mod tests {
         assert!(f.sources > 0);
     }
 
+    /// The streamed relay sources share one list of substrings, taken from
+    /// the rules. Every relay and carrier rule that matches a host or URL
+    /// must have a substring in each of them whose sample URL fires it, or
+    /// be named here with why it is left out.
+    #[test]
+    fn streamed_relay_sources_cover_the_relay_and_carrier_rules() {
+        use sc_core::{IndicatorKind, Observation, Rules};
+        const LEFT_OUT: &[(&str, &str)] = &[
+            ("relay.hrefli", "WordPress outbound links: far too common"),
+            ("relay.translate_goog", "translated pages: far too common"),
+            ("relay.scrape_api", "named all day by its own users"),
+            ("carrier.codesandbox", "named all day by its own users"),
+            (
+                "carrier.agent_sandbox",
+                "matched by suffix; the rule needs a sandbox's id label",
+            ),
+            ("carrier.microlink_function", "covered by api.microlink.io/"),
+            // Program content, not a host: these fire on what the unwrapper
+            // finds inside a carrier URL the substrings above already keep.
+            ("carrier.data_url_script", "program content"),
+            ("carrier.inline_fetch_program", "program content"),
+            ("carrier.form_post_program", "program content"),
+            ("carrier.html_program", "program content"),
+        ];
+        const STREAMED: &[&str] = &[
+            "gharchive-relays",
+            "wikimedia-relay-links",
+            "hackernews-relay-links",
+            "bluesky-relay-links",
+        ];
+        let rules = Rules::default_rules();
+        let wl: Watchlist = toml::from_str(include_str!("../../../../watchlist.toml")).unwrap();
+        // A URL a substring stands for: what follows the host is a target.
+        let sample = |n: &str| {
+            let n = n.trim_start_matches('/');
+            let host = n.split('/').next().unwrap_or(n);
+            let lead = if host.starts_with('.') { "sandbox" } else { "" };
+            let tail = if n.contains('/') { "" } else { "/" };
+            format!("https://{lead}{n}{tail}https://target.example/?q=1")
+        };
+        for name in STREAMED {
+            let s = wl
+                .sources
+                .iter()
+                .find(|s| s.name == *name)
+                .unwrap_or_else(|| panic!("{name} is not in the watchlist"));
+            let mut fired = BTreeSet::new();
+            for n in s.query.pattern.split('|') {
+                let o = Observation {
+                    url: sample(n.trim()),
+                    ..Default::default()
+                };
+                for h in sc_core::extract(&o, &rules).hits {
+                    fired.insert(h.rule_id);
+                }
+            }
+            let mut missing = Vec::new();
+            for r in &rules.set.rules {
+                let host_or_url = matches!(
+                    r.target,
+                    sc_core::rules::Target::Host | sc_core::rules::Target::Url
+                );
+                if !matches!(r.kind, IndicatorKind::Relay | IndicatorKind::Carrier)
+                    || !host_or_url
+                    || LEFT_OUT.iter().any(|(id, _)| *id == r.id)
+                {
+                    continue;
+                }
+                if !fired.contains(&r.id) {
+                    missing.push(r.id.as_str());
+                }
+            }
+            assert!(
+                missing.is_empty(),
+                "{name}: no substring fires {missing:?} (add one, or name it in LEFT_OUT with why)"
+            );
+        }
+    }
+
     #[test]
     fn a_misspelt_key_is_reported_wherever_it_is() {
         let f = check(

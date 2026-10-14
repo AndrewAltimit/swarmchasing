@@ -3,7 +3,8 @@
 //! Ground rules, enforced by what this crate does and does not implement:
 //! - Read **indexes and public records only** (CDX listings, scan-service
 //!   search results, CT log entries, registry and event-stream metadata,
-//!   wiki edit streams, Hacker News posts, security.txt). Never download archived content, package code or WARC data.
+//!   wiki edit streams, Hacker News and Bluesky posts, GitHub search results,
+//!   code-host project listings, security.txt). Never download archived content, package code or WARC data.
 //!   Never open captured pages or the URLs agents submitted: they may be live
 //!   exploit payloads or trigger callbacks to the operator.
 //! - Never read or write agent callback channels (inboxes, ntfy topics, pastes).
@@ -33,7 +34,9 @@ mod commoncrawl;
 mod crtsh;
 mod ctlog;
 pub mod cve;
+pub mod forges;
 mod gharchive;
+pub mod ghsearch;
 pub mod hackernews;
 pub mod identity;
 pub mod lookup;
@@ -55,11 +58,13 @@ mod wellknown;
 pub mod wikimedia;
 
 pub use arquivo::{Arquivo, parse_arquivo_cdx};
+pub use bluesky::BskyLinks;
 pub use client::{Client, DEFAULT_MAX_BODY, Retry, USER_AGENT, parse_retry_after};
 pub use commoncrawl::{CommonCrawl, parse_cc_cdx, parse_collinfo};
 pub use crtsh::CertRecord;
 pub use ctlog::{CtLog, parse_entries, san_dns_names};
 pub use gharchive::{GhArchive, filter_events};
+pub use ghsearch::GhSearch;
 pub use hackernews::HnLinks;
 pub use mcp::{McpRegistry, parse_mcp_servers};
 pub use memento::{Memento, parse_timemap};
@@ -169,10 +174,12 @@ pub enum Kind {
     Mcp,
     Wikimedia,
     HackerNews,
+    Bluesky,
+    GhSearch,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 14] = [
+    pub const ALL: [Kind; 16] = [
         Self::Wayback,
         Self::Arquivo,
         Self::Urlquery,
@@ -187,6 +194,8 @@ impl Kind {
         Self::Mcp,
         Self::Wikimedia,
         Self::HackerNews,
+        Self::Bluesky,
+        Self::GhSearch,
     ];
 
     pub fn name(self) -> &'static str {
@@ -205,6 +214,8 @@ impl Kind {
             Self::Mcp => "mcp",
             Self::Wikimedia => "wikimedia",
             Self::HackerNews => "hackernews",
+            Self::Bluesky => "bluesky",
+            Self::GhSearch => "ghsearch",
         }
     }
 
@@ -219,13 +230,14 @@ impl Kind {
         match self {
             Self::Urlquery => Some("URLQUERY_APIKEY"),
             Self::Urlscan => Some("URLSCAN_APIKEY"),
+            Self::GhSearch => Some("GITHUB_TOKEN"),
             _ => None,
         }
     }
 
     /// Whether the source cannot run without its key.
     pub fn needs_key(self) -> bool {
-        self == Self::Urlquery
+        matches!(self, Self::Urlquery | Self::GhSearch)
     }
 
     /// The API key from [`Kind::key_env`], if set and not blank.
@@ -315,8 +327,8 @@ pub trait Source {
     }
 }
 
-/// The source of `kind` for `query`. urlquery needs an API key; urlscan
-/// takes one if given.
+/// The source of `kind` for `query`. urlquery needs an API key and GitHub
+/// search a token; urlscan takes a key if given.
 pub fn source(kind: Kind, query: CdxQuery, api_key: Option<String>) -> Result<Box<dyn Source>> {
     Ok(match kind {
         Kind::Wayback => Box::new(Wayback { query }),
@@ -336,6 +348,11 @@ pub fn source(kind: Kind, query: CdxQuery, api_key: Option<String>) -> Result<Bo
         Kind::Mcp => Box::new(McpRegistry { query }),
         Kind::Wikimedia => Box::new(WikiLinks::new(query)?),
         Kind::HackerNews => Box::new(HnLinks { query }),
+        Kind::Bluesky => Box::new(BskyLinks::new(query)?),
+        Kind::GhSearch => Box::new(GhSearch::new(
+            query,
+            api_key.ok_or_else(|| anyhow::anyhow!("ghsearch needs a GitHub token"))?,
+        )?),
     })
 }
 
@@ -361,6 +378,11 @@ impl Needles {
                 .filter(|n| !n.is_empty() && n != "*")
                 .collect(),
         )
+    }
+
+    /// The substrings, lower case.
+    pub fn terms(&self) -> &[String] {
+        &self.0
     }
 
     pub fn matches(&self, text: &str) -> bool {
@@ -421,6 +443,8 @@ mod tests {
         assert!("gopher".parse::<Kind>().is_err());
         assert_eq!(Kind::Urlscan.key_env(), Some("URLSCAN_APIKEY"));
         assert!(Kind::Urlquery.needs_key() && !Kind::Urlscan.needs_key());
+        assert_eq!(Kind::GhSearch.key_env(), Some("GITHUB_TOKEN"));
+        assert!(Kind::GhSearch.needs_key());
     }
 
     #[test]

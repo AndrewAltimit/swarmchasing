@@ -1,7 +1,9 @@
 //! Platform events for the coordinated-account detector
 //! (`sc_core::platform`): GitHub events from GH Archive, npm search results,
 //! PyPI's feeds, the Hugging Face Hub's newest Spaces, models and datasets,
-//! and Wikimedia's revision stream ([`crate::wikimedia`]). Metadata and
+//! Wikimedia's revision stream ([`crate::wikimedia`]), and the other
+//! sources' modules ([`crate::registries`], [`crate::forges`]). Metadata and
+
 //! event text only: repositories, packages, Spaces, wiki pages and every
 //! URL inside the text are never fetched.
 //!
@@ -68,6 +70,8 @@ pub const PLATFORM_KINDS: &[&str] = &[
     "osv",
     "wikimedia-ai-cleanup",
     "bluesky",
+    "gitlab",
+    "codeberg",
 ];
 
 /// A platform source in the watchlist (`[[platform.source]]`).
@@ -221,6 +225,7 @@ pub fn pull_platform(
                 .unwrap_or(crate::hackernews::DEFAULT_LOOKUPS),
         ),
         k if let Some(r) = crate::registries::pull(client, k, &src.query, mark, rules, max) => r,
+        k if let Some(r) = crate::forges::pull(client, k, &src.query, mark, rules, max) => r,
         k => bail!(
             "unknown platform source kind `{k}` (expected one of {})",
             PLATFORM_KINDS.join(", ")

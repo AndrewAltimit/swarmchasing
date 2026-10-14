@@ -73,6 +73,10 @@ pub enum Platform {
     Cve,
     /// Bluesky posts, from Jetstream.
     Bluesky,
+    /// GitLab.com projects.
+    Gitlab,
+    /// Codeberg repositories.
+    Codeberg,
 }
 
 impl Platform {
@@ -91,6 +95,8 @@ impl Platform {
             Self::Crates => "crates",
             Self::Cve => "cve",
             Self::Bluesky => "bluesky",
+            Self::Gitlab => "gitlab",
+            Self::Codeberg => "codeberg",
         }
     }
 }
@@ -181,7 +187,7 @@ pub struct PlatformEvent {
     /// `go:<module>@<version>`, `hn:<item>`, `nuget:<id>@<version>`,
     /// `packagist:<name>@<time>`, `gem:<name>@<version>`,
     /// `crate:<name>@<version>`, `ghsa:<id>`, `cve:<id>`,
-    /// `bsky:<account hash>/<rkey>`.
+    /// `bsky:<account hash>/<rkey>`, `gitlab:<project id>`, `codeberg:<repo id>`.
     pub id: String,
     pub platform: Platform,
     pub action: Action,

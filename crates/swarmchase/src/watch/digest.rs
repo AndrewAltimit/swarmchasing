@@ -118,6 +118,12 @@ pub fn capability(kind: &str) -> &'static str {
         "npm" | "pypi" => "registry leads: packages carrying run tags",
         "wikimedia" => "wiki edit leads: relay and run-tag links added to wiki pages",
         "hackernews" => "Hacker News leads: relay and run-tag links in stories and comments",
+        "bluesky" => {
+            "Bluesky leads: relay and run-tag links in a sampled stretch of posts, not every post since the last run"
+        }
+        "ghsearch" => {
+            "GitHub leads from pull request text and commit messages, which GH Archive's payloads leave out"
+        }
         "ctlog" => "certificate leads: new relay look-alikes and mirrors",
         "wellknown" => "agent protocol footprints: agent cards and signature key directories",
         "mcp" => "MCP Registry metadata for linking hosts to tool servers",

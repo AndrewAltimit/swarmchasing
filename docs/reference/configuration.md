@@ -23,6 +23,8 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | `SWARMCHASE_ADMIN` | `swarmchase case new` | The admin name a new case records. Unset, `git config user.name` ([second review](cases.md#second-review)). |
 | `URLQUERY_APIKEY` | `swarmchase` | urlquery.net collectors and watch sources. |
 | `URLSCAN_APIKEY` | `swarmchase` | Optional: raises urlscan.io's search quota ([urlscan.io](#urlscanio)). |
+| `GITHUB_TOKEN` | `swarmchase watch` | GitHub search sources (`ghsearch`); skipped without it. Any token that can read public data. |
+
 | `SWARMCHASE_SITE_URL` | `swarmchase notice build`, `site build` | `--base-url`. |
 | `SWARMCHASE_LLM_URL` | `swarmchase review --suggest`, `watch --triage` | A local OpenAI-compatible model server; loopback, private or link-local hosts only ([label suggestions](watch.md#label-suggestions)). |
 | `SWARMCHASE_LLM_MODEL` | `swarmchase review --suggest`, `watch --triage` | The model name sent to that server. |
