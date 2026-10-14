@@ -883,11 +883,16 @@ retry = 0.2
 
 # The sink swarm again, evading: a new run tag on every request and a new
 # client (address, network, user agent) for every request. It measures how
-# linking degrades when only the shared inbox is left.
+# linking degrades when only the shared inbox is left. The inbox joins the
+# agents' records into one cluster, so no pair is left for S1 (a strand of
+# one record is left out) or a candidate fleet; what it bounds is the
+# clustering, and no seam on a client that never repeats.
 [[scenario]]
 name = "evasive-swarm"
 seed = 411
 seeds = 4
+expect.clusters = { min_f1 = 0.86 }
+expect.seam = { max_pairs = 0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -911,6 +916,7 @@ records = 3
 name = "low-and-slow"
 seed = 421
 seeds = 4
+expect.clusters = { min_f1 = 0.98 }
 span_hours = 336
 [[scenario.actor]]
 kind = "agent"
@@ -1152,7 +1158,7 @@ palette_share = 0.1
 name = "tree-dispatch"
 seed = 451
 seeds = 4
-expect.S6 = { min_precision = 1.0 }
+expect.S6 = { min_precision = 1.0, min_recall = 0.36 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 7

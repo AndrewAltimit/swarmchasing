@@ -648,6 +648,9 @@ pub(crate) struct Signals<'a> {
     pub co_groups: &'a [crate::biclique::CoGroup],
     pub generator_pairs: &'a [crate::generator::GeneratorPair],
     pub playbook_pairs: &'a [crate::playbook::PlaybookPair],
+    /// Pairs whose playbooks walk one step set in conflicting orders: no
+    /// template tie between them ([`crate::playbook`]).
+    pub order_conflicts: &'a [(String, String)],
 }
 
 /// How much of its kind a value held by `n` of `total` clusters counts:
@@ -678,8 +681,21 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
     let family = std::cell::Cell::new(None);
     // `weight` is the share of the kind's ratio the link carries (its
     // similarity times its rarity), as an exponent.
+    let conflicts: HashSet<(&str, &str)> = s
+        .order_conflicts
+        .iter()
+        .flat_map(|(a, b)| [(a.as_str(), b.as_str()), (b.as_str(), a.as_str())])
+        .collect();
     let mut push = |x: &str, y: &str, kind: SoftLinkKind, weight: f64, detail: String| {
         if x == y || !is_shown(x) || !is_shown(y) {
+            return;
+        }
+        // A template set two playbooks walk in conflicting orders is a
+        // harness two operators share.
+        let template = matches!(kind, SoftLinkKind::Scaffold | SoftLinkKind::ScaffoldLineage)
+            || (kind == SoftLinkKind::CoGroup
+                && family.get().unwrap_or(kind.family()) == Family::Harness);
+        if template && conflicts.contains(&(x, y)) {
             return;
         }
         let base = opts.lr(kind);
