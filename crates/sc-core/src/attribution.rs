@@ -19,8 +19,9 @@
 //! 2. hosting network: the ASN the requests came from. It names a host, and
 //!    names a developer only when it belongs to the company the requests
 //!    self-identify as. A cloud provider's published ranges add the region
-//!    and service as description; a Tor exit names no host, and its
-//!    records are left out of hosting claims ([`crate::netranges`]);
+//!    and service as description. A Tor exit names no host and no sender:
+//!    its records are left out of every claim, and private reports carry a
+//!    caution instead ([`tor_caution`], [`crate::netranges`]);
 //! 3. identifiers shared with a confirmed incident (inbox IDs, tags);
 //! 4. infrastructure owned by the provider;
 //! 5. confirmation by the provider.
@@ -443,6 +444,15 @@ fn marker_party(rule: &str, matched: &str) -> String {
     }
 }
 
+/// The caution a report gives for `n` records sent through Tor exit relays.
+/// It is no claim: it names no party and carries no label, because the
+/// network the requests left by says nothing about who sent them.
+pub fn tor_caution(n: usize) -> String {
+    format!(
+        "{n} record(s) were sent through Tor exit relays; the network says nothing about the sender. They are left out of the hosting claims, and nothing here attributes them to Tor or to the people who run its relays."
+    )
+}
+
 /// Claims the records support for one cluster: developer (self-identification
 /// and same-company networks), host (client networks and runtime markers)
 /// and harness candidates (client traces). Strongest first within a layer.
@@ -484,7 +494,8 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
     // (`target_asn`, where a scan service reached the URL) says nothing about
     // who sent the request.
     // A Tor exit names a relay, not the agent's host: those records are
-    // left out of every hosting claim, and said so in one claim of their own.
+    // left out of every claim. Tor is no party to the incident, so they get
+    // no claim of their own; reports say so in a caution ([`tor_caution`]).
     // Published cloud ranges ([`crate::netranges`]) describe the rest.
     let hosting = &c.hosting;
     let mut sent_from: BTreeMap<u32, usize> = BTreeMap::new();
@@ -579,17 +590,6 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
             ..Claim::new(provider.clone(), Role::Host, Evidence::HostingAsn)
         });
     }
-    if !hosting.tor.is_empty() {
-        let n = hosting.tor.len();
-        claims.push(Claim {
-            details: vec![format!(
-                "{n} record(s) sent from addresses on the Tor exit list; an exit relay names neither the agent's host nor its developer, so these records are left out of the other hosting claims"
-            )],
-            tag: Some(Tag::Observed),
-            records: n,
-            ..Claim::new("Tor exit relays", Role::Host, Evidence::HostingAsn)
-        });
-    }
     for ((rule, matched), n) in &markers {
         claims.push(Claim {
             details: vec![format!(
@@ -648,7 +648,12 @@ pub fn harness(a: &Analysis, c: &Cluster) -> Vec<Claim> {
         .map(|(product, (n, uas))| {
             let mut details: Vec<String> = uas
                 .iter()
-                .map(|(ua, k)| format!("{k} record(s) sent User-Agent `{ua}`"))
+                .map(|(ua, k)| {
+                    format!(
+                        "{k} record(s) sent User-Agent `{}`",
+                        crate::extract::defang(ua)
+                    )
+                })
                 .collect();
             details.extend(shared.iter().cloned());
             Claim {

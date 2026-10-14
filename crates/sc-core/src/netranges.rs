@@ -476,7 +476,7 @@ mod tests {
         assert_eq!(annotate(&mut a, &table()), 3);
         // Attribution: the ASN claim says which ranges its records came
         // from, a record with no ASN is claimed by its range, and the Tor
-        // exit's network is no hosting claim at all.
+        // exit's record is in no claim at all, not even one naming Tor.
         let claims = crate::attribution::attribute(&a, &a.clusters[0]);
         let host = |p: &str| claims.iter().find(|c| c.party == p);
         let asn = host("AS64500").expect("AS64500");
@@ -489,7 +489,28 @@ mod tests {
         );
         assert!(host("AS64501").is_none(), "{claims:#?}");
         assert_eq!(host("AWS").map(|c| c.records), Some(1));
-        assert_eq!(host("Tor exit relays").map(|c| c.records), Some(1));
+        assert!(
+            claims.iter().all(|c| !c.party.contains("Tor")),
+            "{claims:#?}"
+        );
+        // Reports carry a caution instead, never in a public notice.
+        let mut a = a.clone();
+        a.clusters[0].tier = crate::model::Tier::Significant;
+        let report = |audience| {
+            let opts = crate::report::ReportOptions {
+                audience,
+                ..Default::default()
+            };
+            crate::report::render_markdown(&a, &opts)
+        };
+        let internal = report(crate::report::Audience::Internal);
+        assert!(
+            internal.contains("**Caution.** 1 record(s) were sent through Tor exit relays; the network says nothing about the sender."),
+            "{internal}"
+        );
+        assert!(!internal.contains("**Tor"), "{internal}");
+        let public = report(crate::report::Audience::Public);
+        assert!(!public.contains("Tor exit"), "{public}");
         let h = &a.clusters[0].hosting;
         assert_eq!(h.classes.get("AWS us-east-1 EC2"), Some(&2));
         assert_eq!(h.tor, [2]);

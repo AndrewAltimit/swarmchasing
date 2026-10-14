@@ -17,7 +17,12 @@
 #                   provider does not say the file lists every address its
 #                   agents use, so an address outside it is unlisted, not spoofed.
 #   [[directory]]   id, provider, signature_agent (the `Signature-Agent` URI the
-#                   provider documents), url (its key directory), source.
+#                   provider documents), url (its key directory), source;
+#                   `access = "direct" | "intermediary"` only where the
+#                   provider's own documentation says how the signer is
+#                   operated (one operator, or a platform many end users
+#                   direct). An intermediary's verified signature attributes
+#                   the platform, not the end user.
 #   [[agent]]       token (the user-agent product token, matched
 #                   case-insensitively as a whole token), provider, product,
 #                   purpose (user_fetch | agent | search | training),

@@ -5301,7 +5301,7 @@
         "url": "https://api.data.example/v1/quotes?symbol=ACME",
         "user_agent": "axios/1.7.7",
         "headers": {
-          "payment-signature": "eyJ4NDAyVmVyc2lvbiI6Mn0="
+          "payment-signature": "REDACTED-c77c2a8972bd"
         }
       },
       "score": 2,
@@ -5311,7 +5311,7 @@
           "rule_id": "selfid.agent_commerce",
           "kind": "self_id",
           "weight": 1,
-          "matched": "payment-signature: eyJ4NDAyVmVyc2lvbiI6Mn0=",
+          "matched": "payment-signature: REDACTED-c77c2a8972bd",
           "layer": 0,
           "artifact": true
         },

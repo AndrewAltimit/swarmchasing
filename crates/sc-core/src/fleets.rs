@@ -760,7 +760,7 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
                     y,
                     SoftLinkKind::Escalation,
                     rarity(e.clusters.len(), total),
-                    format!("{} on {}{}", e.route_line(), e.host, e.path),
+                    e.detail(),
                 );
             }
         }

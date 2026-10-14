@@ -252,12 +252,17 @@ impl<'a> Pinned<'a> {
         })
     }
 
-    /// The analysis of the records `scope` allows.
+    /// The analysis of the records `scope` allows, each cluster's client
+    /// addresses described from the network ranges held beside the cases
+    /// (so a Tor exit's network is in no hosting claim of a sent report).
     pub fn analysis(&self, scope: &Scope) -> Result<Analysis> {
-        Ok(analyze(
+        let mut a = analyze(
             records_in_scope(self.root, self.case, scope, Some(&self.rules))?,
             &self.rules,
-        ))
+        );
+        let data = self.root.parent().unwrap_or(self.root);
+        crate::commands::netranges::annotate_in(data, &mut a);
+        Ok(a)
     }
 }
 
@@ -647,6 +652,36 @@ mod tests {
         })
         .unwrap();
         assert!(rename(&root, "new-1", "newer-1", "2026-10-14").is_err());
+        cleanup(&root);
+    }
+
+    #[test]
+    fn a_case_analysis_reads_the_held_network_ranges() {
+        let root = scratch("tor");
+        let rules = RulesText::load(None).unwrap();
+        let records: Vec<Observation> = fixture()
+            .results
+            .iter()
+            .map(|r| Observation {
+                ip: Some("192.0.2.200".into()),
+                ts_kind: sc_core::TsKind::Request,
+                ..r.obs.clone()
+            })
+            .collect();
+        new_case(&root, "t-1", "Portal", records, &rules, "2026-10-12").unwrap();
+        let ranges = root.parent().unwrap().join("netranges");
+        std::fs::create_dir_all(&ranges).unwrap();
+        std::fs::write(ranges.join("tor-bulk-exit-list.txt"), "192.0.2.200\n").unwrap();
+        let c = load(&root, "t-1").unwrap();
+        let a = analysis(&root, &c, &Scope::All).unwrap();
+        assert!(a.clusters.iter().any(|c| !c.hosting.tor.is_empty()));
+        // The report that is sent names no hosting network for Tor exits.
+        let provider = report(&root, "t-1", Audience::Provider, None, None, "d").unwrap();
+        assert!(!provider.contains("(hosting network)"), "{provider}");
+        assert!(
+            provider.contains("sent through Tor exit relays"),
+            "{provider}"
+        );
         cleanup(&root);
     }
 

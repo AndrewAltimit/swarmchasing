@@ -37,8 +37,13 @@ const OPAQUE_PARAM: &str = r"(?i)^(token|key|code|sig|signature)$";
 /// key and token headers hosted-browser and sandbox services document for
 /// their APIs and preview links (Browserbase `X-BB-API-Key`, Browser Use
 /// `X-Browser-Use-API-Key`, Hyperbrowser `x-hyperbrowser-token`, Daytona
-/// `x-daytona-preview-token`, Modal `Modal-Key` and `Modal-Secret`).
-const SECRET_HEADER: &str = r"(?i)^(cookie|set-cookie|authorization|proxy-authorization|x-api-key|x-auth-token|x-csrf-token|x-xsrf-token|x-bb-api-key|x-browser-use-api-key|x-hyperbrowser-token|x-daytona-preview-token|modal-key|modal-secret)$";
+/// `x-daytona-preview-token`, Modal `Modal-Key` and `Modal-Secret`), and the
+/// x402 payment headers (`PAYMENT-SIGNATURE` in version 2, `X-PAYMENT` in
+/// version 1), whose value is a signed payment authorization a server could
+/// settle. The server's `X-PAYMENT-RESPONSE` / `PAYMENT-RESPONSE` is a
+/// settlement receipt that authorizes nothing, so it is kept. The header name
+/// survives redaction, so `selfid.agent_commerce` still matches it.
+const SECRET_HEADER: &str = r"(?i)^(cookie|set-cookie|authorization|proxy-authorization|x-api-key|x-auth-token|x-csrf-token|x-xsrf-token|x-bb-api-key|x-browser-use-api-key|x-hyperbrowser-token|x-daytona-preview-token|modal-key|modal-secret|payment-signature|x-payment)$";
 
 /// Well-known credential shapes, redacted wherever they appear.
 const SECRET_VALUE: &str = concat!(
@@ -668,5 +673,35 @@ mod tests {
         assert_eq!(redact_observation(&mut o), 0);
         assert_eq!(o, snapshot);
         assert_eq!(o.headers["Via"], "1.1 hysandbox (ATS)");
+    }
+
+    #[test]
+    fn x402_payment_headers_are_hashed_and_still_match() {
+        let mut o = Observation {
+            url: "https://api.data.example/v1/quotes".into(),
+            ..Default::default()
+        };
+        o.headers.insert(
+            "PAYMENT-SIGNATURE".into(),
+            "eyJ4NDAyVmVyc2lvbiI6Mn0=".into(),
+        );
+        o.headers
+            .insert("X-PAYMENT".into(), "eyJ4NDAyVmVyc2lvbiI6MX0=".into());
+        o.headers.insert(
+            "X-PAYMENT-RESPONSE".into(),
+            "eyJzdWNjZXNzIjp0cnVlfQ==".into(),
+        );
+        assert_eq!(redact_observation(&mut o), 2);
+        assert!(o.headers["PAYMENT-SIGNATURE"].starts_with(MARK));
+        assert!(o.headers["X-PAYMENT"].starts_with(MARK));
+        assert_eq!(o.headers["X-PAYMENT-RESPONSE"], "eyJzdWNjZXNzIjp0cnVlfQ==");
+        // The rule reads the header name, so it fires on the redacted record.
+        let rules = crate::rules::Rules::default_rules();
+        let x = crate::extract::extract(&o, &rules);
+        assert!(
+            x.hits.iter().any(|h| h.rule_id == "selfid.agent_commerce"),
+            "{:?}",
+            x.hits
+        );
     }
 }

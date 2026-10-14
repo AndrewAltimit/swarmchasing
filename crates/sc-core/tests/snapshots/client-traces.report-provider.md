@@ -31,7 +31,7 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 
 **Harness and framework candidates** (ranked; never named as the source in public):
 
-1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; Claude-User/1.0; +Claude-User@anthropic.com)`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Kimi-User/1.0; +https://www.kimi.com/policies/kimi-crawlers`; 2 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.markdown_accept; 1 record(s) send the header-name set bccc78e9 (accept).
+1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 1 record(s) sent User-Agent `Mozilla/5.0 (compatible; Claude-User/1.0; +Claude-User@anthropic.com)`; 1 record(s) sent User-Agent `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Kimi-User/1.0; +hxxps://www[.]kimi[.]com/policies/kimi-crawlers`; 2 record(s) match header fingerprint rule header.agent_ua; 1 record(s) match header fingerprint rule header.markdown_accept; 1 record(s) send the header-name set bccc78e9 (accept).
 
 ## Why we think this is an agent
 
