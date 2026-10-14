@@ -19,7 +19,7 @@ A case exports as a [STIX 2.1](references.md#interoperability) bundle. The profi
 
 Rules of the profile:
 
-- **Scoped like the report.** A provider export carries the provider's evidence; an affected-operator export carries only that operator's own logs; a public export withholds what the notice withholds and is linted the same way ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)).
+- **Scoped like the report.** A provider export carries the provider's evidence; an affected-operator export carries only the records aimed at that operator's own endpoints, and only its own logs; a public export withholds what the notice withholds and is linted the same way ([FM-11.4](11-notices.md#fm-114-what-a-notice-withholds)).
 - **Deterministic ids.** Object ids are UUIDv5 of the content (cyber-observable ids follow the STIX recipe), so the same case exports byte for byte the same and recipients can de-duplicate.
 - **Real values.** STIX patterns hold real, not defanged, values: they are for machines. The public export therefore carries no IP addresses or user agents.
 - **Confidence.** An indicator's `confidence` follows the tier of the evidence behind it.

@@ -51,9 +51,9 @@ Each change is logged with its date.
 | `case add <id> …` | Adds new records. |
 | `case contacts <id> [--providers-only] [--country CC]` | Adds provider contacts from the directory, proposes national CSIRTs, then finds a contact for each compromised, targeted or historical endpoint, never reading a relay, carrier or callback host ([contacts](#contacts)). |
 | `case contact add\|rm <id> …` | Adds or removes a contact by hand ([contacts](#contacts)). |
-| `case report <id> --audience … [--to <contact>]` | Drafts a report into `reports/`, applying the case's claims and naming threshold; an affected report needs `--to` ([operator scope](#what-an-operator-is-sent)). |
-| `case draft <id> --audience provider\|affected --to <contact> [--force]` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
-| `case draft <id> --all` | Writes a draft for every provider and affected contact not yet sent to ([drafts](#drafts)). |
+| `case report <id> --audience … [--to <contact> [--endpoint <host>]]` | Drafts a report into `reports/`, applying the case's claims and naming threshold; an affected report needs `--to` ([operator scope](#what-an-operator-is-sent)). |
+| `case draft <id> --audience provider\|affected --to <contact> [--endpoint <host>] [--force]` | Writes the report for one listed contact into `outbox/` ([drafts](#drafts)). |
+| `case draft <id> --all [--force]` | Writes a draft for every provider and affected recipient not yet sent to ([drafts](#drafts)). |
 | `case bundle <id>` | Writes an evidence bundle without drafting a report, signed when there is a signing key ([signing](#signed-bundles)). |
 | `case verify <bundle> [--key <file>]` | Checks the signature, the manifest, re-runs the analysis and fails if the signature is invalid or any tier or cluster differs. |
 | `case sent <id> --to … --channel … [--at <time>] [--again]` | Records a send the admin made, with its time, and moves an open case to reported ([lead times](#lead-times)). |
@@ -69,7 +69,7 @@ Each change is logged with its date.
 | `case review-packet <id> [--naming]` | Writes the draft, checklist output and internal report into `outbox/review/` for the second reviewer ([second review](#second-review)). |
 | `case review <id> --reviewer "…" --verdict approve\|object [--note "…"]` | Records a second review of the current draft ([second review](#second-review)). |
 | `case rules <id> [--update]` | Shows the pinned rules version against the current one and the records whose tier would change. |
-| `case export <id> --format stix\|misp --audience … [--to <contact>]` | Writes the case as a STIX 2.1 bundle or a MISP event ([STIX export](#stix-export), [MISP export](#misp-export)). |
+| `case export <id> --format stix\|misp --audience … [--to <contact> [--endpoint <host>]] [--force]` | Writes the case as a STIX 2.1 bundle or a MISP event ([STIX export](#stix-export), [MISP export](#misp-export)). |
 | `case export <id> --format oecd\|aiid [--site-url …]` | Writes a draft for an AI incident database or reporting framework ([incident database drafts](#incident-database-drafts)). |
 | `case evidence add <id> <log> --org … --host …` | Adds logs an affected operator sent back ([operator evidence](#operator-evidence)). |
 | `case evidence consent <id> <eid> --how …` | Records the operator's agreement to the notice using its logs; `withdraw` reverses it. |
@@ -117,7 +117,7 @@ swarmchase case fleet split <id> k-77d0e2aa [--why "…"]
 
 Clusters are named by stable key (or C-number in the case's analysis) and stored as keys under `[[fleet]]` in `case.toml`. A merge takes in any fleet already holding one of the clusters. The decision log records the clusters, the soft links between them with their strength and detail, the candidate fleet that proposed it, the reason, and the command that reverses it. A merge with no soft link between the clusters needs `--why`. A split takes one cluster out; a fleet left with one cluster is dissolved.
 
-Reports then carry a *Fleets* section, with soft-link details in case notes only, and STIX exports a `grouping` per fleet ([STIX export](#stix-export)). `case status` shows each cluster's key, corroboration, fleet and any plant signals ([provenance and plant review](../methodology.md#provenance-and-plant-review)).
+Reports then carry a *Fleets* section, with soft-link details in case notes only, and STIX exports a `grouping` per fleet ([STIX export](#stix-export)). A report or export to one operator analyses only its own records, each of its clusters keeping the key of the case cluster that holds most of its records; it shows a fleet when two or more of the fleet's clusters reach the operator's hosts, and counts, without listing, interaction runs elsewhere. `case status` shows each cluster's key, corroboration, fleet and any plant signals ([provenance and plant review](../methodology.md#provenance-and-plant-review)).
 
 ## Swarms
 
@@ -158,9 +158,13 @@ Each contact has a role: `provider`, `affected` (an operator), `registrar`, `hos
 
 `case draft` writes the report for one listed contact into `outbox/`. For an email contact it is an unsent `.eml` with a fresh evidence bundle attached; otherwise it is paste-ready text for a web form or CERT portal, naming the fresh bundle made for that recipient. Nothing is ever sent by the tool. After the admin sends a draft, `case sent --draft <file>` records it, reading the recipient from the draft's `To:` header (or the form draft's first line) and recording the file as the report sent.
 
-A draft is named `<date>-<audience>-<address slug>-<hash>`, the hash taken from the address, so two addresses that slug alike never share a file. A draft already in the outbox may hold the admin's edits: drafting for the same contact on the same day is refused unless `--force`. `case sent` refuses to record a send again (same recipient and draft, or without a draft the same day) unless `--again`, for a report that really went out twice. `case draft` and `case contacts` list unreviewed endpoints with a `case endpoint` line ready to run.
+A draft is named `<date>-<audience>-<slug>-<hash>`: the slug and hash are taken from the address and, for an affected report, the contact's endpoint, so two addresses that slug alike, or one address listed for two operators, never share a file. A report or export for one contact (`--to`) is named the same way. A draft already in the outbox may hold the admin's edits: drafting for the same contact on the same day is refused unless `--force`. `case sent` refuses to record a send again (same recipient and draft, or without a draft the same day) unless `--again`, for a report that really went out twice. `case draft` and `case contacts` list unreviewed endpoints with a `case endpoint` line ready to run.
 
-`case draft --all` drafts for every contact whose role implies the audience: provider contacts get the provider report, affected contacts the affected report scoped to their endpoint. Contacts already sent to are skipped, and so are registrar, host, CSIRT and other contacts, since what they may see is the admin's call; draft those one at a time with `--audience` and `--to`. Each skipped contact is listed. `--reporter` names who the report is from in its *Reporter* line.
+`case draft --all` drafts for every contact whose role implies the audience: provider contacts get the provider report, affected contacts the affected report scoped to their endpoint. Contacts already sent to are skipped, and so are registrar, host, CSIRT and other contacts, since what they may see is the admin's call; draft those one at a time with `--audience` and `--to`. A contact whose draft is already in the outbox is skipped too, and the rest are still drafted; `--force` writes them all again. Each skipped contact is listed. `--reporter` names who the report is from in its *Reporter* line.
+
+### One address, two operators
+
+A hosting company's abuse address can be listed for the endpoints of two operators. Those are two recipients, each with its own report, draft and export, and one operator's report never covers the other's hosts. `--to` with such an address alone is refused with the endpoints it is listed for; `--endpoint <host>` (defanged or not) picks one. `case draft --all` drafts one report per recipient. A send recorded from one recipient's draft (`case sent --draft`) counts for that recipient only; a send recorded without a draft counts for every recipient at the address.
 
 An unknown case ID, endpoint or contact address is refused with the closest match the case holds, when one is close enough to be a typo.
 
@@ -168,7 +172,7 @@ Provider and affected reports end with a *Publication* section: the time the ind
 
 ### What an operator is sent
 
-A report to an affected operator covers that operator's own endpoints and nothing else: the contact's endpoint and, for an affected contact, the endpoints of the case's other affected contacts at the same organisation under the same registrable domain (an organisation name is free text, so two operators recorded under one name never see each other's hosts or logs). Only the records aimed at those hosts are analysed, rendered and bundled, by the case's pinned rules, with that operator's own logs; the same scope applies to `case export --audience affected --to`. No other operator's host, record or payload reaches it. A contact with no endpoint is refused until it has one.
+A report to an affected operator covers that operator's own endpoints and nothing else: the contact's endpoint and, for an affected contact, the endpoints of the case's other affected contacts at the same organisation under the same registrable domain (an organisation name is free text, so two operators recorded under one name never see each other's hosts or logs). Only the records aimed at those hosts are analysed, rendered and bundled, by the case's pinned rules, with the operator logs of those hosts; the same scope applies to `case export --audience affected --to`. No other operator's host, record or payload reaches it. A contact with no endpoint is refused until it has one.
 
 A *Wider activity* section, read from the case's records and only the operator logs agreed for publication (another operator's private logs never move it), says how many linked clusters in the case hold the operator's records, how large they are and how many other hosts they reached, counted and never named. It lists the operator's requests that link to the activity only through records elsewhere, so a single request on its host is not lost. Provider reports, case notes and `case bundle` keep the whole case.
 
@@ -283,7 +287,7 @@ A pinned copy loads leniently. It was valid when it was pinned, so a key the cur
 
 `case export --format stix` writes the case as a STIX 2.1 bundle (indicators, observed data per cluster, relationships, report) for recipients' tooling. It is scoped like the matching report:
 
-- an affected export carries only that operator's own logs;
+- an affected export carries only the records aimed at that operator's own endpoints, and only its own logs ([operator scope](#what-an-operator-is-sent));
 - a public export withholds what the notice withholds, names only the hosts the notice names (not the domains or target networks of hosts not classified affected), and is linted.
 
 Ids are deterministic.

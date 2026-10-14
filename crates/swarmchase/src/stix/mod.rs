@@ -13,7 +13,7 @@
 pub use sc_stix::feature_kind;
 
 use crate::case::{self, Scope};
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use sc_core::Audience;
 use serde_json::Value;
 
@@ -26,7 +26,7 @@ pub fn export(
     reporter: Option<&str>,
     today: &str,
 ) -> Result<String> {
-    let v = export_value(root, id, audience, to, reporter, today)?;
+    let v = export_value(root, id, audience, to, None, reporter, today)?;
     Ok(format!(
         "{}
 ",
@@ -35,12 +35,14 @@ pub fn export(
 }
 
 /// The case as a STIX bundle for `audience`. An affected export is for the
-/// one operator `to` names; case notes are not exported.
+/// one operator `to` names (on `endpoint`, when the address is listed for
+/// more than one operator's); case notes are not exported.
 pub fn export_value(
     root: &std::path::Path,
     id: &str,
     audience: Audience,
     to: Option<&str>,
+    endpoint: Option<&str>,
     reporter: Option<&str>,
     today: &str,
 ) -> Result<Value> {
@@ -52,12 +54,7 @@ pub fn export_value(
         (Audience::Affected, None) => {
             bail!("an affected export is for one operator: pass --to <contact address>")
         }
-        (Audience::Affected, Some(to)) => Some(
-            c.contacts
-                .iter()
-                .find(|x| x.address.eq_ignore_ascii_case(to))
-                .with_context(|| format!("`{to}` is not a contact in case {id}"))?,
-        ),
+        (Audience::Affected, Some(to)) => Some(case::find_contact(&c, to, endpoint)?),
         _ => None,
     };
     let unreviewed = c.unreviewed().len();

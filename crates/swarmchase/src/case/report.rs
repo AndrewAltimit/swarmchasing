@@ -140,42 +140,116 @@ fn wider_activity(
     s
 }
 
-/// The contact `to` names in case `c`, any case, or an error naming the
-/// closest one.
-pub(crate) fn find_contact<'a>(c: &'a Case, to: &str) -> Result<&'a Contact> {
-    match c
-        .contacts
-        .iter()
-        .find(|x| x.address.eq_ignore_ascii_case(to.trim()))
-    {
-        Some(x) => Ok(x),
-        None => {
-            let known: Vec<&str> = c.contacts.iter().map(|x| x.address.as_str()).collect();
-            bail!(
-                "`{to}` is not a contact in case {}{} (known: {}); add it to case.toml or run `case contacts`",
-                c.id,
-                sc_case::text::did_you_mean(to, known.iter().copied()),
-                if known.is_empty() {
-                    "none".into()
-                } else {
-                    known.join(", ")
-                }
-            )
-        }
-    }
+/// The hosts a report to contact `x` would cover as an affected report
+/// ([`Scope::hosts`]): two contacts that share an address are one recipient
+/// only when these agree.
+fn operator_hosts(c: &Case, x: &Contact) -> BTreeSet<String> {
+    Scope::for_audience(Audience::Affected, Some(x))
+        .hosts(c, &sc_collect::psl::registrable_domain)
+        .unwrap_or_default()
 }
 
-/// The outbox file stem for a draft to `address`: the date, the audience,
-/// the address as a slug and a short hash of the address, so two addresses
-/// that slug alike (`a.b@x.org`, `a-b@x.org`) never share a file.
-pub(crate) fn stem(today: &str, audience: Audience, address: &str) -> String {
-    let address = address.trim().to_ascii_lowercase();
-    let slug: String = address
+/// A host as typed on the command line: trimmed, lowercase, defanging
+/// (`a[.]b`) undone.
+fn typed_host(h: &str) -> String {
+    h.trim().replace("[.]", ".").to_ascii_lowercase()
+}
+
+/// The contact `to` names in case `c` (any case), on `endpoint` when given,
+/// or an error naming the closest one. One address listed for endpoints of
+/// different operators names none of them alone: without `endpoint` that
+/// is an error listing the endpoints, so one operator's report never
+/// covers another's hosts.
+pub(crate) fn find_contact<'a>(
+    c: &'a Case,
+    to: &str,
+    endpoint: Option<&str>,
+) -> Result<&'a Contact> {
+    let matches: Vec<&Contact> = c
+        .contacts
+        .iter()
+        .filter(|x| x.address.trim().eq_ignore_ascii_case(to.trim()))
+        .collect();
+    let endpoints = |xs: &[&Contact]| -> String {
+        let e: BTreeSet<String> = xs
+            .iter()
+            .map(|x| {
+                x.endpoint
+                    .as_deref()
+                    .map_or_else(|| "(none)".into(), sc_core::defang_host)
+            })
+            .collect();
+        e.into_iter().collect::<Vec<_>>().join(", ")
+    };
+    if matches.is_empty() {
+        let known: Vec<&str> = c.contacts.iter().map(|x| x.address.as_str()).collect();
+        bail!(
+            "`{to}` is not a contact in case {}{} (known: {}); add it to case.toml or run `case contacts`",
+            c.id,
+            sc_case::text::did_you_mean(to, known.iter().copied()),
+            if known.is_empty() {
+                "none".into()
+            } else {
+                known.join(", ")
+            }
+        )
+    }
+    if let Some(e) = endpoint {
+        let host = typed_host(e);
+        return match matches.iter().find(|x| x.is_for(&host)) {
+            Some(x) => Ok(x),
+            None => bail!(
+                "`{to}` is not listed for endpoint {} in case {} (its endpoints: {})",
+                sc_core::defang_host(&host),
+                c.id,
+                endpoints(&matches)
+            ),
+        };
+    }
+    let first = matches[0];
+    let hosts = operator_hosts(c, first);
+    if matches[1..].iter().any(|x| operator_hosts(c, x) != hosts) {
+        bail!(
+            "`{to}` is listed for the endpoints of more than one operator in case {} ({}); pass --endpoint <host> to say which report this is",
+            c.id,
+            endpoints(&matches)
+        );
+    }
+    Ok(first)
+}
+
+/// What names a draft for `x` apart from its date: the audience, the
+/// address as a slug and, for an affected report, its endpoint, with a
+/// short hash of both, so two addresses that slug alike (`a.b@x.org`,
+/// `a-b@x.org`), or one address listed for two operators' endpoints, never
+/// share a file.
+pub(crate) fn stem_tail(audience: Audience, x: &Contact) -> String {
+    let address = x.address.trim().to_ascii_lowercase();
+    let key = match (audience, x.endpoint.as_deref()) {
+        (Audience::Affected, Some(e)) => format!("{address} {}", e.trim().to_ascii_lowercase()),
+        _ => address,
+    };
+    let slug: String = key
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
         .collect();
-    let hash = sc_case::bundle::sha256_hex(address.as_bytes());
-    format!("{today}-{}-{slug}-{}", audience_id(audience), &hash[..6])
+    let hash = sc_case::bundle::sha256_hex(key.as_bytes());
+    format!("{}-{slug}-{}", audience_id(audience), &hash[..6])
+}
+
+/// The file stem for a report, draft or export to contact `x` on `today`.
+pub(crate) fn stem(today: &str, audience: Audience, x: &Contact) -> String {
+    format!("{today}-{}", stem_tail(audience, x))
+}
+
+/// Where the draft to contact `x` goes in case directory `dir`.
+pub(crate) fn draft_path(dir: &Path, today: &str, audience: Audience, x: &Contact) -> PathBuf {
+    let stem = stem(today, audience, x);
+    dir.join("outbox").join(if x.channel == "email" {
+        format!("{stem}.eml")
+    } else {
+        format!("{stem}.md")
+    })
 }
 
 /// Write the report for one contact into the outbox: an unsent .eml with a
@@ -183,11 +257,28 @@ pub(crate) fn stem(today: &str, audience: Audience, address: &str) -> String {
 /// fresh bundle otherwise. The bundle holds what the report may: for an
 /// operator, only the records on its own endpoints. A draft already in the
 /// outbox (it may be hand-edited) is kept unless `force`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draft(
     root: &Path,
     id: &str,
     audience: Audience,
     to: &str,
+    endpoint: Option<&str>,
+    reporter: Option<String>,
+    today: &str,
+    force: bool,
+) -> Result<PathBuf> {
+    let c = load(root, id)?;
+    let contact = find_contact(&c, to, endpoint)?;
+    draft_to(root, &c, audience, contact, reporter, today, force)
+}
+
+/// [`draft`], for a contact already found in case `c`.
+pub(crate) fn draft_to(
+    root: &Path,
+    c: &Case,
+    audience: Audience,
+    contact: &Contact,
     reporter: Option<String>,
     today: &str,
     force: bool,
@@ -197,16 +288,10 @@ pub(crate) fn draft(
             "only provider and affected reports are sent; case notes stay private and the notice is published (`case notice`)"
         );
     }
-    let c = load(root, id)?;
-    let contact = find_contact(&c, to)?;
+    let id = c.id.as_str();
     let dir = case_dir(root, id)?;
     let outbox = dir.join("outbox");
-    let stem = stem(today, audience, &contact.address);
-    let p = outbox.join(if contact.channel == "email" {
-        format!("{stem}.eml")
-    } else {
-        format!("{stem}.md")
-    });
+    let p = draft_path(&dir, today, audience, contact);
     if p.exists() && !force {
         bail!(
             "{} exists (it may hold your edits); pass --force to write it again",
@@ -215,11 +300,11 @@ pub(crate) fn draft(
     }
     let md = report(root, id, audience, reporter, Some(contact), today)?;
     std::fs::create_dir_all(&outbox)?;
-    let pinned = Pinned::new(root, &c)?;
+    let pinned = Pinned::new(root, c)?;
     let bundle = crate::bundle::write(
         &dir.join("bundles"),
         id,
-        &case_records(root, &c, &scope(audience, Some(contact)))?,
+        &case_records(root, c, &scope(audience, Some(contact)))?,
         &pinned.rules,
         today,
         crate::bundle::git_commit(),
@@ -350,6 +435,126 @@ mod tests {
             "case notes see them"
         );
         assert_eq!(wider(&c), before);
+        cleanup(&root);
+    }
+
+    /// Two runs, each over two operators' hosts, the earliest record of
+    /// each on `one.example`: one operator's own analysis keys them apart
+    /// from the case unless it takes the case's keys.
+    fn two_runs() -> Vec<Observation> {
+        let mut obs = Vec::new();
+        for (run, (tag, base)) in [("aa1x", 1_791_000_000), ("bb2y", 1_791_050_000)]
+            .into_iter()
+            .enumerate()
+        {
+            for i in 0..6 {
+                let host = if i % 2 == 0 {
+                    "one.example"
+                } else {
+                    "two.example"
+                };
+                obs.push(Observation {
+                    id: format!("x{run}-{i}"),
+                    ts: base + i * 40,
+                    url: format!(
+                        "https://r.jina.ai/https://{host}/q?id={i}%20UNION%20SELECT%201&uqtag={tag}"
+                    ),
+                    ..Default::default()
+                });
+            }
+        }
+        obs
+    }
+
+    #[test]
+    fn an_operator_sees_its_fleets_under_the_case_keys() {
+        let root = scratch("fleet-keys");
+        let rules = RulesText::load(None).unwrap();
+        new_case(&root, "f-1", "Fleet", two_runs(), &rules, "2026-10-12").unwrap();
+        let contact = |host: &str| Contact {
+            org: host.into(),
+            role: ContactRole::Affected,
+            endpoint: Some(host.into()),
+            channel: "email".into(),
+            address: format!("security@{host}"),
+            source: String::new(),
+            confidence: "medium".into(),
+            found_on: "d".into(),
+            purpose: None,
+        };
+        let c = load(&root, "f-1").unwrap();
+        let all = analysis(&root, &c, &Scope::All).unwrap();
+        let mut keys: Vec<String> = all
+            .clusters
+            .iter()
+            .filter(|cl| cl.tier > sc_core::Tier::Noise)
+            .map(|cl| cl.key.clone())
+            .collect();
+        keys.sort();
+        assert_eq!(keys.len(), 2, "two runs");
+        update(&root, "f-1", |c| {
+            for e in &mut c.endpoints {
+                e.state = EndpointState::Targeted;
+            }
+            c.contacts = vec![contact("one.example"), contact("two.example")];
+            let mut runs: Vec<String> = keys.iter().map(|k| format!("{k}#1")).collect();
+            runs.push("k-0ther000#1".into());
+            c.fleets = vec![sc_case::Fleet {
+                id: "fleet-1".into(),
+                clusters: keys.clone(),
+                since: "d".into(),
+                swarm_evidence: vec![sc_case::model::SwarmEvidence {
+                    kind: sc_core::SwarmEdgeKind::SharedSink,
+                    runs,
+                    note: "both read one sink on one.example".into(),
+                    date: "d".into(),
+                }],
+            }];
+            Ok(())
+        })
+        .unwrap();
+        let c = load(&root, "f-1").unwrap();
+        let to = &c.contacts[1];
+        let scope = Scope::for_audience(Audience::Affected, Some(to));
+        // Clustered afresh, two.example's records key apart from the case.
+        let fresh = sc_core::analyze(case_records(&root, &c, &scope).unwrap(), &rules.rules);
+        assert!(fresh.clusters.iter().all(|cl| !keys.contains(&cl.key)));
+        // Its analysis speaks of the case's clusters.
+        let own = analysis(&root, &c, &scope).unwrap();
+        let mut own_keys: Vec<String> = own
+            .clusters
+            .iter()
+            .filter(|cl| cl.tier > sc_core::Tier::Noise)
+            .map(|cl| cl.key.clone())
+            .collect();
+        own_keys.sort();
+        assert_eq!(own_keys, keys);
+        let md = report(&root, "f-1", Audience::Affected, None, Some(to), "d").unwrap();
+        assert!(md.contains("## Fleets and swarms"), "{md}");
+        for k in &keys {
+            assert!(md.contains(k.as_str()), "{k}: {md}");
+        }
+        // Another operator's host, run or note never reaches it.
+        assert!(
+            !md.contains("one[.]example") && !md.contains("one.example"),
+            "{md}"
+        );
+        assert!(!md.contains("k-0ther000"), "{md}");
+        assert!(md.contains("and 1 run(s) elsewhere"), "{md}");
+        // The STIX export groups the fleet too.
+        let v = crate::stix::export_value(
+            &root,
+            "f-1",
+            Audience::Affected,
+            Some("security@two.example"),
+            None,
+            None,
+            "2026-10-14",
+        )
+        .unwrap();
+        let text = v.to_string();
+        assert!(text.contains("\"grouping\""), "{text}");
+        assert!(!text.contains("one.example"), "{text}");
         cleanup(&root);
     }
 }

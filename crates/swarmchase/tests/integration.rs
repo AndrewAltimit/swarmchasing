@@ -9,6 +9,7 @@
 mod analysis;
 mod cases;
 mod common;
+mod drafts;
 mod eval;
 mod exports;
 mod inbox;
