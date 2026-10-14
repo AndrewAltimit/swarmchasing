@@ -501,6 +501,31 @@ pub struct Actor {
     /// the actor's.
     #[serde(default)]
     pub prose: Option<Prose>,
+    /// How a run's tag is generated: `random` hex, a UUIDv1 on the
+    /// operator's machine (one node id), a ULID from the operator's clock
+    /// (one skew), or the operator's counter (successive numbers).
+    #[serde(default)]
+    pub tag_style: TagStyle,
+    /// For target lists: each host a site of its own (its own registrable
+    /// domain), as a list of sites is, instead of one site's hosts.
+    #[serde(default)]
+    pub own_families: bool,
+}
+
+/// How a run's tag is generated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TagStyle {
+    /// Random hex, nothing of the generator.
+    #[default]
+    Random,
+    /// A UUIDv1 for the run's start, on the operator's node id.
+    UuidV1,
+    /// A ULID for the run's start on the operator's clock, a few minutes
+    /// off.
+    Ulid,
+    /// The operator's stem and its counter's next number.
+    Counter,
 }
 
 /// What a run tag stands for.

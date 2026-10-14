@@ -71,6 +71,8 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`scaffold`](src/scaffold.rs) | Request templates with values as slot types, and cluster pairs sharing them beyond chance. |
 | [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
 | [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model, and in the same order beyond a random order. |
+| [`biclique`](src/biclique.rs) | Co-groups: three or more clusters on several rarely held sites or templates, beyond a degree-preserving swap null. |
+| [`generator`](src/generator.rs) | Generated identifiers decoded (UUID node ids, Snowflake workers, clock skews, counters), and cluster pairs on one generator beyond chance. |
 | [`community`](src/community.rs) | Backbone filter, deterministic Leiden (CPM) and minimum cut for candidate fleets. |
 | [`fleet_track`](src/fleet_track.rs) | Candidate fleets across analyses: `FK-` keys, matching, pair evidence accumulated over windows. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |

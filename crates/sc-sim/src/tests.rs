@@ -241,6 +241,63 @@ fn a_fleets_harness_adds_its_parameters_in_one_rotation() {
 }
 
 #[test]
+fn a_large_fleet_is_one_co_group_and_a_crowd_on_one_site_none() {
+    let m = bench_one("fleet-large");
+    let g = &m.links["co_group"];
+    assert!(g.found > 0 && g.correct == g.pairs, "{}", render(&m));
+    let m = bench_one("news-spike-large");
+    assert_eq!(m.links["co_group"].pairs, 0, "{}", render(&m));
+}
+
+#[test]
+fn styled_tags_are_fresh_per_run_and_keep_their_generator() {
+    let rules = Rules::default_rules();
+    let p = Palette::default_palette(&rules);
+    let text = to_ndjson(&generate(&scenario("fleet-randomtags"), 401, &p));
+    let truth = Truth::from_ndjson(&text);
+    let obs = parse_input(&text, Format::Auto, &FieldMap::default()).observations;
+    // Each fleet run's tag (the last uqtag: palette records carry their
+    // own), by actor.
+    let mut tags: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        Default::default();
+    for o in &obs {
+        let t = truth.get(&o.id).unwrap();
+        let Some(f) = &t.fleet else { continue };
+        if let Some(v) = o
+            .url
+            .split(['?', '&'])
+            .filter_map(|kv| kv.strip_prefix("uqtag="))
+            .next_back()
+        {
+            tags.entry(f.clone()).or_default().insert(v.to_string());
+        }
+    }
+    let fleet = |a: &str| tags[&format!("fleet-randomtags-f{a}")].clone();
+    // A fresh tag per run, three runs each.
+    for a in ["0", "1", "2"] {
+        assert_eq!(fleet(a).len(), 3, "{tags:?}");
+    }
+    // UUIDv1s on one node; ULIDs of 26 characters; one counter's stem.
+    let nodes: std::collections::BTreeSet<String> =
+        fleet("0").iter().map(|v| v[24..].to_string()).collect();
+    assert!(
+        fleet("0")
+            .iter()
+            .all(|v| v.len() == 36 && &v[14..15] == "1")
+    );
+    assert_eq!(nodes.len(), 1, "{nodes:?}");
+    assert!(fleet("1").iter().all(|v| v.len() == 26));
+    let stems: std::collections::BTreeSet<String> = fleet("2")
+        .iter()
+        .map(|v| v.trim_end_matches(|c: char| c.is_ascii_digit()).to_string())
+        .collect();
+    assert_eq!(stems.len(), 1, "{stems:?}");
+    let m = bench_one("fleet-randomtags");
+    let g = &m.links["generator"];
+    assert!(g.found > 0 && g.correct == g.pairs, "{}", render(&m));
+}
+
+#[test]
 fn a_fleet_among_hundreds_of_agents_draws_scaffold_links() {
     let m = bench_one("fleet-crowd");
     let s = &m.links["scaffold"];

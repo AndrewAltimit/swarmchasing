@@ -18,9 +18,9 @@ print!("{}", render(&m));
 
 | Module | Covers |
 |---|---|
-| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, target lists, news spikes, hubs, single agents, background, benign look-alikes, planters, mimics, escalators, prompt fleets, framework users, link checkers, SEO crawlers) and their options ([simulated scenarios](../../docs/reference/evaluation.md#simulated-scenarios)), seeds, null scenarios, expectations, defaults, the calibration allow-list. |
+| [`scenario`](src/scenario.rs) | Scenario files: actors (swarms by mode, fleets, schedulers, target lists, news spikes, hubs, single agents, background, benign look-alikes, planters, mimics, escalators, prompt fleets, framework users, link checkers, SEO crawlers) and their options ([simulated scenarios](../../docs/reference/evaluation.md#simulated-scenarios)), tag styles, seeds, null scenarios, expectations, defaults, the calibration allow-list. |
 | [`palette`](src/palette.rs) | The committed records the generator copies, sorted by use (attack, read, callback inbox, benign, person, tool). |
-| [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers, a fleet harness's own parameters, synthetic prose from prompt templates. |
+| [`generate`](src/generate.rs) | Labelled records from a scenario and a seed: clients, times, hosts, per-run identifiers, a fleet harness's own parameters, synthetic prose from prompt templates, tags from a node id, clock or counter. |
 | [`rng`](src/rng.rs) | A small seeded generator, the same on every platform. |
 | [`truth`](src/truth.rs) | `TruthRow` per record id from `label`, `actor`, `class`, `run`, `swarm` and `fleet`; the operator a run belongs to. |
 | [`measure`](src/measure.rs) | Pair-level precision and recall per edge kind, soft-link kind and candidate fleet; onset groups against swarm pairs and seams against false merges; split runs rejoined; the grade table by actor and class; B-cubed and adjusted Rand index of clusters against runs; time to detect, and by prefix re-analysis time to L2 or a candidate fleet. |

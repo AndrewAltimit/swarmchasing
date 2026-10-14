@@ -15,7 +15,7 @@
 
 use crate::palette::{Palette, Template, Use};
 use crate::rng::Rng;
-use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Prose, Scenario, TagScope};
+use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Prose, Scenario, TagScope, TagStyle};
 use sc_core::{LinkFeature, Observation, TsKind};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -184,6 +184,8 @@ struct Gen<'a> {
     /// The current actor's options that [`Gen::run`] applies to each of its
     /// runs.
     opts: RunOpts,
+    /// How the current actor's runs generate their tags.
+    tag_style: TagStyle,
 }
 
 /// Actor options [`Gen::run`] applies to every run of the actor.
@@ -219,6 +221,7 @@ pub fn generate(s: &Scenario, seed: u64, palette: &Palette) -> Vec<Value> {
         shapes: BTreeMap::new(),
         times: BTreeMap::new(),
         opts: RunOpts::default(),
+        tag_style: TagStyle::Random,
     };
     for (i, a) in s.actor.iter().enumerate() {
         g.opts = RunOpts {
@@ -259,6 +262,7 @@ pub fn to_ndjson(records: &[Value]) -> String {
 
 impl Gen<'_> {
     fn actor(&mut self, i: usize, a: &Actor) {
+        self.tag_style = a.tag_style;
         let mut rng = self.rng.fork(&format!("actor{i}"));
         let mut start = self.t0 + (a.offset_hours * 3600.0) as i64;
         if a.off_hour {
@@ -689,6 +693,10 @@ impl Gen<'_> {
                 .iter()
                 .filter_map(|&j| self.scenario.actor.get(j).map(|b| (j, b.hosts)))
                 .flat_map(|(j, n)| self.hosts(&format!("a{j}"), n))
+                .collect(),
+            // A list of sites: one host on each.
+            _ if a.own_families => (0..a.hosts.max(1))
+                .flat_map(|k| self.hosts(&format!("a{i}s{k}"), 1))
                 .collect(),
             _ => self.hosts(&format!("a{i}"), a.hosts),
         };
@@ -1402,6 +1410,7 @@ impl Gen<'_> {
             self.emit(&spec, "generated hand-off fetch", url, t, status, basis);
             t += gap(rng, spec.pace);
         }
+        let styled = self.styled_tag(&spec, t);
         let mut sched = t;
         for (r, (host, u)) in spec.hosts.iter().zip(&spec.uses).enumerate() {
             let shape = (!spec.shapes.is_empty()).then(|| &spec.shapes[r % spec.shapes.len()]);
@@ -1492,11 +1501,17 @@ impl Gen<'_> {
                 }
                 if spec.tag && u != &Use::Benign {
                     let tag = if per_request {
-                        ids.token(&format!("{}:{step}", spec.scope), "uqtag", 10)
+                        format!(
+                            "r{}",
+                            ids.token(&format!("{}:{step}", spec.scope), "uqtag", 10)
+                        )
                     } else {
-                        ids.token(&spec.scope, "uqtag", 10)
+                        match &styled {
+                            Some(s) => s.clone(),
+                            None => format!("r{}", ids.token(&spec.scope, "uqtag", 10)),
+                        }
                     };
-                    url = add_param(&url, "uqtag", &format!("r{tag}"));
+                    url = add_param(&url, "uqtag", &tag);
                 }
                 if let Some(w) = &spec.writes {
                     url = add_param(&url, "notes", w);
@@ -1517,6 +1532,59 @@ impl Gen<'_> {
             }
         }
         t
+    }
+
+    /// The run's tag when its actor does not use random ones, generated at
+    /// `at`: on the operator's node id, clock or counter. The operator is
+    /// the run's fleet, else the run itself. From streams of their own, so
+    /// runs with random tags draw as before.
+    fn styled_tag(&self, spec: &RunSpec, at: i64) -> Option<String> {
+        let operator = spec.truth.fleet.as_deref().unwrap_or(&spec.scope);
+        let base = Rng::new(self.seed).fork("tag_style");
+        let mut op = base.fork(operator);
+        let mut own = base.fork(&spec.scope);
+        match self.tag_style {
+            TagStyle::Random => None,
+            TagStyle::UuidV1 => {
+                // A unicast node id: the multicast bit clear.
+                let node = op.next_u64() & 0xfeff_ffff_ffff;
+                let seq = own.below(1 << 14) as u64;
+                let ticks =
+                    (at * 10_000_000 + GREGORIAN_OFFSET) as u64 + own.below(10_000_000) as u64;
+                Some(format!(
+                    "{:08x}-{:04x}-1{:03x}-{:04x}-{:012x}",
+                    ticks & 0xffff_ffff,
+                    (ticks >> 32) & 0xffff,
+                    (ticks >> 48) & 0xfff,
+                    0x8000 | seq,
+                    node
+                ))
+            }
+            TagStyle::Ulid => {
+                // A clock 97 to 840 seconds off either way: clear of an
+                // ordinary clock and of whole quarter hours.
+                let off = op.range(97, 840) * if op.chance(0.5) { 1 } else { -1 };
+                let ms = ((at + off) * 1000) as u64 + own.below(1000) as u64;
+                let mut s: String = (0..10)
+                    .rev()
+                    .map(|k| CROCKFORD[((ms >> (5 * k)) & 31) as usize] as char)
+                    .collect();
+                s.extend((0..16).map(|_| CROCKFORD[own.below(32)] as char));
+                Some(s)
+            }
+            TagStyle::Counter => {
+                let stem = COUNTER_STEMS[op.below(COUNTER_STEMS.len())];
+                let first = op.range(10_000, 90_000) as u64;
+                // The run's place in its operator's runs.
+                let k: u64 = spec
+                    .scope
+                    .rsplit(':')
+                    .next()
+                    .and_then(|x| x.parse().ok())
+                    .unwrap_or(0);
+                Some(format!("{stem}{}", first + k))
+            }
+        }
     }
 
     fn emit(
@@ -1701,6 +1769,15 @@ fn rewrite(
     }
     url
 }
+
+/// 100-nanosecond intervals from the Gregorian epoch to the Unix epoch.
+const GREGORIAN_OFFSET: i64 = 122_192_928_000_000_000;
+
+/// The ULID alphabet (Crockford's base 32).
+const CROCKFORD: &[u8] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/// Stems a counter tag is drawn from.
+const COUNTER_STEMS: &[&str] = &["batch-", "job", "worker-", "task", "crawl-", "lane"];
 
 /// How redaction writes a secret: this prefix and hex digits.
 const SECRET: &str = "REDACTED-";
@@ -2069,6 +2146,7 @@ mod tests {
             shapes: BTreeMap::new(),
             times: BTreeMap::new(),
             opts: RunOpts::default(),
+            tag_style: TagStyle::Random,
         };
         let mut rng = Rng::new(2);
         let spec = |gaps: Vec<i64>, rng: &mut Rng| RunSpec {
