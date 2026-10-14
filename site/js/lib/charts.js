@@ -11,7 +11,7 @@ import { fmtShort, fmtTs, dur } from "./fmt.js";
 
 // Presentation properties copied onto a chart's exported copy, so the file
 // draws as the page does without the site's stylesheet.
-const EXPORT_PROPS = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-opacity", "opacity", "font-family", "font-size", "font-weight", "visibility", "dominant-baseline"];
+const EXPORT_PROPS = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "stroke-opacity", "paint-order", "opacity", "font-family", "font-size", "font-weight", "visibility", "dominant-baseline"];
 
 /**
  * A chart as a standalone SVG file: a copy with each element's computed
@@ -39,18 +39,24 @@ export function svgFile(chart) {
 /** A file name from a chart's label: `swarmchase-runs-per-cluster.svg`. */
 const fileName = (label) => `swarmchase-${String(label || "chart").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "chart"}.svg`;
 
-/** A chart with its legend, caption, a "View as table" toggle and, for an SVG chart, a download. */
-export function figure({ chart, legend = null, caption = null, head = [], rows = [] }) {
+/**
+ * A chart with its legend, caption, a "View as table" toggle and, for an SVG
+ * chart, a download. `what` names the chart in its toggle ("View the runs as
+ * a table") where a step shows more than one.
+ */
+export function figure({ chart, legend = null, caption = null, head = [], rows = [], what = "" }) {
   const table = el("div", { class: "scroll", hidden: true },
     el("table", {}, el("thead", {}, el("tr", {}, head.map((h) => el("th", { scope: "col" }, h)))),
       el("tbody", {}, rows.map((r) => el("tr", {}, r.map((c) => el("td", {}, c)))))));
-  const btn = el("button", { type: "button", "aria-expanded": "false" }, "View as table");
+  const asTable = what ? `View ${what} as a table` : "View as table";
+  const asChart = what ? `View ${what} as a chart` : "View as chart";
+  const btn = el("button", { type: "button", "aria-expanded": "false" }, asTable);
   btn.addEventListener("click", () => {
     const open = table.hidden;
     table.hidden = !open;
     chart.hidden = open;
     btn.setAttribute("aria-expanded", String(open));
-    btn.textContent = open ? "View as chart" : "View as table";
+    btn.textContent = open ? asChart : asTable;
   });
   const svgChart = chart instanceof SVGSVGElement ? chart : chart.querySelector?.("svg.chart");
   let save = null;
@@ -70,7 +76,7 @@ export function figure({ chart, legend = null, caption = null, head = [], rows =
 export const legendKey = (cls, label) => el("span", {}, el("span", { class: `key ${cls}` }), label);
 /** A legend entry drawn with the edge's own classes, so it matches the graph. */
 export const edgeKey = (cls, label) => el("span", {}, svg("svg", { class: "chart key-line", viewBox: "0 0 26 10", width: 26, height: 10, "aria-hidden": "true" }, svg("path", { class: `edge ${cls}`, d: "M1,5 L25,5" })), label);
-/** A legend entry for an interaction-edge kind (S1–S5) or strength. */
+/** A legend entry for an interaction-edge kind (S1–S6) or strength. */
 export const swarmKey = (cls, label) => el("span", {}, svg("svg", { class: "chart key-line", viewBox: "0 0 26 10", width: 26, height: 10, "aria-hidden": "true" }, svg("path", { class: `sedge ${cls}`, d: "M1,5 L25,5" })), label);
 export const legend = (...keys) => el("p", { class: "legend" }, keys);
 export const tierLegend = () => legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"));
@@ -162,9 +168,15 @@ export function fitScale(runs, t0, t1, x0, x1) {
  * stretches shrink to a marked gap ([`fitScale`]), so runs days apart stay
  * readable; a zoomed window is always drawn to scale.
  */
-export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onSelect = null, width = 900, label, domain = null, onZoom = null, fit = false }) {
+export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onSelect = null, width = 900, label, domain = null, onZoom = null, fit = false, empty = null }) {
   const full = runExtent(lanes);
-  if (!full) return el("p", { class: "hint" }, "No runs with timestamps.");
+  if (!full) {
+    // A run belongs to a cluster: with none formed there is nothing to draw,
+    // however well the records are timed.
+    return el("p", { class: "hint" }, empty ?? (lanes.length
+      ? "These clusters have no timestamped runs to draw."
+      : "No clusters formed, so there are no runs to draw: records link into a cluster through shared identifiers or close timing. Every flagged record is still listed in the flagged-records table."));
+  }
   const [t0, t1] = domain ?? full;
   const span = Math.max(60, t1 - t0);
   const W = Math.max(320, width), LH = 26, L = 56, R = 10, T = 6, B = 26;
@@ -288,21 +300,60 @@ export function swimlanes({ lanes, pauses = [], bands = [], selected = null, onS
 }
 
 /**
- * Fleet graph: clusters as nodes (area by records, colour by tier), hints as
- * edges. Laid out on a circle by first-seen time, so the layout is stable.
+ * The order nodes take around the fleet graph: each group's members side by
+ * side (groups in the order given, members in node order, a node in the
+ * first group that names it), then the rest in node order. Deterministic.
  */
-export function fleetGraph({ nodes, edges, selected = null, onSelect = null, width = 900 }) {
+export function groupOrder(nodes, groups) {
+  const at = new Map(nodes.map((n, i) => [n.key, i]));
+  const placed = new Set();
+  const order = [];
+  for (const g of groups) {
+    for (const i of [...new Set(g.members.filter((k) => at.has(k)).map((k) => at.get(k)))].sort((p, q) => p - q)) {
+      if (!placed.has(i)) {
+        placed.add(i);
+        order.push(i);
+      }
+    }
+  }
+  nodes.forEach((_, i) => placed.has(i) || order.push(i));
+  return order;
+}
+
+/**
+ * Fleet graph: clusters as nodes (area by records, colour by tier), hints as
+ * edges. Laid out on an ellipse in the order given (first-seen time), except
+ * that each of `groups` ({label, members: node keys}, the candidate fleets)
+ * sits together behind a light band that names it, so its edges stay short.
+ * The layout depends only on its input, so it is stable.
+ */
+export function fleetGraph({ nodes, edges, groups = [], selected = null, onSelect = null, width = 900 }) {
   if (!nodes.length) return el("p", { class: "hint" }, "No clusters.");
   const W = Math.max(320, width), H = Math.min(560, Math.max(300, W * 0.62));
   const cx = W / 2, cy = H / 2, rad = Math.min(W, H) / 2 - 44;
+  const rx = Math.min(W / 2 - 50, rad * 1.45), ry = rad;
   const maxSize = Math.max(1, ...nodes.map((n) => n.size));
+  const angle = (slot) => (slot / nodes.length) * Math.PI * 2 - Math.PI / 2;
+  const slotOf = new Map(groupOrder(nodes, groups).map((i, slot) => [nodes[i].key, slot]));
   const pos = new Map();
-  nodes.forEach((n, i) => {
-    const a = (i / nodes.length) * Math.PI * 2 - Math.PI / 2;
-    const r = nodes.length === 1 ? 0 : rad;
-    pos.set(n.key, { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), r: 7 + 15 * Math.sqrt(n.size / maxSize) });
-  });
+  for (const n of nodes) {
+    const a = angle(slotOf.get(n.key));
+    const k = nodes.length === 1 ? 0 : 1;
+    pos.set(n.key, { x: cx + k * rx * Math.cos(a), y: cy + k * ry * Math.sin(a), r: 7 + 15 * Math.sqrt(n.size / maxSize) });
+  }
   const root = svg("svg", { class: "chart fleet", viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "group", "aria-label": "Clusters and the hints that connect them" });
+  // Bands first, under the edges and nodes: an arc of the ellipse from a
+  // fleet's first member to its last, wide enough to hold the nodes.
+  const taken = new Set();
+  for (const g of groups) {
+    const slots = [...new Set(g.members.filter((k) => slotOf.has(k) && !taken.has(k)).map((k) => slotOf.get(k)))].sort((p, q) => p - q);
+    for (const k of g.members) taken.add(k);
+    if (slots.length < 2 || nodes.length < 2) continue;
+    const a0 = angle(slots[0]), a1 = angle(slots[slots.length - 1]), mid = (a0 + a1) / 2;
+    const d = `M${cx + rx * Math.cos(a0)},${cy + ry * Math.sin(a0)} A${rx},${ry} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${cx + rx * Math.cos(a1)},${cy + ry * Math.sin(a1)}`;
+    root.append(tip(svg("g", { class: "fleet-band" }, svg("path", { d }),
+      svg("text", { class: "band-label", x: cx + (rx - 58) * Math.cos(mid), y: cy + (ry - 50) * Math.sin(mid) + 4, "text-anchor": "middle" }, g.label)), `${g.label}: a hint for review, not evidence`));
+  }
   const near = new Set();
   if (selected) for (const e of edges) if (e.a === selected || e.b === selected) near.add(e.a).add(e.b);
   // Parallel edges between one pair bow apart.
@@ -467,7 +518,7 @@ export function hourly({ data, pauses = [], width = 900 }) {
 
 /**
  * Swarm view: runs as nodes on a time axis, one lane per cluster, and the
- * interaction hints between them as arcs styled by kind (S1–S5) and
+ * interaction hints between them as arcs styled by kind (S1–S6) and
  * weighted by strength. `nodes`: {id, lane, t, label, short, sub};
  * `lanes`: {key, label, tier}; `edges`: {a, b, kind, strength, label}.
  */

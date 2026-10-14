@@ -145,7 +145,7 @@ Every entry needs a source in a comment: the site's own page for a practice targ
 
 ## Writing eval records
 
-Each new or changed rule needs labelled records in [`samples/eval/`](../../samples/eval/README.md): at least one agent record it should catch, and hard negatives. Synthetic records for coverage go in `rule-coverage.ndjson`; records rebuilt from a published request go in `published-patterns.ndjson`, marked `"reconstructed": true`.
+Each new or changed rule needs labelled records in [`samples/eval/`](../../samples/eval/README.md): at least one agent record it should catch, and hard negatives. Synthetic records for coverage go in `rule-coverage.ndjson`, extra hard negatives in `hard-negatives.ndjson`; records rebuilt from a published request go in `published-patterns.ndjson`, marked `"reconstructed": true`.
 
 A positive:
 

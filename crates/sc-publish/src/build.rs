@@ -393,7 +393,7 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         let text = r.read(&rel)?;
         schemas.push((rel, text));
     }
-    let lastmod = git_dates(&r.root, &["docs", "rules/default.toml"]);
+    let lastmod = git_dates(&r.root, &["docs", "rules/default.toml", "site/js/pages"]);
     let now = build_time();
     let dated = commit_date(&r.root, now);
     // A module's download size: the host serves it gzip-compressed.

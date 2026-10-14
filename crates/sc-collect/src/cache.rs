@@ -7,6 +7,10 @@
 //! Both files are written through a temporary file and a rename, and the
 //! metadata holds the body's SHA-256: a body that does not match (a write
 //! cut short, a body from another response) is a miss, never served.
+//!
+//! Cached bodies are raw collector answers, before redaction, so the watch
+//! deletes entries older than its TTL (at least a day) on every run
+//! ([`prune_http_cache`]).
 
 use crate::client::{Fetched, now_secs};
 use serde::{Deserialize, Serialize};
@@ -112,21 +116,111 @@ impl HttpCache {
     }
 }
 
-/// Write via a temporary file beside `p`, unique to this process and call,
-/// and a rename.
-fn write_atomic(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+/// A temporary path beside `p` that no other writer uses: the process id
+/// and a counter, so two writers never share one.
+pub fn temp_path(p: &Path) -> PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static N: AtomicU64 = AtomicU64::new(0);
     let name = p.file_name().unwrap_or_default().to_string_lossy();
-    let tmp = p.with_file_name(format!(
+    p.with_file_name(format!(
         ".{name}.{}.{}.tmp",
         std::process::id(),
         N.fetch_add(1, Ordering::Relaxed)
-    ));
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, p).inspect_err(|_| {
+    ))
+}
+
+/// Write `bytes` to `p` through a temporary file beside it ([`temp_path`])
+/// and a rename, so a crash never leaves half a file. The temporary file is
+/// removed when the write or the rename fails. Every rewritten file in the
+/// data directory goes through here.
+pub fn write_atomic(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = temp_path(p);
+    let done = std::fs::write(&tmp, bytes).and_then(|()| std::fs::rename(&tmp, p));
+    if done.is_err() {
         let _ = std::fs::remove_file(&tmp);
-    })
+    }
+    done
+}
+
+/// What [`prune_http_cache`] found and removed.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct CacheStats {
+    /// Entries kept, and their bytes on disk (metadata and body).
+    pub entries: usize,
+    pub bytes: u64,
+    /// Entries removed, and the bytes they held.
+    pub removed: usize,
+    pub removed_bytes: u64,
+}
+
+/// Delete cache entries under `dir` stored or last revalidated more than
+/// `max_age` before `now` (Unix seconds), with bodies whose metadata is
+/// gone and temporary files left by a write cut short. Cached responses are
+/// raw collector answers, not redacted records, so they are kept no longer
+/// than they are useful. A missing directory is an empty cache.
+pub fn prune_http_cache(dir: &Path, max_age: Duration, now: i64) -> std::io::Result<CacheStats> {
+    let mut st = CacheStats::default();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(st),
+        Err(e) => return Err(e),
+    };
+    let cutoff = now - max_age.as_secs() as i64;
+    let mtime = |p: &Path| -> i64 {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_secs() as i64)
+    };
+    let size = |p: &Path| std::fs::metadata(p).map_or(0, |m| m.len());
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|e| Some(e.ok()?.path()))
+        .filter(|p| p.is_file())
+        .collect();
+    files.sort();
+    for p in &files {
+        let name = p.file_name().unwrap_or_default().to_string_lossy();
+        if name.ends_with(".tmp") {
+            if mtime(p) < cutoff {
+                st.removed_bytes += size(p);
+                std::fs::remove_file(p)?;
+            }
+            continue;
+        }
+        let Some(stem) = name.strip_suffix(".json") else {
+            continue;
+        };
+        let body = p.with_file_name(format!("{stem}.body"));
+        let bytes = size(p) + size(&body);
+        let stored = std::fs::read_to_string(p)
+            .ok()
+            .and_then(|s| serde_json::from_str::<Meta>(&s).ok())
+            .map_or_else(|| mtime(p), |m| m.stored);
+        if stored < cutoff {
+            std::fs::remove_file(p)?;
+            if body.exists() {
+                std::fs::remove_file(&body)?;
+            }
+            st.removed += 1;
+            st.removed_bytes += bytes;
+        } else {
+            st.entries += 1;
+            st.bytes += bytes;
+        }
+    }
+    // A body whose metadata is gone can never be served.
+    for p in &files {
+        let name = p.file_name().unwrap_or_default().to_string_lossy();
+        if let Some(stem) = name.strip_suffix(".body")
+            && !p.with_file_name(format!("{stem}.json")).exists()
+            && p.exists()
+        {
+            st.removed_bytes += size(p);
+            std::fs::remove_file(p)?;
+        }
+    }
+    Ok(st)
 }
 
 fn hex(b: &[u8]) -> String {
@@ -175,6 +269,67 @@ mod tests {
             })
             .count();
         assert_eq!(leftovers, 0);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn pruning_drops_old_entries_orphans_and_leftovers() {
+        let dir =
+            std::env::temp_dir().join(format!("sc-collect-cache-prune-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let c = HttpCache::new(&dir, Duration::from_secs(3600));
+        let f = |body: &str| Fetched {
+            status: 200,
+            body: body.into(),
+            content_type: None,
+            final_url: String::new(),
+        };
+        c.store("https://a.example/old", &f("old"), None, None);
+        c.store("https://a.example/new", &f("new"), None, None);
+        // Age the first entry by rewriting its metadata.
+        let old = c.load("https://a.example/old").unwrap();
+        let (m, _) = c.paths("https://a.example/old");
+        let meta = Meta {
+            stored: now_secs() - 3 * 86_400,
+            ..old.meta
+        };
+        std::fs::write(&m, serde_json::to_string(&meta).unwrap()).unwrap();
+        // A body without metadata, and a temporary file a crash left.
+        std::fs::write(dir.join("orphan.body"), "x").unwrap();
+        std::fs::write(dir.join(".a.json.1.2.tmp"), "x").unwrap();
+        let st = prune_http_cache(&dir, Duration::from_secs(86_400), now_secs()).unwrap();
+        assert_eq!((st.entries, st.removed), (1, 1), "{st:?}");
+        assert!(st.bytes > 0 && st.removed_bytes > 0);
+        assert!(c.load("https://a.example/old").is_none());
+        assert_eq!(c.load("https://a.example/new").unwrap().body, "new");
+        assert!(!dir.join("orphan.body").exists());
+        // A fresh temporary file may belong to a write in progress.
+        assert!(dir.join(".a.json.1.2.tmp").exists());
+        let later = now_secs() + 2 * 86_400;
+        let st = prune_http_cache(&dir, Duration::from_secs(86_400), later).unwrap();
+        assert_eq!((st.entries, st.removed), (0, 1), "{st:?}");
+        assert!(!dir.join(".a.json.1.2.tmp").exists());
+        assert_eq!(
+            prune_http_cache(&dir.join("none"), Duration::ZERO, 0).unwrap(),
+            CacheStats::default()
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_failed_rename_leaves_no_temporary_file() {
+        let dir = std::env::temp_dir().join(format!("sc-collect-atomic-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // The target is a non-empty directory, so the rename fails.
+        std::fs::create_dir_all(dir.join("target").join("inside")).unwrap();
+        assert!(write_atomic(&dir.join("target"), b"x").is_err());
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(left, ["target"], "{left:?}");
+        write_atomic(&dir.join("f"), b"y").unwrap();
+        assert_eq!(std::fs::read(dir.join("f")).unwrap(), b"y");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

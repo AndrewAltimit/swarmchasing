@@ -31,6 +31,7 @@
 
 pub mod automation;
 mod detect;
+pub mod provenance;
 pub mod residue;
 pub mod text;
 
@@ -38,6 +39,7 @@ pub mod text;
 mod tests;
 
 pub use detect::{detect, detect_platform};
+pub use provenance::{CandidateProvenance, PackageProvenance};
 pub use text::{TextSketch, name_template, sketch, wiki_title_template};
 
 use crate::rules::Rules;
@@ -73,6 +75,10 @@ pub enum Platform {
     Cve,
     /// Bluesky posts, from Jetstream.
     Bluesky,
+    /// GitLab.com projects.
+    Gitlab,
+    /// Codeberg repositories.
+    Codeberg,
 }
 
 impl Platform {
@@ -91,6 +97,8 @@ impl Platform {
             Self::Crates => "crates",
             Self::Cve => "cve",
             Self::Bluesky => "bluesky",
+            Self::Gitlab => "gitlab",
+            Self::Codeberg => "codeberg",
         }
     }
 }
@@ -181,7 +189,7 @@ pub struct PlatformEvent {
     /// `go:<module>@<version>`, `hn:<item>`, `nuget:<id>@<version>`,
     /// `packagist:<name>@<time>`, `gem:<name>@<version>`,
     /// `crate:<name>@<version>`, `ghsa:<id>`, `cve:<id>`,
-    /// `bsky:<account hash>/<rkey>`.
+    /// `bsky:<account hash>/<rkey>`, `gitlab:<project id>`, `codeberg:<repo id>`.
     pub id: String,
     pub platform: Platform,
     pub action: Action,
@@ -406,6 +414,11 @@ pub struct PlatformSwarm {
     /// Every member event id.
     pub members: Vec<String>,
     pub reason: String,
+    /// Build provenance of the members' package releases, where the watch
+    /// looked it up ([`provenance`]): context, never part of the chance or
+    /// the strength.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<CandidateProvenance>,
 }
 
 /// A group left out, and why.

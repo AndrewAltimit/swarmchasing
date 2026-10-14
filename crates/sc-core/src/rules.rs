@@ -208,7 +208,11 @@ pub struct RuleSet {
     #[serde(default)]
     pub co_target: crate::cotarget::CoTargetOptions,
     #[serde(default)]
+    pub prompt_echo: crate::prose::PromptEchoOptions,
+    #[serde(default)]
     pub swarm: crate::swarm::SwarmOptions,
+    #[serde(default)]
+    pub agentness: crate::agentness::AgentnessOptions,
     #[serde(default, rename = "rule")]
     pub rules: Vec<RuleDef>,
     #[serde(default, rename = "asn")]
@@ -482,12 +486,14 @@ mod tests {
         );
         assert_eq!(s.soft_links, crate::fleets::SoftLinkOptions::default());
         assert_eq!(s.co_target, crate::cotarget::CoTargetOptions::default());
+        assert_eq!(s.prompt_echo, crate::prose::PromptEchoOptions::default());
         assert_eq!(s.scaffold, crate::scaffold::ScaffoldOptions::default());
         assert_eq!(
             s.co_activity,
             crate::coactivity::CoActivityOptions::default()
         );
         assert_eq!(s.swarm, crate::swarm::SwarmOptions::default());
+        assert_eq!(s.agentness, crate::agentness::AgentnessOptions::default());
     }
 
     #[test]

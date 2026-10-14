@@ -146,7 +146,7 @@ pub fn negative_control(a: &Analysis) -> ControlSummary {
             flagged: Proportion::new(flagged, n),
         })
         .collect();
-    let mut by_kind = [0usize; 5];
+    let mut by_kind = [0usize; 6];
     for e in &a.swarm_edges {
         by_kind[e.kind as usize] += 1;
     }
@@ -218,6 +218,6 @@ mod tests {
         assert!(c.by_rule.iter().any(|r| r.flagged.k == 1));
         assert_eq!(c.records_above_l0.n, 3);
         assert_eq!(c.swarm_edges, 0);
-        assert_eq!(c.swarm_edges_by_kind.len(), 5);
+        assert_eq!(c.swarm_edges_by_kind.len(), 6);
     }
 }

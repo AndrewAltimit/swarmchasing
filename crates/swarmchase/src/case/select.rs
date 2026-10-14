@@ -47,6 +47,8 @@ pub(super) fn select(
         bail!("choose records with --cluster and/or --record");
     }
     let rules = RulesText::load(sel.rules.as_deref())?;
+    // Named records outside the window, taken from the whole store.
+    let mut older: Vec<Observation> = Vec::new();
     let obs = if sel.input.is_empty() {
         let dir = data.join("store");
         if !dir.is_dir() {
@@ -59,7 +61,26 @@ pub(super) fn select(
             Some(d) => d,
             None => window_days(&sel.watchlist)?,
         };
-        load_store(&dir, now - days * 86_400)?
+        let obs = load_store(&dir, now - days * 86_400)?;
+        // A record named by ID is found wherever the store has it: the
+        // watch reports a late-indexed record captured before the window
+        // as new, and its digest's `case add` line names it. It is taken
+        // as it is, outside the window's analysis, so cluster numbers and
+        // keys stay those of the window.
+        let have: BTreeSet<&str> = obs.iter().map(|o| o.id.as_str()).collect();
+        let missing: BTreeSet<&str> = sel
+            .records
+            .iter()
+            .map(String::as_str)
+            .filter(|id| !have.contains(id))
+            .collect();
+        if !missing.is_empty() {
+            older = load_store(&dir, i64::MIN)?
+                .into_iter()
+                .filter(|o| missing.contains(o.id.as_str()))
+                .collect();
+        }
+        obs
     } else {
         read_inputs(&InputArgs {
             input: sel.input.clone(),
@@ -69,7 +90,14 @@ pub(super) fn select(
         })?
     };
     let a = analyze(obs, &rules.rules);
-    let picked = pick(&a, &sel.clusters, &sel.records, sel.host_hits)?;
+    let in_window: Vec<String> = sel
+        .records
+        .iter()
+        .filter(|id| !older.iter().any(|o| &o.id == *id))
+        .cloned()
+        .collect();
+    let mut picked = pick(&a, &sel.clusters, &in_window, sel.host_hits)?;
+    picked.extend(older);
     Ok((rules, picked))
 }
 

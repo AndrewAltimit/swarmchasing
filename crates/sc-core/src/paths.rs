@@ -171,12 +171,27 @@ pub struct PathStats {
     /// Findings by [`FabricatedReason`] label.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub fabricated_reasons: BTreeMap<String, usize>,
+    /// Fabricated values its members carry that other clusters carry too:
+    /// one model family's habit of inventing the same value, not an
+    /// operator link. Internal reports only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared_invention: Vec<SharedInvention>,
 }
 
 impl PathStats {
     pub fn is_empty(&self) -> bool {
         self.preambles.is_empty() && self.shared_unusual_sets.is_empty() && self.fabricated_ids == 0
     }
+}
+
+/// A fabricated identifier ([`fabricated_ids`]) carried by two or more
+/// clusters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharedInvention {
+    pub value: String,
+    pub shape: IdShape,
+    /// Clusters carrying it, this one included.
+    pub clusters: usize,
 }
 
 /// Reduce a URL or path to its path: no scheme, host, query or fragment,

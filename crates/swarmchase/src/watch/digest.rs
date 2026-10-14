@@ -106,7 +106,7 @@ impl SourceReport {
 pub fn capability(kind: &str) -> &'static str {
     match kind {
         "urlquery" | "urlscan" => {
-            "submit-time records, the only request-like times: timing links, pace, agent grades above L2 and interaction edges (S1–S5)"
+            "submit-time records, the only request-like times: timing links, pace, agent grades above L2 and interaction edges (S1–S6)"
         }
         "wayback" | "commoncrawl" | "memento" => {
             "archive captures through this relay or carrier: the targets, payloads and run tags it wraps"
@@ -118,6 +118,12 @@ pub fn capability(kind: &str) -> &'static str {
         "npm" | "pypi" => "registry leads: packages carrying run tags",
         "wikimedia" => "wiki edit leads: relay and run-tag links added to wiki pages",
         "hackernews" => "Hacker News leads: relay and run-tag links in stories and comments",
+        "bluesky" => {
+            "Bluesky leads: relay and run-tag links in a sampled stretch of posts, not every post since the last run"
+        }
+        "ghsearch" => {
+            "GitHub leads from pull request text and commit messages, which GH Archive's payloads leave out"
+        }
         "ctlog" => "certificate leads: new relay look-alikes and mirrors",
         "wellknown" => "agent protocol footprints: agent cards and signature key directories",
         "mcp" => "MCP Registry metadata for linking hosts to tool servers",
@@ -133,7 +139,7 @@ pub(super) fn lost_lines(sources: &[SourceReport]) -> Vec<String> {
     let submit = |r: &&SourceReport| r.kind.parse::<Kind>().is_ok_and(Kind::submit_time);
     if !sources.iter().filter(submit).any(|r| r.ran()) {
         out.push(
-            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S5) are unavailable this run: archive capture times cannot stand in for submission times."
+            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S6) are unavailable this run: archive capture times cannot stand in for submission times."
                 .to_string(),
         );
     }
@@ -279,6 +285,9 @@ pub enum AlertKind {
     /// A store file has lines that cannot be read (a write cut short, bytes
     /// that are not UTF-8); they are skipped.
     StoreDamaged,
+    /// A step after collection failed (a file not written, a history not
+    /// read); the run went on without it.
+    StepFailed,
     Other,
 }
 
@@ -292,6 +301,7 @@ impl AlertKind {
             AlertKind::HostDown => "host_down",
             AlertKind::RuleDrift => "rule_drift",
             AlertKind::StoreDamaged => "store_damaged",
+            AlertKind::StepFailed => "step_failed",
             AlertKind::Other => "other",
         }
     }
@@ -1500,7 +1510,7 @@ mod tests {
         };
         let d = write("t1", &a, &s, &s, &BTreeSet::new(), &health, &[]);
         for want in [
-            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S5) are unavailable",
+            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S6) are unavailable",
             "`urlquery-jina` skipped (URLQUERY_APIKEY not set). Lost: submit-time records",
             "`gharchive-relays` read 6 of 60 hours, 54 skipped",
             "`gharchive-relays` has pulled nothing in 5 runs and never has; its canary passed",

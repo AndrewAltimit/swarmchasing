@@ -17,7 +17,8 @@
 // evaluation with hostile edited rules; the unwrap tool; security.txt and
 // defang on the tools page; the identity page's synthetic example (each
 // class it holds renders, spoofed records in the alert), hostile records
-// and a hostile provider file. It also checks layout: no page scrolls sideways
+// and a hostile provider file; the log check's example and a hostile access
+// log. It also checks layout: no page scrolls sideways
 // at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
 // one column, and each press of the theme toggle flips the look, storing it
 // only while it differs from the system's.
@@ -533,9 +534,12 @@ try {
   await audit("unwrap");
 
   // Tools: security.txt and defang with hostile text.
-  await open("tools/", `!document.getElementById("sectxt-run").disabled`);
+  await open("tools/", `document.getElementById("sectxt-run")`);
   const tools = await run(`(async () => {
-    document.getElementById("sectxt").value = ${JSON.stringify(sectxt)};
+    const st = document.getElementById("sectxt");
+    st.value = ${JSON.stringify(sectxt)};
+    // Parse is enabled by input, as typing or pasting enables it.
+    st.dispatchEvent(new Event("input"));
     document.getElementById("sectxt-run").click();
     const d = document.getElementById("defang-in");
     d.value = ${JSON.stringify(program + " https://evil.example/" + tag)};
@@ -593,8 +597,40 @@ try {
     if (!(await run(`document.getElementById("id-file-table").textContent.includes("your copy")`))) failures.push("a provider file picked on the identity page was not taken");
   }
   await audit("identity");
+
+  // Check my logs: the synthetic example (a flagged run from an address
+  // passing as a provider's agent), then a hostile access log whose path,
+  // user agent and host carry probes.
+  await open("check-logs/", `document.getElementById("cl-example")`);
+  const clRun = await run(`(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const done = () => !document.getElementById("cl-result").hidden;
+    document.getElementById("cl-example").click();
+    for (let i = 0; i < 300 && !done(); i++) await wait(50);
+    const flagged = document.querySelectorAll("#cl-summary table.records tbody tr").length;
+    const spoofed = document.querySelectorAll("#cl-summary .alert li").length;
+    const next = !document.getElementById("cl-next").hidden;
+    document.getElementById("cl-result").hidden = true;
+    const box = document.getElementById("cl-input");
+    box.value = ${JSON.stringify(
+      [
+        `203.0.113.5 - - [04/Oct/2026:08:10:00 +0000] "GET /search?q=${encodeURIComponent(program)}&cb=https://webhook.site/x HTTP/1.1" 200 1 "-" "ChatGPT-User/1.0 ${program}"`,
+        `203.0.113.6 - - [04/Oct/2026:08:10:01 +0000] "GET /${tag} HTTP/1.1" 200 1 "${tag}" "${tag}"`,
+      ].join("\n") + "\n",
+    )};
+    box.dispatchEvent(new Event("input"));
+    document.getElementById("cl-host").value = ${JSON.stringify(tag)};
+    document.getElementById("cl-run").click();
+    for (let i = 0; i < 200 && !done() && document.getElementById("cl-alert").hidden; i++) await wait(50);
+    return { flagged, spoofed, next, shown: done() || !document.getElementById("cl-alert").hidden };
+  })()`);
+  if (!clRun.flagged) failures.push("the log check's example listed no flagged request");
+  if (!clRun.spoofed) failures.push("the log check's example listed no spoofed agent");
+  if (!clRun.next) failures.push("the log check showed no next steps");
+  if (!clRun.shown) failures.push("the log check showed nothing for a hostile log");
+  await audit("check-logs");
   // Back to the tools page for the bundle viewer.
-  await open("tools/", `!document.getElementById("sectxt-run").disabled`);
+  await open("tools/", `document.getElementById("case-example")`);
 
   // The bundle viewer: a hostile bundle (stamp, manifest and case claims
   // carry probes), picked through the file input as a visitor would.

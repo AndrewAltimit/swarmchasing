@@ -19,7 +19,12 @@ export const SOFT_KINDS = {
   shared_secret: "shared captured secret",
   relay_stack: "relay stack",
   callback_service: "callback service",
+  scaffold: "shared scaffold",
+  co_activity: "co-activity",
   co_target: "shared rare targets",
+  ordered_co_target: "ordered rare targets",
+  scaffold_lineage: "scaffold lineage",
+  prompt_echo: "prompt echo",
 };
 
 /** A safe class suffix and a label for a soft-link kind id. */
@@ -73,6 +78,7 @@ export const levelOf = (id) => AGENT_LEVELS.find((l) => l.id === id) ?? null;
 export const AGENT_SIGNALS = {
   self_id: ["self_described", "names a model or vendor, or carries an agent test tag (anyone can write this)"],
   residue: ["model_written", "model-output residue in requests"],
+  page_residue: ["model_written", "residue a broken page also carries in its links, such as an unrendered template (it never sets the grade alone: any client following the link sends it)"],
   prose: ["model_written", "natural-language prose in parameters"],
   fabricated_ids: ["model_written", "identifiers no generator produces"],
   cut_lengths: ["model_written", "URLs cut at one repeated length, like an output limit"],
@@ -82,6 +88,8 @@ export const AGENT_SIGNALS = {
   escalation: ["adaptive", "a route escalation to reach one page"],
   model_pace_chain: ["adaptive", "a probe chain at model pace"],
   machine_pace: ["agent_likely", "retries after errors at tool pace, faster than a person reads"],
+  per_fetch_robots: ["agent_likely", "a /robots.txt request before every page, on the same host each time, as an uncached robots-respecting fetch tool sends"],
+  rate_ceiling: ["agent_likely", "requests hitting one per-window ceiling again and again and never passing it, as a client-side rate limiter allows"],
   fan_out: ["agent_likely", "parallel fan-out of one fixed width"],
   round_the_clock: ["agent_likely", "activity round the clock"],
   declared_testing: [null, "declares authorised testing or research"],
@@ -91,6 +99,8 @@ export const AGENT_SIGNALS = {
 };
 export const signalLabel = (k) => AGENT_SIGNALS[k]?.[1] ?? (trunc(String(k ?? "?").replace(/_/g, " "), 60) || "?");
 export const signalRung = (k) => AGENT_SIGNALS[k]?.[0] ?? null;
+/** Signals listed on a rung that never set the grade (the engine's `grades()`). */
+export const signalGrades = (k) => k !== "page_residue";
 
 /** Cap id → [ceiling level id, label]. */
 export const AGENT_CAPS = {
@@ -107,6 +117,7 @@ export const SWARM_KINDS = {
   synchronized_start: { id: "S3", label: "synchronized start", what: "runs of different clients whose requests line up step by step at one offset, against two chance models" },
   role_sequence: { id: "S4", label: "role sequence", what: "a run that only reads a set of hosts, then another attacking them in the same order" },
   disjoint_partition: { id: "S5", label: "disjoint partition", what: "runs started together splitting one target family with almost no overlap (alone, a fleet signal)" },
+  dispatch_star: { id: "S6", label: "dispatch star", what: "a run that two or more different-client runs each trail at their own consistent lag, as a planner dispatching workers (one upstream trigger does the same)" },
 };
 export const swarmKind = (k) => SWARM_KINDS[k] ?? { id: "S?", label: trunc(String(k ?? "?").replace(/_/g, " "), 40), what: "" };
 

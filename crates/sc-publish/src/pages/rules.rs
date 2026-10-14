@@ -1,8 +1,8 @@
 //! The rules explorer: one card per rule in `rules/default.toml`, grouped
 //! by kind, read as plain TOML so a field the analysis does not use yet (a
-//! `tactic`, say) still shows. A card is a row (id, weight, flags) that
-//! opens; on a phone the page script starts them closed, so the list is a
-//! list. Each card links its Field Manual section and tactic, and
+//! `tactic`, say) still shows. A card is a row (id, weight, flags, a line
+//! of description) that opens; rows start closed, and the page script opens
+//! them on a wide screen, so on a phone the list is a list. Each card links its Field Manual section and tactic, and
 //! can test a URL in the page (the engine's unwrap, output defanged). The
 //! editor and the in-browser evaluation sit behind "Edit & test".
 
@@ -234,15 +234,17 @@ pub fn body(
     Ok(s)
 }
 
-/// One rule: a compact row (id, weight, flags) that opens on its
-/// description, facts, pattern, URL test and labelled-set hits. Open in the
-/// markup; the page script closes them on a phone.
+/// One rule: a compact row (id, weight, flags, and the description cut to
+/// a line while it is closed) that opens on its description, facts,
+/// pattern, URL test and labelled-set hits. Closed in the markup, so a
+/// phone lays out a list of rows; the page script opens them on a wide
+/// screen.
 fn card(c: &RuleCard, st: Option<&RuleStat>, fm: &BTreeMap<String, String>) -> String {
     let mut s = String::new();
     let _ = write!(
         s,
         "<article class=\"rule-card\" id=\"rule-{}\" data-kind=\"{}\" data-target=\"{}\" data-tactic=\"{}\" data-significant=\"{}\" data-link=\"{}\" data-artifact=\"{}\" data-text=\"{}\">\
-<details class=\"rule-fold\" open><summary><h3><code>{}</code></h3><span class=\"rule-w\" title=\"Weight\">+{}</span>{}</summary><div class=\"rule-body\">",
+<details class=\"rule-fold\"><summary><span class=\"rule-head\"><h3><code>{}</code></h3><span class=\"rule-w\" title=\"Weight\">+{}</span>{}</span>{}</summary><div class=\"rule-body\">",
         esc(&c.id),
         esc(&c.kind),
         esc(&c.target),
@@ -261,6 +263,11 @@ fn card(c: &RuleCard, st: Option<&RuleStat>, fm: &BTreeMap<String, String>) -> S
         esc(&c.id),
         c.weight,
         flags(c),
+        if c.description.is_empty() {
+            String::new()
+        } else {
+            format!("<span class=\"rule-gist\">{}</span>", esc(&c.description))
+        },
     );
     if !c.description.is_empty() {
         let _ = write!(s, "<p>{}</p>", esc(&c.description));
@@ -404,7 +411,7 @@ group = "oast"
         assert!(b.contains("<section class=\"rule-kind\" data-rule-kind=\"exfil\""));
         assert!(b.find("data-rule-kind=\"exfil\"") < b.find("data-rule-kind=\"relay\""));
         assert!(b.contains(
-            "<details class=\"rule-fold\" open><summary><h3><code>b</code></h3><span class=\"rule-w\" title=\"Weight\">+4</span><span class=\"flag link\">"
+            "<details class=\"rule-fold\"><summary><span class=\"rule-head\"><h3><code>b</code></h3><span class=\"rule-w\" title=\"Weight\">+4</span><span class=\"flag link\">"
         ));
         assert!(b.contains("<details class=\"explain\"><summary>How a score adds up</summary>"));
     }

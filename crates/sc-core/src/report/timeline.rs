@@ -49,6 +49,7 @@ impl Report<'_> {
             // A named contact is for the admin to check, not for a recipient.
             if self.opts.audience == Audience::Internal {
                 declared(s, c);
+                shared_inventions(s, c);
             }
         }
     }
@@ -339,4 +340,23 @@ fn declared(s: &mut String, c: &Cluster) {
             defang(&d.text)
         );
     }
+}
+
+/// Fabricated values other clusters carry too: case notes only. A model
+/// family's habit, never a tie between operators.
+fn shared_inventions(s: &mut String, c: &Cluster) {
+    if c.paths.shared_invention.is_empty() {
+        return;
+    }
+    let shown: Vec<String> = c
+        .paths
+        .shared_invention
+        .iter()
+        .map(|x| format!("`{}` ({} clusters)", truncate(&x.value, 64), x.clusters))
+        .collect();
+    let _ = writeln!(
+        s,
+        "  - shared invention: the same fabricated identifier in other clusters, {}: one model family's habit, not an operator link",
+        shown.join(", ")
+    );
 }

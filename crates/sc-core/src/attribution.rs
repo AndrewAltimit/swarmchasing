@@ -380,8 +380,40 @@ fn vendor_of(matched: &str) -> Option<(&'static str, &'static str)> {
     })
 }
 
-/// The product token of a user agent (`python-httpx/0.27` → `python-httpx`).
+/// Coding-harness tokens the `header.coding_agent_ua` rule reads, with the
+/// harness each names. Two of them sit inside a Mozilla-compatible user agent
+/// (Gemini CLI, Aider), so the first-token rule below would call them browser
+/// automation.
+const HARNESS_UA: &[(&str, &str)] = &[
+    ("google-gemini-cli/", "gemini-cli"),
+    ("qwencode/", "qwen-code"),
+    ("aider/", "aider"),
+    ("crush/", "crush"),
+];
+
+/// The coding harness a user agent names: a [`HARNESS_UA`] token at the start
+/// or after a separator, so `candycrush/2` is not Crush.
+fn harness_product(ua: &str) -> Option<&'static str> {
+    let lower = ua.to_ascii_lowercase();
+    HARNESS_UA.iter().find_map(|(token, name)| {
+        lower
+            .match_indices(token)
+            .any(|(i, _)| {
+                lower[..i]
+                    .chars()
+                    .next_back()
+                    .is_none_or(|c| !c.is_ascii_alphanumeric())
+            })
+            .then_some(*name)
+    })
+}
+
+/// The product token of a user agent (`python-httpx/0.27` → `python-httpx`),
+/// or the coding harness it names.
 fn ua_product(ua: &str) -> Option<String> {
+    if let Some(h) = harness_product(ua) {
+        return Some(h.to_string());
+    }
     let p = ua
         .split(['/', ' ', ';', '('])
         .find(|s| !s.is_empty())?
@@ -780,6 +812,42 @@ mod tests {
             .iter()
             .any(|p| p.contains("never a Conclusion"))
         );
+    }
+
+    #[test]
+    fn coding_harness_user_agents_name_their_harness() {
+        for (ua, want) in [
+            (
+                "Mozilla/5.0 (compatible; Google-Gemini-CLI/1.0; +https://github.com/google-gemini/gemini-cli)",
+                "gemini-cli",
+            ),
+            ("QwenCode/0.0.14 (linux; x64)", "qwen-code"),
+            (
+                "Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0.0.0 Safari/537.36 Aider/0.86.1 +https://aider.chat/",
+                "aider",
+            ),
+            ("Mozilla./5.0 (Aider/0.86.1 +https://aider.chat/)", "aider"),
+            ("crush/1.0", "crush"),
+            ("python-httpx/0.27.0", "python-httpx"),
+            ("CandyCrush/2.1", "candycrush"),
+        ] {
+            assert_eq!(ua_product(ua).as_deref(), Some(want), "{ua}");
+        }
+        let rules = Rules::default_rules();
+        let pattern = &rules.rule("header.coding_agent_ua").unwrap().pattern;
+        let r = regex::RegexBuilder::new(pattern)
+            .case_insensitive(true)
+            .build()
+            .unwrap();
+        for (token, _) in HARNESS_UA {
+            let ua = match *token {
+                "google-gemini-cli/" => "Mozilla/5.0 (compatible; Google-Gemini-CLI/1.0)",
+                "qwencode/" => "QwenCode/1.2.3 (linux; arm64)",
+                "aider/" => "Mozilla/5.0 Aider/0.1.0 +https://aider.chat/",
+                _ => "crush/1.0",
+            };
+            assert!(r.is_match(ua), "{token} not read by the rule");
+        }
     }
 
     #[test]

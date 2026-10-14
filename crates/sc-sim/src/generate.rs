@@ -15,7 +15,7 @@
 
 use crate::palette::{Palette, Template, Use};
 use crate::rng::Rng;
-use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Scenario};
+use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Prose, Scenario};
 use sc_core::{LinkFeature, Observation, TsKind};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -36,6 +36,26 @@ const BROWSER_UAS: &[&str] = &[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
     "Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0",
+];
+
+/// User agents of benign look-alikes: an uptime service, an internet-wide
+/// scanner, link-preview bots, feed readers.
+const MONITOR_UA: &str = "Mozilla/5.0 (compatible; UptimeRobot/2.0; http://www.uptimerobot.com/)";
+const SCANNER_UA: &str = "Mozilla/5.0 (compatible; survey-scanner/2.1; +https://scanner.example/)";
+const PREVIEW_UAS: &[&str] = &[
+    "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
+    "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+    "Twitterbot/1.0",
+    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)",
+    "TelegramBot (like TwitterBot)",
+];
+const FEED_UAS: &[&str] = &[
+    "Feedly/1.0 (+http://www.feedly.com/fetcher.html; 12 subscribers)",
+    "Mozilla/5.0 (compatible; Inoreader/1.0; https://www.inoreader.com)",
+    "NewsBlur Feed Fetcher - 8 subscribers",
+    "FreshRSS/1.24.1 (Linux; https://freshrss.org)",
+    "Miniflux/2.1.3 (https://miniflux.app)",
 ];
 
 /// Hosting networks agents run from, and access networks people use.
@@ -117,12 +137,27 @@ struct RunSpec {
     adapt: bool,
     /// The scope of the palette subset this run draws from, and its share.
     habits: Option<(String, f64)>,
+    /// The scope of the prompt templates the run writes its prose from,
+    /// when it writes prose.
+    prose: Option<String>,
 }
 
 /// The palette subset an actor's runs draw from under `key`, when it does
 /// not use the whole palette.
 fn habits(a: &Actor, key: String) -> Option<(String, f64)> {
     (a.palette_share < 1.0).then(|| (key, a.palette_share.max(0.0)))
+}
+
+/// The scope of the prompt templates run `k` of actor `i` writes from, when
+/// it writes prose: its own, its operator's (`operator`, when it has one) or
+/// the actor's.
+fn prose_scope(a: &Actor, i: usize, k: usize, operator: Option<&str>) -> Option<String> {
+    let own = || format!("{i}:{k}");
+    a.prose.map(|p| match p {
+        Prose::Own => own(),
+        Prose::Operator => operator.map_or_else(own, str::to_string),
+        Prose::Shared => format!("{i}"),
+    })
 }
 
 struct Gen<'a> {
@@ -238,10 +273,13 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: habits(a, format!("{i}:{k}")),
+                        prose: prose_scope(a, i, k, None),
                     };
                     self.run(spec, &mut rng);
                 }
             }
+            Kind::PromptFleet => self.prompt_fleet(i, a, start, window, &mut rng),
+            Kind::Framework => self.framework(i, a, start, window, &mut rng),
             Kind::Swarm => self.swarm(i, a, start, &mut rng),
             Kind::Escalator => self.escalator(i, a, start, window, &mut rng),
             Kind::Fleet => {
@@ -297,6 +335,7 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: None,
+                        prose: prose_scope(a, i, k, Some(&fleet)),
                     };
                     self.run(spec, &mut rng);
                 }
@@ -336,6 +375,7 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: habits(a, format!("{i}")),
+                        prose: None,
                     };
                     self.run(spec, &mut rng);
                 }
@@ -391,6 +431,7 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: None,
+                        prose: None,
                     };
                     self.run(spec, &mut rng);
                 }
@@ -425,12 +466,16 @@ impl Gen<'_> {
                         fetches: None,
                         adapt: true,
                         habits: None,
+                        prose: None,
                     };
                     self.run(spec, &mut rng);
                 }
             }
             Kind::TargetList | Kind::NewsSpike | Kind::Hub => {
                 self.target_list(i, a, start, window, &mut rng)
+            }
+            Kind::UptimeMonitor | Kind::InternetScanner | Kind::LinkPreview | Kind::FeedPoller => {
+                self.lookalike(i, a, start, window, &mut rng)
             }
             _ => self.background(i, a, start, window, &mut rng),
         }
@@ -482,6 +527,7 @@ impl Gen<'_> {
                 fetches: None,
                 adapt: true,
                 habits: None,
+                prose: None,
             };
             let mut ids = Ids::new(self.seed);
             let mut t = base.start;
@@ -536,6 +582,17 @@ impl Gen<'_> {
             Kind::NewsSpike => "news_spike",
             _ => "hub",
         };
+        // One order for every agent: the list's sorted order, or one seeded
+        // order from its own stream, so actors without it draw as before.
+        let order: Option<Vec<String>> = if a.sorted {
+            Some(shared.clone())
+        } else if a.in_order {
+            let mut o = shared.clone();
+            shuffle(&mut o, &mut self.rng.fork(&format!("actor{i}:order")));
+            Some(o)
+        } else {
+            None
+        };
         let mut t = start;
         for k in 0..a.agents.max(1) {
             let begin = match a.kind {
@@ -550,8 +607,14 @@ impl Gen<'_> {
                 Kind::NewsSpike => start + rng.range(0, span.min(6 * 3600)),
                 _ => start,
             };
-            let mut hosts = shared.clone();
-            shuffle(&mut hosts, rng);
+            let hosts = match &order {
+                Some(o) => o.clone(),
+                None => {
+                    let mut h = shared.clone();
+                    shuffle(&mut h, rng);
+                    h
+                }
+            };
             let records = a.records.max(hosts.len());
             let spec = RunSpec {
                 truth: Truth {
@@ -579,7 +642,75 @@ impl Gen<'_> {
                 fetches: None,
                 adapt: true,
                 habits: habits(a, format!("{i}:{k}")),
+                prose: prose_scope(a, i, k, fleet.as_deref()),
             };
+            self.run(spec, rng);
+        }
+    }
+
+    /// Agents of one operator writing prose from its prompt templates, each
+    /// otherwise its own: client, inbox, tags, hosts, habits and start.
+    fn prompt_fleet(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let fleet = format!("{}-f{i}", self.scenario.name);
+        for k in 0..a.agents {
+            let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+            let client = agent_client(rng);
+            let begin = start + rng.range(0, window);
+            let mut spec = self.bg_spec(
+                i,
+                k,
+                a,
+                "prompt_fleet",
+                "agent",
+                Some("agent"),
+                Use::Attack,
+                Pace::Model,
+                true,
+                &client,
+                &hosts,
+                begin,
+                a.records,
+            );
+            spec.truth.fleet = Some(fleet.clone());
+            spec.uses = read_then_attack(a.records, a.hosts);
+            spec.tag = a.tag;
+            spec.prose = prose_scope(a, i, k, Some(&fleet)).or_else(|| Some(fleet.clone()));
+            self.run(spec, rng);
+        }
+    }
+
+    /// Agents of unrelated operators on one framework: its templates in a
+    /// fixed rotation and its step counter, and one parameter per operator.
+    fn framework(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let templates = self.scaffold(rng);
+        let mut hrng = self.rng.fork(&format!("actor{i}:harness"));
+        let names = harness_names(&mut hrng, a.agents + 1);
+        for k in 0..a.agents {
+            let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+            let client = agent_client(rng);
+            let begin = start + rng.range(0, window);
+            let mut spec = self.bg_spec(
+                i,
+                k,
+                a,
+                "framework_user",
+                "agent",
+                Some("agent"),
+                Use::Attack,
+                Pace::Model,
+                true,
+                &client,
+                &hosts,
+                begin,
+                a.records,
+            );
+            spec.fixed = Some(templates.clone());
+            // The framework's step counter, then the operator's own
+            // parameter (another name for each, while names last).
+            let own = 1 + k % (names.len() - 1).max(1);
+            spec.harness = vec![names[0].clone(), names[own].clone()];
+            spec.tag = a.tag;
+            spec.prose = prose_scope(a, i, k, None);
             self.run(spec, rng);
         }
     }
@@ -651,7 +782,7 @@ impl Gen<'_> {
                     }
                 })
                 .collect();
-            let begin = if dispatch {
+            let mut begin = if dispatch {
                 start + late.first().copied().unwrap_or(0)
             } else if handoff && k > 0 {
                 t + rng.range(5 * 60, 45 * 60)
@@ -662,6 +793,19 @@ impl Gen<'_> {
             } else {
                 start + rng.range(0, 300)
             };
+            // One dispatcher sends each step to every agent; each request
+            // leaves up to the jitter after its dispatch, never before the
+            // agent's previous request. Times are placed against the
+            // dispatches, not the previous request, so lateness never
+            // accumulates.
+            let sync = (!dispatch && has(Mode::Sync)).then(|| {
+                let jitter = a.jitter_secs.unwrap_or(2).max(0);
+                let late: Vec<i64> = sync_gaps.iter().map(|_| rng.range(0, jitter)).collect();
+                sync_times(&sync_gaps, &late)
+            });
+            if let Some((first, _)) = &sync {
+                begin += first;
+            }
             let spec = RunSpec {
                 truth: Truth {
                     label: Some("agent"),
@@ -678,8 +822,6 @@ impl Gen<'_> {
                 },
                 start: begin,
                 pace,
-                // One dispatcher sends each step to every agent; each
-                // request leaves 0 to 2 s after its dispatch.
                 gaps: if dispatch {
                     Some(
                         (0..a.records)
@@ -687,17 +829,7 @@ impl Gen<'_> {
                             .collect(),
                     )
                 } else {
-                    has(Mode::Sync).then(|| {
-                        let jitter = a.jitter_secs.unwrap_or(2).max(0);
-                        let late: Vec<i64> =
-                            sync_gaps.iter().map(|_| rng.range(0, jitter)).collect();
-                        (0..sync_gaps.len())
-                            .map(|r| {
-                                let prev = late[r.saturating_sub(1)];
-                                (sync_gaps[r] + late[r] - prev).max(0)
-                            })
-                            .collect()
-                    })
+                    sync.map(|(_, gaps)| gaps)
                 },
                 // A reader and an attacker go through the hosts in one order.
                 hosts: if has(Mode::Roles) {
@@ -717,10 +849,166 @@ impl Gen<'_> {
                 fetches: (handoff && k > 0).then(|| raw.clone()),
                 adapt: true,
                 habits: habits(a, format!("{i}")),
+                prose: prose_scope(a, i, k, Some(&swarm)),
             };
             let end = self.run(spec, rng);
             if reader {
                 t = end;
+            }
+        }
+    }
+
+    /// Benign look-alikes of swarm and fleet signals. Each client is its
+    /// own run and its own operator, so every edge or soft link drawn
+    /// between two of them is false.
+    fn lookalike(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let (class, palette_class) = match a.kind {
+            Kind::UptimeMonitor => ("uptime_monitor", "api_client"),
+            Kind::InternetScanner => ("internet_scanner", "crawler"),
+            Kind::LinkPreview => ("link_preview", "crawler"),
+            _ => ("feed_poller", "crawler"),
+        };
+        let pool: Vec<Template> = self
+            .palette
+            .benign_flagged(palette_class)
+            .into_iter()
+            .cloned()
+            .collect();
+        if pool.is_empty() {
+            return;
+        }
+        let n = a.agents.max(1);
+        let basis = self.scenario.basis;
+        let ok = move |code: u16| (basis == Basis::Request).then_some(code);
+        let net = rng.below(CLOUD_ASNS.len());
+        let prefix = rng.pick(NETS).copied().unwrap_or("192.0.2");
+        let specs: Vec<RunSpec> = (0..n)
+            .map(|k| {
+                let other_net = CLOUD_ASNS[(net + k) % CLOUD_ASNS.len()];
+                let client = match a.kind {
+                    Kind::UptimeMonitor => Client {
+                        ua: MONITOR_UA.into(),
+                        asn: other_net,
+                        ip: address(rng),
+                    },
+                    // One network, consecutive addresses.
+                    Kind::InternetScanner => Client {
+                        ua: SCANNER_UA.into(),
+                        asn: CLOUD_ASNS[net],
+                        ip: format!("{prefix}.{}", 10 + k % 240),
+                    },
+                    Kind::LinkPreview => Client {
+                        ua: PREVIEW_UAS[k % PREVIEW_UAS.len()].into(),
+                        asn: other_net,
+                        ip: address(rng),
+                    },
+                    _ => Client {
+                        ua: FEED_UAS[k % FEED_UAS.len()].into(),
+                        asn: other_net,
+                        ip: address(rng),
+                    },
+                };
+                self.bg_spec(
+                    i,
+                    k,
+                    a,
+                    class,
+                    "tool",
+                    Some("benign"),
+                    Use::Benign,
+                    Pace::Tool,
+                    false,
+                    &client,
+                    &[],
+                    start,
+                    0,
+                )
+            })
+            .collect();
+        let pick = |rng: &mut Rng| pool[rng.below(pool.len())].clone();
+        let mut ids = Ids::new(self.seed);
+        let begin = start + rng.range(0, window);
+        match a.kind {
+            Kind::UptimeMonitor => {
+                // The same URLs from every region, one check a minute in
+                // turn, each region within a second of the others.
+                let hosts = self.hosts(&format!("a{i}"), a.hosts);
+                let checks: Vec<(Template, String)> =
+                    hosts.iter().map(|h| (pick(rng), h.clone())).collect();
+                for c in 0..a.records {
+                    let (tpl, host) = &checks[c % checks.len()];
+                    let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                    let at = begin + c as i64 * 60;
+                    for spec in &specs {
+                        let ts = at + rng.range(0, 2);
+                        self.emit(spec, &tpl.origin, url.clone(), ts, ok(200), basis);
+                    }
+                }
+            }
+            Kind::InternetScanner => {
+                // One host family split over the addresses, one probe set
+                // per host, every address starting at once.
+                let family = self.hosts(&format!("a{i}"), a.hosts * n);
+                let probes: Vec<Template> = (0..3).map(|_| pick(rng)).collect();
+                for (k, spec) in specs.iter().enumerate() {
+                    let mut t = begin + rng.range(0, 3);
+                    let mine = family.iter().skip(k).step_by(n);
+                    let sends = mine.flat_map(|h| probes.iter().map(move |p| (p, h)));
+                    for (tpl, host) in sends.take(a.records) {
+                        let url = rewrite(tpl, host, spec, &mut ids, None);
+                        self.emit(spec, &tpl.origin, url, t, ok(200), basis);
+                        t += gap(rng, Pace::Tool);
+                    }
+                }
+            }
+            Kind::LinkPreview => {
+                // Each posted link fetched by most platforms' bots within
+                // seconds of the post.
+                let hosts = self.hosts(&format!("a{i}"), a.hosts);
+                for p in 0..a.records {
+                    let posted = start + rng.range(0, window);
+                    let tpl = pick(rng);
+                    let host = &hosts[p % hosts.len()];
+                    let url = rewrite(&tpl, host, &specs[0], &mut ids, None);
+                    for spec in &specs {
+                        if rng.chance(0.7) {
+                            let ts = posted + rng.range(1, 6);
+                            self.emit(spec, &tpl.origin, url.clone(), ts, ok(200), basis);
+                        }
+                    }
+                }
+            }
+            _ => {
+                // The same feeds in one order each poll, each reader on its
+                // own interval and phase; through the feed host's outage
+                // each reader fails once and backs off until it ends.
+                let hosts = self.hosts(&format!("a{i}"), a.hosts);
+                let feeds: Vec<(Template, String)> =
+                    hosts.iter().map(|h| (pick(rng), h.clone())).collect();
+                let down = start + window / 2 + rng.range(0, 3600);
+                let up = down + rng.range(3600, 3 * 3600);
+                for spec in &specs {
+                    let every = [900, 1800, 3600][rng.below(3)];
+                    let phase = rng.range(0, every);
+                    let mut failed = false;
+                    for c in 0..a.records as i64 {
+                        let mut t = start + phase + c * every;
+                        if (down..up).contains(&t) {
+                            if !failed {
+                                let (tpl, host) = &feeds[0];
+                                let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                                self.emit(spec, &tpl.origin, url, t, ok(503), basis);
+                                failed = true;
+                            }
+                            continue;
+                        }
+                        for (tpl, host) in &feeds {
+                            let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                            self.emit(spec, &tpl.origin, url, t, ok(200), basis);
+                            t += rng.range(1, 3);
+                        }
+                    }
+                }
             }
         }
     }
@@ -856,6 +1144,7 @@ impl Gen<'_> {
             fetches: None,
             adapt,
             habits: habits(a, format!("{i}:{k}")),
+            prose: None,
         }
     }
 
@@ -900,6 +1189,7 @@ impl Gen<'_> {
             self.emit(&spec, "generated hand-off fetch", url, t, status, basis);
             t += gap(rng, spec.pace);
         }
+        let mut sched = t;
         for (r, (host, u)) in spec.hosts.iter().zip(&spec.uses).enumerate() {
             let shape = (!spec.shapes.is_empty()).then(|| &spec.shapes[r % spec.shapes.len()]);
             let fixed = shape.map(|s| &s.templates).or(spec.fixed.as_ref());
@@ -929,12 +1219,22 @@ impl Gen<'_> {
             let Some(tpl) = tpl else {
                 continue;
             };
+            // A scheduled run (synchronised, dispatched or copied timing)
+            // keeps its schedule: retries take time after a request but do
+            // not move the next one, which leaves at its scheduled time or
+            // right after the last retry. A run without one paces itself
+            // from its last request.
             if r > 0 {
-                t += spec
-                    .gaps
-                    .as_ref()
-                    .and_then(|g| g.get(r).copied())
-                    .unwrap_or_else(|| gap(rng, spec.pace));
+                match spec.gaps.as_ref().and_then(|g| g.get(r).copied()) {
+                    Some(g) => {
+                        sched += g;
+                        t = t.max(sched);
+                    }
+                    None => {
+                        t += gap(rng, spec.pace);
+                        sched = t;
+                    }
+                }
             }
             let error = rng.chance(spec.retry);
             let tries = if error { 3 } else { 1 };
@@ -957,6 +1257,10 @@ impl Gen<'_> {
                         ids.token(&format!("{}:{step}", spec.scope), name, 8)
                     };
                     url = add_param(&url, name, &value);
+                }
+                if let Some(p) = &spec.prose {
+                    let text = prompt_text(self.seed, p, r, host);
+                    url = add_param(&url, "query", &text.replace(' ', "%20"));
                 }
                 if spec.tag && u != &Use::Benign {
                     let tag = ids.token(&spec.scope, "uqtag", 10);
@@ -1198,6 +1502,24 @@ fn rfc3339(ts: i64) -> String {
         .unwrap_or_default()
 }
 
+/// A synchronised worker's schedule: dispatch `r` comes `gaps[r]` after
+/// dispatch `r - 1` (`gaps[0]` unused) and the worker's request `late[r]`
+/// after it, never before its previous request. Returns the first request's
+/// lateness and the gaps between requests, placed against the dispatches.
+fn sync_times(gaps: &[i64], late: &[i64]) -> (i64, Vec<i64>) {
+    let (mut dispatch, mut prev) = (0i64, 0i64);
+    let mut out = Vec::with_capacity(gaps.len());
+    for (r, g) in gaps.iter().enumerate() {
+        if r > 0 {
+            dispatch += g;
+        }
+        let at = (dispatch + late.get(r).copied().unwrap_or(0)).max(prev);
+        out.push(if r == 0 { 0 } else { at - prev });
+        prev = at;
+    }
+    (late.first().copied().unwrap_or(0), out)
+}
+
 fn gap(rng: &mut Rng, pace: Pace) -> i64 {
     let (lo, hi) = pace.bounds();
     rng.log_range(lo, hi).round().max(0.0) as i64
@@ -1244,6 +1566,162 @@ fn subset<'a>(pool: &'a [Template], seed: u64, key: &str, share: f64) -> Vec<&'a
 #[cfg(test)]
 pub(crate) fn is_harness_param(name: &str) -> bool {
     HARNESS_PARAMS.contains(&name)
+}
+
+/// Words a synthetic prompt template is built from, slot by slot: a verb, an
+/// adjective and a thing, a preposition before the target, then another
+/// verb, a determiner, a preposition, an adjective and a thing. Two
+/// operators' templates share few word triples, as unrelated prompts do.
+const PROMPT_SLOTS: &[&[&str]] = &[
+    &[
+        "find",
+        "list",
+        "check",
+        "locate",
+        "collect",
+        "compare",
+        "describe",
+        "review",
+        "map",
+        "note",
+        "record",
+        "summarize",
+        "verify",
+        "inspect",
+        "gather",
+        "outline",
+        "rank",
+        "trace",
+        "count",
+        "flag",
+    ],
+    &[
+        "public",
+        "older",
+        "hidden",
+        "main",
+        "default",
+        "latest",
+        "shared",
+        "internal",
+        "external",
+        "unused",
+        "slow",
+        "legacy",
+        "mobile",
+        "archived",
+        "primary",
+        "secondary",
+        "nested",
+        "signed",
+        "cached",
+        "empty",
+    ],
+    &[
+        "login page",
+        "contact form",
+        "search box",
+        "upload form",
+        "status page",
+        "sitemap",
+        "help center",
+        "price list",
+        "api route",
+        "error page",
+        "staff list",
+        "news feed",
+        "docs index",
+        "release notes",
+        "comment form",
+        "account page",
+        "cookie banner",
+        "download area",
+        "partner list",
+        "privacy page",
+    ],
+    &[
+        "on", "for", "at", "across", "within", "behind", "under", "near",
+    ],
+    &[
+        "explain",
+        "report",
+        "write down",
+        "tell me",
+        "show",
+        "quote",
+        "estimate",
+        "decide",
+        "confirm",
+        "check again",
+        "measure",
+        "repeat",
+        "extract",
+        "save",
+        "test",
+        "read",
+        "group",
+        "sort",
+        "score",
+        "mark",
+    ],
+    &[
+        "every",
+        "each",
+        "any",
+        "all",
+        "the first",
+        "the last",
+        "both",
+        "some",
+    ],
+    &[
+        "from", "about", "inside", "beside", "after", "before", "under", "through",
+    ],
+    &[
+        "visible", "broken", "recent", "odd", "large", "small", "plain", "careful", "strange",
+        "dated", "quiet", "loud", "early", "late", "short", "long", "clear", "rough", "steady",
+        "rare",
+    ],
+    &[
+        "field",
+        "header",
+        "button",
+        "link",
+        "message",
+        "answer",
+        "form",
+        "redirect",
+        "cookie",
+        "token name",
+        "status code",
+        "title",
+        "footer",
+        "banner",
+        "menu",
+        "image",
+        "script name",
+        "version string",
+        "date",
+        "label",
+    ],
+];
+
+/// The prose request `r` of a run writing from the prompt templates of
+/// `scope` carries for `host`: one of three seeded templates, in turn, with
+/// the host as its target. Synthetic words only.
+fn prompt_text(seed: u64, scope: &str, r: usize, host: &str) -> String {
+    let mut rng = Rng::new(seed)
+        .fork("prompt")
+        .fork(scope)
+        .fork(&(r % 3).to_string());
+    let w: Vec<&str> = PROMPT_SLOTS
+        .iter()
+        .map(|slot| slot[rng.below(slot.len())])
+        .collect();
+    format!(
+        "{} the {} {} {} {host} and {} {} {} {} the {} {}",
+        w[0], w[1], w[2], w[3], w[4], w[5], w[8], w[6], w[7], w[2]
+    )
 }
 
 /// `n` distinct harness parameter names, in a seeded order.
@@ -1320,6 +1798,81 @@ mod tests {
         assert_eq!(a, ids(subset(pool, 7, "0:1", 0.3)));
         assert_ne!(a, ids(subset(pool, 7, "0:2", 0.3)));
         assert_eq!(subset(pool, 7, "0:1", 0.0).len(), 2);
+    }
+
+    #[test]
+    fn sync_lateness_does_not_accumulate() {
+        // Dispatches 10 s apart; a worker 30 s late on the first and on time
+        // after. It waits for nothing it already sent, then is back on the
+        // dispatches: its fifth request leaves at the fifth dispatch.
+        let (first, gaps) = sync_times(&[0, 10, 10, 10, 10], &[30, 0, 0, 0, 0]);
+        assert_eq!(first, 30);
+        assert_eq!(gaps, [0, 0, 0, 0, 10]);
+        assert_eq!(first + gaps.iter().sum::<i64>(), 40);
+        // On time throughout: the gaps are the dispatches'.
+        assert_eq!(sync_times(&[5, 7, 9], &[2, 2, 2]), (2, vec![0, 7, 9]));
+    }
+
+    #[test]
+    fn retries_do_not_move_a_schedule() {
+        let rules = sc_core::Rules::default_rules();
+        let palette = Palette::default_palette(&rules);
+        let file = crate::ScenarioFile::parse(
+            "[[scenario]]\nname = \"t\"\n[[scenario.actor]]\nkind = \"agent\"\n",
+        )
+        .unwrap();
+        let mut g = Gen {
+            scenario: &file.scenario[0],
+            seed: 1,
+            palette: &palette,
+            rng: Rng::new(1),
+            t0: 0,
+            out: Vec::new(),
+            shapes: BTreeMap::new(),
+            times: BTreeMap::new(),
+        };
+        let mut rng = Rng::new(2);
+        let spec = |gaps: Vec<i64>, rng: &mut Rng| RunSpec {
+            truth: Truth {
+                label: Some("agent"),
+                actor: "agent",
+                class: "test".into(),
+                run: format!("r{}", gaps[1]),
+                swarm: None,
+                fleet: None,
+            },
+            client: agent_client(rng),
+            start: 1000,
+            pace: Pace::Model,
+            hosts: vec!["h0.t.example".to_string(); gaps.len()],
+            uses: vec![Use::Attack; gaps.len()],
+            gaps: Some(gaps),
+            fixed: None,
+            harness: Vec::new(),
+            shapes: Vec::new(),
+            scope: "0:0".into(),
+            sink_scope: None,
+            tag: true,
+            retry: 1.0,
+            writes: None,
+            fetches: None,
+            adapt: true,
+            habits: None,
+            prose: None,
+        };
+        // Every request fails twice and is retried, each retry at most a
+        // model's pace later: well inside ten minutes.
+        g.run(spec(vec![0, 600, 600, 600], &mut rng), &mut rng);
+        let ts = &g.times["r600"];
+        assert_eq!(ts.len(), 12);
+        let firsts: Vec<i64> = ts.iter().step_by(3).copied().collect();
+        assert_eq!(firsts, [1000, 1600, 2200, 2800]);
+        // Retries longer than the schedule's gaps: the next request leaves
+        // after the last retry, never before it, and the schedule resumes.
+        g.run(spec(vec![0, 1, 1, 2000], &mut rng), &mut rng);
+        let ts = &g.times["r1"];
+        assert!(ts.windows(2).all(|w| w[0] <= w[1]), "{ts:?}");
+        assert_eq!(ts[9], 3002, "{ts:?}");
     }
 
     #[test]

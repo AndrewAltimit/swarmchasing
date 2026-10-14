@@ -98,7 +98,7 @@
           "id": { "type": "string", "pattern": "^(fleet-[0-9]+|SCF-[0-9]+)$" },
           "kind": { "enum": ["fleet", "swarm"] },
           "aliases": { "type": "array", "items": { "type": "string" } },
-          "interaction": { "type": "array", "items": { "enum": ["shared_sink", "handoff", "synchronized_start", "role_sequence", "disjoint_partition"] } }
+          "interaction": { "type": "array", "items": { "enum": ["shared_sink", "handoff", "synchronized_start", "role_sequence", "disjoint_partition", "dispatch_star"] } }
         },
         "if": { "properties": { "kind": { "const": "swarm" } } },
         "then": { "required": ["interaction"], "properties": { "interaction": { "minItems": 1 } } }

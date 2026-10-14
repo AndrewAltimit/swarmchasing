@@ -229,26 +229,14 @@ pub fn append(p: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
-/// A temporary path beside `p` that no other writer uses: the process id
-/// and a counter, so two writers never share one.
-pub fn temp_path(p: &Path) -> std::path::PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static N: AtomicU64 = AtomicU64::new(0);
-    let name = p.file_name().unwrap_or_default().to_string_lossy();
-    p.with_file_name(format!(
-        ".{name}.{}.{}.tmp",
-        std::process::id(),
-        N.fetch_add(1, Ordering::Relaxed)
-    ))
-}
+pub use sc_collect::temp_path;
 
 /// Write `bytes` to `p` via a temporary file and a rename, so a crash never
-/// leaves half a file.
+/// leaves half a file; the temporary file is removed when either step fails.
+/// The one atomic write every data directory file goes through
+/// ([`sc_collect::write_atomic`]).
 pub fn write_atomic(p: &Path, bytes: &[u8]) -> Result<()> {
-    let tmp = temp_path(p);
-    std::fs::write(&tmp, bytes).with_context(|| format!("writing {}", tmp.display()))?;
-    std::fs::rename(&tmp, p).with_context(|| format!("writing {}", p.display()))?;
-    Ok(())
+    sc_collect::write_atomic(p, bytes).with_context(|| format!("writing {}", p.display()))
 }
 
 pub fn read_json<T: for<'de> Deserialize<'de>>(p: &Path) -> Result<Option<T>> {
@@ -278,8 +266,11 @@ pub fn write_json_kept<T: Serialize>(p: &Path, v: &T) -> Result<()> {
     if p.is_file() {
         let bak = backup_path(p);
         let tmp = temp_path(&bak);
-        std::fs::copy(p, &tmp).with_context(|| format!("copying {}", p.display()))?;
-        std::fs::rename(&tmp, &bak).with_context(|| format!("writing {}", bak.display()))?;
+        let done = std::fs::copy(p, &tmp).and_then(|_| std::fs::rename(&tmp, &bak));
+        if done.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        done.with_context(|| format!("writing {}", bak.display()))?;
     }
     write_json(p, v)
 }
@@ -313,7 +304,16 @@ pub const LOCK_FILE: &str = ".lock";
 /// never write at once.
 #[derive(Debug)]
 pub struct DataLock {
-    _file: std::fs::File,
+    file: std::fs::File,
+}
+
+impl Drop for DataLock {
+    /// Unlock explicitly rather than by closing: a child process forked
+    /// while the lock was held shares the open file until it execs, and
+    /// closing only our handle would leave the lock held until then.
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
 }
 
 /// Take `<data>/.lock` for `what`, or fail at once, naming the holder, when
@@ -358,7 +358,7 @@ pub fn lock_data(data: &Path, what: &str) -> Result<DataLock> {
             std::process::id()
         ),
     );
-    Ok(DataLock { _file: f })
+    Ok(DataLock { file: f })
 }
 
 #[cfg(test)]

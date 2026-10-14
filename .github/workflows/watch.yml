@@ -96,6 +96,10 @@ jobs:
         id: watch
         env:
           INIT: ${{ inputs.init && '--init' || '' }}
+          # The job's own token, read-only (`permissions` above), for the
+          # GitHub search source only, so no other step sees it; it searches
+          # public pull requests and commits.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export SWARMCHASE_DATA="${SWARMCHASE_DATA:-$HOME/swarmchase-data}"
           public="$RUNNER_TEMP/watch-public.txt"

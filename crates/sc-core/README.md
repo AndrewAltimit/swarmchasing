@@ -69,7 +69,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`fleets`](src/fleets.rs) | Soft links as likelihood ratios by family, and the candidate fleets they suggest; never merges. |
 | [`scaffold`](src/scaffold.rs) | Request templates with values as slot types, and cluster pairs sharing them beyond chance. |
 | [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
-| [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model. |
+| [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model, and in the same order beyond a random order. |
 | [`community`](src/community.rs) | Backbone filter, deterministic Leiden (CPM) and minimum cut for candidate fleets. |
 | [`fleet_track`](src/fleet_track.rs) | Candidate fleets across analyses: `FK-` keys, matching, pair evidence accumulated over windows. |
 | [`recurrence`](src/recurrence.rs) | One task rerun on another day, across target runs or across an analysis's clusters (`cluster_reruns`). |
@@ -81,7 +81,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`identity`](src/identity/mod.rs) | Declared agent identity: product claims, published ranges (`ranges`), Web Bot Auth signatures (`httpsig`, `sfv`); verified, spoofed or claimed. Ed25519 checks need the `signatures` feature. |
 | [`agentness`](src/agentness.rs) | Each cluster's agent grade (L0 payloads only to L4 agent likely) with its signals, counter-signals and caps; L5 only from a case decision. |
 | [`swarm`](src/swarm/mod.rs) | Interaction edges between runs (SC-T9): runs and strands (`runs`), named artifacts (`artifacts`), one detector per kind (`edges`), edges against labels (`eval`). |
-| [`platform`](src/platform/mod.rs) | Coordinated-account swarm candidates on public platforms: slotted text sketches and MinHash (`text`), residue in prose (`residue`), benign automation and templates (`automation`), grouping and the chance model (`detect`). Hints, never findings. |
+| [`platform`](src/platform/mod.rs) | Coordinated-account swarm candidates on public platforms: slotted text sketches and MinHash (`text`), residue in prose (`residue`), benign automation and templates (`automation`), grouping and the chance model (`detect`), members' build provenance (`provenance`). Hints, never findings. |
 | [`report`](src/report/mod.rs) | Markdown drafts and the public notice, one module per section; per-audience wording (`audience`) and cluster hint lines (`hints`). |
 | [`notice`](src/notice.rs) | What a public notice may carry: the withholding view and the leak lint. Notice files, pages and the feed are in [`sc-publish`](../sc-publish/README.md). |
 | [`stamp`](src/stamp.rs) | Reproducibility stamps for evidence bundles. |

@@ -522,7 +522,7 @@ function graphDetail(g, sel) {
 
 function graphSection(d) {
   const g = d.graph;
-  const sub = "Clusters above noise that something ties together. Grey lines are soft links (thicker is stronger, combined per pair); red dashed lines are possible interaction (S1 to S5). Shaded areas are candidate fleets. None of it merges clusters or changes a score: each tie is a lead to check.";
+  const sub = "Clusters above noise that something ties together. Grey lines are soft links (thicker is stronger, combined per pair); red dashed lines are possible interaction (S1 to S6). Shaded areas are candidate fleets. None of it merges clusters or changes a score: each tie is a lead to check.";
   if (!g || !g.nodes.length) {
     return section("graph", "Link graph", sub, none(g ? `No ties between the ${plural(g.clusters, "cluster")} above noise.` : "The latest run has no analysis to draw."));
   }

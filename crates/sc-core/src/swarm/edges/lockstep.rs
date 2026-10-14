@@ -21,6 +21,7 @@
 //! kept are cut at a false discovery rate over them.
 
 use super::{Ctx, Tests};
+use crate::chance::{Mix, seed};
 use crate::swarm::runs::{Run, differ};
 use crate::swarm::{EdgeStrength, SwarmEdgeKind};
 
@@ -118,30 +119,6 @@ fn placed(cov: &Coverage, k: usize, d: i64, ulo: f64, uhi: f64) -> f64 {
         }
     }
     (len / (uhi - ulo)).clamp(0.0, 1.0)
-}
-
-/// A small seeded generator (splitmix64), the same on every platform.
-struct Mix(u64);
-
-impl Mix {
-    fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
-    }
-}
-
-/// FNV-1a over the pair's stable labels: the permutations' seed.
-fn seed(parts: &[&str]) -> u64 {
-    let mut h = 0xcbf2_9ce4_8422_2325u64;
-    for p in parts {
-        for b in p.bytes().chain([0]) {
-            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
-        }
-    }
-    h
 }
 
 /// One run pair in lockstep: lined-up requests, the shorter run's count,
@@ -270,9 +247,7 @@ impl Ctx<'_> {
         // follows no match.
         while perms < base || (ge == 0 && perms < most) {
             perms += 1;
-            for i in (1..g.len()).rev() {
-                g.swap(i, (rng.next() % (i as u64 + 1)) as usize);
-            }
+            rng.shuffle(&mut g);
             shuffled.clear();
             shuffled.push(b0);
             for &step in &g {

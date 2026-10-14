@@ -6,7 +6,7 @@
 - **Window:** 2026-05-11 14:02:10 UTC → 2026-05-16 09:30:04 UTC
 - **Records:** 35 linked public records in 6 cluster(s) (of 37 records reviewed, 35 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-13.2
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
 
 ## Summary
 
@@ -125,6 +125,12 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C5**: 2026-05-12 10:15:00 UTC to 2026-05-12 10:39:30 UTC, times of unknown kind
 - **C6**: 2026-05-13 16:40:00 UTC to 2026-05-13 16:44:00 UTC, times of unknown kind
 
+
+## Pairwise tests
+
+Every pair test over the whole analysis, by family: the pairs tested, those kept under the family's false-discovery cut, and how many that unlikely chance alone would give among them.
+
+- scaffold_lineage: 0 kept of 1 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 
 ## Representative records
 

@@ -1,6 +1,7 @@
-//! The five edge detectors (`S1` to `S5`), one module each, over the runs
+//! The six edge detectors (`S1` to `S6`), one module each, over the runs
 //! of one analysis.
 
+mod dispatch;
 mod handoff;
 mod lockstep;
 mod partition;
@@ -57,7 +58,7 @@ impl Tests {
 }
 
 /// Every edge between `runs`, in kind order (`S1` first), and the
-/// multiplicity budget of S3, S4 and S5.
+/// multiplicity budget of S3 to S6.
 pub(super) fn detect(
     runs: &[Run],
     clusters: &[Cluster],
@@ -86,6 +87,8 @@ pub(super) fn detect(
         cl: clusters,
         res: results,
         opts: &rules.set.swarm,
+        co: &rules.set.co_activity,
+        max_shared: rules.set.soft_links.max_shared,
     };
     let mut out = Vec::new();
     let groups: Vec<(&str, Vec<Meta>)> = named
@@ -111,6 +114,8 @@ pub(super) fn detect(
             .keep(SwarmEdgeKind::RoleSequence, fdr, &mut out),
         cx.partitions()
             .keep(SwarmEdgeKind::DisjointPartition, fdr, &mut out),
+        cx.dispatch_stars()
+            .keep(SwarmEdgeKind::DispatchStar, fdr, &mut out),
     ];
     (out, families)
 }
@@ -123,6 +128,10 @@ struct Ctx<'a> {
     cl: &'a [Cluster],
     res: &'a [ObsResult],
     opts: &'a super::SwarmOptions,
+    /// Co-activity's bins, lags, shifts and clock weighting (S6).
+    co: &'a crate::coactivity::CoActivityOptions,
+    /// `soft_links.max_shared`: a bin more clusters share says nothing (S6).
+    max_shared: usize,
 }
 
 /// One side of an edge: the run, its strand label, the records.

@@ -37,7 +37,7 @@ pub enum FleetCmd {
         /// The fleet (`fleet-1`).
         fleet: String,
         /// shared_sink | handoff | synchronized_start | role_sequence |
-        /// disjoint_partition (or S1..S5).
+        /// disjoint_partition | dispatch_star (or S1..S6).
         #[arg(long)]
         kind: sc_core::SwarmEdgeKind,
         /// A run, as <cluster>#<run> (`C3#2` or `k-3f9a2c1b#2`). Repeat.

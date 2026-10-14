@@ -5,7 +5,8 @@ Passive collectors for public records. They return [`sc-core`](../sc-core/README
 - web archive indexes: the Wayback Machine, Arquivo.pt and Common Crawl CDX, and Memento timemaps;
 - agent protocol footprints: Wayback captures of agent cards and signature key directories;
 - scan services: urlquery.net and urlscan.io search;
-- event streams and registries: GH Archive, Wikimedia EventStreams, Hacker News, Bluesky's Jetstream, npm search, PyPI feeds and the MCP Registry;
+- event streams and registries: GH Archive, GitHub search, Wikimedia EventStreams, Hacker News, Bluesky's Jetstream, npm search, PyPI feeds and the MCP Registry;
+- code-host listings: GitLab.com's and Codeberg's newest projects;
 - certificates: crt.sh, and CT logs read directly;
 - contacts: security.txt and RDAP.
 
@@ -78,6 +79,8 @@ Every source has a `parse_*` function that reads a saved response without the ne
 | `wellknown` | Wayback captures of agent footprint files | hosts or `*.domain`s | capture |
 | `mcp` | Official MCP Registry list | substrings | request |
 | `hackernews` | Links in Hacker News stories and comments (search index) | substrings of the link, title or text | request |
+| `bluesky` | Links in Bluesky posts (Jetstream), a sampled stretch | substrings of the link or text | request |
+| `ghsearch` | Links in GitHub pull request text and commit messages (search API, token needed) | substrings, each one search | request |
 
 "Substrings" are `|`-separated and case-insensitive; `*` keeps everything. Each module's docs give the source's terms of use and what they allow.
 
@@ -91,13 +94,15 @@ Wayback's resume key (with its time window, when sliced), Common Crawl's crawl-a
 
 Streamed sources read a bounded amount each pull from a checkpoint (`Source::checkpointed`): GH Archive reads on from the last hour read, up to `scan` hours and `max_mb`, decoded a line at a time, and skips and counts an hour whose file is corrupt or cut off; Wikimedia EventStreams reads Server-Sent Events from the millisecond after the last event read (`since=`) until the time the pull began, `scan` wall-clock minutes or `max_mb`, reopening a dropped connection from the last event; a CT log reads from its checkpoint when that is within the newest `scan` entries, else the newest `scan`. A backlog too long to catch up on is skipped and counted.
 
-Hacker News walks its search index back from the pull's start to the checkpoint, `scan` queries of 1000 items each, and counts the stretch it could not reach as skipped.
+Hacker News walks its search index back from the pull's start to the checkpoint, `scan` queries of 1000 items each, and counts the stretch it could not reach as skipped. GitHub search runs one search per substring and scope over the window since the checkpoint, at most `scan` requests, and counts a search the budget or the 1000-result cap cut short as skipped. Bluesky reads the same sampled stretch of Jetstream as its platform pass.
 
 ### Platform events
 
-[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (a kind in `PLATFORM_KINDS`: `gharchive`, `npm`, `pypi`, `huggingface`, `golang`, `wikimedia`, `hackernews`, `nuget`, `packagist`, `rubygems`, `crates`, `cve`, `osv`, `wikimedia-ai-cleanup`, `bluesky`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped.
+[`platform`](src/platform.rs) reads the same event stream and registries for a different purpose: every event of the kinds the coordinated-account detector groups, not only matches. `pull_platform` takes a `[[platform.source]]` entry (a kind in `PLATFORM_KINDS`: `gharchive`, `npm`, `pypi`, `huggingface`, `golang`, `wikimedia`, `hackernews`, `nuget`, `packagist`, `rubygems`, `crates`, `cve`, `osv`, `wikimedia-ai-cleanup`, `bluesky`, `gitlab`, `codeberg`) and returns `sc_core::platform::PlatformEvent`s, with logins hashed, account ids reduced to a rank, text reduced to a slotted sketch and automation logins dropped.
 
 A reference source (`osv`, `wikimedia-ai-cleanup`) returns `PlatformPull::labels` instead of events: a `TargetLabel` names a target on a platform (`label_key` normalises it as events name it), what it says (`osv-malicious`, `wiki-ai-cleanup`) and the record or category that says so.
+
+[`provenance`](src/provenance.rs) is a lookup, not a source: `Client::package_provenance` takes a member event id (`npm:<name>@<version>`, `pypi:<name>[@<version>]`) and reads that release's build provenance, npm's SLSA statement from the registry's attestations endpoint or PyPI's trusted-publisher attestation from its integrity API, as `sc_core::platform::PackageProvenance` (repository, workflow, ref, commit, runner, environment). A 404 is `None`. No package file is downloaded and signatures are not verified. The parsers are tested against trimmed public responses in [`tests/fixtures/provenance/`](tests/fixtures/provenance/).
 
 Declared coding-agent Apps are tallied by product and lookalike App logins by login (`PlatformPull::declared`, `lookalikes`). GitHub's trimmed payloads give a pull request opened no text; it is kept text-less with its repository as the target, as stars and forks are. `gharchive_file` reads a GH Archive hour file from disk. Nothing inside an event's text is fetched, and a Space or repository is never opened ([methodology](../../docs/methodology.md#coordinated-accounts-on-public-platforms)).
 
@@ -109,10 +114,12 @@ Sources that read a stream or feed and keep only matches report a `Coverage` on 
 
 - **Retries.** Dropped connections, HTTP 429 and 5xx are retried with exponential backoff: 5 retries from 5 seconds, spread ±25%, each wait capped at 5 minutes. A gateway timeout (HTTP 504) or a request that timed out is retried only twice, because an index query too heavy for the server times out the same way every time. Other errors fail at once. Change the policy with `Client::with_retry`.
 - **Unavailable hosts.** HTTP 503 (the Internet Archive's "Temporarily Offline") is retried for a span of time, `unavailable_patience` (10 minutes), rather than a count. A host still unavailable after that is marked down for the client's life: later requests to it fail at once, so one outage costs a watch run ten minutes, not ten minutes per source. `Client::down_hosts` lists them.
-- **Retry-After.** A server's `Retry-After`, in seconds or as an HTTP date, is honoured as given.
+- **Retry-After.** A server's `Retry-After`, in seconds or as an HTTP date, is honoured as given, on streamed downloads too. One that asks for more than the 5-minute cap is not waited out: the host is marked down for the client's life at once.
+- **Hanging hosts.** A host that times out on two requests in a row, each after its retries, is marked down the same way, so a hanging index costs a run two requests' patience, not one per source.
 - **Pacing.** The minimum interval applies per host, so sources on different hosts do not slow each other.
 - **Size cap.** A response read into memory is capped at 64 MiB (`Client::with_max_body`). Large files are streamed with their own cap.
-- **Cache.** `Client::with_cache(dir, ttl)` keeps responses on disk. One younger than `ttl` is reused without a request; an older one is revalidated with its ETag or Last-Modified. Requests carrying API keys are never cached.
+- **Cache.** `Client::with_cache(dir, ttl)` keeps responses on disk. One younger than `ttl` is reused without a request; an older one is revalidated with its ETag or Last-Modified. Requests carrying API keys are never cached. Cached bodies are raw answers, so `prune_http_cache` deletes entries older than a given age, bodies without metadata and stale temporary files; the watch runs it every run.
+- **Atomic writes.** `write_atomic` writes through a temporary file beside the target and a rename, and removes the temporary file when either step fails. The cache and every rewritten file in the CLI's data directory use it.
 - **Counts.** `Client::requests` counts the requests sent, retries included; `Client::cache_hits` counts reuses.
 
 Error messages name the URL and never a header value, so an API key does not end up in a log.
@@ -127,7 +134,7 @@ Error messages name the URL and never a header value, so an API key does not end
 |---|---|
 | `SWARMCHASE_UA` | Overrides the user agent, which by default names the tool, its version and the repository. |
 
-API keys are passed in by the caller. `Kind::key_env` names the variable the CLI reads: `URLQUERY_APIKEY` (required for urlquery) and `URLSCAN_APIKEY` (optional for urlscan).
+API keys are passed in by the caller. `Kind::key_env` names the variable the CLI reads: `URLQUERY_APIKEY` (required for urlquery), `URLSCAN_APIKEY` (optional for urlscan) and `GITHUB_TOKEN` (required for ghsearch).
 
 ## Tests
 
@@ -152,7 +159,11 @@ The tests parse synthetic responses (never third-party records) and feed the pag
 | [`wikimedia.rs`](src/wikimedia.rs) | Wikimedia EventStreams: an SSE reader, added external links as records, edits as platform events; pages tagged as suspected AI-generated text as labels. |
 | [`registries.rs`](src/registries.rs) | NuGet's catalog, Packagist's change feed, RubyGems' newest gems and crates.io's newest crates as platform events. |
 | [`cve.rs`](src/cve.rs) | CVE records and GitHub advisories as platform events, grouped by the repository their references name. |
-| [`bluesky.rs`](src/bluesky.rs) | Bluesky posts from Jetstream over one WebSocket connection, a sampled stretch a run, with account age from the PLC directory. |
+| [`bluesky.rs`](src/bluesky.rs) | Bluesky posts from Jetstream over one WebSocket connection, a sampled stretch a run: matching links as records, posts as platform events with account age from the PLC directory. |
+| [`ghsearch.rs`](src/ghsearch.rs) | GitHub search: relay links and run tags in pull request text and commit messages, which GH Archive's payloads leave out. |
+| [`forges.rs`](src/forges.rs) | GitLab.com's and Codeberg's newest public projects as platform events. |
+
+| [`provenance.rs`](src/provenance.rs) | Build provenance of one npm or PyPI release, looked up for platform candidates' members. |
 | [`osv.rs`](src/osv.rs) | OSV malicious-package records as labels on package targets (`TargetLabel`), joined to candidates by the watch. |
 | [`hackernews.rs`](src/hackernews.rs) | Hacker News search index: links as records, stories and comments as platform events, account age from profiles. |
 | [`wellknown.rs`](src/wellknown.rs) | Agent protocol footprints in the Wayback index. |

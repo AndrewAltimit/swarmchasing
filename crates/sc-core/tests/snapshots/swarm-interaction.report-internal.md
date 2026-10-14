@@ -6,7 +6,7 @@
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-03-12 16:34:00 UTC
 - **Records:** 38 linked public records in 7 cluster(s) (of 38 records reviewed, 38 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-13.2
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
 
 ## Summary
 
@@ -160,6 +160,13 @@ For each cluster, the window to search, what its times measure, and the strings 
   - identifiers: `param:uqtag=scout7f`
 
 
+## Candidate fleets
+
+Clusters tied by soft links (shared pauses, reruns, recon openings, encoding, shared scaffolds, co-activity and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.
+
+- **F1**: C2, C6, 1 soft link(s): ordered co-target (weakest pair 0.97)
+  - C2 ↔ C6: ordered co-target (0.97): 5 of 5 shared rare hosts first touched in the same order, in the same hours (chance 8.3e-3 for a random order, 0.01 such pairs expected among 1 tested): one ord…
+
 ## Possible interaction (SC-T9)
 
 Pairs of runs whose records suggest agents acting on each other's output. Each is a weak-to-moderate signal that coincidence, one scheduler or one agent changing route can also produce. None is scored or merges anything; together they are an Inference to review, not a finding. A grouping is called a swarm only once reviewed evidence of interaction is recorded.
@@ -175,6 +182,7 @@ Every pair test over the whole analysis, by family: the pairs tested, those kept
 
 - scaffold: 0 kept of 2 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 - co_activity: 0 kept of 1 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
+- ordered_co_target: 1 kept of 1 tested (1 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
 - role_sequence: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 - disjoint_partition: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 

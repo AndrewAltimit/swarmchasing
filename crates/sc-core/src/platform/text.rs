@@ -66,6 +66,16 @@ impl TextSketch {
 /// name, login) that become a slot. `None` for text with no words.
 pub fn sketch(text: &str, context: &[&str], rules: &Rules) -> Option<TextSketch> {
     let tokens = slot_tokens(text, context);
+    let mut out = token_sketch(&tokens)?;
+    out.residue = super::residue::text_residue(text, rules);
+    out.self_id = super::residue::self_id(text);
+    Some(out)
+}
+
+/// The sketch of slotted `tokens` ([`slot_tokens`]): words, template hash,
+/// MinHash signature and excerpt, with no residue read. `None` when there
+/// are no tokens.
+pub fn token_sketch(tokens: &[String]) -> Option<TextSketch> {
     if tokens.is_empty() {
         return None;
     }
@@ -103,8 +113,8 @@ pub fn sketch(text: &str, context: &[&str], rules: &Rules) -> Option<TextSketch>
         skeleton: fnv(head.join(" ").as_bytes()),
         minhash,
         excerpt: crate::redact::redact_decoded(&excerpt),
-        residue: super::residue::text_residue(text, rules),
-        self_id: super::residue::self_id(text),
+        residue: Vec::new(),
+        self_id: Vec::new(),
     })
 }
 
@@ -126,7 +136,7 @@ pub fn slot_tokens(text: &str, context: &[&str]) -> Vec<String> {
         out.push(t);
     };
     for raw in text.split_whitespace() {
-        let lower = raw.to_lowercase();
+        let lower = raw.to_lowercase().replace('\u{2019}', "'");
         let trimmed = lower.trim_matches(|c: char| !c.is_alphanumeric() && c != '@' && c != '/');
         if trimmed.is_empty() {
             continue;
@@ -150,7 +160,10 @@ pub fn slot_tokens(text: &str, context: &[&str]) -> Vec<String> {
             push("<path>".into(), &mut out);
             continue;
         }
-        if ctx.iter().any(|c| c == trimmed) {
+        if ctx
+            .iter()
+            .any(|c| c == trimmed || c == possessive_base(trimmed))
+        {
             push("<user>".into(), &mut out);
             continue;
         }
@@ -165,9 +178,17 @@ pub fn slot_tokens(text: &str, context: &[&str]) -> Vec<String> {
     out
 }
 
-/// A word, or the slot it stands for.
+/// `w` without a possessive ending (`'s`, or `'` after an `s`).
+fn possessive_base(w: &str) -> &str {
+    w.strip_suffix("'s")
+        .or_else(|| w.strip_suffix('\'').filter(|b| b.ends_with('s')))
+        .unwrap_or(w)
+}
+
+/// A word, or the slot it stands for. A context word slots in its
+/// possessive too (`acmecorp's`).
 fn word_slot(w: &str, ctx: &[String]) -> String {
-    if ctx.iter().any(|c| c == w) {
+    if ctx.iter().any(|c| c == w || c == possessive_base(w)) {
         return "<user>".into();
     }
     let digits = w.chars().filter(char::is_ascii_digit).count();

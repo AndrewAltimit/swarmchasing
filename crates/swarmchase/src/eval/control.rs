@@ -224,9 +224,7 @@ pub fn run(args: &PreEraArgs) -> Result<()> {
                     if let Some(d) = path.parent() {
                         std::fs::create_dir_all(d)?;
                     }
-                    let tmp = path.with_extension("ndjson.tmp");
-                    std::fs::write(&tmp, crate::store::to_ndjson(&obs)?)?;
-                    std::fs::rename(&tmp, &path)?;
+                    crate::store::write_atomic(&path, crate::store::to_ndjson(&obs)?.as_bytes())?;
                     eprintln!("  {:<20} {}: {} captures", s.name, w.year, obs.len());
                     t.fetched += 1;
                     files.push(path);

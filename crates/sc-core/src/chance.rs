@@ -3,7 +3,7 @@
 //! pairs, and the multiplicity budget each family of tests reports.
 //!
 //! Every pairwise test in the analysis (shared pauses, scaffolds,
-//! co-activity, the S3 to S5 interaction edges, platform candidates) belongs
+//! co-activity, the S3 to S6 interaction edges, platform candidates) belongs
 //! to one [`TestFamily`]. A family counts the pairs it tested, keeps those
 //! whose chance passes its own limit and a Benjamini-Hochberg cut over every
 //! pair tested, and states how many pairs that unlikely chance alone would
@@ -55,7 +55,8 @@ pub(crate) fn bh_cut(chances: &[f64], tested: usize, q: f64) -> Option<f64> {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TestFamily {
     /// `shared_pause`, `scaffold`, `co_activity`, `synchronized_start`,
-    /// `role_sequence`, `disjoint_partition`, or `platform:<name>`.
+    /// `role_sequence`, `disjoint_partition`, `dispatch_star`, or
+    /// `platform:<name>`.
     pub family: String,
     /// Pairs (or groups) tested.
     pub tested: usize,
@@ -132,9 +133,244 @@ pub(crate) fn product_chance(p1: f64, p2: f64) -> f64 {
     (x * (1.0 - x.ln())).min(1.0)
 }
 
+/// The chance of a product of `ps` this small or smaller when they are
+/// independent uniform chances (Fisher's method): `x Σ_{j<n} (-ln x)^j / j!`
+/// for the product `x` of `n` chances. Two chances give [`product_chance`].
+pub(crate) fn product_chance_all(ps: &[f64]) -> f64 {
+    if ps.is_empty() {
+        return 1.0;
+    }
+    let x: f64 = ps.iter().map(|p| p.clamp(0.0, 1.0)).product();
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let l = -x.ln();
+    let (mut term, mut sum) = (1.0, 1.0);
+    for j in 1..ps.len() {
+        term *= l / j as f64;
+        sum += term;
+    }
+    (x * sum).min(1.0)
+}
+
+/// A small seeded generator (splitmix64), the same on every platform: the
+/// permutation tests' source, so a chance is reproducible from the records.
+pub(crate) struct Mix(pub(crate) u64);
+
+impl Mix {
+    pub(crate) fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+
+    /// Shuffle `v` in place (Fisher-Yates).
+    pub(crate) fn shuffle<T>(&mut self, v: &mut [T]) {
+        for i in (1..v.len()).rev() {
+            v.swap(i, (self.next() % (i as u64 + 1)) as usize);
+        }
+    }
+}
+
+/// FNV-1a over stable labels: a permutation test's seed.
+pub(crate) fn seed(parts: &[&str]) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for p in parts {
+        for b in p.bytes().chain([0]) {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    h
+}
+
+/// Items up to which [`increasing_at_least`] is exact.
+const LIS_EXACT_MAX: usize = 30;
+
+/// `ln(n!)`.
+pub(crate) fn ln_fact(n: usize) -> f64 {
+    (2..=n).map(|i| (i as f64).ln()).sum()
+}
+
+/// `P(LIS >= l)` for the longest increasing subsequence of a uniformly
+/// random permutation of `k` items. Exact up to [`LIS_EXACT_MAX`] items, by
+/// the Robinson-Schensted correspondence: the permutations whose longest
+/// increasing subsequence is `l` are counted by the squared numbers of
+/// standard Young tableaux (hook length formula) of the partitions of `k`
+/// whose first row is `l`. Above that, the union bound over every set of
+/// `l` positions, `C(k, l) / l!`, which overstates the chance, never
+/// understates it.
+pub(crate) fn increasing_at_least(k: usize, l: usize) -> f64 {
+    if l <= 1 {
+        return 1.0;
+    }
+    if l > k {
+        return 0.0;
+    }
+    if k <= LIS_EXACT_MAX {
+        return lis_table()[k][l];
+    }
+    let ln = ln_fact(k) - ln_fact(l) - ln_fact(k - l) - ln_fact(l);
+    ln.exp().min(1.0)
+}
+
+/// `table[k][l]`: `P(LIS >= l)` over permutations of `k` items, for `k` up
+/// to [`LIS_EXACT_MAX`].
+fn lis_table() -> &'static Vec<Vec<f64>> {
+    static TABLE: std::sync::OnceLock<Vec<Vec<f64>>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        (0..=LIS_EXACT_MAX)
+            .map(|k| {
+                // exact[l]: P(LIS = l).
+                let mut exact = vec![0.0; k + 2];
+                let ln_k = ln_fact(k);
+                let mut parts = Vec::new();
+                partitions(k, k, &mut parts, &mut |lambda| {
+                    let ln_f = ln_k - ln_hooks(lambda);
+                    exact[lambda[0]] += (2.0 * ln_f - ln_k).exp();
+                });
+                let mut at_least = vec![0.0; k + 2];
+                for l in (0..=k).rev() {
+                    at_least[l] = (at_least[l + 1] + exact[l]).min(1.0);
+                }
+                if k == 0 {
+                    at_least[0] = 1.0;
+                }
+                at_least
+            })
+            .collect()
+    })
+}
+
+/// Every partition of `n` into parts of at most `max`, largest first.
+fn partitions(n: usize, max: usize, parts: &mut Vec<usize>, f: &mut impl FnMut(&[usize])) {
+    if n == 0 {
+        if !parts.is_empty() {
+            f(parts);
+        }
+        return;
+    }
+    for p in (1..=max.min(n)).rev() {
+        parts.push(p);
+        partitions(n - p, p, parts, f);
+        parts.pop();
+    }
+}
+
+/// The sum of the logs of the hook lengths of partition `lambda`.
+fn ln_hooks(lambda: &[usize]) -> f64 {
+    let mut s = 0.0;
+    for (i, &row) in lambda.iter().enumerate() {
+        for j in 0..row {
+            // Cells below (i, j): rows after i at least j + 1 long.
+            let below = lambda[i + 1..].iter().filter(|&&r| r > j).count();
+            s += ((row - j - 1 + below + 1) as f64).ln();
+        }
+    }
+    s
+}
+
+/// The longest chain of `points` increasing strictly in both coordinates:
+/// the longest increasing subsequence of one order read in the other, with
+/// ties in either order never counted as agreement. Patience sorting in
+/// `O(n log n)`: points by the first coordinate, ties in it by the second
+/// descending so no two of them chain, then the longest strictly increasing
+/// run of second coordinates.
+pub(crate) fn longest_chain(points: &[(i64, i64)]) -> usize {
+    let mut p = points.to_vec();
+    crate::sort::by(&mut p, |a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+    // tails[k]: the smallest last second coordinate of a chain of k + 1.
+    let mut tails: Vec<i64> = Vec::new();
+    for (_, y) in p {
+        let i = tails.partition_point(|&t| t < y);
+        if i == tails.len() {
+            tails.push(y);
+        } else {
+            tails[i] = y;
+        }
+    }
+    tails.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn longest_increasing_subsequence_chances() {
+        // Every one of 5! orders: one is fully increasing.
+        assert!((increasing_at_least(5, 5) - 1.0 / 120.0).abs() < 1e-12);
+        assert_eq!(increasing_at_least(5, 1), 1.0);
+        assert_eq!(increasing_at_least(5, 6), 0.0);
+        // Brute force over permutations of 6: count by LIS.
+        fn perms(v: &mut Vec<i64>, k: usize, out: &mut Vec<Vec<i64>>) {
+            if k == v.len() {
+                out.push(v.clone());
+                return;
+            }
+            for i in k..v.len() {
+                v.swap(k, i);
+                perms(v, k + 1, out);
+                v.swap(k, i);
+            }
+        }
+        let mut all = Vec::new();
+        perms(&mut (0..6).collect(), 0, &mut all);
+        for l in 1..=6 {
+            let n = all
+                .iter()
+                .filter(|p| {
+                    let pts: Vec<(i64, i64)> =
+                        p.iter().enumerate().map(|(i, &x)| (i as i64, x)).collect();
+                    longest_chain(&pts) >= l
+                })
+                .count();
+            let want = n as f64 / all.len() as f64;
+            assert!((increasing_at_least(6, l) - want).abs() < 1e-9, "{l}");
+        }
+        // The bound above the exact range is above the exact value below it.
+        let exact = increasing_at_least(30, 20);
+        let bound = (ln_fact(30) - ln_fact(20) - ln_fact(10) - ln_fact(20)).exp();
+        assert!(exact <= bound && exact > 0.0, "{exact} {bound}");
+        assert!(increasing_at_least(40, 30) < 1e-20);
+        // Ties never count as agreement.
+        assert_eq!(longest_chain(&[(0, 0), (0, 1), (1, 0)]), 1);
+        assert_eq!(longest_chain(&[(0, 0), (1, 1), (2, 2)]), 3);
+    }
+
+    /// The quadratic chain the patience sort replaces, as a reference.
+    fn chain_by_pairs(points: &[(i64, i64)]) -> usize {
+        let mut p = points.to_vec();
+        p.sort();
+        let mut best = vec![1usize; p.len()];
+        for j in 0..p.len() {
+            for i in 0..j {
+                if p[i].0 < p[j].0 && p[i].1 < p[j].1 {
+                    best[j] = best[j].max(best[i] + 1);
+                }
+            }
+        }
+        best.into_iter().max().unwrap_or(0)
+    }
+
+    #[test]
+    fn the_patience_chain_matches_the_quadratic_one() {
+        let mut mix = Mix(7);
+        assert_eq!(longest_chain(&[]), 0);
+        for round in 0..3000 {
+            let n = (mix.next() % 13) as usize;
+            // Small ranges so ties in either coordinate are common.
+            let range = 1 + (round % 9) as u64;
+            let pts: Vec<(i64, i64)> = (0..n)
+                .map(|_| ((mix.next() % range) as i64, (mix.next() % range) as i64))
+                .collect();
+            assert_eq!(longest_chain(&pts), chain_by_pairs(&pts), "{pts:?}");
+        }
+        // Many points stay fast: a long increasing run with ties mixed in.
+        let big: Vec<(i64, i64)> = (0..200_000i64).map(|i| (i / 2, i)).collect();
+        assert_eq!(longest_chain(&big), 100_000);
+    }
 
     #[test]
     fn a_family_keeps_what_its_cut_keeps_and_states_the_expected() {
@@ -163,6 +399,15 @@ mod tests {
         assert!((product_chance(0.1, 0.1) - x * (1.0 - x.ln())).abs() < 1e-12);
         assert_eq!(product_chance(1.0, 1.0), 1.0);
         assert_eq!(product_chance(0.0, 0.5), 0.0);
+        // The general form agrees for two, and for one is the chance itself.
+        assert!((product_chance_all(&[0.1, 0.1]) - product_chance(0.1, 0.1)).abs() < 1e-12);
+        assert!((product_chance_all(&[0.03]) - 0.03).abs() < 1e-12);
+        // Three: P(U1 U2 U3 <= x) = x (1 + l + l^2 / 2), l = -ln x.
+        let x: f64 = 0.001;
+        let l = -x.ln();
+        let want = x * (1.0 + l + l * l / 2.0);
+        assert!((product_chance_all(&[0.1, 0.1, 0.1]) - want).abs() < 1e-12);
+        assert_eq!(product_chance_all(&[]), 1.0);
     }
 
     #[test]

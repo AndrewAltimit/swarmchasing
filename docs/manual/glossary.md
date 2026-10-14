@@ -48,11 +48,13 @@ Each term links to the section that defines it.
 | Naming lead | Working days before an affected operator is named: 3, or 10 if compromised. | [FM-10.2](10-disclosure.md#fm-102-lead-times) |
 | Naming update | A dated update that names affected operators. | [FM-10.2](10-disclosure.md#fm-102-lead-times), [FM-11.2](11-notices.md#fm-112-structure) |
 | Notice | The public page for one incident. | [FM-1.4](01-scope.md#fm-14-casework-terms), [chapter 11](11-notices.md) |
+| Ordered co-target | Two concurrent clusters first touching shared rare hosts in one order beyond chance; a soft link. | [FM-5.19](05-linking.md#fm-519-ordered-co-targets) |
 | Passivity test | The conditions every source must pass. | [FM-3.2](03-sources.md#fm-32-passivity-test) |
 | Pause | A gap long in absolute terms and against the median gap. | [FM-6.2](06-timing.md#fm-62-cadence-bursts-and-pauses) |
 | Plant signal | A sign a cluster's records were placed to be found. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Platform swarm candidate | Accounts acting alike on a public platform beyond chance; a hint, never a swarm. | [FM-5.15](05-linking.md#fm-515-coordinated-accounts-on-public-platforms) |
 | Probe chain | One client trying variants of one request. | [FM-5.4](05-linking.md#fm-54-probe-chains) |
+| Prompt echo | Two clusters writing prose from one template beyond chance; a soft link. | [FM-5.21](05-linking.md#fm-521-prompt-echo) |
 | Provenance | Who can create a record: observed, submit- or publish-anywhere. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |
 | Provider | The organisation whose agents are attributed. | [FM-1.4](01-scope.md#fm-14-casework-terms) |
 | Public record | A third-party trace of a request, published to anyone. | [FM-3.1](03-sources.md#fm-31-what-counts-as-a-public-record) |
@@ -63,6 +65,7 @@ Each term links to the section that defines it.
 | Rhythm | A cluster's hour-of-day profile. | [FM-6.4](06-timing.md#fm-64-rhythm) |
 | Run | Records of a cluster with no gap longer than the run gap. | [FM-1.3](01-scope.md#fm-13-groupings), [FM-5.5](05-linking.md#fm-55-runs) |
 | SC-T | The swarmchasing tactic ids, SC-T1 to SC-T9. | [FM-4.3](04-indicators.md#fm-43-the-sc-t-tactic-taxonomy) |
+| Scaffold lineage | Two clusters whose request templates are one part apart beyond chance; a soft link. | [FM-5.20](05-linking.md#fm-520-scaffold-lineage) |
 | Scope finding | In scope, scope exceeded or not assessable. | [FM-15.4](15-misalignment.md#fm-154-stating-a-scope-finding) |
 | Scope test | One of S1 to S7, each a way activity can exceed its task. | [FM-15.3](15-misalignment.md#fm-153-scope-tests) |
 | Second review | Approval of the exact draft by a person other than the admin. | [FM-10.9](10-disclosure.md#fm-109-self-review-and-second-review) |

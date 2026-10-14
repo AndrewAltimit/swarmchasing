@@ -39,7 +39,7 @@ The network fields of a scan-service record usually describe the **target**: whe
 
 The harness is the software around the model: the agent framework, the fetch tool, the browser automation, the product. Its traces include tool-call markup dialects, the user agent of a fetch tool, which relays and carriers it reaches for, fixed fan-out widths, and parameter conventions.
 
-Harness traces are reported as ranked candidates with the traces for each, tagged Inference. A harness is never named as the source in public: open-source frameworks are used by many operators, and their traces are easy to imitate. Toolkit: private reports rank one candidate per client product in the records' user agents, by records, with the header fingerprints, header-name sets and URL encoding style they share; public notices leave harness candidates out.
+Harness traces are reported as ranked candidates with the traces for each, tagged Inference. A harness is never named as the source in public: open-source frameworks are used by many operators, and their traces are easy to imitate. Toolkit: private reports rank one candidate per client product in the records' user agents (a coding harness's own token, such as Gemini CLI's or Aider's, names the product even inside a Mozilla-compatible user agent), by records, with the header fingerprints, header-name sets and URL encoding style they share; public notices leave harness candidates out.
 
 ## FM-7.5 Model family layer
 
@@ -119,7 +119,7 @@ Before any layer is attributed, a report states how likely it is that an agent s
 | L1 | Self-described | A model or vendor name, or an agent test tag. Costs nothing to write ([FM-7.9](#fm-79-false-flag-reasoning)); worded like L0. |
 | L2 | Model-written | Model-output residue, prose, invented identifiers, a repeated output cut length, stale knowledge or stale dates ([FM-4.5](04-indicators.md#fm-45-artifact-families)). |
 | L3 | Adaptive | L2, and behaviour that answers responses: a changed request after an error, a route escalation, variants at model pace. Read from request or submit times only. |
-| L4 | Agent likely | L3, and a pace or scale beyond one person: adapting at machine speed, fixed parallel fan-out, cross-service fan-out with no auto-submitter around it ([FM-6.3](06-timing.md#fm-63-concurrency-and-fan-out)), activity round the clock. No working-hours rhythm against it. |
+| L4 | Agent likely | L3, and a pace or scale beyond one person: adapting at machine speed, fixed parallel fan-out, cross-service fan-out with no auto-submitter around it ([FM-6.3](06-timing.md#fm-63-concurrency-and-fan-out)), activity round the clock, or a machine fetch tool's habit (robots.txt read again before every page, a client-side rate ceiling held again and again). No working-hours rhythm against it. |
 | L5 | Documented | Casework only: operator logs matching an agent harness, or the provider's confirmation. |
 
 Caps:
@@ -127,6 +127,10 @@ Caps:
 - **must** stop at L2 when every timestamp is an archive capture ([FM-6.1](06-timing.md#fm-61-timestamp-kinds));
 - **must** stop at L2 when a working-hours rhythm meets slow pace, and the report says the activity is possibly human-operated with model help;
 - **should** stop at L3 under any working-hours rhythm.
+
+A referral tag **must not** count as self-description: an assistant's citation tag (`utm_source=chatgpt.com`) names where the link came from, and anyone following or copying the link sends it.
+
+Page-borne residue **must not** set L2 on its own. Residue a page carries in its own links, such as an unrendered front-end template (`{{item.slug}}` in a path), is sent by every crawler, preview bot and feed poller that follows the link; it shows a link was followed, not who wrote it. It is reported beside the L2 evidence and counts only where another L2 signal already holds.
 
 Declared testing and benchmark targets ([FM-4.9](04-indicators.md#fm-49-benchmark-targets-and-declared-testing)) are reported as counter-signals and do not move the grade: anyone can declare a test. A declared agent product from outside its provider's published ranges is a counter-signal too, and a verified provider identity supports L1 and nothing higher ([FM-7.13](#fm-713-published-address-ranges)).
 

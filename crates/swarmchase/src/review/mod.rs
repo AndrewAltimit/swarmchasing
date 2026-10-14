@@ -610,9 +610,16 @@ fn mark_tuned(args: &TunedArgs) -> Result<()> {
 
 /// The review file, keyed by record ID. Saving rewrites it, so a re-review
 /// replaces the earlier line instead of duplicating the record.
+///
+/// Saving merges: under a lock beside the file, it reads the file again and
+/// applies only what this store changed since it was opened or last saved,
+/// so a long `review --serve` never undoes a `review tuned` (or another
+/// reviewer's labels) written meanwhile.
 pub struct ReviewStore {
     path: PathBuf,
     pub entries: BTreeMap<String, Review>,
+    /// Each entry as last read or written, serialised, to tell what changed.
+    base: BTreeMap<String, String>,
 }
 
 impl ReviewStore {
@@ -636,8 +643,18 @@ impl ReviewStore {
     }
 
     pub fn open(path: PathBuf) -> Result<Self> {
+        let entries = Self::read(&path)?;
+        let base = snapshot(&entries)?;
+        Ok(Self {
+            path,
+            entries,
+            base,
+        })
+    }
+
+    fn read(path: &Path) -> Result<BTreeMap<String, Review>> {
         let mut entries = BTreeMap::new();
-        match std::fs::read_to_string(&path) {
+        match std::fs::read_to_string(path) {
             Ok(text) => {
                 for (n, line) in text.lines().enumerate() {
                     if line.trim().is_empty() {
@@ -651,23 +668,68 @@ impl ReviewStore {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
         }
-        Ok(Self { path, entries })
+        Ok(entries)
     }
 
-    pub fn save(&self) -> Result<()> {
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir)?;
+    /// Write this store's changes into the file: entries added, changed or
+    /// removed here since it was opened (or last saved) replace the file's,
+    /// and every other entry in the file stays as the file has it. A record
+    /// marked `tuned` in the file meanwhile stays tuned. Afterwards
+    /// `entries` holds the merged file.
+    pub fn save(&mut self) -> Result<()> {
+        let dir = self.path.parent().unwrap_or(Path::new("."));
+        std::fs::create_dir_all(dir)?;
+        let name = self.path.file_name().unwrap_or_default().to_string_lossy();
+        let lock_path = dir.join(format!(".{name}.lock"));
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&lock_path)
+            .with_context(|| format!("opening {}", lock_path.display()))?;
+        lock.lock()
+            .with_context(|| format!("locking {}", lock_path.display()))?;
+        let mut merged = Self::read(&self.path)?;
+        let ours = snapshot(&self.entries)?;
+        for (id, r) in &self.entries {
+            if self.base.get(id) == ours.get(id) {
+                continue;
+            }
+            let mut r = r.clone();
+            let base_tuned = self
+                .base
+                .get(id)
+                .and_then(|t| serde_json::from_str::<Review>(t).ok())
+                .is_some_and(|b| b.tuned);
+            if merged.get(id).is_some_and(|d| d.tuned) && !base_tuned {
+                r.tuned = true;
+            }
+            merged.insert(id.clone(), r);
+        }
+        for id in self.base.keys() {
+            if !self.entries.contains_key(id) {
+                merged.remove(id);
+            }
         }
         let mut text = String::new();
-        for r in self.entries.values() {
+        for r in merged.values() {
             text.push_str(&serde_json::to_string(r)?);
             text.push('\n');
         }
-        let tmp = self.path.with_extension("ndjson.tmp");
-        std::fs::write(&tmp, text)?;
-        std::fs::rename(&tmp, &self.path)
-            .with_context(|| format!("writing {}", self.path.display()))
+        crate::store::write_atomic(&self.path, text.as_bytes())?;
+        drop(lock);
+        self.base = snapshot(&merged)?;
+        self.entries = merged;
+        Ok(())
     }
+}
+
+/// Each entry serialised, to compare against later.
+fn snapshot(entries: &BTreeMap<String, Review>) -> Result<BTreeMap<String, String>> {
+    entries
+        .iter()
+        .map(|(id, r)| Ok((id.clone(), serde_json::to_string(r)?)))
+        .collect()
 }
 
 /// One record in the queue: an index into `Analysis::results` and its class.
@@ -1498,6 +1560,63 @@ mod tests {
             from: "leads.ndjson".into(),
             today: "2026-10-12".into(),
         }
+    }
+
+    #[test]
+    fn a_save_keeps_what_another_writer_saved_meanwhile() {
+        let a = analysis();
+        let review = |id: &str, label: &str| {
+            let r = a.results.iter().find(|r| r.obs.id == id).unwrap();
+            Review {
+                record: r.obs.clone(),
+                label: label.into(),
+                note: None,
+                class: CLASS_FLAGGED.into(),
+                reviewed_at: "x".into(),
+                tier: r.tier,
+                score: r.score,
+                rules: Vec::new(),
+                rules_version: a.rules_version.clone(),
+                suggested: None,
+                tuned: false,
+                grade: None,
+            }
+        };
+        let mut first = tmp_store("merge");
+        first.entries.insert("c1".into(), review("c1", "agent"));
+        first.entries.insert("c2".into(), review("c2", "benign"));
+        first.save().unwrap();
+        // A long-lived page opens the file, then `review tuned` marks c1.
+        let mut page = ReviewStore::open(first.path.clone()).unwrap();
+        let mut tuned = ReviewStore::open(first.path.clone()).unwrap();
+        tuned.entries.get_mut("c1").unwrap().tuned = true;
+        tuned.save().unwrap();
+        // The page labels another record, relabels c1 and clears c2.
+        page.entries
+            .insert("plain1".into(), review("plain1", "benign"));
+        page.entries.get_mut("c1").unwrap().label = "unsure".into();
+        page.entries.remove("c2");
+        page.save().unwrap();
+        let saved = ReviewStore::open(first.path.clone()).unwrap().entries;
+        let ids: Vec<&str> = saved.keys().map(String::as_str).collect();
+        assert_eq!(ids, ["c1", "plain1"]);
+        assert_eq!(saved["c1"].label, "unsure");
+        assert!(saved["c1"].tuned, "the tuned mark survives the page's save");
+        assert_eq!(page.entries.len(), 2);
+        // No temporary file is left beside the review file.
+        let dir = first.path.parent().unwrap();
+        let tmp = std::fs::read_dir(dir)
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .is_some_and(|x| x == "tmp")
+            })
+            .count();
+        assert_eq!(tmp, 0);
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 
     #[test]

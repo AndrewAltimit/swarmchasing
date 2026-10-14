@@ -12,6 +12,8 @@ swarmchase case new <id> --title "…" --cluster C1 [--record ID] [--host-hits] 
 
 `case new` copies the selected records into `raw/records.ndjson`, so watch retention cannot delete them, and writes `case.toml`. Records come from the watch store, or from files given as arguments. From the store it analyses the last `--days` days, by default the `analysis_window_days` of `--watchlist` (`watchlist.toml`, else 30), the window the digest analyses, so a cluster number from the digest names the same cluster; a stable key (`k-3f9a2c1b`) names it whatever the window. A line of `raw/records.ndjson` that cannot be read is skipped with a warning. `--host-hits` also takes every flagged record on the same hosts, including other clusters. `review` can open a case from a lead too ([review](watch.md#reviewing-leads)).
 
+A record named with `--record` that is older than the window is taken from the whole store, outside the window's analysis, so the digest's `case add` lines work for late-indexed captures.
+
 ## What `case.toml` holds
 
 - the case status (`open`, `reported`, `published`, `closed`), the notice status (`active`, `contained`, `historical`), and the date a notice was added while its publication is pending;
@@ -124,7 +126,7 @@ swarmchase case fleet interaction <id> fleet-1 --kind handoff --run C1#1 --run k
 swarmchase case fleet withdraw <id> fleet-1 1 [--why "…"]
 ```
 
-`--kind` is one of `shared_sink`, `handoff`, `synchronized_start`, `role_sequence` and `disjoint_partition` (or `S1` to `S5`). Each `--run` is `<cluster>#<run>`, a C-number or stable key and the run's number in its cluster, and must belong to the fleet; it is stored by key. `--note` is required. The entry goes under `[[fleet.swarm_evidence]]` with its date, and the decision log records it with the matching analysis edges and the command that withdraws it. Splitting a cluster out of the fleet sets aside the entries that name it.
+`--kind` is one of `shared_sink`, `handoff`, `synchronized_start`, `role_sequence`, `disjoint_partition` and `dispatch_star` (or `S1` to `S6`). Each `--run` is `<cluster>#<run>`, a C-number or stable key and the run's number in its cluster, and must belong to the fleet; it is stored by key. `--note` is required. The entry goes under `[[fleet.swarm_evidence]]` with its date, and the decision log records it with the matching analysis edges and the command that withdraws it. Splitting a cluster out of the fleet sets aside the entries that name it.
 
 While a fleet has an entry, reports call it a swarm and list each entry as an Inference (the note in case notes and provider reports only), the notice draft gains a short *Swarm* section naming the clusters and kinds without keys or notes, and the STIX `grouping` is named a swarm. Without one, the grouping is a fleet everywhere and the notice says nothing about it.
 

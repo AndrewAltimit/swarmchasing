@@ -34,12 +34,20 @@
 #
 # Simulator: `swarmchase sim bench` on samples/sim/scenarios.toml, with
 # floors on interaction-edge, soft-link and candidate-fleet precision summed
-# over every scenario, and ceilings on the edges, soft links and
-# candidate-fleet pairs the null scenarios (no two runs related) draw. The
-# simulator is seeded, so the numbers only move when the analysis, the rules,
-# the generator or the scenarios do. Floors only go up and ceilings only go
-# down, as above; a new scenario that lowers a pooled number is argued in its
-# commit, never landed by moving a bound.
+# over every scenario (soft links and candidate fleets also between distinct
+# runs only, since a split run rejoined counts as right in the first), ceilings
+# on the edges, soft links and candidate-fleet pairs the null scenarios (no two
+# runs related) draw, ceilings on benign and tool records graded L2 or above
+# and on people's records graded L3 or above, and each scenario's `expect`
+# table (`--expect`: every kind a scenario is built to produce must draw pairs
+# and meet its bounds there, or draw at most `max_pairs` where it is built not
+# to fire). Then `swarmchase sim calibrate --check`: every soft-link ratio in
+# the bundled rules at or below the lower bound of that kind's ratio
+# stratified by scenario, where the simulation measures it. The simulator is
+# seeded, so the numbers only move when the analysis, the rules, the generator
+# or the scenarios do. Floors only
+# go up and ceilings only go down, as above; a new scenario that lowers a
+# pooled number is argued in its commit, never landed by moving a bound.
 #
 # Usage:
 #     scripts/ci/eval-gate.sh [extra cargo args, e.g. --profile release-test]
@@ -51,16 +59,16 @@ cargo run --quiet "$@" -p swarmchase -- eval samples/eval/*.ndjson \
     --show-fp 50 \
     --min-significant-precision 0.90 \
     --min-suggestive-precision 0.90 \
-    --min-suggestive-recall 0.94 \
-    --min-significant-recall 0.39 \
-    --min-significant-precision-lower 0.93 \
-    --min-suggestive-precision-lower 0.96 \
+    --min-suggestive-recall 0.96 \
+    --min-significant-recall 0.52 \
+    --min-significant-precision-lower 0.95 \
+    --min-suggestive-precision-lower 0.97 \
     --min-nonsynthetic-significant-precision 0.90 \
     --min-nonsynthetic-suggestive-precision 0.90 \
-    --min-nonsynthetic-suggestive-recall 0.80 \
-    --min-nonsynthetic-significant-recall 0.38 \
-    --min-nonsynthetic-significant-precision-lower 0.75 \
-    --min-nonsynthetic-suggestive-precision-lower 0.86 \
+    --min-nonsynthetic-suggestive-recall 0.84 \
+    --min-nonsynthetic-significant-recall 0.40 \
+    --min-nonsynthetic-significant-precision-lower 0.78 \
+    --min-nonsynthetic-suggestive-precision-lower 0.87 \
     --coverage-allow samples/eval/coverage-allow.txt \
     --require-coverage
 
@@ -74,4 +82,13 @@ cargo run --quiet "$@" -p swarmchase -- sim bench samples/sim/scenarios.toml \
     --max-null-edges 0 \
     --max-null-links 10 \
     --max-null-fleet-pairs 3 \
+    --min-link-cross-run-precision 0.27 \
+    --min-fleet-cross-run-precision 0.91 \
+    --max-benign-high 0 \
+    --max-human-high 10 \
+    --expect \
     | sed -n '/^Null scenarios/,$p'
+
+cargo run --quiet "$@" -p swarmchase -- sim calibrate samples/sim/scenarios.toml \
+    --check \
+    | sed -n '/^ok\|^FAIL/p'

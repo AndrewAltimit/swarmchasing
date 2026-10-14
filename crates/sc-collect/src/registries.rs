@@ -76,7 +76,7 @@ const CRATES: &str = "https://crates.io/api/v1/crates";
 const DEFAULT_CRATES_PAGES: usize = 3;
 
 /// Where a pull starts (ms) and how much backlog it passed over (ms).
-fn start_at(mark: Option<i64>, newest: i64) -> (i64, i64) {
+pub(crate) fn start_at(mark: Option<i64>, newest: i64) -> (i64, i64) {
     let fresh = newest - FRESH_MS;
     match mark {
         Some(m) if m >= newest - MAX_BACKLOG_MS => (m.min(newest), 0),
@@ -87,7 +87,13 @@ fn start_at(mark: Option<i64>, newest: i64) -> (i64, i64) {
 
 /// Coverage in minutes: read from `start` to `reached`, against `start`
 /// to `newest`, with `skipped` ms passed over.
-fn minutes(start: i64, reached: i64, newest: i64, skipped: i64, read_any: bool) -> Coverage {
+pub(crate) fn minutes(
+    start: i64,
+    reached: i64,
+    newest: i64,
+    skipped: i64,
+    read_any: bool,
+) -> Coverage {
     let m = |ms: i64| (ms.max(0) / 60_000) as u64;
     Coverage {
         unit: "minutes",
@@ -99,14 +105,14 @@ fn minutes(start: i64, reached: i64, newest: i64, skipped: i64, read_any: bool) 
     }
 }
 
-fn ms_of(s: &str) -> Option<i64> {
+pub(crate) fn ms_of(s: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(s.trim())
         .ok()
         .map(|d| d.timestamp_millis())
 }
 
 /// Drop events from automation accounts (marked by an empty id) and count them.
-fn split_automation(mut events: Vec<PlatformEvent>) -> (Vec<PlatformEvent>, usize) {
+pub(crate) fn split_automation(mut events: Vec<PlatformEvent>) -> (Vec<PlatformEvent>, usize) {
     let n = events.len();
     events.retain(|e| !e.id.is_empty());
     let dropped = n - events.len();
@@ -474,14 +480,29 @@ fn pull_crates(
     max: usize,
 ) -> Result<PlatformPull> {
     let now_ms = crate::client::now_secs() * 1000;
-    let (start, skipped) = start_at(mark.map(|m| m as i64), now_ms);
     let budget = q.scan.unwrap_or(DEFAULT_CRATES_PAGES).clamp(1, 20);
+    crates_listing(mark, budget, max, now_ms, rules, &mut |query| {
+        client.get(&format!("{CRATES}{query}"))
+    })
+}
+
+/// Page crates.io's listing back from the newest crate to the checkpoint
+/// `mark` (ms), at most `budget` pages. `fetch` answers one page's query.
+fn crates_listing(
+    mark: Option<u64>,
+    budget: usize,
+    max: usize,
+    now_ms: i64,
+    rules: &Rules,
+    fetch: &mut dyn FnMut(&str) -> Result<String>,
+) -> Result<PlatformPull> {
+    let (start, skipped) = start_at(mark.map(|m| m as i64), now_ms);
     let mut out = PlatformPull::default();
     let mut query = "?sort=new&per_page=100".to_string();
     let (mut newest, mut reached, mut crates) = (None::<i64>, now_ms, 0usize);
     let mut done = false;
     for i in 0..budget {
-        let body = match client.get(&format!("{CRATES}{query}")) {
+        let body = match fetch(&query) {
             Ok(b) => b,
             Err(e) if i == 0 => return Err(e),
             Err(_) => break,
@@ -491,13 +512,15 @@ fn pull_crates(
         newest = newest.max(page.newest);
         out.events.extend(page.events);
         reached = page.oldest.unwrap_or(start);
-        match page.next {
-            Some(n) if reached > start && out.events.len() < max => query = n,
-            _ => {
-                done = true;
-                break;
-            }
+        if reached <= start || page.next.is_none() {
+            done = true;
+            break;
         }
+        // At the cap the pages left are not read and count as skipped.
+        if out.events.len() >= max {
+            break;
+        }
+        query = page.next.unwrap_or_default();
     }
     let (mut events, automation) = split_automation(std::mem::take(&mut out.events));
     out.capped = events.len().saturating_sub(max);
@@ -664,6 +687,43 @@ mod tests {
             "https://crates.io/crates/agent_probe_0042/0.1.0"
         );
         assert_eq!(repo_owner("https://example.org/a/b"), None);
+    }
+
+    #[test]
+    fn a_crates_pull_stopped_at_its_cap_counts_the_rest_as_skipped() {
+        let rules = Rules::default_rules();
+        let now = ms_of("2026-10-13T19:00:00Z").unwrap();
+        let mark = (now - 3_600_000) as u64;
+        // Page one reaches back to 18:30 and has more; page two would reach
+        // the checkpoint.
+        let pages = [
+            r#"{"crates":[
+              {"name":"agent_probe_0002","created_at":"2026-10-13T18:50:00Z","newest_version":"0.1.0","description":"Probe crate"},
+              {"name":"agent_probe_0001","created_at":"2026-10-13T18:30:00Z","newest_version":"0.1.0","description":"Probe crate"}
+            ],"meta":{"next_page":"?sort=new&per_page=100&seek=b"}}"#,
+            r#"{"crates":[
+              {"name":"agent_probe_0000","created_at":"2026-10-13T17:00:00Z","newest_version":"0.1.0","description":"Probe crate"}
+            ],"meta":{"next_page":null}}"#,
+        ];
+        let mut asked = 0;
+        let mut fetch = |q: &str| {
+            asked += 1;
+            Ok(pages[usize::from(q.contains("seek"))].to_string())
+        };
+        let out = crates_listing(Some(mark), 5, 2, now, &rules, &mut fetch).unwrap();
+        assert_eq!(asked, 1, "the cap stops the pull");
+        // 18:00 to 18:30 was not read: skipped, not claimed as read.
+        assert_eq!((out.coverage.read, out.coverage.skipped), (30, 30));
+        assert_eq!(
+            out.coverage.next,
+            ms_of("2026-10-13T18:50:00Z").map(|m| m as u64)
+        );
+        // Under the cap it pages on to the checkpoint and reads it all.
+        let out = crates_listing(Some(mark), 5, 100, now, &rules, &mut |q: &str| {
+            Ok(pages[usize::from(q.contains("seek"))].to_string())
+        })
+        .unwrap();
+        assert_eq!((out.coverage.read, out.coverage.skipped), (60, 0));
     }
 
     #[test]

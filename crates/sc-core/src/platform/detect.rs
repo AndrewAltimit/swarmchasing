@@ -774,6 +774,7 @@ impl Group<'_> {
             links: m.iter().take(10).map(|&i| ev[i].link.clone()).collect(),
             members: m.iter().map(|&i| ev[i].id.clone()).collect(),
             reason,
+            provenance: None,
         }
     }
 }

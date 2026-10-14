@@ -16,12 +16,23 @@
 //! suspected AI-generated text. Labels are kept in
 //! `<out>/platform/labels.ndjson` for `label_days`, and a candidate whose
 //! members acted on a labelled target says so in the digest.
+//!
+//! Build provenance is looked up, not streamed: for the npm and PyPI
+//! candidates new or grown this run, up to `provenance_lookups` member
+//! releases a run, members on an OSV-labelled package first
+//! (`sc_collect::provenance`). Answers are kept in
+//! `<out>/platform/provenance.ndjson` for `label_days`, so a release is
+//! looked up once, and each npm or PyPI candidate carries what its members'
+//! answers say ([`sc_core::platform::CandidateProvenance`]).
 
 use crate::store::{read_json, write_json};
 use anyhow::Result;
 use sc_collect::Client;
 use sc_collect::platform::{PlatformSource, TargetLabel, label_key, pull_platform};
-use sc_core::platform::{PlatformEvent, PlatformOptions, PlatformReport, PlatformSwarm, detect};
+use sc_core::platform::{
+    CandidateProvenance, PackageProvenance, Platform, PlatformEvent, PlatformOptions,
+    PlatformReport, PlatformSwarm, detect,
+};
 use sc_core::{Rules, defang, defang_host, fmt_ts};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -39,6 +50,10 @@ pub struct Config {
     /// How long labels from reference sources are kept.
     #[serde(default = "default_label_days")]
     pub label_days: i64,
+    /// Package releases whose build provenance one run looks up at most;
+    /// 0 turns the lookups off.
+    #[serde(default = "default_provenance_lookups")]
+    pub provenance_lookups: usize,
     #[serde(default, rename = "source")]
     pub sources: Vec<PlatformSource>,
 }
@@ -48,6 +63,7 @@ impl Default for Config {
         Self {
             carry_hours: default_carry(),
             label_days: default_label_days(),
+            provenance_lookups: default_provenance_lookups(),
             options: PlatformOptions::default(),
             sources: Vec::new(),
         }
@@ -60,6 +76,10 @@ fn default_carry() -> i64 {
 
 fn default_label_days() -> i64 {
     30
+}
+
+fn default_provenance_lookups() -> usize {
+    40
 }
 
 /// `<out>/platform/state.json`.
@@ -116,6 +136,9 @@ pub struct Outcome {
     pub labels: usize,
     /// Candidate id to its members on labelled targets.
     pub labelled: BTreeMap<String, Vec<LabelMatch>>,
+    /// Provenance lookups made this run, and how many failed.
+    pub provenance_lookups: usize,
+    pub provenance_failed: usize,
 }
 
 impl Outcome {
@@ -181,7 +204,7 @@ pub fn run(
         outcome.sources.push(line);
         write_json(&state_path, &state)?;
     }
-    let report = detect(&batch, &cfg.options);
+    let mut report = detect(&batch, &cfg.options);
 
     let labels_path = dir.join("labels.ndjson");
     let label_cutoff = now - cfg.label_days.max(1) * 86_400;
@@ -206,18 +229,6 @@ pub fn run(
         write_json(&run_dir.join("platform-labels.json"), &outcome.labelled)?;
     }
 
-    // Carry what may join a group later; the rest of the stream is dropped.
-    let keep: BTreeSet<&str> = report.carry.iter().map(String::as_str).collect();
-    let mut seen = BTreeSet::new();
-    let mut carry = String::new();
-    for e in &batch {
-        if e.ts >= cutoff && keep.contains(e.id.as_str()) && seen.insert(e.id.as_str()) {
-            carry.push_str(&serde_json::to_string(e)?);
-            carry.push('\n');
-        }
-    }
-    crate::store::write_atomic(&carry_path, carry.as_bytes())?;
-
     for s in &report.swarms {
         match state.reported.get(&s.id) {
             None => {
@@ -230,6 +241,70 @@ pub fn run(
         }
         state.reported.insert(s.id.clone(), (s.events, s.end));
     }
+
+    // Build provenance of the reported registry candidates' releases.
+    let prov_path = dir.join("provenance.ndjson");
+    let mut known: BTreeMap<String, ProvenanceAnswer> = if prov_path.exists() {
+        crate::store::read_ndjson::<ProvenanceAnswer>(&prov_path)?
+            .0
+            .into_iter()
+            .filter(|a| a.ts >= label_cutoff)
+            .map(|a| (a.member.clone(), a))
+            .collect()
+    } else {
+        BTreeMap::new()
+    };
+    let wanted = provenance_queue(&report, &outcome, &batch, &labels, &known);
+    if cfg.provenance_lookups > 0 && !wanted.is_empty() {
+        eprint!("{:<24} provenance … ", "package-provenance");
+        let mut failures_in_row = 0;
+        for member in wanted.into_iter().take(cfg.provenance_lookups) {
+            outcome.provenance_lookups += 1;
+            match client.package_provenance(&member) {
+                Ok(found) => {
+                    failures_in_row = 0;
+                    let answer = ProvenanceAnswer {
+                        member: member.clone(),
+                        ts: now,
+                        found,
+                    };
+                    known.insert(member, answer);
+                }
+                Err(e) => {
+                    outcome.provenance_failed += 1;
+                    failures_in_row += 1;
+                    if failures_in_row >= 3 {
+                        eprint!("stopped after 3 failures in a row ({e:#}) … ");
+                        break;
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "{} lookup(s), {} failed",
+            outcome.provenance_lookups, outcome.provenance_failed
+        );
+    }
+    let mut text = String::new();
+    for a in known.values() {
+        text.push_str(&serde_json::to_string(a)?);
+        text.push('\n');
+    }
+    crate::store::write_atomic(&prov_path, text.as_bytes())?;
+    attach_provenance(&mut report, &known);
+
+    // Carry what may join a group later; the rest of the stream is dropped.
+    let keep: BTreeSet<&str> = report.carry.iter().map(String::as_str).collect();
+    let mut seen = BTreeSet::new();
+    let mut carry = String::new();
+    for e in &batch {
+        if e.ts >= cutoff && keep.contains(e.id.as_str()) && seen.insert(e.id.as_str()) {
+            carry.push_str(&serde_json::to_string(e)?);
+            carry.push('\n');
+        }
+    }
+    crate::store::write_atomic(&carry_path, carry.as_bytes())?;
+
     state.reported.retain(|_, (_, end)| *end >= cutoff);
     write_json(&state_path, &state)?;
     write_json(&run_dir.join("platform-swarms.json"), &report)?;
@@ -285,6 +360,132 @@ pub fn match_labels(
         }
     }
     out
+}
+
+/// One release's provenance lookup, kept in `platform/provenance.ndjson`:
+/// `found` is `None` when the release carries none.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProvenanceAnswer {
+    pub member: String,
+    /// When it was looked up (Unix seconds).
+    pub ts: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub found: Option<PackageProvenance>,
+}
+
+/// Members whose provenance to look up, in order: from the npm and PyPI
+/// candidates new or grown this run, one member per candidate in turn,
+/// each candidate's members on an OSV-labelled package first. Members
+/// already answered are left out.
+pub fn provenance_queue(
+    report: &PlatformReport,
+    outcome: &Outcome,
+    events: &[PlatformEvent],
+    labels: &[TargetLabel],
+    known: &BTreeMap<String, ProvenanceAnswer>,
+) -> Vec<String> {
+    let malicious: BTreeSet<(Platform, &str)> = labels
+        .iter()
+        .filter(|l| l.kind == "osv-malicious")
+        .map(|l| (l.platform, l.target.as_str()))
+        .collect();
+    let by_id: BTreeMap<&str, &PlatformEvent> = events.iter().map(|e| (e.id.as_str(), e)).collect();
+    let mut lists: Vec<Vec<&str>> = Vec::new();
+    for s in &report.swarms {
+        if !matches!(s.platform, Platform::Npm | Platform::Pypi)
+            || !(outcome.new.contains(&s.id) || outcome.grown.contains(&s.id))
+        {
+            continue;
+        }
+        let (mut first, mut rest): (Vec<&str>, Vec<&str>) = (Vec::new(), Vec::new());
+        for m in &s.members {
+            if known.contains_key(m) || sc_collect::provenance::split_member(m).is_none() {
+                continue;
+            }
+            let labelled = by_id.get(m.as_str()).is_some_and(|e| {
+                let key = label_key(e.platform, &e.target);
+                malicious.contains(&(e.platform, key.as_str()))
+            });
+            if labelled {
+                first.push(m);
+            } else {
+                rest.push(m);
+            }
+        }
+        first.extend(rest);
+        if !first.is_empty() {
+            lists.push(first);
+        }
+    }
+    let mut out = Vec::new();
+    let mut seen = BTreeSet::new();
+    let longest = lists.iter().map(Vec::len).max().unwrap_or(0);
+    for i in 0..longest {
+        for l in &lists {
+            if let Some(m) = l.get(i)
+                && seen.insert(*m)
+            {
+                out.push(m.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Put each candidate's members' answers on it.
+pub fn attach_provenance(report: &mut PlatformReport, known: &BTreeMap<String, ProvenanceAnswer>) {
+    for s in &mut report.swarms {
+        let answers: Vec<&ProvenanceAnswer> =
+            s.members.iter().filter_map(|m| known.get(m)).collect();
+        if answers.is_empty() {
+            continue;
+        }
+        let records = answers.iter().filter_map(|a| a.found.clone()).collect();
+        s.provenance = Some(CandidateProvenance::new(answers.len(), records));
+    }
+}
+
+/// A candidate's provenance line for the digest, or `None` when nothing
+/// was looked up. Repositories and workflows are defanged as targets are.
+pub fn provenance_line(s: &PlatformSwarm) -> Option<String> {
+    let p = s.provenance.as_ref()?;
+    if p.with == 0 {
+        return Some(format!(
+            "- Provenance (weak context): none of {} member release(s) looked up carries build provenance.",
+            p.looked_up
+        ));
+    }
+    let list = |v: &[(String, usize)]| {
+        v.iter()
+            .take(5)
+            .map(|(k, n)| format!("`{}` ({n})", defang_host(k).replace('`', "'")))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut t = format!(
+        "- Provenance: {} of {} member release(s) looked up name a source; repositories {}",
+        p.with,
+        p.looked_up,
+        list(&p.repos)
+    );
+    if !p.workflows.is_empty() {
+        let _ = write!(t, "; workflows {}", list(&p.workflows));
+    }
+    t.push('.');
+    let shared = if p.shared_workflow {
+        Some("workflow")
+    } else if p.shared_repo {
+        Some("repository")
+    } else {
+        None
+    };
+    if let Some(what) = shared {
+        let _ = write!(
+            t,
+            " Several packages name one {what}: a same-operator hint, still a hint (a monorepo publishes many packages from one)."
+        );
+    }
+    Some(t)
 }
 
 /// What a label kind says, for the digest.
@@ -369,6 +570,13 @@ pub fn section(o: &Outcome) -> String {
                 }
             }
         }
+    }
+    if o.provenance_lookups > 0 {
+        let _ = writeln!(
+            t,
+            "- Package provenance: {} release(s) looked up for new and grown registry candidates, {} failed.",
+            o.provenance_lookups, o.provenance_failed
+        );
     }
     t.push('\n');
     for s in shown {
@@ -455,6 +663,9 @@ pub fn render_swarm(s: &PlatformSwarm, tag: Option<&str>) -> String {
             .collect();
         let _ = writeln!(t, "- Harness self-identification (weak): {}", r.join(", "));
     }
+    if let Some(line) = provenance_line(s) {
+        let _ = writeln!(t, "{line}");
+    }
     if !s.caveats.is_empty() {
         let _ = writeln!(t, "- Rule out: {}.", s.caveats.join("; "));
     }
@@ -527,6 +738,7 @@ mod tests {
             links: vec!["https://github.com/a/b/issues/1".into()],
             members: vec![],
             reason: "4 issues opened".into(),
+            provenance: None,
         };
         let o = Outcome {
             report: PlatformReport {
@@ -557,6 +769,145 @@ mod tests {
         assert!(t.contains("Codex (OpenAI) 3"), "{t}");
         assert!(t.contains("Spoofing lead: App `claude-fleet[bot]`"), "{t}");
         assert!(t.contains("selfid.claude_code (2)"), "{t}");
+    }
+
+    fn registry_swarm(id: &str, platform: Platform, members: &[&str]) -> PlatformSwarm {
+        PlatformSwarm {
+            id: id.into(),
+            platform,
+            basis: vec![],
+            actions: vec![],
+            events: members.len(),
+            accounts: members.len(),
+            start: 0,
+            end: 0,
+            template: String::new(),
+            similarity: None,
+            burst: Default::default(),
+            new_accounts: None,
+            residue: vec![],
+            self_id: vec![],
+            targets: vec![],
+            distinct_targets: members.len(),
+            p_chance: 1e-6,
+            tested: 1,
+            strength: sc_core::platform::HintStrength::Weak,
+            caveats: vec![],
+            links: vec![],
+            members: members.iter().map(|m| m.to_string()).collect(),
+            reason: String::new(),
+            provenance: None,
+        }
+    }
+
+    #[test]
+    fn provenance_is_queued_for_reported_registry_candidates_labelled_first() {
+        let ev = |id: &str, target: &str| PlatformEvent {
+            id: id.into(),
+            platform: Platform::Npm,
+            target: target.into(),
+            ..Default::default()
+        };
+        let events = vec![
+            ev("npm:a-1@1.0.0", "a-1"),
+            ev("npm:a-2@1.0.0", "a-2"),
+            ev("npm:a-3@1.0.0", "a-3"),
+            ev("npm:b-1@1.0.0", "b-1"),
+        ];
+        let report = PlatformReport {
+            swarms: vec![
+                registry_swarm(
+                    "PS-1",
+                    Platform::Npm,
+                    &["npm:a-1@1.0.0", "npm:a-2@1.0.0", "npm:a-3@1.0.0"],
+                ),
+                registry_swarm("PS-2", Platform::Npm, &["npm:b-1@1.0.0"]),
+                // Not reported this run.
+                registry_swarm("PS-3", Platform::Npm, &["npm:c-1@1.0.0"]),
+                // Not a registry.
+                registry_swarm("PS-4", Platform::Github, &["gh:1"]),
+            ],
+            ..Default::default()
+        };
+        let o = Outcome {
+            new: ["PS-1".to_string(), "PS-4".to_string()].into(),
+            grown: ["PS-2".to_string()].into(),
+            ..Default::default()
+        };
+        let labels = vec![TargetLabel {
+            platform: Platform::Npm,
+            target: "a-3".into(),
+            kind: "osv-malicious".into(),
+            source_id: "MAL-2026-9".into(),
+            link: String::new(),
+            ts: 0,
+        }];
+        let known: BTreeMap<String, ProvenanceAnswer> = [(
+            "npm:a-2@1.0.0".to_string(),
+            ProvenanceAnswer {
+                member: "npm:a-2@1.0.0".into(),
+                ts: 0,
+                found: None,
+            },
+        )]
+        .into();
+        let q = provenance_queue(&report, &o, &events, &labels, &known);
+        assert_eq!(q, ["npm:a-3@1.0.0", "npm:b-1@1.0.0", "npm:a-1@1.0.0"]);
+    }
+
+    #[test]
+    fn provenance_lines_defang_and_name_a_shared_workflow() {
+        let rec = |m: &str, pkg: &str| PackageProvenance {
+            member: m.into(),
+            package: pkg.into(),
+            forge: "github".into(),
+            repo: "fleet-op/pkgs.io".into(),
+            workflow: ".github/workflows/publish.yml".into(),
+            ..Default::default()
+        };
+        let answer = |m: &str, found: Option<PackageProvenance>| {
+            (
+                m.to_string(),
+                ProvenanceAnswer {
+                    member: m.into(),
+                    ts: 0,
+                    found,
+                },
+            )
+        };
+        let known: BTreeMap<String, ProvenanceAnswer> = [
+            answer("npm:a-1@1.0.0", Some(rec("npm:a-1@1.0.0", "a-1"))),
+            answer("npm:a-2@1.0.0", Some(rec("npm:a-2@1.0.0", "a-2"))),
+            answer("npm:a-3@1.0.0", None),
+            answer("npm:b-1@1.0.0", None),
+        ]
+        .into();
+        let mut report = PlatformReport {
+            swarms: vec![
+                registry_swarm(
+                    "PS-1",
+                    Platform::Npm,
+                    &["npm:a-1@1.0.0", "npm:a-2@1.0.0", "npm:a-3@1.0.0"],
+                ),
+                registry_swarm("PS-2", Platform::Npm, &["npm:b-1@1.0.0"]),
+                registry_swarm("PS-3", Platform::Npm, &["npm:c-1@1.0.0"]),
+            ],
+            ..Default::default()
+        };
+        attach_provenance(&mut report, &known);
+        let p = report.swarms[0].provenance.as_ref().unwrap();
+        assert_eq!((p.looked_up, p.with), (3, 2));
+        assert!(p.shared_workflow);
+        // Provenance changes neither chance nor strength.
+        assert_eq!(report.swarms[0].p_chance, 1e-6);
+        let t = render_swarm(&report.swarms[0], None);
+        assert!(t.contains("2 of 3 member release(s)"), "{t}");
+        assert!(t.contains("`github:fleet-op/pkgs[.]io` (2)"), "{t}");
+        assert!(t.contains("Several packages name one workflow"), "{t}");
+        let t = render_swarm(&report.swarms[1], None);
+        assert!(t.contains("Provenance (weak context): none of 1"), "{t}");
+        assert!(report.swarms[2].provenance.is_none());
+        assert!(!render_swarm(&report.swarms[2], None).contains("Provenance"));
     }
 
     #[test]
@@ -597,6 +948,7 @@ mod tests {
             links: vec![],
             members: events.iter().map(|e| e.id.clone()).collect(),
             reason: String::new(),
+            provenance: None,
         };
         let report = PlatformReport {
             swarms: vec![swarm],

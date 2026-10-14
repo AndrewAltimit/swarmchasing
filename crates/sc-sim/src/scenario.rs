@@ -5,6 +5,7 @@
 //! scenario can be a name and one actor.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ScenarioFile {
@@ -67,8 +68,51 @@ pub struct Scenario {
     /// different runs is false. The gate holds a ceiling on them.
     #[serde(default)]
     pub null: bool,
+    /// What the scenario is built to produce: an interaction-edge kind
+    /// (`S3` or `synchronized_start`), a soft-link kind (`co_target`) or
+    /// `candidate_fleet`, each with the bounds it must meet on this
+    /// scenario's own measurement (`expect.S3 = { min_recall = 0.8 }`). An
+    /// expected kind that draws nothing fails, unless it sets `max_pairs`
+    /// (`expect.S3 = { max_pairs = 0 }`: built not to fire).
+    #[serde(default)]
+    pub expect: BTreeMap<String, Expect>,
     #[serde(default)]
     pub actor: Vec<Actor>,
+}
+
+/// Bounds on one kind in one scenario, summed over its seeds.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Expect {
+    /// Pairs it draws that are right.
+    #[serde(default)]
+    pub min_precision: Option<f64>,
+    /// Reachable true pairs it finds.
+    #[serde(default)]
+    pub min_recall: Option<f64>,
+    /// Soft links and candidate fleets: pairs of clusters on one run it
+    /// rejoins, of those split.
+    #[serde(default)]
+    pub min_rejoined: Option<f64>,
+    /// Pairs it may draw at most: `0` for a kind the scenario is built to
+    /// show does not fire. With it set, drawing nothing passes.
+    #[serde(default)]
+    pub max_pairs: Option<usize>,
+}
+
+/// The measurement key an `expect` names (an edge kind's serialised name,
+/// a soft-link kind's, or `candidate_fleet`) and whether it is an edge;
+/// `None` for a name that is none of these.
+pub fn expect_key(name: &str) -> Option<(String, bool)> {
+    if let Ok(k) = name.parse::<sc_core::SwarmEdgeKind>() {
+        return Some((k.name().to_string(), true));
+    }
+    if name == "candidate_fleet"
+        || serde_json::from_value::<sc_core::SoftLinkKind>(serde_json::json!(name)).is_ok()
+    {
+        return Some((name.to_string(), false));
+    }
+    None
 }
 
 fn one() -> u64 {
@@ -98,6 +142,12 @@ impl Scenario {
             return Err(format!(
                 "{}: a null scenario relates no runs, but has a {:?} actor",
                 self.name, a.kind
+            ));
+        }
+        if let Some(k) = self.expect.keys().find(|k| expect_key(k).is_none()) {
+            return Err(format!(
+                "{}: expect.{k} names no edge kind, soft-link kind or candidate_fleet",
+                self.name
             ));
         }
         Ok(())
@@ -145,8 +195,8 @@ pub enum Mode {
     /// within the hour, then work their own hosts (S2).
     Handoff,
     /// The first agent is a planner sending a request at irregular
-    /// dispatches, twenty times its pace apart (80 s to 30 min at model pace);
-    /// each other agent sends one 40 to 85 seconds after each dispatch
+    /// dispatches 10 to 50 minutes apart, so a few records span hours; each
+    /// other agent sends one 40 to 85 seconds after each dispatch
     /// (co-activity).
     Dispatch,
 }
@@ -201,6 +251,37 @@ pub enum Kind {
     /// One unrelated agent working the target lists of the actors it
     /// `bridges` (by index) in their hours: a cluster tied to two fleets.
     Hub,
+    /// An uptime service checking the same `hosts` in turn, one a minute
+    /// (`records` checks), from `agents` regions in lockstep, each region
+    /// its own network and address: benign, and a look-alike of a
+    /// synchronised swarm (S3).
+    UptimeMonitor,
+    /// An internet-wide scanner sharding one host family over `agents`
+    /// addresses of one network, all starting together, each address
+    /// sending one probe set to its hosts (`records` requests each):
+    /// benign, and a look-alike of a sharded swarm (S5) and of a shared
+    /// scaffold.
+    InternetScanner,
+    /// Link-preview bots of `agents` chat and social platforms, most of
+    /// them fetching each posted link (`records` posts) within seconds of
+    /// the post: benign, and a look-alike of co-activity.
+    LinkPreview,
+    /// `agents` feed readers polling the same `hosts` feeds in one order
+    /// (`records` polls each) on their own intervals, all backing off
+    /// through one outage of the feed host: benign, and a look-alike of
+    /// reruns and shared pauses.
+    FeedPoller,
+    /// Several agents of one operator writing the intent of each request as
+    /// prose from the operator's prompt templates (`prose`, `operator` by
+    /// default), each with its own client, inbox, tags, hosts and habits,
+    /// over the scenario's span: one operator, no interaction, no shared
+    /// harness.
+    PromptFleet,
+    /// Agents of unrelated operators on one agent framework: the
+    /// framework's templates and step counter, each operator adding one
+    /// parameter of its own, so any two are one structural part apart; each
+    /// agent its own operator, over the scenario's span.
+    Framework,
 }
 
 impl Kind {
@@ -215,6 +296,7 @@ impl Kind {
                 | Self::Planter
                 | Self::Mimic
                 | Self::TargetList
+                | Self::PromptFleet
         )
     }
 }
@@ -290,6 +372,32 @@ pub struct Actor {
     /// target do.
     #[serde(default)]
     pub same_family: bool,
+    /// For target lists, news spikes and hubs: every agent walks the hosts
+    /// in one order (one list handed to all), instead of each in its own.
+    #[serde(default)]
+    pub in_order: bool,
+    /// For target lists, news spikes and hubs: every agent walks the hosts
+    /// in their sorted order, as a published sorted list gives it.
+    #[serde(default)]
+    pub sorted: bool,
+    /// Requests carry the run's intent as prose in a `query` parameter,
+    /// written from prompt templates of the run's own, its operator's or
+    /// the actor's.
+    #[serde(default)]
+    pub prose: Option<Prose>,
+}
+
+/// Whose prompt templates a run's prose comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Prose {
+    /// Its own: no other run writes from them.
+    Own,
+    /// Its operator's (a fleet's or swarm's); a single agent's own.
+    Operator,
+    /// The actor's, whoever runs it: a viral prompt or a published query
+    /// list copied by unrelated operators.
+    Shared,
 }
 
 fn default_records() -> usize {

@@ -387,8 +387,10 @@ impl ClaudeCli {
         let mut cmd = Command::new(&self.path);
         cmd.args(self.args())
             .current_dir(dir)
-            // The subscription login is the credential, never an API key.
+            // The subscription login is the credential, never an API key,
+            // and the watch's GitHub token stays with the watch.
             .env_remove("ANTHROPIC_API_KEY")
+            .env_remove("GITHUB_TOKEN")
             .env_remove("CLAUDECODE")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

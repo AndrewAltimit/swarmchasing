@@ -492,7 +492,7 @@ fn print_swarm(w: &sc_core::swarm::SwarmEval) {
     if w.edges == 0 && w.groups.is_empty() {
         return;
     }
-    let kinds = |m: &[usize; 5]| {
+    let kinds = |m: &[usize]| {
         sc_core::SwarmEdgeKind::ALL
             .iter()
             .zip(m)

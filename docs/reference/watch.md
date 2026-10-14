@@ -8,7 +8,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 
 | Path | Holds |
 |---|---|
-| `state.json` | Each source's time cursor, resume key or stream checkpoint, and health history. |
+| `state.json` | Each source's time cursor, resume key or stream checkpoint, query fingerprint and health history; records not yet in a digest; state of sources removed from the watchlist. |
 | `state.json.bak` | The previous `state.json`, read when the current one does not parse. |
 | `.lock`, `.lock.owner` | The data directory's writer lock and the command holding it ([one writer at a time](#one-writer-at-a-time)). |
 | `store/<source>.ndjson` | Stored records, deduplicated by ID. |
@@ -17,8 +17,9 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `runs/<stamp>/run.json` | The run in a stable JSON ([the run summary](#the-run-summary)). |
 | `runs/<stamp>/attention.json` | The run's [attention queue](#the-attention-queue). |
 | `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
+| `summary.json`, `ledger.json` (`.bak`, `.damaged`) | The previous copy, and a copy that could not be read, set aside ([interrupted runs](#interrupted-runs)). |
 | `autonomy.ndjson` | What each [autonomy](#autonomy) level did or would have done. |
-| `platform/` | The [platform pass](#platform-swarms): checkpoints, reported candidates and carried events. |
+| `platform/` | The [platform pass](#platform-swarms): checkpoints, reported candidates, carried events, labels and provenance answers. |
 | `runs/<stamp>/platform-swarms.json` | The run's platform swarm candidates. |
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
 | `labels/suggestions-local.ndjson` | The local model's suggestions on new leads ([model triage](#model-triage)). |
@@ -27,7 +28,7 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 | `rules/<version>.toml` | Rules versions that cases pin. |
 | `canary/registry.json` | Canary tokens registered from built sites ([canary sightings](#canary-sightings)). |
 | `runs/<stamp>/canary.json` | The run's canary sightings, when it has any. |
-| `cache/http/` | Cached collector responses; safe to delete. |
+| `cache/http/` | Cached collector responses, pruned every run ([retention](#retention)); safe to delete. |
 | `asn/ip2asn-v4.tsv.gz` | The IP-to-ASN table, once fetched. |
 | `identity/` | Providers' published agent ranges and key directories, once fetched ([identity](identity.md)). |
 | `.stale-alerted` | The run stamp the staleness check last mailed about ([runner](runner.md#watch-staleyml)). |
@@ -38,12 +39,15 @@ Every watch, review and case command works in one data directory: `--out` (or `-
 
 - **Cursors.** Each source keeps a time cursor in `state.json`. New records are deduplicated by ID and appended to the source's store file. A record stamped in the future moves the cursor no further than the run's own time. A source that cannot page and returns `limit` records moves its cursor no further than the oldest of them, since what lies before may be missing. IDs of records with no time stay in the seen list, so they are never added twice.
 - **Wayback paging.** Wayback's index is sorted by URL rather than time, so a pull cut short by `limit`, or by a failed page, resumes from its resume key on the next run. A host too big for one index query is read by path prefix, and `slice_days` reads the time range in windows.
-- **Checkpoints.** GH Archive, Wikimedia EventStreams, Hacker News and CT logs read on from where the last run stopped (`mark` in `state.json`), within a per-run budget. Every page read counts as progress, matches or not, so a failure after matchless hours resumes after them. A GH Archive hour whose file is corrupt or cut off is skipped and counted, not retried each run.
-- **Unavailable hosts.** A host answering HTTP 503 gets ten minutes of retries; if it stays down, later requests to it in the same run are not sent, and its sources continue next run.
+- **Checkpoints.** GH Archive, Wikimedia EventStreams, Hacker News, Bluesky, GitHub search and CT logs read on from where the last run stopped (`mark` in `state.json`), within a per-run budget. Every page read counts as progress, matches or not, so a failure after matchless hours resumes after them. A GH Archive hour whose file is corrupt or cut off is skipped and counted, not retried each run.
+- **Unavailable hosts.** A host answering HTTP 503 gets ten minutes of retries; if it stays down, later requests to it in the same run are not sent, and its sources continue next run. The same holds at once for a host whose `Retry-After` asks for more than the five-minute cap on a wait, and for a host that times out on two requests in a row after their retries, so a hanging index cannot spend the run's time budget.
 - **Overlap.** Each pull overlaps the last by `overlap_days` to catch late-indexed captures.
-- **Analysis window.** Every run analyses the stored records captured in the last `analysis_window_days` together, so clusters can span runs. The overlap before the window is read for the archive burst baseline only. `case new` defaults to the same window, so a cluster number from the digest names the same cluster there.
+- **Analysis window.** Every run analyses the stored records captured in the last `analysis_window_days` together, so clusters can span runs, plus the run's new records whatever their capture time: an archive that indexes a capture late still gets it analysed once. The digest notes how many new records were captured before the window, and `run.json` counts them. The overlap before the window is read for the archive burst baseline only. `case new` defaults to the same window, so a cluster number from the digest names the same cluster there; a record named with `--record` is taken from the whole store when it is older.
+- **Changed queries.** Each source's state holds a fingerprint of its kind, pattern, match type, filters and endpoint. A source edited under the same name starts over (cursor, seen IDs, resume key and checkpoint reset, health kept), records its store already holds are not reported again, and the digest says so. A state saved without a fingerprint counts as matching.
+- **Removed sources.** The state of a source no longer in the watchlist is set aside under `retired` in `state.json`, with a digest note; a source added back under the same name continues from it.
 - **urlquery.** urlquery sources need `URLQUERY_APIKEY`. Without it they are skipped and the digest says so ([configuration](configuration.md#urlquerynet)).
-- **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss.
+- **GitHub search.** `ghsearch` sources need `GITHUB_TOKEN`. Without it they are skipped and the digest says so.
+- **HTTP cache.** Responses are kept in `cache/http/` and reused for `http_cache_ttl_secs` (default 3600, 0 turns it off), then revalidated with their ETag. Requests that carry an API key are not cached. Each entry holds its body's SHA-256; a body that does not match is a miss. Cached bodies are raw answers, not redacted records, so every run deletes entries older than the TTL, and at least a day ([retention](#retention)).
 - **Store lines.** A store file is read line by line as bytes. A line that is not UTF-8 or not a record (a write cut short) is skipped and counted in a `store_damaged` health alert; the other lines are read. Before an append, a last line without its newline is ended, so it never swallows the next record.
 - **ASN.** Once `swarmchase asn fetch` has put the IP-to-ASN table in `asn/`, records that carry an IP but no network get one ([configuration](configuration.md#ip-to-asn-table)).
 - **Redaction.** Collectors redact what they return, and the watch redacts every pulled record again before it reaches the run directory or the store, so a collector that misses a field cannot put a secret in the store. Redaction is idempotent: a record redacted once passes through unchanged.
@@ -63,6 +67,8 @@ Each `[[source]]` names a `kind`. Its `pattern` means what the table says; `endp
 | `gharchive` | GH Archive events | substrings | `scan`: hours per run; `max_mb` |
 | `wikimedia` | External links added to wiki pages | substrings of the link or title | `scan`: minutes per run; `max_mb`; `filter` |
 | `hackernews` | Links in Hacker News stories and comments | substrings of the link, title or text | `scan`: index queries of 1000 items per run |
+| `bluesky` | Links in Bluesky posts (Jetstream) | substrings of the link or text | a sample; `scan`: minutes per run; `max_mb`; `endpoint` |
+| `ghsearch` | Links in GitHub pull requests and commit messages | substrings, each one search | needs `GITHUB_TOKEN`; `scan`: requests per run; `endpoint`: `prs` or `commits` |
 | `npm` | npm registry search | search text | `canary`: a search that always hits |
 | `pypi` | PyPI RSS feed | substrings | `endpoint`: `updates` or `packages` |
 | `ctlog` | One CT log | substrings | `endpoint`: log URL; `scan`: entries per run |
@@ -77,11 +83,34 @@ Streamed and feed kinds read a bounded amount each run and report their coverage
 
 GitHub's event payloads are trimmed: a pull request carries its number and refs but no title, body, link or author association, and a push carries no commits. A `gharchive` source therefore finds pasted URLs in issues, comments, reviews, discussions and releases, and run tags in repository names; a pull request's record links to it by number. `scan` hours at most are read per run, and `max_mb` is sized to fit them, so the hour cap ends a run.
 
-A `wikimedia` source reads the `mediawiki.page-links-change` stream from the millisecond after the last event read, until it reaches the time the run began or runs out of `scan` wall-clock minutes or `max_mb` megabytes; the rest waits for the next run. Each added external link is a record whose URL is the link, never fetched, and whose reference is the edit's diff. Bot-flagged accounts and the stream's `canary` events are dropped. `filter` takes `domain:<wiki>`, `!domain:<wiki>` and `ns:<n>`. Coverage is in minutes of stream time. Requests carry the client's identifying user agent, as Wikimedia's User-Agent policy asks. Every kind's terms of use are summarised in the [watchlist](../../watchlist.toml) and in its [collector](../../crates/sc-collect/README.md#record-sources).
+A `ghsearch` source fills the gap GitHub's trimmed payloads leave: it searches pull requests created and commits committed since its checkpoint, one search per substring, and checks every result against the substring again, since search matches words. Only matching links and run tags become records, the link as URL and the pull request or commit page as reference; the footers coding agents add to their own work never match.
+
+Each search reads oldest first, from three hours before the checkpoint (for items indexed late and commits dated before their push; seen IDs drop the repeats) to ten minutes ago. The checkpoint moves only as far as every search read: a search cut short by the request budget, a failed request or GitHub's 1000-result cap holds it at the newest item that search reached, and the next run reads on from there. A rate limit GitHub answers with HTTP 403 is waited out like a 429, within the client's retry cap. A search GitHub answered with `incomplete_results` counts as skipped, and so does every search when a checkpoint older than 48 hours is skipped to the newest six hours.
+
+A `bluesky` source reads Jetstream's posts for a sampled stretch: from its checkpoint, or the newest half hour when the checkpoint is older, for at most `scan` wall-clock minutes. Links posted outside the stretch are never seen, and the digest's coverage shows minutes read against minutes since the last run. Each link in a post's link facets or link card that matches is a record whose reference is the post's page; a post deleted during the read is dropped.
+
+A `wikimedia` source reads the `mediawiki.page-links-change` stream
+ from the millisecond after the last event read, until it reaches the time the run began or runs out of `scan` wall-clock minutes or `max_mb` megabytes; the rest waits for the next run. Each added external link is a record whose URL is the link, never fetched, and whose reference is the edit's diff. Bot-flagged accounts and the stream's `canary` events are dropped. `filter` takes `domain:<wiki>`, `!domain:<wiki>` and `ns:<n>`. Coverage is in minutes of stream time. Requests carry the client's identifying user agent, as Wikimedia's User-Agent policy asks. Every kind's terms of use are summarised in the [watchlist](../../watchlist.toml) and in its [collector](../../crates/sc-collect/README.md#record-sources).
 
 ### One writer at a time
 
-A watch run holds an exclusive lock on the data directory (`.lock`) from start to finish; `case rename` and `backup restore` take it too. A second command that needs it fails at once, naming the holder from `.lock.owner`, instead of writing beside the first. The lock is advisory and released when the command exits, however it exits. `state.json` and every other rewritten file are written to a temporary file of their own and renamed into place; the previous `state.json` is kept as `state.json.bak`, read with a warning when the current one does not parse.
+A watch run holds an exclusive lock on the data directory (`.lock`) from start to finish; `case rename`, `watch reset`, `watch prune-cache`, `backup create` and `backup restore` take it too. A second command that needs it fails at once, naming the holder from `.lock.owner`, instead of writing beside the first. The lock is advisory and released when the command exits, however it exits. `state.json` and every other rewritten file are written to a temporary file of their own and renamed into place; the previous `state.json` is kept as `state.json.bak`, read with a warning when the current one does not parse.
+
+A review file is saved under a lock of its own and merged: a save rereads the file and writes only what that command changed, so a `review --serve` page left open never undoes a `review tuned` run meanwhile.
+
+### Interrupted runs
+
+A run saves `state.json` after each source, with the IDs of the records it stored under `undigested`. They are cleared only once the run's digest and `run.json` are written, and the ledger and `autonomy.ndjson` are saved just before that, so a run cut short before its digest leaves them as they were. A run cut short after collecting (killed, out of time, a crash) leaves them, and the next run loads those records from the store and reports them as new, with a note in the digest and their number as `carried_over` in `run.json`.
+
+Steps after collection do not stop a run: a file that cannot be written or a history that cannot be read becomes a `step_failed` health alert, and the run goes on to its digest. A `summary.json` or `ledger.json` that does not parse is read from its `.bak` copy; when that fails too, the damaged file is kept as `.damaged`, the history starts afresh and the digest says so.
+
+A step after the digest that fails (the run's `summary.json`, `LATEST`, retention) ends the run with an error, having lost nothing the digest reported.
+
+### One source, or starting one over
+
+`watch --only <name>` pulls one source, with its cursor, health and undigested records as a full run keeps them, and leaves the others as they are; the analysis and digest cover the store as usual. `watch reset <name>…` makes sources start over on their next run: it clears each one's cursor, seen IDs, resume key and checkpoint under the data lock, and keeps its health history. The next run drops the records the source's store already holds, as for a changed query, so they are neither stored twice nor reported again.
+
+`watch prune-cache [watchlist.toml]` deletes cached responses older than the TTL (at least a day), or older than `--max-age-hours`, as each run does.
 
 ### Checking a watchlist
 
@@ -119,7 +148,8 @@ The health block comes first, because a source that did not run hides whatever i
 - a source skipped for the first time (no API key);
 - a source whose pull falls below a fifth of its median over recent runs, which usually means an API change, an expired key or a spent quota. A source's first pull and a pull spread over several runs are catching up, so they do not count towards the median;
 - a rule whose hit rate on one source's new records jumps to three times its recent rate on that source. Each source is compared with itself, because a relay's own rule fires on nearly every record from it;
-- a store file with lines that cannot be read, with their count. They are skipped; the other records are read.
+- a store file with lines that cannot be read, with their count. They are skipped; the other records are read;
+- a step after collection that failed and was skipped, or a `summary.json` or `ledger.json` started afresh because it could not be read ([interrupted runs](#interrupted-runs)).
 
 Under *Capability lost this run* it lists each skipped, failed or stopped source with what its absence costs, and the part of a stream it skipped. When no submit-time source ran (urlquery is the only one scheduled), it says so first: without submission times, timing links, pace, agent grades above L2 and interaction edges are unavailable. *Quiet sources* notes a source that has pulled nothing for several runs, and whether its canary passed.
 
@@ -129,7 +159,7 @@ Any alert gets the digest emailed; lost capability and quiet sources alone do no
 
 The sources table shows each source's records, requests, coverage and status. Coverage is what a stream or feed source read against what there was to read since its checkpoint, such as `6 of 6 hours, canary ok` or `1024 of 400000 entries, 398976 skipped` for a CT log that grows faster than a polite reader.
 
-The digest ends with a *Run time* line: the run's time up to the digest, each phase (`collect`, `platform`, `analysis`, `triage`) and the three slowest sources. `run.json` has the same in milliseconds.
+The digest ends with a *Run time* line: the run's time up to the digest, each phase (`collect`, `platform`, `analysis`, `triage`) and the three slowest sources. `run.json` has the same in milliseconds. An *HTTP cache* line follows: responses served from the cache this run, entries kept and their size, and entries deleted.
 
 ### Headline counts
 
@@ -191,9 +221,9 @@ The watch changes nothing itself. Apply an approved proposal with `swarmchase no
 
 ## Platform swarms
 
-A separate pass in each run looks for accounts acting alike on GitHub, package registries (npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Go modules), the Hugging Face Hub, Wikimedia wikis, Hacker News, Bluesky and CVE records: near-identical or templated text, templated names, or text-less stars, forks and pull requests on one target, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
+A separate pass in each run looks for accounts acting alike on GitHub, GitLab.com, Codeberg, package registries (npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Go modules), the Hugging Face Hub, Wikimedia wikis, Hacker News, Bluesky and CVE records: near-identical or templated text, templated names, or text-less stars, forks and pull requests on one target, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
 
-**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), `label_days` (default 30), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
+**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), `label_days` (default 30), `provenance_lookups` (default 40), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
 
 | Kind | Reads | Fields |
 |---|---|---|
@@ -207,6 +237,9 @@ A separate pass in each run looks for accounts acting alike on GitHub, package r
 | `packagist` | Packagist's change feed since the checkpoint | none; the feed keeps a day |
 | `rubygems` | RubyGems' newest listing (fifty gems) | `endpoint`: `latest` (default) or `just_updated` |
 | `crates` | crates.io's newest crates, back to the checkpoint | `scan`: pages of 100 per run (default 3) |
+| `gitlab` | GitLab.com's newest public projects, back to the checkpoint | `scan`: pages of 100 per run (default 3) |
+| `codeberg` | Codeberg's newest repositories, back to the checkpoint | `scan`: pages of 50 per run (default 3) |
+
 | `cve` | GitHub advisories of one type, oldest first from the checkpoint, or CVE List records new in its delta log | `endpoint`: `unreviewed` (default), `reviewed`, `malware` or `cvelist`; `scan`: requests of 100 (default 3), or records for `cvelist` (default 30) |
 | `wikimedia-ai-cleanup` | Pages added to a wiki's suspected-AI-generated-text cleanup categories since the checkpoint, as labels | `endpoint`: the wiki (default `en.wikipedia.org`); `pattern`: the category name before ` from <month>`, `*` for the default; `scan`: API requests (default 4) |
 | `osv` | OSV malicious-package records for one ecosystem, as labels | `endpoint`: `npm` (default), `PyPI`, `Go`, `crates.io`, `NuGet`, `Packagist` or `RubyGems`; `scan`: records per run (default 50) |
@@ -217,11 +250,15 @@ A separate pass in each run looks for accounts acting alike on GitHub, package r
 
 **Labels.** An `osv` or `wikimedia-ai-cleanup` source gives labels, not events: the packages OSV's malicious-package records name, or the wiki pages editors tagged as suspected AI-generated text. They are kept in `platform/labels.ndjson` for `label_days` (default 30). A candidate shown in the digest whose members published a labelled package or edited a labelled page gets a *Labelled* line with the records behind it, and `runs/<stamp>/platform-labels.json` lists every candidate's matches.
 
+**Build provenance.** For the npm and PyPI candidates new or grown this run, the pass looks up the build provenance of member releases: npm's attestations and PyPI's integrity API, by name and version, at most `provenance_lookups` a run (0 turns them off), one member per candidate in turn, members on an OSV-labelled package first. Only the source repository, workflow, ref, commit, runner and deployment environment are kept; no package file is downloaded. Answers, including "none", go to `platform/provenance.ndjson` for `label_days`, so a release is looked up once.
+
+Each npm or PyPI candidate with answers carries them as `provenance` in `platform-swarms.json`, and the digest gives it a *Provenance* line: the repositories and workflows its packages name, whether several packages share one, or that none carries provenance (weak context). It changes neither the chance nor the strength ([methodology](../methodology.md#coordinated-accounts-on-public-platforms)).
+
 **Declared coding agents.** GitHub events from the coding-agent Apps that [`declared-agents.toml`](../../declared-agents.toml) lists (`github_app`) are tallied by product on the source's line, not grouped. An undeclared App whose login carries one of those products' names is listed below it as a spoofing lead, by login: App logins name software, not people.
 
 **What is stored.** Nothing from the full stream. After grouping, only events worth another look are carried in `platform/carry.ndjson` for `carry_hours`: members of a group with two or more accounts and events carrying residue. Events hold a keyed hash for the account, never its login, and slotted text sketches, never the text. The run's candidates, suppressed groups and counts go to `runs/<stamp>/platform-swarms.json`.
 
-**In the digest.** *Platform swarm hints* lists candidates that are new this run or have grown since they were last listed, each with its reason line (burst, new accounts, residue and their chances), what joined it, the slotted template, its targets, any coding-harness self-identification (weak context), what is left to rule out, and up to five defanged links. A new or grown candidate counts as a change. Suppressed groups are summed by benign kind. Candidates are not leads for triage: the hosted model may see only archive and urlquery records ([policies](../policies.md#evidence-and-attribution)).
+**In the digest.** *Platform swarm hints* lists candidates that are new this run or have grown since they were last listed, each with its reason line (burst, new accounts, residue and their chances), what joined it, the slotted template, its targets, any coding-harness self-identification (weak context), its packages' build provenance, what is left to rule out, and up to five defanged links. A new or grown candidate counts as a change. Suppressed groups are summed by benign kind. Candidates are not leads for triage: the hosted model may see only archive and urlquery records ([policies](../policies.md#evidence-and-attribution)).
 
 **On demand.** `swarmchase platform-swarms <events.ndjson>` runs the detector over carried events or fixtures, and `--gharchive <hour.json.gz>` over GH Archive hour files read locally; `--json` prints the full report and `--options` takes a TOML of tunables.
 
@@ -236,7 +273,7 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `rules_version` | The rules the analysis ran with. |
 | `changed` | Whether the digest counts as changed, and so is emailed. |
 | `priority`, `reasons` | `high`, `medium` or `low`, and the facts behind it ([needs attention](#needs-attention)). |
-| `counts` | `records`, `new_records`, `significant`, `suggestive` and `clusters_above_noise` over the window. |
+| `counts` | `records`, `new_records`, `significant`, `suggestive` and `clusters_above_noise` over the window; of the new records, `carried_over` and `new_before_window`. |
 | `leads` | The run's new leads, strongest first ([leads](#lead-fields)). |
 | `triage` | `enabled`, `backend`, `model`, `asked`, `answered`, `reused`, `left`, `withheld` and an optional `note` ([model triage](#model-triage)). |
 | `health` | `alerts`, the `lost` capability lines, and `sources` with `name`, `kind`, `pulled`, `new`, `status` and `duration_ms`. |
@@ -246,7 +283,7 @@ Each run also writes `runs/<stamp>/run.json`, the run in a small JSON for script
 | `durations_ms` | Milliseconds per phase (`collect`, `platform`, `analysis`, `triage`, `report`) and `total` up to this file. |
 | `digest` | The digest's file name in the same directory. |
 
-A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
+A reason has `level`, `kind` (`lead`, `case_clock`, or an alert kind) and the digest's `text`. An alert has `kind` (`source_failed`, `source_skipped`, `source_collapsed`, `canary_failed`, `host_down`, `rule_drift`, `store_damaged`, `step_failed` or `other`), the `source` or host it concerns, and `text`. A source's `status` is `complete`, `partial`, `stopped`, `error` or `skipped`. A due clock's `clock` is `indicators` or `naming`, and `since` is Unix seconds.
 
 ### Lead fields
 
@@ -351,7 +388,9 @@ A lead's thread counts with every thread it was merged into. For `draft_case`, *
 
 ## Retention
 
-At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones. The platform pass keeps its carried events for `carry_hours` only. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
+At the end of each run, run directories and stored records older than `retain_days` (default 180, by capture time) are deleted, with ledger points and autonomy lines older than that. Only the newest `keep_analysis_runs` runs (default 8; 0 keeps all) keep their full `analysis.json` and `case-notes.md`, which grow with the window; older runs keep their digest, `run.json`, `summary.json`, attention queue and new records. The dashboard reads the newest run's analysis, and a case analyses its own records, so neither needs the older ones.
+
+The platform pass keeps its carried events for `carry_hours` only. Cached HTTP responses older than `http_cache_ttl_secs`, and at least a day, are deleted on every run, before the digest; `watch prune-cache` does the same on demand. Copy anything a case needs into the case first (`case new` or `case add`). The policy is in [policies](../policies.md#collection).
 
 ## The dashboard
 
@@ -371,7 +410,7 @@ It answers these questions:
 - **Whether monitoring is healthy.** Each source's status from `state.json` (failing, skipped, quiet, catching up, ok), its recent pulls, what its absence loses, the latest digest's health alerts, and rule drift recomputed on the latest run.
 - **What waits on the admin.** The review queue as `review --serve` builds it from the latest run's analysis, with label progress and the agent labels below L2 counted apart, and each open case's clocks and what `case status` says it still needs.
 - **How leads move.** The activity timeline draws each thread from the ledger as a row over the window: a bar per run, its height the records, its colour the band, solid when that run collected records for it, with dots for events.
-- **What ties leads together.** The link graph draws the latest analysis's clusters above noise that something ties: soft links as grey lines, thicker for a stronger pair (combined as candidate fleets combine them), possible interaction (S1 to S5) as red dashed lines, interaction inside one cluster as a ring, and candidate fleets as shaded areas. Groups of tied clusters are laid out apart, largest first, and the same overview always draws the same picture. It can show only interaction or only fleets; selecting a cluster or a line lists each tie with its strength and defanged detail, and the table under it lists every tie. Up to 60 clusters are drawn, the queue's top ones first. A tie is a lead to check, never a merge.
+- **What ties leads together.** The link graph draws the latest analysis's clusters above noise that something ties: soft links as grey lines, thicker for a stronger pair (combined as candidate fleets combine them), possible interaction (S1 to S6) as red dashed lines, interaction inside one cluster as a ring, and candidate fleets as shaded areas. Groups of tied clusters are laid out apart, largest first, and the same overview always draws the same picture. It can show only interaction or only fleets; selecting a cluster or a line lists each tie with its strength and defanged detail, and the table under it lists every tie. Up to 60 clusters are drawn, the queue's top ones first. A tie is a lead to check, never a merge.
 - **How autonomy would have done.** Each level's mode and record (agreed, disagreed, pending, held back, never proposed) and its latest lines with their outcome ([reading a level's record](#reading-a-levels-record)).
 - **What to run next.** Each item comes with its command, with the data directory filled in: `review --serve`, `case … new --cluster <key>`, a case's next step, or `scan` on a drifting source's records.
 

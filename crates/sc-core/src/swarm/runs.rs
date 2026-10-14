@@ -30,7 +30,7 @@ fn dims(r: &ObsResult) -> [Option<String>; 5] {
 /// Who sent a record: its user agent, network and header set, whatever
 /// relay it went through. `None` when neither the user agent nor the network
 /// is known, so no client can be told apart.
-fn client_key(r: &ObsResult) -> Option<String> {
+pub(crate) fn client_key(r: &ObsResult) -> Option<String> {
     let d = dims(r);
     let mut key = String::new();
     for x in &d[1..4] {
@@ -56,6 +56,9 @@ pub(super) fn fp_of(results: &[ObsResult], members: &[usize]) -> Fp {
 
 /// The dimensions known on both sides and disjoint, or `None` when they
 /// share a user agent, network or header set (one client, most likely).
+/// Clients known on neither side give an empty list: S3 counts those as
+/// different, its timing tests carrying the edge; S6 requires a non-empty
+/// list.
 pub(super) fn differ(a: &Fp, b: &Fp) -> Option<Vec<&'static str>> {
     let mut out = Vec::new();
     for i in 0..DIMS.len() {

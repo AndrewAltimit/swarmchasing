@@ -23,6 +23,8 @@ The commit gate refuses `env.list` and `.env` even when force-added ([contributi
 | `SWARMCHASE_ADMIN` | `swarmchase case new` | The admin name a new case records. Unset, `git config user.name` ([second review](cases.md#second-review)). |
 | `URLQUERY_APIKEY` | `swarmchase` | urlquery.net collectors and watch sources. |
 | `URLSCAN_APIKEY` | `swarmchase` | Optional: raises urlscan.io's search quota ([urlscan.io](#urlscanio)). |
+| `GITHUB_TOKEN` | `swarmchase watch` | GitHub search sources (`ghsearch`); skipped without it. Locally, a fine-grained token with no permissions ([GitHub token](#github-token)). |
+
 | `SWARMCHASE_SITE_URL` | `swarmchase notice build`, `site build` | `--base-url`. |
 | `SWARMCHASE_LLM_URL` | `swarmchase review --suggest`, `watch --triage` | A local OpenAI-compatible model server; loopback, private or link-local hosts only ([label suggestions](watch.md#label-suggestions)). |
 | `SWARMCHASE_LLM_MODEL` | `swarmchase review --suggest`, `watch --triage` | The model name sent to that server. |
@@ -54,6 +56,10 @@ urlquery's terms allow personal, non-commercial research use and forbid redistri
 `swarmchase collect urlscan` searches urlscan.io's public scans. It works without a key; `URLSCAN_APIKEY` raises the quota. Only result metadata and the report link are kept, never page content or screenshots.
 
 [urlscan's terms](https://urlscan.io/terms/) license personal, non-commercial use and need written permission for systematic retrieval into a database. So urlscan is a per-case lookup, not a watch source, and its records are cited by report link, as for urlquery.
+
+## GitHub token
+
+Searching public pull requests and commits needs a token but no permission. For local runs, create a fine-grained personal access token with public repository access only and no permissions, so a leaked `env.list` exposes nothing private. The scheduled watch passes the job's own read-only token to its collect step alone.
 
 ## Collector cache
 

@@ -1,12 +1,15 @@
 # Scenarios for `swarmchase sim bench` (crates/sc-sim). Synthetic: request
 # content is copied from samples/eval and only who sends it, when and in what
 # order is simulated. Each scenario runs under `seeds` seeds and is measured
-# on its own; the background actors are the hard negatives.
+# on its own; the background actors are the hard negatives. `expect` names
+# the kinds a scenario is built to produce, with bounds set at or just below
+# what it measures; they only go up.
 
 [[scenario]]
 name = "sink"
 seed = 11
 seeds = 4
+expect.S1 = { min_precision = 1.0, min_recall = 0.91 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -25,6 +28,7 @@ records = 3
 name = "roles"
 seed = 21
 seeds = 4
+expect.S4 = { min_precision = 1.0, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 2
@@ -49,6 +53,7 @@ retry = 0.2
 name = "sync"
 seed = 31
 seeds = 4
+expect.S3 = { min_precision = 1.0, min_recall = 0.83 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -68,6 +73,7 @@ retry = 0.2
 name = "shard"
 seed = 41
 seeds = 4
+expect.S5 = { min_precision = 1.0, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -113,6 +119,7 @@ retry = 0.2
 name = "planted"
 seed = 61
 seeds = 4
+expect.S1 = { min_precision = 0.33, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 2
@@ -137,6 +144,7 @@ retry = 0.2
 name = "handoff"
 seed = 81
 seeds = 4
+expect.S2 = { min_precision = 1.0, min_recall = 0.5 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -152,11 +160,17 @@ kind = "relay_readers"
 agents = 8
 records = 3
 
+# A swarm seen only through a scan service's submit times, which carry no
+# client: its agents share one inbox, so they fall in one cluster, and with
+# no user agent or network its runs cannot be split into clients, so no
+# interaction edge is drawn. The cluster already holds every true pair.
 [[scenario]]
 name = "submit-basis"
 seed = 71
 seeds = 4
 basis = "submit"
+expect.S1 = { max_pairs = 0 }
+expect.S3 = { max_pairs = 0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -176,6 +190,7 @@ agents = 3
 name = "sync-off-hour"
 seed = 91
 seeds = 4
+expect.S3 = { min_precision = 1.0, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -194,10 +209,14 @@ agents = 10
 retry = 0.2
 palette_share = 0.3
 
+# A synchronised swarm at tool pace, gaps of a second or two: the lockstep
+# test's permutations of a run's own gaps line up as well as its real order
+# within the tolerance, so S3 does not fire, by design.
 [[scenario]]
 name = "sync-tool"
 seed = 101
 seeds = 4
+expect.S3 = { max_pairs = 0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -240,6 +259,9 @@ records = 60
 name = "dispatch"
 seed = 121
 seeds = 4
+expect.co_activity = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
+expect.S6 = { min_precision = 1.0, min_recall = 0.66 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 3
@@ -319,6 +341,7 @@ records = 3
 name = "planted-timing"
 seed = 231
 seeds = 4
+expect.S1 = { min_precision = 0.33, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 2
@@ -342,6 +365,7 @@ palette_share = 0.3
 name = "xbow-swarm"
 seed = 241
 seeds = 3
+expect.S1 = { min_precision = 1.0, min_recall = 0.42 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 12
@@ -366,6 +390,8 @@ name = "hub-two-fleets"
 seed = 251
 seeds = 3
 span_hours = 240
+expect.scaffold = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "fleet"
 agents = 3
@@ -396,6 +422,8 @@ name = "fleet-crowd"
 seed = 261
 seeds = 4
 span_hours = 240
+expect.scaffold = { min_precision = 0.92, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 0.92, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "fleet"
 agents = 3
@@ -430,6 +458,8 @@ name = "fleet-upgrade"
 seed = 281
 seeds = 3
 span_hours = 240
+expect.scaffold = { min_precision = 1.0, min_recall = 0.33 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 0.33 }
 [[scenario.actor]]
 kind = "fleet"
 agents = 4
@@ -490,6 +520,8 @@ palette_share = 0.3
 name = "escalation"
 seed = 311
 seeds = 4
+expect.escalation = { min_precision = 1.0, min_rejoined = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_rejoined = 1.0 }
 [[scenario.actor]]
 kind = "escalator"
 agents = 3
@@ -510,6 +542,8 @@ records = 3
 name = "target-list"
 seed = 131
 seeds = 4
+expect.co_target = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "target_list"
 agents = 3
@@ -527,6 +561,8 @@ palette_share = 0.3
 name = "news-spike-list"
 seed = 141
 seeds = 4
+expect.co_target = { min_precision = 0.75, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 0.8, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "news_spike"
 agents = 8
@@ -551,6 +587,8 @@ palette_share = 0.3
 name = "hub"
 seed = 151
 seeds = 4
+expect.co_target = { min_precision = 0.51, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 0.88, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "target_list"
 agents = 3
@@ -574,3 +612,142 @@ kind = "agent"
 agents = 10
 retry = 0.2
 palette_share = 0.3
+
+# Benign look-alikes, background only: an uptime service checking from four
+# regions in lockstep (S3), an internet-wide scanner sharding one host family
+# over one network's addresses (S5, scaffold), link-preview bots fetching
+# each posted link within seconds (co-activity), and feed readers polling
+# the same feeds in one order through one outage (reruns, shared pauses).
+[[scenario]]
+name = "null-lookalikes"
+seed = 321
+seeds = 8
+null = true
+[[scenario.actor]]
+kind = "uptime_monitor"
+agents = 4
+records = 120
+hosts = 3
+[[scenario.actor]]
+kind = "internet_scanner"
+agents = 6
+records = 12
+hosts = 4
+[[scenario.actor]]
+kind = "link_preview"
+agents = 5
+records = 30
+hosts = 6
+[[scenario.actor]]
+kind = "feed_poller"
+agents = 4
+records = 60
+hosts = 3
+[[scenario.actor]]
+kind = "agent"
+agents = 12
+retry = 0.2
+palette_share = 0.3
+
+# A synchronised swarm beside an uptime service checking from four regions
+# in lockstep: only the swarm's pairs are right.
+[[scenario]]
+name = "sync-monitors"
+seed = 331
+seeds = 4
+expect.S3 = { min_precision = 1.0, min_recall = 0.75 }
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["sync"]
+records = 8
+offset_hours = 5
+off_hour = true
+palette_share = 0.3
+[[scenario.actor]]
+kind = "uptime_monitor"
+agents = 4
+records = 240
+hosts = 3
+offset_hours = 4
+window_hours = 0.5
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# One operator handing one ordered target list to three agents, who walk it
+# in that order at their own loose paces, 15 to 20 minutes apart. A
+# popularity-ranked list walked by many unrelated agents is news-spike-list:
+# its hosts are held by too many senders to be rare for either co-target
+# test.
+[[scenario]]
+name = "ordered-list"
+seed = 341
+seeds = 4
+expect.ordered_co_target = { min_precision = 1.0, min_recall = 1.0 }
+expect.co_target = { min_precision = 1.0, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "target_list"
+agents = 3
+records = 10
+hosts = 8
+in_order = true
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# The harness-family fleet methods in one crowd of agents writing prose from
+# prompts of their own, over three weeks: a two-agent fleet whose harness is
+# upgraded for its second agent a few hours after the first (one parameter
+# renamed, one template changed: scaffold lineage), beside four unrelated
+# operators on one agent framework whose templates are one parameter apart;
+# and two agents of one operator writing from its prompt templates (prompt
+# echo), beside three unrelated agents copying one viral prompt and twelve
+# copying one published query list. Both tests read a key or template two
+# clusters hold at a base rate of one over the other comparable clusters, so
+# a pair passes only among a hundred or more; three unrelated copies of one
+# prompt pass among a few hundred, the method's limit. The prose is synthetic.
+[[scenario]]
+name = "harness-crowd"
+seed = 361
+seeds = 4
+span_hours = 480
+expect.scaffold_lineage = { min_precision = 1.0, min_recall = 0.25 }
+expect.prompt_echo = { min_precision = 1.0, min_recall = 0.37 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 0.62 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 2
+records = 8
+upgrade_at = 1
+interval_hours = 2
+[[scenario.actor]]
+kind = "framework"
+agents = 4
+records = 8
+[[scenario.actor]]
+kind = "prompt_fleet"
+agents = 2
+records = 8
+palette_share = 0.1
+[[scenario.actor]]
+kind = "agent"
+agents = 3
+palette_share = 0.1
+prose = "shared"
+[[scenario.actor]]
+kind = "agent"
+agents = 12
+palette_share = 0.1
+prose = "shared"
+[[scenario.actor]]
+kind = "agent"
+agents = 150
+retry = 0.2
+palette_share = 0.05
+prose = "own"

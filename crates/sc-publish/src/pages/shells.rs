@@ -53,11 +53,6 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 </div>
 <div id="viz-panel" class="viz-panel" role="tabpanel" aria-labelledby="tab-runs" tabindex="0"><div class="empty-state"><p>Runs over time, the fleet and swarm graphs, rules against clusters and the hourly rhythm appear here once records are analysed.</p></div></div>
 <div id="filter-bar" class="filter-bar" aria-live="polite"></div>
-<div class="sub-head"><h3 class="pane-sub" id="records-h">Flagged records</h3><button type="button" id="csv-records" class="small" disabled>Download CSV</button></div>
-<div id="records"><p class="hint">No records yet.</p></div>
-<div class="sub-head"><h3 class="pane-sub">Endpoints</h3><button type="button" id="csv-endpoints" class="small" disabled>Download CSV</button></div>
-<p class="hint">Flagged requests per target host; times are UTC. Hits counts the suggestive or significant records to the host, out of every record that targets it (hits / all). "Ongoing" means hit within 7 days of the newest record loaded: what an affected operator checks their logs for.</p>
-<div id="endpoints"><p class="hint">No endpoints yet.</p></div>
 </section>
 <aside class="pane pane-context" data-pane="context" aria-labelledby="h-ctx">
 <h2 id="h-ctx">Context</h2>
@@ -68,13 +63,25 @@ pub const ANALYZE: &str = r#"<header class="page-head compact"><h1>Workbench</h1
 <div id="links"><p class="hint">None yet.</p></div>
 </aside>
 </div>
+<section class="pane pane-tables" data-pane="explore" aria-labelledby="records-h">
+<div class="sub-head"><h2 class="pane-sub" id="records-h">Flagged records</h2><button type="button" id="csv-records" class="small" disabled>Download CSV</button></div>
+<div class="row table-tools">
+<label>Sort by <select id="rec-sort"><option value="score">score</option><option value="time">time</option><option value="cluster">cluster</option></select></label>
+<label class="grow">Filter <input id="rec-filter" type="search" class="mono" spellcheck="false" placeholder="text in the defanged URL, or a rule id" aria-describedby="rec-filter-hint"></label>
+</div>
+<p class="hint" id="rec-filter-hint">The filter matches the defanged URL and the rule ids, ignoring case. The CSV holds the records the table lists, in its order.</p>
+<div id="records"><p class="hint">No records yet.</p></div>
+<div class="sub-head"><h2 class="pane-sub" id="endpoints-h">Endpoints</h2><button type="button" id="csv-endpoints" class="small" disabled>Download CSV</button></div>
+<p class="hint">Flagged requests per target host; times are UTC. Hits counts the suggestive or significant records to the host, out of every record that targets it (hits / all). "Ongoing" means hit within 7 days of the newest record loaded: what an affected operator checks their logs for.</p>
+<div id="endpoints"><p class="hint">No endpoints yet.</p></div>
+</section>
 <section class="card pane-report" data-pane="report" aria-labelledby="h-report">
 <h2 id="h-report">Report</h2>
 <p class="hint">A disclosure draft from this analysis, scoped to the selected cluster if there is one. It follows the CLI's naming gate: outside case notes, a developer is named only on evidence at or above the level you pick. Model names in requests never name one on their own; an ASN names the host.</p>
 <div class="row">
 <label>Audience <select id="audience"><option value="internal">Internal case notes</option><option value="provider">AI provider</option><option value="affected">Affected operator</option><option value="indicator">Indicator notice (names no host)</option><option value="public">Naming update (names hosts)</option></select></label>
 <label class="grow">Reporter <input id="reporter" placeholder="Name and contact"></label>
-<label class="grow">Name a developer only on <select id="min-named"></select></label>
+<label class="grow">Name a developer only on <select id="min-named" disabled><option value="">the default level (set when the engine loads)</option></select></label>
 </div>
 <details class="claims"><summary>Claims from case work <span id="claims-count" class="hint"></span></summary>
 <p class="hint">The JSON array <code>swarmchase report --claims</code> reads, e.g. <code>[{"party":"Example AI","role":"developer","evidence":"provider_confirmed","details":["confirmed in writing"]}]</code>. Kept in this page only.</p>
@@ -123,8 +130,8 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <section class="card" aria-labelledby="sectxt-h">
 <h2 id="sectxt-h">Read a security.txt</h2>
 <p class="hint">Paste an organisation's <code>/.well-known/security.txt</code> to pull out who to notify. Or run <code>swarmchase contact &lt;domain&gt;</code>.</p>
-<label for="sectxt" class="sr-only">security.txt</label><textarea id="sectxt" class="mono" rows="7" spellcheck="false"></textarea>
-<div class="row"><button type="button" id="sectxt-run" class="primary">Parse</button></div>
+<label for="sectxt" class="sr-only">security.txt</label><textarea id="sectxt" class="mono" rows="7" spellcheck="false" placeholder="Contact: mailto:security@example.org&#10;Expires: 2027-01-01T00:00:00Z"></textarea>
+<div class="row"><button type="button" id="sectxt-run" class="primary" disabled>Parse</button><span class="hint" id="sectxt-wait">Paste a security.txt to parse it.</span></div>
 <p class="hint card-status" data-tools-status aria-live="polite"></p>
 <div id="sectxt-out"></div>
 </section>
@@ -133,8 +140,48 @@ pub const TOOLS: &str = r#"<header class="page-head compact"><h1>Tools</h1>
 <p class="hint" id="defang-hint">Make URLs safe to paste into reports and chat: <code>hxxps://example[.]org/</code>. Every <code>http</code> and <code>https</code> URL in the text changes, nested ones too: its scheme, and the dots of its host. Bare host names and IP addresses outside a URL are left as typed.</p>
 <label for="defang-in" class="sr-only">Text to defang</label><textarea id="defang-in" class="mono" rows="4" spellcheck="false" aria-describedby="defang-hint"></textarea>
 <p class="hint card-status" data-engine-status aria-live="polite"></p>
-<pre id="defang-out" class="report" aria-live="polite"></pre>
+<div id="defang-result" hidden><h3 class="pane-sub" id="defang-out-h">Defanged</h3>
+<pre id="defang-out" class="report" tabindex="0" aria-labelledby="defang-out-h" aria-live="polite"></pre>
+<div class="row"><button type="button" id="defang-copy" class="small">Copy</button></div></div>
 </section>"#;
+
+/// Check my logs: an operator pastes its access log once and gets the
+/// workbench's access-log analysis and the identity check on the same text,
+/// then a plain summary and what to do next ([`site/js/pages/checklog.js`]).
+/// The next steps are links in the markup; the script only shows them.
+pub const CHECK_LOGS: &str = r##"<header class="page-head compact"><h1>Check my logs</h1>
+<p class="lede">For a site operator: paste or drop your web server's access log once. The page runs the same rules as the workbench's access-log preset over the requests to your host, and checks every request that says it comes from an AI provider's agent against the ranges the provider publishes, then sums both up in plain words. It runs in this page: your log is never uploaded, and nothing is fetched from anyone.</p></header>
+<section class="card" aria-labelledby="cl-log-h">
+<h2 id="cl-log-h">1. Your log</h2>
+<div id="cl-drop" class="dropzone">
+<p class="drop-lead">Paste your log below, drop the file here, or try the synthetic example.</p>
+<div class="row drop-actions"><label class="file button">Load file<input type="file" id="cl-file" accept=".log,.txt"></label><button type="button" id="cl-example">Try an example</button></div>
+<label for="cl-input" class="sr-only">Access log</label>
+<textarea id="cl-input" class="mono" rows="8" spellcheck="false" aria-describedby="cl-input-hint" placeholder='203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET /search?q=... HTTP/1.1" 200 512 "-" "Mozilla/5.0"'></textarea>
+<p id="cl-drop-status" class="hint" role="status" hidden></p>
+</div>
+<p class="hint" id="cl-input-hint">Common or Combined Log Format (Combined carries the user agent the identity check reads). Behind a proxy, log the forwarded client address, not the proxy's.</p>
+<div class="row"><label class="grow">Your host, as visitors type it <input id="cl-host" class="mono" spellcheck="false" placeholder="www.example.org" aria-describedby="cl-host-hint"></label></div>
+<p class="hint" id="cl-host-hint">An access log does not name the site it belongs to; the analysis needs it to read each request as a URL.</p>
+<div class="row"><button type="button" id="cl-run" class="primary" disabled>Check my log</button></div>
+<p class="hint card-status" data-tools-status aria-live="polite"></p><p id="rules-note" class="hint" hidden></p>
+<p id="cl-example-note" class="hint note" hidden>Example loaded: a synthetic log from documentation addresses on a reserved host, checked against synthetic range files that stand in for the providers' files. None of it was collected.</p>
+<div id="cl-alert" class="alert" role="alert" hidden></div>
+</section>
+<section class="card" id="cl-result" aria-labelledby="cl-result-h" hidden>
+<h2 id="cl-result-h" tabindex="-1">2. What the page found</h2>
+<div id="cl-summary" aria-live="polite"></div>
+</section>
+<section class="card" id="cl-next" aria-labelledby="cl-next-h" hidden>
+<h2 id="cl-next-h">3. What to do next</h2>
+<ul class="next-steps">
+<li><strong>Look closer.</strong> The <a href="../analyze/#preset=access-log">workbench's access-log preset</a> shows the same analysis with its clusters, runs and timing; the <a href="../identity/">agent identity page</a> lists every declared agent and takes newer copies of the providers' files. Paste the log there again: pages share nothing.</li>
+<li><strong>Share sightings.</strong> From the workbench, a <a href="../operators/#share-sightings">sightings file</a> lets the same swarm be matched across sites without sending your log.</li>
+<li><strong>Report a swarm.</strong> If the requests look like an AI agent acting against your site, <a href="../submit/">report it</a>: the form builds the report in your browser and sends nothing itself.</li>
+<li><strong>Talk to us privately.</strong> Questions, or a report from us to answer: <a href="../contact/">contact</a>. Please do not open a public issue that names your host.</li>
+</ul>
+<p class="hint">Flagged requests and spoofed agents are hints to check against the rest of your logs, not proof of who sent them (<a href="../operators/#what-to-expect-in-your-own-logs">what to expect in your own logs</a>).</p>
+</section>"##;
 
 /// Agent identity: an operator checks the agents its own log declares
 /// against the providers' published ranges and keys
@@ -229,8 +276,8 @@ pub const SUBMIT: &str = r##"<header class="page-head compact"><h1>Report a swar
 /// project without naming a host in public.
 pub const OPERATORS_PANEL: &str = r##"<aside class="card callout-card" aria-labelledby="check-h">
 <h2 id="check-h">Check your access log in the browser</h2>
-<p>The workbench has an access-log preset: paste your web server's log (Common or Combined Log Format), name your host in the field map, and it runs the same rules over your requests. The log is analysed in the page and never uploaded.</p>
-<p><a class="button primary" href="../analyze/#preset=access-log">Open the access-log preset</a></p>
+<p><a href="../check-logs/">Check my logs</a> takes your web server's log (Common or Combined Log Format) once, runs the indicator rules over the requests to your host and checks every agent that names itself against its provider's published addresses, then says in plain words what it found and what to do next. The workbench's access-log preset shows the same analysis in full. The log stays in the page and is never uploaded.</p>
+<p><a class="button primary" href="../check-logs/">Check my logs</a> <a class="button" href="../analyze/#preset=access-log">Open the access-log preset</a></p>
 <p>Requests that name an AI provider's agent (<code>ChatGPT-User</code>, <code>Claude-User</code>, a signature) can be checked against the ranges and keys the provider publishes, in the browser too: <a href="../identity/">agent identity</a> (<a href="#agents-that-name-themselves">how</a>).</p>
 </aside>
 <aside class="card callout-card" aria-labelledby="contact-h">

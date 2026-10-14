@@ -101,7 +101,10 @@
         "callback_service": { "$ref": "#/$defs/ratio" },
         "scaffold": { "$ref": "#/$defs/ratio" },
         "co_activity": { "$ref": "#/$defs/ratio" },
-        "co_target": { "$ref": "#/$defs/ratio" }
+        "co_target": { "$ref": "#/$defs/ratio" },
+        "ordered_co_target": { "$ref": "#/$defs/ratio" },
+        "scaffold_lineage": { "$ref": "#/$defs/ratio" },
+        "prompt_echo": { "$ref": "#/$defs/ratio" }
       }
     },
     "scaffold": {
@@ -139,7 +142,20 @@
         "min_hosts": { "$ref": "#/$defs/count" },
         "max_holders": { "$ref": "#/$defs/count" },
         "max_chance": { "$ref": "#/$defs/share" },
-        "fdr": { "$ref": "#/$defs/share" }
+        "fdr": { "$ref": "#/$defs/share" },
+        "order_min_hosts": { "$ref": "#/$defs/count" }
+      }
+    },
+    "prompt_echo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_words": { "$ref": "#/$defs/count" },
+        "min_similarity": { "$ref": "#/$defs/share" },
+        "max_holders": { "$ref": "#/$defs/count" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" },
+        "common_templates": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     },
     "swarm": {
@@ -153,7 +169,29 @@
         "lockstep_permutations": { "type": "integer", "minimum": 1 },
         "lockstep_max_permutations": { "type": "integer", "minimum": 1 },
         "lockstep_max_chance": { "$ref": "#/$defs/share" },
+        "dispatch_min_followers": { "$ref": "#/$defs/count" },
+        "dispatch_pair_max_chance": { "$ref": "#/$defs/share" },
+        "dispatch_lag_tolerance_bins": { "$ref": "#/$defs/count" },
+        "dispatch_max_chance": { "$ref": "#/$defs/share" },
         "fdr": { "$ref": "#/$defs/share" }
+      }
+    },
+    "agentness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "robots_window_secs": { "$ref": "#/$defs/secs" },
+        "robots_min_pages": { "$ref": "#/$defs/count" },
+        "robots_min_share": { "$ref": "#/$defs/share" },
+        "robots_min_repeats": { "$ref": "#/$defs/count" },
+        "robots_max_chance": { "$ref": "#/$defs/share" },
+        "rate_window_secs": { "type": "integer", "minimum": 1 },
+        "rate_min_cap": { "$ref": "#/$defs/count" },
+        "rate_min_saturated": { "$ref": "#/$defs/count" },
+        "rate_press_secs": { "$ref": "#/$defs/secs" },
+        "rate_permutations": { "type": "integer", "minimum": 1 },
+        "rate_max_permutations": { "type": "integer", "minimum": 1 },
+        "rate_max_chance": { "$ref": "#/$defs/share" }
       }
     },
     "cut_lengths": {

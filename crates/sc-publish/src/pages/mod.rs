@@ -325,6 +325,57 @@ fn manual_terms(first: &[docs::Doc], sources: &[(String, String)]) -> docs::Term
     t
 }
 
+/// A notice's link-card and search description: the first paragraph of
+/// its body as plain text, cut to a sentence-sized length, then its status
+/// and date. A body with no paragraph gives the status line alone.
+fn notice_description(n: &NoticeFile) -> String {
+    let status = format!(
+        "Notice {}: status {}, updated {}.",
+        n.meta.id,
+        n.meta.status.label(),
+        n.meta.updated
+    );
+    let mut para: Vec<&str> = Vec::new();
+    let mut fenced = false;
+    for l in n.body.lines() {
+        let t = l.trim();
+        if t.starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        let block = t.starts_with('#')
+            || t.starts_with('|')
+            || t.starts_with('>')
+            || t.starts_with("- ")
+            || t.starts_with("* ")
+            || t.split_once(". ")
+                .is_some_and(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
+        if t.is_empty() || block {
+            if !para.is_empty() {
+                break;
+            }
+            continue;
+        }
+        para.push(t);
+    }
+    let text = docs::strip_inline(&para.join(" "));
+    if text.is_empty() {
+        return status;
+    }
+    const MAX: usize = 200;
+    let cut = if text.chars().count() > MAX {
+        let head: String = text.chars().take(MAX).collect();
+        let head = head.rsplit_once(' ').map_or(head.as_str(), |(h, _)| h);
+        format!("{}...", head.trim_end_matches([',', ';', ':', '.']))
+    } else {
+        text
+    };
+    format!("{cut} {status}")
+}
+
 /// A plain `YYYY-MM-DD` date, as the sitemap's `lastmod` takes it.
 fn is_date(d: &str) -> bool {
     let b = d.as_bytes();
@@ -493,12 +544,7 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
             &format!("notices/{}/index.html", n.meta.id),
             "notices",
             &n.meta.title,
-            &format!(
-                "Notice {}: status {}, updated {}.",
-                n.meta.id,
-                n.meta.status.label(),
-                n.meta.updated
-            ),
+            &notice_description(n),
             notices::page_body(n),
         ));
         if let Some(p) = pages.last_mut() {
@@ -684,6 +730,16 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     p.scripts.push("js/pages/identity.js");
     pages.push(p);
     let mut p = page(
+        "check-logs/index.html",
+        "checklog",
+        "Check my logs",
+        "For a site operator: check your access log for AI agent activity and spoofed agent identities in the browser, with a plain summary and what to do next.",
+        shells::CHECK_LOGS.to_string(),
+    );
+    // No preload: the tools module loads on the first sign of input.
+    p.scripts.push("js/pages/checklog.js");
+    pages.push(p);
+    let mut p = page(
         "submit/index.html",
         "submit",
         "Report a swarm",
@@ -699,6 +755,23 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "How to reach the Swarmchasing maintainers privately, whoever you are: an operator, an AI provider, a researcher or an AI agent.",
         shells::CONTACT.to_string(),
     ));
+
+    // A tool page's content is its page script: date it by that file's
+    // last commit.
+    for p in pages.iter_mut().filter(|p| {
+        p.lastmod.is_none()
+            && matches!(
+                p.nav,
+                "analyze" | "checklog" | "unwrap" | "tools" | "identity" | "submit"
+            )
+    }) {
+        p.lastmod = p
+            .scripts
+            .iter()
+            .filter_map(|js| inp.lastmod.get(&format!("site/{js}")))
+            .max()
+            .cloned();
+    }
 
     let mut sitemap = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
@@ -916,6 +989,17 @@ mod tests {
     }
 
     #[test]
+    fn check_logs_offers_only_the_files_it_reads() {
+        // The page reads access logs only; records belong in the workbench.
+        let input = shells::CHECK_LOGS
+            .split("id=\"cl-file\"")
+            .nth(1)
+            .and_then(|t| t.split('>').next())
+            .unwrap();
+        assert_eq!(input.trim(), "accept=\".log,.txt\"");
+    }
+
+    #[test]
     fn manual_sections_are_articles_and_maintainer_docs_group_last() {
         let mut inp = inputs();
         inp.docs.push((
@@ -1032,6 +1116,27 @@ mod tests {
             .unwrap()
             .1;
         assert!(!idx.contains("name=\"sector\""));
+    }
+
+    #[test]
+    fn a_notice_is_described_by_its_first_paragraph() {
+        let n = synthetic_notices().remove(3);
+        let d = notice_description(&n);
+        assert!(
+            d.starts_with("A fixture for the site's tests. It describes no real incident."),
+            "{d}"
+        );
+        assert!(
+            d.ends_with("Notice synthetic-clinic-scan: status contained, updated 2026-08-20."),
+            "{d}"
+        );
+        let mut long = n.clone();
+        long.body = format!("# T\n\n{}\n\n- item\n", "word ".repeat(80));
+        let d = notice_description(&long);
+        assert!(d.contains("word..."), "{d}");
+        assert!(d.chars().count() < 280, "{d}");
+        long.body = "# Only a heading\n\n1. a list\n".into();
+        assert!(notice_description(&long).starts_with("Notice "));
     }
 
     #[test]

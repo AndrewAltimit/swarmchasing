@@ -4,9 +4,9 @@
 
 - **Prepared:** 2000-01-01
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-09-20 12:02:03 UTC
-- **Records:** 200 linked public records in 53 cluster(s) (of 393 records reviewed, 310 flagged)
+- **Records:** 200 linked public records in 53 cluster(s) (of 452 records reviewed, 345 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-13.2
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
 
 ## Summary
 
@@ -227,13 +227,13 @@ Every flagged request to each host, including requests outside the linked cluste
 
 | Host | Hits | First seen | Last seen | Status | Attack payloads |
 |---|---|---|---|---|---|
-| `records[.]agency[.]example` | 51 | 2026-07-02 10:00:00 UTC | 2026-08-13 09:00:00 UTC | historical | `exploit.cmdi`, `exploit.double_encoded_meta`, `exploit.double_encoded_path`, `exploit.php_eval`, `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.sqli_union`, `exploit.userinfo_confusion`, `exploit.xss` |
+| `records[.]agency[.]example` | 55 | 2026-07-02 10:00:00 UTC | 2026-10-06 08:16:00 UTC | ongoing | `exploit.cmdi`, `exploit.double_encoded_meta`, `exploit.double_encoded_path`, `exploit.php_eval`, `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.sqli_union`, `exploit.userinfo_confusion`, `exploit.xss` |
 | `data[.]portal[.]example` | 11 | 2026-07-02 10:01:00 UTC | 2026-08-07 09:01:00 UTC | historical | `exploit.sqli_boolean`, `exploit.traversal`, `exploit.traversal_single` |
-| `files[.]depot[.]example` | 9 | 2026-05-15 22:05:07 UTC | 2026-08-12 09:30:00 UTC | historical | `exploit.null_byte`, `exploit.sqli_boolean`, `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single`, `exploit.xss` |
-| `permits[.]xsvc-a[.]example` | 8 | 2026-09-20 10:00:00 UTC | 2026-09-20 10:02:24 UTC | ongoing | `exploit.sqli_boolean` |
-| `api[.]parts[.]example` | 7 | 2026-05-14 03:20:00 UTC | 2026-05-14 03:20:04 UTC | historical | `exploit.sqli_boolean`, `exploit.sqli_union` |
+| `files[.]depot[.]example` | 10 | 2026-05-15 22:05:07 UTC | 2026-10-03 14:20:00 UTC | ongoing | `exploit.null_byte`, `exploit.sqli_boolean`, `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single`, `exploit.xss` |
+| `api[.]parts[.]example` | 8 | 2026-05-14 03:20:00 UTC | 2026-10-05 16:40:00 UTC | ongoing | `exploit.sqli_boolean`, `exploit.sqli_union` |
+| `permits[.]xsvc-a[.]example` | 8 | 2026-09-20 10:00:00 UTC | 2026-09-20 10:02:24 UTC | historical | `exploit.sqli_boolean` |
 | `portal[.]clinic[.]example` | 6 | 2026-05-11 14:02:10 UTC | 2026-05-11 14:07:35 UTC | historical | `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.sqli_union` |
-| `portal[.]xsvc-gw[.]example` | 6 | 2026-09-20 12:00:00 UTC | 2026-09-20 12:02:03 UTC | ongoing | `exploit.sqli_boolean` |
+| `portal[.]xsvc-gw[.]example` | 6 | 2026-09-20 12:00:00 UTC | 2026-09-20 12:02:03 UTC | historical | `exploit.sqli_boolean` |
 | `intranet[.]lab[.]example` | 5 | 2026-05-16 09:30:00 UTC | 2026-05-16 09:30:04 UTC | historical | `exploit.sqli_boolean`, `exploit.sqli_quote`, `exploit.ssti`, `exploit.xss` |
 | `api[.]datausa[.]io` | 4 | 2026-08-03 15:30:00 UTC | 2026-08-20 07:00:00 UTC | historical | `exploit.open_redirect_probe`, `exploit.ssti`, `exploit.traversal`, `exploit.traversal_single` |
 | `login[.]coop[.]example` | 4 | 2026-05-13 16:40:00 UTC | 2026-05-13 16:44:00 UTC | historical | `exploit.sqli_boolean` |
@@ -249,7 +249,7 @@ Every flagged request to each host, including requests outside the linked cluste
 | `api[.]plant-b[.]example` | 2 | 2026-09-03 09:00:00 UTC | 2026-09-03 09:02:00 UTC | historical | `exploit.traversal`, `exploit.traversal_single` |
 | `billing[.]utility-portal[.]example` | 2 | 2026-03-12 16:00:00 UTC | 2026-03-12 16:30:00 UTC | historical | `exploit.sqli_boolean` |
 | `demo[.]testfire[.]net` | 2 | 2026-08-11 09:00:00 UTC | 2026-08-11 09:00:30 UTC | historical | `exploit.sqli_boolean`, `exploit.xss` |
-| `intranet[.]xsvc-h[.]example` | 2 | 2026-09-20 11:00:00 UTC | 2026-09-20 11:04:00 UTC | ongoing | `exploit.sqli_union` |
+| `intranet[.]xsvc-h[.]example` | 2 | 2026-09-20 11:00:00 UTC | 2026-09-20 11:04:00 UTC | historical | `exploit.sqli_union` |
 | `meter[.]utility-portal[.]example` | 2 | 2026-03-12 16:02:00 UTC | 2026-03-12 16:32:00 UTC | historical | `exploit.sqli_boolean` |
 | `node2[.]ledger[.]example` | 2 | 2026-05-14 04:37:49 UTC | 2026-05-14 07:02:49 UTC | historical | `exploit.sqli_boolean` |
 | `node3[.]ledger[.]example` | 2 | 2026-05-14 05:29:29 UTC | 2026-05-14 07:51:09 UTC | historical | `exploit.sqli_boolean` |
@@ -708,11 +708,13 @@ Clusters tied by soft links (shared pauses, reruns, recon openings, encoding, sh
 
 - **F1**: C1, C2, 1 soft link(s): co-activity (weakest pair 0.96)
   - C1 ↔ C2: co-activity (0.96): 8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 5.0e-3: 2.1e-9 analytic, a share of 0.005 of 199 circular shifts; …
-- **F2**: C17, C18, C19, 3 soft link(s): shared scaffold (weakest pair 0.95)
+- **F2**: C10, C44, 1 soft link(s): ordered co-target (weakest pair 0.97)
+  - C10 ↔ C44: ordered co-target (0.97): 5 of 5 shared rare hosts first touched in the same order, in the same hours (chance 8.3e-3 for a random order, 0.01 such pairs expected among 1 tested): one ord…
+- **F3**: C17, C18, C19, 3 soft link(s): shared scaffold (weakest pair 0.95)
   - C17 ↔ C18: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
   - C17 ↔ C19: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
   - C18 ↔ C19: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 46 comparable clusters and 0 record(s) outside them, a base rate of 4.4e-2 (chance 2.0e-3 for the rare…
-- **F3**: C42, C43, 1 soft link(s): shared scaffold (weakest pair 0.95)
+- **F4**: C42, C43, 1 soft link(s): shared scaffold (weakest pair 0.95)
   - C42 ↔ C43: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 2 of 46 comparable clusters and 0 record(s) outside them, a base rate of 2.2e-2 (chance 4.9e-4 for the rare…
 
 ## Possible interaction (SC-T9)
@@ -730,6 +732,8 @@ Every pair test over the whole analysis, by family: the pairs tested, those kept
 
 - scaffold: 4 kept of 6 tested (4 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
 - co_activity: 1 kept of 2 tested (1 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
+- ordered_co_target: 1 kept of 1 tested (1 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
+- scaffold_lineage: 0 kept of 5 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 - role_sequence: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 - disjoint_partition: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 

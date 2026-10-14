@@ -734,3 +734,65 @@ fn path_hints_describe_but_never_score() {
     assert_eq!(c.paths.fabricated_ids, 3);
     assert!(b.clusters[0].paths.preambles.is_empty());
 }
+
+#[test]
+fn a_fabricated_value_in_two_clusters_is_a_shared_invention_hint() {
+    // Two inboxes a week apart, both inventing the same placeholder UUID;
+    // a third with its own.
+    let mut obs = Vec::new();
+    for (f, (inbox, id)) in [
+        (
+            "0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a",
+            "12345678-1234-1234-1234-123456789abc",
+        ),
+        (
+            "7d2e4a10-2222-4b3c-8a66-4e3f2a1b0c9d",
+            "12345678-1234-1234-1234-123456789abc",
+        ),
+        (
+            "3c4d5e6f-3333-4d4e-9b77-5f4e3b2c1d0e",
+            "aaaaaaaa-bbbb-bbbb-cccc-000000000000",
+        ),
+    ]
+    .iter()
+    .enumerate()
+    {
+        for k in 0..2 {
+            obs.push(o(
+                1_791_000_000 + f as i64 * 7 * 86_400 + k * 60,
+                &format!("https://h{k}.c{f}.example/o/{id}?cb=https://webhook.site/{inbox}"),
+            ));
+        }
+    }
+    let a = analyze(obs, &Rules::default_rules());
+    assert_eq!(a.clusters.len(), 3, "{:?}", a.clusters);
+    let shared: Vec<usize> = a
+        .clusters
+        .iter()
+        .map(|c| c.paths.shared_invention.len())
+        .collect();
+    assert_eq!(shared.iter().filter(|&&n| n == 1).count(), 2, "{shared:?}");
+    let c = a
+        .clusters
+        .iter()
+        .find(|c| !c.paths.shared_invention.is_empty())
+        .unwrap();
+    assert_eq!(c.paths.shared_invention[0].clusters, 2);
+    assert_eq!(
+        c.paths.shared_invention[0].value,
+        "12345678-1234-1234-1234-123456789abc"
+    );
+    // A model-family hint, never a soft link.
+    assert!(a.soft_links.iter().all(|l| !l.detail.contains("12345678")));
+    let render = |audience| {
+        crate::report::render_markdown(
+            &a,
+            &crate::report::ReportOptions {
+                audience,
+                ..Default::default()
+            },
+        )
+    };
+    assert!(render(crate::report::Audience::Internal).contains("shared invention"));
+    assert!(!render(crate::report::Audience::Provider).contains("shared invention"));
+}

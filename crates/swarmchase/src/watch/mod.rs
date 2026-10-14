@@ -46,7 +46,16 @@
 //!
 //! Each run reads the stored records of the analysis window plus the overlap,
 //! and this run's new records whatever their capture time; the archive burst
-//! baseline is taken over the same span.
+//! baseline is taken over the same span, and the analysis covers the window
+//! and every new record.
+//!
+//! A run saves `state.json` after each source, with the IDs it stored as
+//! `undigested`; they are cleared once the digest and `run.json` are
+//! written, so the next run reports what a run cut short had stored. The
+//! ledger and the autonomy log are saved between those two steps, so a run
+//! cut short before its digest leaves them as they were. Steps after
+//! collection that fail become digest alerts instead of ending the run; a
+//! step after the digest that fails ends it with an error. A source whose query changed starts over ([`pull::fingerprint`]).
 //!
 //! Retention (docs/policies.md): run directories and stored records older than
 //! `retain_days` are deleted at the end of every run. Records needed for a case
@@ -74,8 +83,7 @@ pub(crate) mod triage;
 
 use crate::health::{RuleHistory, RuleRun};
 use crate::store::{
-    append, load_store_counted, prune, read_json, read_json_kept, to_ndjson, write_json,
-    write_json_kept,
+    append, load_store_counted, prune, read_json_kept, to_ndjson, write_json, write_json_kept,
 };
 use anyhow::{Context, Result, bail};
 use cases::{CaseCheck, CaseWatch};
@@ -175,10 +183,23 @@ pub struct State {
     /// Per case: records that matched its indicators, and what was proposed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cases: BTreeMap<String, CaseWatch>,
+    /// Per source, the IDs of records stored but not yet reported in a
+    /// digest. Saved with each source's progress and cleared once the
+    /// run's digest and `run.json` are written, so a run cut short after
+    /// collecting reports its records as new in the next run's digest.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub undigested: BTreeMap<String, BTreeSet<String>>,
+    /// State of sources no longer in the watchlist, set aside rather than
+    /// dropped: a source added back under the same name continues from it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub retired: BTreeMap<String, SourceState>,
 }
 
 #[derive(clap::Args)]
+#[command(args_conflicts_with_subcommands = true)]
 pub struct WatchArgs {
+    #[command(subcommand)]
+    cmd: Option<WatchCmd>,
     /// Watchlist TOML (see watchlist.toml).
     #[arg(default_value = "watchlist.toml")]
     watchlist: PathBuf,
@@ -193,8 +214,13 @@ pub struct WatchArgs {
     /// Check the watchlist and exit: unknown keys, bad values, duplicate
     /// names, and every source built as a run builds it. Reads no data
     /// directory and sends no request.
-    #[arg(long, conflicts_with_all = ["init", "public_log", "triage"])]
+    #[arg(long, conflicts_with_all = ["init", "public_log", "triage", "only"])]
     check: bool,
+    /// Pull only this source (by name), with its cursor and health as a
+    /// full run keeps them; the other sources are left as they are. The
+    /// analysis and digest cover the whole store as usual.
+    #[arg(long, value_name = "NAME")]
+    only: Option<String>,
     /// Also write a summary safe for a public CI log to this file: each
     /// source's name, kind, status, counts and duration, and the totals.
     /// Nothing about records or leads.
@@ -227,7 +253,49 @@ pub struct WatchArgs {
     triage_secs: u64,
 }
 
+#[derive(clap::Subcommand)]
+enum WatchCmd {
+    /// Make sources start over: forget each one's cursor, seen IDs, resume
+    /// key and stream checkpoint, keeping its health history. The next run
+    /// pulls it as if new (from its `from`, if set). Takes the data lock.
+    Reset {
+        /// Source names, as in state.json (sources no longer in the
+        /// watchlist included).
+        #[arg(required = true)]
+        names: Vec<String>,
+        #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+        out: PathBuf,
+    },
+    /// Delete cached HTTP responses (`<data>/cache/http/`) older than
+    /// `--max-age-hours`, by default the watchlist's `http_cache_ttl_secs`
+    /// and at least a day, as every run does. Takes the data lock.
+    PruneCache {
+        #[arg(default_value = "watchlist.toml")]
+        watchlist: PathBuf,
+        #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+        out: PathBuf,
+        /// Keep entries younger than this many hours; 0 deletes them all.
+        #[arg(long)]
+        max_age_hours: Option<u64>,
+    },
+}
+
 pub fn run(args: WatchArgs) -> Result<()> {
+    match args.cmd {
+        Some(WatchCmd::Reset { names, out }) => return reset(&out, &names),
+        Some(WatchCmd::PruneCache {
+            watchlist,
+            out,
+            max_age_hours,
+        }) => {
+            let age = match max_age_hours {
+                Some(h) => Duration::from_secs(h * 3600),
+                None => cache_max_age(&read_watchlist(&watchlist)?),
+            };
+            return prune_cache_cmd(&out, age);
+        }
+        None => {}
+    }
     if args.check {
         return check::run(&args.watchlist);
     }
@@ -248,7 +316,10 @@ pub fn run(args: WatchArgs) -> Result<()> {
             notices: &args.notices,
             public_log: args.public_log.as_deref(),
         },
-        args.init,
+        &RunOpts {
+            init: args.init,
+            only: args.only.as_deref(),
+        },
         &rules,
         triage,
     )
@@ -262,23 +333,200 @@ struct Paths<'a> {
     public_log: Option<&'a Path>,
 }
 
+/// How a run goes.
+struct RunOpts<'a> {
+    init: bool,
+    /// Pull only this source.
+    only: Option<&'a str>,
+}
+
+fn read_watchlist(watchlist: &Path) -> Result<Watchlist> {
+    toml::from_str(
+        &std::fs::read_to_string(watchlist)
+            .with_context(|| format!("reading {}", watchlist.display()))?,
+    )
+    .context("watchlist")
+}
+
+/// How long a cached HTTP response is kept: its TTL, and at least a day.
+fn cache_max_age(wl: &Watchlist) -> Duration {
+    Duration::from_secs(wl.http_cache_ttl_secs.max(DAY as u64))
+}
+
+/// `watch reset`: start the named sources over, under the data lock.
+fn reset(out: &Path, names: &[String]) -> Result<()> {
+    let _lock = crate::store::lock_data(out, "watch reset")?;
+    let state_path = out.join("state.json");
+    let Some(mut state) = read_json_kept::<State>(&state_path)? else {
+        bail!(
+            "no state.json in {}; nothing to reset",
+            crate::store::describe_data(out)
+        );
+    };
+    let known: Vec<String> = state
+        .sources
+        .keys()
+        .chain(state.retired.keys())
+        .cloned()
+        .collect();
+    for n in names {
+        let st = match state.sources.get_mut(n) {
+            Some(st) => st,
+            None => state.retired.get_mut(n).with_context(|| {
+                format!(
+                    "no source `{n}` in {}; it knows {}",
+                    state_path.display(),
+                    known.join(", ")
+                )
+            })?,
+        };
+        st.reset_position();
+    }
+    write_json_kept(&state_path, &state)?;
+    println!(
+        "reset {}: the next run pulls {} from the start (or its `from`); health history kept",
+        names.join(", "),
+        if names.len() == 1 { "it" } else { "them" }
+    );
+    Ok(())
+}
+
+/// `watch prune-cache`.
+fn prune_cache_cmd(out: &Path, age: Duration) -> Result<()> {
+    let _lock = crate::store::lock_data(out, "watch prune-cache")?;
+    let dir = out.join("cache").join("http");
+    let st = sc_collect::prune_http_cache(&dir, age, chrono::Utc::now().timestamp())
+        .with_context(|| format!("pruning {}", dir.display()))?;
+    println!(
+        "{}: deleted {} entr{} ({}), kept {} ({})",
+        dir.display(),
+        st.removed,
+        if st.removed == 1 { "y" } else { "ies" },
+        human_bytes(st.removed_bytes),
+        st.entries,
+        human_bytes(st.bytes)
+    );
+    Ok(())
+}
+
+fn human_bytes(b: u64) -> String {
+    match b {
+        b if b >= 1 << 20 => format!("{:.1} MB", b as f64 / f64::from(1u32 << 20)),
+        b if b >= 1 << 10 => format!("{:.1} KB", b as f64 / 1024.0),
+        b => format!("{b} B"),
+    }
+}
+
+/// What the collection phase gathered.
+#[derive(Default)]
+struct Collected {
+    reports: Vec<SourceReport>,
+    /// This run's new records, and those carried over from a run that
+    /// ended before its digest.
+    fresh: Vec<Observation>,
+    new_ids: BTreeSet<String>,
+    ids_by_source: BTreeMap<String, BTreeSet<String>>,
+    alerts: Vec<Alert>,
+    notes: Vec<String>,
+    /// Records reported as new here that an earlier run collected.
+    carried: usize,
+}
+
+impl Collected {
+    fn add(&mut self, source: &str, o: Observation) {
+        self.ids_by_source
+            .entry(source.to_string())
+            .or_default()
+            .insert(o.id.clone());
+        if self.new_ids.insert(o.id.clone()) {
+            self.fresh.push(o);
+        }
+    }
+}
+
+/// A step after collection that failed: the run goes on without it, and
+/// the digest says so, rather than losing the records already collected.
+fn soft<T>(alerts: &mut Vec<Alert>, step: &str, r: Result<T>) -> Option<T> {
+    match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            eprintln!("{step}: error: {e:#}");
+            alerts.push(Alert::new(
+                AlertKind::StepFailed,
+                step,
+                format!(
+                    "The run's {step} step failed and was skipped ({}); the rest of the run went ahead.",
+                    crate::util::one_line(&format!("{e:#}"), 200)
+                ),
+            ));
+            None
+        }
+    }
+}
+
+/// A history file the run rebuilds as it goes (`summary.json`,
+/// `ledger.json`), or its `.bak` copy. When neither reads, the damaged file
+/// is moved aside to `<name>.damaged` and the history starts afresh, with
+/// an alert, instead of stopping the run.
+fn read_history<T: serde::de::DeserializeOwned>(p: &Path, alerts: &mut Vec<Alert>) -> Option<T> {
+    match read_json_kept(p) {
+        Ok(v) => v,
+        Err(e) => {
+            let name = p.file_name().unwrap_or_default().to_string_lossy();
+            let aside = p.with_file_name(format!("{name}.damaged"));
+            let moved = std::fs::rename(p, &aside).is_ok();
+            alerts.push(Alert::new(
+                AlertKind::StoreDamaged,
+                &name,
+                format!(
+                    "`{name}` could not be read ({}), nor its previous copy; this run starts it afresh{}, so clusters may be reported as new again.",
+                    crate::util::one_line(&format!("{e:#}"), 160),
+                    if moved {
+                        format!(" and kept the damaged file as `{name}.damaged`")
+                    } else {
+                        String::new()
+                    }
+                ),
+            ));
+            None
+        }
+    }
+}
+
 fn watch(
     paths: &Paths,
-    init: bool,
+    opts: &RunOpts,
     rules: &Rules,
     triage_with: Option<(triage::Backend, triage::Limits)>,
 ) -> Result<()> {
     let (watchlist, out, notices) = (paths.watchlist, paths.out, paths.notices);
     let mut phases = timing::Phases::new();
-    let wl: Watchlist = toml::from_str(
-        &std::fs::read_to_string(watchlist)
-            .with_context(|| format!("reading {}", watchlist.display()))?,
-    )
-    .context("watchlist")?;
+    let wl = read_watchlist(watchlist)?;
     if wl.sources.is_empty() {
         bail!("{}: no [[source]] entries", watchlist.display());
     }
     wl.autonomy.check()?;
+    let sources: Vec<&WatchSource> = match opts.only {
+        Some(name) => {
+            let s = wl
+                .sources
+                .iter()
+                .find(|s| s.name == name)
+                .with_context(|| {
+                    format!(
+                        "--only {name}: no such source in {}; it has {}",
+                        watchlist.display(),
+                        wl.sources
+                            .iter()
+                            .map(|s| s.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })?;
+            vec![s]
+        }
+        None => wl.sources.iter().collect(),
+    };
     let mut client = Client::new(Duration::from_secs(wl.min_interval_secs))?;
     if wl.http_cache_ttl_secs > 0 {
         client = client.with_cache(
@@ -296,7 +544,7 @@ fn watch(
     let stamp = now.format("%Y%m%dT%H%M%SZ").to_string();
     let run_dir = out.join("runs").join(&stamp);
     if !crate::store::has_data(out) {
-        if !init {
+        if !opts.init {
             bail!(
                 "no watch data in {}; pass --init to start a new data directory there, or point --out or SWARMCHASE_DATA at the existing one",
                 crate::store::describe_data(out)
@@ -315,121 +563,28 @@ fn watch(
 
     let state_path = out.join("state.json");
     let mut state: State = read_json_kept(&state_path)?.unwrap_or_default();
-    let mut reports = Vec::new();
-    let mut fresh: Vec<Observation> = Vec::new();
-    let mut new_ids = BTreeSet::new();
-    let mut ids_by_source: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    let mut alerts = Vec::new();
-
-    for s in &wl.sources {
-        eprint!("{:<24} {:<8} {} … ", s.name, s.kind, s.query.pattern);
-        if let Ok(kind) = s.kind.parse::<Kind>()
-            && kind.needs_key()
-            && kind.key_from_env().is_none()
-        {
-            let why = format!("{} not set", kind.key_env().unwrap_or("API key"));
-            eprintln!("skipped: {why}");
-            let st = state.sources.entry(s.name.clone()).or_default();
-            alerts.extend(
-                st.health
-                    .observe_skip(&s.name, &why)
-                    .map(|t| Alert::new(AlertKind::SourceSkipped, &s.name, t)),
-            );
-            reports.push(SourceReport {
-                skipped: Some(format!("skipped: {why}")),
-                ..SourceReport::new(&s.name, &s.kind)
-            });
-            continue;
-        }
-        let st = state.sources.entry(s.name.clone()).or_default();
-        let before = client.requests();
-        let began = std::time::Instant::now();
-        let first_or_resumed = st.cursor == 0 || st.pending.is_some();
-        let res = pull(&client, s, st, wl.overlap_days * DAY, asn.as_ref());
-        st.last_run = Some(stamp.clone());
-        let mut rep = SourceReport {
-            requests: client.requests() - before,
-            duration_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
-            ..SourceReport::new(&s.name, &s.kind)
-        };
-        let short = res.as_ref().err().map(digest::short_reason);
-        if res.is_ok() && (first_or_resumed || st.pending.is_some()) {
-            st.health.observe_catch_up();
-        } else {
-            let outcome = match (&res, &short) {
-                (Ok(p), _) => Ok(p.pulled),
-                (Err(_), Some(why)) => Err(why.as_str()),
-                (Err(_), None) => Err("unknown error"),
-            };
-            let kind = if outcome.is_ok() {
-                AlertKind::SourceCollapsed
-            } else {
-                AlertKind::SourceFailed
-            };
-            alerts.extend(
-                st.health
-                    .observe(&s.name, outcome)
-                    .map(|t| Alert::new(kind, &s.name, t)),
-            );
-        }
-        match res {
-            Ok(p) => {
-                let pulled = p.pulled;
-                let new = p.new;
-                rep.pulled = pulled;
-                rep.new = new.len();
-                rep.pending = st.pending.is_some();
-                rep.stopped = p.stopped;
-                if let Some(c) = &p.coverage
-                    && c.canary == Some(false)
-                {
-                    alerts.push(Alert::new(
-                        AlertKind::CanaryFailed,
-                        &s.name,
-                        format!(
-                            "`{}` read {} but its canary failed: nothing came back in the shape the parser expects, so an empty pull here proves nothing. Check the source's format.",
-                            s.name,
-                            c.line()
-                        ),
-                    ));
-                }
-                rep.coverage = p.coverage;
-                rep.quiet = st
-                    .health
-                    .observe_yield(pulled)
-                    .map(|n| (n, st.health.ever_pulled));
-                st.last_error = None;
-                eprintln!(
-                    "{pulled} pulled, {} new{}",
-                    new.len(),
-                    if rep.pending { " (more next run)" } else { "" }
-                );
-                if !new.is_empty() {
-                    let nd = to_ndjson(&new)?;
-                    std::fs::write(run_dir.join(format!("{}.ndjson", s.name)), &nd)?;
-                    append(&out.join("store").join(format!("{}.ndjson", s.name)), &nd)?;
-                    let ids = ids_by_source.entry(s.name.clone()).or_default();
-                    for o in new {
-                        ids.insert(o.id.clone());
-                        if new_ids.insert(o.id.clone()) {
-                            fresh.push(o);
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("error: {e:#}");
-                st.last_error = Some(format!("{e:#}"));
-                rep.error = short;
-            }
-        }
-        // Save after every source so an interrupted run keeps its progress.
-        write_json_kept(&state_path, &state)?;
-        reports.push(rep);
+    let mut c = Collected::default();
+    carry_over(out, &state, &mut c);
+    collect(
+        &Collect {
+            client: &client,
+            out,
+            run_dir: &run_dir,
+            state_path: &state_path,
+            stamp: &stamp,
+            overlap: wl.overlap_days * DAY,
+            asn: asn.as_ref(),
+        },
+        &sources,
+        &mut state,
+        &mut c,
+    )?;
+    if opts.only.is_none() {
+        retire_missing(&wl, &mut state, &mut c.notes);
     }
 
     for (host, why) in client.down_hosts() {
-        alerts.push(Alert::new(
+        c.alerts.push(Alert::new(
             AlertKind::HostDown,
             &host,
             format!(
@@ -439,7 +594,23 @@ fn watch(
     }
 
     phases.end("collect");
-    let canaries = crate::canary::watch_sightings(out, &fresh, &run_dir)?;
+    // From here on a step that fails becomes a digest alert: the records
+    // are stored and marked undigested, and the digest is what reports them.
+    let Collected {
+        reports,
+        fresh,
+        new_ids,
+        ids_by_source,
+        mut alerts,
+        mut notes,
+        carried,
+    } = c;
+    let canaries = soft(
+        &mut alerts,
+        "canary",
+        crate::canary::watch_sightings(out, &fresh, &run_dir),
+    )
+    .unwrap_or_default();
 
     // Coordinated accounts on public platforms: its own pull and store, so a
     // failure here never stops the record analysis.
@@ -456,8 +627,12 @@ fn watch(
     // Rolling analysis over everything recent, not just this run's records,
     // so clusters can span runs.
     let since = now.timestamp() - wl.analysis_window_days * DAY;
-    let (mut stored, damaged) =
-        load_store_counted(&out.join("store"), since - wl.overlap_days * DAY)?;
+    let (mut stored, damaged) = soft(
+        &mut alerts,
+        "store",
+        load_store_counted(&out.join("store"), since - wl.overlap_days * DAY),
+    )
+    .unwrap_or_default();
     for (file, n) in &damaged {
         eprintln!("warning: {file}: {n} unreadable line(s) skipped");
         alerts.push(Alert::new(
@@ -481,7 +656,16 @@ fn watch(
         contained_after_days: wl.contained_after_days,
     }
     .monitor(&fresh, &mut state.cases);
-    let recent: Vec<Observation> = stored.into_iter().filter(|o| o.ts >= since).collect();
+    // The window, and every new record whatever its capture time: a record
+    // indexed late is new to us, so it is analysed in the run that found it.
+    let before_window = fresh.iter().filter(|o| o.ts > 0 && o.ts < since).count();
+    if let Some(note) = before_window_note(&fresh, since, wl.analysis_window_days) {
+        notes.push(note);
+    }
+    let recent: Vec<Observation> = stored
+        .into_iter()
+        .filter(|o| o.ts >= since || new_ids.contains(&o.id))
+        .collect();
     let a = analyze(recent, rules);
     let (drifts, restarted) = state.rules.observe(
         &a.rules_version,
@@ -490,26 +674,26 @@ fn watch(
             .map(|(s, ids)| (s.clone(), RuleRun::from_analysis(&a, ids)))
             .collect(),
     );
-    write_json_kept(&state_path, &state)?;
+    soft(&mut alerts, "state", write_json_kept(&state_path, &state));
     alerts.extend(
         drifts
             .iter()
             .map(|d| Alert::new(AlertKind::RuleDrift, &d.source, d.line())),
     );
-    let mut notes = Vec::new();
     if restarted {
         notes.push(format!(
             "Rules changed to {}; the drift baseline restarts from this run.",
             a.rules_version
         ));
     }
-    let health = Health {
-        sources: reports,
-        alerts,
-        notes,
-    };
     crate::util::print_summary(&a);
-    std::fs::write(run_dir.join("analysis.json"), serde_json::to_string(&a)?)?;
+    soft(
+        &mut alerts,
+        "analysis",
+        serde_json::to_string(&a)
+            .map_err(anyhow::Error::from)
+            .and_then(|j| Ok(std::fs::write(run_dir.join("analysis.json"), j)?)),
+    );
     let md = render_markdown(
         &a,
         &ReportOptions {
@@ -517,15 +701,20 @@ fn watch(
             ..Default::default()
         },
     );
-    std::fs::write(run_dir.join("case-notes.md"), md)?;
+    soft(
+        &mut alerts,
+        "case notes",
+        std::fs::write(run_dir.join("case-notes.md"), md).map_err(anyhow::Error::from),
+    );
     phases.end("analysis");
 
     let summary_path = out.join("summary.json");
-    let prev: Summary = read_json(&summary_path)?.unwrap_or_default();
+    let prev: Summary = read_history(&summary_path, &mut alerts).unwrap_or_default();
     let generated = now.format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let next = summarise(&a, &prev, generated.clone());
     let ledger_path = out.join(ledger::FILE);
-    let mut ledger: ledger::Ledger = read_json(&ledger_path)?.unwrap_or_else(ledger::Ledger::new);
+    let mut ledger: ledger::Ledger =
+        read_history(&ledger_path, &mut alerts).unwrap_or_else(ledger::Ledger::new);
     let observed = ledger.observe(&a, &stamp, now.timestamp(), &new_ids);
     let fleets = ledger.observe_fleets(&a, &observed, &stamp, now.timestamp());
     // New or escalated is decided against each cluster's own thread, so a
@@ -554,6 +743,29 @@ fn watch(
         now.timestamp(),
         &autonomy::load(out),
     );
+    // Written before the digest, so a failure is in it.
+    soft(
+        &mut alerts,
+        "attention",
+        write_json(&run_dir.join(attention::FILE), &queue),
+    );
+    // Cached responses are raw collector answers: kept no longer than the
+    // TTL (and a day), on every run.
+    let cache = soft(
+        &mut alerts,
+        "cache",
+        sc_collect::prune_http_cache(
+            &out.join("cache").join("http"),
+            cache_max_age(&wl),
+            now.timestamp(),
+        )
+        .map_err(anyhow::Error::from),
+    );
+    let health = Health {
+        sources: reports,
+        alerts,
+        notes,
+    };
     let mut priority = priority::assess(&leads, &health.alerts, &cases.due);
     priority.add(autonomy::priority_reasons(&decisions));
     priority.add(
@@ -597,10 +809,18 @@ fn watch(
     digest
         .text
         .push_str(&phases.digest_section(&health.sources));
+    if let Some(st) = cache {
+        digest.text.push_str(&format!(
+            "\nHTTP cache: {} response(s) served from it this run; {} entr{} kept ({}), {} older than {} hours deleted.\n",
+            client.cache_hits(),
+            st.entries,
+            if st.entries == 1 { "y" } else { "ies" },
+            human_bytes(st.bytes),
+            st.removed,
+            cache_max_age(&wl).as_secs() / 3600
+        ));
+    }
     std::fs::write(run_dir.join("digest.md"), &digest.text)?;
-    write_json(&run_dir.join(attention::FILE), &queue)?;
-    write_json(&ledger_path, &ledger)?;
-    autonomy::append(out, &decisions)?;
     phases.end("report");
     write_json(
         &run_dir.join(run_summary::FILE),
@@ -609,6 +829,8 @@ fn watch(
             generated: &generated,
             analysis: &a,
             new_records: new_ids.len(),
+            carried_over: carried,
+            new_before_window: before_window,
             changed: digest.changed,
             priority: &priority,
             leads: &leads,
@@ -620,34 +842,45 @@ fn watch(
             durations: &phases.summary(),
         }),
     )?;
-    write_json(&run_dir.join("summary.json"), &next)?;
-    write_json(&summary_path, &next)?;
-    std::fs::write(out.join("LATEST"), &stamp)?;
-    let trimmed = crate::store::trim_analyses(out, wl.keep_analysis_runs)?;
-    if trimmed > 0 {
-        eprintln!(
-            "retention: dropped the full analysis of {trimmed} run(s) beyond the newest {}",
-            wl.keep_analysis_runs
-        );
-    }
-    if wl.retain_days > 0 {
-        let cutoff = now.timestamp() - wl.retain_days.max(wl.analysis_window_days) * DAY;
-        let (runs, records) = prune(out, cutoff)?;
-        for cw in state.cases.values_mut() {
-            cw.hits.retain(|h| h.ts <= 0 || h.ts >= cutoff);
+    // What fails from here on loses nothing the digest has not reported;
+    // the run still ends with an error so it is noticed.
+    let mut late = Vec::new();
+    let mut later = |step: &str, r: Result<()>| {
+        if let Err(e) = r {
+            eprintln!("{step}: error: {e:#}");
+            late.push(format!("{step}: {e:#}"));
         }
-        write_json_kept(&state_path, &state)?;
-        if ledger.prune(cutoff) > 0 {
-            write_json(&ledger_path, &ledger)?;
-        }
-        autonomy::prune(out, cutoff)?;
-        if runs + records > 0 {
-            eprintln!(
-                "retention: deleted {runs} run dir(s) and {records} stored record(s) older than {} days",
-                wl.retain_days
-            );
-        }
-    }
+    };
+    // Saved only once the digest and run.json report this run: a run that
+    // stops before them leaves the ledger and the autonomy log as they
+    // were, so the next run reports its carried-over records as leads.
+    later("ledger", write_json_kept(&ledger_path, &ledger));
+    later("autonomy", autonomy::append(out, &decisions));
+    // The digest and run.json report this run's records: they are no
+    // longer undigested.
+    state.undigested.clear();
+    write_json_kept(&state_path, &state)?;
+    later(
+        "summary",
+        write_json(&run_dir.join("summary.json"), &next)
+            .and_then(|()| write_json_kept(&summary_path, &next)),
+    );
+    later(
+        "LATEST",
+        crate::store::write_atomic(&out.join("LATEST"), stamp.as_bytes()),
+    );
+    later(
+        "retention",
+        retain(
+            out,
+            &wl,
+            now.timestamp(),
+            &mut state,
+            &state_path,
+            &mut ledger,
+            &ledger_path,
+        ),
+    );
     eprintln!(
         "wrote {} ({}, priority {})",
         run_dir.display(),
@@ -674,6 +907,13 @@ fn watch(
         writeln!(f, "changed={}", digest.changed)?;
         writeln!(f, "priority={}", priority.level.label())?;
     }
+    if !late.is_empty() {
+        bail!(
+            "the digest was written, but {} step(s) after it failed: {}",
+            late.len(),
+            late.join("; ")
+        );
+    }
     let ran: Vec<_> = health
         .sources
         .iter()
@@ -690,6 +930,264 @@ fn watch(
             "every source failed; see {}",
             run_dir.join("digest.md").display()
         );
+    }
+    Ok(())
+}
+
+/// The digest note for new records captured before the analysis window:
+/// they are analysed in the run that found them, but later runs analyse
+/// the window only.
+fn before_window_note(fresh: &[Observation], since: i64, window_days: i64) -> Option<String> {
+    let old: Vec<i64> = fresh
+        .iter()
+        .map(|o| o.ts)
+        .filter(|&t| t > 0 && t < since)
+        .collect();
+    let oldest = old.iter().copied().min()?;
+    Some(format!(
+        "{} new record(s) were captured before the {window_days}-day analysis window (the oldest on {}); this run analyses them with the window, later runs leave them out. `case add --record` still finds them in the store until retention deletes them.",
+        old.len(),
+        sc_core::fmt_ts(oldest)
+    ))
+}
+
+/// Records an earlier run stored but never reported (it ended before its
+/// digest), loaded from the store into this run's new records.
+fn carry_over(out: &Path, state: &State, c: &mut Collected) {
+    let source_of: BTreeMap<&str, &str> = state
+        .undigested
+        .iter()
+        .flat_map(|(s, ids)| ids.iter().map(move |id| (id.as_str(), s.as_str())))
+        .collect();
+    if source_of.is_empty() {
+        return;
+    }
+    let all = match load_store_counted(&out.join("store"), i64::MIN) {
+        Ok((all, _)) => all,
+        Err(e) => {
+            soft::<()>(&mut c.alerts, "carry-over", Err(e));
+            return;
+        }
+    };
+    for o in all {
+        if let Some(src) = source_of.get(o.id.as_str()) {
+            c.carried += 1;
+            c.add(src, o);
+        }
+    }
+    c.notes.push(format!(
+        "{} record(s) stored by an earlier run that ended before its digest are reported as new in this one.",
+        c.carried
+    ));
+}
+
+/// Set aside the state of sources no longer in the watchlist, and restore
+/// it for a source added back under the same name.
+fn retire_missing(wl: &Watchlist, state: &mut State, notes: &mut Vec<String>) {
+    let names: BTreeSet<&str> = wl.sources.iter().map(|s| s.name.as_str()).collect();
+    let gone: Vec<String> = state
+        .sources
+        .keys()
+        .filter(|n| !names.contains(n.as_str()))
+        .cloned()
+        .collect();
+    for n in gone {
+        if let Some(st) = state.sources.remove(&n) {
+            notes.push(format!(
+                "`{n}` is no longer in the watchlist; its state is set aside under `retired` in state.json, and a source added back under that name continues from it."
+            ));
+            state.retired.insert(n, st);
+        }
+    }
+}
+
+/// What every source's pull needs.
+struct Collect<'a> {
+    client: &'a Client,
+    out: &'a Path,
+    run_dir: &'a Path,
+    state_path: &'a Path,
+    stamp: &'a str,
+    overlap: i64,
+    asn: Option<&'a sc_core::asn::AsnTable>,
+}
+
+/// Pull each source in turn, storing what is new and saving `state.json`
+/// after each, so an interrupted run keeps its progress; the IDs stored
+/// are kept as undigested until a digest reports them.
+fn collect(
+    x: &Collect,
+    sources: &[&WatchSource],
+    state: &mut State,
+    c: &mut Collected,
+) -> Result<()> {
+    for s in sources {
+        eprint!("{:<24} {:<8} {} … ", s.name, s.kind, s.query.pattern);
+        if let Some(st) = state.retired.remove(&s.name) {
+            state.sources.entry(s.name.clone()).or_insert(st);
+        }
+        if let Ok(kind) = s.kind.parse::<Kind>()
+            && kind.needs_key()
+            && kind.key_from_env().is_none()
+        {
+            let why = format!("{} not set", kind.key_env().unwrap_or("API key"));
+            eprintln!("skipped: {why}");
+            let st = state.sources.entry(s.name.clone()).or_default();
+            c.alerts.extend(
+                st.health
+                    .observe_skip(&s.name, &why)
+                    .map(|t| Alert::new(AlertKind::SourceSkipped, &s.name, t)),
+            );
+            c.reports.push(SourceReport {
+                skipped: Some(format!("skipped: {why}")),
+                ..SourceReport::new(&s.name, &s.kind)
+            });
+            continue;
+        }
+        let st = state.sources.entry(s.name.clone()).or_default();
+        let restarted = st.align(&pull::fingerprint(s));
+        if restarted {
+            c.notes.push(format!(
+                "`{}`'s query changed since its last run (pattern, match type, filter, kind or endpoint); its cursor, resume key and checkpoint were reset, so it reads from the start again.",
+                s.name
+            ));
+        }
+        let before = x.client.requests();
+        let began = std::time::Instant::now();
+        let first_or_resumed = st.cursor == 0 || st.pending.is_some();
+        let res = pull(x.client, s, st, x.overlap, x.asn);
+        st.last_run = Some(x.stamp.to_string());
+        let mut rep = SourceReport {
+            requests: x.client.requests() - before,
+            duration_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
+            ..SourceReport::new(&s.name, &s.kind)
+        };
+        let short = res.as_ref().err().map(digest::short_reason);
+        if res.is_ok() && (first_or_resumed || st.pending.is_some()) {
+            st.health.observe_catch_up();
+        } else {
+            let outcome = match (&res, &short) {
+                (Ok(p), _) => Ok(p.pulled),
+                (Err(_), Some(why)) => Err(why.as_str()),
+                (Err(_), None) => Err("unknown error"),
+            };
+            let kind = if outcome.is_ok() {
+                AlertKind::SourceCollapsed
+            } else {
+                AlertKind::SourceFailed
+            };
+            c.alerts.extend(
+                st.health
+                    .observe(&s.name, outcome)
+                    .map(|t| Alert::new(kind, &s.name, t)),
+            );
+        }
+        match res {
+            Ok(p) => {
+                let pulled = p.pulled;
+                let mut new = p.new;
+                let store_file = x.out.join("store").join(format!("{}.ndjson", s.name));
+                if restarted || st.restart {
+                    // Seen IDs were reset with the position: what the store
+                    // already holds is not new.
+                    let held: BTreeSet<String> =
+                        crate::store::read_ndjson::<Observation>(&store_file)
+                            .map(|(v, _)| v.into_iter().map(|o| o.id).collect())
+                            .unwrap_or_default();
+                    new.retain(|o| !held.contains(&o.id));
+                    st.restart = false;
+                }
+                rep.pulled = pulled;
+                rep.new = new.len();
+                rep.pending = st.pending.is_some();
+                rep.stopped = p.stopped;
+                if let Some(cov) = &p.coverage
+                    && cov.canary == Some(false)
+                {
+                    c.alerts.push(Alert::new(
+                        AlertKind::CanaryFailed,
+                        &s.name,
+                        format!(
+                            "`{}` read {} but its canary failed: nothing came back in the shape the parser expects, so an empty pull here proves nothing. Check the source's format.",
+                            s.name,
+                            cov.line()
+                        ),
+                    ));
+                }
+                rep.coverage = p.coverage;
+                rep.quiet = st
+                    .health
+                    .observe_yield(pulled)
+                    .map(|n| (n, st.health.ever_pulled));
+                st.last_error = None;
+                eprintln!(
+                    "{pulled} pulled, {} new{}",
+                    new.len(),
+                    if rep.pending { " (more next run)" } else { "" }
+                );
+                if !new.is_empty() {
+                    let nd = to_ndjson(&new)?;
+                    std::fs::write(x.run_dir.join(format!("{}.ndjson", s.name)), &nd)?;
+                    append(&store_file, &nd)?;
+                    state
+                        .undigested
+                        .entry(s.name.clone())
+                        .or_default()
+                        .extend(new.iter().map(|o| o.id.clone()));
+                    for o in new {
+                        c.add(&s.name, o);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("error: {e:#}");
+                st.last_error = Some(format!("{e:#}"));
+                rep.error = short;
+            }
+        }
+        // Save after every source so an interrupted run keeps its progress.
+        write_json_kept(x.state_path, state)?;
+        c.reports.push(rep);
+    }
+    Ok(())
+}
+
+/// Retention at the end of a run: trim old runs' full analyses, then
+/// delete run directories, stored records, case hits, ledger points and
+/// autonomy lines older than `retain_days`.
+fn retain(
+    out: &Path,
+    wl: &Watchlist,
+    now: i64,
+    state: &mut State,
+    state_path: &Path,
+    ledger: &mut ledger::Ledger,
+    ledger_path: &Path,
+) -> Result<()> {
+    let trimmed = crate::store::trim_analyses(out, wl.keep_analysis_runs)?;
+    if trimmed > 0 {
+        eprintln!(
+            "retention: dropped the full analysis of {trimmed} run(s) beyond the newest {}",
+            wl.keep_analysis_runs
+        );
+    }
+    if wl.retain_days > 0 {
+        let cutoff = now - wl.retain_days.max(wl.analysis_window_days) * DAY;
+        let (runs, records) = prune(out, cutoff)?;
+        for cw in state.cases.values_mut() {
+            cw.hits.retain(|h| h.ts <= 0 || h.ts >= cutoff);
+        }
+        write_json_kept(state_path, state)?;
+        if ledger.prune(cutoff) > 0 {
+            write_json_kept(ledger_path, ledger)?;
+        }
+        autonomy::prune(out, cutoff)?;
+        if runs + records > 0 {
+            eprintln!(
+                "retention: deleted {runs} run dir(s) and {records} stored record(s) older than {} days",
+                wl.retain_days
+            );
+        }
     }
     Ok(())
 }

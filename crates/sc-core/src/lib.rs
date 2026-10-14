@@ -76,7 +76,7 @@ pub use model::{
     Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SUBMISSION_SOURCE,
     SourceKind, Tactic, Tier, TsKind, fmt_ts, parse_ts, top_counts,
 };
-pub use paths::{FabricatedId, PathStats, fabricated_ids};
+pub use paths::{FabricatedId, PathStats, SharedInvention, fabricated_ids};
 pub use plant::{Corroboration, PlantSignal, PlantSignalKind};
 pub use recurrence::{ClusterRun, RecurrenceOptions, Rerun, TargetRun, cluster_reruns, reruns};
 pub use redact::{redact_observation, redact_url};
