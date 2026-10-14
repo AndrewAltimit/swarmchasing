@@ -432,6 +432,14 @@ Onset groups are hints: never scored, never a soft link, never a merge. Internal
 
 At most 200 edges are kept. Internal and provider reports list those touching the report's clusters (a provider report only those between two of them) under *Possible interaction (SC-T9)*, details defanged. Affected-operator reports and notices do not.
 
+## Slice onsets
+
+Onset groups need clusters above noise. A swarm whose agents each send a record or two, one per tag, never clusters there, but it changes counts: the watch reads each source's new records in slices (per rule, per specific scaffold template, per target site family) and looks for a slice whose rate per record rose ([`changepoint.rs`](../crates/sc-core/src/timing/changepoint.rs)).
+
+Each run is one bin of `k` slice records out of `n` records the source returned. The baseline rate `p0` is the slice's pooled rate over the older runs, with half a record of prior so a slice the baseline never saw stays finite. Over the newest runs (up to six), a one-sided Poisson CUSUM adds `k ln 3 - 2 n p0` per run, the log likelihood ratio of three times the baseline rate against it, restarting at zero when the sum falls below. A slice is rising when the sum reaches 4, with at least 3 records since the start of the rise and at least twice the baseline rate there. Exposure is in the expected count, so a source returning more rows at the same rate is not a rise; three older runs and 100 records under them are needed first.
+
+A source that changes (pagination, a new crawl, a recovery) lifts what was already there; a swarm adds slices of its own and lifts a few others. When at least three of a source's established slices, and at least 60% of them, rise in one run, the rise is read as the source. A rule rising both here and in the drift check reads "drift or onset". Slice onsets are leads for review in the mailed digest ([watch](reference/watch.md#slice-onsets)), never findings.
+
 ## Coordinated accounts on public platforms
 
 Agent swarms also act through accounts: near-identical issues, comments and vulnerability reports from fresh accounts, repositories, packages and Spaces created with templated names, stars and forks farmed onto one repository, test edits to wiki sandboxes, many at once. [`platform`](../crates/sc-core/src/platform/mod.rs) groups such public actions into **platform swarm candidates**, separately from the record analysis. A candidate is a hint for the admin; it never joins a cluster, scores a record or makes a fleet. The method is [SC-FM 5.15](manual/05-linking.md#fm-515-coordinated-accounts-on-public-platforms).

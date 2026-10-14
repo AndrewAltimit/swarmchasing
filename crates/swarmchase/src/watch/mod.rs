@@ -29,7 +29,8 @@
 //! `[autonomy]` turns it on.
 //!
 //! Every run also checks source health and rule drift against the trailing
-//! history in `state.json` (see `health.rs`) and reports both in the digest.
+//! history in `state.json` (see `health.rs`) and reports both in the digest,
+//! with slices of each source whose rate rose ([`onset`]).
 //! The digest also lists runs whose target sequence repeats an earlier run in
 //! another cluster (possible reruns, never merged) and bursts of archive
 //! captures of a host the store normally holds few captures of.
@@ -52,7 +53,9 @@
 //! A run saves `state.json` after each source, with the IDs it stored as
 //! `undigested`; they are cleared once the digest and `run.json` are
 //! written, so the next run reports what a run cut short had stored. Case
-//! hits, rule history and alert streaks are saved with that same write, and
+//! hits, rule history, onset history and alert streaks (sources' health
+//! included: the saves after each source keep the health the run found)
+//! are saved with that same write, and
 //! the ledger and the autonomy log just before it, so a run cut short
 //! before its digest leaves them as they were. The result is handed to the
 //! workflow (`$GITHUB_OUTPUT`) right after the digest and `run.json`,
@@ -85,6 +88,7 @@ pub(crate) mod digest;
 pub(crate) mod fleet_threads;
 pub(crate) mod ledger;
 pub(crate) mod mailed;
+pub(crate) mod onset;
 pub(crate) mod platform;
 pub(crate) mod priority;
 pub(crate) mod public_log;
@@ -93,7 +97,7 @@ pub(crate) mod run_summary;
 pub(crate) mod timing;
 pub(crate) mod triage;
 
-use crate::health::{RuleHistory, RuleRun, alert_due};
+use crate::health::{RuleHistory, RuleRun, SourceHealth, alert_due};
 use crate::store::{
     append, load_store_counted, prune, read_json_kept, to_ndjson, write_json, write_json_kept,
 };
@@ -202,6 +206,9 @@ pub struct State {
     /// Rule hit rates on recent runs' new records, for drift checks.
     #[serde(default)]
     pub rules: RuleHistory,
+    /// Per-run counts of each source's slices, for onsets ([`onset`]).
+    #[serde(default, skip_serializing_if = "onset::OnsetHistory::is_empty")]
+    pub onsets: onset::OnsetHistory,
     /// Per case: records that matched its indicators, and what was proposed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cases: BTreeMap<String, CaseWatch>,
@@ -215,6 +222,10 @@ pub struct State {
     /// dropped: a source added back under the same name continues from it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub retired: BTreeMap<String, SourceState>,
+    /// The newest run whose digest was mailed, as the last run found it:
+    /// retention may delete that run's marker ([`mailed`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_mailed: Option<String>,
     /// Hosts unavailable on the last runs, with how many runs in a row.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub host_down: BTreeMap<String, u32>,
@@ -617,6 +628,11 @@ fn watch(
 
     let state_path = out.join("state.json");
     let mut state: State = read_json_kept(&state_path)?.unwrap_or_default();
+    if let Some(m) = mailed::newest_marked(out)
+        && state.last_mailed.as_ref().is_none_or(|l| *l < m)
+    {
+        state.last_mailed = Some(m);
+    }
     let mut c = Collected::default();
     carry_over(out, &state, &mut c);
     for w in crate::commands::netranges::refresh_daily(&client, out) {
@@ -758,13 +774,24 @@ fn watch(
         .collect();
     let mut a = analyze(recent, rules);
     crate::commands::netranges::annotate_in(out, &mut a);
-    let (drifts, restarted) = state.rules.observe(
+    let (mut drifts, restarted) = state.rules.observe(
         &a.rules_version,
         ids_by_source
             .iter()
             .map(|(s, ids)| (s.clone(), RuleRun::from_analysis(&a, ids)))
             .collect(),
     );
+    let onsets = state.onsets.observe(
+        &a.rules_version,
+        ids_by_source
+            .iter()
+            .map(|(s, ids)| {
+                let run = onset::SliceRun::from_analysis(&a, ids, &stamp, now.timestamp());
+                (s.clone(), run)
+            })
+            .collect(),
+    );
+    onset::read_drifts(&onsets, &mut drifts);
     // Case hits and the rule history are saved with the undigested clear
     // below, not here: a run cut short before its digest must not mark a
     // case hit or a rule run as already reported.
@@ -859,9 +886,10 @@ fn watch(
         alerts,
         notes,
     };
-    let unmailed = mailed::unmailed(out, &stamp);
+    let unmailed = mailed::unmailed(out, &stamp, state.last_mailed.as_deref());
     let mut priority = priority::assess(&leads, &health.alerts, &cases.due);
     priority.add(autonomy::priority_reasons(&decisions));
+    priority.add(onset::priority_reasons(&onsets));
     if let Some(top) = unmailed.iter().map(mailed::Unmailed::level).max() {
         priority.add(vec![priority::Reason {
             level: top,
@@ -901,6 +929,8 @@ fn watch(
     digest
         .text
         .push_str(&fleet_threads::section(&a, &ledger, &fleets));
+    digest.text.push_str(&onset::section(&onsets));
+    digest.changed |= onsets.due();
     digest
         .text
         .push_str(&crate::canary::digest_section(&canaries));
@@ -1149,6 +1179,27 @@ struct Collect<'a> {
     deadline: Option<std::time::Instant>,
 }
 
+/// Save collection progress (cursors, seen and undigested IDs) with each
+/// source's health as the run found it. Health streaks reach the admin only
+/// through the digest, so they are saved with the run's final write: a run
+/// cut short before its digest leaves them as they were, and the next run
+/// alerts on the streak runs its digest would have.
+fn save_progress(
+    path: &Path,
+    state: &mut State,
+    start: &mut BTreeMap<String, SourceHealth>,
+) -> Result<()> {
+    let swap = |state: &mut State, start: &mut BTreeMap<String, SourceHealth>| {
+        for (name, st) in &mut state.sources {
+            std::mem::swap(&mut st.health, start.entry(name.clone()).or_default());
+        }
+    };
+    swap(state, start);
+    let r = write_json_kept(path, state);
+    swap(state, start);
+    r
+}
+
 /// Pull each source in turn, storing what is new and saving `state.json`
 /// after each, so an interrupted run keeps its progress; the IDs stored
 /// are kept as undigested until a digest reports them. Sources deferred by
@@ -1160,6 +1211,13 @@ fn collect(
     state: &mut State,
     c: &mut Collected,
 ) -> Result<()> {
+    // Health as the run found it, for the saves after each source.
+    let mut start: BTreeMap<String, SourceHealth> = state
+        .retired
+        .iter()
+        .chain(&state.sources)
+        .map(|(n, st)| (n.clone(), st.health.clone()))
+        .collect();
     let mut order: Vec<&WatchSource> = sources.to_vec();
     order.sort_by_key(|s| !state.sources.get(&s.name).is_some_and(|st| st.deferred));
     let mut deferred = Vec::new();
@@ -1306,7 +1364,7 @@ fn collect(
             }
         }
         // Save after every source so an interrupted run keeps its progress.
-        write_json_kept(x.state_path, state)?;
+        save_progress(x.state_path, state, &mut start)?;
         c.reports.push(rep);
     }
     if !deferred.is_empty() {
@@ -1343,6 +1401,7 @@ fn retain(
         for cw in state.cases.values_mut() {
             cw.hits.retain(|h| h.ts <= 0 || h.ts >= cutoff);
         }
+        state.onsets.prune(cutoff);
         write_json_kept(state_path, state)?;
         if ledger.prune(cutoff) > 0 {
             write_json_kept(ledger_path, ledger)?;
@@ -1426,6 +1485,55 @@ mod tests {
             "{:?}",
             c.notes
         );
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn progress_saves_keep_the_health_the_run_found() {
+        let d = scratch("progress");
+        let path = d.join("state.json");
+        let mut state = State::default();
+        state
+            .sources
+            .entry("a".into())
+            .or_default()
+            .health
+            .errors_in_row = 1;
+        state
+            .retired
+            .entry("r".into())
+            .or_default()
+            .health
+            .skipped_runs = 3;
+        let mut start: BTreeMap<String, SourceHealth> = state
+            .retired
+            .iter()
+            .chain(&state.sources)
+            .map(|(n, st)| (n.clone(), st.health.clone()))
+            .collect();
+        // This run: `a` fails again, `r` comes back and runs, `n` is new.
+        let a = state.sources.get_mut("a").unwrap();
+        a.health.errors_in_row = 2;
+        a.cursor = 42;
+        let r = state.retired.remove("r").unwrap();
+        state.sources.insert("r".into(), r);
+        state.sources.get_mut("r").unwrap().health.skipped_runs = 0;
+        state
+            .sources
+            .entry("n".into())
+            .or_default()
+            .health
+            .errors_in_row = 1;
+        save_progress(&path, &mut state, &mut start).unwrap();
+        let saved: State = read_json_kept(&path).unwrap().unwrap();
+        assert_eq!(saved.sources["a"].cursor, 42, "progress is saved");
+        assert_eq!(saved.sources["a"].health.errors_in_row, 1);
+        assert_eq!(saved.sources["r"].health.skipped_runs, 3);
+        assert_eq!(saved.sources["n"].health.errors_in_row, 0);
+        // The run itself goes on with the new health.
+        assert_eq!(state.sources["a"].health.errors_in_row, 2);
+        assert_eq!(state.sources["r"].health.skipped_runs, 0);
+        assert_eq!(state.sources["n"].health.errors_in_row, 1);
         std::fs::remove_dir_all(&d).unwrap();
     }
 

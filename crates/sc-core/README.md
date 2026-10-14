@@ -62,7 +62,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`analyze`](src/analyze/mod.rs) | The pipeline as ordered passes (`pipeline`): score, link into clusters (`link`), describe each cluster (`hints`), number, then cross-cluster hints. Clusters have a number (`C1`) and a stable `key`. |
 | [`chains`](src/chains.rs) | Probe chains: one client trying variant after variant of a request. |
 | [`seam`](src/seam.rs) | Seams in a cluster's link graph: a record or one client's records holding together two groups that differ. A plant-review prompt. |
-| [`timing`](src/timing/mod.rs) | Cadence, bursts and pauses (`cadence`), hour-of-day profiles (`rhythm`), date tags (`dates`) and shared pauses (`pauses`). |
+| [`timing`](src/timing/mod.rs) | Cadence, bursts and pauses (`cadence`), hour-of-day profiles (`rhythm`), date tags (`dates`), shared pauses (`pauses`) and per-run change points in slices of the records (`changepoint`). |
 | [`fingerprint`](src/fingerprint.rs) | How a request was encoded, and header sets. |
 | [`paths`](src/paths.rs) | Path sets per host and fabricated-looking identifiers. |
 | [`dialect`](src/dialect.rs) | Payload dialect, shared dialects between clusters, repeated cut lengths. |

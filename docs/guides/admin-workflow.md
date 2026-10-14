@@ -22,6 +22,7 @@ Read it top down:
 - **Digests not mailed.** Leads from earlier runs whose digest never reached you, folded in here. Check the mail setup if it recurs.
 - **Health.** A starved or failing source, or a rule whose hit rate jumped. Fix the source or the key before trusting the rest. A failure that goes on is mailed again on its 2nd, 4th and 8th run, not every run; the sources table shows it each time.
 - **New clusters, tier changes, first-time endpoints.** The leads.
+- **Slice onsets.** A rule, scaffold template or target site family whose rate on one source rose against that source's earlier runs: a swarm starting below the clustering threshold, or a rule matching something new. Read the example records (in `runs/<stamp>/<source>.ndjson` of the runs since it started) for the tag or template they share; a rule also in Health as "drift or onset" may be either. A source-side change means the source, not a swarm.
 - **Possible reruns and archive bursts.** Leads to check, never merged automatically.
 - **Case status.** Proposals for existing cases; see [step 9](#9-keep-the-notice-current).
 

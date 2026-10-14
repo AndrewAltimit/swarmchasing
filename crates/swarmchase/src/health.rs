@@ -3,7 +3,10 @@
 //! A source whose pull collapses against its own recent history usually means
 //! an API change, an expired key or a spent quota, not a quiet week. A rule
 //! whose hit rate on new records jumps against its recent history usually
-//! means the rule started matching something ordinary. Both are reported in
+//! means the rule started matching something ordinary, though a swarm
+//! starting below the clustering threshold reads the same: where the onset
+//! check (`watch/onset.rs`) also finds the rule rising, the alert says
+//! "drift or onset" ([`Reading`]). Both are reported in
 //! the digest before a broken source hides a swarm or a noisy rule reaches a
 //! notice. A failed run alerts at once, and a failure that goes on alerts
 //! again on its 2nd, 4th, 8th... run in a row ([`alert_due`]); a source that
@@ -206,13 +209,37 @@ pub struct Drift {
     pub records: usize,
     pub baseline_hits: usize,
     pub baseline_records: usize,
+    /// How the rise reads, once the onset check has run.
+    pub reading: Reading,
+}
+
+/// What a rule's jump in rate most likely is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Reading {
+    /// A rule matching something ordinary.
+    #[default]
+    Drift,
+    /// Both fit: the onset check also finds the rule's slice rising on its
+    /// own, as a swarm starting below the clustering threshold would.
+    DriftOrOnset,
+    /// Most of the source's slices rose with it: the source changed.
+    Source,
 }
 
 impl Drift {
     pub fn line(&self) -> String {
         let pct = |h: usize, n: usize| 100.0 * h as f64 / n.max(1) as f64;
+        let what = match self.reading {
+            Reading::Drift => "",
+            Reading::DriftOrOnset => {
+                "drift or onset: the rule may match something ordinary, or a swarm may be starting below the clustering threshold (see Slice onsets); "
+            }
+            Reading::Source => {
+                "with most of its source's slices, so read as a source-side change before a noisy rule; "
+            }
+        };
         format!(
-            "`{}` fired on {} of {} new records from {} ({:.1}%) against {:.1}% over its previous {} records",
+            "{what}`{}` fired on {} of {} new records from {} ({:.1}%) against {:.1}% over its previous {} records",
             self.rule,
             self.hits,
             self.records,
@@ -275,6 +302,7 @@ fn drift(baseline: &[RuleRun], run: &RuleRun) -> Vec<Drift> {
                 records: run.records,
                 baseline_hits: base_hits,
                 baseline_records: base_records,
+                reading: Reading::Drift,
             });
         }
     }
@@ -382,6 +410,20 @@ mod tests {
         assert_eq!((d[0].source.as_str(), d[0].rule.as_str()), ("s", "a"));
         assert_eq!((d[0].baseline_hits, d[0].baseline_records), (3, 150));
         assert!(d[0].line().contains("20.0%"), "{}", d[0].line());
+        assert!(!d[0].line().contains("onset"));
+        let mut both = d[0].clone();
+        both.reading = Reading::DriftOrOnset;
+        assert!(
+            both.line().starts_with("drift or onset: "),
+            "{}",
+            both.line()
+        );
+        both.reading = Reading::Source;
+        assert!(
+            both.line().contains("source-side change"),
+            "{}",
+            both.line()
+        );
 
         // A brand-new rule with no baseline hits drifts too.
         let (d, _) = h.observe("v1", one("s", run(40, &[("c", 6)])));
