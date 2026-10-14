@@ -15,7 +15,7 @@ use crate::analyze::{ObsResult, target_text};
 use crate::rules::RuleDef;
 use crate::timing::{TimeBasis, request_like};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// How a request reached its target, from plainest to most elaborate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -200,7 +200,7 @@ pub fn escalations(
             let split = k == reqs.len()
                 || results[reqs[k].0].obs.ts - results[reqs[k - 1].0].obs.ts > opts.window_secs;
             if split {
-                if let Some(e) = climb(results, cluster_ids, host, &path, &reqs[start..k]) {
+                if let Some(e) = climb(results, cluster_ids, host, &path, &reqs[start..k], &reqs) {
                     out.push(e);
                 }
                 start = k;
@@ -213,12 +213,16 @@ pub fn escalations(
     out
 }
 
+/// Other senders of a page this close to a climb make it a crowd's.
+const CROWD_SECS: i64 = 86_400;
+
 fn climb(
     results: &[ObsResult],
     cluster_ids: &[String],
     host: &str,
     path: &str,
     seq: &[(usize, Route)],
+    all: &[(usize, Route)],
 ) -> Option<Escalation> {
     let mut steps: Vec<EscalationStep> = Vec::new();
     for &(i, route) in seq {
@@ -231,6 +235,24 @@ fn climb(
         }
     }
     if steps.len() < 2 {
+        return None;
+    }
+    // A page another cluster asked for too, within a day of the climb, is a
+    // crowd's (a site in the news): which of its senders climbed is unknown.
+    // Records outside a cluster could be anyone's, the climber's included.
+    let (first, last) = (
+        results[seq[0].0].obs.ts,
+        results[seq[seq.len() - 1].0].obs.ts,
+    );
+    let climbers: BTreeSet<usize> = steps
+        .iter()
+        .filter_map(|s| results[s.record].cluster)
+        .collect();
+    let crowd = all.iter().any(|&(i, _)| {
+        (first - CROWD_SECS..=last + CROWD_SECS).contains(&results[i].obs.ts)
+            && results[i].cluster.is_some_and(|c| !climbers.contains(&c))
+    });
+    if crowd {
         return None;
     }
     let mut clusters: Vec<String> = Vec::new();
@@ -334,6 +356,32 @@ mod tests {
             md.contains("route escalation on `data[.]portal[.]example/report/annual`: direct → relay over 60s; submit times"),
             "{md}"
         );
+    }
+
+    #[test]
+    fn a_page_a_third_cluster_asked_for_is_no_ones_escalation() {
+        // Each sender twice from its own address, with its own inbox.
+        let sent = |ts: i64, n: u8, url: &str| -> Vec<Observation> {
+            let hook = format!("hook=https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8{n}");
+            (0..2)
+                .map(move |k| Observation {
+                    id: format!("r{n}{k}"),
+                    ip: Some(format!("192.0.2.{n}")),
+                    ..o(ts + k * 10, &format!("{url}?{hook}"))
+                })
+                .collect()
+        };
+        let relay = format!("https://r.jina.ai/{PAGE}");
+        let mut obs: Vec<Observation> = [sent(T, 1, PAGE), sent(T + 60, 2, &relay)].concat();
+        let a = analyze(obs.clone(), &Rules::default_rules());
+        assert_eq!(a.clusters.len(), 2);
+        assert_eq!(a.escalations.len(), 1, "{:?}", a.escalations);
+        assert_eq!(a.escalations[0].clusters.len(), 2);
+        // A third cluster reads the page directly that afternoon.
+        obs.extend(sent(T + 4 * 3600, 3, PAGE));
+        let b = analyze(obs, &Rules::default_rules());
+        assert_eq!(b.clusters.len(), 3);
+        assert!(b.escalations.is_empty(), "{:?}", b.escalations);
     }
 
     #[test]

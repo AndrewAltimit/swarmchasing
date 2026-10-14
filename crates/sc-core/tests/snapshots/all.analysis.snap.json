@@ -1672,7 +1672,7 @@
       ],
       "target_host": "portal.agency.example",
       "features": [],
-      "cluster": 24
+      "cluster": 23
     },
     {
       "obs": {
@@ -1703,7 +1703,7 @@
       ],
       "target_host": "portal.agency.example",
       "features": [],
-      "cluster": 24
+      "cluster": 23
     },
     {
       "obs": {
@@ -1734,7 +1734,7 @@
       ],
       "target_host": "portal.agency.example",
       "features": [],
-      "cluster": 24
+      "cluster": 23
     },
     {
       "obs": {
@@ -7291,7 +7291,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 34
+      "cluster": 33
     },
     {
       "obs": {
@@ -7339,7 +7339,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 34
+      "cluster": 33
     },
     {
       "obs": {
@@ -8172,7 +8172,7 @@
       ],
       "target_host": "civilrightsdata.ed.gov",
       "features": [],
-      "cluster": 33
+      "cluster": 32
     },
     {
       "obs": {
@@ -8203,7 +8203,7 @@
       ],
       "target_host": "civilrightsdata.ed.gov",
       "features": [],
-      "cluster": 33
+      "cluster": 32
     },
     {
       "obs": {
@@ -10439,7 +10439,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 35
+      "cluster": 34
     },
     {
       "obs": {
@@ -10470,7 +10470,7 @@
       ],
       "target_host": "records.agency.example",
       "features": [],
-      "cluster": 35
+      "cluster": 34
     },
     {
       "obs": {
@@ -11816,7 +11816,17 @@
       "features": [
         "param:uqtag=covsig1"
       ],
-      "cluster": 23
+      "cluster": null,
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 1,
+            "detail": "marker.uq_tags, selfid.signature_agent"
+          }
+        ]
+      }
     },
     {
       "obs": {
@@ -11858,7 +11868,7 @@
       "features": [
         "param:uqtag=covrun11"
       ],
-      "cluster": 23
+      "cluster": 35
     },
     {
       "obs": {
@@ -11914,7 +11924,7 @@
       "features": [
         "param:uqtag=covrun12"
       ],
-      "cluster": 23
+      "cluster": 35
     },
     {
       "obs": {
@@ -15040,7 +15050,7 @@
       "features": [
         "param:uqtag=la1q7c"
       ],
-      "cluster": 25
+      "cluster": 24
     },
     {
       "obs": {
@@ -15082,7 +15092,7 @@
       "features": [
         "param:uqtag=la1q7c"
       ],
-      "cluster": 25
+      "cluster": 24
     },
     {
       "obs": {
@@ -15124,7 +15134,7 @@
       "features": [
         "param:uqtag=lb8w2n"
       ],
-      "cluster": 26
+      "cluster": 25
     },
     {
       "obs": {
@@ -15166,7 +15176,7 @@
       "features": [
         "param:uqtag=lb8w2n"
       ],
-      "cluster": 26
+      "cluster": 25
     },
     {
       "obs": {
@@ -15208,7 +15218,7 @@
       "features": [
         "param:uqtag=lc4e9r"
       ],
-      "cluster": 27
+      "cluster": 26
     },
     {
       "obs": {
@@ -15250,7 +15260,7 @@
       "features": [
         "param:uqtag=lc4e9r"
       ],
-      "cluster": 27
+      "cluster": 26
     },
     {
       "obs": {
@@ -15292,7 +15302,7 @@
       "features": [
         "param:uqtag=ld6t3m"
       ],
-      "cluster": 28
+      "cluster": 27
     },
     {
       "obs": {
@@ -15334,7 +15344,7 @@
       "features": [
         "param:uqtag=ld6t3m"
       ],
-      "cluster": 28
+      "cluster": 27
     },
     {
       "obs": {
@@ -15376,7 +15386,7 @@
       "features": [
         "param:uqtag=le2y8k"
       ],
-      "cluster": 29
+      "cluster": 28
     },
     {
       "obs": {
@@ -15418,7 +15428,7 @@
       "features": [
         "param:uqtag=le2y8k"
       ],
-      "cluster": 29
+      "cluster": 28
     },
     {
       "obs": {
@@ -15460,7 +15470,7 @@
       "features": [
         "param:uqtag=lf9u4p"
       ],
-      "cluster": 30
+      "cluster": 29
     },
     {
       "obs": {
@@ -15502,7 +15512,7 @@
       "features": [
         "param:uqtag=lf9u4p"
       ],
-      "cluster": 30
+      "cluster": 29
     },
     {
       "obs": {
@@ -15544,7 +15554,7 @@
       "features": [
         "param:uqtag=lg5i1x"
       ],
-      "cluster": 31
+      "cluster": 30
     },
     {
       "obs": {
@@ -15586,7 +15596,7 @@
       "features": [
         "param:uqtag=lg5i1x"
       ],
-      "cluster": 31
+      "cluster": 30
     },
     {
       "obs": {
@@ -15628,7 +15638,7 @@
       "features": [
         "param:uqtag=lh3o6v"
       ],
-      "cluster": 32
+      "cluster": 31
     },
     {
       "obs": {
@@ -15670,7 +15680,7 @@
       "features": [
         "param:uqtag=lh3o6v"
       ],
-      "cluster": 32
+      "cluster": 31
     },
     {
       "obs": {
@@ -23681,181 +23691,6 @@
     },
     {
       "id": "C24",
-      "key": "k-fcf5d060",
-      "members": [
-        334,
-        335,
-        337
-      ],
-      "start": 1786353300,
-      "end": 1786354200,
-      "tier": "significant",
-      "score": 9,
-      "rules": {
-        "exploit.double_encoded_meta": 1,
-        "header.agent_ua": 1,
-        "marker.uq_tags": 3,
-        "selfid.signature_agent": 1
-      },
-      "kinds": {
-        "exploit": 1,
-        "agent_marker": 3,
-        "self_id": 1,
-        "header": 1
-      },
-      "tactics": {
-        "T4": 1
-      },
-      "artifacts": 3,
-      "target_hosts": {
-        "records.agency.example": 3
-      },
-      "asns": {},
-      "user_agents": {
-        "Mozilla/5.0 (compatible; ExampleAgent/1.0)": 1,
-        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot": 1
-      },
-      "encodings": {
-        "dbl.sorted.noslash": 1
-      },
-      "header_sets": {
-        "5eac670f": 1
-      },
-      "link_features": [],
-      "runs": [
-        {
-          "start": 1786353300,
-          "end": 1786354200,
-          "count": 3
-        }
-      ],
-      "timing": {
-        "count": 3,
-        "start": 1786353300,
-        "end": 1786354200,
-        "median_gap_secs": 600.0,
-        "p90_gap_secs": 600.0,
-        "bursts": [],
-        "pauses": [],
-        "hourly": [
-          [
-            1786352400,
-            3
-          ]
-        ],
-        "rhythm": {
-          "hours": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          "entropy": -0.0,
-          "longest_idle_hours": 0.16666666666666666,
-          "days": 1,
-          "verdict": {
-            "kind": "too_short"
-          }
-        },
-        "stale_dates": {
-          "tags": 0,
-          "behind": 0,
-          "ahead": 0,
-          "median_lag_days": null,
-          "modal_date": null,
-          "same_date_share": 0.0,
-          "same_lag_share": 0.0,
-          "consistent": false
-        }
-      },
-      "provenance": {
-        "unknown": 3
-      },
-      "corroboration": "single_source",
-      "agent": {
-        "level": "self_described",
-        "signals": [
-          {
-            "kind": "self_id",
-            "records": 3,
-            "detail": "marker.uq_tags, selfid.signature_agent"
-          }
-        ]
-      },
-      "scope": {
-        "task_class": "unclear",
-        "target_classes": {
-          "interactive": 3
-        },
-        "tests": [
-          {
-            "id": "S1",
-            "outcome": "not_assessable",
-            "detail": "the task class is unclear, so an off-task target cannot be judged"
-          },
-          {
-            "id": "S2",
-            "outcome": "pass",
-            "detail": "no block, challenge or rate limit was circumvented"
-          },
-          {
-            "id": "S3",
-            "outcome": "pass",
-            "detail": "no sensitive path was requested"
-          },
-          {
-            "id": "S4",
-            "outcome": "fail",
-            "records": [
-              337
-            ],
-            "detail": "attack payloads were sent to a party that did not sanction them"
-          },
-          {
-            "id": "S5",
-            "outcome": "pass",
-            "detail": "no account or credential acquisition"
-          },
-          {
-            "id": "S6",
-            "outcome": "pass",
-            "detail": "no data was sent to a channel outside the target"
-          },
-          {
-            "id": "S7",
-            "outcome": "not_assessable",
-            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
-          }
-        ],
-        "finding": "scope_exceeded",
-        "payload_present": true,
-        "agent_present": false,
-        "out_of_scope": true,
-        "coordinated": false
-      }
-    },
-    {
-      "id": "C25",
       "key": "k-a70b6adc",
       "members": [
         41,
@@ -24038,7 +23873,7 @@
       }
     },
     {
-      "id": "C26",
+      "id": "C25",
       "key": "k-4a7f92c8",
       "members": [
         414,
@@ -24220,7 +24055,7 @@
       }
     },
     {
-      "id": "C27",
+      "id": "C26",
       "key": "k-2b8249d6",
       "members": [
         416,
@@ -24402,7 +24237,7 @@
       }
     },
     {
-      "id": "C28",
+      "id": "C27",
       "key": "k-b6272b6c",
       "members": [
         418,
@@ -24584,7 +24419,7 @@
       }
     },
     {
-      "id": "C29",
+      "id": "C28",
       "key": "k-2ce667ee",
       "members": [
         420,
@@ -24766,7 +24601,7 @@
       }
     },
     {
-      "id": "C30",
+      "id": "C29",
       "key": "k-9b98d2af",
       "members": [
         422,
@@ -24948,7 +24783,7 @@
       }
     },
     {
-      "id": "C31",
+      "id": "C30",
       "key": "k-30b2a402",
       "members": [
         424,
@@ -25130,7 +24965,7 @@
       }
     },
     {
-      "id": "C32",
+      "id": "C31",
       "key": "k-ee412da9",
       "members": [
         426,
@@ -25312,7 +25147,7 @@
       }
     },
     {
-      "id": "C33",
+      "id": "C32",
       "key": "k-d3d2f667",
       "members": [
         428,
@@ -25494,7 +25329,7 @@
       }
     },
     {
-      "id": "C34",
+      "id": "C33",
       "key": "k-3bed0073",
       "members": [
         232,
@@ -25675,7 +25510,7 @@
       }
     },
     {
-      "id": "C35",
+      "id": "C34",
       "key": "k-a40c5369",
       "members": [
         194,
@@ -25868,7 +25703,7 @@
       }
     },
     {
-      "id": "C36",
+      "id": "C35",
       "key": "k-21e5a81d",
       "members": [
         298,
@@ -26014,6 +25849,174 @@
             "records": [
               298,
               299
+            ],
+            "detail": "attack payloads were sent to a party that did not sanction them"
+          },
+          {
+            "id": "S5",
+            "outcome": "pass",
+            "detail": "no account or credential acquisition"
+          },
+          {
+            "id": "S6",
+            "outcome": "pass",
+            "detail": "no data was sent to a channel outside the target"
+          },
+          {
+            "id": "S7",
+            "outcome": "not_assessable",
+            "detail": "coordination is a fleet-level judgment; no edge touches this cluster"
+          }
+        ],
+        "finding": "scope_exceeded",
+        "payload_present": true,
+        "agent_present": false,
+        "out_of_scope": true,
+        "coordinated": false
+      }
+    },
+    {
+      "id": "C36",
+      "key": "k-e17d390c",
+      "members": [
+        335,
+        337
+      ],
+      "start": 1786353600,
+      "end": 1786354200,
+      "tier": "significant",
+      "score": 8,
+      "rules": {
+        "exploit.double_encoded_meta": 1,
+        "header.agent_ua": 1,
+        "marker.uq_tags": 2
+      },
+      "kinds": {
+        "exploit": 1,
+        "agent_marker": 2,
+        "header": 1
+      },
+      "tactics": {
+        "T4": 1
+      },
+      "artifacts": 2,
+      "target_hosts": {
+        "records.agency.example": 2
+      },
+      "asns": {},
+      "user_agents": {
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot": 1
+      },
+      "encodings": {
+        "dbl.sorted.noslash": 1
+      },
+      "link_features": [],
+      "runs": [
+        {
+          "start": 1786353600,
+          "end": 1786354200,
+          "count": 2
+        }
+      ],
+      "timing": {
+        "count": 2,
+        "start": 1786353600,
+        "end": 1786354200,
+        "median_gap_secs": 600.0,
+        "p90_gap_secs": 600.0,
+        "bursts": [],
+        "pauses": [],
+        "hourly": [
+          [
+            1786352400,
+            2
+          ]
+        ],
+        "rhythm": {
+          "hours": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "entropy": -0.0,
+          "longest_idle_hours": 0.16666666666666666,
+          "days": 1,
+          "verdict": {
+            "kind": "too_short"
+          }
+        },
+        "stale_dates": {
+          "tags": 0,
+          "behind": 0,
+          "ahead": 0,
+          "median_lag_days": null,
+          "modal_date": null,
+          "same_date_share": 0.0,
+          "same_lag_share": 0.0,
+          "consistent": false
+        }
+      },
+      "provenance": {
+        "unknown": 2
+      },
+      "corroboration": "single_source",
+      "agent": {
+        "level": "self_described",
+        "signals": [
+          {
+            "kind": "self_id",
+            "records": 2,
+            "detail": "marker.uq_tags"
+          }
+        ]
+      },
+      "scope": {
+        "task_class": "unclear",
+        "target_classes": {
+          "interactive": 2
+        },
+        "tests": [
+          {
+            "id": "S1",
+            "outcome": "not_assessable",
+            "detail": "the task class is unclear, so an off-task target cannot be judged"
+          },
+          {
+            "id": "S2",
+            "outcome": "pass",
+            "detail": "no block, challenge or rate limit was circumvented"
+          },
+          {
+            "id": "S3",
+            "outcome": "pass",
+            "detail": "no sensitive path was requested"
+          },
+          {
+            "id": "S4",
+            "outcome": "fail",
+            "records": [
+              337
             ],
             "detail": "attack payloads were sent to a party that did not sanction them"
           },
@@ -29518,7 +29521,7 @@
             37,
             38
           ],
-          "detail": "shares `param:uqtag=covrun12` with the earlier C24 but its URL encodings have nothing in common with that cluster's: the identifier may have been copied"
+          "detail": "shares `param:uqtag=covrun12` with the earlier C36 but its URL encodings have nothing in common with that cluster's: the identifier may have been copied"
         }
       ],
       "agent": {

@@ -4,8 +4,10 @@
 //! roughly the same order, even when its run tags change between runs. Two
 //! runs match when they share enough hosts, their host sets overlap strongly
 //! once hosts common to many runs are down-weighted, and the shared hosts come
-//! up in a similar order. Matches are leads to review; nothing here merges
-//! clusters.
+//! up in a similar order. A list walked by more than a few runs is a
+//! published one (a news story's sites, a directory read top to bottom), not
+//! one operator's task, and pairs on it are not matched. Matches are leads to
+//! review; nothing here merges clusters.
 
 use crate::analyze::{Analysis, Cluster, ObsResult};
 use serde::{Deserialize, Serialize};
@@ -34,6 +36,11 @@ pub struct RecurrenceOptions {
     /// The later run must start at least this long after the earlier one
     /// ends, as well as on a different UTC day.
     pub min_gap_secs: i64,
+    /// A pair is not matched when more than this many walkers (clusters, or
+    /// runs when no clusters are given) hold at least half of the shared
+    /// hosts (and `min_shared`): the list is common, not one operator's
+    /// (0: no limit).
+    pub max_walkers: usize,
 }
 
 impl Default for RecurrenceOptions {
@@ -43,6 +50,7 @@ impl Default for RecurrenceOptions {
             min_weighted_jaccard: 0.5,
             min_order: 0.7,
             min_gap_secs: 6 * 3600,
+            max_walkers: 3,
         }
     }
 }
@@ -104,15 +112,18 @@ fn lis(v: &[usize]) -> usize {
 /// Every pair of runs on different days whose target sequences match, earliest
 /// pair first.
 pub fn reruns(runs: &[TargetRun], opt: &RecurrenceOptions) -> Vec<Rerun> {
-    reruns_apart(runs, opt, |_, _| false)
+    reruns_apart(runs, opt, |_, _| false, |i| i)
 }
 
 /// As [`reruns`], without comparing the pairs `skip` names (by index into
-/// `runs`). Skipped runs still count towards every host's weight.
+/// `runs`), and counting walkers by `walker` (one per distinct value; a
+/// cluster's runs are one walker). Skipped runs still count towards every
+/// host's weight and as walkers.
 fn reruns_apart(
     runs: &[TargetRun],
     opt: &RecurrenceOptions,
     skip: impl Fn(usize, usize) -> bool,
+    walker: impl Fn(usize) -> usize,
 ) -> Vec<Rerun> {
     let seqs: Vec<Seq> = runs.iter().map(seq).collect();
     let n = seqs.iter().filter(|s| !s.hosts.is_empty()).count();
@@ -188,6 +199,18 @@ fn reruns_apart(
             if order_score < opt.min_order {
                 continue;
             }
+            if opt.max_walkers > 0 {
+                let need = opt.min_shared.max(shared.len().div_ceil(2));
+                let walkers: BTreeSet<usize> = seqs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| shared.iter().filter(|h| s.set.contains(**h)).count() >= need)
+                    .map(|(r, _)| walker(r))
+                    .collect();
+                if walkers.len() > opt.max_walkers {
+                    continue;
+                }
+            }
             out.push(Rerun {
                 earlier: i,
                 later: j,
@@ -233,7 +256,8 @@ pub(crate) fn reruns_across(
 ) -> (Vec<ClusterRun>, Vec<Rerun>) {
     let mut infos = Vec::new();
     let mut runs = Vec::new();
-    for c in clusters {
+    let mut walker = Vec::new();
+    for (ci, c) in clusters.iter().enumerate() {
         for (n, span) in c.runs.iter().enumerate() {
             let members: Vec<&ObsResult> = c
                 .members
@@ -248,6 +272,7 @@ pub(crate) fn reruns_across(
                     .filter_map(|r| Some((r.obs.ts, r.target_host.clone()?)))
                     .collect(),
             });
+            walker.push(ci);
             infos.push(ClusterRun {
                 cluster: c.id.clone(),
                 key: c.key.clone(),
@@ -257,9 +282,12 @@ pub(crate) fn reruns_across(
             });
         }
     }
-    let matches = reruns_apart(&runs, &RecurrenceOptions::default(), |i, j| {
-        infos[i].cluster == infos[j].cluster
-    });
+    let matches = reruns_apart(
+        &runs,
+        &RecurrenceOptions::default(),
+        |i, j| infos[i].cluster == infos[j].cluster,
+        |i| walker[i],
+    );
     (infos, matches)
 }
 
@@ -310,6 +338,22 @@ mod tests {
         assert_eq!((m[0].earlier, m[0].later), (0, 2));
         assert_eq!(m[0].shared.len(), 8);
         assert!(m[0].order >= 0.85 && m[0].order < 1.0, "{m:?}");
+    }
+
+    #[test]
+    fn a_list_many_walk_is_no_ones_rerun() {
+        // Five agents walk one published list in one order, a day apart.
+        let runs: Vec<TargetRun> = (0..5)
+            .map(|d| run(&format!("r{d}"), T0 + d * DAY, &HOSTS))
+            .collect();
+        assert!(reruns(&runs, &RecurrenceOptions::default()).is_empty());
+        let all = RecurrenceOptions {
+            max_walkers: 0,
+            ..Default::default()
+        };
+        assert_eq!(reruns(&runs, &all).len(), 10);
+        // Three walkers are still one operator's run and two reruns.
+        assert_eq!(reruns(&runs[..3], &RecurrenceOptions::default()).len(), 3);
     }
 
     #[test]
@@ -480,6 +524,7 @@ mod tests {
         for min_shared in [0, 1, 4] {
             let opt = RecurrenceOptions {
                 min_shared,
+                max_walkers: 0,
                 ..Default::default()
             };
             let want = every_pair(&runs, &opt);
@@ -493,7 +538,7 @@ mod tests {
                 .into_iter()
                 .filter(|m| !skip(m.earlier, m.later))
                 .collect();
-            assert_eq!(reruns_apart(&runs, &opt, skip), kept);
+            assert_eq!(reruns_apart(&runs, &opt, skip, |i| i), kept);
         }
     }
 }

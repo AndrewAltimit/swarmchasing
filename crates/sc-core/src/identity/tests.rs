@@ -205,9 +205,9 @@ fn signatures_outrank_addresses() {
 #[test]
 fn clusters_get_a_line_a_counter_signal_and_a_suggested_claim() {
     let obs = log(&format!(
-        r#"192.0.2.9 - - [04/Oct/2026:08:10:00 +0000] "GET /item?id=1%20UNION%20SELECT%201 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
-192.0.2.9 - - [04/Oct/2026:08:10:30 +0000] "GET /item?id=2%20UNION%20SELECT%202 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
-203.0.113.50 - - [04/Oct/2026:08:11:00 +0000] "GET /item?id=3%20UNION%20SELECT%203 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}""#
+        r#"192.0.2.9 - - [04/Oct/2026:08:10:00 +0000] "GET /item?id=1%20UNION%20SELECT%201&run=idr1 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
+192.0.2.9 - - [04/Oct/2026:08:10:30 +0000] "GET /item?id=2%20UNION%20SELECT%202&run=idr1 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
+203.0.113.50 - - [04/Oct/2026:08:11:00 +0000] "GET /item?id=3%20UNION%20SELECT%203&run=idr1 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}""#
     ));
     let mut a = crate::analyze(obs, &Rules::default_rules());
     assert_eq!(a.clusters.len(), 1, "fixture should form one cluster");

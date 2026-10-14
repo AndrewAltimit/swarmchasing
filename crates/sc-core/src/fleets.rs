@@ -276,7 +276,7 @@ impl Default for SoftLinkOptions {
             max_shared: 10,
             shared_pause: 4.0,
             dialect: 2.0,
-            rerun: 3.0,
+            rerun: 10.0,
             preamble: 3.0,
             path_set: 3.0,
             encoding: 1.0,

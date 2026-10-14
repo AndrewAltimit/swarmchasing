@@ -7,10 +7,11 @@
 //! the same parameter names in the same order, values of the same kinds and
 //! lengths, the same URL encoding, the same test payloads. [`template`]
 //! reduces a record to that shape with every value replaced by its slot type,
-//! and [`scaffold_pairs`] compares clusters' template mixes.
+//! and [`scaffold_pairs`] compares clusters' template mixes, each template
+//! counted once per target host so a retried request is one request.
 //!
 //! Popular libraries and agent frameworks give unrelated operators one shape
-//! too. Four guards answer that: a template held by many clusters weighs
+//! too. Five guards answer that: a template held by many clusters weighs
 //! little (IDF, as reruns weigh hosts); one held by more than
 //! `scaffold.max_holders` senders (clusters, and records outside them) is a
 //! common default and ties nothing; each shared template has a base rate
@@ -18,9 +19,12 @@
 //! all), its other holders counted with any outside records carrying it,
 //! and a pair's chance is that two unrelated clusters both hold the rarest
 //! template they share at its rate, corrected for the number of usable
-//! templates they share; and the pairs are cut at a false discovery rate
-//! over the pairs compared. Records outside the clusters only ever make a template more
-//! common, so appending unrelated traffic cannot make a shape look rare.
+//! templates they share; a template one part away from a common default (a
+//! framework's shape with one setting each operator picks) is read within
+//! that default, at its share of the default's senders; and the pairs are
+//! cut at a false discovery rate over the pairs compared. Records outside
+//! the clusters only ever make a template more common, so appending
+//! unrelated traffic cannot make a shape look rare.
 //! Pairs are soft links: they never score, link or merge.
 //!
 //! [`lineage_pairs`] finds a fleet that exact templates split: one harness
@@ -354,16 +358,24 @@ pub(crate) fn scaffold_pairs(
         return (Vec::new(), TestFamily::cut("scaffold", &[], 0, opts.fdr));
     }
     let mut specific: BTreeMap<String, bool> = BTreeMap::new();
+    let mut shapes: BTreeMap<String, Template> = BTreeMap::new();
     let profiles: Vec<BTreeMap<String, f64>> = shown
         .iter()
         .map(|c| {
-            let mut m: BTreeMap<String, f64> = BTreeMap::new();
+            // Each template counted once per target host: a request retried
+            // is one request, not three alike.
+            let mut sent: BTreeSet<(String, Option<&str>)> = BTreeSet::new();
             for &i in &c.members {
                 let t = template(&results[i]);
                 specific.insert(t.key.clone(), t.specificity >= opts.min_specificity);
-                *m.entry(t.key).or_default() += 1.0;
+                sent.insert((t.key.clone(), results[i].target_host.as_deref()));
+                shapes.entry(t.key.clone()).or_insert(t);
             }
-            let total = c.members.len().max(1) as f64;
+            let mut m: BTreeMap<String, f64> = BTreeMap::new();
+            for (t, _) in &sent {
+                *m.entry(t.clone()).or_default() += 1.0;
+            }
+            let total = sent.len().max(1) as f64;
             m.values_mut().for_each(|x| *x /= total);
             m
         })
@@ -383,10 +395,26 @@ pub(crate) fn scaffold_pairs(
             inside[m] = true;
         }
     }
+    // Each specific template's defaults: its lineage keys with one part
+    // dropped, and the clusters holding any template that meets each one.
+    let mut default_holders: BTreeMap<String, BTreeSet<usize>> = BTreeMap::new();
+    for (ci, p) in profiles.iter().enumerate() {
+        for t in p.keys() {
+            for (k, _) in lineage_keys(&shapes[t], opts.min_specificity) {
+                default_holders.entry(k).or_default().insert(ci);
+            }
+        }
+    }
     let mut outside_with: BTreeMap<String, usize> = BTreeMap::new();
+    let mut default_outside: BTreeMap<String, usize> = BTreeMap::new();
     for (i, r) in results.iter().enumerate() {
         if !inside[i] {
             let t = template(r);
+            for (k, _) in lineage_keys(&t, opts.min_specificity) {
+                if default_holders.contains_key(&k) {
+                    *default_outside.entry(k).or_default() += 1;
+                }
+            }
             if holders.contains_key(t.key.as_str()) {
                 *outside_with.entry(t.key).or_default() += 1;
             }
@@ -399,11 +427,35 @@ pub(crate) fn scaffold_pairs(
         .filter(|p| p.keys().any(|t| specific.get(t).copied().unwrap_or(false)))
         .count();
     // A template's base rate: its other holders and outside carriers over
-    // the other comparable clusters, one holder of the pair left out.
-    let rate = |t: &str| -> f64 {
-        ((holders[t].len() - 1 + outside(t)) as f64 / comparable.saturating_sub(1).max(1) as f64)
-            .min(1.0)
-    };
+    // the other comparable clusters, one holder of the pair left out. A
+    // template one part away from a common default (a lineage key, one part
+    // dropped, that more than `max_holders` senders meet: a framework's
+    // shape with one setting each operator picks) is read within that
+    // default: two of its users match on the part by the template's share
+    // of the default's other senders, so the rate is that share's square
+    // root, and the pair's chance its share.
+    let rates: BTreeMap<&str, f64> = holders
+        .iter()
+        .map(|(&t, ids)| {
+            let own = ids.len() - 1 + outside(t);
+            let base = own as f64 / comparable.saturating_sub(1).max(1) as f64;
+            let within = lineage_keys(&shapes[t], opts.min_specificity)
+                .into_iter()
+                .filter(|(_, dropped)| dropped.is_some())
+                .map(|(k, _)| {
+                    let senders = default_holders.get(&k).map_or(0, BTreeSet::len)
+                        + default_outside.get(&k).copied().unwrap_or(0);
+                    if senders > opts.max_holders && senders > own + 1 {
+                        (own as f64 / (senders - 1) as f64).sqrt()
+                    } else {
+                        0.0
+                    }
+                })
+                .fold(0.0, f64::max);
+            (t, base.max(within).min(1.0))
+        })
+        .collect();
+    let rate = |t: &str| -> f64 { rates[t] };
     let df = |t: &str| holders.get(t).map_or(1, Vec::len);
     let weight = |t: &str| (1.0 + n as f64 / df(t) as f64).ln();
     // Candidate pairs: those sharing a specific template held by few
@@ -1099,6 +1151,78 @@ mod tests {
         rules.set.soft_links.max_shared = 5;
         let b = analyze(fleet(6, harness), &rules);
         assert!(b.scaffold_pairs.is_empty(), "{:?}", b.scaffold_pairs);
+    }
+
+    /// A framework's two request shapes, with one setting each operator
+    /// names: `opt{name(c)}`.
+    fn framework(name: impl Fn(usize) -> usize) -> impl Fn(usize, usize) -> String {
+        move |c, k| {
+            let n = name(c);
+            if k == 1 {
+                format!(
+                    "https://h{k}.c{c}.example/api/v2/301?cmd=%3Bid&uqtag=fx{c}{c}q{c}&step={k}&opt{n}=on"
+                )
+            } else {
+                format!("{}&opt{n}=on", harness(c, k))
+            }
+        }
+    }
+
+    fn among_others(mut obs: Vec<Observation>, others: usize) -> Vec<Observation> {
+        for (i, mut x) in fleet(others, other).into_iter().enumerate() {
+            x.id = format!("bg{i}");
+            x.ts += 86_400 * 200;
+            obs.push(x);
+        }
+        obs
+    }
+
+    #[test]
+    fn operators_picking_one_framework_setting_alike_tie_none() {
+        // Two clusters on one shape among twenty others: a pair.
+        let two = among_others(fleet(2, framework(|_| 0)), 20);
+        let a = analyze(two, &Rules::default_rules());
+        assert_eq!(a.scaffold_pairs.len(), 1, "{:?}", a.scaffold_pairs);
+        // Twenty-four operators on the framework, each setting named one of
+        // twelve ways: every pair naming it alike holds a shape no one else
+        // does, but the framework's shape without the setting is a common
+        // default, and two of its users name the setting alike one time in
+        // twenty-three.
+        let crowd = among_others(fleet(24, framework(|c| c % 12)), 20);
+        let b = analyze(crowd, &Rules::default_rules());
+        assert!(b.scaffold_pairs.is_empty(), "{:?}", b.scaffold_pairs);
+    }
+
+    #[test]
+    fn a_retried_request_counts_once_in_the_mix() {
+        // Two clusters sharing one retried request, among others of their
+        // own shapes: three copies of it would make them look alike.
+        let shape = |c: usize, k: usize| match k {
+            0 => format!("https://h0.c{c}.example/item/3?id=1%27&uqtag=fx{c}x"),
+            _ => format!("https://h1.c{c}.example/p{c}{k}?name{c}{k}=%3Cb%3E&uqtag=fx{c}x"),
+        };
+        let mut obs = Vec::new();
+        for c in 0..2 {
+            for k in 0..2 {
+                obs.push(o(
+                    &format!("c{c}r{k}"),
+                    T0 + c as i64 * 86_400 + k as i64 * 60,
+                    &shape(c, k),
+                ));
+            }
+            for r in 0..3 {
+                obs.push(o(
+                    &format!("c{c}x{r}"),
+                    T0 + c as i64 * 86_400 + 30 + r,
+                    &shape(c, 0),
+                ));
+            }
+        }
+        let mut rules = Rules::default_rules();
+        rules.set.scaffold.max_chance = 1.0;
+        rules.set.scaffold.fdr = 1.0;
+        let a = analyze(among_others(obs, 20), &rules);
+        assert!(a.scaffold_pairs.is_empty(), "{:?}", a.scaffold_pairs);
     }
 
     #[test]

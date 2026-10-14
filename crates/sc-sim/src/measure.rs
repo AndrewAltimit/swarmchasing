@@ -78,8 +78,9 @@ impl KindStat {
 }
 
 /// True pairs: all of them, and those both of whose runs reach a cluster
-/// above noise (`reachable`). For operator pairs, `joined` are already in
-/// one cluster.
+/// above noise (`reachable`). `joined` are those whose runs have most of
+/// their records in one cluster: soft-link recall leaves them out; swarm
+/// edges count them, since an edge can join the rest of the two runs.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PairCounts {
     pub total: usize,
@@ -527,6 +528,11 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
                 out.swarm_pairs.total += 1;
                 if reach {
                     out.swarm_pairs.reachable += 1;
+                    // Runs whose most records share one cluster: an edge
+                    // can still join the rest of them.
+                    if home[x] == home[y] {
+                        out.swarm_pairs.joined += 1;
+                    }
                     swarm_pairs.push((x, y));
                 }
             }
