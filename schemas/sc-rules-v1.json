@@ -153,7 +153,29 @@
         "lockstep_permutations": { "type": "integer", "minimum": 1 },
         "lockstep_max_permutations": { "type": "integer", "minimum": 1 },
         "lockstep_max_chance": { "$ref": "#/$defs/share" },
+        "dispatch_min_followers": { "$ref": "#/$defs/count" },
+        "dispatch_pair_max_chance": { "$ref": "#/$defs/share" },
+        "dispatch_lag_tolerance_bins": { "$ref": "#/$defs/count" },
+        "dispatch_max_chance": { "$ref": "#/$defs/share" },
         "fdr": { "$ref": "#/$defs/share" }
+      }
+    },
+    "agentness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "robots_window_secs": { "$ref": "#/$defs/secs" },
+        "robots_min_pages": { "$ref": "#/$defs/count" },
+        "robots_min_share": { "$ref": "#/$defs/share" },
+        "robots_min_repeats": { "$ref": "#/$defs/count" },
+        "robots_max_chance": { "$ref": "#/$defs/share" },
+        "rate_window_secs": { "type": "integer", "minimum": 1 },
+        "rate_min_cap": { "$ref": "#/$defs/count" },
+        "rate_min_saturated": { "$ref": "#/$defs/count" },
+        "rate_press_secs": { "$ref": "#/$defs/secs" },
+        "rate_permutations": { "type": "integer", "minimum": 1 },
+        "rate_max_permutations": { "type": "integer", "minimum": 1 },
+        "rate_max_chance": { "$ref": "#/$defs/share" }
       }
     },
     "cut_lengths": {

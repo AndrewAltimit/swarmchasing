@@ -23,6 +23,10 @@
 //!   family with almost no overlap, or in a stride or blocks of its sorted
 //!   hosts. One scheduler sharding a list does the same, so alone it is a
 //!   fleet signal.
+//! - **S6 dispatch star**: a run that leads two or more different-client
+//!   runs, each trailing it at its own consistent lag, as a planner
+//!   dispatching workers does. One upstream trigger (a feed item, a news
+//!   alert) sends unrelated agents after it the same way.
 //!
 //! Only identifier strings already in the records are matched; nothing here
 //! reads an artifact, an inbox or a callback channel.
@@ -42,7 +46,7 @@ use crate::rules::Rules;
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 
-/// What an edge rests on, `S1` to `S5`.
+/// What an edge rests on, `S1` to `S6`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SwarmEdgeKind {
@@ -51,20 +55,22 @@ pub enum SwarmEdgeKind {
     SynchronizedStart,
     RoleSequence,
     DisjointPartition,
+    DispatchStar,
 }
 
 impl SwarmEdgeKind {
-    pub const ALL: [SwarmEdgeKind; 5] = [
+    pub const ALL: [SwarmEdgeKind; 6] = [
         SwarmEdgeKind::SharedSink,
         SwarmEdgeKind::Handoff,
         SwarmEdgeKind::SynchronizedStart,
         SwarmEdgeKind::RoleSequence,
         SwarmEdgeKind::DisjointPartition,
+        SwarmEdgeKind::DispatchStar,
     ];
 
-    /// `S1` to `S5`.
+    /// `S1` to `S6`.
     pub fn id(self) -> &'static str {
-        ["S1", "S2", "S3", "S4", "S5"][self as usize]
+        ["S1", "S2", "S3", "S4", "S5", "S6"][self as usize]
     }
 
     pub fn label(self) -> &'static str {
@@ -74,6 +80,7 @@ impl SwarmEdgeKind {
             "synchronized start",
             "role sequence",
             "disjoint partition",
+            "dispatch star",
         ][self as usize]
     }
 
@@ -85,6 +92,7 @@ impl SwarmEdgeKind {
             "synchronized_start",
             "role_sequence",
             "disjoint_partition",
+            "dispatch_star",
         ][self as usize]
     }
 }
@@ -99,7 +107,7 @@ impl std::str::FromStr for SwarmEdgeKind {
             .into_iter()
             .find(|k| k.id().eq_ignore_ascii_case(&s) || k.name() == s)
             .ok_or_else(|| {
-                format!("unknown interaction kind `{s}` (S1..S5 or a name such as handoff)")
+                format!("unknown interaction kind `{s}` (S1..S6 or a name such as handoff)")
             })
     }
 }
@@ -153,7 +161,8 @@ impl RunRef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SwarmEdge {
     pub kind: SwarmEdgeKind,
-    /// For a hand-off, `a` writes and `b` fetches; otherwise `a` starts first.
+    /// For a hand-off, `a` writes and `b` fetches; for a dispatch star, `a`
+    /// leads and `b` follows; otherwise `a` starts first.
     pub a: RunRef,
     pub b: RunRef,
     pub strength: EdgeStrength,
@@ -192,7 +201,17 @@ pub struct SwarmOptions {
     pub lockstep_max_permutations: usize,
     /// S3: kept when the larger of the two chances is at most this.
     pub lockstep_max_chance: f64,
-    /// S3, S4, S5: Benjamini-Hochberg false discovery rate over the tests
+    /// S6: followers a leader needs, each of a different client.
+    pub dispatch_min_followers: usize,
+    /// S6: a follower's own pair chance at its leading lag must be at most
+    /// this.
+    pub dispatch_pair_max_chance: f64,
+    /// S6: two followers' own best lag must be within this many bins of the
+    /// difference of their lags to the leader.
+    pub dispatch_lag_tolerance_bins: i64,
+    /// S6: kept when the star's combined chance is at most this.
+    pub dispatch_max_chance: f64,
+    /// S3 to S6: Benjamini-Hochberg false discovery rate over the tests
     /// each kind read.
     pub fdr: f64,
 }
@@ -207,6 +226,10 @@ impl Default for SwarmOptions {
             lockstep_permutations: 199,
             lockstep_max_permutations: 1999,
             lockstep_max_chance: 0.01,
+            dispatch_min_followers: 2,
+            dispatch_pair_max_chance: 0.05,
+            dispatch_lag_tolerance_bins: 1,
+            dispatch_max_chance: 0.01,
             fdr: 0.05,
         }
     }
@@ -217,7 +240,7 @@ const MAX_EDGES: usize = 200;
 
 /// Possible interaction between the runs of clusters above noise, in kind
 /// order (`S1` first), and the multiplicity budget of each kind with a
-/// chance model (S3 to S5).
+/// chance model (S3 to S6).
 pub(crate) fn swarm_edges(
     clusters: &[Cluster],
     results: &[ObsResult],
@@ -261,7 +284,7 @@ pub(crate) fn report_block(
             e.kind.label(),
             e.strength.label(),
             e.a.label(),
-            if e.kind == SwarmEdgeKind::Handoff {
+            if matches!(e.kind, SwarmEdgeKind::Handoff | SwarmEdgeKind::DispatchStar) {
                 "→"
             } else {
                 "↔"

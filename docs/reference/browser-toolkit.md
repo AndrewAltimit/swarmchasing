@@ -86,7 +86,7 @@ On a wide screen it has three panes: the records and clusters, the views, and th
 - **Runs**: a lane per cluster and a bar per run, pauses shaded, shared pauses outlined. *Fit to activity* (on by default) shrinks each idle stretch to a narrow hatched gap that names its length, so runs days apart stay readable; a zoomed window is always drawn to scale;
 - **Runs** zoom: drag across the plot, or focus the chart and use `+`, `-`, the arrow keys and `0`;
 - **Fleet**: clusters as nodes and the hints between them (shared pauses, probe chains, payload dialects, soft links, candidate fleets) as edges, one style per soft-link kind in the legend; a kind the page does not know is drawn in the generic style under its own name. Clusters sit on an ellipse in order of first activity, except that a candidate fleet's members sit together on a light band that names it, as on the landing page;
-- **Swarm**: runs as nodes on a time axis and the interaction hints between them (S1 to S5) as arcs, styled by kind and weighted by strength;
+- **Swarm**: runs as nodes on a time axis and the interaction hints between them (S1 to S6) as arcs, styled by kind and weighted by strength;
 - **Rules × clusters**: a heatmap whose cells filter the records;
 - **Rhythm**: records by weekday and hour, UTC;
 - **Endpoints × time** and **Hourly**.

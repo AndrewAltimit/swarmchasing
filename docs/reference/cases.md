@@ -126,7 +126,7 @@ swarmchase case fleet interaction <id> fleet-1 --kind handoff --run C1#1 --run k
 swarmchase case fleet withdraw <id> fleet-1 1 [--why "…"]
 ```
 
-`--kind` is one of `shared_sink`, `handoff`, `synchronized_start`, `role_sequence` and `disjoint_partition` (or `S1` to `S5`). Each `--run` is `<cluster>#<run>`, a C-number or stable key and the run's number in its cluster, and must belong to the fleet; it is stored by key. `--note` is required. The entry goes under `[[fleet.swarm_evidence]]` with its date, and the decision log records it with the matching analysis edges and the command that withdraws it. Splitting a cluster out of the fleet sets aside the entries that name it.
+`--kind` is one of `shared_sink`, `handoff`, `synchronized_start`, `role_sequence`, `disjoint_partition` and `dispatch_star` (or `S1` to `S6`). Each `--run` is `<cluster>#<run>`, a C-number or stable key and the run's number in its cluster, and must belong to the fleet; it is stored by key. `--note` is required. The entry goes under `[[fleet.swarm_evidence]]` with its date, and the decision log records it with the matching analysis edges and the command that withdraws it. Splitting a cluster out of the fleet sets aside the entries that name it.
 
 While a fleet has an entry, reports call it a swarm and list each entry as an Inference (the note in case notes and provider reports only), the notice draft gains a short *Swarm* section naming the clusters and kinds without keys or notes, and the STIX `grouping` is named a swarm. Without one, the grouping is a fleet everywhere and the notice says nothing about it.
 

@@ -113,7 +113,7 @@ fn evaluation_set_numbers_hold() {
     assert_eq!(w.found, w.groups, "{w:?}");
     assert_eq!(w.groups.len(), 3, "{w:?}");
     assert_eq!((w.edges, w.on_groups, w.across_groups), (4, 3, 0), "{w:?}");
-    assert_eq!(w.on_non_swarm, [0, 0, 0, 0, 1], "S5 only: {w:?}");
+    assert_eq!(w.on_non_swarm, [0, 0, 0, 0, 1, 0], "S5 only: {w:?}");
 
     // Fleet proposals: the three clusters on one harness pair by scaffold, and
     // so do the sharded scheduler's two shards (one fleet in the interaction

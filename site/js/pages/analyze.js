@@ -482,7 +482,7 @@ function viewFleet() {
   });
 }
 
-/** Runs as nodes and the interaction hints (S1–S5) between them. */
+/** Runs as nodes and the interaction hints (S1–S6) between them. */
 function swarmData() {
   const nodes = new Map();
   const lanes = new Map();
@@ -1009,7 +1009,7 @@ function renderLinks() {
   const sw = swarmData().edges;
   if (sw.length) {
     out.push(el("h4", {}, `Interaction hints (${sw.length})`));
-    out.push(el("p", { class: "hint" }, "Runs that may act on each other's output (S1–S5): weak-to-moderate hints, never a merge. See the Swarm view."));
+    out.push(el("p", { class: "hint" }, "Runs that may act on each other's output (S1–S6): weak-to-moderate hints, never a merge. See the Swarm view."));
     out.push(el("ul", {}, sw.slice(0, 40).map((e) => el("li", {}, el("strong", {}, `${e.name} (${e.strength})`), ` ${e.from} → ${e.to}: ${e.detail}`))));
   }
   if (none.length) {

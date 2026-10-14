@@ -6,19 +6,19 @@ use crate::eval::LabelSet;
 use serde::{Deserialize, Serialize};
 
 /// Edges against records labelled with a `swarm` group (`none` for runs
-/// known not to interact). Counts by kind are indexed `S1` to `S5`. Report
+/// known not to interact). Counts by kind are indexed `S1` to `S6`. Report
 /// only: no gate reads it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SwarmEval {
     pub edges: usize,
-    pub by_kind: [usize; 5],
+    pub by_kind: [usize; 6],
     /// Interacting groups labelled, and those with an edge inside them.
     pub groups: Vec<String>,
     pub found: Vec<String>,
     /// Edges inside one interacting group.
     pub on_groups: usize,
     /// Edges touching a run labelled `none`, by kind.
-    pub on_non_swarm: [usize; 5],
+    pub on_non_swarm: [usize; 6],
     /// Edges between two different interacting groups.
     pub across_groups: usize,
 }

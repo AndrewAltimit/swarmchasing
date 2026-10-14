@@ -144,6 +144,7 @@ Interaction between agents rarely leaves a direct trace in public records. A rec
 | S3 | Synchronized start | Runs of different clients whose requests line up step by step at one offset, beyond chance under random placement and under their own gaps reordered. | One dispatcher driving both runs for one operator. |
 | S4 | Role sequence | One run only reads a set of hosts; a differently fingerprinted run then attacks the same hosts in the same order. | A scanner fed from a public list both runs read. |
 | S5 | Disjoint partition | Runs started together split one target family with almost no overlap. | One scheduler sharding a list: a fleet signal unless others join it. |
+| S6 | Dispatch star | One run that several different-client runs each trail at their own consistent lag. | One upstream trigger (a feed item, a news alert) that unrelated agents each react to. |
 
 Identifiers are matched as strings already in the records. Reading an artifact, an inbox or a channel to see what was written is never part of the method ([FM-3.2](03-sources.md#fm-32-passivity-test)). How the signals are found and recorded is in [FM-5.12](05-linking.md#fm-512-interaction-edges).
 

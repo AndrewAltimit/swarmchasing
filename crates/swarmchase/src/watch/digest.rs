@@ -106,7 +106,7 @@ impl SourceReport {
 pub fn capability(kind: &str) -> &'static str {
     match kind {
         "urlquery" | "urlscan" => {
-            "submit-time records, the only request-like times: timing links, pace, agent grades above L2 and interaction edges (S1–S5)"
+            "submit-time records, the only request-like times: timing links, pace, agent grades above L2 and interaction edges (S1–S6)"
         }
         "wayback" | "commoncrawl" | "memento" => {
             "archive captures through this relay or carrier: the targets, payloads and run tags it wraps"
@@ -139,7 +139,7 @@ pub(super) fn lost_lines(sources: &[SourceReport]) -> Vec<String> {
     let submit = |r: &&SourceReport| r.kind.parse::<Kind>().is_ok_and(Kind::submit_time);
     if !sources.iter().filter(submit).any(|r| r.ran()) {
         out.push(
-            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S5) are unavailable this run: archive capture times cannot stand in for submission times."
+            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S6) are unavailable this run: archive capture times cannot stand in for submission times."
                 .to_string(),
         );
     }
@@ -1510,7 +1510,7 @@ mod tests {
         };
         let d = write("t1", &a, &s, &s, &BTreeSet::new(), &health, &[]);
         for want in [
-            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S5) are unavailable",
+            "**No submit-time source ran.** Timing links, pace, agent grades above L2 and interaction edges (S1–S6) are unavailable",
             "`urlquery-jina` skipped (URLQUERY_APIKEY not set). Lost: submit-time records",
             "`gharchive-relays` read 6 of 60 hours, 54 skipped",
             "`gharchive-relays` has pulled nothing in 5 runs and never has; its canary passed",

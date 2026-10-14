@@ -119,7 +119,7 @@ Before any layer is attributed, a report states how likely it is that an agent s
 | L1 | Self-described | A model or vendor name, or an agent test tag. Costs nothing to write ([FM-7.9](#fm-79-false-flag-reasoning)); worded like L0. |
 | L2 | Model-written | Model-output residue, prose, invented identifiers, a repeated output cut length, stale knowledge or stale dates ([FM-4.5](04-indicators.md#fm-45-artifact-families)). |
 | L3 | Adaptive | L2, and behaviour that answers responses: a changed request after an error, a route escalation, variants at model pace. Read from request or submit times only. |
-| L4 | Agent likely | L3, and a pace or scale beyond one person: adapting at machine speed, fixed parallel fan-out, cross-service fan-out with no auto-submitter around it ([FM-6.3](06-timing.md#fm-63-concurrency-and-fan-out)), activity round the clock. No working-hours rhythm against it. |
+| L4 | Agent likely | L3, and a pace or scale beyond one person: adapting at machine speed, fixed parallel fan-out, cross-service fan-out with no auto-submitter around it ([FM-6.3](06-timing.md#fm-63-concurrency-and-fan-out)), activity round the clock, or a machine fetch tool's habit (robots.txt read again before every page, a client-side rate ceiling held again and again). No working-hours rhythm against it. |
 | L5 | Documented | Casework only: operator logs matching an agent harness, or the provider's confirmation. |
 
 Caps:

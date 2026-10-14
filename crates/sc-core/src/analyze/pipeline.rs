@@ -346,6 +346,7 @@ fn scope(cx: &mut AnalysisCtx) {
 /// Each cluster's agent grade, and each flagged unclustered record's.
 fn agent(cx: &mut AnalysisCtx) {
     let a = &mut cx.a;
+    let clients = crate::agentness::ClientIndex::new(&a.results);
     for c in a.clusters.iter_mut() {
         c.agent = crate::agentness::assess(
             c,
@@ -353,6 +354,8 @@ fn agent(cx: &mut AnalysisCtx) {
             &a.chains,
             &a.escalations,
             &cx.rules.set.chains,
+            &clients,
+            &cx.rules.set.agentness,
         );
     }
     for r in a

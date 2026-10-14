@@ -276,8 +276,13 @@ fdr = 0.05
 # random over the analysis span, and its own gaps permuted
 # `lockstep_permutations` times with its start kept, continued to
 # `lockstep_max_permutations` when none lines up as well. Capture times never
-# count. S3, S4 and S5 edges are each cut at false discovery rate `fdr` over
-# the pairs their test read.
+# count. S6 dispatch star: a cluster that `dispatch_min_followers` or more
+# different-client clusters each trail at their own lag, read on the
+# `[co_activity]` bins and lags, each follower's chance at most
+# `dispatch_pair_max_chance`, followers' own lag within
+# `dispatch_lag_tolerance_bins` of the difference of their lags to the leader,
+# and the star's combined chance at most `dispatch_max_chance`. S3 to S6 edges
+# are each cut at false discovery rate `fdr` over the tests their kind read.
 [swarm]
 lockstep_tolerance_secs = 3
 lockstep_min_events = 4
@@ -286,7 +291,38 @@ lockstep_max_offset_secs = 120
 lockstep_permutations = 199
 lockstep_max_permutations = 1999
 lockstep_max_chance = 0.01
+dispatch_min_followers = 2
+dispatch_pair_max_chance = 0.05
+dispatch_lag_tolerance_bins = 1
+dispatch_max_chance = 0.01
 fdr = 0.05
+
+# Agent grade: a machine fetch tool's habits, read from one client's requests
+# in a run (its unflagged ones included), request and submit times only; each
+# an L4 signal. Per-fetch robots: at least `robots_min_share` of at least
+# `robots_min_pages` pages come within `robots_window_secs` after a
+# /robots.txt request on their host, with `robots_min_repeats` such requests
+# on one host, and a chance of at most `robots_max_chance` with the robots
+# requests placed at random over the client's span. Rate ceiling: at least
+# `rate_min_saturated` windows of `rate_window_secs` hold the most requests any
+# window holds (at least `rate_min_cap`), each followed by a request within
+# `rate_press_secs` of its end; kept at `rate_max_chance` over
+# `rate_permutations` permutations of the run's own gaps, continued to
+# `rate_max_permutations` while none holds the ceiling as well. A run with a
+# 429 response is not read.
+[agentness]
+robots_window_secs = 2
+robots_min_pages = 3
+robots_min_share = 0.8
+robots_min_repeats = 2
+robots_max_chance = 0.01
+rate_window_secs = 60
+rate_min_cap = 5
+rate_min_saturated = 3
+rate_press_secs = 60
+rate_permutations = 199
+rate_max_permutations = 1999
+rate_max_chance = 0.001
 
 # Repeated cut lengths: at least `min_records` truncated URLs within
 # `tolerance` characters of a common length. `rule` marks a URL as cut off.

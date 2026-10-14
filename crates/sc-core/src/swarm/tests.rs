@@ -500,5 +500,92 @@ fn eval_counts_edges_against_swarm_groups() {
     let none = lines.replace("sink-1", "none");
     let e = swarm_eval(&a, &crate::eval::parse_labels(&none));
     assert!(e.groups.is_empty());
-    assert_eq!(e.on_non_swarm, [1, 0, 0, 0, 0]);
+    assert_eq!(e.on_non_swarm, [1, 0, 0, 0, 0, 0]);
+}
+
+/// Irregular dispatch times over about eight hours, off the clock hour.
+fn dispatches() -> Vec<i64> {
+    let gaps = [
+        1500, 2200, 900, 3100, 1300, 2600, 1700, 2900, 1100, 2000, 1400, 2400,
+    ];
+    schedule(T0 + 17 * 60 + 13, &gaps, &|_| 0)
+}
+
+const P: (&str, u32) = ("Planner/1", 8075);
+
+/// A planner at `times`, and one worker per entry of `workers`, each with
+/// its client and its delay after every dispatch.
+fn star(times: &[i64], workers: &[((&str, u32), i64)]) -> Vec<Observation> {
+    let mut obs = background();
+    obs.extend(client_run(0, P, times, &|_| false));
+    for (k, &(client, lag)) in workers.iter().enumerate() {
+        let ts: Vec<i64> = times.iter().map(|t| t + lag).collect();
+        obs.extend(client_run(1 + k, client, &ts, &|_| false));
+    }
+    obs
+}
+
+#[test]
+fn a_planner_leading_two_workers_is_a_dispatch_star() {
+    let (a, e) = edges(
+        star(&dispatches(), &[(A, 70), (B, 100)]),
+        SwarmEdgeKind::DispatchStar,
+    );
+    assert_eq!(e.len(), 2, "{:?}", a.swarm_edges);
+    for x in &e {
+        // The planner leads both spokes.
+        assert!(x.a.records.iter().all(|r| r.starts_with("c0")), "{x:?}");
+        assert!(x.b.records.iter().all(|r| !r.starts_with("c0")), "{x:?}");
+        let p = x.chance.unwrap();
+        assert!(
+            p <= Rules::default_rules().set.swarm.dispatch_max_chance,
+            "{p}"
+        );
+        assert!(x.detail.contains("upstream trigger"), "{}", x.detail);
+        assert!(x.detail.contains("user agent"), "{}", x.detail);
+        assert!(x.tested >= 1, "{x:?}");
+    }
+    let f = a
+        .multiplicity
+        .iter()
+        .find(|f| f.family == "dispatch_star")
+        .expect("the S6 family");
+    assert_eq!(f.kept, 1, "{f:?}");
+    let md = crate::report::render_markdown(&a, &crate::report::ReportOptions::default());
+    assert!(md.contains("S6 dispatch star"), "{md}");
+}
+
+#[test]
+fn one_follower_or_followers_of_one_client_make_no_star() {
+    let (a, e) = edges(star(&dispatches(), &[(A, 70)]), SwarmEdgeKind::DispatchStar);
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
+    // Two clusters of one client trailing the planner: one worker with two
+    // tags, not two workers.
+    let (a, e) = edges(
+        star(&dispatches(), &[(A, 70), (A, 100)]),
+        SwarmEdgeKind::DispatchStar,
+    );
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
+}
+
+#[test]
+fn jobs_on_the_clock_hour_make_no_star() {
+    // A job at the top of every hour for a day, two more 30 and 90 s after.
+    let hour0 = (T0 / 3600 + 1) * 3600;
+    let times: Vec<i64> = (0..24).map(|h| hour0 + h * 3600 + 5).collect();
+    let (a, e) = edges(
+        star(&times, &[(A, 30), (B, 90)]),
+        SwarmEdgeKind::DispatchStar,
+    );
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
+}
+
+#[test]
+fn capture_times_make_no_star() {
+    let mut obs = star(&dispatches(), &[(A, 70), (B, 100)]);
+    for x in obs.iter_mut() {
+        x.ts_kind = crate::model::TsKind::Capture;
+    }
+    let (a, e) = edges(obs, SwarmEdgeKind::DispatchStar);
+    assert!(e.is_empty(), "{:?}", a.swarm_edges);
 }
