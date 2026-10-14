@@ -55,6 +55,8 @@ Your access logs see requests the public records cannot. You can run the same ru
 
 The browser toolkit runs the analysis entirely on your machine. Records are parsed and analysed in WebAssembly in the page; nothing is uploaded.
 
+The short path is **Check my logs** (**Investigate**, then **Check my logs**): paste or drop the log once, name your host, and the page runs the rules and the [agent identity](#agents-that-name-themselves) check on it, then says what it found and what to do next. For the full analysis, use the workbench:
+
 1. Open the workbench (**Investigate**, then **Workbench**); its access-log preset sets the format for you.
 2. Paste the log, or use **Load file**.
 3. Pick **Access log** as the format (auto-detect usually finds it).

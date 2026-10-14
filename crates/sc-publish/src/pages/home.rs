@@ -9,8 +9,9 @@
 use super::html::{esc, pill, table};
 use super::svg::{Lane, swimlanes};
 use super::walk::{
-    GEdge, GNode, LadderCol, RunEdge, RunNode, ScopeRow, ScorePart, UrlLayer, cluster_graph,
-    disclosure_flow, ladder, layer_bands, layer_stack, scope_grid, score_bar, swarm_arcs,
+    GEdge, GGroup, GNode, LadderCol, RunEdge, RunNode, ScopeRow, ScorePart, UrlLayer,
+    cluster_graph, disclosure_flow, ladder, layer_bands, layer_stack, scope_grid, score_bar,
+    swarm_arcs,
 };
 use crate::file::NoticeFile;
 use crate::markdown::md_blocks;
@@ -50,8 +51,20 @@ fn name<T: serde::Serialize>(v: &T) -> String {
 }
 
 fn rows_table(head: &[&str], rows: &[Vec<String>]) -> String {
+    named_table("", head, rows)
+}
+
+/// A table under its own toggle, `View <what> as table`, for a step with
+/// more than one figure, so each toggle says which it opens.
+fn named_table(what: &str, head: &[&str], rows: &[Vec<String>]) -> String {
+    let label = if what.is_empty() {
+        "View as table".to_string()
+    } else {
+        format!("View {what} as a table")
+    };
     format!(
-        "<details class=\"as-table\"><summary>View as table</summary>{}</details>",
+        "<details class=\"as-table\"><summary>{}</summary>{}</details>",
+        esc(&label),
         table("", head, rows)
     )
 }
@@ -387,6 +400,18 @@ fn link_step(a: &Analysis, links: &FmLinks) -> String {
         .iter()
         .map(|f| format!("{} ({})", f.id, f.clusters.join(", ")))
         .collect();
+    let groups: Vec<GGroup> = a
+        .candidate_fleets
+        .iter()
+        .map(|f| GGroup {
+            label: format!("candidate fleet {}", f.id),
+            members: f
+                .clusters
+                .iter()
+                .filter_map(|c| idx.get(c.as_str()).copied())
+                .collect(),
+        })
+        .collect();
     step(&Step {
         id: "link",
         n: 3,
@@ -402,10 +427,11 @@ fn link_step(a: &Analysis, links: &FmLinks) -> String {
         figure: cluster_graph(
             &nodes,
             &edges,
+            &groups,
             "Synthetic example: clusters and the soft links between them",
         ),
         caption: format!(
-            "{} clusters from {} records. Node area is the record count; colour the tier; a thick grey edge joins a candidate fleet.",
+            "{} clusters from {} records. Node area is the record count; colour the tier. A candidate fleet's clusters sit together on a shaded band that names it, a thick grey edge joining them.",
             a.clusters.len(),
             a.total
         ),
@@ -551,8 +577,16 @@ fn time_step(a: &Analysis, links: &FmLinks) -> String {
         ),
         table: format!(
             "{}{}",
-            rows_table(&["Cluster", "Tier", "Run start", "Run end", "Records"], &run_rows),
-            rows_table(&["Hint", "Strength", "From", "To", "Chance"], &rows)
+            named_table(
+                "the runs",
+                &["Cluster", "Tier", "Run start", "Run end", "Records"],
+                &run_rows
+            ),
+            named_table(
+                "the interaction hints",
+                &["Hint", "Strength", "From", "To", "Chance"],
+                &rows
+            )
         ),
         refs: fm(links, &["FM-5.5", "FM-6.2", "FM-5.12"]),
         fit: Fit::ScrollOnly,
@@ -962,7 +996,7 @@ const AUDIENCES: [Audience; 5] = [
         "What the report means, what becomes public and when, how to check your own logs, and how to reach us privately.",
         &[
             ("operators/", "For operators"),
-            ("analyze/#preset=access-log", "Check a log in your browser"),
+            ("check-logs/", "Check my logs in your browser"),
         ],
     ),
     (

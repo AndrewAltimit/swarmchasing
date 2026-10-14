@@ -4,7 +4,7 @@
 // unwrap box for any URL, zoomable runs, the interaction graph, each
 // cluster's agent-likelihood ladder, and each cluster's scope tests. Record text is shown defanged, never
 // as a link.
-import { $, el, activate, fetchRoot, showError } from "../lib/dom.js";
+import { $, el, activate, fetchRoot, ruleLink, showError } from "../lib/dom.js";
 import { arr, obj, fmtTs, fmtShort, dur, trunc, plural } from "../lib/fmt.js";
 import { engine, host as hostOf } from "../lib/wasm.js";
 import { figure, legend, legendKey, swarmKey, swimlanes, runExtent, zoomWindow, swarmGraph } from "../lib/charts.js";
@@ -55,7 +55,7 @@ function unwrapBox(example) {
       ...arr(x.layers).map((l, i) => el("div", { class: `layer d${Math.min(4, Number(l.depth) || 0)}` },
         el("div", { class: "via" }, `[${i}] ${l.via}${l.host ? " · " + hostOf(sc, l.host) : ""}`),
         el("code", {}, safe(l.text, 400)),
-        el("div", {}, (byLayer[i] ?? []).map((h) => el("span", { class: "chip" }, `${h.rule_id} +${h.weight}`))))));
+        el("div", {}, (byLayer[i] ?? []).map((h) => el("span", { class: "chip" }, ruleLink(h.rule_id, "rule-link"), ` +${h.weight}`))))));
   };
   const go = el("button", { type: "button", class: "primary" }, "Unwrap");
   go.addEventListener("click", run);
@@ -97,6 +97,7 @@ function timeFigures() {
     caption: "The same runs, drawn live: zoom into the two days.",
     head: ["Cluster", "Tier", "Run start", "Run end", "Records"],
     rows: lanes.flatMap((l) => l.runs.map((r) => [l.label, l.tier, fmtTs(r.start), fmtTs(r.end), String(r.count)])),
+    what: "the runs",
   });
   // Runs as nodes, hints as arcs.
   const nodes = new Map();
@@ -125,6 +126,7 @@ function timeFigures() {
     caption: "Hover or focus an arc for the hint it rests on. Each is a hint for review, never a merge.",
     head: ["Hint", "Strength", "Between"],
     rows: edges.map((e) => [e.name, e.strength, e.label]),
+    what: "the interaction hints",
   });
   show("time", runsFig, swarmFig);
 }

@@ -203,27 +203,107 @@ pub struct GEdge {
     pub label: String,
 }
 
-/// Clusters on a circle (in the order given), area by record count, with
-/// the hints between them.
-pub fn cluster_graph(nodes: &[GNode], edges: &[GEdge], label: &str) -> String {
+/// A candidate fleet in the cluster graph: its label and its members, as
+/// node indexes.
+pub struct GGroup {
+    pub label: String,
+    pub members: Vec<usize>,
+}
+
+/// The order clusters take around the graph's ellipse: each group's members
+/// side by side (groups in the order given, members in node order, a node
+/// in the first group that names it), then every other node in node order.
+/// Deterministic, so the figure is the same on every build.
+pub fn group_order(n: usize, groups: &[GGroup]) -> Vec<usize> {
+    let mut order = Vec::with_capacity(n);
+    let mut placed = vec![false; n];
+    for g in groups {
+        let mut m: Vec<usize> = g.members.iter().copied().filter(|&i| i < n).collect();
+        m.sort_unstable();
+        m.dedup();
+        for i in m {
+            if !placed[i] {
+                placed[i] = true;
+                order.push(i);
+            }
+        }
+    }
+    order.extend((0..n).filter(|&i| !placed[i]));
+    order
+}
+
+/// Clusters on an ellipse, area by record count, with the hints between
+/// them. Each candidate fleet's members sit together, behind a light band
+/// along the ellipse that names the fleet, so its edges stay short instead
+/// of crossing the figure.
+pub fn cluster_graph(nodes: &[GNode], edges: &[GEdge], groups: &[GGroup], label: &str) -> String {
     let (w, h) = (720.0, 380.0);
     let (cx, cy, rad) = (w / 2.0, h / 2.0, h / 2.0 - 46.0);
+    let (rx, ry) = (rad * 1.45, rad);
     let max = nodes.iter().map(|n| n.size).max().unwrap_or(1).max(1) as f64;
     let n = nodes.len().max(1) as f64;
+    let angle = |slot: usize| slot as f64 / n * std::f64::consts::TAU - std::f64::consts::FRAC_PI_2;
+    let order = group_order(nodes.len(), groups);
+    let mut slot_of = vec![0usize; nodes.len()];
+    for (slot, &i) in order.iter().enumerate() {
+        slot_of[i] = slot;
+    }
     let pos: Vec<(f64, f64, f64)> = nodes
         .iter()
         .enumerate()
         .map(|(i, nd)| {
-            let a = i as f64 / n * std::f64::consts::TAU - std::f64::consts::FRAC_PI_2;
-            let r = if nodes.len() == 1 { 0.0 } else { rad };
+            let a = angle(slot_of[i]);
+            let k = if nodes.len() == 1 { 0.0 } else { 1.0 };
             (
-                cx + r * 1.45 * a.cos(),
-                cy + r * a.sin(),
+                cx + k * rx * a.cos(),
+                cy + k * ry * a.sin(),
                 7.0 + 15.0 * (nd.size as f64 / max).sqrt(),
             )
         })
         .collect();
     let mut s = open("fleet", w, h, label);
+    // Bands first, under the edges and nodes: an arc of the ellipse from a
+    // fleet's first member to its last, wide enough to hold the nodes.
+    let mut taken = vec![false; nodes.len()];
+    for g in groups {
+        let mut slots: Vec<usize> = g
+            .members
+            .iter()
+            .filter(|&&i| i < nodes.len() && !taken[i])
+            .map(|&i| slot_of[i])
+            .collect();
+        slots.sort_unstable();
+        slots.dedup();
+        for &i in &g.members {
+            if i < nodes.len() {
+                taken[i] = true;
+            }
+        }
+        let (Some(&first), Some(&last)) = (slots.first(), slots.last()) else {
+            continue;
+        };
+        if slots.len() < 2 || nodes.len() < 2 {
+            continue;
+        }
+        let (a0, a1) = (angle(first), angle(last));
+        let large = if a1 - a0 > std::f64::consts::PI { 1 } else { 0 };
+        let mid = (a0 + a1) / 2.0;
+        let _ = write!(
+            s,
+            "<g class=\"fleet-band\"><title>{0}</title><path d=\"M{1:.1},{2:.1} A{3:.1},{4:.1} 0 {5} 1 {6:.1},{7:.1}\"/>\
+<text class=\"band-label\" x=\"{8:.1}\" y=\"{9:.1}\" text-anchor=\"middle\">{0}</text></g>",
+            esc(&g.label),
+            cx + rx * a0.cos(),
+            cy + ry * a0.sin(),
+            rx,
+            ry,
+            large,
+            cx + rx * a1.cos(),
+            cy + ry * a1.sin(),
+            cx + (rx - 58.0) * mid.cos(),
+            cy + (ry - 50.0) * mid.sin() + 4.0,
+        );
+    }
     let mut seen: Vec<(usize, usize)> = Vec::new();
     for e in edges {
         let (Some(p), Some(q)) = (pos.get(e.a), pos.get(e.b)) else {
@@ -303,7 +383,7 @@ pub fn swarm_arcs(
     let t0 = nodes.iter().map(|n| n.t).min().unwrap_or(0);
     let t1 = nodes.iter().map(|n| n.t).max().unwrap_or(1);
     let span = (t1 - t0).max(60) as f64;
-    let (w, lh, l, r, t, b) = (960.0, 44.0, 64.0, 24.0, 40.0, 28.0);
+    let (w, lh, l, r, t, b) = (720.0, 44.0, 64.0, 24.0, 40.0, 28.0);
     let h = t + b + lh * lanes.len().max(1) as f64;
     let x = |v: i64| l + 12.0 + (v - t0) as f64 / span * (w - l - r - 24.0);
     let y = |lane: usize| t + lh * lane as f64 + lh / 2.0;
@@ -667,6 +747,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_fleet_sits_together_and_is_named_on_its_band() {
+        let g = |members: Vec<usize>| GGroup {
+            label: "candidate fleet F1".into(),
+            members,
+        };
+        // Members side by side in node order, then the rest; a node two
+        // groups name stays with the first.
+        assert_eq!(
+            group_order(6, &[g(vec![4, 1]), g(vec![1, 5])]),
+            vec![1, 4, 5, 0, 2, 3]
+        );
+        assert_eq!(group_order(3, &[g(vec![9])]), vec![0, 1, 2]);
+        let nodes: Vec<GNode> = (0..5)
+            .map(|i| GNode {
+                label: format!("C{i}"),
+                tier: "significant".into(),
+                size: 1,
+            })
+            .collect();
+        let svg = cluster_graph(&nodes, &[], &[g(vec![0, 3])], "x");
+        assert_eq!(svg.matches("class=\"fleet-band\"").count(), 1);
+        assert!(svg.contains(">candidate fleet F1</text>"));
+        assert_eq!(svg, cluster_graph(&nodes, &[], &[g(vec![0, 3])], "x"));
+        // A one-member group draws no band.
+        assert!(!cluster_graph(&nodes, &[], &[g(vec![2])], "x").contains("fleet-band"));
+    }
+
+    #[test]
     fn figures_escape_labels_and_carry_no_style() {
         let p = "<script>\"x";
         let figs = [
@@ -706,6 +814,10 @@ mod tests {
                     size: 1,
                 }],
                 &[],
+                &[GGroup {
+                    label: p.into(),
+                    members: vec![0],
+                }],
                 p,
             ),
             swarm_arcs(

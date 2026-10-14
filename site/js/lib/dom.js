@@ -1,12 +1,17 @@
 // DOM helpers shared by every page. Record contents are untrusted: they only
 // ever reach the page through el()'s text children (textContent), never as
-// HTML, and el() refuses URL attributes other than blob: URLs the page made.
+// HTML, and el() refuses URL attributes other than blob: URLs the page made
+// and links to the site's own pages (a relative path and a fragment, such
+// as ../rules/#rule-x), which carry no scheme and so can go nowhere else.
 
 export const $ = (id) => document.getElementById(id);
 
 // Attributes that load or navigate. Only blob: URLs the page made itself.
 const URL_ATTRS = new Set(["href", "src", "action", "formaction", "xlink:href", "srcdoc", "data", "poster"]);
 const SVG_NS = "http://www.w3.org/2000/svg";
+// A link within the site: one or more ./ or ../, a lower-case page path,
+// then a fragment of URL-encoded characters. Nothing else passes.
+const SITE_LINK = /^(?:\.\.?\/)+[a-z0-9\-/]*#[A-Za-z0-9%._~!*'()\-]+$/;
 
 function apply(e, attrs) {
   for (const [k, v] of Object.entries(attrs ?? {})) {
@@ -17,8 +22,8 @@ function apply(e, attrs) {
     else if (k.startsWith("on")) {
       if (typeof v !== "function") throw new Error(`${k}: handler must be a function`);
       e.addEventListener(k.slice(2), v);
-    } else if (URL_ATTRS.has(k.toLowerCase()) && !String(v).startsWith("blob:")) {
-      throw new Error(`${k}: only blob: URLs`);
+    } else if (URL_ATTRS.has(k.toLowerCase()) && !String(v).startsWith("blob:") && !(k === "href" && SITE_LINK.test(String(v)))) {
+      throw new Error(`${k}: only blob: URLs and links within the site`);
     } else e.setAttribute(k, v === true ? "" : String(v));
   }
 }
@@ -43,11 +48,28 @@ export function svg(tag, attrs = {}, ...kids) {
   return e;
 }
 
+/**
+ * A rule id as a link to its row on the rules page (`rules/#rule-<id>`).
+ * The id is URL-encoded into the fragment and shown as text, so an id from
+ * edited rules can only name a row, never a page elsewhere.
+ */
+export function ruleLink(id, cls = "chip rule-link") {
+  const root = document.body.dataset.root || "./";
+  const text = String(id ?? "");
+  const href = `${root}rules/#rule-${encodeURIComponent(text)}`;
+  return SITE_LINK.test(href) ? el("a", { class: cls, href, title: `Rule ${text} on the rules page` }, text) : el("span", { class: cls }, text);
+}
+
 /** Run fn on click, Enter and Space: for rows and marks that act as buttons. */
 export function activate(node, fn) {
-  node.addEventListener("click", fn);
+  // A link or control inside the node does its own job, not the node's.
+  const own = (ev) => {
+    const inner = ev.target.closest?.("a, button, input, select, textarea");
+    return !inner || inner === node || !node.contains(inner);
+  };
+  node.addEventListener("click", (ev) => own(ev) && fn(ev));
   node.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" || ev.key === " ") {
+    if (own(ev) && (ev.key === "Enter" || ev.key === " ")) {
       ev.preventDefault();
       fn(ev);
     }

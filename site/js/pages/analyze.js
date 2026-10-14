@@ -3,7 +3,7 @@
 // text only, URLs and hosts defanged, and never become links. The URL hash
 // holds the selection as ids only (a cluster key, a record number, a rule
 // id, a view), never hosts, URLs or other record data.
-import { $, el, activate, download, fetchRoot, showAlert, showError } from "../lib/dom.js";
+import { $, el, activate, download, fetchRoot, ruleLink, showAlert, showError } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
 import { workbench, host as hostOf, pageRules } from "../lib/wasm.js";
 import { figure, legend, legendKey, edgeKey, swarmKey, tierLegend, rampLegend, swimlanes, runExtent, zoomWindow, fleetGraph, swarmGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
@@ -34,6 +34,7 @@ function ensure() {
     const ev = JSON.parse(m.evidence_levels());
     $("min-named").replaceChildren(...ev.levels.map((l) => el("option", { value: l.id }, l.label)));
     $("min-named").value = ev.default;
+    $("min-named").disabled = false;
     sc = m;
     return m;
   }).catch((e) => {
@@ -239,6 +240,7 @@ function runAnalysis() {
     warn.textContent = notes.join(" ");
   }
   a = out.analysis;
+  defanged = new Map();
   zoom = null;
   allRecords = false;
   // Declared testing (the declaring text and the contact it names) is for
@@ -401,7 +403,8 @@ function viewRuns() {
   const cl = a.clusters.filter((c) => arr(c.runs).some((r) => r.start > 0)).slice(0, MAX_LANES);
   const lanes = cl.map((c) => ({ key: keyOf(c), label: c.id, tier: c.tier, runs: c.runs.filter((r) => r.start > 0) }));
   const full = runExtent(lanes);
-  const svgChart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), bands: sharedPauseBands(), selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth(), label: "Runs per cluster over time, UTC", domain: zoom, onZoom: setZoom, fit });
+  const svgChart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), bands: sharedPauseBands(), selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth(), label: "Runs per cluster over time, UTC", domain: zoom, onZoom: setZoom, fit,
+    empty: a.clusters.length ? "None of the clusters has a run with timestamps, so there is nothing to draw on a time axis. The flagged records are listed in the table below." : "No clusters formed, so there are no runs to draw: records link into a cluster through shared identifiers or close timing. Every flagged record is still listed in the flagged-records table below." });
   if (svgChart instanceof SVGElement) svgChart.setAttribute("data-focus-key", "swim-chart");
   const chart = full ? el("div", {}, zoomTools(full), svgChart) : svgChart;
   return figure({
@@ -463,11 +466,17 @@ function viewFleet() {
   // One legend entry per edge style present: each soft-link kind has its own.
   const styles = new Map();
   for (const e of edges) styles.set(`${e.kind} ${e.sub}`.trim(), e.name);
-  const chart = fleetGraph({ nodes, edges, selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth() });
+  // Each candidate fleet's clusters sit together, on a band that names it.
+  const groups = arr(a.candidate_fleets).map((f) => {
+    const o = Array.isArray(f) ? { clusters: f } : obj(f);
+    const members = arr(o.clusters ?? o.members ?? o.keys).map((x) => clusterBy(String(x ?? ""))).filter(Boolean).map(keyOf).filter((k) => keys.has(k));
+    return { label: `candidate fleet ${trunc(String(o.id ?? o.name ?? ""), 24)}`.trim(), members };
+  });
+  const chart = fleetGraph({ nodes, edges, groups, selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth() });
   return figure({
     chart,
     legend: legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"), ...[...styles].map(([cls, name]) => edgeKey(cls, name))),
-    caption: `Hints, not evidence: no edge changes a score or merges clusters. Node area is the cluster's record count; clusters sit in order of first activity.${edges.length ? "" : " No hints connect these clusters."}`,
+    caption: `Hints, not evidence: no edge changes a score or merges clusters. Node area is the cluster's record count; clusters sit in order of first activity, a candidate fleet's together on a shaded band.${edges.length ? "" : " No hints connect these clusters."}`,
     head: ["Hint", "From", "To", "Detail"],
     rows: edges.map((e) => [e.name, idOf(e.a), idOf(e.b), e.label]),
   });
@@ -623,7 +632,9 @@ window.addEventListener("resize", () => {
 });
 
 // ── Records and endpoints ──────────────────────────────────────────────────
-const RECORD_HEAD = ["Tier", "Score", "Time (UTC)", "Cluster", "URL (defanged)", "Rules"];
+// Below the three panes, at full width. The columns that say why a record
+// is flagged come first: tier, score, rules, then the URL.
+const RECORD_HEAD = ["Tier", "Score", "Rules", "URL (defanged)", "Time (UTC)", "Cluster"];
 const ENDPOINT_HEAD = ["Host", "Tier", "Hits / all", "First seen (UTC)", "Last seen (UTC)", "Status", "Attack payloads"];
 /** A cell labelled with its column, so the rows stack as cards on phones. */
 const cell = (head, col, attrs, ...kids) => el("td", { ...attrs, "data-label": head[col] }, ...kids);
@@ -632,10 +643,34 @@ const cell = (head, col, attrs, ...kids) => el("td", { ...attrs, "data-label": h
 // and on wide screens alike) with a button for the rest of the selection.
 const FEW_ROWS = 10;
 let allRecords = false; // the visitor asked for every record of this analysis
+let defanged = new Map(); // record index -> its whole URL defanged, for the filter
+
+const defangedUrl = (i) => {
+  if (!defanged.has(i)) defanged.set(i, sc.defang(String(a.results[i].obs.url ?? "")));
+  return defanged.get(i);
+};
+const clusterNo = (i) => {
+  const c = a.results[i].cluster;
+  return c == null ? Infinity : c;
+};
+const SORTS = {
+  score: (x, y) => a.results[y].score - a.results[x].score || a.results[x].obs.ts - a.results[y].obs.ts,
+  time: (x, y) => a.results[x].obs.ts - a.results[y].obs.ts || x - y,
+  cluster: (x, y) => clusterNo(x) - clusterNo(y) || a.results[x].obs.ts - a.results[y].obs.ts,
+};
+
+/** The selection's records, filtered by the text box and in the order picked. */
+function listedRecords() {
+  const needle = $("rec-filter").value.trim().toLowerCase();
+  let idx = [...scopeIdx()];
+  if (needle) idx = idx.filter((i) => defangedUrl(i).toLowerCase().includes(needle) || arr(a.results[i].hits).some((h) => String(h.rule_id).toLowerCase().includes(needle)));
+  return idx.sort(SORTS[$("rec-sort").value] ?? SORTS.score);
+}
 
 function renderRecords() {
-  const idx = [...scopeIdx()].sort((x, y) => a.results[y].score - a.results[x].score || a.results[x].obs.ts - a.results[y].obs.ts);
-  $("records-h").textContent = `Flagged records (${scopeText()}: ${idx.length})`;
+  const idx = listedRecords();
+  const needle = $("rec-filter").value.trim();
+  $("records-h").textContent = `Flagged records (${scopeText()}${needle ? `, matching "${trunc(needle, 40)}"` : ""}: ${idx.length})`;
   const capped = idx.slice(0, MAX_ROWS);
   // A selected record past the short list shows the whole list.
   const few = !allRecords && capped.length > FEW_ROWS + 2 && !(sel.r != null && capped.indexOf(sel.r) >= FEW_ROWS);
@@ -644,15 +679,16 @@ function renderRecords() {
     const r = a.results[i];
     const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, tabindex: 0, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}`, "data-focus-key": `rec:${i}` },
       cell(RECORD_HEAD, 0, { class: "rc-head" }, pill(r.tier)), cell(RECORD_HEAD, 1, { class: "num rc-head rc-lab" }, r.score),
-      cell(RECORD_HEAD, 2, { class: "nowrap rc-head", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
-      cell(RECORD_HEAD, 3, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"),
-      cell(RECORD_HEAD, 4, { class: "url" }, safe(r.obs.url, 300)),
-      cell(RECORD_HEAD, 5, {}, arr(r.hits).map((h) => el("span", { class: "chip" }, h.rule_id))));
+      cell(RECORD_HEAD, 2, { class: "rules" }, arr(r.hits).map((h) => ruleLink(h.rule_id))),
+      cell(RECORD_HEAD, 3, { class: "url" }, safe(r.obs.url, 300)),
+      cell(RECORD_HEAD, 4, { class: "nowrap rc-head", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
+      cell(RECORD_HEAD, 5, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"));
+    // A rule link opens the rules page; the rest of the row selects the record.
     activate(tr, () => select({ r: sel.r === i ? null : i }));
     return tr;
   }));
-  if (idx.length > capped.length && !few) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - capped.length} more not shown; download the analysis JSON for all.`)));
-  if (!idx.length) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, "No flagged records in this selection.")));
+  if (idx.length > capped.length && !few) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - capped.length} more not shown; download the CSV or the analysis JSON for all.`)));
+  if (!idx.length) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, needle ? "No flagged record in this selection matches the filter." : "No flagged records in this selection.")));
   const more = few ? el("button", { type: "button", class: "more-rows" }, `Show all ${capped.length}${idx.length > capped.length ? ` of ${idx.length}` : ""} records`) : null;
   more?.addEventListener("click", () => {
     allRecords = true;
@@ -663,6 +699,14 @@ function renderRecords() {
   });
   $("records").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "records" },
     el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)), ...(more ? [more] : []));
+}
+$("rec-sort").addEventListener("change", () => a && renderRecords());
+{
+  let t = 0;
+  $("rec-filter").addEventListener("input", () => {
+    clearTimeout(t);
+    t = setTimeout(() => a && renderRecords(), 120);
+  });
 }
 
 function renderEndpoints() {
@@ -677,10 +721,10 @@ function renderEndpoints() {
   for (const v of views) {
     const c = (col, attrs, ...kids) => cell(ENDPOINT_HEAD, col, attrs, ...kids);
     body.append(el("tr", {},
-      c(0, { class: "url" }, host(v.host)), c(1, {}, pill(v.max_tier)),
+      c(0, { class: "host" }, host(v.host)), c(1, {}, pill(v.max_tier)),
       c(2, { class: "num hits", title: `${v.hits} suggestive or significant of ${v.records} records to this host` }, `${v.hits} / ${v.records}`),
-      c(3, { class: "nowrap", title: fmtTs(v.first_seen) }, fmtShort(v.first_seen)), c(4, { class: "nowrap", title: fmtTs(v.last_seen) }, fmtShort(v.last_seen)), c(5, {}, String(v.activity ?? "")),
-      c(6, {}, v.payloads ? Object.keys(obj(v.payload_rules)).map((r) => el("span", { class: "chip" }, r)) : el("span", { class: "hint" }, "none seen"))));
+      c(3, { class: "nowrap", title: fmtTs(v.first_seen) }, fmtShort(v.first_seen)), c(4, { class: "nowrap", title: fmtTs(v.last_seen) }, fmtShort(v.last_seen)), c(5, { class: "nowrap" }, String(v.activity ?? "")),
+      c(6, {}, v.payloads ? Object.keys(obj(v.payload_rules)).map((r) => ruleLink(r)) : el("span", { class: "hint" }, "none seen"))));
   }
   $("endpoints").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "endpoints" },
     el("thead", {}, el("tr", {}, ENDPOINT_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)));
@@ -757,7 +801,7 @@ function clusterContext(c) {
     c.corroboration ? el("span", { class: `corr ${String(c.corroboration).replace(/[^a-z_]/g, "")}` }, corroborationLabel(c.corroboration)) : null,
     el("div", { class: "hint" }, "who can put such a record into its source; one kind of source alone could be one person submitting URLs"));
   row("Targets", chips(topEntries(c.target_hosts, 6).map(([h, n]) => `${host(h)} ×${n}`)));
-  row("Top rules", chips(topEntries(c.rules, 8).map(([r, n]) => `${r} ×${n}`)));
+  row("Top rules", topEntries(c.rules, 8).map(([r, n]) => el("span", { class: "chip" }, ruleLink(r, "rule-link"), ` ×${n}`)));
   const tac = topEntries(c.tactics, 9);
   if (tac.length) row("Tactics", tacticBars(tac), el("div", { class: "hint" }, "records per tactic: what the matches show the agent doing; descriptive, never scored"));
   if (num(c.artifacts)) row("Model artifacts", `${c.artifacts} match(es) show only that a model wrote the request (residue, self-identification)`);
@@ -897,7 +941,7 @@ function recordContext(i) {
   if (r.obs.source) row("Source", trunc(String(r.obs.source), 60));
   if (r.target_host) row("Target", host(r.target_host));
   row("URL (defanged)", el("code", {}, safe(r.obs.url, 1200)));
-  row("Rules", el("ul", {}, arr(r.hits).map((h) => el("li", {}, el("strong", {}, h.rule_id), ` +${h.weight}`,
+  row("Rules", el("ul", {}, arr(r.hits).map((h) => el("li", {}, el("strong", {}, ruleLink(h.rule_id, "rule-link")), ` +${h.weight}`,
     h.tactic ? el("span", { class: "chip" }, tactic(h.tactic)) : null, h.artifact ? el("span", { class: "chip" }, "model artifact") : null,
     h.matched ? [": ", el("code", {}, safe(h.matched, 160))] : null))));
   const sum = arr(r.hits).reduce((t, h) => t + Math.max(0, num(h.weight) ?? 0), 0);
@@ -1138,7 +1182,7 @@ const iso = (t) => (t > 0 ? new Date(t * 1000).toISOString().replace(/\.\d{3}Z$/
 
 $("csv-records").addEventListener("click", () => {
   if (!a) return;
-  const idx = [...scopeIdx()].sort((x, y) => a.results[y].score - a.results[x].score || a.results[x].obs.ts - a.results[y].obs.ts);
+  const idx = listedRecords();
   const rows = idx.map((i) => {
     const r = a.results[i];
     return [i, r.tier, r.score, iso(r.obs.ts), r.cluster != null ? a.clusters[r.cluster]?.id ?? "" : "", r.target_host ? host(r.target_host) : "", sc.defang(String(r.obs.url ?? "")), arr(r.hits).map((h) => h.rule_id).join(" ")];
@@ -1183,7 +1227,8 @@ $("csv-endpoints").addEventListener("click", () => {
   });
 }
 
-{
+/** Apply what the URL hash asks for: the access-log preset or the example. */
+async function applyHash() {
   const h = readHash();
   // The view is set after the example loads: setting it rewrites the hash,
   // which still holds the selection the example's analysis reads.
@@ -1201,3 +1246,17 @@ $("csv-endpoints").addEventListener("click", () => {
   }
   if (h.v) setView(h.v);
 }
+await applyHash();
+// A link to #try=example or #preset=access-log followed from this page (the
+// home page's and the operators' links, the browser's back button) applies
+// it as arrival does. The page's own selection writes use replaceState,
+// which fires no hashchange.
+window.addEventListener("hashchange", () => {
+  const h = readHash();
+  if (h.example || h.preset === "access-log") applyHash();
+  else if (a) {
+    sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
+    if (h.v && h.v !== view) setView(h.v);
+    else select({}, null);
+  }
+});

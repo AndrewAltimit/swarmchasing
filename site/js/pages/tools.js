@@ -7,7 +7,7 @@
 // manifest's signature (against the keys this site publishes) and the
 // analysis by the tools module. Record contents, stamps and claims
 // are untrusted: inserted as text, URLs defanged.
-import { $, el, showError, fetchRoot } from "../lib/dom.js";
+import { $, el, ruleLink, showError, fetchRoot } from "../lib/dom.js";
 import { arr, obj, num, pct, dur, fmtTs, topEntries, trunc } from "../lib/fmt.js";
 import { tools, engine, host, pageRules } from "../lib/wasm.js";
 import { figure, swimlanes, tierLegend } from "../lib/charts.js";
@@ -253,7 +253,7 @@ function recordTable(a) {
       td(2, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster].id : "–"),
       td(3, {}, trunc(String(r.obs.id), 40)),
       td(4, { class: "url" }, sc.defang(trunc(String(r.obs.url), 300))),
-      td(5, {}, r.hits.map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched)) }, h.rule_id))));
+      td(5, {}, r.hits.map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched)) }, ruleLink(h.rule_id, "rule-link")))));
   };
   const body = el("tbody", {}, (few ? all.slice(0, PHONE_ROWS) : all).map(row),
     idx.length > all.length ? el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - all.length} more not shown.`)) : null);
@@ -310,5 +310,26 @@ $("sectxt-run").addEventListener("click", () => using(tools, (m) => {
   // Values are shown defanged: a security.txt is text from elsewhere, not a link.
   $("sectxt-out").replaceChildren(el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, (v ?? []).length ? (v ?? []).map((x) => m.defang(String(x))).join("\n") : "–")])));
 }, $("sectxt-run")));
+// Parse is offered once there is text to parse.
+const syncParse = () => {
+  const empty = !$("sectxt").value.trim();
+  $("sectxt-run").disabled = empty;
+  $("sectxt-wait").hidden = !empty;
+};
+$("sectxt").addEventListener("input", syncParse);
+syncParse();
 // Each change is defanged once the engine is there; the latest text wins.
-$("defang-in").addEventListener("input", () => using(engine, (m) => ($("defang-out").textContent = m.defang($("defang-in").value))));
+// The result, under its label, shows only while there is text.
+$("defang-in").addEventListener("input", () => {
+  if (!$("defang-in").value.trim()) {
+    $("defang-out").textContent = "";
+    $("defang-result").hidden = true;
+    return;
+  }
+  using(engine, (m) => {
+    const text = $("defang-in").value;
+    $("defang-out").textContent = text.trim() ? m.defang(text) : "";
+    $("defang-result").hidden = !text.trim();
+  });
+});
+$("defang-copy").addEventListener("click", () => navigator.clipboard?.writeText($("defang-out").textContent));

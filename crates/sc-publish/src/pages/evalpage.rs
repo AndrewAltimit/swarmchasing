@@ -109,8 +109,9 @@ pub fn body(s: &Summary, set_href: &str) -> String {
         o,
         "<section aria-labelledby=\"per-rule\"><h2 id=\"per-rule\">Hits per rule</h2>\
 <p class=\"hint\">Labelled records each rule matched, agent then benign, with the rule's own precision once it has {MIN_HITS_FOR_PRECISION} hits or more. A rule with benign hits is a candidate for a lower weight. Coverage: {} of {} rules have an agent example{}{}.</p>\
+<details class=\"as-table chart-fold\"><summary>Show the chart of hits per rule</summary>\
 <p class=\"legend\"><span><span class=\"key s-agent\"></span>agent records</span> <span><span class=\"key s-benign\"></span>benign records</span></p>\
-<figure class=\"chart-box\">{}</figure>",
+<figure class=\"chart-box\">{}</figure></details>",
         c.covered,
         c.rules,
         if c.allowed > 0 {

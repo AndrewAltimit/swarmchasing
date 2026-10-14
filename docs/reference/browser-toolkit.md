@@ -36,7 +36,8 @@ It refuses any path under `data/` or `$SWARMCHASE_DATA`, so watch data and case 
 | `/methodology/`, `/docs/` | The methodology and every other doc. |
 | `/docs/manual/` | The Field Manual, with section and glossary links and a pager. |
 | `/docs/manual/sections/` | Every Field Manual section by id, with search. |
-| `/operators/` | The operators' guide, with a link to the workbench's access-log preset. |
+| `/operators/` | The operators' guide, with links to *Check my logs* and the workbench's access-log preset. |
+| `/check-logs/` | *Check my logs*: one access log, the rules and the identity check, a plain summary ([check my logs](#check-my-logs)). |
 | `/rules/` | The rules grouped by kind, filterable by every SC-T tactic, each with a URL tester; an editor and an in-browser evaluation ([rules explorer](#rules-explorer)). |
 | `/eval/` | The [summary](evaluation.md#summary-json) of the bundled rules on the labelled set: each tier in sentences, then intervals, every slice as a forest plot; tiers recomputed in the page for edited rules ([evaluation page](#evaluation-page)). |
 | `/analyze/` | The workbench. |
@@ -76,15 +77,15 @@ Until there is a real notice, the notices section shows the indicator notice the
 
 ## The workbench
 
-The workbench analyses pasted or loaded records, including an operator's own access log (`/analyze/#preset=access-log`; see [for operators](../guides/for-operators.md#check-your-own-logs)). *Try an example* loads the synthetic showcase.
+The workbench analyses pasted or loaded records, including an operator's own access log (`/analyze/#preset=access-log`; see [for operators](../guides/for-operators.md#check-your-own-logs)). *Try an example* loads the synthetic showcase. A link to `#try=example` or `#preset=access-log` followed while on the page applies it as arrival does.
 
 An empty workbench is one dashed area: paste records, drop a file on it, *Load file* or *Try an example*; the empty views pane says what will show there and offers the example too. A dropped file is read in the page, as a picked one is. *Analyse* is offered once there is input; drafting the report, preparing sightings and the CSV downloads wait for an analysis. An input from which no record is read shows no dashboard: an alert says nothing was read, quotes the first problem the parser met, and lists the formats the workbench reads. After a run the records box folds to a line with the record count and *Edit*, so the clusters sit under the summary.
 
-On a wide screen it has three panes: the records and clusters, the views, and the context of what is selected. Phones step through them. The views are:
+On a wide screen it has three panes: the records and clusters, the views, and the context of what is selected, with the flagged records and the endpoints at full width below them. Phones step through them; the tables belong to the Explore step. The views are:
 
 - **Runs**: a lane per cluster and a bar per run, pauses shaded, shared pauses outlined. *Fit to activity* (on by default) shrinks each idle stretch to a narrow hatched gap that names its length, so runs days apart stay readable; a zoomed window is always drawn to scale;
 - **Runs** zoom: drag across the plot, or focus the chart and use `+`, `-`, the arrow keys and `0`;
-- **Fleet**: clusters as nodes and the hints between them (shared pauses, probe chains, payload dialects, soft links, candidate fleets) as edges, one style per soft-link kind in the legend; a kind the page does not know is drawn in the generic style under its own name;
+- **Fleet**: clusters as nodes and the hints between them (shared pauses, probe chains, payload dialects, soft links, candidate fleets) as edges, one style per soft-link kind in the legend; a kind the page does not know is drawn in the generic style under its own name. Clusters sit on an ellipse in order of first activity, except that a candidate fleet's members sit together on a light band that names it, as on the landing page;
 - **Swarm**: runs as nodes on a time axis and the interaction hints between them (S1 to S5) as arcs, styled by kind and weighted by strength;
 - **Rules × clusters**: a heatmap whose cells filter the records;
 - **Rhythm**: records by weekday and hour, UTC;
@@ -98,11 +99,21 @@ The scope section ([SC-FM 15](../manual/15-misalignment.md)) answers the four qu
 
 The links panel lists shared pauses, dialects, probe chains, common features, escalations, candidate fleets, soft links and interaction hints. The kinds with nothing found share one *None found* line, each with what finding none means as its tooltip. Chains and escalations timed by archive captures show no pace.
 
-Every view has a table view and a *Download SVG* button, which saves the chart as drawn, with its colours, as a standalone file.
+Chart text is at least 12 px at the scale the chart is drawn. Every view has a table view and a *Download SVG* button, which saves the chart as drawn, with its colours, as a standalone file.
 
-The flagged records and the endpoints each download as CSV: hosts and URLs defanged, times in UTC, and a cell a spreadsheet would read as a formula prefixed with a quote mark. The endpoints table gives times to the minute with UTC in its header, and its *Hits / all* column counts the suggestive or significant records to a host out of every record that targets it. Every mark that selects something is a keyboard button (Enter or Space), focus stays on it after the views redraw, and Escape clears the selection. Edges, shared pauses and rhythms are hints to check, not evidence ([methodology](../methodology.md#descriptive-hints)). The selection is kept in the URL hash as ids only (a cluster key, a record number, a rule id), never hosts or URLs.
+The flagged records table leads with what flags a record (tier, score, rules, the defanged URL), then its time and cluster. It sorts by score, time or cluster, and a filter narrows it to records whose defanged URL or rule ids contain the text typed. A host never breaks inside its cell; a URL wraps where it must. Rule ids here, in the context panel, on the unwrap page and in the bundle check link to their row on the rules page.
 
-The last step drafts a disclosure, on *Draft the report* or when the section scrolls into view, from the analysis the page shows ([loading](#loading-and-size)). It follows the CLI's naming gate: pick the weakest evidence that may name a developer, and paste claims from case work (the JSON `swarmchase report --claims` reads). Outside case notes, a developer below that level is not named ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
+The flagged records (as the table lists them, filter and order included) and the endpoints each download as CSV: hosts and URLs defanged, times in UTC, and a cell a spreadsheet would read as a formula prefixed with a quote mark. The endpoints table gives times to the minute with UTC in its header, and its *Hits / all* column counts the suggestive or significant records to a host out of every record that targets it.
+
+Every mark that selects something is a keyboard button (Enter or Space), focus stays on it after the views redraw, and Escape clears the selection. Edges, shared pauses and rhythms are hints to check, not evidence ([methodology](../methodology.md#descriptive-hints)). The selection is kept in the URL hash as ids only (a cluster key, a record number, a rule id), never hosts or URLs.
+
+The last step drafts a disclosure, on *Draft the report* or when the section scrolls into view, from the analysis the page shows ([loading](#loading-and-size)). It follows the CLI's naming gate: pick the weakest evidence that may name a developer (the choices fill in, at the default level, when the engine loads), and paste claims from case work (the JSON `swarmchase report --claims` reads). Outside case notes, a developer below that level is not named ([attribution](../methodology.md#attribution-levels-and-the-naming-gate)).
+
+## Check my logs
+
+`/check-logs/` is the operator's short path: paste or drop an access log once and name the host. The tools module runs the workbench's analysis on it (format `access_log`, the host in the field map) and the identity check with the providers' files the site was built with, then the page says in plain words how many requests the rules flagged and which rules, lists the strongest of them defanged, and counts the agents that name themselves: verified, claims only, and spoofed (grouped by address and declared product, in an alert).
+
+It ends with what to do next: look closer in the workbench or on the identity page, share sightings, report a swarm, or reach the project privately. The next steps are links in the page's markup; the script only shows them. *Try an example* runs a synthetic log on a reserved host against synthetic range files, labelled as such. Nothing is uploaded or fetched beyond the site's own files.
 
 ## Agent identity
 
@@ -124,13 +135,13 @@ The manual's pages link `FM-n.m` section ids and `SC-Tn` tactic ids in running t
 
 ## Rules explorer
 
-The rules are grouped by kind. Each is a row (its id, weight and flags such as *significant alone*) that opens on the rest: the description, what it matches, its independence group if it has one, its tactic and Field Manual section, the pattern, the URL tester and its hits on the labelled set. Rows start open on a wide screen; on phones they start closed, as do the filters, and the rule a link names (`#rule-<id>`) opens. A kind whose rules the filters all hide is hidden with its heading. The lede gives the tier thresholds; how a score adds up is folded under it.
+The rules are grouped by kind. Each is a row (its id, weight and flags such as *significant alone*, and while closed its description cut to one line) that opens on the rest: the description, what it matches, its independence group if it has one, its tactic and Field Manual section, the pattern, the URL tester and its hits on the labelled set. The id wraps in its own column, so the row's chevron stays on its first line. Rows are closed in the markup and the page script opens them on a wide screen; on phones they stay closed, as do the filters, and the rule a link names (`#rule-<id>`) opens and is scrolled to. A kind whose rules the filters all hide is hidden with its heading. The lede gives the tier thresholds; how a score adds up is folded under it.
 
 *Test a URL* unwraps a URL with the engine, says whether that rule fires and on which layer, and lists the other rules that fire; the URL is decoded, never opened, and shown defanged. The tactic filter lists SC-T1 to SC-T9; SC-T8 and SC-T9 are cluster- and fleet-level judgments that no rule makes, and the page says so.
 
 ## Evaluation page
 
-The page opens with the tiers in plain words: for each, how many agent records the rules flag and miss, how many of the records they flag are benign, and the range the share of right flags could take by chance. The sentences are made from the summary at build, on the records collected rather than written for the set when there are any, else on all of them. The cards with each rate's 95% interval, the confusion matrices and the forest plots follow.
+The page opens with the tiers in plain words: for each, how many agent records the rules flag and miss, how many of the records they flag are benign, and the range the share of right flags could take by chance. The sentences are made from the summary at build, on the records collected rather than written for the set when there are any, else on all of them. The cards with each rate's 95% interval, the confusion matrices and the forest plots follow. The chart of hits per rule, a bar for every rule, is folded under its section with its table beside it.
 
 ## Edited rules
 
@@ -200,9 +211,11 @@ After a build with a seed, `swarmchase canary register _site` checks each token 
 
 ## Link cards and search
 
-Every page carries Open Graph and Twitter card tags with its title and description. With an `https` base URL (a deploy), it also carries its canonical URL and the preview image `og-image.png` (1200 by 630); a local build on `http://localhost` leaves the absolute URLs out. The home page describes the site and the project as JSON-LD (`WebSite`, `Organization`), and each Field Manual chapter as a `TechArticle` that is part of the manual. JSON-LD is a script element of a data type, which browsers never run, so the CSP does not apply to it; its text escapes `<`, `>` and `&`, so no value can close the element, and `check-site.py` allows no other inline script.
+Every page carries Open Graph and Twitter card tags with its title and description; a notice's description is the first paragraph of its body, cut to a sentence-sized length, then its status and date. With an `https` base URL (a deploy), it also carries its canonical URL and the preview image `og-image.png` (1200 by 630) with its text alternative, for both Open Graph and the Twitter card; a local build on `http://localhost` leaves the absolute URLs out.
 
-The sitemap gives a notice its latest update date and a doc or the rules page its last commit date, so a rebuild of the same commit writes the same sitemap. A shallow clone cannot date its files, so the build then leaves `lastmod` out; the deploy checks out full history for it.
+The home page describes the site and the project as JSON-LD (`WebSite`, `Organization`), and each Field Manual chapter as a `TechArticle` that is part of the manual. JSON-LD is a script element of a data type, which browsers never run, so the CSP does not apply to it; its text escapes `<`, `>` and `&`, so no value can close the element, and `check-site.py` allows no other inline script.
+
+The sitemap gives a notice its latest update date, a doc or the rules page its last commit date, and a tool page (the workbench, *Check my logs*, unwrap, identity, tools, submit) the last commit date of its page script, so a rebuild of the same commit writes the same sitemap. A shallow clone cannot date its files, so the build then leaves `lastmod` out; the deploy checks out full history for it.
 
 ## Printing
 
@@ -216,7 +229,9 @@ Every page has a banner, navigation, main and footer landmark, one `h1` and head
 
 Records, notices, claims and edited rules can carry attack payloads, so the site treats them as inert text.
 
-- Every page carries a strict Content-Security-Policy: only the site's own scripts, styles and WASM modules, no inline script or style, no requests elsewhere.
-- Generated pages escape every value; page scripts insert text, never HTML. URLs from records are shown defanged and never as links.
+- Every page carries a strict Content-Security-Policy: only the site's own scripts, styles and WASM modules, no inline script or style, no requests elsewhere, and `require-trusted-types-for 'script'`, so every HTML and script sink refuses a plain string (the page scripts use none).
+- Generated pages escape every value; page scripts insert text, never HTML. URLs from records are shown defanged and never as links. The only links a script makes are to the site's own pages by a relative path and a fragment (a rule's row), with the fragment URL-encoded.
 
-[`check-site.py`](../../scripts/ci/check-site.py) checks the sources in CI and the pre-commit hook, and every generated page and the build's inputs after a build. [`site-xss-check.mjs`](../../scripts/site-xss-check.mjs) builds the site with a hostile notice, loads every page in headless Chrome, drives the workbench with XSS probes, hostile claims and hostile edited rules, picks a hostile evidence bundle in the bundle viewer, checks the notice filters on synthetic notices (`crates/sc-publish/tests/fixtures/notices/`, never published), and fails if any of them runs; CI runs it at deploy.
+[`check-site.py`](../../scripts/ci/check-site.py) checks the sources in CI and the pre-commit hook, and every generated page and the build's inputs after a build; on a build it also checks that every link with a `#fragment` to a page of the site names an id on that page (fragments the page scripts read, such as `#rule-`, `#try=` or `#preset=`, aside).
+
+[`site-xss-check.mjs`](../../scripts/site-xss-check.mjs) builds the site with a hostile notice, loads every page in headless Chrome, drives the workbench with XSS probes, hostile claims and hostile edited rules, runs *Check my logs* on a hostile access log, picks a hostile evidence bundle in the bundle viewer, checks the notice filters on synthetic notices (`crates/sc-publish/tests/fixtures/notices/`, never published), and fails if any of them runs; CI runs it at deploy.
