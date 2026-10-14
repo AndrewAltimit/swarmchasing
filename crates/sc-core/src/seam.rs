@@ -20,7 +20,8 @@
 //! `linking.seam_min_side` records and differ: their habits share nothing
 //! (relay stacks, URL encodings or payload dialect, where both sides have
 //! them), or no client (user agent, network and header set together) sent
-//! records on both. A seam is a prompt for
+//! records on both while each side has a client sending two or more of its
+//! records (one rotating its client on every request shares none anyway). A seam is a prompt for
 //! the plant review ([`crate::plant`]): it never splits the cluster, changes
 //! a score or links anything.
 
@@ -319,17 +320,25 @@ fn habits(results: &[ObsResult], records: &[usize]) -> [BTreeSet<String>; 3] {
 }
 
 /// How two sides differ: the habits on which both have data and share
-/// nothing ([`crate::plant::HABITS`]), then `clients` when both name
-/// clients and no client (user agent, network and header set together)
-/// sent records on both.
+/// nothing ([`crate::plant::HABITS`]), then `clients` when each side has
+/// a client sending two or more of its records and no client (user agent,
+/// network and header set together) sent records on both.
 fn sides_differ(results: &[ObsResult], a: &[usize], b: &[usize]) -> Vec<&'static str> {
     let (ha, hb) = (habits(results, a), habits(results, b));
     let mut v = crate::plant::habits_apart(&ha, &hb);
-    let clients = |s: &[usize]| -> BTreeSet<String> {
-        s.iter().filter_map(|&m| client_key(&results[m])).collect()
+    let clients = |s: &[usize]| -> BTreeMap<String, usize> {
+        let mut n = BTreeMap::new();
+        for k in s.iter().filter_map(|&m| client_key(&results[m])) {
+            *n.entry(k).or_insert(0) += 1;
+        }
+        n
     };
     let (ca, cb) = (clients(a), clients(b));
-    if !ca.is_empty() && !cb.is_empty() && ca.is_disjoint(&cb) {
+    // A side whose every record is a client of its own (an agent rotating
+    // address and user agent on each request) has no client to share:
+    // that its clients are not the other side's says nothing.
+    let recurs = |c: &BTreeMap<String, usize>| c.values().any(|&n| n >= 2);
+    if recurs(&ca) && recurs(&cb) && ca.keys().all(|k| !cb.contains_key(k)) {
         v.push("clients");
     }
     v
@@ -520,6 +529,13 @@ mod tests {
         let members: Vec<usize> = (0..9).collect();
         let ties = [tie(&[0, 1, 2, 3, 4], "ra"), tie(&[4, 5, 6, 7, 8], "rb")];
         let refs: Vec<&Tie> = ties.iter().collect();
+        assert!(seams(&results, &members, &refs, 3).is_empty());
+        // An agent rotating its client on every request: no two records
+        // share a client, on either side or across, so the sides' clients
+        // differing says nothing.
+        let results: Vec<ObsResult> = (0..9)
+            .map(|i| rec(&format!("agent-{i}/1.0"), 64_500 + i))
+            .collect();
         assert!(seams(&results, &members, &refs, 3).is_empty());
         // Every record on one tag: no joint at all.
         let results = two_operators();

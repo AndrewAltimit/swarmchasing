@@ -34,6 +34,14 @@
 //! `max_holders` senders is a common default and seeds no comparison.
 //! Pairs are soft links in the harness family: they never score, link or
 //! merge.
+//!
+//! **Order conflicts.** Two clusters holding playbooks whose profiles share
+//! `min_steps` steps or more, and walk at most half of them in one order
+//! (one's reverse of the other's, say), run the steps of one template set
+//! by different scripts: the template set they share is a harness two
+//! operators use, not one operator's. Such pairs are returned for the soft
+//! links ([`crate::fleets`]) to leave out the template ties between them
+//! (scaffolds, scaffold lineage, co-groups on templates).
 
 use crate::analyze::{Cluster, ObsResult};
 use crate::chance::{Mix, TestFamily, product_chance, seed, sidak};
@@ -327,16 +335,57 @@ fn follows(classes: &[&BTreeSet<String>], order: &[String]) -> bool {
 /// Pairs of clusters above noise whose playbooks align beyond chance, most
 /// unlikely first, and the family's multiplicity budget. `max_shared` is
 /// `soft_links.max_shared`.
+/// Length of the longest increasing subsequence.
+fn lis(v: &[usize]) -> usize {
+    let mut tails: Vec<usize> = Vec::new();
+    for &x in v {
+        let i = tails.partition_point(|&t| t < x);
+        if i == tails.len() {
+            tails.push(x);
+        } else {
+            tails[i] = x;
+        }
+    }
+    tails.len()
+}
+
+/// Whether profiles `x` and `y` walk the steps they share in clearly
+/// different orders: at least `min_steps` distinct shared steps, at most
+/// half of them in one order in both.
+fn disagree(x: &[usize], y: &[usize], min_steps: usize) -> bool {
+    let mut seen = BTreeSet::new();
+    let shared: Vec<usize> = x
+        .iter()
+        .copied()
+        .filter(|s| y.contains(s) && seen.insert(*s))
+        .collect();
+    if shared.len() < min_steps.max(2) {
+        return false;
+    }
+    let ranks: Vec<usize> = shared
+        .iter()
+        .filter_map(|s| y.iter().position(|v| v == s))
+        .collect();
+    lis(&ranks) * 2 <= shared.len()
+}
+
+/// Playbook pairs, the family's multiplicity budget, and the pairs of
+/// clusters whose playbooks walk one step set in conflicting orders (by
+/// cluster id, the stronger first).
 pub(crate) fn playbook_pairs(
     clusters: &[Cluster],
     results: &[ObsResult],
     max_shared: usize,
     opts: &PlaybookOptions,
-) -> (Vec<PlaybookPair>, TestFamily) {
+) -> (Vec<PlaybookPair>, TestFamily, Vec<(String, String)>) {
     let family = "playbook";
     let shown: Vec<&Cluster> = clusters.iter().filter(|c| c.tier > Tier::Noise).collect();
     if shown.len() < 3 {
-        return (Vec::new(), TestFamily::cut(family, &[], 0, opts.fdr));
+        return (
+            Vec::new(),
+            TestFamily::cut(family, &[], 0, opts.fdr),
+            Vec::new(),
+        );
     }
     // Step ids and their classes.
     let mut ids: BTreeMap<String, usize> = BTreeMap::new();
@@ -430,6 +479,21 @@ pub(crate) fn playbook_pairs(
         d >= 2 && d <= max_shared && d + out_of(s) <= opts.max_holders
     };
     let holds = |b: &Book| b.profile.len() >= opts.min_steps && b.support >= opts.min_hosts;
+    // Holders of playbooks sharing a step whose orders conflict.
+    let mut sharing: BTreeSet<(usize, usize)> = BTreeSet::new();
+    for hs in holders.values() {
+        let with: Vec<usize> = hs.iter().copied().filter(|&c| holds(&books[c])).collect();
+        for (i, &x) in with.iter().enumerate() {
+            for &y in &with[i + 1..] {
+                sharing.insert((x, y));
+            }
+        }
+    }
+    let conflicts: Vec<(String, String)> = sharing
+        .into_iter()
+        .filter(|&(x, y)| disagree(&books[x].profile, &books[y].profile, opts.min_steps))
+        .map(|(x, y)| (shown[x].id.clone(), shown[y].id.clone()))
+        .collect();
     // Candidates: two clusters holding a playbook whose profiles share a
     // usable step.
     let mut candidates: BTreeSet<(usize, usize)> = BTreeSet::new();
@@ -540,7 +604,7 @@ pub(crate) fn playbook_pairs(
             .then(p.b.cmp(&q.b))
     });
     out.truncate(MAX_PAIRS);
-    (out, fam)
+    (out, fam, conflicts)
 }
 
 #[cfg(test)]
@@ -729,6 +793,31 @@ mod tests {
         for x in p {
             assert_eq!(side(&x.a), side(&x.b), "{x:?}");
         }
+        // Their orders disagree, so the template set they share ties no
+        // pair across the two, and no candidate fleet holds both.
+        use crate::fleets::SoftLinkKind::{CoGroup, Scaffold, ScaffoldLineage};
+        for l in &a.soft_links {
+            if matches!(l.kind, CoGroup | Scaffold | ScaffoldLineage) {
+                assert_eq!(side(&l.a), side(&l.b), "{l:?}");
+            }
+        }
+        for f in &a.candidate_fleets {
+            let sides: BTreeSet<bool> = f.clusters.iter().map(|c| side(c)).collect();
+            assert_eq!(sides.len(), 1, "{f:?}");
+        }
+    }
+
+    #[test]
+    fn orders_conflict_when_shared_steps_mostly_disagree() {
+        // Shared steps in the first order, ranked in the second: reversed
+        // and mostly reversed disagree; one swap does not.
+        assert!(disagree(&[0, 1, 2, 3], &[3, 2, 1, 0], 3));
+        assert!(disagree(&[0, 1, 2, 3], &[3, 2, 0, 1], 3));
+        assert!(!disagree(&[0, 1, 2, 3], &[1, 0, 2, 3], 3));
+        assert!(!disagree(&[0, 1, 2, 3], &[0, 1, 2, 3], 3));
+        // Too few shared steps say nothing.
+        assert!(!disagree(&[0, 1], &[1, 0], 3));
+        assert!(!disagree(&[0, 1, 2], &[5, 6, 7], 3));
     }
 
     #[test]

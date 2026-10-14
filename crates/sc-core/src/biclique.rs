@@ -8,7 +8,7 @@
 //! them. This test reads the group instead of the pair. Each cluster above
 //! noise holds **features** of two families:
 //!
-//! - **targets**: a rare host family (a host's last two labels), one
+//! - **targets**: a rare host family ([`crate::knowledge::family`]), one
 //!   feature per episode of activity on it (touches by clusters above noise
 //!   no more than `window_secs` apart, request and submit times only), so a
 //!   feature is one site in one stretch of hours. Hosts of one site are one

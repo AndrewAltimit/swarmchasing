@@ -25,6 +25,9 @@ pub(super) struct AnalysisCtx<'r> {
     flagged: Vec<usize>,
     /// What linking joined the records by (set by `link`).
     ties: Vec<link::Tie>,
+    /// Pairs of clusters whose playbooks walk one step set in conflicting
+    /// orders (set by `playbook`).
+    order_conflicts: Vec<(String, String)>,
     a: Analysis,
 }
 
@@ -249,13 +252,14 @@ pub(super) const PASSES: &[Pass] = &[
     // Reads members' layers and parameters, and outside records' URLs.
     pass("playbook", &["number", "trim_layers"], |cx| {
         let s = &cx.rules.set;
-        let (pairs, family) = crate::playbook::playbook_pairs(
+        let (pairs, family, conflicts) = crate::playbook::playbook_pairs(
             &cx.a.clusters,
             &cx.a.results,
             s.soft_links.max_shared,
             &s.playbook,
         );
         cx.a.playbook_pairs = pairs;
+        cx.order_conflicts = conflicts;
         if family.tested > 0 {
             cx.a.multiplicity.push(family);
         }
@@ -305,6 +309,7 @@ pub(super) fn run(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         observations,
         flagged: Vec::new(),
         ties: Vec::new(),
+        order_conflicts: Vec::new(),
         a: Analysis::default(),
     };
     for (i, p) in PASSES.iter().enumerate() {
@@ -529,12 +534,15 @@ fn fleets(cx: &mut AnalysisCtx) {
             co_groups: &a.co_groups,
             generator_pairs: &a.generator_pairs,
             playbook_pairs: &a.playbook_pairs,
+            order_conflicts: &cx.order_conflicts,
         },
         opts,
     );
     cx.a.candidate_fleets =
         crate::fleets::candidate_fleets(&soft_links, &cluster_ids(&a.clusters), opts);
     cx.a.soft_links = soft_links;
+    cx.a.joint_caps =
+        (opts.joint != crate::fleets::SoftLinkOptions::default().joint).then(|| opts.joint.clone());
 }
 
 /// Counts, the rules version and timing over every flagged record.

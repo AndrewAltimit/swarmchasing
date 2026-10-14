@@ -4,10 +4,13 @@
 //! roughly the same order, even when its run tags change between runs. Two
 //! runs match when they share enough hosts, their host sets overlap strongly
 //! once hosts common to many runs are down-weighted, and the shared hosts come
-//! up in a similar order. A list walked by more than a few runs is a
-//! published one (a news story's sites, a directory read top to bottom), not
-//! one operator's task, and pairs on it are not matched. Matches are leads to
-//! review; nothing here merges clusters.
+//! up in a similar order. A list walked by more than a few runs within a
+//! day of each other is a published one (a news story's sites, a directory
+//! read top to bottom), not one operator's task, and pairs on it are not
+//! matched. Only walkers active within a day less `min_gap_secs` of either
+//! run of the pair count: one operator rerunning its task every day, under
+//! a new tag each day, walks the list once a day however many days it
+//! runs. Matches are leads to review; nothing here merges clusters.
 
 use crate::analyze::{Analysis, Cluster, ObsResult};
 use serde::{Deserialize, Serialize};
@@ -37,9 +40,10 @@ pub struct RecurrenceOptions {
     /// ends, as well as on a different UTC day.
     pub min_gap_secs: i64,
     /// A pair is not matched when more than this many walkers (clusters, or
-    /// runs when no clusters are given) hold at least half of the shared
-    /// hosts (and `min_shared`): the list is common, not one operator's
-    /// (0: no limit).
+    /// runs when no clusters are given) active within a day less
+    /// `min_gap_secs` of either run hold at least half of the shared hosts
+    /// (and `min_shared`): the list is common, not one operator's (0: no
+    /// limit).
     pub max_walkers: usize,
 }
 
@@ -148,6 +152,13 @@ fn reruns_apart(
         .map(|&i| seqs[i].set.iter().map(String::as_str).collect())
         .collect();
     let counts = crate::dialect::SharedCounts::new(&sets);
+    // The runs holding each host, for counting a list's walkers.
+    let mut holders: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for (r, s) in seqs.iter().enumerate() {
+        for h in &s.set {
+            holders.entry(h.as_str()).or_default().push(r);
+        }
+    }
     let mut out = Vec::new();
     for (k, &i) in order.iter().enumerate() {
         let later: Vec<usize> = if opt.min_shared == 0 {
@@ -201,12 +212,30 @@ fn reruns_apart(
             }
             if opt.max_walkers > 0 {
                 let need = opt.min_shared.max(shared.len().div_ceil(2));
-                let walkers: BTreeSet<usize> = seqs
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, s)| shared.iter().filter(|h| s.set.contains(**h)).count() >= need)
-                    .map(|(r, _)| walker(r))
-                    .collect();
+                // A day less the gap: one operator's daily reruns fall
+                // outside it, other walkers of a published list inside.
+                let g = (DAY - opt.min_gap_secs).max(opt.min_gap_secs).max(0);
+                let near = |s: &Seq, x: &Seq| s.start <= x.end + g && s.end >= x.start - g;
+                // A walker holding `need` of the shared hosts holds one of
+                // the first `len - need + 1`; counting stops past the limit.
+                let mut walkers: BTreeSet<usize> = BTreeSet::new();
+                let mut seen: BTreeSet<usize> = BTreeSet::new();
+                'scan: for h in &shared[..shared.len() + 1 - need.min(shared.len())] {
+                    for &r in holders.get(h.as_str()).into_iter().flatten() {
+                        let s = &seqs[r];
+                        if !seen.insert(r)
+                            || !(near(s, a) || near(s, b))
+                            || walkers.contains(&walker(r))
+                            || shared.iter().filter(|h| s.set.contains(**h)).count() < need
+                        {
+                            continue;
+                        }
+                        walkers.insert(walker(r));
+                        if walkers.len() > opt.max_walkers {
+                            break 'scan;
+                        }
+                    }
+                }
                 if walkers.len() > opt.max_walkers {
                     continue;
                 }
@@ -342,18 +371,33 @@ mod tests {
 
     #[test]
     fn a_list_many_walk_is_no_ones_rerun() {
-        // Five agents walk one published list in one order, a day apart.
-        let runs: Vec<TargetRun> = (0..5)
-            .map(|d| run(&format!("r{d}"), T0 + d * DAY, &HOSTS))
+        // Five agents walk one published list in one order within an hour
+        // of each other, and five more two days later.
+        let runs: Vec<TargetRun> = (0..10)
+            .map(|k| {
+                let day = if k < 5 { 0 } else { 2 * DAY };
+                run(&format!("r{k}"), T0 + day + (k % 5) * 600, &HOSTS)
+            })
             .collect();
         assert!(reruns(&runs, &RecurrenceOptions::default()).is_empty());
         let all = RecurrenceOptions {
             max_walkers: 0,
             ..Default::default()
         };
-        assert_eq!(reruns(&runs, &all).len(), 10);
-        // Three walkers are still one operator's run and two reruns.
-        assert_eq!(reruns(&runs[..3], &RecurrenceOptions::default()).len(), 3);
+        assert_eq!(reruns(&runs, &all).len(), 25);
+        // Three walkers at once are still one operator's run and its rerun.
+        let few: Vec<TargetRun> = [0, 1, 5].iter().map(|&k| runs[k].clone()).collect();
+        assert_eq!(reruns(&few, &RecurrenceOptions::default()).len(), 2);
+    }
+
+    #[test]
+    fn one_operators_daily_reruns_all_match() {
+        // One task rerun every day for a week, a new tag (a new cluster)
+        // each day: one walker at a time, however many days.
+        let runs: Vec<TargetRun> = (0..7)
+            .map(|d| run(&format!("r{d}"), T0 + d * DAY, &HOSTS))
+            .collect();
+        assert_eq!(reruns(&runs, &RecurrenceOptions::default()).len(), 21);
     }
 
     #[test]

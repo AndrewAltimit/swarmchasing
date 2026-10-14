@@ -313,6 +313,11 @@ pub struct Analysis {
     /// admin, never findings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub candidate_fleets: Vec<crate::fleets::CandidateFleet>,
+    /// The joint caps its soft links were combined under, when the rules
+    /// analysed with set others than the bundled ones (a rules file, a
+    /// case's pinned rules): [`Analysis::pair_evidence`] reads them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joint_caps: Option<crate::fleets::JointCaps>,
     /// Pairs of runs whose records suggest agents interacting (SC-T9):
     /// hints for the admin, never scored, never a link or a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -364,6 +369,15 @@ impl Cluster {
 }
 
 impl Analysis {
+    /// Every linked pair's combined evidence, under the joint caps of the
+    /// rules it was analysed with, as its candidate fleets were combined.
+    pub fn pair_evidence(&self) -> BTreeMap<(String, String), crate::fleets::PairEvidence> {
+        match &self.joint_caps {
+            Some(caps) => crate::fleets::pair_evidence_with(&self.soft_links, caps),
+            None => crate::fleets::pair_evidence(&self.soft_links),
+        }
+    }
+
     /// The index of the cluster `sel` names, by id or key.
     pub fn cluster_index(&self, sel: &str) -> Option<usize> {
         self.clusters.iter().position(|c| c.matches(sel))

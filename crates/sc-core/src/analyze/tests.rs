@@ -867,6 +867,18 @@ fn different_clients_on_one_host_are_not_joined_by_timing() {
     let z = on_one_host(&[(None, None), (a, None), (None, ua("axios/1.6.8"))]);
     assert_eq!(z.clusters.len(), 1);
     assert_eq!(z.clusters[0].members.len(), 3);
+    // A record naming no client between them joins neither to the other:
+    // two clusters, each one address.
+    let w = on_one_host(&[(a, None), (None, None), (b, None), (a, None), (b, None)]);
+    for c in &w.clusters {
+        let ips: std::collections::BTreeSet<_> = c
+            .members
+            .iter()
+            .filter_map(|&m| w.results[m].obs.ip.as_ref())
+            .collect();
+        assert_eq!(ips.len(), 1, "{:?}", w.clusters);
+    }
+    assert_eq!(w.clusters.len(), 2, "{:?}", w.clusters);
 }
 
 #[test]

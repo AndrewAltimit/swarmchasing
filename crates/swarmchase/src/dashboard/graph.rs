@@ -52,7 +52,7 @@ pub fn graph(a: &Analysis, q: Option<&Queue>) -> Value {
             (y.to_string(), x.to_string())
         }
     };
-    let evidence = sc_core::fleets::pair_evidence(&a.soft_links);
+    let evidence = a.pair_evidence();
     for l in &a.soft_links {
         if !ids.contains(l.a.as_str()) || !ids.contains(l.b.as_str()) {
             continue;
@@ -229,7 +229,7 @@ mod tests {
         let links = g["links"].as_array().unwrap();
         assert_eq!(links.len(), 1, "{g}");
         let l = &links[0];
-        let e = sc_core::fleets::pair_evidence(&a.soft_links);
+        let e = a.pair_evidence();
         let lr = e.values().next().unwrap().lr;
         assert_eq!(l["soft_strength"], round2(sc_core::fleets::strength_of(lr)));
         assert_eq!(l["soft_lr"], round2(lr));

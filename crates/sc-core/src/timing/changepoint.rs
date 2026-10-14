@@ -206,14 +206,9 @@ const MIN_TEMPLATE_SPECIFICITY: usize = 2;
 /// Characters kept of a template key.
 const MAX_KEY: usize = 160;
 
-/// The registrable-looking part of a host: its last two labels.
+/// A host's site ([`crate::knowledge::family`]).
 fn site_family(host: &str) -> &str {
-    let mut dots = host.rmatch_indices('.');
-    dots.next();
-    match dots.next() {
-        Some((i, _)) => &host[i + 1..],
-        None => host,
-    }
+    crate::knowledge::family(host)
 }
 
 #[cfg(test)]

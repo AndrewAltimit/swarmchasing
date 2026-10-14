@@ -25,7 +25,7 @@
 //!
 //! **Common trigger.** A news story or a disclosed flaw sends unrelated
 //! agents to one target at once. A group whose clusters share target
-//! families (a host's last two labels) beyond chance is read as that: for
+//! families ([`crate::knowledge::family`]) beyond chance is read as that: for
 //! each family held by `g` of the `N` point clusters, the group's `n`
 //! members hold it as a hypergeometric draw, and the pairs of members
 //! sharing a family, summed over families, are compared with their expected

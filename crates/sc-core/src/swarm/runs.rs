@@ -217,9 +217,7 @@ pub(super) fn runs(clusters: &[Cluster], results: &[ObsResult]) -> Vec<Run> {
     out
 }
 
-/// The registrable-looking part of a host: its last two labels.
+/// A host's site ([`crate::knowledge::family`]).
 pub(super) fn family(host: &str) -> &str {
-    let mut dots = host.rmatch_indices('.');
-    dots.next();
-    dots.next().map_or(host, |(i, _)| &host[i + 1..])
+    crate::knowledge::family(host)
 }

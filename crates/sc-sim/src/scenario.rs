@@ -141,12 +141,20 @@ pub struct Expect {
     /// count at most.
     #[serde(default)]
     pub max_records: Option<usize>,
+    /// For `clusters`: the B-cubed F1 of clusters against true runs it must
+    /// reach.
+    #[serde(default)]
+    pub min_f1: Option<f64>,
 }
 
 /// Grade ceilings an `expect` table may name: people's records in
 /// clusters graded L3 or above, and benign or tool records graded L2 or
 /// above.
 pub const GRADE_KEYS: [&str; 2] = ["human_high", "benign_high"];
+
+/// The clustering bound an `expect` table may name:
+/// `expect.clusters = { min_f1 = 0.95 }`, B-cubed F1 against true runs.
+pub const CLUSTER_KEY: &str = "clusters";
 
 /// The measurement key an `expect` names (an edge kind's serialised name,
 /// a soft-link kind's, `candidate_fleet` or a review hint's) and whether it
@@ -194,15 +202,20 @@ impl Scenario {
                 self.name, a.kind
             ));
         }
-        if let Some(k) = self
-            .expect
-            .keys()
-            .find(|k| expect_key(k).is_none() && !GRADE_KEYS.contains(&k.as_str()))
-        {
+        if let Some(k) = self.expect.keys().find(|k| {
+            expect_key(k).is_none() && !GRADE_KEYS.contains(&k.as_str()) && *k != CLUSTER_KEY
+        }) {
             return Err(format!(
-                "{}: expect.{k} names no edge kind, soft-link kind, candidate_fleet, review hint or grade ceiling",
+                "{}: expect.{k} names no edge kind, soft-link kind, candidate_fleet, review hint, grade ceiling or clusters",
                 self.name
             ));
+        }
+        if self
+            .expect
+            .get(CLUSTER_KEY)
+            .is_some_and(|e| e.min_f1.is_none())
+        {
+            return Err(format!("{}: expect.{CLUSTER_KEY} needs min_f1", self.name));
         }
         if let Some((k, _)) = self
             .expect

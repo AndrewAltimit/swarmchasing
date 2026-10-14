@@ -13,7 +13,7 @@
 //! nothing fails: nothing drawn is no evidence of precision.
 
 use crate::measure::{KindStat, Measurement};
-use crate::scenario::{GRADE_KEYS, Scenario, ScenarioFile, expect_key};
+use crate::scenario::{CLUSTER_KEY, GRADE_KEYS, Scenario, ScenarioFile, expect_key};
 use serde::{Deserialize, Serialize};
 
 /// What the null scenarios drew between different runs, summed over their
@@ -228,6 +228,17 @@ impl Gate {
                     });
                     continue;
                 }
+                if kind == CLUSTER_KEY {
+                    let least = e.min_f1.unwrap_or(0.0);
+                    let f1 = m.and_then(|m| m.clustering.bcubed()).map(|b| b.2);
+                    out.push(Check {
+                        name: name("B-cubed F1"),
+                        value: f1.map_or("no agent record".into(), |f| format!("{f:.3}")),
+                        bound: format!(">= {least:.3}"),
+                        ok: f1.is_some_and(|f| f + 1e-12 >= least),
+                    });
+                    continue;
+                }
                 let stat = m.and_then(|m| {
                     let (key, edge) = expect_key(kind)?;
                     if edge {
@@ -423,6 +434,48 @@ mod tests {
         assert!(
             ScenarioFile::parse(
                 "[[scenario]]\nname = \"s\"\nexpect.S9 = {}\n[[scenario.actor]]\nkind = \"agent\"\n"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn a_clustering_bound_reads_b_cubed_f1() {
+        let file = ScenarioFile::parse(
+            "[[scenario]]
+name = \"s\"
+expect.clusters = { min_f1 = 0.9 }
+[[scenario.actor]]
+kind = \"agent\"
+",
+        )
+        .unwrap();
+        let g = Gate {
+            expect: true,
+            ..Default::default()
+        };
+        let mut m = Measurement::default();
+        // Four records: precision 1, recall 0.75 (F1 6/7).
+        m.clustering.records = 4;
+        m.clustering.bcubed_precision_sum = 4.0;
+        m.clustering.bcubed_recall_sum = 3.0;
+        let lines: Vec<String> = g
+            .check_scenarios(&[("s".to_string(), m.clone())], &file)
+            .iter()
+            .map(Check::line)
+            .collect();
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].starts_with("FAIL s clusters B-cubed F1: 0.857"),
+            "{lines:?}"
+        );
+        m.clustering.bcubed_recall_sum = 4.0;
+        let c = g.check_scenarios(&[("s".to_string(), m)], &file);
+        assert!(c[0].ok, "{:?}", c[0]);
+        // Without min_f1 the table is refused.
+        assert!(
+            ScenarioFile::parse(
+                "[[scenario]]\nname = \"s\"\nexpect.clusters = { min_recall = 0.9 }\n[[scenario.actor]]\nkind = \"agent\"\n"
             )
             .is_err()
         );

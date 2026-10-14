@@ -187,7 +187,7 @@ The newest twelve are listed; older ones are counted in the section's heading an
 
 ### Slice onsets
 
-Some swarms never cluster above noise: one agent per tag, a few records a run, each below tier. What they change is a count. Each run counts its new records per slice of each source: per rule they hit and, for flagged records, per specific scaffold template and per target site family (a host's last two labels). It keeps the last 16 runs per source in `state.json`, each with the source's records that run (its exposure) and a few example record IDs per slice.
+Some swarms never cluster above noise: one agent per tag, a few records a run, each below tier. What they change is a count. Each run counts its new records per slice of each source: per rule they hit and, for flagged records, per specific scaffold template and per target site family (a host's site, [methodology](../methodology.md#linking-into-clusters)). It keeps the last 16 runs per source in `state.json`, each with the source's records that run (its exposure) and a few example record IDs per slice.
 
 A slice is rising when a Poisson CUSUM over its newest runs (up to six), against its rate per record over the older runs, reaches the threshold ([methodology](../methodology.md#slice-onsets)). A source that returned more rows at the same rate is not rising. Fewer than three older runs, or fewer than 100 records under them, is no alarm.
 

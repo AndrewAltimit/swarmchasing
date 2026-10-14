@@ -43,10 +43,27 @@
 //! leader). Each leader with enough candidate followers is a test, and the
 //! stars kept are cut at a false discovery rate over them.
 //!
-//! One upstream trigger (a feed item, a news alert, a scheduled post) sends
-//! unrelated agents after it the same way, and the first to react reads as
-//! the leader. Followers of different clients are required, which a
-//! trigger's audience also is, so the edge stays a hint for review.
+//! **Nearest leaders.** A follower trails its own dispatcher by its own
+//! delay and anyone else by that and the other's delay too, so its
+//! dispatcher is the cluster after which its delays spread least (their
+//! median absolute deviation). A candidate follower another cluster times
+//! more tightly, or as tightly while leading the leader (the earlier of two
+//! alike is the dispatcher), is that cluster's and is left out of the star.
+//! Clusters downstream of the leader (those it leads, directly or through
+//! clusters it leads) are not read so: a tree's sub-dispatcher times its
+//! own workers more tightly than the root does, and they stay in the root's
+//! star, where the tree's reduction ([`crate::swarm::tree`]) finds their
+//! nearest leader.
+//!
+//! **Chains.** One upstream trigger (a feed item, a news alert, a scheduled
+//! post) sends unrelated agents after it at their own lags, and the
+//! quickest reads as the leader; the second quickest leads every slower one
+//! as well. A star one of whose followers leads every other follower, and
+//! times them more tightly in sum than the leader, is read as such a chain
+//! and not kept: a tree's sub-dispatcher leads its own workers only. A
+//! trigger's readers at fixed lags, and a trigger whose quickest reader is
+//! seldom late, still read as a dispatch star, so the edge stays a hint
+//! for review.
 
 use super::{Ctx, Tests};
 use crate::chance::{at_least, product_chance_all, sidak};
@@ -121,98 +138,131 @@ fn direction_chance(x: &[i64], y: &[i64], bin: i64, reach: i64) -> f64 {
     at_least(&vec![0.5; n], after)
 }
 
-/// The leader of a star against stand-in leaders of the same followers.
-struct Rank {
-    /// Other clusters that could stand in as leader of the followers (they
-    /// lead at least `dispatch_min_followers` of them), and those leading
-    /// them at least as well as the leader does.
-    standins: usize,
-    as_well: usize,
-    /// The leader's rank, `(as_well + 1) / (standins + 1)`; 0 when no other
-    /// cluster leads the followers at all, so a unique leader is not vetoed
-    /// and a trigger's leader (one of many) is.
-    chance: f64,
-}
-
-impl Rank {
-    fn line(&self) -> String {
-        if self.standins == 0 {
-            "; no other cluster active in its hours leads the same followers".into()
-        } else {
-            format!(
-                "; {} of {} other clusters that could lead the same followers lead them as well (rank chance {:.1e})",
-                self.as_well, self.standins, self.chance
-            )
+/// For each of the leader's bursts (times with no earlier time of its
+/// within `reach` seconds), its first time and the follower's first time
+/// after it within `reach`: the delay, by the burst's bin. A burst is read
+/// once, so a leader sending two requests a minute apart does not read
+/// every follower as early after the second.
+fn delays(x: &[i64], y: &[i64], bin: i64, reach: i64) -> BTreeMap<i64, i64> {
+    let mut out = BTreeMap::new();
+    let mut prev: Option<i64> = None;
+    for &t in x {
+        let b = t.div_euclid(bin);
+        let burst = prev.is_some_and(|p| t - p <= reach);
+        prev = Some(t);
+        if burst {
+            continue;
+        }
+        let i = y.partition_point(|&v| v <= t);
+        if let Some(&v) = y.get(i).filter(|&&v| v - t <= reach) {
+            out.insert(b, v - t);
         }
     }
+    out
+}
+
+/// The mean absolute deviation of delays from their median, in seconds:
+/// how tightly a follower trails; `None` under three delays.
+fn spread(d: &BTreeMap<i64, i64>) -> Option<f64> {
+    if d.len() < 3 {
+        return None;
+    }
+    let mut v: Vec<i64> = d.values().copied().collect();
+    v.sort_unstable();
+    let n = v.len();
+    let m = if n % 2 == 1 {
+        v[n / 2] as f64
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) as f64 / 2.0
+    };
+    Some(v.iter().map(|&x| (x as f64 - m).abs()).sum::<f64>() / n as f64)
 }
 
 impl Ctx<'_> {
-    /// How `l` leads `followers` (indexes into `acts`, `skip` left out): the
-    /// sum of `-ln` of each lead's chance, and how many it leads at all. A
-    /// follower it does not lead adds nothing.
-    fn lead_strength(
-        &self,
-        l: &Activity,
-        acts: &[Activity],
-        followers: &[usize],
-        skip: usize,
-    ) -> (f64, usize) {
-        let mut sum = 0.0;
-        let mut led = 0;
-        for &f in followers.iter().filter(|&&f| f != skip) {
-            if let Some(x) = self.lead(l, &acts[f]) {
-                sum += -x.chance.max(1e-300).ln();
-                led += 1;
-            }
-        }
-        (sum, led)
+    /// `f`'s delays after `l`'s events ([`delays`]).
+    fn delays_after(&self, l: &Activity, f: &Activity) -> BTreeMap<i64, i64> {
+        let bin = self.co.bin_secs.max(1);
+        let reach = (self.co.max_lag_bins.max(0) + 2) * bin;
+        delays(&l.times, &f.times, bin, reach)
     }
 
-    /// The leader's rank among stand-in leaders of the same followers: every
-    /// other cluster whose span meets the leader's and that is not itself
-    /// led by the leader's followers' leader (a cluster leading the leader
-    /// leads its followers through it, a tree, not a stand-in). A stand-in
-    /// counts when it leads at least `dispatch_min_followers` of the
-    /// followers (the leader scored on the same set, the stand-in left out),
-    /// and leads them as well when its strength is at least the leader's. The
-    /// rank is `(as_well + 1) / (standins + 1)`; with no stand-in at all it
-    /// is 0, so a unique leader passes. Under one trigger (a feed item, a
-    /// news alert) many clusters lead the followers about equally, so the
-    /// rank is large and the star does not pass.
-    fn leader_rank(&self, acts: &[Activity], li: usize, followers: &[usize]) -> Rank {
+    /// The clusters `acts[li]` leads, directly or through clusters it leads,
+    /// among those active within reach of its span: downstream of it.
+    fn downstream(&self, acts: &[Activity], li: usize) -> Vec<bool> {
         let l = &acts[li];
         let reach = self.co.max_lag_bins.max(0) + 2;
         let (ls, le) = (l.bins[0] - reach, l.bins[l.bins.len() - 1] + reach);
-        let min = self.opts.dispatch_min_followers.max(2);
-        let (mut standins, mut as_well) = (0usize, 0usize);
-        for (ci, c) in acts.iter().enumerate() {
-            if ci == li || c.bins[0] > le || c.bins[c.bins.len() - 1] < ls {
-                continue;
-            }
-            if self.lead(c, l).is_some() {
-                continue;
-            }
-            let (theirs, led) = self.lead_strength(c, acts, followers, ci);
-            if led < min {
-                continue;
-            }
-            standins += 1;
-            let (ours, _) = self.lead_strength(l, acts, followers, ci);
-            if theirs >= ours - 1e-9 {
-                as_well += 1;
+        let near: Vec<usize> = (0..acts.len())
+            .filter(|&c| {
+                c != li && acts[c].bins[0] <= le && acts[c].bins[acts[c].bins.len() - 1] >= ls
+            })
+            .collect();
+        let mut down = vec![false; acts.len()];
+        let mut stack = vec![li];
+        while let Some(x) = stack.pop() {
+            for &c in &near {
+                if !down[c] && self.leads(&acts[x], &acts[c]) {
+                    down[c] = true;
+                    stack.push(c);
+                }
             }
         }
-        let chance = if standins == 0 {
-            0.0
-        } else {
-            (as_well + 1) as f64 / (standins + 1) as f64
+        down
+    }
+
+    /// The spreads of `followers`' delays after `x`, summed; `None` when one
+    /// has too few delays to read.
+    fn spread_sum(&self, x: &Activity, acts: &[Activity], followers: &[usize]) -> Option<f64> {
+        followers
+            .iter()
+            .map(|&f| spread(&self.delays_after(x, &acts[f])))
+            .sum()
+    }
+
+    /// Whether candidate follower `fi` of `acts[li]` is another cluster's:
+    /// one active within reach of it, not downstream of the leader (`down`),
+    /// that leads it and times it more tightly, or as tightly while leading
+    /// the leader.
+    fn nearer_leader(&self, acts: &[Activity], li: usize, fi: usize, down: &[bool]) -> bool {
+        let (l, f) = (&acts[li], &acts[fi]);
+        let Some(ours) = spread(&self.delays_after(l, f)) else {
+            return false;
         };
-        Rank {
-            standins,
-            as_well,
-            chance,
-        }
+        acts.iter().enumerate().any(|(gi, g)| {
+            gi != li
+                && gi != fi
+                && !down[gi]
+                && self.near(g, f)
+                && self.leads(g, f)
+                && spread(&self.delays_after(g, f)).is_some_and(|theirs| {
+                    theirs < ours - 1e-9 || (theirs <= ours + 1e-9 && self.leads(g, l))
+                })
+        })
+    }
+
+    /// A candidate follower (of `heads`) that leads every one of the
+    /// star's `chosen` followers but itself, and times them more tightly in
+    /// sum than the leader: a trigger's chain.
+    fn chain(
+        &self,
+        acts: &[Activity],
+        li: usize,
+        heads: &[usize],
+        chosen: &[usize],
+    ) -> Option<usize> {
+        let l = &acts[li];
+        heads.iter().copied().find(|&c| {
+            let rest: Vec<usize> = chosen.iter().copied().filter(|&f| f != c).collect();
+            !rest.is_empty()
+                && rest.iter().all(|&f| self.leads(&acts[c], &acts[f]))
+                && match (
+                    self.spread_sum(&acts[c], acts, &rest),
+                    self.spread_sum(l, acts, &rest),
+                ) {
+                    (Some(theirs), Some(ours)) => theirs < ours - 1e-9,
+                    _ => false,
+                }
+        })
     }
 
     /// Each cluster above noise with enough active bins outside crowded
@@ -392,6 +442,22 @@ impl Ctx<'_> {
     /// direction's ([`direction_chance`]): both must hold. The co-activity
     /// chance, the costly part, is only read for a lead that passes the rest.
     fn lead(&self, l: &Activity, f: &Activity) -> Option<Lead> {
+        let direction = self.direction(l, f)?;
+        let (_, mut lead) = self.per_lag(&l.bins, &f.bins, true)?;
+        lead.chance = lead.chance.max(direction);
+        Some(lead)
+    }
+
+    /// Whether `l` leads `f` as [`Ctx::lead`] reads it, short of the
+    /// co-activity chance: at a lag of zero or more, more often than its
+    /// mirror, in a direction chance alone seldom gives.
+    fn leads(&self, l: &Activity, f: &Activity) -> bool {
+        self.direction(l, f).is_some()
+    }
+
+    /// The direction's chance of `f` trailing `l`, when it trails at its
+    /// best lag, more often than before it, within `dispatch_pair_max_chance`.
+    fn direction(&self, l: &Activity, f: &Activity) -> Option<f64> {
         let (counts, lead) = self.per_lag(&l.bins, &f.bins, false)?;
         if lead.lag < 0 || lead.coincidences < self.co.min_coincidences {
             return None;
@@ -404,12 +470,7 @@ impl Ctx<'_> {
         let bin = self.co.bin_secs.max(1);
         let reach = (self.co.max_lag_bins.max(0) + 2) * bin;
         let direction = direction_chance(&l.times, &f.times, bin, reach);
-        if direction > self.opts.dispatch_pair_max_chance {
-            return None;
-        }
-        let (_, mut lead) = self.per_lag(&l.bins, &f.bins, true)?;
-        lead.chance = lead.chance.max(direction);
-        Some(lead)
+        (direction <= self.opts.dispatch_pair_max_chance).then_some(direction)
     }
 
     /// Whether `x` and `y` come within reach of each other on enough bins
@@ -483,20 +544,27 @@ impl Ctx<'_> {
             if p > o.dispatch_max_chance {
                 continue;
             }
-            // The leader against stand-ins: every other cluster active in
-            // its hours, read as the leader of the clusters it leads. The
-            // whole candidate set is read, not the consistent subset, so a
-            // trigger's chain (an earlier follower leading the later ones)
-            // is seen whatever subset the star kept.
-            let followers: Vec<usize> = cands.iter().map(|c| c.0).collect();
-            let rank = self.leader_rank(&acts, li, &followers);
-            let p = p.max(rank.chance);
-            if p > o.dispatch_max_chance {
+            let heads: Vec<usize> = cands.iter().map(|c| c.0).collect();
+            let picked: Vec<usize> = chosen.iter().map(|c| c.0).collect();
+            if self.chain(&acts, li, &heads, &picked).is_some() {
                 continue;
             }
+            // Followers another cluster times more tightly are its own:
+            // they count toward the star's chance, as the leader does lead
+            // them, but the edges go to the leader's own.
+            let down = self.downstream(&acts, li);
+            let own: Vec<&(usize, Lead)> = chosen
+                .iter()
+                .copied()
+                .filter(|c| !self.nearer_leader(&acts, li, c.0, &down))
+                .collect();
+            if own.len() < min {
+                continue;
+            }
+            let theirs = chosen.len() - own.len();
             let lc = &self.cl[l.ci];
             let mut edges = Vec::new();
-            for c in &chosen {
+            for c in &own {
                 let f = &acts[c.0];
                 let fc = &self.cl[f.ci];
                 let diff = differ(&l.fp, &f.fp).unwrap_or_default();
@@ -546,7 +614,7 @@ impl Ctx<'_> {
                 } else {
                     EdgeStrength::Weak
                 };
-                let others: Vec<&str> = chosen
+                let others: Vec<&str> = own
                     .iter()
                     .filter(|d| d.0 != c.0)
                     .map(|d| self.cl[acts[d.0].ci].id.as_str())
@@ -566,7 +634,11 @@ impl Ctx<'_> {
                     n_cand,
                     chosen.len() + 1
                 );
-                detail.push_str(&rank.line());
+                if theirs > 0 {
+                    detail.push_str(&format!(
+                        "; {theirs} candidate follower(s) another cluster times more tightly left out"
+                    ));
+                }
                 if !diff.is_empty() {
                     detail.push_str(&format!("; they differ in {}", diff.join(", ")));
                 }

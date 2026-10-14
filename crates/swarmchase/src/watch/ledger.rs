@@ -427,7 +427,7 @@ impl Ledger {
             p.decay_to(t);
             at.insert((p.a.clone(), p.b.clone()), i);
         }
-        for e in sc_core::fleets::pair_evidence(&a.soft_links).into_values() {
+        for e in a.pair_evidence().into_values() {
             let (Some(ta), Some(tb)) = (thread_of(&e.a), thread_of(&e.b)) else {
                 continue;
             };
