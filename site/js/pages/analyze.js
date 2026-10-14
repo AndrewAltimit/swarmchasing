@@ -956,6 +956,13 @@ function clusterContext(c) {
       num(prose.mismatched) ? el("div", {}, `${prose.mismatched} in a language other than their target's country domain`) : null,
       el("div", { class: "hint" }, "an agent prompted in one language often searches a foreign site in it; travellers do too (a hint, not evidence)"));
   }
+  // Declared, then undeclared (identity::fallback): the host arrives defanged.
+  const fb = obj(obj(c.identity).fallback);
+  if (num(fb.blocked))
+    row("Declared, then undeclared", `${fb.blocked} blocked request(s) declaring `, el("code", {}, safeText(fb.declared, 60)),
+      ` on ${safeText(fb.host, 80)} were followed within ${Math.max(1, Math.ceil((num(fb.within_secs) ?? 0) / 60))} min by ${num(fb.undeclared) ?? "?"} undeclared browser-like request(s) for the same page(s) `,
+      chips(arr(fb.paths).slice(0, 5).map((x) => safeText(x, 60))),
+      el("div", { class: "hint" }, "a pattern to check, never scored: an agent falling back to an undeclared client after a block looks like this; so does an unrelated visitor reading the same page"));
   const lf = arr(c.link_features);
   if (lf.length) row("Linked by", chips(lf.slice(0, 10).map((x) => safe(typeof x === "string" ? x : JSON.stringify(x), 90))), lf.length > 10 ? el("span", { class: "hint" }, ` ${lf.length - 10} more`) : null);
   const mine = new Set(arr(c.members));

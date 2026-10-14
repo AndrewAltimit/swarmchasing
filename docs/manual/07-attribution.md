@@ -35,7 +35,7 @@ The hosting layer rests on the **client** network: the network the request came 
 
 The network fields of a scan-service record usually describe the **target**: where the scanner reached the submitted URL's host, which for a relayed URL is often the relay's network ([FM-14.3](14-limits.md#fm-143-a-scan-services-asn-is-the-targets)). Records keep client and target networks apart; a hosting claim cites which one it uses. An ASN names a host. It is never by itself evidence about the developer.
 
-A cloud provider's published ranges for its own network describe a client address further: provider, region and service. That is description of the host, not a stronger claim. An address on the Tor exit list names a relay, not a host: records sent from one are left out of hosting claims and of the same-company check, so anonymised traffic never supports a hosting or developer claim ([methodology](../methodology.md#hosting-class)).
+A cloud provider's published ranges for its own network describe a client address further: provider, region and service. That is description of the host, not a stronger claim. An address on the Tor exit list names a relay, not a host: records sent from one are left out of hosting claims and of the same-company check, so anonymised traffic never supports a hosting or developer claim ([methodology](../methodology.md#hosting-class)). Tor is no party to the incident and gets no claim of its own: a report to a provider or operator carries a caution that the records were sent through Tor exit relays and that the network says nothing about the sender, and a public notice's attribution leaves them out.
 
 ## FM-7.4 Harness and framework layer
 
@@ -150,6 +150,10 @@ Some agents now declare who operates them in a form that costs something to forg
 
 A verified signature shows that the request was signed with a key the signer publishes. It does not show who directed the agent: a provider's agent product signs on behalf of every customer who uses it.
 
+Signers differ in who operates them. A **direct** signer is one operator's own agent; an **intermediary** is a platform a wide range of end users direct, each starting their own actions. A signature verified for an intermediary attributes the platform, never the end user, and a report says so. A per-end-user value the platform forwards (an RFC 7239 `Forwarded` header) separates one end user's requests from another's: it is a key to group requests by, not attribution, and is not published. A practitioner records the class only where the provider's own documentation states it.
+
+A declared agent that is refused (403, 429 or a challenge) and is followed within minutes by undeclared browser-like requests for the same pages from elsewhere is a pattern to check, not a finding: an agent falling back to an undeclared client looks like this, and so does an unrelated visitor reading the same page. It is never scored, names no provider beyond the refused requests' own declaration, and says nothing about who sent the undeclared requests.
+
 | Observation | Reading | Layer and level |
 |---|---|---|
 | Valid signature, key in a directory the provider documents as its own | The request came from the provider's signing infrastructure. | Developer: `provider_infrastructure` ([FM-7.2](#fm-72-developer-and-operator-ladder)); who deployed it is a separate claim ([FM-7.8](#fm-78-the-naming-gate)). |
@@ -207,7 +211,8 @@ A valid signature outranks the address: a product may sign from addresses its fi
 Rules for reading:
 
 - the files are the provider's own publications, read from the addresses its documentation gives, like a security contact ([FM-2.1](02-principles.md#fm-21-passive-only)); an address taken from a request is never fetched;
-- a file changes over time: a verdict names the file and the date it was fetched, and a log much older than the file is read with that gap stated;
+- a file changes over time: a verdict names the file and the date it was fetched (and the file's own creation time, when it states one), and a log much older than the file is read with that gap stated;
+- a file shared by several products may name the services each prefix serves; that name says which product the provider publishes the prefix for, and a declared product from a prefix published for another is the provider's systems with a mismatch to state, not a spoof;
 - the address must be the client's: a log behind a proxy or load balancer records the proxy unless the operator logs the forwarded client address;
 - an address in a shared cloud range shows the provider rented it at the file's date, not that it still does.
 

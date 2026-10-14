@@ -53,6 +53,12 @@ pub struct Held {
     pub sha256: String,
     /// Prefixes or keys it holds.
     pub entries: usize,
+    /// A range file's own `creationTime` and `synctoken`
+    /// (draft-illyes-webbotauth-jafar), when it carries them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synctoken: Option<String>,
 }
 
 /// The held files, by catalog id.
@@ -136,7 +142,7 @@ fn fetch_one(
     if f.body.len() > MAX_BODY {
         bail!("GET {url}: over {MAX_BODY} bytes");
     }
-    let entries = parse(id, agent, &f.body).map_err(anyhow::Error::msg)?;
+    let (entries, created, synctoken) = parse(id, agent, &f.body).map_err(anyhow::Error::msg)?;
     let p = file(data, id);
     std::fs::create_dir_all(dir(data))?;
     std::fs::write(&p, &f.body).with_context(|| format!("writing {}", p.display()))?;
@@ -148,14 +154,19 @@ fn fetch_one(
             .map(|b| format!("{b:02x}"))
             .collect(),
         entries,
+        created,
+        synctoken,
     })
 }
 
-/// Entries in a file: prefixes in a range file, keys in a directory.
-fn parse(id: &str, agent: Option<&str>, body: &str) -> Result<usize, String> {
+/// Entries in a file (prefixes in a range file, keys in a directory), and a
+/// range file's `creationTime` and `synctoken` when it has them.
+type Parsed = (usize, Option<String>, Option<String>);
+
+fn parse(id: &str, agent: Option<&str>, body: &str) -> Result<Parsed, String> {
     match agent {
-        Some(a) => KeyDirectory::parse(id, a, body).map(|d| d.keys.len()),
-        None => RangeTable::parse(id, body).map(|t| t.len()),
+        Some(a) => KeyDirectory::parse(id, a, body).map(|d| (d.keys.len(), None, None)),
+        None => RangeTable::parse(id, body).map(|t| (t.len(), t.created, t.synctoken)),
     }
 }
 
@@ -217,6 +228,7 @@ mod tests {
                 fetched: "2026-10-12".into(),
                 sha256: "x".into(),
                 entries: 1,
+                ..Default::default()
             },
         );
         write_index(&data, &idx).unwrap();
@@ -226,6 +238,15 @@ mod tests {
         assert_eq!(t.fetched.as_deref(), Some("2026-10-12"));
         assert_eq!(w.len(), 1, "{w:?}");
         assert_eq!(parse("k", Some("https://a.test"), "{}").ok(), None);
+        // A range file's optional dating fields are kept for the index.
+        assert_eq!(
+            parse(
+                "r",
+                None,
+                r#"{"creationTime":"2026-10-10T14:30:00Z","synctoken":"7","prefixes":[{"ipv4Prefix":"192.0.2.0/28"}]}"#
+            ),
+            Ok((1, Some("2026-10-10T14:30:00Z".into()), Some("7".into())))
+        );
         let _ = std::fs::remove_dir_all(data);
     }
 }

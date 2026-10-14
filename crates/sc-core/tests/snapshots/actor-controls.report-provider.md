@@ -37,7 +37,7 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 **Harness and framework candidates** (ranked; never named as the source in public):
 
 1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`; 5 record(s) encode URLs in style `hexU.noslash`; 6 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0`; 5 record(s) encode URLs in style `sp20.noslash`; 5 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`; 2 record(s) encode URLs in style `sp20.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15`; 2 record(s) encode URLs in style `sp20.hexU.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0`; 3 record(s) encode URLs in style `sp20.unsorted.noslash`.
-2. sqlmap. Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `sqlmap/1.8.4#stable (https://sqlmap.org)`; 8 record(s) match header fingerprint rule header.pentest_ua; 8 record(s) encode URLs in style `sp20.noslash`.
+2. sqlmap. Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `sqlmap/1.8.4#stable (hxxps://sqlmap[.]org)`; 8 record(s) match header fingerprint rule header.pentest_ua; 8 record(s) encode URLs in style `sp20.noslash`.
 
 ## Why we think this is an agent
 

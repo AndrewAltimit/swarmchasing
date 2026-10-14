@@ -148,6 +148,17 @@ impl Escalation {
             .collect::<Vec<_>>()
             .join(" → ")
     }
+
+    /// The soft-link detail: `direct → relay on a[.]b/path`, the host
+    /// defanged here so every output that prints it is safe.
+    pub fn detail(&self) -> String {
+        format!(
+            "{} on {}{}",
+            self.route_line(),
+            crate::extract::defang_host(&self.host),
+            self.path
+        )
+    }
 }
 
 /// The route of one record: the most elaborate its hits show, or direct when
@@ -313,6 +324,10 @@ mod tests {
         );
         assert_eq!((e.start, e.end), (T, T + 300));
         assert_eq!(e.route_line(), "direct → relay → program carrier");
+        assert_eq!(
+            e.detail(),
+            "direct → relay → program carrier on data[.]portal[.]example/report/annual"
+        );
         assert_eq!(e.time_basis, TimeBasis::Submit);
     }
 

@@ -89,6 +89,11 @@ pub(super) const PASSES: &[Pass] = &[
         link::number(&mut cx.a.clusters, &mut cx.a.results)
     }),
     pass("escalations", &["number"], escalations),
+    // Declared, then undeclared: a hint from the rules alone; the CLI
+    // repeats it with the providers' ranges ([`crate::identity::fallback`]).
+    pass("fallback", &["number"], |cx| {
+        crate::identity::fallback::mark(&mut cx.a, None)
+    }),
     pass(
         "plant",
         &[

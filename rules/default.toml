@@ -1750,8 +1750,9 @@ target = "user_agent"
 # https://developers.facebook.com/docs/sharing/webmasters/web-crawlers .
 # Google-Pinpoint:
 # https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers .
-# Applebot: https://support.apple.com/en-us/119829 .
-pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|Google-Pinpoint|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|Amzn-User|Amzn-SearchBot|KimiBot|Kimi-User|Kimi-SearchBot|meta-externalagent|meta-externalfetcher|meta-webindexer|meta-externalads|Applebot|ExaSearchBot|FirecrawlAgent|CloudflareBrowserRenderingCrawler"
+# Applebot is a search crawler, not an agent product: it is in
+# declared-agents.toml for identity checks only.
+pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|Google-Pinpoint|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|Amzn-User|Amzn-SearchBot|KimiBot|Kimi-User|Kimi-SearchBot|meta-externalagent|meta-externalfetcher|meta-webindexer|meta-externalads|ExaSearchBot|FirecrawlAgent|CloudflareBrowserRenderingCrawler"
 weight = 1
 description = "Known agent product in the user agent (FM-7.11 declared identity)"
 

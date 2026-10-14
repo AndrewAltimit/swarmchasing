@@ -56,7 +56,7 @@ What is replaced:
 
 - query and fragment parameters with a secret name: cookies, authorisation and access tokens, API keys, client secrets, passwords, session IDs, CSRF tokens, and some anti-bot tokens (the `SECRET_PARAM` list);
 - any parameter value shaped like a dumped cookie jar (`a=1; b=2`);
-- secret request headers: `Cookie`, `Authorization`, `X-API-Key` and similar (`SECRET_HEADER`);
+- secret request headers: `Cookie`, `Authorization`, `X-API-Key` and similar, and the x402 payment authorizations `PAYMENT-SIGNATURE` and `X-PAYMENT` (`SECRET_HEADER`); a server's `X-PAYMENT-RESPONSE` settlement receipt authorizes nothing and is kept;
 - well-known credential shapes anywhere in the record: JWTs, AWS access key IDs, GitHub, GitLab and Slack tokens, `sk-` style model API keys, Google API keys (`SECRET_VALUE`).
 
 Each secret becomes `REDACTED-` followed by the first 12 hex digits of its SHA-256. The hash is deterministic, so two records that carried the same secret can still be tied together: the same redacted value in two clusters is a strong soft link (`shared_secret`, see [soft links](#descriptive-hints)). Hashes of stock passwords (`password`, `admin`, `123456` and the like) do not count, because unrelated clients send them alike. It is unsalted. An operator holding a token can therefore check whether that token appears in a record. A short or guessable secret could be recovered from its hash by brute force.
@@ -65,7 +65,7 @@ What is kept:
 
 - **Placeholders.** A value that is plainly a template placeholder (`YOUR_API_KEY`, `<your-token>`, `{{token}}`, `${KEY}`, `INSERT_KEY_HERE`) is not a secret. It is kept, because the model-output rules read it.
 - **Payloads, tags and run IDs.** Attack payloads, agent tags and run identifiers are left intact. The rules need them.
-- **Parameter names.** Only values are replaced, so a rule that matches a parameter name (an anti-bot token name, for example) still fires.
+- **Parameter and header names.** Only values are replaced, so a rule that matches a parameter or header name (an anti-bot token name, an x402 payment header) still fires.
 - **IP addresses.** They are not redacted.
 
 ## Unwrapping
@@ -511,7 +511,7 @@ Reports list each claim with its layer, label and tag, and add a Conclusion line
 
 Once `swarmchase netranges fetch` has run (the watch refreshes the files at most once a day), each cluster's client addresses are looked up in the address ranges AWS, Google Cloud, Oracle Cloud and Cloudflare publish for their own networks, and in the Tor Project's bulk exit list ([`netranges.rs`](../crates/sc-core/src/netranges.rs)). The most specific published range gives the address's hosting class: provider, region and service (`AWS us-east-1 EC2`). A hosting claim lists how many of its records came from each class, and a record with no ASN whose address a provider's ranges hold gets a hosting claim naming that provider. A scan service's address is never looked up: it is the scanner's or the target's.
 
-A Tor exit names a relay, not the agent's host. Records sent from an address on the exit list are left out of every other hosting claim, including the same-company check that lifts a developer claim to `hosting_asn`, and get one claim of their own saying so. The hosting class is description only: it never raises a score, links records or names a developer.
+A Tor exit names a relay, not the agent's host. Records sent from an address on the exit list are left out of every other hosting claim, including the same-company check that lifts a developer claim to `hosting_asn`. Tor is no party to the incident, so they get no claim: reports to providers and operators, and case notes, carry a caution instead, that the records were sent through Tor exit relays and the network says nothing about the sender. A public notice's attribution leaves them out. Case reports read the ranges held in the data directory beside `cases/`, as the digest does. The hosting class is description only: it never raises a score, links records or names a developer.
 
 ## Declared agent identity
 
@@ -528,6 +528,14 @@ Agent products declare themselves in the user agent, and some sign their request
 | `claimed` | A declared product and nothing to check it against. |
 
 The analysis commands give each cluster an identity line (`identity` in the analysis JSON). It is descriptive: it changes no score, tier or link. The three verified classes reach `provider_infrastructure` evidence; case notes print the developer claim they support as a `case claim` command, and nothing is claimed until the admin runs it. On the agent grade, a verified identity is a signal for L1 (`verified_platform`): it shows the provider's platform sent the request, which a user directing a fetch tool also produces, so it lifts L0 to L1 and nothing higher. A spoofed identity is a counter-signal (`spoofed_identity`). Reports to affected operators and public notices carry none of it. Without range files held, a user agent stays a claim and nothing is called spoofed.
+
+**Direct and intermediary signers.** A key directory in the catalog may carry `access`, following Cloudflare's [signed-agent classes](https://developers.cloudflare.com/bots/concepts/bot/signed-agents/): `direct` for an agent one operator runs, `intermediary` for a platform many end users direct. It is set only where the provider's own documentation says which. A signature verified for an intermediary attributes the platform, not the end user who started the request, and the identity line, the suggested claim and the report say so. An RFC 7239 `Forwarded` header under such a signer names a per-end-user value: the report counts the distinct values as a key to group requests by, never as attribution, and never prints them.
+
+**Shared range files.** A range file may name the services each prefix serves (`services` in [draft-illyes-webbotauth-jafar](https://datatracker.ietf.org/doc/draft-illyes-webbotauth-jafar/)). An undeclared request from a prefix that names services takes those names as its agent; a declared product from a prefix published for other services stays `ip_verified`, with the mismatch in its detail. The file's `creationTime` and `synctoken` are read when present and never required.
+
+**Declared, then undeclared.** A cluster's declared requests (a product in the user agent, or Web Bot Auth headers) that were blocked (403 or 429, or a challenge page or `cf-mitigated: challenge`) and were followed within ten minutes by undeclared browser-like requests for the same host and path give the cluster a hint ([`fallback.rs`](../crates/sc-core/src/identity/fallback.rs)). Cloudflare's published analysis of undeclared crawling describes this shape.
+
+The pipeline finds it from the rules alone; with the declared product's range files held, undeclared requests from inside them are left out, since they are the provider's own systems. It is a pattern to check: an unrelated visitor reading the same page after the agent looks the same. It changes no score, tier or link, names no provider beyond what the blocked requests declared, and appears in case notes and the workbench only.
 
 ## Agent likelihood
 
