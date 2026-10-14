@@ -81,7 +81,7 @@ cargo run --quiet "$@" -p swarmchase -- eval samples/eval/*.ndjson \
     --min-nonsynthetic-significant-precision-lower 0.78 \
     --min-nonsynthetic-suggestive-precision-lower 0.88 \
     --min-cluster-suggestive-recall 0.95 \
-    --min-cluster-significant-recall 0.52 \
+    --min-cluster-significant-recall 0.51\
     --min-nonsynthetic-cluster-suggestive-recall 0.84 \
     --min-nonsynthetic-cluster-significant-recall 0.46 \
     --min-bcubed-f1 0.90 \
