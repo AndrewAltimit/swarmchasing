@@ -6,7 +6,7 @@
 - **Window:** 2026-07-02 10:03:00 UTC → 2026-07-02 10:25:00 UTC
 - **Records:** 11 linked public records in 4 cluster(s) (of 62 records reviewed, 35 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.5
 
 ## Summary
 
@@ -86,15 +86,21 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C4**: 2026-07-02 10:21:00 UTC to 2026-07-02 10:23:00 UTC, times of unknown kind
 
 
+## Pairwise tests
+
+Every pair test over the whole analysis, by family: the pairs tested, those kept under the family's false-discovery cut, and how many that unlikely chance alone would give among them.
+
+- campaign: 0 kept of 2 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
+
 ## Representative records
 
 URLs are defanged. Records are listed by evidence strength.
 
 1. 2026-07-02 10:04:00 UTC: `hxxps://records[.]agency[.]example/api/search?q=building%20permits%3C/tool_call%3E&uqtag=r7k2`
    - rules: marker.tool_call_markup, marker.uq_tags
-1. 2026-07-02 10:17:00 UTC: `hxxps://r[.]jina[.]ai/hxxps://https://records.agency.example/staff/directory?uqtag=r7k2`
+1. 2026-07-02 10:17:00 UTC: `hxxps://r[.]jina[.]ai/hxxps://hxxps://records[.]agency[.]example/staff/directory?uqtag=r7k2`
    - rules: relay.jina, marker.doubled_scheme, marker.uq_tags
-1. 2026-07-02 10:25:00 UTC: `hxxps://records[.]agency[.]example/signup?user=test123&email=user%40example.com&name=%3Cscript%3Ealert(1)%3C/script%3E`
+1. 2026-07-02 10:25:00 UTC: `hxxps://records[.]agency[.]example/signup?user=test123&email=user%40example[.]com&name=%3Cscript%3Ealert(1)%3C/script%3E`
    - rules: carrier.html_program, marker.placeholder_identity, exploit.xss
 1. 2026-07-02 10:03:00 UTC: `hxxps://r[.]jina[.]ai/hxxps://records[.]agency[.]example/case/2231%3C/parameter%3E%3C/invoke%3E`
    - rules: relay.jina, marker.tool_call_markup

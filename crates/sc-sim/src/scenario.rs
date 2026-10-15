@@ -8,15 +8,53 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScenarioFile {
     #[serde(default)]
     pub scenario: Vec<Scenario>,
+    /// What every scenario inherits unless it sets its own.
+    #[serde(default)]
+    pub defaults: Defaults,
+    /// Settings of `sim calibrate --check`.
+    #[serde(default)]
+    pub calibration: CalibrationConfig,
+}
+
+/// Settings every scenario inherits.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Defaults {
+    /// Expectations each scenario holds unless its own `expect` names the
+    /// same key (`human_high = { max_records = 0 }`).
+    #[serde(default)]
+    pub expect: BTreeMap<String, Expect>,
+}
+
+/// Settings of the calibration check.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CalibrationConfig {
+    /// Soft-link kinds the rules give a ratio above 1 that no scenario
+    /// measures, each with the reason the ratio stands without a
+    /// measurement. Any other such kind fails the check as unmeasured.
+    #[serde(default)]
+    pub unmeasured: BTreeMap<String, String>,
 }
 
 impl ScenarioFile {
     pub fn parse(text: &str) -> Result<Self, String> {
-        let f: Self = toml::from_str(text).map_err(|e| e.to_string())?;
-        for s in &f.scenario {
+        let mut f: Self = toml::from_str(text).map_err(|e| e.to_string())?;
+        for k in f.calibration.unmeasured.keys() {
+            if serde_json::from_value::<sc_core::SoftLinkKind>(serde_json::json!(k)).is_err() {
+                return Err(format!(
+                    "calibration.unmeasured.{k} names no soft-link kind"
+                ));
+            }
+        }
+        for s in &mut f.scenario {
+            for (k, e) in &f.defaults.expect {
+                s.expect.entry(k.clone()).or_insert_with(|| e.clone());
+            }
             s.check()?;
         }
         Ok(f)
@@ -69,8 +107,9 @@ pub struct Scenario {
     #[serde(default)]
     pub null: bool,
     /// What the scenario is built to produce: an interaction-edge kind
-    /// (`S3` or `synchronized_start`), a soft-link kind (`co_target`) or
-    /// `candidate_fleet`, each with the bounds it must meet on this
+    /// (`S3` or `synchronized_start`), a soft-link kind (`co_target`),
+    /// `candidate_fleet` or a review hint (`seam`, `onset_group`,
+    /// `onset_trigger`), each with the bounds it must meet on this
     /// scenario's own measurement (`expect.S3 = { min_recall = 0.8 }`). An
     /// expected kind that draws nothing fails, unless it sets `max_pairs`
     /// (`expect.S3 = { max_pairs = 0 }`: built not to fire).
@@ -98,16 +137,35 @@ pub struct Expect {
     /// show does not fire. With it set, drawing nothing passes.
     #[serde(default)]
     pub max_pairs: Option<usize>,
+    /// For a grade ceiling (`human_high`, `benign_high`): records it may
+    /// count at most.
+    #[serde(default)]
+    pub max_records: Option<usize>,
+    /// For `clusters`: the B-cubed F1 of clusters against true runs it must
+    /// reach.
+    #[serde(default)]
+    pub min_f1: Option<f64>,
 }
 
+/// Grade ceilings an `expect` table may name: people's records in
+/// clusters graded L3 or above, and benign or tool records graded L2 or
+/// above.
+pub const GRADE_KEYS: [&str; 2] = ["human_high", "benign_high"];
+
+/// The clustering bound an `expect` table may name:
+/// `expect.clusters = { min_f1 = 0.95 }`, B-cubed F1 against true runs.
+pub const CLUSTER_KEY: &str = "clusters";
+
 /// The measurement key an `expect` names (an edge kind's serialised name,
-/// a soft-link kind's, or `candidate_fleet`) and whether it is an edge;
+/// a soft-link kind's, `candidate_fleet` or a review hint's) and whether it
+/// is an edge;
 /// `None` for a name that is none of these.
 pub fn expect_key(name: &str) -> Option<(String, bool)> {
     if let Ok(k) = name.parse::<sc_core::SwarmEdgeKind>() {
         return Some((k.name().to_string(), true));
     }
     if name == "candidate_fleet"
+        || crate::measure::GROUP_KINDS.contains(&name)
         || serde_json::from_value::<sc_core::SoftLinkKind>(serde_json::json!(name)).is_ok()
     {
         return Some((name.to_string(), false));
@@ -144,9 +202,28 @@ impl Scenario {
                 self.name, a.kind
             ));
         }
-        if let Some(k) = self.expect.keys().find(|k| expect_key(k).is_none()) {
+        if let Some(k) = self.expect.keys().find(|k| {
+            expect_key(k).is_none() && !GRADE_KEYS.contains(&k.as_str()) && *k != CLUSTER_KEY
+        }) {
             return Err(format!(
-                "{}: expect.{k} names no edge kind, soft-link kind or candidate_fleet",
+                "{}: expect.{k} names no edge kind, soft-link kind, candidate_fleet, review hint, grade ceiling or clusters",
+                self.name
+            ));
+        }
+        if self
+            .expect
+            .get(CLUSTER_KEY)
+            .is_some_and(|e| e.min_f1.is_none())
+        {
+            return Err(format!("{}: expect.{CLUSTER_KEY} needs min_f1", self.name));
+        }
+        if let Some((k, _)) = self
+            .expect
+            .iter()
+            .find(|(k, e)| GRADE_KEYS.contains(&k.as_str()) && e.max_records.is_none())
+        {
+            return Err(format!(
+                "{}: expect.{k} is a grade ceiling and needs max_records",
                 self.name
             ));
         }
@@ -199,6 +276,15 @@ pub enum Mode {
     /// other agent sends one 40 to 85 seconds after each dispatch
     /// (co-activity).
     Dispatch,
+    /// Agents launched within five minutes of each other, each with its own
+    /// client (no two sharing a user agent and network), tags, inbox and
+    /// hosts, and nothing else in common: only their onset ties them.
+    Launch,
+    /// A planner dispatching workers that dispatch workers of their own:
+    /// agent `k` (from 1) follows agent `(k - 1) / 2`, sending one request
+    /// 40 to 85 seconds after its parent's at each of the planner's
+    /// irregular dispatches, 10 to 50 minutes apart (a dispatch tree).
+    TreeDispatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -282,6 +368,31 @@ pub enum Kind {
     /// parameter of its own, so any two are one structural part apart; each
     /// agent its own operator, over the scenario's span.
     Framework,
+    /// `agents` repositories running one link checker from cloud runners
+    /// on a cron at the top of the hour, each checking the same published
+    /// list of `hosts` in sorted order (`records` checks), with one scripted
+    /// user agent: benign, and a look-alike of a synchronised swarm (S3), of
+    /// co-targeting and of one operator's fleet.
+    CiLinkChecker,
+    /// `agents` SEO audit vendors, each walking one site's sitemap (`hosts`
+    /// subdomains of one family, in sitemap order) sharded over four
+    /// consecutive addresses of its own network: benign, and a look-alike
+    /// of a sharded swarm (S5) and of ordered co-targeting. Each vendor is
+    /// one run.
+    SeoCrawler,
+    /// `agents` unrelated agents watching one feed: at each of its `records`
+    /// items, 10 to 50 minutes apart, every agent sends one request at its
+    /// own lag (30 seconds to 4 minutes, up to 15 seconds late), each to its
+    /// own hosts: each its own operator, and a look-alike of a dispatch
+    /// star (S6) whose leader is the quickest reader.
+    Trigger,
+    /// One operator running `agents` short sessions of `records` requests
+    /// each through the scenario's span (or `window_hours`), all on one
+    /// site (`hosts` hosts of one family), each session with its own
+    /// client, run tag and callback inbox, all sending records from the
+    /// operator's own share of the palette (`palette_share`): one
+    /// operator, sessions linked by nothing they hold.
+    Campaign,
 }
 
 impl Kind {
@@ -297,6 +408,7 @@ impl Kind {
                 | Self::Mimic
                 | Self::TargetList
                 | Self::PromptFleet
+                | Self::Campaign
         )
     }
 }
@@ -326,6 +438,39 @@ pub struct Actor {
     /// Agents put a run tag (`uqtag`) on every request, as many do.
     #[serde(default = "yes")]
     pub tag: bool,
+    /// What a run tag stands for, when set: one per run (as `tag = true`),
+    /// a new one on every request (an agent randomising its tags), or none.
+    /// Overrides `tag`.
+    #[serde(default)]
+    pub tag_scope: Option<TagScope>,
+    /// Every request leaves from a new client (address, network and user
+    /// agent), as a run behind rotating proxies does.
+    #[serde(default)]
+    pub rotate_clients: bool,
+    /// For single agents: each request this many hours after the last (a
+    /// tenth either way), instead of at the run's pace: a low and slow run.
+    #[serde(default)]
+    pub gap_hours: Option<f64>,
+    /// For a fleet: each agent walks its host list again, in the same
+    /// order, this many hours (up to one more) after its run starts, from
+    /// a new client with new tags: one operator rerunning a task.
+    #[serde(default)]
+    pub rerun_after_hours: Option<f64>,
+    /// For a fleet: the operator's quota runs out four minutes after the
+    /// actor's start, and again four minutes after it comes back, and every
+    /// run of the fleet active then goes quiet for this many minutes at
+    /// once. With `window_hours`, the fleet's agents start within that many
+    /// hours of the actor's start.
+    #[serde(default)]
+    pub stall_minutes: Option<f64>,
+    /// For a fleet: every request carries one captured token (redacted, as
+    /// ingest writes it), the same in every run of the fleet.
+    #[serde(default)]
+    pub shared_secret: bool,
+    /// Every request carries one documented demo key (a stock value, as
+    /// ingest redacts it), the same for every client that copies the docs.
+    #[serde(default)]
+    pub stock_secret: bool,
     /// Hours after the scenario start the actor begins.
     #[serde(default)]
     pub offset_hours: f64,
@@ -347,6 +492,10 @@ pub struct Actor {
     pub copy_timing: bool,
     /// For a mimic: the fleets (by actor index) whose scaffolds it sends.
     /// For a hub: the target-list actors (by index) whose hosts it works.
+    /// For a planter: the first actor it names here is a second victim,
+    /// whose first run's run tag every record also carries, so one client
+    /// joins two operators' records. Such a planter is an agent of its own
+    /// operator (an agent client at model pace), not a person.
     #[serde(default)]
     pub bridges: Vec<usize>,
     /// For a fleet: hours between one agent's start and the next (26 by
@@ -385,6 +534,86 @@ pub struct Actor {
     /// the actor's.
     #[serde(default)]
     pub prose: Option<Prose>,
+    /// How a run's tag is generated: `random` hex, a UUIDv1 on the
+    /// operator's machine (one node id), a ULID from the operator's clock
+    /// (one skew), or the operator's counter (successive numbers).
+    #[serde(default)]
+    pub tag_style: TagStyle,
+    /// For a UUIDv1 or ULID tag style: each run mints this many tags, a
+    /// fresh one at the start of each of that many equal parts of its
+    /// requests, as an agent minting an id per step does (one when unset).
+    #[serde(default)]
+    pub tag_mints: Option<usize>,
+    /// For target lists: each host a site of its own (its own registrable
+    /// domain), as a list of sites is, instead of one site's hosts.
+    #[serde(default)]
+    pub own_families: bool,
+    /// For a fleet: each agent works its hosts one at a time, sending its
+    /// scaffold's templates on each in one fixed order (its playbook);
+    /// `records` is best a multiple of `hosts` times `steps`.
+    #[serde(default)]
+    pub playbook: bool,
+    /// For a fleet: templates in its scaffold (3 by default).
+    #[serde(default)]
+    pub steps: Option<usize>,
+    /// For a fleet: send the shape (templates and harness parameters) of
+    /// the fleet actor at this index, as another operator on the same
+    /// harness and palette does.
+    #[serde(default)]
+    pub shape_of: Option<usize>,
+    /// For a playbook fleet: its steps in reverse order.
+    #[serde(default)]
+    pub reverse_steps: bool,
+    /// For a swarm: every agent runs one harness, adding its parameters
+    /// (a step counter and a per-request trace) to every request and
+    /// sending the swarm's templates in one rotation, as an orchestrator's
+    /// workers built on one framework do.
+    #[serde(default)]
+    pub harness: bool,
+    /// For a fleet: agent `k` generates its tags in `tag_styles[k % n]`
+    /// instead of `tag_style`, as an operator changing its tags does.
+    #[serde(default)]
+    pub tag_styles: Vec<TagStyle>,
+}
+
+/// How a run's tag is generated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TagStyle {
+    /// Random hex, nothing of the generator.
+    #[default]
+    Random,
+    /// A UUIDv1 for the run's start, on the operator's node id.
+    UuidV1,
+    /// A ULID for the run's start on the operator's clock, a few minutes
+    /// off.
+    Ulid,
+    /// The operator's stem and its counter's next number.
+    Counter,
+}
+
+/// What a run tag stands for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TagScope {
+    /// One tag per run.
+    Run,
+    /// A new tag on every request.
+    PerRequest,
+    /// No tag.
+    None,
+}
+
+impl Actor {
+    /// The tag scope in force: `tag_scope`, else one per run or none as
+    /// `tag` says.
+    pub fn tags(&self) -> TagScope {
+        self.tag_scope.unwrap_or(if self.tag {
+            TagScope::Run
+        } else {
+            TagScope::None
+        })
+    }
 }
 
 /// Whose prompt templates a run's prose comes from.

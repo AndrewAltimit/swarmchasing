@@ -8,7 +8,7 @@
 //! the records; the public notice uses them only once the operator's
 //! agreement is recorded with `case evidence consent`.
 
-use crate::case::{Case, CaseStatus, NOTICE_DRAFT, case_dir, load, save, update};
+use crate::case::{Case, CaseStatus, NOTICE_DRAFT, case_dir, load, update};
 use crate::pinning::case_rules;
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
@@ -253,45 +253,47 @@ fn add_evidence(root: &Path, id: &str, r: Received, today: &str) -> Result<Opera
         date,
         note,
     } = r;
-    let mut c = load(root, id)?;
-    let sha256 = crate::bundle::sha256_hex(text.as_bytes());
-    if let Some(e) = c.evidence.iter().find(|e| e.sha256 == sha256) {
-        bail!("this file is already evidence {} in case {id}", e.id);
-    }
-    let eid = format!("e{}", c.evidence.len() + 1);
-    let (records, lines, warnings) = ingest(text, format, map, &eid, &case_rules(root, &c)?);
-    for w in warnings.iter().take(5) {
-        eprintln!("warning: {w}");
-    }
-    if lines == 0 {
-        bail!("no records in the file (check --format and --map)");
-    }
-    let dir = case_dir(root, id)?;
-    let p = file(&dir, &eid);
-    std::fs::create_dir_all(p.parent().unwrap_or(&dir))?;
-    std::fs::write(&p, crate::store::to_ndjson(&records)?)?;
-    let received = date.unwrap_or_else(|| today.to_string());
-    let e = OperatorEvidence {
-        id: eid.clone(),
-        org: org.to_string(),
-        host: host.to_ascii_lowercase(),
-        received: received.clone(),
-        sha256,
-        lines,
-        kept: records.len(),
-        public: None,
-        note,
-    };
-    c.evidence.push(e.clone());
-    c.log(
+    // Under the case's lock from the read to the write, so a change made
+    // meanwhile is neither lost nor lost to.
+    crate::case::modify(root, id, |c| {
+        let sha256 = crate::bundle::sha256_hex(text.as_bytes());
+        if let Some(e) = c.evidence.iter().find(|e| e.sha256 == sha256) {
+            bail!("this file is already evidence {} in case {id}", e.id);
+        }
+        let eid = format!("e{}", c.evidence.len() + 1);
+        let (records, lines, warnings) = ingest(text, format, map, &eid, &case_rules(root, c)?);
+        for w in warnings.iter().take(5) {
+            eprintln!("warning: {w}");
+        }
+        if lines == 0 {
+            bail!("no records in the file (check --format and --map)");
+        }
+        let dir = case_dir(root, id)?;
+        let p = file(&dir, &eid);
+        std::fs::create_dir_all(p.parent().unwrap_or(&dir))?;
+        std::fs::write(&p, crate::store::to_ndjson(&records)?)?;
+        let received = date.unwrap_or_else(|| today.to_string());
+        let e = OperatorEvidence {
+            id: eid.clone(),
+            org: org.to_string(),
+            host: host.to_ascii_lowercase(),
+            received: received.clone(),
+            sha256,
+            lines,
+            kept: records.len(),
+            public: None,
+            note,
+        };
+        c.evidence.push(e.clone());
+        c.log(
         &received,
         format!(
             "operator evidence {eid} from {org}: {} of {lines} records kept; private reports only",
             records.len()
         ),
     );
-    save(root, &c)?;
-    Ok(e)
+        Ok(e)
+    })
 }
 
 #[cfg(test)]
@@ -333,18 +335,39 @@ mod tests {
             public: None,
             note: None,
         };
-        assert!(e.in_scope(&Scope::All));
-        assert!(!e.in_scope(&Scope::Public));
-        assert!(e.in_scope(&Scope::Operator {
+        let site = &sc_collect::psl::registrable_domain;
+        let contact = |org: &str, host: &str| Contact {
+            org: org.into(),
+            role: sc_case::model::ContactRole::Affected,
+            endpoint: Some(host.into()),
+            channel: "email".into(),
+            address: format!("security@{host}"),
+            source: String::new(),
+            confidence: "medium".into(),
+            found_on: "d".into(),
+            purpose: None,
+        };
+        let mut c = sc_case::model::Case::new("t-1", "t", "d", None);
+        c.contacts = vec![
+            contact("Portal", "portal.example.gov"),
+            contact("Portal", "pay.example.gov"),
+            contact("Portal", "portal.hosting.example"),
+            contact("other", "PORTAL.example.gov"),
+        ];
+        let to = |i: usize| Scope::for_audience(Audience::Affected, Some(&c.contacts[i]));
+        assert!(e.in_scope(&Scope::All, &c, site));
+        assert!(!e.in_scope(&Scope::Public, &c, site));
+        assert!(e.in_scope(&to(3), &c, site));
+        let none = Scope::Operator {
             org: "other",
-            host: Some("PORTAL.example.gov")
-        }));
-        assert!(!e.in_scope(&Scope::Operator {
-            org: "other",
-            host: None
-        }));
+            host: None,
+        };
+        assert!(!e.in_scope(&none, &c, site));
+        // Same organisation and registrable domain; same name elsewhere.
+        assert!(e.in_scope(&to(1), &c, site));
+        assert!(!e.in_scope(&to(2), &c, site));
         e.public = Some("2026-10-21: reply".into());
-        assert!(e.in_scope(&Scope::Public));
+        assert!(e.in_scope(&Scope::Public, &c, site));
     }
 
     #[test]

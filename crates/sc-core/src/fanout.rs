@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 /// Fan-out settings (`[fanout]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct FanOutOptions {
     /// Records at most this many seconds after a batch's first record join it.
     pub batch_secs: i64,

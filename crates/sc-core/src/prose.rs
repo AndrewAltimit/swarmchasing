@@ -256,7 +256,7 @@ pub fn prose_stats<'a>(
 
 /// Prompt echo settings (`[prompt_echo]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct PromptEchoOptions {
     /// Words a prose value must keep once slotted.
     pub min_words: usize,
@@ -295,7 +295,7 @@ const MAX_ECHO_PAIRS: usize = 200;
 const BAND_COMPARE: usize = 64;
 /// The word `{site}` becomes in a published template, slotted as a target
 /// name is.
-const COMMON_SITE: &str = "commonsiteslot";
+pub(crate) const COMMON_SITE: &str = "commonsiteslot";
 /// Characters of slotted template a pair shows.
 const ECHO_EXCERPT: usize = 80;
 
@@ -356,7 +356,7 @@ enum Holder {
 }
 
 /// A record's parameter values: its layers' when kept, else its URL's.
-fn param_values(r: &crate::analyze::ObsResult) -> Vec<String> {
+pub(crate) fn param_values(r: &crate::analyze::ObsResult) -> Vec<String> {
     if r.layers.is_empty() {
         crate::weburl::WebUrl::parse(&r.obs.url)
             .map(|u| u.query_pairs().into_iter().map(|(_, v)| v).collect())
@@ -374,7 +374,7 @@ fn param_values(r: &crate::analyze::ObsResult) -> Vec<String> {
 /// aside, and for a label with hyphens its parts of three letters or more
 /// and the parts joined (`acme-corp` gives `acme`, `corp` and `acmecorp`),
 /// as prose writes the name.
-fn host_words(host: Option<&str>) -> Vec<String> {
+pub(crate) fn host_words(host: Option<&str>) -> Vec<String> {
     let Some(h) = host else {
         return Vec::new();
     };

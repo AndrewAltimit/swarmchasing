@@ -429,6 +429,7 @@ pub fn build_site_dir(o: &BuildOptions) -> Result<Built, String> {
         identity,
         lastmod,
         dated,
+        schemas: schemas.clone(),
     };
     let mut files = build_pages(&mut inputs)?;
     let schema_paths: Vec<String> = schemas.iter().map(|(p, _)| p.clone()).collect();

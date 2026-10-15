@@ -3,8 +3,8 @@
 //! markup it writes itself (headings, paragraphs, lists, quotes, tables,
 //! code, emphasis, links). Raw HTML in a doc shows as text.
 //!
-//! Links to other docs go to their site pages; links to other repository
-//! files go to GitHub; `http(s)` links stay as they are; any other scheme
+//! Links to other docs go to their site pages; links to a schema to the
+//! site's published copy; links to other repository files go to GitHub; `http(s)` links stay as they are; any other scheme
 //! is shown as text, never as a link.
 //!
 //! With [`Terms`], the Field Manual becomes hypertext: `FM-n.m` section ids
@@ -702,6 +702,14 @@ fn resolve(href: &str, ctx: &Ctx) -> Option<String> {
     if ctx.links.docs.contains(&target) {
         return Some(format!("{}{}{frag}", rel_root(&ctx.page), doc_url(&target)));
     }
+    // The build publishes every schema as committed, under the same path:
+    // the site links its own copy, and the directory its schemas index.
+    if target.starts_with("schemas/") && target.ends_with(".json") {
+        return Some(format!("{}{target}{frag}", rel_root(&ctx.page)));
+    }
+    if target.trim_end_matches('/') == "schemas" {
+        return Some(format!("{}schemas/{frag}", rel_root(&ctx.page)));
+    }
     let kind = if path.ends_with('/') || !target.rsplit('/').next().unwrap_or("").contains('.') {
         "tree"
     } else {
@@ -986,6 +994,24 @@ mod tests {
         // Elsewhere the same line is ordinary text.
         let d = render("docs/reference/cases.md", text);
         assert!(d.html.contains("Manual index"));
+    }
+
+    #[test]
+    fn schemas_link_the_sites_own_copy() {
+        let d = render(
+            "docs/reference/cases.md",
+            "# C\n\n[rules](../../schemas/sc-rules-v1.json), [stix](../../schemas/stix/x-sc-agent-run.json), [dir](../../schemas/)\n",
+        );
+        let h = &d.html;
+        assert!(
+            h.contains("href=\"../../../schemas/sc-rules-v1.json\""),
+            "{h}"
+        );
+        assert!(
+            h.contains("href=\"../../../schemas/stix/x-sc-agent-run.json\""),
+            "{h}"
+        );
+        assert!(h.contains("href=\"../../../schemas/\""), "{h}");
     }
 
     #[test]

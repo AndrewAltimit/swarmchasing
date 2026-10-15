@@ -5,6 +5,8 @@ use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
+mod lenient;
+
 pub const DEFAULT_RULES: &str = include_str!("../../../rules/default.toml");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,6 +38,7 @@ impl Target {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuleDef {
     pub id: String,
     pub kind: IndicatorKind,
@@ -107,6 +110,7 @@ fn one() -> i32 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Thresholds {
     pub suggestive: i32,
     pub significant: i32,
@@ -122,7 +126,7 @@ impl Default for Thresholds {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Linking {
     pub strong_params: Vec<String>,
     /// A shared feature joins records at most this far apart (0: no limit).
@@ -146,6 +150,9 @@ pub struct Linking {
     pub archive_burst_gap_secs: i64,
     pub archive_burst_min: usize,
     pub archive_burst_ratio: f64,
+    /// Seam review: both pieces a joint holds together need at least this
+    /// many records (0: off; [`crate::seam`]).
+    pub seam_min_side: usize,
 }
 
 impl Default for Linking {
@@ -165,23 +172,27 @@ impl Default for Linking {
             archive_burst_gap_secs: 180,
             archive_burst_min: 5,
             archive_burst_ratio: 10.0,
+            seam_min_side: 3,
         }
     }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Meta {
     #[serde(default)]
     pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AsnDef {
     pub asn: u32,
     pub org: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuleSet {
     #[serde(default)]
     pub meta: Meta,
@@ -210,7 +221,17 @@ pub struct RuleSet {
     #[serde(default)]
     pub prompt_echo: crate::prose::PromptEchoOptions,
     #[serde(default)]
+    pub biclique: crate::biclique::BicliqueOptions,
+    #[serde(default)]
+    pub campaign: crate::campaign::CampaignOptions,
+    #[serde(default)]
+    pub generator: crate::generator::GeneratorOptions,
+    #[serde(default)]
+    pub playbook: crate::playbook::PlaybookOptions,
+    #[serde(default)]
     pub swarm: crate::swarm::SwarmOptions,
+    #[serde(default)]
+    pub onset: crate::swarm::OnsetOptions,
     #[serde(default)]
     pub agentness: crate::agentness::AgentnessOptions,
     #[serde(default, rename = "rule")]
@@ -266,6 +287,14 @@ impl Rules {
     pub fn from_toml(text: &str) -> Result<Self, String> {
         let set: RuleSet = toml::from_str(text).map_err(|e| format!("rules: {e}"))?;
         Self::compile(set)
+    }
+
+    /// Rules from a pinned or historical file: a key these rules no longer
+    /// know (a retired option) is dropped, with a warning for each, instead
+    /// of failing the load. The shipped rules and a `--rules` file load
+    /// with [`Rules::from_toml`], which refuses unknown keys.
+    pub fn from_toml_lenient(text: &str) -> Result<(Self, Vec<String>), String> {
+        lenient::from_toml_lenient(text)
     }
 
     pub fn compile(set: RuleSet) -> Result<Self, String> {
@@ -469,6 +498,64 @@ mod tests {
         let r = Rules::default_rules();
         assert!(r.compiled.len() > 30);
         assert_eq!(r.asn_org(132203), Some("Tencent Cloud"));
+    }
+
+    /// A misspelt key in a settings table fails to load, instead of leaving
+    /// the default in force.
+    #[test]
+    fn a_misspelt_setting_fails() {
+        for table in [
+            "meta",
+            "thresholds",
+            "linking",
+            "chains",
+            "fanout",
+            "cut_lengths",
+            "paths",
+            "escalation",
+            "soft_links",
+            "scaffold",
+            "co_activity",
+            "co_target",
+            "prompt_echo",
+            "swarm",
+            "agentness",
+            "biclique",
+            "campaign",
+            "generator",
+            "playbook",
+            "onset",
+        ] {
+            let text = format!("[{table}]\nno_such_setting = 1\n");
+            let e = Rules::from_toml(&text).err().unwrap_or_default();
+            assert!(e.contains("unknown field"), "[{table}]: {e}");
+        }
+        assert!(Rules::from_toml("[soft_links]\nrerun = 2.0\n").is_ok());
+    }
+
+    /// A misspelt key in a rule, an `[[asn]]`, `[[benchmark]]` or
+    /// `[[stale]]` entry, or a misspelt table name, fails to load too.
+    #[test]
+    fn a_misspelt_rule_key_or_table_fails() {
+        let rule = "[[rule]]\nid = \"a\"\nkind = \"exfil\"\ntarget = \"url\"\npattern = \"x\"\nweight = 1\n";
+        assert!(Rules::from_toml(rule).is_ok());
+        for text in [
+            format!("{rule}signficant = true\n"),
+            format!("{rule}lnk = true\n"),
+            "[bicliqe]\nmin_targets = 3\n".to_string(),
+            "[[asn]]\nasn = 1\norg = \"x\"\nname = \"y\"\n".to_string(),
+            "[[benchmark]]\nid = \"b\"\npattern = \"x\"\nnotes = \"y\"\n".to_string(),
+            "[[stale]]\nid = \"s\"\npattern = \"x\"\ntarg = \"url\"\n".to_string(),
+        ] {
+            let e = Rules::from_toml(&text).err().unwrap_or_default();
+            assert!(e.contains("unknown field"), "{text}: {e}");
+        }
+        // A pinned copy drops such a key with a warning instead.
+        let (r, warnings) = Rules::from_toml_lenient(&format!("{rule}lnk = true\n")).unwrap();
+        assert_eq!(r.set.rules.len(), 1);
+        assert!(warnings[0].contains("rule[0].lnk"), "{warnings:?}");
+        let (_, warnings) = Rules::from_toml_lenient("[bicliqe]\nmin_targets = 3\n").unwrap();
+        assert!(warnings[0].contains("bicliqe"), "{warnings:?}");
     }
 
     /// A rules file without these sections (one a case pinned earlier) gets

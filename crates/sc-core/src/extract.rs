@@ -373,7 +373,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
         }
         for r in rules.matching(Target::Url, &layer.text) {
             if let Matcher::Re(re) = &r.matcher
-                && let Some(m) = re.find(&layer.text)
+                && let Some(m) = kept_match(re, &layer.text)
             {
                 // A URL rule marks the layer as an intermediary only when it matched the host part.
                 let host_end = layer
@@ -392,7 +392,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
             }
             for r in rules.matching(Target::ParamValue, v) {
                 if let Matcher::Re(re) = &r.matcher
-                    && let Some(m) = re.find(v)
+                    && let Some(m) = kept_match(re, v)
                     && r.def.check.is_none_or(|c| c.passes(v, ua))
                 {
                     push(
@@ -434,7 +434,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     if let Some(ua) = ua {
         for r in rules.matching(Target::UserAgent, ua) {
             if let Matcher::Re(re) = &r.matcher
-                && let Some(m) = re.find(ua)
+                && let Some(m) = kept_match(re, ua)
             {
                 push(&mut hits, &mut features, r, m.as_str(), 0);
             }
@@ -443,7 +443,7 @@ pub fn extract(obs: &Observation, rules: &Rules) -> Extracted {
     if let Some(fin) = &obs.final_url {
         for r in rules.matching(Target::FinalUrl, fin) {
             if let Matcher::Re(re) = &r.matcher
-                && let Some(m) = re.find(fin)
+                && let Some(m) = kept_match(re, fin)
             {
                 push(&mut hits, &mut features, r, m.as_str(), 0);
             }
@@ -527,14 +527,161 @@ pub fn defang_host(host: &str) -> String {
 }
 
 /// Make URLs safe to paste into a report: `hxxps://example[.]com/...`.
-/// Every embedded URL is defanged, not just the outermost.
+/// Every embedded URL is defanged, not just the outermost, and so is a
+/// host after `//` without a scheme (`//a.example`, `%2F%2Fa.example`).
+/// Within a URL (from its scheme or `//` to the next space or quote) every
+/// host name or address is defanged wherever it sits: in a path, a query
+/// value (`site%3Aa.example`, `user%40a.example`) or a fragment. Text
+/// outside a URL is left as it is, so a rule id (`relay.jina`) stays
+/// readable; [`defang_hosts`] defangs bare hosts there too.
 pub fn defang(s: &str) -> String {
     static RE: OnceLock<Regex> = OnceLock::new();
+    static BARE: OnceLock<Regex> = OnceLock::new();
+    static SPAN: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| Regex::new(r"(?i)(h)tt(ps?)://([^/?#\s]+)").unwrap());
-    re.replace_all(s, |c: &regex::Captures| {
-        format!("{}xx{}://{}", &c[1], &c[2], c[3].replace('.', "[.]"))
-    })
-    .into_owned()
+    let bare = BARE.get_or_init(|| {
+        Regex::new(r"(?i)(//|%2f%2f)([a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+)").unwrap()
+    });
+    let span = SPAN.get_or_init(|| Regex::new(r#"(?i)(?://|%2f%2f)[^\s"'<>`]*"#).unwrap());
+    // A scheme glued to the one before it (`https://https://a.example`) is
+    // read as that one's host, so the pass repeats until no scheme is left;
+    // each pass removes at least one.
+    let mut s = s.to_string();
+    while re.is_match(&s) {
+        s = re
+            .replace_all(&s, |c: &regex::Captures| {
+                format!(
+                    "{}xx{}://{}",
+                    &c[1],
+                    &c[2],
+                    c[3].replace("[.]", ".").replace('.', "[.]")
+                )
+            })
+            .into_owned();
+    }
+    let s = bare.replace_all(&s, |c: &regex::Captures| {
+        format!("{}{}", &c[1], c[2].replace('.', "[.]"))
+    });
+    span.replace_all(&s, |c: &regex::Captures| defang_bare(&c[0]))
+        .into_owned()
+}
+
+/// Text made safe to print wherever a host may sit outside a URL (a link
+/// feature, a soft-link detail, an identifier): URLs defanged as [`defang`]
+/// does, then every bare host name left (`a.example`, `1.2.3.4`) written
+/// `a[.]example`. A run of letters, digits, dots and hyphens counts as a
+/// host when its labels are all non-empty and its last is two or more
+/// letters (not a file suffix such as `php`), or when it is four numbers of
+/// at most 255 not following a product name (`Chrome/138.0.0.0`); so
+/// `0.52`, `e.g`, `v1.2` and `index.html` stay as they are.
+pub fn defang_hosts(s: &str) -> String {
+    defang_bare(&defang(s))
+}
+
+/// The bare-host pass of [`defang`]: every host name or address left in
+/// `s` written `a[.]example`.
+fn defang_bare(s: &str) -> String {
+    /// File name suffixes that are no top-level domain, so `d.php` or
+    /// `robots.txt` cannot be a host and stays readable. A suffix that is
+    /// also a TLD (`.zip`, `.sh`, `.md`) is not listed.
+    const FILE_SUFFIXES: &[&str] = &[
+        "asp", "aspx", "bak", "cfg", "cgi", "css", "csv", "exe", "gif", "gz", "htm", "html", "ico",
+        "ini", "jpeg", "jpg", "js", "json", "jsp", "log", "pdf", "php", "png", "svg", "tar",
+        "toml", "txt", "wasm", "webp", "woff", "woff2", "xml", "yaml", "yml",
+    ];
+    let hosty = |c: char| c.is_ascii_alphanumeric() || c == '.' || c == '-';
+    let mut out = String::with_capacity(s.len() + 8);
+    let mut word = String::new();
+    let flush = |word: &mut String, out: &mut String| {
+        // Dots at either end belong to the text around the host.
+        let core = word.trim_matches('.');
+        let start = word.len() - word.trim_start_matches('.').len();
+        let labels: Vec<&str> = core.split('.').collect();
+        let named = labels.len() > 1
+            && labels.iter().all(|l| !l.is_empty())
+            && labels
+                .last()
+                .is_some_and(|l| l.len() > 1 && l.chars().all(|c| c.is_ascii_alphabetic()))
+            && !labels
+                .last()
+                .is_some_and(|l| FILE_SUFFIXES.contains(&l.to_ascii_lowercase().as_str()));
+        // `Chrome/138.0.0.0` is a version, not an address.
+        let mut before = out.chars().rev();
+        let version =
+            before.next() == Some('/') && before.next().is_some_and(|c| c.is_alphanumeric());
+        let ip = labels.len() == 4
+            && !version
+            && labels
+                .iter()
+                .all(|l| !l.is_empty() && l.len() <= 3 && l.parse::<u16>().is_ok_and(|n| n < 256));
+        if named || ip {
+            out.push_str(&word[..start]);
+            out.push_str(&defang_host(core));
+            out.push_str(&word[start + core.len()..]);
+        } else {
+            out.push_str(word);
+        }
+        word.clear();
+    };
+    for c in s.chars() {
+        if hosty(c) {
+            word.push(c);
+        } else {
+            flush(&mut word, &mut out);
+            out.push(c);
+        }
+    }
+    flush(&mut word, &mut out);
+    out
+}
+
+/// Defanged text cut to `max` characters, with `…` when cut. Defang
+/// first and cut after (`clip_defanged(&defang_hosts(s), 90)`): a host
+/// cut before defanging (`a.example.n`) no longer reads as one. A cut
+/// never ends inside a `[.]`.
+pub fn clip_defanged(defanged: &str, max: usize) -> String {
+    if defanged.chars().count() <= max {
+        return defanged.to_string();
+    }
+    let mut t: String = defanged.chars().take(max).collect();
+    if t.ends_with("[.") {
+        t.truncate(t.len() - 2);
+    } else if t.ends_with('[') && defanged[t.len()..].starts_with(".]") {
+        t.truncate(t.len() - 1);
+    }
+    t.push('…');
+    t
+}
+
+/// A linking feature's text (`<rule>:<value>` or `param:<name>=<value>`)
+/// made safe to print: the rule id or parameter name kept as it is, since
+/// `exfil.requestbin` names a rule, not a host, and the value defanged by
+/// [`defang_hosts`]. Text of neither form is defanged whole.
+pub fn defang_feature(s: &str) -> String {
+    let split = if let Some(p) = s.strip_prefix("param:") {
+        p.find('=').map(|i| "param:".len() + i + 1)
+    } else {
+        s.find(':')
+            .filter(|&i| i > 0 && !s[..i].contains(|c: char| c.is_whitespace() || c == '/'))
+            .map(|i| i + 1)
+    };
+    match split {
+        Some(i) => format!("{}{}", &s[..i], defang_hosts(&s[i..])),
+        None => defang_hosts(s),
+    }
+}
+
+/// Where `re` matches `text`: the group named `m` when the pattern has one,
+/// else the whole match. The group lets a pattern see context it does not
+/// keep (`(^|[^a-z])(?P<m>agenttest\d*)`: no letter before the tag), since
+/// the matched text is what a linking rule links on.
+fn kept_match<'t>(re: &regex::Regex, text: &'t str) -> Option<regex::Match<'t>> {
+    if re.capture_names().any(|n| n == Some("m")) {
+        let c = re.captures(text)?;
+        c.name("m").or_else(|| c.get(0))
+    } else {
+        re.find(text)
+    }
 }
 
 #[cfg(test)]
@@ -988,5 +1135,94 @@ mod tests {
             defang("q=%28https://t.example/)"),
             "q=%28hxxps://t[.]example/)"
         );
+        // A host after `//` is one, with or without a scheme.
+        assert_eq!(
+            defang("https://https://a.example/x?u=%2F%2Fb.example%2F&c=//c.example/d.php"),
+            "hxxps://hxxps://a[.]example/x?u=%2F%2Fb[.]example%2F&c=//c[.]example/d.php"
+        );
+        // A host anywhere in a URL is defanged: after an encoded `:` or
+        // `@`, after `=`, in a path or a fragment.
+        assert_eq!(
+            defang("https://s.jina.ai/site%3Aportal.agency.example%20admin"),
+            "hxxps://s[.]jina[.]ai/site%3Aportal[.]agency[.]example%20admin"
+        );
+        assert_eq!(
+            defang("https://f.example/s?email=user%40example.com&n=a.example.org#b.example"),
+            "hxxps://f[.]example/s?email=user%40example[.]com&n=a[.]example[.]org#b[.]example"
+        );
+        assert_eq!(
+            defang("https://f.example/go/t.example/x"),
+            "hxxps://f[.]example/go/t[.]example/x"
+        );
+        // Defanged text defangs to itself.
+        for s in [
+            "https://r.jina.ai/https://https://a.example/p?q=b.example",
+            "q=%2F%2Fa.example and //b.example/x.php",
+        ] {
+            assert_eq!(defang(&defang(s)), defang(s), "{s}");
+            assert_eq!(defang_hosts(&defang_hosts(s)), defang_hosts(s), "{s}");
+        }
+        // Text outside a URL keeps its dotted names (rule ids).
+        assert_eq!(
+            defang("relay.jina on https://a.example/p?q=b.example"),
+            "relay.jina on hxxps://a[.]example/p?q=b[.]example"
+        );
+    }
+
+    #[test]
+    fn clips_after_defanging() {
+        let f = "exfil.oast:id.oast.pipedream.net";
+        let d = defang_feature(f);
+        assert_eq!(clip_defanged(&d, 28), "exfil.oast:id[.]oast[.]piped…");
+        // Never inside a `[.]`.
+        assert_eq!(clip_defanged("a[.]example", 2), "a…");
+        assert_eq!(clip_defanged("a[.]example", 3), "a…");
+        assert_eq!(clip_defanged("a[.]example", 4), "a[.]…");
+        assert_eq!(clip_defanged("a[.]b", 9), "a[.]b");
+    }
+
+    #[test]
+    fn defangs_bare_hosts() {
+        assert_eq!(
+            defang_hosts("exfil.requestbin:c0ve7x9.m.pipedream.net"),
+            "exfil[.]requestbin:c0ve7x9[.]m[.]pipedream[.]net"
+        );
+        assert_eq!(
+            defang_hosts("program on portal.example.gov/q and https://x.example/a"),
+            "program on portal[.]example[.]gov/q and hxxps://x[.]example/a"
+        );
+        assert_eq!(defang_hosts("_dmarc.a.example."), "_dmarc[.]a[.]example.");
+        assert_eq!(
+            defang_hosts("from 10.0.0.12, then"),
+            "from 10[.]0[.]0[.]12, then"
+        );
+        assert_eq!(
+            defang_hosts("q=%2F%2Fa.example%2F and //b.example/"),
+            "q=%2F%2Fa[.]example%2F and //b[.]example/"
+        );
+        // Numbers, abbreviations and versions are not hosts.
+        for s in [
+            "Jaccard 0.52, width 4",
+            "e.g. a run",
+            "v1.2 at 999.1.1.1",
+            "Chrome/138.0.0.0 Safari/537.36",
+        ] {
+            assert_eq!(defang_hosts(s), s);
+        }
+        assert_eq!(
+            defang_feature("exfil.requestbin:c0ve7x9.m.pipedream.net"),
+            "exfil.requestbin:c0ve7x9[.]m[.]pipedream[.]net"
+        );
+        assert_eq!(
+            defang_feature("param:cb=https://hook.example/x"),
+            "param:cb=hxxps://hook[.]example/x"
+        );
+        assert_eq!(
+            defang_feature("close requests on a.example"),
+            "close requests on a[.]example"
+        );
+        // Already defanged text stays as it is.
+        let once = defang_hosts("a.example and https://b.example/");
+        assert_eq!(defang_hosts(&once), once);
     }
 }

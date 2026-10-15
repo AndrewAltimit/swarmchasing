@@ -11,6 +11,7 @@ mod pipeline;
 
 pub use hints::is_context_kind;
 pub(crate) use hints::{payload_variants, relay_stack, target_text};
+pub(crate) use link::{Tie, TieWhy};
 
 use crate::dialect::{CutLengths, Dialect, DialectPair};
 use crate::extract::Layer;
@@ -174,6 +175,15 @@ pub struct Cluster {
         skip_serializing_if = "crate::identity::ClusterIdentity::is_empty"
     )]
     pub identity: crate::identity::ClusterIdentity,
+    /// Members' client addresses by the cloud range they fall in, and those
+    /// on the Tor exit list ([`crate::netranges`]). Filled by
+    /// [`crate::netranges::annotate`], not by the pipeline. Descriptive:
+    /// never scored, never linked on.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::netranges::ClusterHosting::is_empty"
+    )]
+    pub hosting: crate::netranges::ClusterHosting,
 }
 
 /// What the members' targets say about the agent's knowledge
@@ -277,21 +287,56 @@ pub struct Analysis {
     /// beyond chance: a link to check, never a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prompt_echo_pairs: Vec<crate::prose::PromptEchoPair>,
+    /// Groups of three or more clusters all holding several features few
+    /// others hold (rare host families in the same hours, request or prose
+    /// templates), beyond a degree-preserving null: a link to check, never a
+    /// merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub co_groups: Vec<crate::biclique::CoGroup>,
+    /// Sites worked by many senders (clusters, and flagged records outside
+    /// them) with one habit set that senders elsewhere seldom hold
+    /// together, beyond chance: a proposal to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub campaigns: Vec<crate::campaign::Campaign>,
+    /// Pairs of clusters whose generated identifiers decode to one
+    /// generator (a UUID node id, a Snowflake worker, a clock skew, a
+    /// counter), beyond chance: a link to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub generator_pairs: Vec<crate::generator::GeneratorPair>,
+    /// Pairs of clusters sending one playbook's steps on their hosts in
+    /// one order beyond chance: a link to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub playbook_pairs: Vec<crate::playbook::PlaybookPair>,
     /// Descriptive ties between clusters above noise (shared pauses, payload
     /// dialects, reruns, recon preambles, path sets, encoding, fan-out, cut
     /// lengths, header sets, escalations, common features, captured
     /// secrets, scaffolds, scaffold lineage, prompt echoes, co-activity,
-    /// co-targets, ordered co-targets), strongest first. They never merge clusters or change a score.
+    /// co-targets, ordered co-targets, co-groups, generators), strongest first. They never merge clusters or change a score.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub soft_links: Vec<crate::fleets::SoftLink>,
     /// Clusters whose combined soft links are strong: proposals for the
     /// admin, never findings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub candidate_fleets: Vec<crate::fleets::CandidateFleet>,
+    /// The joint caps its soft links were combined under, when the rules
+    /// analysed with set others than the bundled ones (a rules file, a
+    /// case's pinned rules): [`Analysis::pair_evidence`] reads them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joint_caps: Option<crate::fleets::JointCaps>,
     /// Pairs of runs whose records suggest agents interacting (SC-T9):
     /// hints for the admin, never scored, never a link or a merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub swarm_edges: Vec<crate::swarm::SwarmEdge>,
+    /// Dispatch stars chained where a follower leads a star of its own
+    /// (two or more generations): a description of who set off whom,
+    /// never scored, never a link or a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dispatch_trees: Vec<crate::swarm::DispatchTree>,
+    /// Clusters of different clients that began within minutes of each
+    /// other beyond chance ([`crate::swarm::OnsetGroup`]), and those read
+    /// as one common trigger: hints, never a link or a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub onset_groups: Vec<crate::swarm::OnsetGroup>,
     /// The multiplicity budget of each family of pairwise tests (shared
     /// pauses, scaffolds, co-activity, the S3 to S6 edges): pairs tested,
     /// kept under a false-discovery cut, and expected by chance.
@@ -329,6 +374,15 @@ impl Cluster {
 }
 
 impl Analysis {
+    /// Every linked pair's combined evidence, under the joint caps of the
+    /// rules it was analysed with, as its candidate fleets were combined.
+    pub fn pair_evidence(&self) -> BTreeMap<(String, String), crate::fleets::PairEvidence> {
+        match &self.joint_caps {
+            Some(caps) => crate::fleets::pair_evidence_with(&self.soft_links, caps),
+            None => crate::fleets::pair_evidence(&self.soft_links),
+        }
+    }
+
     /// The index of the cluster `sel` names, by id or key.
     pub fn cluster_index(&self, sel: &str) -> Option<usize> {
         self.clusters.iter().position(|c| c.matches(sel))
@@ -355,6 +409,82 @@ impl Analysis {
                 (c.id.clone(), infer_offset(&samples))
             })
             .collect()
+    }
+
+    /// Give each cluster the key of the cluster in `reference` that holds
+    /// most of its members (by record id), so an analysis of a subset of
+    /// `reference`'s records speaks of its clusters in `reference`'s key
+    /// space. Clusters are taken largest first; when two share a reference
+    /// cluster, the larger keeps its key and the other keeps its own (or,
+    /// should its own be one taken here, its own with a `-s<n>` suffix). Run
+    /// and onset references to cluster keys follow. Only the keys change:
+    /// members, scores and ids stay as analysed.
+    pub fn rekey_from(&mut self, reference: &Analysis) {
+        use std::collections::BTreeSet;
+        let mut home: BTreeMap<&str, usize> = BTreeMap::new();
+        for r in &reference.results {
+            if let Some(ci) = r.cluster {
+                home.entry(r.obs.id.as_str()).or_insert(ci);
+            }
+        }
+        let mut order: Vec<usize> = (0..self.clusters.len()).collect();
+        crate::sort::by_key(&mut order, |&ci| {
+            (std::cmp::Reverse(self.clusters[ci].members.len()), ci)
+        });
+        let mut wanted: Vec<Option<String>> = vec![None; self.clusters.len()];
+        let mut taken: BTreeSet<String> = BTreeSet::new();
+        for &ci in &order {
+            let mut votes: BTreeMap<usize, usize> = BTreeMap::new();
+            for &m in &self.clusters[ci].members {
+                if let Some(&rc) = home.get(self.results[m].obs.id.as_str()) {
+                    *votes.entry(rc).or_default() += 1;
+                }
+            }
+            let best = votes
+                .iter()
+                .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))
+                .map(|(&rc, _)| reference.clusters[rc].key.clone());
+            if let Some(k) = best.filter(|k| !k.is_empty() && !taken.contains(k)) {
+                taken.insert(k.clone());
+                wanted[ci] = Some(k);
+            }
+        }
+        let mut map: BTreeMap<String, String> = BTreeMap::new();
+        for &ci in &order {
+            let old = self.clusters[ci].key.clone();
+            let new = match wanted[ci].take() {
+                Some(k) => k,
+                None => {
+                    let mut k = old.clone();
+                    let mut n = 1;
+                    while taken.contains(&k) {
+                        n += 1;
+                        k = format!("{old}-s{n}");
+                    }
+                    taken.insert(k.clone());
+                    k
+                }
+            };
+            if new != old {
+                map.insert(old, new.clone());
+            }
+            self.clusters[ci].key = new;
+        }
+        if map.is_empty() {
+            return;
+        }
+        let swap = |k: &mut String| {
+            if let Some(n) = map.get(k.as_str()) {
+                *k = n.clone();
+            }
+        };
+        for e in &mut self.swarm_edges {
+            swap(&mut e.a.key);
+            swap(&mut e.b.key);
+        }
+        for g in &mut self.onset_groups {
+            g.keys.iter_mut().for_each(swap);
+        }
     }
 }
 

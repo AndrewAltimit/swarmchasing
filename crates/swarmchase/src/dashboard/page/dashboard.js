@@ -114,7 +114,7 @@ function tiles(d) {
 
 // ---- next steps ---------------------------------------------------------------
 
-const KIND = { health: "Health", drift: "Drift", watch: "Watch", attention: "Urgent", new: "New", review: "Review", case: "Case", "case-proposal": "Proposal" };
+const KIND = { health: "Health", drift: "Drift", watch: "Watch", mail: "Mail", attention: "Urgent", new: "New", review: "Review", case: "Case", "case-proposal": "Proposal" };
 
 function actions(d) {
   const list = d.actions || [];

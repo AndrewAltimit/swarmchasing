@@ -5,9 +5,9 @@
 // cluster's agent-likelihood ladder, and each cluster's scope tests. Record text is shown defanged, never
 // as a link.
 import { $, el, activate, fetchRoot, ruleLink, showError } from "../lib/dom.js";
-import { arr, obj, fmtTs, fmtShort, dur, trunc, plural } from "../lib/fmt.js";
+import { arr, obj, fmtTs, fmtShort, trunc, plural } from "../lib/fmt.js";
 import { engine, host as hostOf } from "../lib/wasm.js";
-import { figure, legend, legendKey, swarmKey, swimlanes, runExtent, zoomWindow, swarmGraph } from "../lib/charts.js";
+import { figure, legend, legendKey, swarmKey, swimlanes, runExtent, zoomTools, swarmGraph } from "../lib/charts.js";
 import { swarmKind, levelOf } from "../lib/hints.js";
 import { agentLadder } from "../lib/agent.js";
 import { scopePanel } from "../lib/scope.js";
@@ -85,14 +85,8 @@ function timeFigures() {
     node.querySelector("svg.swim")?.focus({ preventScroll: true });
   };
   const chart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), width: width(node), label: "Runs per cluster over time, UTC", domain: zoom, onZoom: redraw });
-  const [t0, t1] = zoom ?? full ?? [0, 0];
-  const reset = el("button", { type: "button", disabled: !zoom }, "Show the whole span");
-  reset.addEventListener("click", () => redraw(null));
-  const zin = el("button", { type: "button", "aria-label": "Zoom in" }, "+");
-  zin.addEventListener("click", () => redraw(zoomWindow(full, zoom, 0.5)));
   const runsFig = figure({
-    chart: el("div", {}, el("div", { class: "zoom-tools" }, zin, reset,
-      el("span", { class: "hint" }, zoom ? `${fmtTs(t0)} → ${fmtTs(t1)} (${dur(t1 - t0)})` : "Drag across the runs to zoom; with the chart focused, + − ← → and 0.")), chart),
+    chart: full ? el("div", {}, zoomTools({ full, zoom, setZoom: redraw }), chart) : chart,
     legend: legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-pause", "pause")),
     caption: "The same runs, drawn live: zoom into the two days.",
     head: ["Cluster", "Tier", "Run start", "Run end", "Records"],

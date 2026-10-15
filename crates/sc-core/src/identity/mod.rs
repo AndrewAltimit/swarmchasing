@@ -25,7 +25,18 @@
 //! the CLI from the catalog's URLs only; a `Signature-Agent` URI in a
 //! request is never fetched. Nothing here changes a score, tier or link, and
 //! a verified identity only suggests a claim: the admin records it.
+//!
+//! A key directory may say how its signer is operated ([`Access`]): a
+//! direct signer is one operator's own agent, an intermediary is a platform
+//! many end users direct. A signature verified for an intermediary
+//! attributes the platform, not the end user, and a per-end-user RFC 7239
+//! `Forwarded` value under it separates end users without naming one.
+//!
+//! A cluster can also carry a declared-then-undeclared hint ([`fallback`]):
+//! a declared agent blocked, and undeclared browser-like requests for the
+//! same pages minutes later. A pattern to check, never a score.
 
+pub mod fallback;
 pub mod httpsig;
 pub mod ranges;
 pub mod sfv;
@@ -58,6 +69,37 @@ fn yes() -> bool {
     true
 }
 
+/// How a signed agent is operated, in Cloudflare's signed-agent classes
+/// (<https://developers.cloudflare.com/bots/concepts/bot/signed-agents/>).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Access {
+    /// One operator runs it, usually on its own infrastructure.
+    Direct,
+    /// A service a wide range of end users operate: the operator runs the
+    /// software, a different end user starts each action.
+    Intermediary,
+}
+
+impl Access {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Direct => "direct",
+            Self::Intermediary => "intermediary",
+        }
+    }
+
+    /// What a verified signature from such a signer attributes.
+    pub fn meaning(self) -> &'static str {
+        match self {
+            Self::Direct => "a direct signer: one operator runs it",
+            Self::Intermediary => {
+                "an intermediary platform many end users direct: the signature attributes the platform, not the end user who started the request"
+            }
+        }
+    }
+}
+
 /// A provider's Web Bot Auth key directory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DirectoryFile {
@@ -66,6 +108,10 @@ pub struct DirectoryFile {
     pub signature_agent: String,
     pub url: String,
     pub source: String,
+    /// How the signer is operated, set only where the provider's own
+    /// documentation says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<Access>,
 }
 
 /// An agent product that names itself in the user agent.
@@ -93,9 +139,15 @@ pub struct DeclaredApp {
     pub provider: String,
     pub product: String,
     /// Words that claim this product in another App's login (`claude` in
-    /// `claude-fleet[bot]`).
+    /// `claude-fleet[bot]`): words of the product's name or of its login,
+    /// never the provider's name alone, which its other Apps carry too.
     #[serde(default)]
     pub names: Vec<String>,
+    /// The provider's own GitHub organisations: an App acting on their
+    /// repositories was installed there by the provider, so its name claims
+    /// nothing of others.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub orgs: Vec<String>,
     pub source: String,
 }
 
@@ -144,6 +196,22 @@ impl Catalog {
                 return Err(format!("agent {}: unknown directory `{d}`", a.token));
             }
         }
+        for a in &c.github_apps {
+            let own: Vec<String> = format!("{} {}", a.product, a.login)
+                .to_ascii_lowercase()
+                .split(|ch: char| !ch.is_ascii_alphanumeric())
+                .filter(|w| !w.is_empty())
+                .map(str::to_string)
+                .collect();
+            for n in &a.names {
+                if !own.contains(&n.to_ascii_lowercase()) {
+                    return Err(format!(
+                        "github_app {}: name `{n}` is not a word of the product or its login",
+                        a.login
+                    ));
+                }
+            }
+        }
         for u in c
             .range_files
             .iter()
@@ -187,7 +255,8 @@ impl Catalog {
     /// The declared App an undeclared GitHub App login (`name[bot]`) claims
     /// by name: a word of the login that starts with one of an App's
     /// `names`. A lookalike is a spoofing lead, not a finding: any App picks
-    /// its own name.
+    /// its own name. On a repository of one of the provider's own `orgs`,
+    /// see [`Catalog::provider_repo`].
     pub fn github_lookalike(&self, login: &str) -> Option<&DeclaredApp> {
         let l = login.to_ascii_lowercase();
         let stem = l.strip_suffix("[bot]")?;
@@ -204,6 +273,18 @@ impl Catalog {
                 words.iter().any(|w| w.starts_with(n.as_str()))
             })
         })
+    }
+
+    /// Whether `repo_owner` is one of the organisations of `app`'s provider
+    /// (any of the provider's declared Apps).
+    pub fn provider_repo(&self, app: &DeclaredApp, repo_owner: &str) -> bool {
+        !repo_owner.is_empty()
+            && self
+                .github_apps
+                .iter()
+                .filter(|a| a.provider == app.provider)
+                .flat_map(|a| &a.orgs)
+                .any(|o| o.eq_ignore_ascii_case(repo_owner))
     }
 
     fn range_file(&self, id: &str) -> Option<&RangeFile> {
@@ -308,6 +389,31 @@ pub struct RecordIdentity {
     pub detail: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<SigCheck>,
+    /// The verified signer's access class, when its directory states one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<Access>,
+    /// Under an intermediary signer, the end user the RFC 7239 `Forwarded`
+    /// header names (its first `for=`). A key to group requests by, never
+    /// attribution; kept out of any output.
+    #[serde(skip)]
+    pub forwarded: Option<String>,
+}
+
+/// The first `for=` of an RFC 7239 `Forwarded` header, unquoted.
+pub fn forwarded_for(o: &Observation) -> Option<String> {
+    let v = o
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("forwarded"))?
+        .1;
+    let first = v.split(',').next()?;
+    first.split(';').find_map(|pair| {
+        let (k, v) = pair.split_once('=')?;
+        k.trim()
+            .eq_ignore_ascii_case("for")
+            .then(|| v.trim().trim_matches('"').to_string())
+            .filter(|v| !v.is_empty())
+    })
 }
 
 /// Class one record. `method` is the request method when the record gives
@@ -351,6 +457,10 @@ pub fn classify(o: &Observation, catalog: &Catalog, data: &IdentityData) -> Reco
         out.provider = d.map(|d| d.provider.clone()).or(out.provider);
         out.agent = d.map(|d| d.signature_agent.clone()).or(out.agent);
         out.basis = Some(directory.clone());
+        out.access = d.and_then(|d| d.access);
+        if out.access == Some(Access::Intermediary) {
+            out.forwarded = forwarded_for(o);
+        }
         out.signature = sig;
         return out;
     }
@@ -364,9 +474,18 @@ pub fn classify(o: &Observation, catalog: &Catalog, data: &IdentityData) -> Reco
             .iter()
             .filter_map(|id| Some((catalog.range_file(id)?, data.ranges.get(id)?)))
             .collect();
-        if let Some((f, _)) = held.iter().find(|(_, t)| t.contains(ip)) {
+        if let Some((f, t)) = held.iter().find(|(_, t)| t.contains(ip)) {
             out.class = IdentityClass::IpVerified;
             out.basis = Some(f.id.clone());
+            // A shared file that names services per prefix may name another.
+            let services = t.services_for(ip);
+            if !services.is_empty() && !services.iter().any(|s| s.eq_ignore_ascii_case(&a.token)) {
+                out.detail = format!(
+                    "the file publishes this address for {}, not {}",
+                    services.join(", "),
+                    a.token
+                );
+            }
             out.signature = sig;
             return out;
         }
@@ -389,10 +508,15 @@ pub fn classify(o: &Observation, catalog: &Catalog, data: &IdentityData) -> Reco
     if declared.is_none()
         && sig.is_none()
         && let Some(ip) = ip
-        && let Some((id, _)) = data.ranges.iter().find(|(_, t)| t.contains(ip))
+        && let Some((id, t)) = data.ranges.iter().find(|(_, t)| t.contains(ip))
     {
         out.class = IdentityClass::InRange;
         out.provider = catalog.range_file(id).map(|f| f.provider.clone());
+        // The file's own name for what sends from this prefix, if it gives one.
+        let services = t.services_for(ip);
+        if !services.is_empty() {
+            out.agent = Some(services.join(", "));
+        }
         out.basis = Some(id.clone());
         return out;
     }
@@ -447,6 +571,17 @@ pub struct IdentityLine {
     /// One example reason, for spoofed and failed lines.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub detail: String,
+    /// The verified signer's access class, when its directory states one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<Access>,
+    /// Under an intermediary signer, how many distinct end users the
+    /// members' `Forwarded` headers name: a grouping key, not attribution.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub end_users: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// A cluster's declared identities, strongest class first. Members with no
@@ -460,11 +595,15 @@ pub struct ClusterIdentity {
     /// Which range files and directories were held, with their fetch dates.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub held: Vec<String>,
+    /// A declared agent blocked, then undeclared browser-like requests for
+    /// the same pages ([`fallback`]). A pattern to check, never a score.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<fallback::Fallback>,
 }
 
 impl ClusterIdentity {
     pub fn is_empty(&self) -> bool {
-        self.lines.is_empty()
+        self.lines.is_empty() && self.fallback.is_none()
     }
 
     pub fn records(&self, class: IdentityClass) -> usize {
@@ -484,7 +623,7 @@ impl ClusterIdentity {
                 let who: Vec<String> = [l.provider.clone(), l.agent.clone()]
                     .into_iter()
                     .flatten()
-                    .map(|s| crate::extract::defang(&s))
+                    .map(|s| crate::extract::defang_hosts(&s))
                     .collect();
                 let mut s = format!("{} {}", l.records, l.class.id().replace('_', " "));
                 if !who.is_empty() {
@@ -492,6 +631,9 @@ impl ClusterIdentity {
                 }
                 if let Some(b) = &l.basis {
                     s.push_str(&format!(" by {b}"));
+                }
+                if l.access == Some(Access::Intermediary) {
+                    s.push_str(", an intermediary: the platform, not the end user");
                 }
                 s
             })
@@ -516,11 +658,15 @@ impl ClusterIdentity {
                 IdentityClass::IpVerified => "declare the product and came from an address in",
                 _ => "came, undeclared, from an address in",
             };
-            by.entry(p).or_default().push(format!(
+            let mut line = format!(
                 "{} record(s) {what} {} (the provider's published file)",
                 l.records,
                 l.basis.as_deref().unwrap_or("?")
-            ));
+            );
+            if let Some(acc) = l.access {
+                line.push_str(&format!("; the signer is {}", acc.meaning()));
+            }
+            by.entry(p).or_default().push(line);
         }
         by.into_iter()
             .map(|(p, details)| Claim {
@@ -538,14 +684,21 @@ pub fn cluster_identity(
     catalog: &Catalog,
     data: &IdentityData,
 ) -> ClusterIdentity {
-    // (class, provider, agent, basis) -> (records, first detail)
+    // (class, provider, agent, basis) -> (records, first detail, access,
+    // end users)
     type Key = (
         IdentityClass,
         Option<String>,
         Option<String>,
         Option<String>,
     );
-    let mut lines: BTreeMap<Key, (usize, String)> = BTreeMap::new();
+    type Acc = (
+        usize,
+        String,
+        Option<Access>,
+        std::collections::BTreeSet<String>,
+    );
+    let mut lines: BTreeMap<Key, Acc> = BTreeMap::new();
     let mut out = ClusterIdentity::default();
     for &m in &c.members {
         let r = classify(&a.results[m].obs, catalog, data);
@@ -560,17 +713,21 @@ pub fn cluster_identity(
         if e.1.is_empty() {
             e.1 = r.detail;
         }
+        e.2 = e.2.or(r.access);
+        e.3.extend(r.forwarded);
     }
     out.lines = lines
         .into_iter()
         .map(
-            |((class, provider, agent, basis), (records, detail))| IdentityLine {
+            |((class, provider, agent, basis), (records, detail, access, users))| IdentityLine {
                 class,
                 provider,
                 agent,
                 basis,
                 records,
                 detail,
+                access,
+                end_users: users.len(),
             },
         )
         .collect();
@@ -632,7 +789,7 @@ pub fn annotate(a: &mut Analysis, catalog: &Catalog, data: &IdentityData) {
                 .iter()
                 .filter(|l| class.contains(&l.class))
                 .filter_map(|l| l.agent.clone().or(l.provider.clone()))
-                .map(|s| crate::extract::defang(&s))
+                .map(|s| crate::extract::defang_hosts(&s))
                 .collect();
             v.dedup();
             v.join(", ")
@@ -663,6 +820,8 @@ pub fn annotate(a: &mut Analysis, catalog: &Catalog, data: &IdentityData) {
         }
         c.identity = id;
     }
+    // Again with the ranges held, which leave out the provider's own systems.
+    fallback::mark(a, Some((catalog, data)));
 }
 
 #[cfg(test)]

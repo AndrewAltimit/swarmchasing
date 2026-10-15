@@ -7,7 +7,7 @@
 // manifest's signature (against the keys this site publishes) and the
 // analysis by the tools module. Record contents, stamps and claims
 // are untrusted: inserted as text, URLs defanged.
-import { $, el, ruleLink, showError, fetchRoot } from "../lib/dom.js";
+import { $, el, copyButton, ruleLink, showError, fetchRoot } from "../lib/dom.js";
 import { arr, obj, num, pct, dur, fmtTs, topEntries, trunc } from "../lib/fmt.js";
 import { tools, engine, host, pageRules } from "../lib/wasm.js";
 import { figure, swimlanes, tierLegend } from "../lib/charts.js";
@@ -250,7 +250,7 @@ function recordTable(a) {
     const r = a.results[i];
     return el("tr", {},
       td(0, { class: "rc-head" }, pill(r.tier)), td(1, { class: "nowrap rc-head" }, fmtTs(r.obs.ts)),
-      td(2, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster].id : "–"),
+      td(2, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"),
       td(3, {}, trunc(String(r.obs.id), 40)),
       td(4, { class: "url" }, sc.defang(trunc(String(r.obs.url), 300))),
       td(5, {}, r.hits.map((h) => el("span", { class: "chip", title: sc.defang(String(h.matched)) }, ruleLink(h.rule_id, "rule-link")))));
@@ -332,4 +332,4 @@ $("defang-in").addEventListener("input", () => {
     $("defang-result").hidden = !text.trim();
   });
 });
-$("defang-copy").addEventListener("click", () => navigator.clipboard?.writeText($("defang-out").textContent));
+copyButton($("defang-copy"), () => $("defang-out").textContent, "Copy failed: select the text above");

@@ -5,8 +5,9 @@ use crate::input::{InputArgs, load_rules, read_records};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use sc_sim::{
-    Gate, Measurement, Palette, ScenarioFile, Truth, bench, calibrate_by_scenario, check_rules,
-    generate, measure, null_counts, render, render_stratified, to_ndjson,
+    BenchOptions, Calibration, Gate, Measurement, Palette, ScenarioFile, Truth, bench_with,
+    calibrate_by_scenario, check_joint, check_rules, generate, measure, null_counts, render,
+    render_stratified, to_ndjson,
 };
 use std::path::PathBuf;
 
@@ -27,6 +28,7 @@ enum SimCmd {
         scenarios: PathBuf,
         #[arg(short, long)]
         out: PathBuf,
+        /// Rules file (defaults to the bundled rules/default.toml).
         #[arg(long)]
         rules: Option<PathBuf>,
     },
@@ -36,14 +38,24 @@ enum SimCmd {
     /// is not met.
     Bench {
         scenarios: PathBuf,
+        /// Rules file (defaults to the bundled rules/default.toml).
         #[arg(long)]
         rules: Option<PathBuf>,
         /// Print only the summed measurement.
         #[arg(long)]
         total: bool,
         /// Also write the per-scenario measurements as JSON.
-        #[arg(long)]
+        #[arg(long = "json-out", value_name = "FILE", alias = "json")]
         json: Option<PathBuf>,
+        /// Also run `sim calibrate --check` on the same generated records
+        /// (each is generated once for both), and fail as it would.
+        #[arg(long)]
+        calibrate_check: bool,
+        /// Cut each generated file into this many prefixes by time and
+        /// analyse each, for the minutes each agent run takes to reach L2 or
+        /// a candidate fleet (0: off; each prefix is a full analysis).
+        #[arg(long, default_value_t = 0)]
+        detect_checkpoints: usize,
         #[command(flatten)]
         gate: GateArgs,
     },
@@ -53,10 +65,13 @@ enum SimCmd {
     /// scenario and each scenario's, beside the ones the rules set.
     Calibrate {
         scenarios: PathBuf,
+        /// Rules file (defaults to the bundled rules/default.toml).
         #[arg(long)]
         rules: Option<PathBuf>,
         /// Exit non-zero when a ratio the rules set is above the
-        /// stratified lower bound of a kind the scenarios measure.
+        /// stratified lower bound of a kind the scenarios measure, or a
+        /// ratio above 1 is measured by no scenario and the scenario file's
+        /// `calibration.unmeasured` gives no reason for it.
         #[arg(long)]
         check: bool,
     },
@@ -71,7 +86,7 @@ enum SimCmd {
         #[arg(long)]
         rules: Option<PathBuf>,
         /// Also write the measurement as JSON (counts and kind names only).
-        #[arg(long)]
+        #[arg(long = "json-out", value_name = "FILE", alias = "json")]
         json: Option<PathBuf>,
     },
 }
@@ -165,11 +180,22 @@ pub fn run(a: SimArgs) -> Result<()> {
             rules,
             total,
             json,
+            calibrate_check,
+            detect_checkpoints,
             gate,
         } => {
             let rules = load_rules(rules.as_deref())?;
             let file = read_scenarios(&scenarios)?;
-            let results = bench(&file, &Palette::default_palette(&rules), &rules);
+            let out = bench_with(
+                &file,
+                &Palette::default_palette(&rules),
+                &rules,
+                BenchOptions {
+                    calibrate: calibrate_check,
+                    checkpoints: detect_checkpoints,
+                },
+            );
+            let results = out.measured;
             let mut sum = Measurement::default();
             for (name, m) in &results {
                 sum.add(m);
@@ -213,8 +239,21 @@ pub fn run(a: SimArgs) -> Result<()> {
                 )
                 .with_context(|| format!("writing {}", j.display()))?;
             }
+            let calibration_failed = if calibrate_check {
+                println!("\nCalibration check (sim calibrate --check):");
+                calibration_check(&out.calibration, &rules, &file)
+            } else {
+                0
+            };
             if failed > 0 {
-                bail!("{failed} simulator bound(s) not met");
+                return Err(crate::Exit::floor(format!(
+                    "{failed} simulator bound(s) not met"
+                )));
+            }
+            if calibration_failed > 0 {
+                return Err(crate::Exit::floor(format!(
+                    "{calibration_failed} soft-link ratio(s) above the simulation's stratified lower bound or unmeasured"
+                )));
             }
             Ok(())
         }
@@ -229,21 +268,11 @@ pub fn run(a: SimArgs) -> Result<()> {
             print!("{}", render_stratified(&strata, &rules));
             if check {
                 println!();
-                let mut failed = 0;
-                for c in check_rules(&strata, &rules) {
-                    println!(
-                        "{} {}: rules {:.2}, stratified lower bound {:.2}",
-                        if c.ok { "ok  " } else { "FAIL" },
-                        serde_json::to_value(c.kind)?.as_str().unwrap_or_default(),
-                        c.bundled,
-                        c.low
-                    );
-                    failed += usize::from(!c.ok);
-                }
+                let failed = calibration_check(&strata, &rules, &file);
                 if failed > 0 {
-                    bail!(
-                        "{failed} soft-link ratio(s) above the simulation's stratified lower bound"
-                    );
+                    return Err(crate::Exit::floor(format!(
+                        "{failed} soft-link ratio(s) above the simulation's stratified lower bound or unmeasured"
+                    )));
                 }
             }
             Ok(())
@@ -269,6 +298,24 @@ pub fn run(a: SimArgs) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// Print each kind's check line and return how many failed.
+fn calibration_check(
+    strata: &[(String, Calibration)],
+    rules: &sc_core::Rules,
+    file: &ScenarioFile,
+) -> usize {
+    let mut failed = 0;
+    for c in check_rules(strata, rules, &file.calibration.unmeasured) {
+        println!("{}", c.line());
+        failed += usize::from(!c.ok);
+    }
+    for c in check_joint(strata, rules) {
+        println!("{}", c.line());
+        failed += usize::from(!c.ok);
+    }
+    failed
 }
 
 fn read_scenarios(p: &std::path::Path) -> Result<ScenarioFile> {

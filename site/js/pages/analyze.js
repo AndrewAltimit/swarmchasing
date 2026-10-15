@@ -1,12 +1,12 @@
-// The analysis workbench. Records are analysed by the engine in this page;
-// nothing is uploaded. Record contents are untrusted: they reach the page as
+// The analysis workbench. Records are analysed by the engine in this page,
+// in a worker when one starts (lib/runner.js); nothing is uploaded. Record contents are untrusted: they reach the page as
 // text only, URLs and hosts defanged, and never become links. The URL hash
 // holds the selection as ids only (a cluster key, a record number, a rule
 // id, a view), never hosts, URLs or other record data.
-import { $, el, activate, download, fetchRoot, ruleLink, showAlert, showError } from "../lib/dom.js";
+import { $, el, activate, busy, copyButton, download, fetchRoot, readFile, roving, ruleLink, showAlert, showError, HANDOFF_KEY } from "../lib/dom.js";
 import { arr, obj, num, fmtTs, fmtShort, dur, trunc, signed, topEntries, plural } from "../lib/fmt.js";
 import { workbench, host as hostOf, pageRules } from "../lib/wasm.js";
-import { figure, legend, legendKey, edgeKey, swarmKey, tierLegend, rampLegend, swimlanes, runExtent, zoomWindow, fleetGraph, swarmGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
+import { figure, legend, legendKey, edgeKey, swarmKey, tierLegend, rampLegend, swimlanes, runExtent, zoomTools, fleetGraph, swarmGraph, heatmap, rhythmGrid, strip, hourly } from "../lib/charts.js";
 import {
   kindClass, kindLabel, tactic, route, fleetItems, language, levelOf, swarmKind, provenanceLabel, corroborationLabel, plantLabel,
 } from "../lib/hints.js";
@@ -14,6 +14,8 @@ import { layersTable } from "../lib/layers.js";
 import { agentLadder as ladderOf } from "../lib/agent.js";
 import { scopePanel } from "../lib/scope.js";
 import { sightingsPanel, resetSightings } from "../lib/sightings.js";
+import { bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, runProgress, setPanel, setSummary } from "../lib/fileset.js";
+import { runner, heldIndexes, Cancelled, EngineCrash } from "../lib/runner.js";
 
 const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
@@ -45,6 +47,12 @@ function ensure() {
 }
 /** Start loading the module; a failure is shown in the status line. */
 const warm = () => ensure().catch(() => {});
+// The analysis, and the endpoints, report, sightings and attribution that
+// read it, run in a worker, so a large set leaves the page responsive and
+// can be cancelled; on the page itself when no worker starts. The page's
+// own module serves the quick helpers (defang, claims, rules).
+const engine = runner(ensure);
+const progress = runProgress($("run").parentElement, () => engine.cancel());
 
 let a = null; // the analysis
 let dateTags = {};
@@ -58,6 +66,11 @@ let wantReport = false; // the visitor asked for the report, or reached it
 
 const host = (h) => hostOf(sc, h);
 const safe = (s, n = 120) => trunc(sc.defang(String(s ?? "")), n);
+// Hint text from the engine (a soft link's detail, a shared pause's reason)
+// can name a host without a scheme ("relay on www.example.org/q"), which
+// defang() leaves alone: a dotted name ending in a letter is defanged too.
+const BARE_NAME = /\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\b/gi;
+const safeText = (s, n = 120) => trunc(sc.defang(String(s ?? "")).replace(BARE_NAME, (m) => (/[a-z]/i.test(m.slice(m.lastIndexOf(".") + 1)) ? m.replaceAll(".", "[.]") : m)), n);
 const pill = (tier) => el("span", { class: `pill ${String(tier).replace(/[^a-z]/g, "")}` }, String(tier));
 const chips = (list) => list.map((x) => el("span", { class: "chip" }, x));
 const keyOf = (c) => c.key || c.id;
@@ -69,7 +82,7 @@ const VALID = { c: /^(k-[0-9a-f]{6,16}|C\d{1,5})$/, r: /^\d{1,7}$/, rule: /^[\w.
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   const get = (k) => (p.has(k) && VALID[k].test(p.get(k)) ? p.get(k) : null);
-  return { c: get("c"), r: get("r"), rule: get("rule"), v: VIEWS.includes(p.get("v")) ? p.get("v") : null, example: p.get("try") === "example", preset: p.get("preset") };
+  return { c: get("c"), r: get("r"), rule: get("rule"), v: VIEWS.includes(p.get("v")) ? p.get("v") : null, example: p.get("try") === "example", preset: p.get("preset"), from: p.get("from") };
 }
 function writeHash() {
   const p = new URLSearchParams();
@@ -141,14 +154,22 @@ tabs.forEach((t, i) => {
 }
 
 // ── Input ──────────────────────────────────────────────────────────────────
+// A set of files (several, a folder, archives) takes the text box's place:
+// unpacked and read file by file into the module, analysed as one input
+// (lib/fileset.js). Each record's id starts with its file's number, which
+// names the file in the record's context, the file filter and the CSV.
+let set = null; // the files picked, while a set replaces the text box
+let setRead = null; // what the last analysis read from each file of the set
+let bigOk = null; // the set the visitor said to read although it is big
+
 /** Analyze is offered only when there is something to analyse. */
-const syncRun = () => ($("run").disabled = !$("input").value.trim());
+const syncRun = () => ($("run").disabled = !set && !$("input").value.trim());
 
 /** After a run: the records box shrinks to a line, so the clusters come up. */
 function collapseInput(n) {
   const hadFocus = $("input-box").contains(document.activeElement);
   $("input-box").hidden = true;
-  $("input-count").textContent = `${plural(n, "record")} loaded`;
+  $("input-count").textContent = `${plural(n, "record")}${setRead ? ` from ${plural(setRead.files.length, "file")}` : ""} loaded`;
   $("input-collapsed").hidden = false;
   $("input-edit").setAttribute("aria-expanded", "false");
   if (hadFocus) $("input-edit").focus({ preventScroll: true });
@@ -157,7 +178,7 @@ function expandInput(focus = false) {
   $("input-box").hidden = false;
   $("input-collapsed").hidden = true;
   $("input-edit").setAttribute("aria-expanded", "true");
-  if (focus) $("input").focus();
+  if (focus) (set ? $("set").querySelector("button") : $("input"))?.focus();
 }
 
 const FORMATS_READ = "The workbench reads NDJSON (one JSON object per line, with a url field), a JSON array, Wayback CDX JSON, one URL per line (optionally after a timestamp), or a web server access log.";
@@ -170,6 +191,17 @@ function nothingRead(title, first) {
     first ? ["First problem: ", el("code", {}, trunc(String(first), 300))] : null,
     `${FORMATS_READ} If auto-detect guessed wrong, pick the format; if your fields have other names, map them, e.g. ts=submitted_at,url=page.url.`,
     "To see what an analysis looks like, press Try an example.");
+}
+
+/**
+ * The analysis ran out of room in the browser: not a problem with the
+ * input, so no format advice. A set keeps its per-file account.
+ */
+function tooMany(message, read = null) {
+  clearAnalysis();
+  expandInput();
+  if (read?.files?.length) showFiles(read);
+  showAlert($("alert"), "Too many records for the browser.", message);
 }
 
 /** Back to the empty workbench: no dashboard for an input that read nothing. */
@@ -190,6 +222,7 @@ function clearAnalysis() {
   $("links").replaceChildren(hint("None yet."));
   $("report").textContent = "Analyse records to draft a report.";
   for (const b of ["copy-report", "dl-report", "dl-json"]) $(b).disabled = true;
+  showFiles(null);
   syncResultControls();
   resetSightings();
   writeHash();
@@ -212,7 +245,8 @@ function syncResultControls() {
 }
 
 // ── Analysis ───────────────────────────────────────────────────────────────
-function runAnalysis() {
+async function runAnalysis() {
+  if (set) return runSetAnalysis();
   const warn = $("warnings");
   warn.hidden = true;
   $("alert").hidden = true;
@@ -223,11 +257,15 @@ function runAnalysis() {
     return false;
   }
   try {
-    out = JSON.parse(sc.analyze(src.input, src.format, src.map, rules));
+    out = await engine.analyze(src.input, src.format, src.map, rules, progress.show);
   } catch (e) {
-    nothingRead("The input could not be read.", e?.message ?? e);
+    if (e instanceof Cancelled) return cancelled();
+    progress.end();
+    if (e instanceof EngineCrash) tooMany(e.message);
+    else nothingRead("The input could not be read.", e?.message ?? e);
     return false;
   }
+  progress.end(`Analysed ${plural(num(out.analysis?.total) ?? 0, "record")}.`);
   if (!num(out.analysis?.total)) {
     nothingRead("Nothing was read from this input: no line held a record.", arr(out.warnings)[0]);
     return false;
@@ -235,6 +273,113 @@ function runAnalysis() {
   const notes = [];
   if (out.redacted) notes.push(`${out.redacted} secret value(s) such as cookies or tokens were replaced with hashes.`);
   if (arr(out.warnings).length) notes.push(`${out.warnings.length} warning(s): ${out.warnings.slice(0, 3).join("; ")}`);
+  setRead = null;
+  showFiles(null);
+  return takeAnalysis(out, notes);
+}
+
+/**
+ * A run the visitor cancelled. The worker that held the last analysis is
+ * gone with it, so the dashboard goes too and the input comes back.
+ */
+function cancelled() {
+  progress.end("Analysis cancelled.");
+  clearAnalysis();
+  expandInput();
+  const status = $("drop-status");
+  status.replaceChildren("Analysis cancelled. Press Analyse to run it again.");
+  status.hidden = false;
+  return false;
+}
+
+/** Analyse the set of files: each unpacked and read in turn, all analysed as one. */
+async function runSetAnalysis() {
+  const warn = $("warnings");
+  warn.hidden = true;
+  $("alert").hidden = true;
+  if (bigOk !== set && !(await bigSetOk(set, $("drop-status"), () => {
+    bigOk = set;
+    analyse();
+  }))) return false;
+  let read;
+  $("drop-status").hidden = true;
+  try {
+    // Under "Access log", a file that starts as JSON is detected (a JSON
+    // log beside the access logs); any other format applies to every file.
+    read = await engine.readSet(set, { format: $("format").value, map: $("map").value, rules }, progress.show);
+  } catch (e) {
+    if (e instanceof Cancelled) return cancelled();
+    progress.end();
+    if (e instanceof EngineCrash) tooMany(e.message);
+    else nothingRead("The files could not be read.", e?.message ?? e);
+    return false;
+  }
+  if (read.failed) {
+    progress.end("The analysis ran out of memory.");
+    setRead = null;
+    tooMany(read.failed, read);
+    return false;
+  }
+  progress.end(`Read ${plural(read.files.length, "file")}, ${plural(num(read.out?.analysis?.total) ?? 0, "record")} analysed.`);
+  if (!num(read.out?.analysis?.total)) {
+    setRead = null;
+    nothingRead("Nothing was read from these files: no line held a record.", read.files.find((f) => f.warnings?.length)?.warnings[0] ?? read.skipped[0]?.reason);
+    showFiles(read);
+    return false;
+  }
+  const notes = [];
+  const redacted = read.files.reduce((n, f) => n + f.redacted, 0);
+  const warned = read.files.filter((f) => f.warning_count);
+  if (redacted) notes.push(`${redacted} secret value(s) such as cookies or tokens were replaced with hashes.`);
+  if (warned.length) notes.push(`${plural(warned.reduce((n, f) => n + f.warning_count, 0), "warning")} in ${plural(warned.length, "file")}; the files read list the first problem of each.`);
+  if (read.stopped) notes.push(read.stopped);
+  setRead = read;
+  showFiles(read);
+  return takeAnalysis(read.out, notes);
+}
+
+/** The per-file summary of a set, and the records table's file filter; none for null. */
+function showFiles(read) {
+  const box = $("files");
+  box.hidden = !read;
+  box.replaceChildren(...(read ? [setSummary(read)] : []));
+  const pick = $("rec-file");
+  pick.replaceChildren(el("option", { value: "" }, "every file"),
+    ...(read?.files ?? []).map((f, i) => el("option", { value: String(i + 1) }, trunc(f.name, 80))));
+  $("rec-file-wrap").hidden = !(read?.files.length > 1);
+}
+
+/** The file a record came from, when a set was analysed; else null. */
+const fileName = (i) => (setRead ? fileOf(a.results[i]?.obs.id, setRead.files) : null);
+
+/**
+ * A record a large analysis did not send (one the hash names), fetched
+ * from where the analysis is held into its place in `a.results`.
+ */
+async function fetchRecord(r) {
+  const i = Number(r);
+  if (!a?.result_index || r == null || !(i >= 0 && i < a.results.length) || a.results[i]) return;
+  try {
+    for (const row of arr(JSON.parse(await engine.call("held_results", JSON.stringify([i]))))) {
+      if (row?.i === i && row.result) a.results[i] = row.result;
+    }
+  } catch {
+    // Not there: the selection is left out.
+  }
+}
+
+/** Show an analysis the module made (from text or from a set), with notes above it. */
+async function takeAnalysis(out, notes) {
+  // The endpoints read the analysis where it was made.
+  let endpoints;
+  try {
+    endpoints = JSON.parse(await engine.call("endpoints", ""));
+  } catch (e) {
+    if (e instanceof Cancelled) return cancelled();
+    endpoints = e instanceof Error ? e : new Error(String(e));
+  }
+  document.body.dataset.analysedIn = engine.mode;
+  const warn = $("warnings");
   if (notes.length) {
     warn.hidden = false;
     warn.textContent = notes.join(" ");
@@ -249,8 +394,9 @@ function runAnalysis() {
   // audience gate, as the CLI does.
   for (const c of arr(a.clusters)) delete c.declared;
   dateTags = obj(out.cluster_date_tags);
-  endpointsCache = null;
+  endpointsCache = endpoints;
   const h = readHash();
+  await fetchRecord(h.r);
   sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
   $("dl-json").disabled = false;
   syncResultControls();
@@ -270,7 +416,7 @@ function renderAll() {
   renderEndpoints();
   renderContext();
   renderLinks();
-  renderReport();
+  queueReport();
   writeHash();
 }
 
@@ -291,7 +437,7 @@ function select(next, step = "context") {
   renderFilterBar();
   renderRecords();
   renderContext();
-  renderReport();
+  queueReport();
   writeHash();
   if (mobile() && step) goStep(step);
   else refocus(key);
@@ -377,27 +523,6 @@ function setZoom(next) {
   refocus("swim-chart");
 }
 
-function zoomTools(full) {
-  const b = (label, text, fn, disabled = false) => {
-    const x = el("button", { type: "button", "aria-label": label, disabled }, text);
-    x.addEventListener("click", fn);
-    return x;
-  };
-  const [t0, t1] = zoom ?? full;
-  const fitBtn = el("button", { type: "button", "aria-pressed": String(fit), disabled: !!zoom, title: "Shrink idle stretches so runs days apart stay readable" }, "Fit to activity");
-  fitBtn.addEventListener("click", () => {
-    fit = !fit;
-    renderView();
-  });
-  return el("div", { class: "zoom-tools" },
-    fitBtn,
-    b("Zoom in", "+", () => setZoom(zoomWindow(full, zoom, 0.5))),
-    b("Zoom out", "−", () => setZoom(zoomWindow(full, zoom, 2)), !zoom),
-    b("Earlier", "◀", () => setZoom(zoomWindow(full, zoom, 1, -0.25)), !zoom),
-    b("Later", "▶", () => setZoom(zoomWindow(full, zoom, 1, 0.25)), !zoom),
-    b("Show the whole span", "Reset", () => setZoom(null), !zoom),
-    el("span", { class: "hint", "aria-live": "polite" }, zoom ? `${fmtTs(t0)} → ${fmtTs(t1)} (${dur(t1 - t0)}), to scale` : `${fit ? "Idle stretches shrink to hatched gaps. " : ""}Drag across the chart to zoom; with the chart focused, + − ← → and 0.`));
-}
 
 function viewRuns() {
   const cl = a.clusters.filter((c) => arr(c.runs).some((r) => r.start > 0)).slice(0, MAX_LANES);
@@ -406,7 +531,11 @@ function viewRuns() {
   const svgChart = swimlanes({ lanes, pauses: arr(a.timing?.pauses), bands: sharedPauseBands(), selected: sel.c, onSelect: (k) => select({ c: sel.c === k ? null : k, r: null, rule: null }), width: panelWidth(), label: "Runs per cluster over time, UTC", domain: zoom, onZoom: setZoom, fit,
     empty: a.clusters.length ? "None of the clusters has a run with timestamps, so there is nothing to draw on a time axis. The flagged records are listed in the table below." : "No clusters formed, so there are no runs to draw: records link into a cluster through shared identifiers or close timing. Every flagged record is still listed in the flagged-records table below." });
   if (svgChart instanceof SVGElement) svgChart.setAttribute("data-focus-key", "swim-chart");
-  const chart = full ? el("div", {}, zoomTools(full), svgChart) : svgChart;
+  const tools = full && zoomTools({ full, zoom, setZoom, fit, onFit: () => {
+    fit = !fit;
+    renderView();
+  } });
+  const chart = full ? el("div", {}, tools, svgChart) : svgChart;
   return figure({
     chart,
     legend: legend(legendKey("k-sig", "significant"), legendKey("k-sug", "suggestive"), legendKey("k-noise", "noise"), legendKey("k-pause", "pause (all records)"), legendKey("k-band", "shared pause")),
@@ -445,7 +574,7 @@ function fleetEdges(keys) {
     const name = kindLabel(o.kind);
     const score = num(o.strength ?? o.score);
     const detail = o.detail ?? o.reason;
-    add(ends[0], ends[1], "soft", `Soft link, ${name}${detail ? ` (${trunc(String(detail), 140)})` : ""}${score != null ? `, strength ${score.toFixed(2)}` : ""}: a hint, not evidence`, `sk-${kindClass(o.kind)}`, name);
+    add(ends[0], ends[1], "soft", `Soft link, ${name}${detail ? ` (${safeText(detail, 140)})` : ""}${score != null ? `, strength ${score.toFixed(2)}` : ""}: a hint, not evidence`, `sk-${kindClass(o.kind)}`, name);
   }
   for (const f of arr(a.candidate_fleets)) {
     const o = Array.isArray(f) ? { clusters: f } : obj(f);
@@ -510,8 +639,8 @@ function swarmData() {
     edges.push({
       a: x, b: y, kind: String(e.kind ?? "other").replace(/[^a-z_]/g, ""), strength: String(e.strength ?? "weak").replace(/[^a-z]/g, ""),
       name: `${k.id} ${k.label}`, from: nodes.get(x).label, to: nodes.get(y).label, chance,
-      detail: safe(e.detail ?? "", 200),
-      label: `${k.id} ${k.label} (${e.strength ?? "?"}): ${nodes.get(x).label} → ${nodes.get(y).label}. ${safe(e.detail ?? "", 160)}${chance != null ? ` Chance ${chance.toExponential(1)}.` : ""} A hint to review, not evidence.`,
+      detail: safeText(e.detail ?? "", 200),
+      label: `${k.id} ${k.label} (${e.strength ?? "?"}): ${nodes.get(x).label} → ${nodes.get(y).label}. ${safeText(e.detail ?? "", 160)}${chance != null ? ` Chance ${chance.toExponential(1)}.` : ""} A hint to review, not evidence.`,
     });
   }
   const order = new Map(a.clusters.map((c, i) => [keyOf(c), i]));
@@ -530,7 +659,15 @@ function viewSwarm() {
     legend: legend(...kinds.map((k) => swarmKey(`sk-${k} st-moderate`, `${swarmKind(k).id} ${swarmKind(k).label}`)), swarmKey("st-weak", "weak"), swarmKey("st-strong", "strong")),
     caption: `Interaction hints (SC-T9) between runs: a fleet is many agents doing the same thing, a swarm one whose agents act on each other's output. Each arc is one weak-to-moderate hint; a claim of interaction needs several together and review. None changes a score, links records or merges clusters.${edges.length ? "" : " This input has none."}`,
     head: ["Kind", "Strength", "From", "To", "Chance", "Detail"],
-    rows: edges.map((e) => [e.name, e.strength, e.from, e.to, e.chance != null ? e.chance.toExponential(1) : "–", e.detail]),
+    rows: [
+      ...edges.map((e) => [e.name, e.strength, e.from, e.to, e.chance != null ? e.chance.toExponential(1) : "–", e.detail]),
+      // Onset groups: clusters of different clients that began together.
+      ...arr(a.onset_groups).map((g) => {
+        const ids = arr(g.clusters).map((c) => safe(c, 12));
+        const chance = num(g.chance);
+        return [g.common_trigger ? "onset (common trigger)" : "onset group", "–", ids[0] ?? "–", trunc(ids.slice(1).join(", "), 80), chance != null ? chance.toExponential(1) : "–", safe(`${ids.length} clusters of different clients began within ${Math.round((num(g.window_secs) ?? 0) / 60)} min${g.common_trigger ? `; they share target families (${arr(g.shared_families).join(", ")}): one trigger, listed, not kept` : ""}`, 200)];
+      }),
+    ],
   });
 }
 
@@ -551,8 +688,10 @@ function viewHeat() {
 }
 
 function scopeIdx() {
-  let idx = a.results.map((_, i) => i).filter((i) => a.results[i].score > 0);
-  if (sel.c) idx = arr(clusterBy(sel.c)?.members);
+  const flagged = (i) => a.results[i]?.score > 0;
+  let idx = heldIndexes(a).filter(flagged);
+  // A cluster's members, flagged ones only: the list is "Flagged records".
+  if (sel.c) idx = arr(clusterBy(sel.c)?.members).filter(flagged);
   if (sel.rule) idx = idx.filter((i) => arr(a.results[i].hits).some((h) => h.rule_id === sel.rule));
   return idx;
 }
@@ -663,23 +802,34 @@ const SORTS = {
 function listedRecords() {
   const needle = $("rec-filter").value.trim().toLowerCase();
   let idx = [...scopeIdx()];
-  if (needle) idx = idx.filter((i) => defangedUrl(i).toLowerCase().includes(needle) || arr(a.results[i].hits).some((h) => String(h.rule_id).toLowerCase().includes(needle)));
+  const file = setRead ? $("rec-file").value : "";
+  if (file) idx = idx.filter((i) => String(a.results[i].obs.id ?? "").startsWith(`f${file}:`));
+  if (needle) idx = idx.filter((i) => defangedUrl(i).toLowerCase().includes(needle) || arr(a.results[i].hits).some((h) => String(h.rule_id).toLowerCase().includes(needle))
+    || (setRead && (fileName(i) ?? "").toLowerCase().includes(needle)));
   return idx.sort(SORTS[$("rec-sort").value] ?? SORTS.score);
 }
 
 function renderRecords() {
   const idx = listedRecords();
   const needle = $("rec-filter").value.trim();
-  $("records-h").textContent = `Flagged records (${scopeText()}${needle ? `, matching "${trunc(needle, 40)}"` : ""}: ${idx.length})`;
+  const file = setRead && $("rec-file").value ? setRead.files[Number($("rec-file").value) - 1]?.name : null;
+  $("records-h").textContent = `Flagged records (${scopeText()}${file ? `, in ${trunc(file, 40)}` : ""}${needle ? `, matching "${trunc(needle, 40)}"` : ""}: ${idx.length})`;
   const capped = idx.slice(0, MAX_ROWS);
   // A selected record past the short list shows the whole list.
   const few = !allRecords && capped.length > FEW_ROWS + 2 && !(sel.r != null && capped.indexOf(sel.r) >= FEW_ROWS);
   const shown = few ? capped.slice(0, FEW_ROWS) : capped;
   const body = el("tbody", {}, shown.map((i) => {
     const r = a.results[i];
-    const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, tabindex: 0, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}`, "data-focus-key": `rec:${i}` },
+    // One tab stop for the table (a roving one, moved by the arrow keys).
+    // The rule links stay out of the tab order: the record's context pane
+    // links the same rules.
+    const tr = el("tr", { class: `pick${sel.r === i ? " sel" : ""}`, "aria-selected": String(sel.r === i), "aria-label": `Record ${i}, ${r.tier}, score ${r.score}`, "data-focus-key": `rec:${i}` },
       cell(RECORD_HEAD, 0, { class: "rc-head" }, pill(r.tier)), cell(RECORD_HEAD, 1, { class: "num rc-head rc-lab" }, r.score),
-      cell(RECORD_HEAD, 2, { class: "rules" }, arr(r.hits).map((h) => ruleLink(h.rule_id))),
+      cell(RECORD_HEAD, 2, { class: "rules" }, arr(r.hits).map((h) => {
+        const link = ruleLink(h.rule_id);
+        link.tabIndex = -1;
+        return link;
+      })),
       cell(RECORD_HEAD, 3, { class: "url" }, safe(r.obs.url, 300)),
       cell(RECORD_HEAD, 4, { class: "nowrap rc-head", title: fmtTs(r.obs.ts) }, fmtShort(r.obs.ts)),
       cell(RECORD_HEAD, 5, { class: "rc-head rc-lab" }, r.cluster != null ? a.clusters[r.cluster]?.id ?? "–" : "–"));
@@ -689,6 +839,7 @@ function renderRecords() {
   }));
   if (idx.length > capped.length && !few) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - capped.length} more not shown; download the CSV or the analysis JSON for all.`)));
   if (!idx.length) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, needle ? "No flagged record in this selection matches the filter." : "No flagged records in this selection.")));
+  if (a.results_omitted) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${plural(a.results_omitted, "flagged record")} with the lowest scores stayed in the analysis engine and are not listed here or in the downloads; the swarmchase CLI lists every one.`)));
   const more = few ? el("button", { type: "button", class: "more-rows" }, `Show all ${capped.length}${idx.length > capped.length ? ` of ${idx.length}` : ""} records`) : null;
   more?.addEventListener("click", () => {
     allRecords = true;
@@ -697,10 +848,13 @@ function renderRecords() {
     const next = $("records").querySelectorAll("tbody tr.pick")[FEW_ROWS];
     next?.focus();
   });
-  $("records").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "records" },
+  const picks = [...body.querySelectorAll("tr.pick")];
+  roving(picks, { current: Math.max(0, shown.indexOf(sel.r)), horizontal: false });
+  $("records").replaceChildren(el("div", { class: "scroll" }, el("table", { class: "records", role: "grid", "aria-labelledby": "records-h", "aria-readonly": "true" },
     el("thead", {}, el("tr", {}, RECORD_HEAD.map((h) => el("th", { scope: "col" }, h)))), body)), ...(more ? [more] : []));
 }
 $("rec-sort").addEventListener("change", () => a && renderRecords());
+$("rec-file").addEventListener("change", () => a && renderRecords());
 {
   let t = 0;
   $("rec-filter").addEventListener("input", () => {
@@ -710,12 +864,8 @@ $("rec-sort").addEventListener("change", () => a && renderRecords());
 }
 
 function renderEndpoints() {
-  try {
-    endpointsCache ??= JSON.parse(sc.endpoints(""));
-  } catch (e) {
-    return showError($("endpoints"), e);
-  }
-  const views = endpointsCache;
+  if (endpointsCache instanceof Error) return showError($("endpoints"), endpointsCache);
+  const views = arr(endpointsCache);
   const body = el("tbody");
   if (!views.length) body.append(el("tr", {}, el("td", { colspan: 7, class: "hint" }, "No target host has a suggestive or significant hit.")));
   for (const v of views) {
@@ -868,6 +1018,13 @@ function clusterContext(c) {
       num(prose.mismatched) ? el("div", {}, `${prose.mismatched} in a language other than their target's country domain`) : null,
       el("div", { class: "hint" }, "an agent prompted in one language often searches a foreign site in it; travellers do too (a hint, not evidence)"));
   }
+  // Declared, then undeclared (identity::fallback): the host arrives defanged.
+  const fb = obj(obj(c.identity).fallback);
+  if (num(fb.blocked))
+    row("Declared, then undeclared", `${fb.blocked} blocked request(s) declaring `, el("code", {}, safeText(fb.declared, 60)),
+      ` on ${safeText(fb.host, 80)} were followed within ${Math.max(1, Math.ceil((num(fb.within_secs) ?? 0) / 60))} min by ${num(fb.undeclared) ?? "?"} undeclared browser-like request(s) for the same page(s) `,
+      chips(arr(fb.paths).slice(0, 5).map((x) => safeText(x, 60))),
+      el("div", { class: "hint" }, "a pattern to check, never scored: an agent falling back to an undeclared client after a block looks like this; so does an unrelated visitor reading the same page"));
   const lf = arr(c.link_features);
   if (lf.length) row("Linked by", chips(lf.slice(0, 10).map((x) => safe(typeof x === "string" ? x : JSON.stringify(x), 90))), lf.length > 10 ? el("span", { class: "hint" }, ` ${lf.length - 10} more`) : null);
   const mine = new Set(arr(c.members));
@@ -893,18 +1050,22 @@ function clusterContext(c) {
 /** The page's link to FM chapter 15 (a template in the page: scripts make no links). */
 const fm15 = () => $("tpl-fm15")?.content.cloneNode(true) ?? null;
 
+/** Redraws the shown attribution layers (after the naming level changes), or null. */
+let refreshAttribution = null;
+
 /** Attribution layers, from the tools module (loaded on request). */
 function attributionPanel(c) {
   const box = el("div", { class: "attr-box" });
   const btn = el("button", { type: "button" }, "Show attribution layers");
+  refreshAttribution = null;
   const load = async () => {
     btn.disabled = true;
     try {
-      const t = await prepared();
-      const res = JSON.parse(t.attribution(JSON.stringify({ cluster: keyOf(c), claims: readClaims() ?? [], min_named: $("min-named").value })));
+      const res = JSON.parse(await engine.call("attribution", JSON.stringify({ cluster: keyOf(c), claims: readClaims() ?? [], min_named: $("min-named").value })));
       box.replaceChildren(
         el("p", { class: "hint" }, `What the records support at each layer, gated as a report at the naming level chosen under Report, with any claims from case work there.${res.withheld ? ` ${res.withheld} developer candidate(s) below that level are not shown.` : ""}`),
         layersTable(res.layers));
+      refreshAttribution = box.isConnected ? load : null;
     } catch (e) {
       showError(box, e);
     }
@@ -923,7 +1084,7 @@ function plantReview(c) {
     ps.length
       ? el("ul", {}, ps.map((p) => {
         const rate = num(p.base_rate);
-        return el("li", { class: rate != null ? "base-rated" : null }, el("strong", {}, plantLabel(p.kind)), p.detail ? `: ${safe(p.detail, 200)}` : "",
+        return el("li", { class: rate != null ? "base-rated" : null }, el("strong", {}, plantLabel(p.kind)), p.detail ? `: ${safeText(p.detail, 200)}` : "",
           el("span", { class: "hint" }, ` (${plural(arr(p.records).length, "record")})`),
           rate != null ? el("div", { class: "hint" }, `Base rate: ${Math.round(rate * 100)}% of the clusters here carry it. Context, not counted toward review.`) : null);
       }))
@@ -942,6 +1103,8 @@ function recordContext(i) {
     return b;
   })() : "none");
   row("Record id", trunc(String(r.obs.id ?? ""), 80));
+  const file = fileName(i);
+  if (file) row("File", el("code", {}, trunc(file, 300)));
   if (r.obs.source) row("Source", trunc(String(r.obs.source), 60));
   if (r.target_host) row("Target", host(r.target_host));
   row("URL (defanged)", el("code", {}, safe(r.obs.url, 1200)));
@@ -969,7 +1132,7 @@ function renderLinks() {
   const none = [];
   if (pauses.length) {
     out.push(el("h4", {}, `Shared pauses (${pauses.length})`));
-    out.push(el("ul", {}, pauses.map((sp) => el("li", {}, el("strong", {}, `${sp.a} and ${sp.b}`), ` went quiet together: ${sp.reason ?? ""}. Their records share no identifier; a link to check, not a merge.`,
+    out.push(el("ul", {}, pauses.map((sp) => el("li", {}, el("strong", {}, `${sp.a} and ${sp.b}`), ` went quiet together: ${safeText(sp.reason ?? "", 200)}. Their records share no identifier; a link to check, not a merge.`,
       num(sp.p_chance) != null ? el("span", { class: "hint" }, ` (chance ${sp.p_chance.toExponential(1)})`) : null))));
   } else none.push(["shared pauses", "no pair of clusters went quiet together more often than chance allows"]);
   const dp = arr(a.dialect_pairs);
@@ -987,7 +1150,7 @@ function renderLinks() {
     out.push(el("h4", {}, `Common features (${common.length})`));
     out.push(el("p", { class: "hint" }, "Values many unrelated records share (a popular tool's tag, a shared service): kept from linking, shown so they are not read as one operator."));
     out.push(el("ul", {}, common.slice(0, 20).map((f) => el("li", {}, el("code", {}, safe(typeof f.feature === "string" ? f.feature : JSON.stringify(f.feature), 80)),
-      ` in ${f.records ?? "?"} records on ${f.hosts ?? "?"} hosts${f.reason ? `: ${safe(f.reason, 120)}` : ""}`))));
+      ` in ${f.records ?? "?"} records on ${f.hosts ?? "?"} hosts${f.reason ? `: ${safeText(f.reason, 120)}` : ""}`))));
   }
   const esc = arr(a.escalations);
   if (esc.length) {
@@ -1040,11 +1203,6 @@ function readClaims() {
   }
 }
 
-/** The module, holding the analysis shown (its own `analyze` made it). */
-async function prepared() {
-  return ensure();
-}
-
 /**
  * The audience choice as report options. The public notice has two stages
  * (docs/policies.md): the indicator notice names no host, so it passes an
@@ -1080,34 +1238,61 @@ async function renderReport() {
   };
   const my = ++reportSeq;
   try {
-    const t = await prepared();
+    const text = await engine.call("report", JSON.stringify(opts));
     if (my !== reportSeq) return;
-    $("report").textContent = t.report(JSON.stringify(opts));
+    $("report").textContent = text;
     for (const b of ["copy-report", "dl-report"]) $(b).disabled = false;
   } catch (e) {
     if (my === reportSeq) $("report").textContent = String(e?.message ?? e);
   }
 }
 
+// Redrafting waits for a pause in typing and selecting, and for the report
+// section to be on screen: a change while it is out of sight marks the
+// draft stale, and it is redrafted when it comes into view (or on Copy).
+let reportVisible = !("IntersectionObserver" in window);
+let reportStale = false;
+let reportTimer = 0;
+function queueReport() {
+  reportStale = true;
+  clearTimeout(reportTimer);
+  reportTimer = setTimeout(() => reportVisible && flushReport(), 250);
+}
+function flushReport() {
+  clearTimeout(reportTimer);
+  reportStale = false;
+  return renderReport();
+}
+
 function startReport() {
   if (wantReport) return;
   wantReport = true;
-  renderReport();
+  flushReport();
 }
 $("draft-report").addEventListener("click", startReport);
 // Sightings to share: built by the tools module from this analysis, shown in
 // full, saved only on Download.
-sightingsPanel(async () => (a ? prepared() : null));
-// Reaching the report section starts the draft (the module is loaded).
+sightingsPanel(async () => (a ? { sightings: (opts) => engine.call("sightings", opts) } : null));
+// Reaching the report section starts the draft (the module is loaded), and
+// redrafts a stale one.
 if ("IntersectionObserver" in window) {
   new IntersectionObserver((entries) => {
-    if (a && entries.some((e) => e.isIntersecting)) startReport();
+    reportVisible = entries[entries.length - 1].isIntersecting;
+    if (!a || !reportVisible) return;
+    if (!wantReport) startReport();
+    else if (reportStale) flushReport();
   }).observe($("report"));
 }
 
 // ── Wiring ─────────────────────────────────────────────────────────────────
+/** Analyse with the button busy: a second press while it runs does nothing. */
+async function analyse() {
+  return (await busy($("run"), "Analysing…", runAnalysis)) ?? false;
+}
+
 async function loadExample() {
   const mod = ensure();
+  clearSet();
   try {
     $("input").value = await fetchRoot("assets/example.ndjson", "text");
   } catch (e) {
@@ -1119,12 +1304,12 @@ async function loadExample() {
   syncPlaceholder();
   $("map").value = "";
   $("preset-note").hidden = true;
-  if (runAnalysis()) $("example-note").hidden = false;
+  if (await analyse()) $("example-note").hidden = false;
 }
 
 $("run").addEventListener("click", async () => {
   $("example-note").hidden = true;
-  if (await ensure().catch(() => null)) runAnalysis();
+  if (await ensure().catch(() => null)) analyse();
 });
 $("example").addEventListener("click", loadExample);
 $("input").addEventListener("input", () => {
@@ -1140,22 +1325,67 @@ $("input-edit").addEventListener("click", () => expandInput(true));
 async function loadFile(f) {
   $("example-note").hidden = true;
   const status = $("drop-status");
+  let text;
   try {
-    $("input").value = await f.text();
+    text = await readFile(f, status, useText);
   } catch (err) {
     status.textContent = `${trunc(String(f.name), 80)} could not be read: ${String(err?.message ?? err)}`;
     status.hidden = false;
     return;
   }
-  status.hidden = true;
-  syncRun();
-  if (await ensure().catch(() => null)) runAnalysis();
+  if (text != null) {
+    status.hidden = true;
+    await useText(text);
+  }
 }
-$("file").addEventListener("change", async (e) => {
-  const f = e.target.files[0];
-  if (f) await loadFile(f);
-  e.target.value = "";
-});
+/** Text read from a file (or carried over) into the records box, analysed. */
+async function useText(text) {
+  clearSet();
+  $("input").value = text;
+  syncRun();
+  if (await ensure().catch(() => null)) await analyse();
+}
+/** Files picked or dropped: one plain file to the records box, anything else as a set. */
+async function takeFiles(sources) {
+  if (!sources.length) return;
+  warm();
+  $("example-note").hidden = true;
+  $("drop-status").hidden = true;
+  const blobs = sources.filter((s) => s.blob).map((s) => s.blob);
+  if (blobs.length === sources.length && !(await needsSet(blobs))) return loadFile(blobs[0]);
+  await useSet(sources);
+}
+/** A set of files in place of the records box, analysed. */
+async function useSet(sources) {
+  set = sources;
+  bigOk = null;
+  $("input").hidden = true;
+  setPanel($("set"), sources, () => {
+    clearSet();
+    $("input").focus();
+  });
+  syncRun();
+  if (await ensure().catch(() => null)) await analyse();
+}
+/** Back to the records box. */
+function clearSet() {
+  if (!set) return;
+  set = null;
+  bigOk = null;
+  $("set").hidden = true;
+  $("set").replaceChildren();
+  $("input").hidden = false;
+  $("drop-status").hidden = true;
+  syncRun();
+}
+for (const id of ["file", "folder"]) {
+  $(id).addEventListener("change", async (e) => {
+    const files = picked(e.target);
+    e.target.value = "";
+    await takeFiles(files);
+  });
+}
+$("folder").addEventListener("click", warm, { once: true });
 syncRun();
 // The records box shows a sample of the format picked: a Common Log Format
 // line for an access log (a documentation address and a placeholder path).
@@ -1165,12 +1395,29 @@ function syncPlaceholder() {
   $("input").placeholder = $("format").value === "access_log" ? ACCESS_LOG_PLACEHOLDER : NDJSON_PLACEHOLDER;
 }
 $("format").addEventListener("change", syncPlaceholder);
-for (const id of ["audience", "min-named"]) $(id).addEventListener("change", renderReport);
-$("reporter").addEventListener("input", renderReport);
-$("claims").addEventListener("input", () => (a ? renderReport() : sc && readClaims()));
-$("copy-report").addEventListener("click", () => navigator.clipboard?.writeText($("report").textContent));
-$("dl-report").addEventListener("click", () => download("swarmchase-report.md", $("report").textContent, "text/markdown"));
-$("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.json", JSON.stringify(a, null, 2), "application/json"));
+$("audience").addEventListener("change", queueReport);
+$("min-named").addEventListener("change", () => {
+  queueReport();
+  refreshAttribution?.();
+});
+$("reporter").addEventListener("input", queueReport);
+// Claims are checked as they are typed; the draft follows after a pause.
+$("claims").addEventListener("input", () => {
+  if (sc) readClaims();
+  if (a) queueReport();
+});
+/** The draft as shown, redrafted first when it is stale. */
+async function reportText() {
+  if (reportStale) await flushReport();
+  return $("report").textContent;
+}
+copyButton($("copy-report"), reportText, "Copy failed: select the draft");
+$("dl-report").addEventListener("click", async () => download("swarmchase-report.md", await reportText(), "text/markdown"));
+// A large analysis holds only the records it lists: they go out with their
+// indexes (`result_index`), as the engine sent them, never as a gap per
+// record not sent.
+$("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.json",
+  JSON.stringify(a.result_index ? { ...a, results: a.result_index.map((i) => a.results[i]) } : a, null, 2), "application/json"));
 
 // ── CSV ────────────────────────────────────────────────────────────────────
 // Hosts and URLs go out defanged, as everywhere on the page, so nothing in
@@ -1189,9 +1436,11 @@ $("csv-records").addEventListener("click", () => {
   const idx = listedRecords();
   const rows = idx.map((i) => {
     const r = a.results[i];
-    return [i, r.tier, r.score, iso(r.obs.ts), r.cluster != null ? a.clusters[r.cluster]?.id ?? "" : "", r.target_host ? host(r.target_host) : "", sc.defang(String(r.obs.url ?? "")), arr(r.hits).map((h) => h.rule_id).join(" ")];
+    const row = [i, r.tier, r.score, iso(r.obs.ts), r.cluster != null ? a.clusters[r.cluster]?.id ?? "" : "", r.target_host ? host(r.target_host) : "", sc.defang(String(r.obs.url ?? "")), arr(r.hits).map((h) => h.rule_id).join(" ")];
+    return setRead ? [...row, fileName(i) ?? ""] : row;
   });
-  download("swarmchase-flagged-records.csv", csv(["record", "tier", "score", "time_utc", "cluster", "target_host", "url_defanged", "rules"], rows), "text/csv");
+  const head = ["record", "tier", "score", "time_utc", "cluster", "target_host", "url_defanged", "rules"];
+  download("swarmchase-flagged-records.csv", csv(setRead ? [...head, "file"] : head, rows), "text/csv");
 });
 $("csv-endpoints").addEventListener("click", () => {
   if (!a) return;
@@ -1200,35 +1449,36 @@ $("csv-endpoints").addEventListener("click", () => {
 });
 
 // ── Drop a file ────────────────────────────────────────────────────────────
-// A file dropped on the records area loads as "Load file" does: read in the
-// page, never uploaded.
-{
-  const zone = $("drop");
-  let depth = 0;
-  const has = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
-  zone.addEventListener("dragenter", (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    depth++;
-    zone.classList.add("over");
-  });
-  zone.addEventListener("dragover", (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  });
-  zone.addEventListener("dragleave", () => {
-    depth = Math.max(0, depth - 1);
-    if (!depth) zone.classList.remove("over");
-  });
-  zone.addEventListener("drop", async (e) => {
-    if (!has(e)) return;
-    e.preventDefault();
-    depth = 0;
-    zone.classList.remove("over");
-    const f = e.dataTransfer.files[0];
-    if (f) await loadFile(f);
-  });
+// Files and folders dropped on the records area load as "Load files" does:
+// read in the page, never uploaded.
+dropZone($("drop"), takeFiles);
+
+/**
+ * The logs Check my logs handed over in this tab, read once: the stored
+ * copy and the hash's flag are removed whether or not one was there.
+ * `{ log, format, map }` for one pasted log (v1), `{ files, map }` for a
+ * set (v2). A pasted log is read in the format Check my logs read it in,
+ * or, from a page that did not say, the one it would have picked.
+ */
+function takeHandoff() {
+  let got = null;
+  try {
+    got = JSON.parse(sessionStorage.getItem(HANDOFF_KEY) ?? "null");
+    sessionStorage.removeItem(HANDOFF_KEY);
+  } catch {
+    got = null;
+  }
+  history.replaceState(null, "", "#preset=access-log");
+  const map = typeof got?.map === "string" ? got.map : "";
+  if (got?.v === 1 && typeof got.log === "string" && got.log.trim()) {
+    const known = [...$("format").options].some((o) => o.value === got.format);
+    return { log: got.log, format: known ? got.format : logFormat(got.log), map };
+  }
+  if (got?.v === 2 && Array.isArray(got.files)) {
+    const files = got.files.filter((f) => typeof f?.name === "string" && typeof f?.text === "string").map((f) => ({ name: f.name, text: f.text }));
+    if (files.length) return { files, map };
+  }
+  return null;
 }
 
 /** Apply what the URL hash asks for: the access-log preset or the example. */
@@ -1243,8 +1493,19 @@ async function applyHash() {
     // The preset's instructions come before the box they are about.
     $("input-box").prepend($("preset-note"));
     $("preset-note").hidden = false;
-    $("input").focus();
-    warm();
+    const carried = h.from === "check-logs" ? takeHandoff() : null;
+    if (carried) {
+      $("map").value = carried.map;
+      if (carried.files) await useSet(carried.files);
+      else {
+        $("format").value = carried.format;
+        syncPlaceholder();
+        await useText(carried.log);
+      }
+    } else {
+      $("input").focus();
+      warm();
+    }
   } else if (h.example) {
     await loadExample();
   }
@@ -1259,8 +1520,10 @@ window.addEventListener("hashchange", () => {
   const h = readHash();
   if (h.example || h.preset === "access-log") applyHash();
   else if (a) {
-    sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
-    if (h.v && h.v !== view) setView(h.v);
-    else select({}, null);
+    fetchRecord(h.r).then(() => {
+      sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
+      if (h.v && h.v !== view) setView(h.v);
+      else select({}, null);
+    });
   }
 });

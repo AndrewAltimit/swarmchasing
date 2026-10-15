@@ -66,11 +66,13 @@ fn user_agent_tokens_match_whole() {
     assert!(c.agent_in_ua("NotChatGPT-Userish/2").is_none());
     assert!(c.agent_in_ua("Mozilla/5.0 (Windows NT 10.0)").is_none());
     // Every token the catalog knows is one the `header.agent_ua` rule reads,
-    // or a later addition to both.
+    // or a later addition to both. Applebot is a search crawler, in the
+    // catalog for identity checks only.
     let rules = Rules::default_rules();
     let r = rules.rule("header.agent_ua").unwrap();
+    assert!(!r.pattern.contains("Applebot"));
     for a in &c.agents {
-        if a.token == "Google-Agent" {
+        if a.token == "Google-Agent" || a.token == "Applebot" {
             continue;
         }
         assert!(
@@ -169,6 +171,7 @@ fn signatures_outrank_addresses() {
         signature_agent: "https://signature-agent.test".into(),
         url: "https://signature-agent.test/.well-known/http-message-signatures-directory".into(),
         source: "test".into(),
+        access: None,
     });
     let d = with_directory(data(), "test.signer", "https://signature-agent.test");
     // Outside every range, but the signature verifies.
@@ -205,9 +208,9 @@ fn signatures_outrank_addresses() {
 #[test]
 fn clusters_get_a_line_a_counter_signal_and_a_suggested_claim() {
     let obs = log(&format!(
-        r#"192.0.2.9 - - [04/Oct/2026:08:10:00 +0000] "GET /item?id=1%20UNION%20SELECT%201 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
-192.0.2.9 - - [04/Oct/2026:08:10:30 +0000] "GET /item?id=2%20UNION%20SELECT%202 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
-203.0.113.50 - - [04/Oct/2026:08:11:00 +0000] "GET /item?id=3%20UNION%20SELECT%203 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}""#
+        r#"192.0.2.9 - - [04/Oct/2026:08:10:00 +0000] "GET /item?id=1%20UNION%20SELECT%201&run=idr1 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
+192.0.2.9 - - [04/Oct/2026:08:10:30 +0000] "GET /item?id=2%20UNION%20SELECT%202&run=idr1 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
+203.0.113.50 - - [04/Oct/2026:08:11:00 +0000] "GET /item?id=3%20UNION%20SELECT%203&run=idr1 HTTP/1.1" 200 512 "-" "{CHATGPT_UA}""#
     ));
     let mut a = crate::analyze(obs, &Rules::default_rules());
     assert_eq!(a.clusters.len(), 1, "fixture should form one cluster");
@@ -248,4 +251,129 @@ fn clusters_get_a_line_a_counter_signal_and_a_suggested_claim() {
     // Stored and read back, the identity stays.
     let back: crate::Cluster = serde_json::from_str(&serde_json::to_string(c).unwrap()).unwrap();
     assert_eq!(back.identity, c.identity);
+
+    // The spoofed line's address prints defanged.
+    let md = crate::report::render_markdown(
+        &a,
+        &crate::report::ReportOptions {
+            audience: crate::report::Audience::Internal,
+            ..Default::default()
+        },
+    );
+    assert!(md.contains("203[.]0[.]113[.]50 is outside"), "{md}");
+    assert!(!md.contains("203.0.113.50"), "{md}");
+}
+
+#[test]
+fn access_class_parses_and_is_optional() {
+    let toml = "[[directory]]\nid='d'\nprovider='P'\nsignature_agent='https://p.test'\nurl='https://p.test/.well-known/http-message-signatures-directory'\nsource='s'\naccess='intermediary'\n";
+    let c = Catalog::from_toml(toml).unwrap();
+    assert_eq!(c.directories[0].access, Some(Access::Intermediary));
+    let bad = toml.replace("intermediary", "shared");
+    assert!(Catalog::from_toml(&bad).is_err());
+    // Set only where a provider's own page says: none in the bundled catalog
+    // states it yet.
+    assert!(
+        Catalog::bundled()
+            .directories
+            .iter()
+            .all(|d| d.access.is_none())
+    );
+}
+
+#[test]
+fn forwarded_names_the_first_end_user() {
+    let mut o = Observation::default();
+    assert_eq!(forwarded_for(&o), None);
+    o.headers.insert(
+        "Forwarded".into(),
+        r#"for="[2001:db8::7]";proto=https, for=198.51.100.17"#.into(),
+    );
+    assert_eq!(forwarded_for(&o).as_deref(), Some("[2001:db8::7]"));
+    o.headers
+        .insert("Forwarded".into(), "proto=https;by=x".into());
+    assert_eq!(forwarded_for(&o), None);
+}
+
+#[test]
+fn an_intermediary_attributes_the_platform_not_the_end_user() {
+    let id = ClusterIdentity {
+        lines: vec![IdentityLine {
+            class: IdentityClass::SignatureVerified,
+            provider: Some("Example Platform".into()),
+            agent: Some("https://agents.platform.test".into()),
+            basis: Some("platform.agents".into()),
+            records: 4,
+            detail: String::new(),
+            access: Some(Access::Intermediary),
+            end_users: 3,
+        }],
+        ..Default::default()
+    };
+    assert!(
+        id.summary()
+            .contains("an intermediary: the platform, not the end user")
+    );
+    let claims = id.suggested_claims();
+    assert!(
+        claims[0].details[0].contains("attributes the platform, not the end user"),
+        "{:?}",
+        claims[0].details
+    );
+    let c = crate::Cluster {
+        id: "C1".into(),
+        tier: crate::model::Tier::Significant,
+        identity: id,
+        ..Default::default()
+    };
+    let a = crate::Analysis {
+        clusters: vec![c],
+        ..Default::default()
+    };
+    let opts = crate::report::ReportOptions {
+        audience: crate::report::Audience::Provider,
+        ..Default::default()
+    };
+    let md = crate::report::render_markdown(&a, &opts);
+    assert!(
+        md.contains(
+            "hxxps://agents[.]platform[.]test: an intermediary platform many end users direct"
+        ),
+        "{md}"
+    );
+    assert!(
+        md.contains("3 distinct end user(s) by their `Forwarded` header, a key to group requests by, not attribution"),
+        "{md}"
+    );
+}
+
+#[test]
+fn a_shared_file_names_the_service_per_prefix() {
+    let mut d = data();
+    d.ranges.insert(
+        "openai.chatgpt-user".into(),
+        RangeTable::parse(
+            "openai.chatgpt-user",
+            r#"{"creationTime":"2026-10-12T00:00:00Z","prefixes":[
+                {"ipv4Prefix":"192.0.2.0/29","services":["ChatGPT-User"]},
+                {"ipv4Prefix":"192.0.2.8/29","services":["OAI-SearchBot"]}]}"#,
+        )
+        .unwrap(),
+    );
+    let obs = log(&format!(
+        r#"192.0.2.2 - - [04/Oct/2026:08:10:00 +0000] "GET / HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
+192.0.2.9 - - [04/Oct/2026:08:10:01 +0000] "GET / HTTP/1.1" 200 512 "-" "{CHATGPT_UA}"
+192.0.2.10 - - [04/Oct/2026:08:10:02 +0000] "GET / HTTP/1.1" 200 512 "-" "Mozilla/5.0 (X11; Linux x86_64) Chrome/126.0""#
+    ));
+    let c = Catalog::bundled();
+    let r: Vec<RecordIdentity> = obs.iter().map(|o| classify(o, &c, &d)).collect();
+    assert_eq!(r[0].class, IdentityClass::IpVerified);
+    assert!(r[0].detail.is_empty(), "{}", r[0].detail);
+    assert_eq!(r[1].class, IdentityClass::IpVerified);
+    assert_eq!(
+        r[1].detail,
+        "the file publishes this address for OAI-SearchBot, not ChatGPT-User"
+    );
+    assert_eq!(r[2].class, IdentityClass::InRange);
+    assert_eq!(r[2].agent.as_deref(), Some("OAI-SearchBot"));
 }

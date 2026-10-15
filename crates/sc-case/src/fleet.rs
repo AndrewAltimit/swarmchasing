@@ -13,9 +13,8 @@
 //! starting from the analysis's interaction edges, which never do it alone.
 
 use crate::model::{Case, Fleet, SwarmEvidence};
-use crate::text::truncate;
 use crate::{Result, bail};
-use sc_core::{Analysis, Audience, Cluster, SwarmEdge, SwarmEdgeKind, defang};
+use sc_core::{Analysis, Audience, Cluster, SwarmEdge, SwarmEdgeKind};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
@@ -55,7 +54,10 @@ pub fn soft_evidence(a: &Analysis, keys: &BTreeSet<String>, detail: bool) -> Vec
             (keys.contains(&ka) && keys.contains(&kb)).then(|| {
                 let mut s = format!("{ka} ↔ {kb}: {} ({:.2})", l.kind.label(), l.strength);
                 if detail && !l.detail.is_empty() {
-                    s += &format!(": {}", defang(&truncate(&l.detail, 160)));
+                    s += &format!(
+                        ": {}",
+                        sc_core::clip_defanged(&sc_core::defang(&l.detail), 160)
+                    );
                 }
                 s
             })
@@ -531,16 +533,36 @@ pub fn report_section(c: &Case, a: &Analysis, audience: Audience) -> String {
         for e in &f.swarm_evidence {
             let note = match audience {
                 Audience::Internal | Audience::Provider => {
-                    format!(": {}", defang(&truncate(&e.note, 200)))
+                    format!(
+                        ": {}",
+                        sc_core::clip_defanged(&sc_core::defang(&e.note), 200)
+                    )
                 }
                 _ => String::new(),
             };
+            // An operator's analysis holds its own clusters only: runs of
+            // others are counted, never listed.
+            let (shown, elsewhere): (Vec<&String>, Vec<&String>) = e.runs.iter().partition(|r| {
+                audience != Audience::Affected
+                    || keys.contains(r.split('#').next().unwrap_or_default())
+            });
+            if shown.is_empty() {
+                continue;
+            }
+            let elsewhere = match elsewhere.len() {
+                0 => String::new(),
+                n => format!(" and {n} run(s) elsewhere"),
+            };
             let _ = writeln!(
                 s,
-                "  - interaction (Inference): {} {}, runs {}{note}",
+                "  - interaction (Inference): {} {}, runs {}{elsewhere}{note}",
                 e.kind.id(),
                 e.kind.label(),
-                e.runs.join(", ")
+                shown
+                    .iter()
+                    .map(|r| r.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
     }

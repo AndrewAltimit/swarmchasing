@@ -14,12 +14,13 @@ A gate fails the commit or the run. CI is the authority; the hook is a fast loca
 | [`ci/check-md-links.py`](ci/check-md-links.py) | Relative links and heading anchors in every tracked Markdown file. | `gates` | staged `*.md` (`--staged`) |
 | [`ci/check-doc-density.py`](ci/check-doc-density.py) | Over-long lines and paragraphs in table cells, in docs, crate READMEs, top-level pages and this page; `--self-test`. | `gates` | staged `*.md` (`--staged`) |
 | [`ci/check-site.py`](ci/check-site.py) | The site's Content-Security-Policy and no HTML sinks in its code; `--selftest`. | `gates` | staged `site/` |
+| [`ci/check-archive.mjs`](ci/check-archive.mjs) | The site's archive reader in Node: gzip, zip, tar, limits, hostile names, on archives [`ci/archive-fixtures.mjs`](ci/archive-fixtures.mjs) builds at run time. | `gates` (when Node is installed) | staged `site/js/lib/` or `scripts/ci/archive-*`, when Node is installed |
 | [`ci/check-published-tags.py`](ci/check-published-tags.py) | Every linking tag or marker a committed notice shows is in `[linking] published_tags`; `--self-test`. | `gates` | staged `notices/` or `rules/` |
 | [`ci/deny.sh`](ci/deny.sh) | cargo-deny: advisories, licenses, sources, bans. Installs the pinned cargo-deny. | `gates` | staged `Cargo.lock` or `deny.toml`, when cargo-deny is installed |
 | `cargo fmt --check` | Formatting. The hook auto-fixes and re-stages. | `ci` | staged Rust, `Cargo.*`, `rules/`, `samples/eval/` |
 | `cargo clippy -D warnings` | Lints, warnings as errors. | `ci` | as above |
 | `cargo test --profile release-test` | The test suite. | `ci` | not run; run it before pushing |
-| [`ci/eval-gate.sh`](ci/eval-gate.sh) | Precision and recall floors on `samples/eval/`, all and non-synthetic, `eval check-results` on the saved results, then the simulator's precision floors, null-scenario ceilings and soft-link ratio check ([evaluation](../docs/reference/evaluation.md#the-eval-gate)). | `ci` | staged `rules/`, `crates/sc-core/`, `crates/sc-sim/`, `samples/eval/`, `samples/sim/` |
+| [`ci/eval-gate.sh`](ci/eval-gate.sh) | Precision and recall floors on `samples/eval/`, all and non-synthetic, cluster recall and B-cubed F1, `eval check-results` on the saved results, then the simulator's precision floors, null-scenario ceilings and soft-link ratio check in one pass ([evaluation](../docs/reference/evaluation.md#the-eval-gate)). The hook runs it with `--profile release-test`. | `ci` | staged `rules/`, `crates/sc-core/`, `crates/sc-sim/`, `samples/eval/`, `samples/sim/` |
 | [`ci/check-rules-schema.py`](ci/check-rules-schema.py) | `rules/default.toml` validates against [`schemas/sc-rules-v1.json`](../schemas/sc-rules-v1.json) ([SC-Rules v1](../docs/specs/rules-v1.md)). Stdlib only. | `gates` | staged `rules/` or `schemas/` |
 | `swarmchase notice lint` | Committed notices carry nothing a notice withholds ([notices](../docs/reference/notices.md#lint)). | `ci` | staged `notices/` |
 | [`ci/check-wasm-target.sh`](ci/check-wasm-target.sh) | Type-checks `sc-wasm` (engine and `tools` feature), `sc-rules-wasm` and `sc-case` for `wasm32-unknown-unknown`. | `ci` | staged `crates/sc-core/`, `crates/sc-wasm/`, `crates/sc-case/` |
@@ -37,8 +38,8 @@ Pull requests run `gates` then `ci`; pushes to `main` run both and then `deploy-
 |---|---|---|
 | [`ci/select-ci-target-dir.sh`](ci/select-ci-target-dir.sh) | Points `CARGO_TARGET_DIR` at a per-compiler cache outside the checkout and prunes the others. | every cargo job in both workflows |
 | [`ci/build-site.sh`](ci/build-site.sh) | Builds the WASM modules (wasm-opt run on all of them in parallel, cached by module hash, size budget enforced), then the site into `_site/`, then runs `check-site.py` on it. | `deploy-pages`; local site work |
-| [`ci/send-mail.sh`](ci/send-mail.sh) | Sends a plain-text email to the admin over SMTP with `curl`, with Date and Message-ID headers; refuses header injection. | `watch.yml` digest and failure alert, `watch-stale.yml` |
-| [`ci/check-watch-age.sh`](ci/check-watch-age.sh) | Prints the newest watch run's stamp and age from `<data>/LATEST`; exits 1 when it is older than the limit (default 12 hours) or missing. | `watch-stale.yml` |
+| [`ci/send-mail.sh`](ci/send-mail.sh) | Sends a plain-text email to the admin over SMTP with `curl` (base64 body, retries), with Date and Message-ID headers; refuses header injection; marks a sent digest `mailed`. | `watch.yml` digest and failure alert, `watch-stale.yml` |
+| [`ci/check-watch-age.sh`](ci/check-watch-age.sh) | Prints the newest watch run's stamp and age from `<data>/LATEST` (or `LATEST_OK`); exits 1 when it is older than the limit (default 12 hours) or missing. | `watch-stale.yml` |
 | [`ci/install-hooks.sh`](ci/install-hooks.sh) | Points `core.hooksPath` at `git-hooks/`. Run once per clone. | contributors |
 
 ## Hooks

@@ -15,6 +15,8 @@
 //! verdict rests on. A fetch that does not parse leaves the previous copy in
 //! place. The files stay in the data directory and are never committed.
 
+pub mod reference;
+
 use crate::Client;
 use crate::client::Opts;
 use anyhow::{Context, Result, bail};
@@ -51,6 +53,12 @@ pub struct Held {
     pub sha256: String,
     /// Prefixes or keys it holds.
     pub entries: usize,
+    /// A range file's own `creationTime` and `synctoken`
+    /// (draft-illyes-webbotauth-jafar), when it carries them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synctoken: Option<String>,
 }
 
 /// The held files, by catalog id.
@@ -70,7 +78,10 @@ pub struct Refreshed {
 }
 
 /// Fetch every range file and directory in `catalog` into `data`, dated
-/// `today`. One failure does not stop the others.
+/// `today`. One failure does not stop the others. `fetched.json` is
+/// rewritten only when a fetch succeeded, so its age is that of the last
+/// refresh that got something, and a failed attempt does not hold off the
+/// next one.
 pub fn refresh(client: &Client, data: &Path, catalog: &Catalog, today: &str) -> Vec<Refreshed> {
     let mut idx = index(data);
     let mut out = Vec::new();
@@ -96,7 +107,9 @@ pub fn refresh(client: &Client, data: &Path, catalog: &Catalog, today: &str) -> 
             result,
         });
     }
-    if let Err(e) = write_index(data, &idx) {
+    if out.iter().any(|r| r.result.is_ok())
+        && let Err(e) = write_index(data, &idx)
+    {
         out.push(Refreshed {
             id: "fetched.json".into(),
             url: String::new(),
@@ -134,7 +147,7 @@ fn fetch_one(
     if f.body.len() > MAX_BODY {
         bail!("GET {url}: over {MAX_BODY} bytes");
     }
-    let entries = parse(id, agent, &f.body).map_err(anyhow::Error::msg)?;
+    let (entries, created, synctoken) = parse(id, agent, &f.body).map_err(anyhow::Error::msg)?;
     let p = file(data, id);
     std::fs::create_dir_all(dir(data))?;
     std::fs::write(&p, &f.body).with_context(|| format!("writing {}", p.display()))?;
@@ -146,14 +159,19 @@ fn fetch_one(
             .map(|b| format!("{b:02x}"))
             .collect(),
         entries,
+        created,
+        synctoken,
     })
 }
 
-/// Entries in a file: prefixes in a range file, keys in a directory.
-fn parse(id: &str, agent: Option<&str>, body: &str) -> Result<usize, String> {
+/// Entries in a file (prefixes in a range file, keys in a directory), and a
+/// range file's `creationTime` and `synctoken` when it has them.
+type Parsed = (usize, Option<String>, Option<String>);
+
+fn parse(id: &str, agent: Option<&str>, body: &str) -> Result<Parsed, String> {
     match agent {
-        Some(a) => KeyDirectory::parse(id, a, body).map(|d| d.keys.len()),
-        None => RangeTable::parse(id, body).map(|t| t.len()),
+        Some(a) => KeyDirectory::parse(id, a, body).map(|d| (d.keys.len(), None, None)),
+        None => RangeTable::parse(id, body).map(|t| (t.len(), t.created, t.synctoken)),
     }
 }
 
@@ -215,6 +233,7 @@ mod tests {
                 fetched: "2026-10-12".into(),
                 sha256: "x".into(),
                 entries: 1,
+                ..Default::default()
             },
         );
         write_index(&data, &idx).unwrap();
@@ -224,6 +243,36 @@ mod tests {
         assert_eq!(t.fetched.as_deref(), Some("2026-10-12"));
         assert_eq!(w.len(), 1, "{w:?}");
         assert_eq!(parse("k", Some("https://a.test"), "{}").ok(), None);
+        // A range file's optional dating fields are kept for the index.
+        assert_eq!(
+            parse(
+                "r",
+                None,
+                r#"{"creationTime":"2026-10-10T14:30:00Z","synctoken":"7","prefixes":[{"ipv4Prefix":"192.0.2.0/28"}]}"#
+            ),
+            Ok((1, Some("2026-10-10T14:30:00Z".into()), Some("7".into())))
+        );
+        let _ = std::fs::remove_dir_all(data);
+    }
+
+    #[test]
+    fn a_refresh_where_every_fetch_fails_leaves_the_index_alone() {
+        let data =
+            std::env::temp_dir().join(format!("sc-collect-identity-failed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&data);
+        // Plain-http URLs are refused before any request is sent.
+        let mut catalog = Catalog::bundled();
+        for f in &mut catalog.range_files {
+            f.url = f.url.replacen("https://", "http://", 1);
+        }
+        for d in &mut catalog.directories {
+            d.url = d.url.replacen("https://", "http://", 1);
+        }
+        let client = Client::new(std::time::Duration::ZERO).unwrap();
+        let got = refresh(&client, &data, &catalog, "2026-10-14");
+        assert!(!got.is_empty());
+        assert!(got.iter().all(|r| r.result.is_err()));
+        assert!(!index_path(&data).exists());
         let _ = std::fs::remove_dir_all(data);
     }
 }

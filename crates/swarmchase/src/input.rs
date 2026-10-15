@@ -65,6 +65,13 @@ pub fn read_inputs(args: &InputArgs) -> Result<Vec<Observation>> {
 /// Read every input as written, with no enrichment, so results do not depend
 /// on local tables (evaluation).
 pub fn read_records(args: &InputArgs) -> Result<Vec<Observation>> {
+    Ok(read_records_counted(args)?.0)
+}
+
+/// [`read_records`], with the number of input lines that could not be read
+/// as a record.
+pub fn read_records_counted(args: &InputArgs) -> Result<(Vec<Observation>, usize)> {
+    let mut bad = 0;
     let map = match &args.map {
         Some(m) => FieldMap::parse(m).map_err(anyhow::Error::msg)?,
         None => FieldMap::default(),
@@ -96,16 +103,19 @@ pub fn read_records(args: &InputArgs) -> Result<Vec<Observation>> {
                 parsed.warnings.len() - 5
             );
         }
+        bad += parsed.warnings.len();
         all.extend(parsed.observations);
     }
-    Ok(all)
+    Ok((all, bad))
 }
 
 /// Analyse the inputs, and add each cluster's declared agent identity from
-/// the published ranges and keys held in the data directory.
+/// the published ranges and keys held in the data directory, and its
+/// hosting class from the network ranges held there.
 pub fn run_analysis(args: &InputArgs) -> Result<Analysis> {
     let rules = load_rules(args.rules.as_deref())?;
     let mut a = analyze(read_inputs(args)?, &rules);
     crate::commands::identity::annotate(&mut a);
+    crate::commands::netranges::annotate(&mut a);
     Ok(a)
 }

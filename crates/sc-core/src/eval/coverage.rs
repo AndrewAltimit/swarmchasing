@@ -166,6 +166,136 @@ pub fn coverage(report: &EvalReport, meta: &[RuleMeta], allow: &AllowList) -> Co
     out
 }
 
+/// How close benign records sit to the suggestive threshold, and what each
+/// rule adds to a record's tier (report only). Numbers and rule ids only.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Margins {
+    /// The suggestive threshold the scores are read against.
+    pub suggestive: i32,
+    /// Benign records scoring one point below it: one more weak hit flags
+    /// them.
+    pub benign_one_below: usize,
+    /// Per hard-negative rule, the highest score among the benign records
+    /// written to resemble what it matches.
+    pub hard_negatives: Vec<HardNegativeMargin>,
+    /// Rule id -> benign records at suggestive or above that would fall
+    /// below it without the rule: the false positives it causes.
+    pub lifted: BTreeMap<String, usize>,
+    /// Agent records at suggestive or above.
+    pub agents: usize,
+    pub agents_flagged: usize,
+    /// Rules whose removal drops an agent record below suggestive, with
+    /// the recall left without each, most dropped first. Read off each
+    /// record's own hits: no rule is removed and nothing is analysed again.
+    pub leave_one_out: Vec<RuleDrop>,
+}
+
+/// One hard-negative rule's closest benign record.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HardNegativeMargin {
+    pub rule_id: String,
+    /// Its hard negatives.
+    pub records: usize,
+    /// The highest score among them.
+    pub max_score: i32,
+    /// Points from that score to the suggestive threshold (0 or less:
+    /// flagged).
+    pub margin: i32,
+}
+
+/// What recall at suggestive or above loses without one rule.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuleDrop {
+    pub rule_id: String,
+    /// Agent records that fall below suggestive without it.
+    pub dropped: usize,
+    /// Recall at suggestive or above without it.
+    pub recall_without: f64,
+}
+
+/// Whether hits `ids` reach suggestive: a significant rule, or a score at
+/// the threshold.
+fn reaches(rules: &crate::Rules, ids: &[&str]) -> bool {
+    ids.iter()
+        .any(|id| rules.rule(id).is_some_and(|d| d.significant))
+        || rules.score(ids.iter().copied()) >= rules.set.thresholds.suggestive
+}
+
+/// The margins of the labelled records of `a`, scored with `rules` (the
+/// rules the analysis ran with).
+pub fn margins(
+    a: &crate::analyze::Analysis,
+    labels: &super::LabelSet,
+    rules: &crate::Rules,
+) -> Margins {
+    let suggestive = rules.set.thresholds.suggestive;
+    let mut out = Margins {
+        suggestive,
+        ..Margins::default()
+    };
+    let mut hn: BTreeMap<&str, (usize, i32)> = BTreeMap::new();
+    let mut dropped: BTreeMap<String, usize> = BTreeMap::new();
+    for (i, l) in super::units::labelled(a, labels) {
+        let r = &a.results[i];
+        let mut ids: Vec<&str> = r.hits.iter().map(|h| h.rule_id.as_str()).collect();
+        crate::sort::sort(&mut ids);
+        ids.dedup();
+        let agent = l.label == super::Label::Agent;
+        let flagged = r.tier >= crate::model::Tier::Suggestive && reaches(rules, &ids);
+        if agent {
+            out.agents += 1;
+            out.agents_flagged += usize::from(r.tier >= crate::model::Tier::Suggestive);
+        } else {
+            out.benign_one_below += usize::from(r.score == suggestive - 1);
+            for rule in &l.hard_negative_for {
+                let e = hn.entry(rule.as_str()).or_insert((0, i32::MIN));
+                e.0 += 1;
+                e.1 = e.1.max(r.score);
+            }
+        }
+        if !flagged {
+            continue;
+        }
+        for id in &ids {
+            let rest: Vec<&str> = ids.iter().copied().filter(|x| x != id).collect();
+            if reaches(rules, &rest) {
+                continue;
+            }
+            let map = if agent { &mut dropped } else { &mut out.lifted };
+            *map.entry((*id).to_string()).or_default() += 1;
+        }
+    }
+    out.hard_negatives = hn
+        .into_iter()
+        .map(|(rule, (records, max_score))| HardNegativeMargin {
+            rule_id: rule.to_string(),
+            records,
+            max_score,
+            margin: suggestive - max_score,
+        })
+        .collect();
+    crate::sort::by(&mut out.hard_negatives, |x, y| {
+        x.margin
+            .cmp(&y.margin)
+            .then_with(|| x.rule_id.cmp(&y.rule_id))
+    });
+    let n = out.agents.max(1) as f64;
+    out.leave_one_out = dropped
+        .into_iter()
+        .map(|(rule_id, d)| RuleDrop {
+            recall_without: out.agents_flagged.saturating_sub(d) as f64 / n,
+            rule_id,
+            dropped: d,
+        })
+        .collect();
+    crate::sort::by(&mut out.leave_one_out, |x, y| {
+        y.dropped
+            .cmp(&x.dropped)
+            .then_with(|| x.rule_id.cmp(&y.rule_id))
+    });
+    out
+}
+
 /// What the coverage gate rejects: rules with no positive and no allow-list
 /// entry, allow-list entries for rules that now have a positive (remove
 /// them) or that name no rule, and entries without a reason.
@@ -234,6 +364,50 @@ mod tests {
         );
         assert!(rule_meta("not [ toml").is_err());
         assert!(!rule_meta(crate::DEFAULT_RULES).unwrap().is_empty());
+    }
+
+    #[test]
+    fn margins_read_each_records_own_hits() {
+        use crate::{Observation, Rules, analyze, parse_labels};
+        let rules = Rules::default_rules();
+        let obs = |id: &str, url: &str| Observation {
+            id: id.into(),
+            ts: 1000,
+            url: url.into(),
+            ..Default::default()
+        };
+        let a = analyze(
+            vec![
+                // An injection payload: flagged on the one rule.
+                obs("a1", "https://t.example/p?id=1%27%20OR%20%271%27=%271"),
+                // A plain page: no hit.
+                obs("b1", "https://u.example/about"),
+            ],
+            &rules,
+        );
+        let labels = parse_labels(
+            "{\"id\":\"a1\",\"label\":\"agent\"}\n\
+             {\"id\":\"b1\",\"label\":\"benign\",\"hard_negative_for\":[\"exploit.sqli_boolean\"]}\n",
+        );
+        let m = margins(&a, &labels, &rules);
+        assert_eq!(m.suggestive, rules.set.thresholds.suggestive);
+        assert_eq!((m.agents, m.agents_flagged), (1, 1));
+        assert_eq!(m.hard_negatives.len(), 1);
+        assert_eq!(m.hard_negatives[0].max_score, 0);
+        assert_eq!(m.hard_negatives[0].margin, m.suggestive);
+        assert!(m.lifted.is_empty());
+        // The agent record stands on the injection rule alone.
+        let r = &a.results.iter().find(|r| r.obs.id == "a1").unwrap();
+        assert!(r.tier >= crate::model::Tier::Suggestive, "{:?}", r.hits);
+        let only = r
+            .hits
+            .iter()
+            .map(|h| h.rule_id.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        if only.len() == 1 {
+            assert_eq!(m.leave_one_out.len(), 1, "{m:?}");
+            assert_eq!(m.leave_one_out[0].recall_without, 0.0);
+        }
     }
 
     #[test]

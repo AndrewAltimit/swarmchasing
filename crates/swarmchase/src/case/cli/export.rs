@@ -5,6 +5,7 @@
 
 use super::Ctx;
 use crate::case::incident;
+use crate::case::report::{find_contact, stem};
 use anyhow::{Result, bail};
 use clap::Args;
 use sc_case::incident::Database;
@@ -36,9 +37,14 @@ pub struct ExportArgs {
     #[arg(long, default_value = "provider")]
     audience: Audience,
     /// For an affected export: the operator's contact address, as listed in
-    /// case.toml. Only that operator's own logs are included.
+    /// case.toml. Only the records aimed at that operator's own endpoints,
+    /// and its own logs, are included.
     #[arg(long)]
     to: Option<String>,
+    /// With --to: the contact's endpoint, when its address is listed for
+    /// more than one operator's endpoints.
+    #[arg(long, requires = "to")]
+    endpoint: Option<String>,
     /// Name for the reporter identity.
     #[arg(long)]
     reporter: Option<String>,
@@ -49,9 +55,13 @@ pub struct ExportArgs {
     #[arg(long, default_value = "notices")]
     notices: PathBuf,
     /// Default: <case>/exports/<audience>-<date>.stix.json (or .misp.json),
-    /// or <case>/exports/<format>-<date>.json for incident database drafts.
+    /// for --to the name its draft would have, or
+    /// <case>/exports/<format>-<date>.json for incident database drafts.
     #[arg(short, long)]
     out: Option<PathBuf>,
+    /// Write over an export already at the default path.
+    #[arg(long)]
+    force: bool,
 }
 
 pub(super) fn run(ctx: &Ctx, a: ExportArgs) -> Result<()> {
@@ -87,23 +97,45 @@ pub(super) fn run(ctx: &Ctx, a: ExportArgs) -> Result<()> {
                 &a.id,
                 a.audience,
                 a.to.as_deref(),
+                a.endpoint.as_deref(),
                 Some(reporter),
                 &ctx.today,
             )?;
+            let c = crate::case::load(&ctx.root, &a.id)?;
             let (value, ext) = if a.format == ExportFormat::Misp {
-                let c = crate::case::load(&ctx.root, &a.id)?;
                 (sc_stix::misp::event(&bundle, &c.title, &ctx.today), "misp")
             } else {
                 (bundle, "stix")
             };
+            // An export for one operator is named after it, as its draft
+            // is, so two operators' exports never share a file.
+            let stem = match (a.audience, a.to.as_deref()) {
+                (Audience::Affected, Some(to)) => {
+                    let x = find_contact(&c, to, a.endpoint.as_deref())?;
+                    stem(&ctx.today, a.audience, x)
+                }
+                _ => format!("{}-{}", audience_id(a.audience), ctx.today),
+            };
             (
                 format!("{}\n", serde_json::to_string_pretty(&value)?),
-                format!("{}-{}.{ext}.json", audience_id(a.audience), ctx.today),
+                format!("{stem}.{ext}.json"),
                 "draft only; nothing was sent",
             )
         }
     };
-    let path = a.out.unwrap_or_else(|| exports.join(name));
+    let path = match a.out {
+        Some(p) => p,
+        None => {
+            let p = exports.join(name);
+            if p.exists() && !a.force {
+                bail!(
+                    "{} exists; pass --force to write it again, or -o for another file",
+                    p.display()
+                );
+            }
+            p
+        }
+    };
     crate::util::write_out(Some(&path), &text)?;
     println!("{said}");
     Ok(())

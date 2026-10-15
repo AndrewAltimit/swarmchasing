@@ -13,14 +13,16 @@ source scripts/with-env.sh
 The scheduled watch runs every 6 hours on the runner and emails the digest when something changed, or an alert when the run failed ([runner](../reference/runner.md)). To run one by hand:
 
 ```sh
-swarmchase watch                      # watchlist.toml, $SWARMCHASE_DATA (or data/)
+swarmchase watch                      # watchlist.toml, -d, else $SWARMCHASE_DATA, else data/
 swarmchase watch --init               # once, to start a new data directory
 ```
 
 Read it top down:
 
-- **Health.** A starved or failing source, or a rule whose hit rate jumped. Fix the source or the key before trusting the rest.
+- **Digests not mailed.** Leads from earlier runs whose digest never reached you, folded in here. Check the mail setup if it recurs.
+- **Health.** A starved or failing source, or a rule whose hit rate jumped. Fix the source or the key before trusting the rest. A failure that goes on is mailed again on its 2nd, 4th and 8th run, not every run; the sources table shows it each time.
 - **New clusters, tier changes, first-time endpoints.** The leads.
+- **Slice onsets.** A rule, scaffold template or target site family whose rate on one source rose against that source's earlier runs: a swarm starting below the clustering threshold, or a rule matching something new. Read the example records (in `runs/<stamp>/<source>.ndjson` of the runs since it started) for the tag or template they share; a rule also in Health as "drift or onset" may be either. A source-side change means the source, not a swarm.
 - **Possible reruns and archive bursts.** Leads to check, never merged automatically.
 - **Case status.** Proposals for existing cases; see [step 9](#9-keep-the-notice-current).
 
@@ -40,7 +42,7 @@ Details: [the dashboard](../reference/watch.md#the-dashboard).
 swarmchase review --unflagged 20
 ```
 
-Label each lead agent, benign or unsure, strongest cluster first. The unflagged sample keeps the benign baseline honest. Labels feed the evaluation ([evaluation](../reference/evaluation.md#reviewed-records)). Press `c` on a lead worth pursuing to open a case from its cluster, or `c <case-id>` to add it to an open one.
+Label each lead agent, benign or unsure, strongest cluster first. The unflagged sample keeps the benign baseline honest. Labels feed the evaluation ([evaluation](../reference/evaluation.md#reviewed-records)). Press `c` on a lead worth pursuing to open a case from its cluster, or `c <case-id>` to add it to an open one. `z` takes back the last answer.
 
 Details: [reviewing leads](../reference/watch.md#reviewing-leads).
 
@@ -103,7 +105,9 @@ swarmchase case draft 2026-10-portal --all            # every provider and affec
 swarmchase case draft 2026-10-portal --audience affected --to security@example.gov
 ```
 
-`case contacts` adds the provider's channels from the [provider directory](../reference/cases.md#the-provider-directory) when a claim names it, then reads security.txt, then RDAP abuse addresses. Add anything else by hand with `case contact add` (a CSIRT, a declared owner). `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form; `--all` drafts for every provider and affected contact not yet sent to, and lists the contacts it leaves for you (registrars, hosts, CSIRTs). Each report states when the indicator notice is scheduled, that it will not name the recipient, and when the recipient may be named. Read every draft before sending it.
+`case contacts` adds the provider's channels from the [provider directory](../reference/cases.md#the-provider-directory) when a claim names it, then reads security.txt, then RDAP abuse addresses. Add anything else by hand with `case contact add` (a CSIRT, a declared owner). `case draft` writes an unsent `.eml` with a fresh evidence bundle into `outbox/`, or paste-ready text for a web form; `--all` drafts for every provider and affected contact not yet sent to, and lists the contacts it leaves for you (registrars, hosts, CSIRTs).
+
+An affected report and its bundle cover only that operator's own endpoints ([what an operator is sent](../reference/cases.md#what-an-operator-is-sent)). Each report states when the indicator notice is scheduled, that it will not name the recipient, and when the recipient may be named. Read every draft before sending it.
 
 Details: [contacts](../reference/cases.md#contacts), [drafts](../reference/cases.md#drafts).
 

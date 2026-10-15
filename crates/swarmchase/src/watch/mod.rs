@@ -5,13 +5,14 @@
 //! ```text
 //! <out>/state.json              per-source cursors and pending resume keys (.bak: the previous copy)
 //! <out>/.lock                   held by the run, so one writer works here at a time
-//! <out>/store/<source>.ndjson   every record collected within retention, redacted, deduplicated
+//! <out>/store/<source>/<YYYY-MM>.ndjson  every record collected within retention, by capture month (crate::store)
 //! <out>/summary.json            clusters and endpoints as of the last run (digest baseline)
 //! <out>/ledger.json             each cluster's history across runs (ledger)
 //! <out>/autonomy.ndjson         what autonomy levels did or would have done (autonomy)
 //! <out>/platform/               platform pass state and carried events (platform)
 //! <out>/runs/<stamp>/           new records per source, analysis, case notes, digest, run.json
 //! <out>/LATEST                  stamp of the most recent run
+//! <out>/LATEST_OK               stamp of the most recent run in which a source ran and not every one failed
 //! ```
 //!
 //! The digest opens with the run's priority ([`priority`]), set from
@@ -29,7 +30,8 @@
 //! `[autonomy]` turns it on.
 //!
 //! Every run also checks source health and rule drift against the trailing
-//! history in `state.json` (see `health.rs`) and reports both in the digest.
+//! history in `state.json` (see `health.rs`) and reports both in the digest,
+//! with slices of each source whose rate rose ([`onset`]).
 //! The digest also lists runs whose target sequence repeats an earlier run in
 //! another cluster (possible reruns, never merged) and bursts of archive
 //! captures of a host the store normally holds few captures of.
@@ -51,11 +53,26 @@
 //!
 //! A run saves `state.json` after each source, with the IDs it stored as
 //! `undigested`; they are cleared once the digest and `run.json` are
-//! written, so the next run reports what a run cut short had stored. The
-//! ledger and the autonomy log are saved between those two steps, so a run
-//! cut short before its digest leaves them as they were. Steps after
-//! collection that fail become digest alerts instead of ending the run; a
-//! step after the digest that fails ends it with an error. A source whose query changed starts over ([`pull::fingerprint`]).
+//! written, so the next run reports what a run cut short had stored. Case
+//! hits, rule history, onset history and alert streaks (sources' health
+//! included: the saves after each source keep the health the run found)
+//! are saved with that same write, and
+//! the ledger and the autonomy log just before it, so a run cut short
+//! before its digest leaves them as they were. The result is handed to the
+//! workflow (`$GITHUB_OUTPUT`) right after the digest and `run.json`,
+//! before any later step can fail. Steps after collection that fail become
+//! digest alerts instead of ending the run; a step after the digest that
+//! fails ends it with an error. A source whose query changed starts over
+//! ([`pull::fingerprint`]).
+//!
+//! Collection has a deadline (`collect_deadline_mins`): sources whose turn
+//! comes after it are deferred, reported as such, and go first next run;
+//! analysis and the digest still run. A failure that repeats run after run
+//! (a source, a host, a canary, a step after collection) alerts on its 1st,
+//! 2nd, 4th, 8th... run ([`crate::health::alert_due`]). So does a run in
+//! which no source could run or every source failed: it ends with an error
+//! on those runs and with a digest note on the others. Changed runs whose
+//! digest was never mailed are folded into the next digest ([`mailed`]).
 //!
 //! Retention (docs/policies.md): run directories and stored records older than
 //! `retain_days` are deleted at the end of every run. Records needed for a case
@@ -73,6 +90,8 @@ pub(crate) mod check;
 pub(crate) mod digest;
 pub(crate) mod fleet_threads;
 pub(crate) mod ledger;
+pub(crate) mod mailed;
+pub(crate) mod onset;
 pub(crate) mod platform;
 pub(crate) mod priority;
 pub(crate) mod public_log;
@@ -81,9 +100,10 @@ pub(crate) mod run_summary;
 pub(crate) mod timing;
 pub(crate) mod triage;
 
-use crate::health::{RuleHistory, RuleRun};
+use crate::health::{RuleHistory, RuleRun, SourceHealth, alert_due};
 use crate::store::{
-    append, load_store_counted, prune, read_json_kept, to_ndjson, write_json, write_json_kept,
+    append_records, load_store_counted, prune, read_json_kept, to_ndjson, write_json,
+    write_json_kept,
 };
 use anyhow::{Context, Result, bail};
 use cases::{CaseCheck, CaseWatch};
@@ -126,6 +146,12 @@ pub struct Watchlist {
     /// queue. 0 keeps every run's analysis.
     #[serde(default = "default_keep_analysis")]
     pub keep_analysis_runs: usize,
+    /// Minutes collection may take: a source whose turn comes later is
+    /// deferred to the next run, where it goes first, and the analysis and
+    /// digest still run. A source already pulling finishes. 0 turns the
+    /// deadline off.
+    #[serde(default = "default_collect_deadline")]
+    pub collect_deadline_mins: u64,
     /// What each autonomy level does ([`autonomy`]); every level is in
     /// shadow by default.
     #[serde(default)]
@@ -143,6 +169,10 @@ fn default_cache_ttl() -> u64 {
 
 fn default_keep_analysis() -> usize {
     8
+}
+
+fn default_collect_deadline() -> u64 {
+    90
 }
 
 fn default_interval() -> u64 {
@@ -180,6 +210,9 @@ pub struct State {
     /// Rule hit rates on recent runs' new records, for drift checks.
     #[serde(default)]
     pub rules: RuleHistory,
+    /// Per-run counts of each source's slices, for onsets ([`onset`]).
+    #[serde(default, skip_serializing_if = "onset::OnsetHistory::is_empty")]
+    pub onsets: onset::OnsetHistory,
     /// Per case: records that matched its indicators, and what was proposed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cases: BTreeMap<String, CaseWatch>,
@@ -193,6 +226,24 @@ pub struct State {
     /// dropped: a source added back under the same name continues from it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub retired: BTreeMap<String, SourceState>,
+    /// The newest run whose digest was mailed, as the last run found it:
+    /// retention may delete that run's marker ([`mailed`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_mailed: Option<String>,
+    /// Hosts unavailable on the last runs, with how many runs in a row.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub host_down: BTreeMap<String, u32>,
+    /// Steps after collection that failed on the last runs ([`soft`]),
+    /// with how many runs in a row.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub step_failed: BTreeMap<String, u32>,
+    /// Runs in a row in which no source could run or every source failed.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub failed_runs: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 #[derive(clap::Args)]
@@ -203,8 +254,17 @@ pub struct WatchArgs {
     /// Watchlist TOML (see watchlist.toml).
     #[arg(default_value = "watchlist.toml")]
     watchlist: PathBuf,
-    /// Data directory: state, record store, and per-run output.
-    #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+    /// Data directory: state, record store, and per-run output. `-o` and
+    /// `--out` are aliases.
+    #[arg(
+        short = 'd',
+        long = "data",
+        value_name = "DIR",
+        visible_alias = "out",
+        short_alias = 'o',
+        default_value = "data",
+        env = "SWARMCHASE_DATA"
+    )]
     out: PathBuf,
     /// Start a new data directory. Without it, a run refuses a directory
     /// that holds no watch data, so a wrong path or an unset
@@ -226,6 +286,7 @@ pub struct WatchArgs {
     /// Nothing about records or leads.
     #[arg(long, value_name = "PATH")]
     public_log: Option<PathBuf>,
+    /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
     /// Committed notices, for the case status proposals in the digest.
@@ -263,7 +324,16 @@ enum WatchCmd {
         /// watchlist included).
         #[arg(required = true)]
         names: Vec<String>,
-        #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+        /// Data directory (`-o`/`--out` are aliases).
+        #[arg(
+            short = 'd',
+            long = "data",
+            value_name = "DIR",
+            visible_alias = "out",
+            short_alias = 'o',
+            default_value = "data",
+            env = "SWARMCHASE_DATA"
+        )]
         out: PathBuf,
     },
     /// Delete cached HTTP responses (`<data>/cache/http/`) older than
@@ -272,7 +342,16 @@ enum WatchCmd {
     PruneCache {
         #[arg(default_value = "watchlist.toml")]
         watchlist: PathBuf,
-        #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
+        /// Data directory (`-o`/`--out` are aliases).
+        #[arg(
+            short = 'd',
+            long = "data",
+            value_name = "DIR",
+            visible_alias = "out",
+            short_alias = 'o',
+            default_value = "data",
+            env = "SWARMCHASE_DATA"
+        )]
         out: PathBuf,
         /// Keep entries younger than this many hours; 0 deletes them all.
         #[arg(long)]
@@ -428,6 +507,8 @@ struct Collected {
     ids_by_source: BTreeMap<String, BTreeSet<String>>,
     alerts: Vec<Alert>,
     notes: Vec<String>,
+    /// Steps that failed, with their first error ([`soft`]).
+    failed_steps: BTreeMap<String, String>,
     /// Records reported as new here that an earlier run collected.
     carried: usize,
 }
@@ -445,22 +526,71 @@ impl Collected {
 }
 
 /// A step after collection that failed: the run goes on without it, and
-/// the digest says so, rather than losing the records already collected.
-fn soft<T>(alerts: &mut Vec<Alert>, step: &str, r: Result<T>) -> Option<T> {
+/// the digest says so ([`step_alerts`]), rather than losing the records
+/// already collected. `failed` keeps each step's first error this run.
+fn soft<T>(failed: &mut BTreeMap<String, String>, step: &str, r: Result<T>) -> Option<T> {
     match r {
         Ok(v) => Some(v),
         Err(e) => {
             eprintln!("{step}: error: {e:#}");
-            alerts.push(Alert::new(
-                AlertKind::StepFailed,
-                step,
-                format!(
-                    "The run's {step} step failed and was skipped ({}); the rest of the run went ahead.",
-                    crate::util::one_line(&format!("{e:#}"), 200)
-                ),
-            ));
+            failed
+                .entry(step.to_string())
+                .or_insert_with(|| crate::util::one_line(&format!("{e:#}"), 200));
             None
         }
+    }
+}
+
+/// This run's failed steps against their streaks in `state.json`: a step
+/// that failed alerts on the 1st, 2nd, 4th, 8th... run of its streak and is
+/// a digest note on the others; a step that did not fail ends its streak.
+fn step_alerts(
+    streaks: &mut BTreeMap<String, u32>,
+    failed: BTreeMap<String, String>,
+    alerts: &mut Vec<Alert>,
+    notes: &mut Vec<String>,
+) {
+    streaks.retain(|s, _| failed.contains_key(s));
+    for (step, why) in failed {
+        let n = streaks.entry(step.clone()).or_default();
+        *n += 1;
+        let n = *n;
+        if alert_due(n) {
+            alerts.push(Alert::new(
+                AlertKind::StepFailed,
+                &step,
+                if n == 1 {
+                    format!(
+                        "The run's {step} step failed and was skipped ({why}); the rest of the run went ahead."
+                    )
+                } else {
+                    format!(
+                        "The run's {step} step has failed {n} runs in a row ({why}); each run skips it and goes ahead with the rest."
+                    )
+                },
+            ));
+        } else {
+            notes.push(format!(
+                "The run's {step} step failed again and was skipped ({why}), {n} runs in a row; it alerts again on run {} of the streak.",
+                n.next_power_of_two()
+            ));
+        }
+    }
+}
+
+/// Why the whole run failed, if it did: no source could run, or every
+/// source that ran failed.
+fn run_failure(sources: &[SourceReport]) -> Option<&'static str> {
+    let ran: Vec<_> = sources
+        .iter()
+        .filter(|r| r.skipped.is_none() && !r.deferred)
+        .collect();
+    if ran.is_empty() {
+        Some("no source could run")
+    } else if ran.iter().all(|r| r.error.is_some()) {
+        Some("every source failed")
+    } else {
+        None
     }
 }
 
@@ -501,6 +631,7 @@ fn watch(
 ) -> Result<()> {
     let (watchlist, out, notices) = (paths.watchlist, paths.out, paths.notices);
     let mut phases = timing::Phases::new();
+    let began = std::time::Instant::now();
     let wl = read_watchlist(watchlist)?;
     if wl.sources.is_empty() {
         bail!("{}: no [[source]] entries", watchlist.display());
@@ -546,7 +677,7 @@ fn watch(
     if !crate::store::has_data(out) {
         if !opts.init {
             bail!(
-                "no watch data in {}; pass --init to start a new data directory there, or point --out or SWARMCHASE_DATA at the existing one",
+                "no watch data in {}; pass --init to start a new data directory there, or point --data or SWARMCHASE_DATA at the existing one",
                 crate::store::describe_data(out)
             );
         }
@@ -555,16 +686,31 @@ fn watch(
             crate::store::describe_data(out)
         );
     }
-    // One writer at a time: a second watch, or a case rename, waits for this
-    // one to finish.
+    // One writer at a time: a second watch, or any other command that takes
+    // the lock, refuses at once while this one holds it.
     let _lock = crate::store::lock_data(out, "watch")?;
     std::fs::create_dir_all(&run_dir)?;
     std::fs::create_dir_all(out.join("store"))?;
+    // A store of the older one-file-per-source layout moves to the
+    // partitioned one first; cut short, the next run finishes it.
+    let migrated = crate::store::migrate_store(&out.join("store"))?;
 
     let state_path = out.join("state.json");
     let mut state: State = read_json_kept(&state_path)?.unwrap_or_default();
+    if let Some(m) = mailed::newest_marked(out)
+        && state.last_mailed.as_ref().is_none_or(|l| *l < m)
+    {
+        state.last_mailed = Some(m);
+    }
     let mut c = Collected::default();
+    if let Some(m) = migrated {
+        eprintln!("note: {}", m.note());
+        c.notes.push(m.note());
+    }
     carry_over(out, &state, &mut c);
+    for w in crate::commands::netranges::refresh_daily(&client, out) {
+        c.notes.push(format!("Network ranges not refreshed: {w}"));
+    }
     collect(
         &Collect {
             client: &client,
@@ -574,6 +720,8 @@ fn watch(
             stamp: &stamp,
             overlap: wl.overlap_days * DAY,
             asn: asn.as_ref(),
+            deadline: (wl.collect_deadline_mins > 0)
+                .then(|| began + Duration::from_secs(wl.collect_deadline_mins * 60)),
         },
         &sources,
         &mut state,
@@ -583,14 +731,30 @@ fn watch(
         retire_missing(&wl, &mut state, &mut c.notes);
     }
 
-    for (host, why) in client.down_hosts() {
-        c.alerts.push(Alert::new(
-            AlertKind::HostDown,
-            &host,
-            format!(
-                "`{host}` was unavailable ({why}); later requests to it this run were not sent, and its sources continue from their checkpoints next run"
-            ),
-        ));
+    let down = client.down_hosts();
+    observe_down(&mut state.host_down, &down);
+    for (host, why) in down {
+        let n = state.host_down.get(&host).copied().unwrap_or(1);
+        if alert_due(n) {
+            c.alerts.push(Alert::new(
+                AlertKind::HostDown,
+                &host,
+                if n == 1 {
+                    format!(
+                        "`{host}` was unavailable ({why}); later requests to it this run were not sent, and its sources continue from their checkpoints next run"
+                    )
+                } else {
+                    format!(
+                        "`{host}` has been unavailable {n} runs in a row ({why}); its sources continue from their checkpoints when it answers"
+                    )
+                },
+            ));
+        } else {
+            c.notes.push(format!(
+                "`{host}` is still unavailable ({why}), {n} runs in a row; it alerts again on run {} of the streak.",
+                n.next_power_of_two()
+            ));
+        }
     }
 
     phases.end("collect");
@@ -603,10 +767,11 @@ fn watch(
         ids_by_source,
         mut alerts,
         mut notes,
+        mut failed_steps,
         carried,
     } = c;
     let canaries = soft(
-        &mut alerts,
+        &mut failed_steps,
         "canary",
         crate::canary::watch_sightings(out, &fresh, &run_dir),
     )
@@ -614,21 +779,36 @@ fn watch(
 
     // Coordinated accounts on public platforms: its own pull and store, so a
     // failure here never stops the record analysis.
-    let platform_outcome =
-        match platform::run(&client, out, &run_dir, now.timestamp(), &wl.platform, rules) {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("platform pass: error: {e:#}");
-                None
-            }
-        };
+    let platform_outcome = soft(
+        &mut failed_steps,
+        "platform",
+        platform::run(&client, out, &run_dir, now.timestamp(), &wl.platform, rules),
+    )
+    .flatten();
 
     phases.end("platform");
     // Rolling analysis over everything recent, not just this run's records,
     // so clusters can span runs.
     let since = now.timestamp() - wl.analysis_window_days * DAY;
+    // Unreadable lines are moved aside once, so they alert in this run only.
+    let set_aside = soft(
+        &mut failed_steps,
+        "store",
+        crate::store::set_aside_damaged(&out.join("store"), since - wl.overlap_days * DAY),
+    )
+    .unwrap_or_default();
+    for (file, (n, aside)) in &set_aside {
+        eprintln!("warning: {file}: {n} unreadable line(s) moved to {aside}");
+        alerts.push(Alert::new(
+            AlertKind::StoreDamaged,
+            file,
+            format!(
+                "`{file}` had {n} line(s) that cannot be read (a write cut short, or bytes that are not UTF-8); they were moved to `{aside}`, which retention deletes with old records. The records on the other lines were read."
+            ),
+        ));
+    }
     let (mut stored, damaged) = soft(
-        &mut alerts,
+        &mut failed_steps,
         "store",
         load_store_counted(&out.join("store"), since - wl.overlap_days * DAY),
     )
@@ -666,15 +846,29 @@ fn watch(
         .into_iter()
         .filter(|o| o.ts >= since || new_ids.contains(&o.id))
         .collect();
-    let a = analyze(recent, rules);
-    let (drifts, restarted) = state.rules.observe(
+    let mut a = analyze(recent, rules);
+    crate::commands::netranges::annotate_in(out, &mut a);
+    let (mut drifts, restarted) = state.rules.observe(
         &a.rules_version,
         ids_by_source
             .iter()
             .map(|(s, ids)| (s.clone(), RuleRun::from_analysis(&a, ids)))
             .collect(),
     );
-    soft(&mut alerts, "state", write_json_kept(&state_path, &state));
+    let onsets = state.onsets.observe(
+        &a.rules_version,
+        ids_by_source
+            .iter()
+            .map(|(s, ids)| {
+                let run = onset::SliceRun::from_analysis(&a, ids, &stamp, now.timestamp());
+                (s.clone(), run)
+            })
+            .collect(),
+    );
+    onset::read_drifts(&onsets, &mut drifts);
+    // Case hits and the rule history are saved with the undigested clear
+    // below, not here: a run cut short before its digest must not mark a
+    // case hit or a rule run as already reported.
     alerts.extend(
         drifts
             .iter()
@@ -688,7 +882,7 @@ fn watch(
     }
     crate::util::print_summary(&a);
     soft(
-        &mut alerts,
+        &mut failed_steps,
         "analysis",
         serde_json::to_string(&a)
             .map_err(anyhow::Error::from)
@@ -702,7 +896,7 @@ fn watch(
         },
     );
     soft(
-        &mut alerts,
+        &mut failed_steps,
         "case notes",
         std::fs::write(run_dir.join("case-notes.md"), md).map_err(anyhow::Error::from),
     );
@@ -745,14 +939,14 @@ fn watch(
     );
     // Written before the digest, so a failure is in it.
     soft(
-        &mut alerts,
+        &mut failed_steps,
         "attention",
         write_json(&run_dir.join(attention::FILE), &queue),
     );
     // Cached responses are raw collector answers: kept no longer than the
     // TTL (and a day), on every run.
     let cache = soft(
-        &mut alerts,
+        &mut failed_steps,
         "cache",
         sc_collect::prune_http_cache(
             &out.join("cache").join("http"),
@@ -761,13 +955,50 @@ fn watch(
         )
         .map_err(anyhow::Error::from),
     );
+    step_alerts(
+        &mut state.step_failed,
+        failed_steps,
+        &mut alerts,
+        &mut notes,
+    );
+    // A whole run that fails ends with an error (and the workflow's failure
+    // mail) on the 1st, 2nd, 4th, 8th... run of its streak, and with a note
+    // on the others.
+    let failure = run_failure(&reports);
+    state.failed_runs = if failure.is_some() {
+        state.failed_runs + 1
+    } else {
+        0
+    };
+    let failure_due = failure.is_some() && alert_due(state.failed_runs);
+    if let Some(f) = failure
+        && !failure_due
+    {
+        notes.push(format!(
+            "The run failed again ({f}), {} runs in a row; it ends with an error again on run {} of the streak.",
+            state.failed_runs,
+            state.failed_runs.next_power_of_two()
+        ));
+    }
     let health = Health {
         sources: reports,
         alerts,
         notes,
     };
+    let unmailed = mailed::unmailed(out, &stamp, state.last_mailed.as_deref());
     let mut priority = priority::assess(&leads, &health.alerts, &cases.due);
     priority.add(autonomy::priority_reasons(&decisions));
+    priority.add(onset::priority_reasons(&onsets));
+    if let Some(top) = unmailed.runs.iter().map(mailed::Unmailed::level).max() {
+        priority.add(vec![priority::Reason {
+            level: top,
+            kind: "unmailed".into(),
+            text: format!(
+                "{} earlier digest(s) were never mailed; their leads are under Digests not mailed",
+                unmailed.total()
+            ),
+        }]);
+    }
     priority.add(
         canaries
             .iter()
@@ -797,10 +1028,19 @@ fn watch(
     digest
         .text
         .push_str(&fleet_threads::section(&a, &ledger, &fleets));
+    digest.text.push_str(&onset::section(&onsets));
+    digest.changed |= onsets.due();
     digest
         .text
         .push_str(&crate::canary::digest_section(&canaries));
     digest.changed |= !canaries.is_empty();
+    // Before the health block, so leads that were never mailed come early.
+    let not_mailed = mailed::section(&unmailed);
+    match digest.text.find("## Health (") {
+        Some(i) => digest.text.insert_str(i, &not_mailed),
+        None => digest.text.push_str(&not_mailed),
+    }
+    digest.changed |= !unmailed.is_empty();
 
     if let Some(o) = &platform_outcome {
         digest.text.push_str(&platform::section(o));
@@ -842,6 +1082,16 @@ fn watch(
             durations: &phases.summary(),
         }),
     )?;
+    // Hand the result to the workflow (digest email) at once: whatever
+    // fails after this, the digest that reports the run is still mailed.
+    if let Ok(p) = std::env::var("GITHUB_OUTPUT") {
+        github_output(
+            Path::new(&p),
+            &run_dir,
+            digest.changed,
+            priority.level.label(),
+        )?;
+    }
     // What fails from here on loses nothing the digest has not reported;
     // the run still ends with an error so it is noticed.
     let mut late = Vec::new();
@@ -851,15 +1101,23 @@ fn watch(
             late.push(format!("{step}: {e:#}"));
         }
     };
+    if let Some(p) = paths.public_log {
+        let log = public_log::PublicLog::new(&health.sources, phases.total_ms());
+        later(
+            "public log",
+            std::fs::write(p, log.render()).with_context(|| format!("writing {}", p.display())),
+        );
+    }
     // Saved only once the digest and run.json report this run: a run that
     // stops before them leaves the ledger and the autonomy log as they
     // were, so the next run reports its carried-over records as leads.
     later("ledger", write_json_kept(&ledger_path, &ledger));
     later("autonomy", autonomy::append(out, &decisions));
     // The digest and run.json report this run's records: they are no
-    // longer undigested.
+    // longer undigested. Case hits, rule history and streaks go with them.
+    // Should the write fail, the next run reports the records again.
     state.undigested.clear();
-    write_json_kept(&state_path, &state)?;
+    later("state", write_json_kept(&state_path, &state));
     later(
         "summary",
         write_json(&run_dir.join("summary.json"), &next)
@@ -869,6 +1127,14 @@ fn watch(
         "LATEST",
         crate::store::write_atomic(&out.join("LATEST"), stamp.as_bytes()),
     );
+    // What the staleness check reads for a watch that runs but never
+    // succeeds: LATEST moves on every run.
+    if failure.is_none() {
+        later(
+            "LATEST_OK",
+            crate::store::write_atomic(&out.join("LATEST_OK"), stamp.as_bytes()),
+        );
+    }
     later(
         "retention",
         retain(
@@ -891,22 +1157,6 @@ fn watch(
         },
         priority.level.label()
     );
-
-    if let Some(p) = paths.public_log {
-        let log = public_log::PublicLog::new(&health.sources, phases.total_ms());
-        std::fs::write(p, log.render()).with_context(|| format!("writing {}", p.display()))?;
-    }
-
-    // Hand the result to the workflow (digest email, artifact upload).
-    if let Ok(p) = std::env::var("GITHUB_OUTPUT") {
-        let mut f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(p)?;
-        writeln!(f, "run_dir={}", run_dir.display())?;
-        writeln!(f, "changed={}", digest.changed)?;
-        writeln!(f, "priority={}", priority.level.label())?;
-    }
     if !late.is_empty() {
         bail!(
             "the digest was written, but {} step(s) after it failed: {}",
@@ -914,24 +1164,46 @@ fn watch(
             late.join("; ")
         );
     }
-    let ran: Vec<_> = health
-        .sources
-        .iter()
-        .filter(|r| r.skipped.is_none())
-        .collect();
-    if ran.is_empty() {
-        bail!(
-            "no source could run; see {}",
-            run_dir.join("digest.md").display()
+    if let Some(f) = failure {
+        if failure_due {
+            bail!("{f}; see {}", run_dir.join("digest.md").display());
+        }
+        eprintln!(
+            "note: {f}, {} runs in a row; the run ends with an error again on run {} of the streak",
+            state.failed_runs,
+            state.failed_runs.next_power_of_two()
         );
     }
-    if ran.iter().all(|r| r.error.is_some()) {
-        bail!(
-            "every source failed; see {}",
+    if !health.alerts.is_empty() {
+        return Err(crate::Exit::alerts(format!(
+            "the run finished with {} alert(s); see {}",
+            health.alerts.len(),
             run_dir.join("digest.md").display()
-        );
+        )));
     }
     Ok(())
+}
+
+/// `run_dir`, `changed` and `priority` for the workflow's mail step.
+fn github_output(p: &Path, run_dir: &Path, changed: bool, priority: &str) -> Result<()> {
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(p)
+        .with_context(|| format!("opening {}", p.display()))?;
+    writeln!(f, "run_dir={}", run_dir.display())?;
+    writeln!(f, "changed={changed}")?;
+    writeln!(f, "priority={priority}")?;
+    Ok(())
+}
+
+/// Count each host down this run towards its streak; a host that answered
+/// leaves the map.
+fn observe_down(streaks: &mut BTreeMap<String, u32>, down: &[(String, String)]) {
+    streaks.retain(|h, _| down.iter().any(|(d, _)| d == h));
+    for (h, _) in down {
+        *streaks.entry(h.clone()).or_default() += 1;
+    }
 }
 
 /// The digest note for new records captured before the analysis window:
@@ -954,26 +1226,19 @@ fn before_window_note(fresh: &[Observation], since: i64, window_days: i64) -> Op
 /// Records an earlier run stored but never reported (it ended before its
 /// digest), loaded from the store into this run's new records.
 fn carry_over(out: &Path, state: &State, c: &mut Collected) {
-    let source_of: BTreeMap<&str, &str> = state
-        .undigested
-        .iter()
-        .flat_map(|(s, ids)| ids.iter().map(move |id| (id.as_str(), s.as_str())))
-        .collect();
-    if source_of.is_empty() {
+    if state.undigested.values().all(BTreeSet::is_empty) {
         return;
     }
-    let all = match load_store_counted(&out.join("store"), i64::MIN) {
-        Ok((all, _)) => all,
+    let found = match crate::store::load_ids(&out.join("store"), &state.undigested) {
+        Ok(found) => found,
         Err(e) => {
-            soft::<()>(&mut c.alerts, "carry-over", Err(e));
+            soft::<()>(&mut c.failed_steps, "carry-over", Err(e));
             return;
         }
     };
-    for o in all {
-        if let Some(src) = source_of.get(o.id.as_str()) {
-            c.carried += 1;
-            c.add(src, o);
-        }
+    for (src, o) in found {
+        c.carried += 1;
+        c.add(&src, o);
     }
     c.notes.push(format!(
         "{} record(s) stored by an earlier run that ended before its digest are reported as new in this one.",
@@ -1010,21 +1275,66 @@ struct Collect<'a> {
     stamp: &'a str,
     overlap: i64,
     asn: Option<&'a sc_core::asn::AsnTable>,
+    /// When collection stops starting sources.
+    deadline: Option<std::time::Instant>,
+}
+
+/// Save collection progress (cursors, seen and undigested IDs) with each
+/// source's health as the run found it. Health streaks reach the admin only
+/// through the digest, so they are saved with the run's final write: a run
+/// cut short before its digest leaves them as they were, and the next run
+/// alerts on the streak runs its digest would have.
+fn save_progress(
+    path: &Path,
+    state: &mut State,
+    start: &mut BTreeMap<String, SourceHealth>,
+) -> Result<()> {
+    let swap = |state: &mut State, start: &mut BTreeMap<String, SourceHealth>| {
+        for (name, st) in &mut state.sources {
+            std::mem::swap(&mut st.health, start.entry(name.clone()).or_default());
+        }
+    };
+    swap(state, start);
+    let r = write_json_kept(path, state);
+    swap(state, start);
+    r
 }
 
 /// Pull each source in turn, storing what is new and saving `state.json`
 /// after each, so an interrupted run keeps its progress; the IDs stored
-/// are kept as undigested until a digest reports them.
+/// are kept as undigested until a digest reports them. Sources deferred by
+/// the last run go first; once the deadline has passed, the rest are
+/// deferred.
 fn collect(
     x: &Collect,
     sources: &[&WatchSource],
     state: &mut State,
     c: &mut Collected,
 ) -> Result<()> {
-    for s in sources {
+    // Health as the run found it, for the saves after each source.
+    let mut start: BTreeMap<String, SourceHealth> = state
+        .retired
+        .iter()
+        .chain(&state.sources)
+        .map(|(n, st)| (n.clone(), st.health.clone()))
+        .collect();
+    let mut order: Vec<&WatchSource> = sources.to_vec();
+    order.sort_by_key(|s| !state.sources.get(&s.name).is_some_and(|st| st.deferred));
+    let mut deferred = Vec::new();
+    for s in order {
         eprint!("{:<24} {:<8} {} … ", s.name, s.kind, s.query.pattern);
         if let Some(st) = state.retired.remove(&s.name) {
             state.sources.entry(s.name.clone()).or_insert(st);
+        }
+        if x.deadline.is_some_and(|d| std::time::Instant::now() >= d) {
+            eprintln!("deferred: collection deadline reached");
+            state.sources.entry(s.name.clone()).or_default().deferred = true;
+            deferred.push(format!("`{}`", s.name));
+            c.reports.push(SourceReport {
+                deferred: true,
+                ..SourceReport::new(&s.name, &s.kind)
+            });
+            continue;
         }
         if let Ok(kind) = s.kind.parse::<Kind>()
             && kind.needs_key()
@@ -1057,6 +1367,7 @@ fn collect(
         let first_or_resumed = st.cursor == 0 || st.pending.is_some();
         let res = pull(x.client, s, st, x.overlap, x.asn);
         st.last_run = Some(x.stamp.to_string());
+        st.deferred = false;
         let mut rep = SourceReport {
             requests: x.client.requests() - before,
             duration_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
@@ -1086,14 +1397,12 @@ fn collect(
             Ok(p) => {
                 let pulled = p.pulled;
                 let mut new = p.new;
-                let store_file = x.out.join("store").join(format!("{}.ndjson", s.name));
+                let store_dir = x.out.join("store");
                 if restarted || st.restart {
                     // Seen IDs were reset with the position: what the store
                     // already holds is not new.
                     let held: BTreeSet<String> =
-                        crate::store::read_ndjson::<Observation>(&store_file)
-                            .map(|(v, _)| v.into_iter().map(|o| o.id).collect())
-                            .unwrap_or_default();
+                        crate::store::source_ids(&store_dir, &s.name).unwrap_or_default();
                     new.retain(|o| !held.contains(&o.id));
                     st.restart = false;
                 }
@@ -1102,17 +1411,24 @@ fn collect(
                 rep.pending = st.pending.is_some();
                 rep.stopped = p.stopped;
                 if let Some(cov) = &p.coverage
-                    && cov.canary == Some(false)
+                    && let Some(n) = st.health.observe_canary(cov.canary)
                 {
-                    c.alerts.push(Alert::new(
-                        AlertKind::CanaryFailed,
-                        &s.name,
-                        format!(
-                            "`{}` read {} but its canary failed: nothing came back in the shape the parser expects, so an empty pull here proves nothing. Check the source's format.",
-                            s.name,
-                            cov.line()
-                        ),
-                    ));
+                    let streak = if n == 1 {
+                        String::new()
+                    } else {
+                        format!(" ({n} runs in a row)")
+                    };
+                    let line = format!(
+                        "`{}` read {} but its canary failed{streak}: nothing came back in the shape the parser expects, so an empty pull here proves nothing. Check the source's format.",
+                        s.name,
+                        cov.line()
+                    );
+                    if alert_due(n) {
+                        c.alerts
+                            .push(Alert::new(AlertKind::CanaryFailed, &s.name, line));
+                    } else {
+                        c.notes.push(line);
+                    }
                 }
                 rep.coverage = p.coverage;
                 rep.quiet = st
@@ -1128,7 +1444,7 @@ fn collect(
                 if !new.is_empty() {
                     let nd = to_ndjson(&new)?;
                     std::fs::write(x.run_dir.join(format!("{}.ndjson", s.name)), &nd)?;
-                    append(&store_file, &nd)?;
+                    append_records(&store_dir, &s.name, &new)?;
                     state
                         .undigested
                         .entry(s.name.clone())
@@ -1146,8 +1462,14 @@ fn collect(
             }
         }
         // Save after every source so an interrupted run keeps its progress.
-        write_json_kept(x.state_path, state)?;
+        save_progress(x.state_path, state, &mut start)?;
         c.reports.push(rep);
+    }
+    if !deferred.is_empty() {
+        c.notes.push(format!(
+            "Collection reached its deadline; deferred to the next run, where they go first: {}.",
+            deferred.join(", ")
+        ));
     }
     Ok(())
 }
@@ -1173,21 +1495,213 @@ fn retain(
     }
     if wl.retain_days > 0 {
         let cutoff = now - wl.retain_days.max(wl.analysis_window_days) * DAY;
-        let (runs, records) = prune(out, cutoff)?;
+        let pruned = prune(out, cutoff)?;
         for cw in state.cases.values_mut() {
             cw.hits.retain(|h| h.ts <= 0 || h.ts >= cutoff);
         }
+        state.onsets.prune(cutoff);
         write_json_kept(state_path, state)?;
         if ledger.prune(cutoff) > 0 {
             write_json_kept(ledger_path, ledger)?;
         }
+        // Target hosts last seen before the cutoff leave the summary, so a
+        // host outlives its records by no more than one run.
+        let summary_path = out.join("summary.json");
+        if let Some(mut s) = read_json_kept::<Summary>(&summary_path)? {
+            let before = s.endpoints.len();
+            s.endpoints
+                .retain(|_, e| e.last_seen <= 0 || e.last_seen >= cutoff);
+            if s.endpoints.len() < before {
+                write_json_kept(&summary_path, &s)?;
+            }
+        }
         autonomy::prune(out, cutoff)?;
-        if runs + records > 0 {
+        let (runs, files, records) = (pruned.runs, pruned.store.files, pruned.store.records);
+        if runs + files + records > 0 {
             eprintln!(
-                "retention: deleted {runs} run dir(s) and {records} stored record(s) older than {} days",
+                "retention: deleted {runs} run dir(s), {files} store month file(s) and {records} more stored record(s) older than {} days",
                 wl.retain_days
             );
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch(name: &str) -> PathBuf {
+        let d =
+            std::env::temp_dir().join(format!("swarmchase-watchmod-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("store")).unwrap();
+        d
+    }
+
+    fn list(extra: &str) -> Watchlist {
+        toml::from_str(&format!(
+            "{extra}\n[[source]]\nname = \"a\"\nkind = \"memento\"\npattern = \"https://a.example/\"\nendpoint = \"http://127.0.0.1:9/\"\n\n[[source]]\nname = \"b\"\nkind = \"memento\"\npattern = \"https://b.example/\"\nendpoint = \"http://127.0.0.1:9/\"\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn past_the_deadline_sources_are_deferred_and_go_first_next_run() {
+        let d = scratch("deadline");
+        let wl = list("");
+        assert_eq!(wl.collect_deadline_mins, 90);
+        let client = Client::new(Duration::ZERO).unwrap();
+        let sources: Vec<&WatchSource> = wl.sources.iter().collect();
+        let mut state = State::default();
+        // `b` was deferred last run.
+        state.sources.entry("b".into()).or_default().deferred = true;
+        let mut c = Collected::default();
+        let x = Collect {
+            client: &client,
+            out: &d,
+            run_dir: &d,
+            state_path: &d.join("state.json"),
+            stamp: "20261014T000000Z",
+            overlap: 0,
+            asn: None,
+            deadline: Some(std::time::Instant::now()),
+        };
+        collect(&x, &sources, &mut state, &mut c).unwrap();
+        let names: Vec<&str> = c.reports.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["b", "a"], "deferred sources go first");
+        assert!(
+            c.reports
+                .iter()
+                .all(|r| r.deferred && r.status() == "deferred")
+        );
+        assert!(state.sources["a"].deferred && state.sources["b"].deferred);
+        assert_eq!(client.requests(), 0, "nothing was sent");
+        assert!(
+            c.notes
+                .iter()
+                .any(|n| n.contains("deferred to the next run") && n.contains("`a`")),
+            "{:?}",
+            c.notes
+        );
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn progress_saves_keep_the_health_the_run_found() {
+        let d = scratch("progress");
+        let path = d.join("state.json");
+        let mut state = State::default();
+        state
+            .sources
+            .entry("a".into())
+            .or_default()
+            .health
+            .errors_in_row = 1;
+        state
+            .retired
+            .entry("r".into())
+            .or_default()
+            .health
+            .skipped_runs = 3;
+        let mut start: BTreeMap<String, SourceHealth> = state
+            .retired
+            .iter()
+            .chain(&state.sources)
+            .map(|(n, st)| (n.clone(), st.health.clone()))
+            .collect();
+        // This run: `a` fails again, `r` comes back and runs, `n` is new.
+        let a = state.sources.get_mut("a").unwrap();
+        a.health.errors_in_row = 2;
+        a.cursor = 42;
+        let r = state.retired.remove("r").unwrap();
+        state.sources.insert("r".into(), r);
+        state.sources.get_mut("r").unwrap().health.skipped_runs = 0;
+        state
+            .sources
+            .entry("n".into())
+            .or_default()
+            .health
+            .errors_in_row = 1;
+        save_progress(&path, &mut state, &mut start).unwrap();
+        let saved: State = read_json_kept(&path).unwrap().unwrap();
+        assert_eq!(saved.sources["a"].cursor, 42, "progress is saved");
+        assert_eq!(saved.sources["a"].health.errors_in_row, 1);
+        assert_eq!(saved.sources["r"].health.skipped_runs, 3);
+        assert_eq!(saved.sources["n"].health.errors_in_row, 0);
+        // The run itself goes on with the new health.
+        assert_eq!(state.sources["a"].health.errors_in_row, 2);
+        assert_eq!(state.sources["r"].health.skipped_runs, 0);
+        assert_eq!(state.sources["n"].health.errors_in_row, 1);
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_failing_step_alerts_on_its_due_runs_and_notes_the_others() {
+        let mut streaks = BTreeMap::new();
+        let mut kinds = Vec::new();
+        for _ in 0..4 {
+            let (mut alerts, mut notes) = (Vec::new(), Vec::new());
+            let failed = BTreeMap::from([("platform".to_string(), "HTTP 503".to_string())]);
+            step_alerts(&mut streaks, failed, &mut alerts, &mut notes);
+            kinds.push((alerts.len(), notes.len()));
+        }
+        // Runs 1, 2 and 4 alert; run 3 is a note.
+        assert_eq!(kinds, [(1, 0), (1, 0), (0, 1), (1, 0)]);
+        assert_eq!(streaks["platform"], 4);
+        // A run in which it succeeds ends the streak.
+        let (mut alerts, mut notes) = (Vec::new(), Vec::new());
+        step_alerts(&mut streaks, BTreeMap::new(), &mut alerts, &mut notes);
+        assert!(streaks.is_empty() && alerts.is_empty() && notes.is_empty());
+    }
+
+    #[test]
+    fn a_host_down_streak_counts_and_ends_when_it_answers() {
+        let mut s = BTreeMap::new();
+        let down = |h: &str| vec![(h.to_string(), "HTTP 503".to_string())];
+        observe_down(&mut s, &down("x"));
+        observe_down(&mut s, &down("x"));
+        observe_down(&mut s, &down("x"));
+        assert_eq!(s["x"], 3);
+        assert!(!alert_due(s["x"]));
+        observe_down(&mut s, &down("y"));
+        assert_eq!(s, BTreeMap::from([("y".to_string(), 1)]));
+    }
+
+    #[test]
+    fn retention_drops_endpoints_last_seen_before_the_cutoff() {
+        let d = scratch("endpoints");
+        let wl = list("retain_days = 180\nanalysis_window_days = 30");
+        let now = 1_800_000_000;
+        let ep = |last_seen| digest::Endpoint {
+            first_seen: last_seen,
+            last_seen,
+            max_tier: sc_core::Tier::Significant,
+        };
+        let summary = Summary {
+            endpoints: BTreeMap::from([
+                ("old.example".to_string(), ep(now - 200 * DAY)),
+                ("new.example".to_string(), ep(now - DAY)),
+                ("undated.example".to_string(), ep(0)),
+            ]),
+            ..Default::default()
+        };
+        write_json_kept(&d.join("summary.json"), &summary).unwrap();
+        let mut state = State::default();
+        let mut ledger = ledger::Ledger::new();
+        retain(
+            &d,
+            &wl,
+            now,
+            &mut state,
+            &d.join("state.json"),
+            &mut ledger,
+            &d.join(ledger::FILE),
+        )
+        .unwrap();
+        let kept: Summary = read_json_kept(&d.join("summary.json")).unwrap().unwrap();
+        let hosts: Vec<&str> = kept.endpoints.keys().map(String::as_str).collect();
+        assert_eq!(hosts, ["new.example", "undated.example"]);
+        std::fs::remove_dir_all(&d).unwrap();
+    }
 }

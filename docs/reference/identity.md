@@ -12,12 +12,20 @@ This evidence comes from operator logs. Public records rarely carry a client add
 |---|---|
 | `[[agent]]` | A product token as it appears in the user agent (`ChatGPT-User`), its provider, purpose, range files and signing directory. |
 | `[[range_file]]` | A published address-range file: its URL, and `exhaustive = false` when the provider does not present it as complete. |
-| `[[directory]]` | A Web Bot Auth key directory: the `Signature-Agent` URI the provider documents, and the directory's URL. |
-| `[[github_app]]` | A coding-agent product's GitHub login (`claude[bot]`, `Copilot`), and the words that claim it in another App's login. |
+| `[[directory]]` | A Web Bot Auth key directory: the `Signature-Agent` URI the provider documents, the directory's URL, and `access` when documented. |
+| `[[github_app]]` | A coding-agent product's GitHub login (`claude[bot]`, `Copilot`), the words that claim it in another App's login, and the provider's own GitHub organisations. |
 
-The platform pass reads `[[github_app]]`: those Apps' events are tallied by product rather than grouped, and an undeclared App whose login carries one of the words is a spoofing lead ([platform swarms](watch.md#platform-swarms)).
+The platform pass reads `[[github_app]]`: those Apps' events are tallied by product rather than grouped, and an undeclared App whose login carries one of the words is a spoofing lead ([platform swarms](watch.md#platform-swarms)). A word is a word of the product's name or its login (`codex`, `claude`, `copilot`), never the provider's name alone, which the provider's other Apps carry; the catalog check refuses any other. An App acting on a repository of one of the provider's `orgs` was installed there by the provider and is no lead.
 
 Every entry cites the provider page (`source`) that names the file. Adding one is a review decision, as for a rule: cite the page, keep the URL the page gives (or the host it redirects to, said in a comment), and run the tests. The catalog is compiled into the CLI and the browser module.
+
+`access` is `direct` (one operator runs the signer) or `intermediary` (a platform many end users direct), after Cloudflare's [signed-agent classes](https://developers.cloudflare.com/bots/concepts/bot/signed-agents/). Set it only where the provider's own documentation says which. A verified signature from an intermediary attributes the platform, not the end user: the identity line, the suggested claim and the report say so ([methodology](../methodology.md#declared-agent-identity)).
+
+A product whose provider publishes no range file, or publishes its addresses only as a web page the refresh cannot parse (Amazon's), is listed without ranges: its user agent stays a claim, never verified and never called spoofed. A key directory whose `Signature-Agent` value and URL the provider's public documentation does not give is left out.
+
+### Candidates from the reference list
+
+`swarmchase identity reference` fetches the community-maintained [ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt) list (MIT) of AI crawler and agent user-agent tokens into `<data>/identity/reference/robots.json` and prints the tokens it lists that the catalog has no `[[agent]]` for, matched case-insensitively, with the operator and function the list gives (defanged). `--offline` reads the held copy. The command proposes and never edits the catalog: the list is a pointer to where to look, and an entry is added only with the provider's own page as its `source`.
 
 ## Passivity
 
@@ -28,11 +36,12 @@ Every entry cites the provider page (`source`) that names the file. Adding one i
 ```bash
 swarmchase identity refresh                        # fetch the catalog's files into <data>/identity/
 swarmchase identity status                         # what is held, with fetch dates
+swarmchase identity reference                      # tokens the ai.robots.txt list names that the catalog lacks
 swarmchase identity check access.log --map host=www.example.org
 swarmchase identity check records.ndjson --json --all
 ```
 
-`check` prints one line per record with a declared identity: record id, client address, class, provider and product, and the reason for a spoof or a failure (hosts defanged). `--all` adds the records with none; `--json` prints the classification as JSON. With nothing held, user agents stay claims and nothing is called spoofed; the command says so.
+`check` prints one line per record with a declared identity: record id, client address, class, provider and product, and the reason for a spoof or a failure (hosts defanged). `--all` adds the records with none; `--json` prints the classification as JSON. With nothing held, user agents stay claims and nothing is called spoofed; the command says so. For each held range file that states its `creationTime`, it also says how many days old the file is and its `synctoken`, so a verdict on an old log can state the gap. `status` shows the creation time beside the fetch date.
 
 Once files are held, the analysis commands fill each cluster's identity from `<data>/identity/` (the data directory is `SWARMCHASE_DATA`, else `data/`): `report` prints it and `analyze` writes it as `identity`.
 
@@ -41,9 +50,22 @@ Once files are held, the analysis commands fill each cluster's identity from `<d
 | Path | Holds |
 |---|---|
 | `<data>/identity/<id>.json` | Each range file or directory as last fetched. A fetch that does not parse keeps the previous copy. |
-| `<data>/identity/fetched.json` | Per file: URL, fetch date, SHA-256 and entry count, so a case can cite the version a verdict rests on. |
+| `<data>/identity/fetched.json` | Per file: URL, fetch date, SHA-256, entry count, and a range file's `creationTime` and `synctoken` when it states them, so a case can cite the version a verdict rests on. |
+| `<data>/identity/reference/robots.json` | The ai.robots.txt list as last fetched by `identity reference`. |
+
+`identity refresh` exits 1 when every fetch failed, and rewrites `fetched.json` only when one succeeded.
 
 The files stay in the data directory and are never committed. Providers change them; refresh before checking a log, and for an old log say how far apart the log and the file are.
+
+### Range file fields
+
+Range files follow the shape [draft-illyes-webbotauth-jafar](https://datatracker.ietf.org/doc/draft-illyes-webbotauth-jafar/) describes: `creationTime` and a `prefixes` list of `ipv4Prefix` or `ipv6Prefix` objects. Any CIDR string in the file is read, so a renamed key still loads. The draft's optional fields are read when present and never required:
+
+| Field | Use |
+|---|---|
+| `creationTime` | When the provider generated the file; `identity check` states its age. |
+| `synctoken` | An opaque value that changes with the file; kept in `fetched.json`. |
+| `services` (per prefix) | The publisher's names for what sends from the prefix. An undeclared request from it takes those names as its agent; a declared product from a prefix published for other services stays `ip_verified`, with the mismatch in its detail. A single `service` string is read the same way. |
 
 ## What a record needs
 
@@ -52,6 +74,8 @@ The files stay in the data directory and are never committed. Providers change t
 | Product claim | A user agent: access logs in Combined format, or `user_agent` in JSON. |
 | Address checks | The client address (`ip`). Behind a proxy, log the forwarded client address, not the proxy's. |
 | Signatures | The `Signature`, `Signature-Input` and `Signature-Agent` headers in a JSON record's `headers`, as received. Common and Combined logs do not carry them. A covered `@method` needs a `:method` header on the record. |
+| End users under an intermediary | The `Forwarded` header (RFC 7239), as received. Its first `for=` value is counted per identity line and never printed. |
+| Declared, then undeclared | The response status, or the final URL or `cf-mitigated` header of a challenge, and the request time. |
 
 Signature checks follow RFC 9421 for the signature base and the Web Bot Auth profile for the rest: the `web-bot-auth` tag, `created`, `expires` and `keyid` present, `@authority` or `@target-uri` covered, the record's time inside `created` (with five minutes' skew) and `expires`, the key found by its JWK thumbprint (or `kid`) in the directory and valid at that time, and Ed25519 (`alg="ed25519"` or none). A keyed dictionary member is tried as RFC 9421 serialises it, then as its bare string, the form the Web Bot Auth draft's own test vector is signed over. Other algorithms are reported as present and unverified.
 
@@ -63,7 +87,11 @@ Case notes and provider reports carry a **Declared agent identity** section: one
 swarmchase case claim <case> --party "OpenAI" --layer developer --evidence provider_infrastructure --detail "..."
 ```
 
-Nothing is recorded until the admin runs it. Reports to affected operators and public notices carry none of this. A spoofed identity also appears as a counter-signal in *Why we think this is an agent*, and a verified one as an L1 signal.
+Nothing is recorded until the admin runs it. Under an intermediary signer, the section says the signature attributes the platform, not the end user, and gives how many distinct end users the `Forwarded` header names, as a key to group requests by, not attribution.
+
+Case notes also carry the declared-then-undeclared hint ([`fallback.rs`](../../crates/sc-core/src/identity/fallback.rs)): a cluster's declared requests blocked with 403, 429 or a challenge, followed within ten minutes by undeclared browser-like requests for the same host and path shape: the normalised path, so `/docs/17` and `/docs/42` match. It is a pattern to check, never a score; an unrelated visitor reading the same page looks the same. The pipeline finds it from the rules alone, so the workbench shows it too; with the declared product's range files held, undeclared requests from inside them are left out.
+
+Reports to affected operators and public notices carry none of this. A spoofed identity also appears as a counter-signal in *Why we think this is an agent*, and a verified one as an L1 signal.
 
 ## In the browser
 
@@ -73,6 +101,8 @@ The page never fetches a provider's file at runtime: the site's policy allows re
 
 ### The snapshot
 
-`sc-site --identity-snapshot <dir>` (or `SITE_IDENTITY_SNAPSHOT` for `scripts/ci/build-site.sh`) embeds the files `identity refresh` wrote into `<dir>`, normally `<data>/identity`, as `assets/identity-snapshot.json` with their URLs and fetch dates. Only `fetched.json` and the files the catalog names are read. A file is embedded only when it parses and its SHA-256 matches `fetched.json`, so the date shown is that file's. The deploy passes the runner's `<data>/identity` when it holds files and fetches nothing itself, so the snapshot is as old as the admin's last `identity refresh` there. Without one, or offline, the build embeds the catalog alone and the page says so.
+`sc-site --identity-snapshot <dir>` (or `SITE_IDENTITY_SNAPSHOT` for `scripts/ci/build-site.sh`) embeds the files `identity refresh` wrote into `<dir>`, normally `<data>/identity`, as `assets/identity-snapshot.json` with their URLs and fetch dates. Only `fetched.json` and the files the catalog names are read. A file is embedded only when it parses and its SHA-256 matches `fetched.json`, so the date shown is that file's.
+
+The deploy passes the runner's `<data>/identity` when it holds files and fetches nothing itself, so the snapshot is as old as the last `identity refresh` there. The scheduled watch workflow runs that refresh once a day, after its digest, as a step that never blocks the watch ([runner](runner.md#watchyml)); the admin can also run it by hand. Without one, or offline, the build embeds the catalog alone and the page says so.
 
 The files are not committed: providers change them, and a copy in git would go stale between commits.

@@ -8,7 +8,7 @@
 //! the agent's own callback channel, which collection never does.
 
 use super::parse::{domain_candidates, from_security_txt, rdap_abuse, registered_domain};
-use crate::case::{Case, Contact, ContactRole, EndpointState};
+use crate::case::{Case, Contact, ContactRole};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::io::Write;
@@ -77,16 +77,8 @@ pub fn find_contacts(
     out: &mut impl Write,
 ) -> Result<()> {
     let mut client = RunCache::new(client);
-    let unreviewed = c
-        .endpoints
-        .iter()
-        .filter(|e| e.state == EndpointState::Unreviewed)
-        .count();
-    if unreviewed > 0 {
-        writeln!(
-            out,
-            "{unreviewed} unreviewed endpoint(s) not looked up; classify them with `case endpoint` first"
-        )?;
+    if let Some(hint) = c.unreviewed_hint() {
+        writeln!(out, "{hint}\n  they are not looked up until classified")?;
     }
     let hosts: Vec<String> = c
         .endpoints
@@ -313,6 +305,10 @@ mod tests {
         );
         let out = String::from_utf8(out).unwrap();
         assert!(out.contains("c3k9q2x7v1[.]oast[.]fun: a relay"), "{out}");
-        assert!(out.contains("1 unreviewed endpoint(s)"), "{out}");
+        assert!(
+            out.contains("1 endpoint(s) are still unreviewed: unsure[.]b[.]example")
+                && out.contains("case endpoint "),
+            "{out}"
+        );
     }
 }

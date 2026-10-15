@@ -603,6 +603,26 @@ fn the_run_summary_gives_priority_alerts_and_model_suggestions() {
 }
 
 #[test]
+fn digests_never_mailed_are_listed_with_a_next_step() {
+    let data = scratch("unmailed");
+    // Nothing mailed yet: the directory does not mail, nothing is listed.
+    let v = app(&data).overview(None, NOW).unwrap();
+    assert_eq!(v["unmailed"], json!([]));
+    std::fs::write(data.join("runs").join(RUN1).join("mailed"), "").unwrap();
+    std::fs::write(
+        data.join("runs").join(RUN2).join("run.json"),
+        json!({ "changed": true, "priority": "medium", "reasons": [], "leads": [] }).to_string(),
+    )
+    .unwrap();
+    let v = app(&data).overview(None, NOW).unwrap();
+    assert_eq!(v["unmailed"][0]["stamp"], RUN2);
+    assert_eq!(v["unmailed"][0]["priority"], "medium");
+    let a = find(&v["actions"], "kind", "mail");
+    assert!(a["command"].as_str().unwrap().ends_with("digest.md"), "{a}");
+    let _ = std::fs::remove_dir_all(data);
+}
+
+#[test]
 fn an_empty_data_directory_says_how_to_start() {
     let data =
         std::env::temp_dir().join(format!("swarmchase-dashboard-empty-{}", std::process::id()));
@@ -615,7 +635,7 @@ fn an_empty_data_directory_says_how_to_start() {
         v["actions"][0]["command"]
             .as_str()
             .unwrap()
-            .starts_with("swarmchase watch -o ")
+            .starts_with("swarmchase watch --init -d ")
     );
     assert_eq!(
         find(&v["health"]["sources"], "name", "ct-relays")["status"],

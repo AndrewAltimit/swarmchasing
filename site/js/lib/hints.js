@@ -25,6 +25,9 @@ export const SOFT_KINDS = {
   ordered_co_target: "ordered rare targets",
   scaffold_lineage: "scaffold lineage",
   prompt_echo: "prompt echo",
+  co_group: "co-group",
+  generator: "identifier generator",
+  playbook: "playbook order",
 };
 
 /** A safe class suffix and a label for a soft-link kind id. */
@@ -143,5 +146,6 @@ export const PLANT_KINDS = {
   too_perfect: "too perfect: significant on many kinds of evidence with nothing ordinary around it",
   habit_mismatch: "habit mismatch: an identifier shared with an earlier cluster that worked differently",
   auto_submitted: "auto-submitted: ordinary links nearby fanned out to the same services, as a mail gateway or security product does",
+  seam: "seam: one record or one client holds together two groups of records that worked differently",
 };
 export const plantLabel = (k) => PLANT_KINDS[k] ?? trunc(String(k ?? "?").replace(/_/g, " "), 60);

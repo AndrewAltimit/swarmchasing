@@ -59,6 +59,7 @@ impl Source for Pypi {
         // the feed or its format changed.
         let items = body.matches("<item>").count() as u64;
         Ok(Page {
+            stopped: None,
             records,
             next: None,
             truncated,

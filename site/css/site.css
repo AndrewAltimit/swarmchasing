@@ -20,6 +20,8 @@
   --surface-1: #fcfcfb;
   --surface-2: #f0efec;
   --border: #dddcd6;
+  /* Form controls' edges: 3:1 or more on every surface (WCAG 1.4.11). */
+  --control-border: #85837c;
   --hairline: rgba(11, 11, 11, 0.10);
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
@@ -60,6 +62,7 @@
     --surface-1: #1a1a19;
     --surface-2: #232321;
     --border: #33332f;
+    --control-border: #75736c;
     --hairline: rgba(255, 255, 255, 0.10);
     --text-primary: #f0efec;
     --text-secondary: #c3c2b7;
@@ -94,6 +97,7 @@
   --surface-1: #1a1a19;
   --surface-2: #232321;
   --border: #33332f;
+  --control-border: #75736c;
   --hairline: rgba(255, 255, 255, 0.10);
   --text-primary: #f0efec;
   --text-secondary: #c3c2b7;
@@ -227,9 +231,11 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 button[aria-busy="true"], button:disabled[aria-busy="true"] { cursor: progress; }
 button.primary, .button.primary { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); font-weight: 600; }
 .button.ghost { border-color: transparent; background: none; color: var(--accent-ink); }
+/* A button that reads as a link in running text (it acts in the page). */
+button.link-button { display: inline; background: none; border: 0; padding: 0; color: var(--accent-ink); text-decoration: underline; font: inherit; line-height: inherit; cursor: pointer; }
 textarea, input, select {
   width: 100%; background: var(--surface-0); color: var(--text-primary);
-  border: 1px solid var(--border); border-radius: 7px; padding: 8px;
+  border: 1px solid var(--control-border); border-radius: 7px; padding: 8px;
   font-family: inherit; font-size: 14px;
 }
 textarea.mono, input.mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace; font-size: 13px; }
@@ -869,9 +875,11 @@ table.layers th[scope="row"] { white-space: nowrap; color: var(--text-primary); 
 .zoom-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 6px; }
 .zoom-tools button { font-size: 12px; padding: 3px 9px; min-width: 30px; }
 .zoom-tools .hint { margin: 0; }
-.chart .brush-area { fill: transparent; cursor: crosshair; }
+/* A horizontal drag zooms on touch too; a vertical one still scrolls the page. */
+.chart .brush-area { fill: transparent; cursor: crosshair; touch-action: pan-y; }
 .chart .brush { fill: var(--band); stroke: var(--band-line); stroke-width: 1; pointer-events: none; }
 .chart .pause, .chart .grid, .chart .lane { pointer-events: none; }
+svg.chart.zoomable { touch-action: pan-y; }
 svg.chart.zoomable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ladder-box { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0 0 12px; background: var(--surface-0); }
 .ladder-box h4 { margin: 0 0 4px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; }
@@ -1054,6 +1062,22 @@ details.on-this-page { display: none; }
 .dropzone .drop-actions { margin: 0 0 8px; }
 .dropzone textarea { background: var(--surface-1); }
 .dropzone #drop-status { margin: 6px 0 0; }
+/* A set of files in place of the text box, and what was read from each. */
+.row label[hidden] { display: none; }
+.file-set { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; overflow-wrap: anywhere; }
+.file-set p { margin: 0 0 4px; }
+.file-set .row { margin-top: 4px; }
+.file-summary { margin: 8px 0; font-size: 13.5px; }
+.file-summary summary { cursor: pointer; font-weight: 600; }
+table.files { min-width: 560px; }
+table.files td.file-name { overflow-wrap: anywhere; min-width: 160px; }
+table.files td.file-note { color: var(--text-secondary); overflow-wrap: anywhere; }
+ul.skipped { margin: 0 0 4px; padding-left: 18px; overflow-wrap: anywhere; }
+/* A running analysis: a bar, the stage with its counts, and Cancel. */
+.run-progress { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 6px 0; font-size: 13.5px; color: var(--text-secondary); }
+.run-progress[hidden] { display: none; }
+.run-progress progress { width: 120px; height: 8px; accent-color: var(--accent); }
+.run-progress .run-stage { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .sub-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .sub-head .pane-sub { margin-bottom: 6px; }
 table.endpoints td.hits { white-space: nowrap; }
@@ -1119,6 +1143,8 @@ table.endpoints td.hits { white-space: nowrap; }
   table.layers td[data-label]::before { content: none; }
   table.layers td:is([data-label="Label"], [data-label="Evidence"], [data-label="Tag"]) { display: inline-block; width: auto; margin-right: 10px; color: var(--text-secondary); }
   table.layers td[data-label="Party"] { font-weight: 600; }
+  /* A file read without a problem has no problem line. */
+  table.files td.file-note:empty { display: none; }
 }
 .conf-pair { white-space: nowrap; }
 

@@ -78,6 +78,9 @@ pub struct SiteInputs {
     /// The build's commit date (`YYYY-MM-DD`): what the feed carries as its
     /// date while it has no entry.
     pub dated: String,
+    /// (repository path, text) of every `schemas/**/*.json`, for the
+    /// schemas index page. The files themselves are published by the build.
+    pub schemas: Vec<(String, String)>,
 }
 
 /// Values every page's shell shows.
@@ -439,6 +442,49 @@ fn tech_article(d: &docs::Doc, base: &str, modified: Option<&str>) -> serde_json
     v
 }
 
+/// A page shell with `notice` after its header when the build holds no
+/// provider's files.
+fn no_files_notice(shell: &str, held: bool, notice: &str) -> String {
+    if held {
+        shell.to_string()
+    } else {
+        shell.replacen("</header>", &format!("</header>{notice}"), 1)
+    }
+}
+
+/// The first sentence of a schema's description, or all of it.
+fn first_sentence(s: &str) -> &str {
+    s.find(". ").map_or(s, |i| &s[..=i])
+}
+
+/// The schemas index: each committed schema by its title, with the first
+/// sentence of its description and a link to the file next to the page.
+fn schemas_page(schemas: &[(String, String)]) -> String {
+    let mut rows = Vec::new();
+    for (path, text) in schemas {
+        let Some(rel) = path.strip_prefix("schemas/") else {
+            continue;
+        };
+        let v: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+        let title = v.get("title").and_then(|t| t.as_str()).unwrap_or(rel);
+        let what = v
+            .get("description")
+            .and_then(|t| t.as_str())
+            .map(first_sentence)
+            .unwrap_or("");
+        rows.push(vec![
+            html::esc(title),
+            html::esc(what),
+            format!("<a href=\"{0}\"><code>{0}</code></a>", html::esc(rel)),
+        ]);
+    }
+    format!(
+        "<header class=\"page-head compact\"><h1>Schemas</h1>\
+<p class=\"lede\">The JSON Schemas of the specs, published as they are committed. The <a href=\"../docs/specs/\">specs</a> say what each format means and how to adopt it.</p></header>{}",
+        html::table("schemas", &["Schema", "What it validates", "File"], &rows)
+    )
+}
+
 /// Every file of the site except the static assets (`site/` is copied as
 /// it is) and the WASM package: (path under the site root, contents).
 /// Refuses when a notice fails its check or an input does not parse.
@@ -719,12 +765,19 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     // No preload: each tool loads its module on first use.
     p.scripts.push("js/pages/tools.js");
     pages.push(p);
+    // Whether the build embedded any provider's range file or key directory:
+    // without one, the identity pages say up front that spoofing cannot be
+    // checked against this build.
+    let held = inp
+        .identity
+        .as_ref()
+        .is_some_and(|s| !s.ranges.is_empty() || !s.directories.is_empty());
     let mut p = page(
         "identity/index.html",
         "identity",
         "Agent identity",
         "Check the AI agents your access log declares against the ranges and keys their providers publish, in the browser.",
-        shells::IDENTITY.to_string(),
+        no_files_notice(shells::IDENTITY, held, shells::NO_PROVIDER_FILES_IDENTITY),
     );
     // No preload: the tools module loads on the first check.
     p.scripts.push("js/pages/identity.js");
@@ -734,7 +787,11 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
         "checklog",
         "Check my logs",
         "For a site operator: check your access log for AI agent activity and spoofed agent identities in the browser, with a plain summary and what to do next.",
-        shells::CHECK_LOGS.to_string(),
+        no_files_notice(
+            shells::CHECK_LOGS,
+            held,
+            shells::NO_PROVIDER_FILES_CHECK_LOGS,
+        ),
     );
     // No preload: the tools module loads on the first sign of input.
     p.scripts.push("js/pages/checklog.js");
@@ -748,6 +805,15 @@ pub fn build_pages(inp: &mut SiteInputs) -> Result<Vec<(String, String)>, String
     );
     p.scripts.push("js/pages/submit.js");
     pages.push(p);
+    if !inp.schemas.is_empty() {
+        pages.push(page(
+            "schemas/index.html",
+            "",
+            "Schemas",
+            "The JSON Schemas of the Swarmchasing specs, as committed: rules, incidents, sightings, submissions and the STIX extension.",
+            schemas_page(&inp.schemas),
+        ));
+    }
     pages.push(page(
         "contact/index.html",
         "",
@@ -906,7 +972,44 @@ mod tests {
                 .into_iter()
                 .collect(),
             dated: "2026-10-02".into(),
+            schemas: vec![(
+                "schemas/sc-rules-v1.json".into(),
+                format!("{{\"title\": \"SC-Rules v1\", \"description\": \"Rules {P}. More.\"}}"),
+            )],
         }
+    }
+
+    #[test]
+    fn identity_pages_say_when_spoofing_cannot_be_checked() {
+        let files = build_pages(&mut inputs()).unwrap();
+        let get = |p: &str| &files.iter().find(|(x, _)| x == p).unwrap().1;
+        for p in ["identity/index.html", "check-logs/index.html"] {
+            assert!(get(p).contains("id=\"no-provider-files\""), "{p}");
+        }
+        let mut with = inputs();
+        let mut snap = crate::identity::Snapshot::default();
+        snap.ranges.insert("r".into(), "{}".into());
+        with.identity = Some(snap);
+        let files = build_pages(&mut with).unwrap();
+        let get = |p: &str| &files.iter().find(|(x, _)| x == p).unwrap().1;
+        for p in ["identity/index.html", "check-logs/index.html"] {
+            assert!(!get(p).contains("no-provider-files"), "{p}");
+        }
+    }
+
+    #[test]
+    fn the_schemas_index_lists_each_schema_escaped() {
+        let files = build_pages(&mut inputs()).unwrap();
+        let page = &files
+            .iter()
+            .find(|(p, _)| p == "schemas/index.html")
+            .unwrap()
+            .1;
+        assert!(page.contains("<a href=\"sc-rules-v1.json\"><code>sc-rules-v1.json</code></a>"));
+        assert!(page.contains("SC-Rules v1"));
+        assert!(page.contains("Rules &lt;script&gt;"));
+        assert!(!page.contains("More."));
+        assert!(!page.contains("<script>alert"));
     }
 
     #[test]
@@ -989,14 +1092,25 @@ mod tests {
     }
 
     #[test]
-    fn check_logs_offers_only_the_files_it_reads() {
-        // The page reads access logs only; records belong in the workbench.
-        let input = shells::CHECK_LOGS
-            .split("id=\"cl-file\"")
-            .nth(1)
-            .and_then(|t| t.split('>').next())
-            .unwrap();
-        assert_eq!(input.trim(), "accept=\".log,.txt\"");
+    fn log_pickers_take_sets_of_files() {
+        // Both pages take several files and a folder. The pickers filter no
+        // extension: rotated logs end in a number (`access.log.1`), and the
+        // page tells an archive from a log by its first bytes.
+        let attrs = |page: &str, id: &str| {
+            page.split(&format!("id=\"{id}\""))
+                .nth(1)
+                .and_then(|t| t.split('>').next())
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        for (page, file, folder) in [
+            (shells::CHECK_LOGS, "cl-file", "cl-folder"),
+            (shells::ANALYZE, "file", "folder"),
+        ] {
+            assert_eq!(attrs(page, file), "multiple");
+            assert_eq!(attrs(page, folder), "webkitdirectory");
+        }
     }
 
     #[test]

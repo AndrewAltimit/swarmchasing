@@ -71,7 +71,9 @@ Linking is measured against reference groupings (records labelled with their tru
 - **False-merge rate**: the share of predicted clusters whose records span more than one true group. This is the error that misattributes, so it is reported on its own.
 - **False-split rate**: the share of true groups spread over more than one predicted cluster.
 
-Toolkit: B-cubed precision, recall and F1, false merges and split runs, reported but not gated ([cluster-level evaluation](../reference/evaluation.md#cluster-level-evaluation)).
+Records of one swarm are linked by design (a shared inbox or tag), so a cluster holding several runs of one labelled swarm is a merge the method intends: it **should** count as right for precision and be listed apart from false merges, with the strict precision kept beside it.
+
+Toolkit: B-cubed precision, recall and F1, false merges, swarm merges and split runs; the eval gate holds a floor on B-cubed F1 ([cluster-level evaluation](../reference/evaluation.md#cluster-level-evaluation)).
 
 ## FM-9.7 Attribution calibration
 

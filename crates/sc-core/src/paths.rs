@@ -23,7 +23,7 @@ use std::sync::OnceLock;
 
 /// Path hint settings and path lists (`[paths]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct PathOptions {
     /// Requests per host that make up its preamble.
     pub preamble_len: usize,

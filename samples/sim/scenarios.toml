@@ -5,6 +5,22 @@
 # the kinds a scenario is built to produce, with bounds set at or just below
 # what it measures; they only go up.
 
+# Every scenario holds these unless its own `expect` sets the key: no
+# person's record in a cluster graded L3 or above, and no benign or tool
+# record graded L2 or above. Scenarios with people pasting payloads or
+# planting records set their own ceilings.
+[defaults]
+expect.human_high = { max_records = 0 }
+expect.benign_high = { max_records = 0 }
+
+# Soft-link kinds the bundled rules give a ratio above 1 that no scenario
+# measures, each with the reason. `sim calibrate --check` fails on any other.
+[calibration.unmeasured]
+preamble = "the generator copies records one by one and writes no run's opening sequence of paths"
+cut_length = "generated requests are never cut at a model's output length"
+header_set = "generated records carry no request headers"
+common_feature = "every generated run gets identifiers of its own, so none is common to many clusters"
+
 [[scenario]]
 name = "sink"
 seed = 11
@@ -120,6 +136,7 @@ name = "planted"
 seed = 61
 seeds = 4
 expect.S1 = { min_precision = 0.33, min_recall = 1.0 }
+expect.human_high = { max_records = 3 }
 [[scenario.actor]]
 kind = "swarm"
 agents = 2
@@ -254,7 +271,8 @@ palette_share = 0.3
 kind = "crawler"
 agents = 40
 records = 60
-# A planner dispatching two workers for hours, beside jobs on the hour.
+# A planner dispatching two workers on one harness for hours, beside jobs
+# on the hour.
 [[scenario]]
 name = "dispatch"
 seed = 121
@@ -269,6 +287,7 @@ modes = ["dispatch"]
 records = 8
 offset_hours = 3
 palette_share = 0.3
+harness = true
 [[scenario.actor]]
 kind = "cron"
 agents = 2
@@ -286,6 +305,7 @@ name = "null-background"
 seed = 201
 seeds = 12
 null = true
+expect.human_high = { max_records = 7 }
 [[scenario.actor]]
 kind = "agent"
 agents = 12
@@ -323,6 +343,7 @@ records = 30
 name = "null-crowd"
 seed = 221
 seeds = 6
+expect.onset_group = { max_pairs = 0 }
 null = true
 span_hours = 24
 [[scenario.actor]]
@@ -422,8 +443,8 @@ name = "fleet-crowd"
 seed = 261
 seeds = 4
 span_hours = 240
-expect.scaffold = { min_precision = 0.92, min_recall = 1.0 }
-expect.candidate_fleet = { min_precision = 0.92, min_recall = 1.0 }
+expect.scaffold = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
 [[scenario.actor]]
 kind = "fleet"
 agents = 3
@@ -498,6 +519,7 @@ palette_share = 0.3
 name = "news-spike"
 seed = 301
 seeds = 4
+expect.onset_group = { max_pairs = 0 }
 [[scenario.actor]]
 kind = "agent"
 agents = 12
@@ -751,3 +773,523 @@ agents = 150
 retry = 0.2
 palette_share = 0.05
 prose = "own"
+
+# One operator rerunning a task: each of three agents walks its host list,
+# then walks it again in the same order the next day from a new client with
+# new tags. The three run together on the first day, and the operator's
+# quota running out stalls them at once, twice. Beside them: feed readers backing
+# off through one outage, an uptime service, and unrelated agents walking
+# one published list in one order over two days, which rerun it as one
+# operator would: the hard negative for the rerun link.
+[[scenario]]
+name = "rerun"
+seed = 371
+seeds = 4
+span_hours = 72
+expect.rerun = { min_precision = 1.0, min_recall = 0.2 }
+expect.shared_pause = { min_precision = 1.0, min_recall = 0.15 }
+expect.candidate_fleet = { min_precision = 1.0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 24
+hosts = 8
+interval_hours = 0
+window_hours = 0.01
+off_hour = true
+rerun_after_hours = 30
+stall_minutes = 200
+[[scenario.actor]]
+kind = "feed_poller"
+agents = 5
+records = 48
+hosts = 4
+[[scenario.actor]]
+kind = "uptime_monitor"
+agents = 4
+records = 60
+hosts = 5
+[[scenario.actor]]
+kind = "news_spike"
+agents = 6
+records = 8
+hosts = 8
+in_order = true
+window_hours = 48
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+# One captured token reused by every run of a fleet, days apart. The hard
+# negative: unrelated agents sending one API's documented demo key, a stock
+# value that must tie nothing.
+[[scenario]]
+name = "shared-secret"
+seed = 381
+seeds = 4
+span_hours = 120
+expect.shared_secret = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+shared_secret = true
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+stock_secret = true
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+# Repositories running one link checker from cloud runners on a cron at the
+# top of the hour, over one published list in sorted order, with one
+# scripted user agent: no two runs related. The checkers alone, so what the
+# null ceilings count here is theirs.
+[[scenario]]
+name = "ci-link-checker"
+seed = 391
+seeds = 4
+null = true
+expect.S3 = { max_pairs = 0 }
+expect.co_target = { max_pairs = 0 }
+expect.ordered_co_target = { max_pairs = 0 }
+expect.candidate_fleet = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "ci_link_checker"
+agents = 30
+records = 12
+hosts = 12
+
+# SEO audit vendors walking one site's sitemap in sitemap order, each
+# sharded over consecutive addresses of its own network.
+[[scenario]]
+name = "seo-crawler"
+seed = 401
+seeds = 4
+expect.ordered_co_target = { max_pairs = 0 }
+expect.S5 = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "seo_crawler"
+agents = 4
+hosts = 24
+window_hours = 6
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+# The sink swarm again, evading: a new run tag on every request and a new
+# client (address, network, user agent) for every request. It measures how
+# linking degrades when only the shared inbox is left. The inbox joins the
+# agents' records into one cluster, so no pair is left for S1 (a strand of
+# one record is left out) or a candidate fleet; what it bounds is the
+# clustering, and no seam on a client that never repeats.
+[[scenario]]
+name = "evasive-swarm"
+seed = 411
+seeds = 4
+expect.clusters = { min_f1 = 0.86 }
+expect.seam = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "swarm"
+agents = 3
+modes = ["sink"]
+records = 8
+tag_scope = "per_request"
+rotate_clients = true
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+[[scenario.actor]]
+kind = "relay_readers"
+agents = 12
+records = 3
+
+# Low and slow: one run whose requests come three to four days apart, past
+# the feature link window, over about two weeks. It measures how such a run
+# splits.
+[[scenario]]
+name = "low-and-slow"
+seed = 421
+seeds = 4
+expect.clusters = { min_f1 = 0.98 }
+span_hours = 336
+[[scenario.actor]]
+kind = "agent"
+agents = 1
+records = 5
+gap_hours = 80
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+
+# An agent of a third operator carrying two other operators' agents' run tags
+# on every record: one client joining two operators' records into one
+# cluster, a seam the plant review names.
+[[scenario]]
+name = "planted-bridge"
+seed = 401
+seeds = 4
+expect.seam = { min_precision = 1.0, min_recall = 0.6 }
+[[scenario.actor]]
+kind = "agent"
+records = 8
+retry = 0.2
+[[scenario.actor]]
+kind = "agent"
+records = 8
+retry = 0.2
+[[scenario.actor]]
+kind = "planter"
+copies = 0
+bridges = [1]
+records = 4
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Fifteen short-lived agents of one operator launched within five minutes,
+# each with its own client, tags and hosts, two or three records each: too
+# few for co-activity or a dispatch star, only their onset ties them.
+[[scenario]]
+name = "swarm-short"
+seed = 411
+seeds = 4
+expect.onset_group = { min_precision = 0.96, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "swarm"
+agents = 15
+modes = ["launch"]
+records = 3
+hosts = 2
+off_hour = true
+offset_hours = 10
+[[scenario.actor]]
+kind = "agent"
+agents = 20
+retry = 0.2
+palette_share = 0.3
+
+# Fifteen unrelated short agents sent to one site within five minutes, as a
+# news story sends them, each working three of its hosts: the hard negative
+# of swarm-short. Their shared site marks one upstream trigger, listed and
+# not kept.
+[[scenario]]
+name = "news-spike-short"
+seed = 421
+seeds = 4
+expect.onset_group = { max_pairs = 0 }
+expect.onset_trigger = {}
+[[scenario.actor]]
+kind = "agent"
+agents = 15
+records = 3
+hosts = 20
+offset_hours = 10
+off_hour = true
+window_hours = 0.08
+same_family = true
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 20
+retry = 0.2
+palette_share = 0.3
+
+# A fleet too large for any pairwise target or harness test, in a crowd: one
+# operator's eight agents on one list of eight sites, each 15 to 20 minutes
+# after the last in its own order, and another operator's eight agents on one
+# harness a day apart, beside 250 unrelated agents. Every site and template
+# has eight holders, past the pairwise caps; the co-group test reads the
+# holder set repeated across features.
+[[scenario]]
+name = "fleet-large"
+seed = 371
+seeds = 4
+span_hours = 240
+expect.co_group = { min_precision = 1.0, min_recall = 0.96 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 0.96 }
+[[scenario.actor]]
+kind = "target_list"
+agents = 8
+records = 10
+hosts = 8
+own_families = true
+offset_hours = 30
+palette_share = 0.3
+[[scenario.actor]]
+kind = "fleet"
+agents = 8
+records = 12
+[[scenario.actor]]
+kind = "agent"
+agents = 250
+retry = 0.2
+palette_share = 0.1
+
+# The co-group test's hard negative: news sends thirty unrelated agents to
+# one site's hosts within a few hours. Many senders on one site are one
+# feature.
+[[scenario]]
+name = "news-spike-large"
+seed = 381
+seeds = 4
+expect.co_group = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "news_spike"
+agents = 30
+records = 6
+hosts = 4
+palette_share = 0.3
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Another hard negative: thirty unrelated operators on one agent framework,
+# its templates and step counter shared and one parameter each picks from a
+# dozen names, so several pick the same one, in a crowd of a hundred agents.
+[[scenario]]
+name = "framework-crowd"
+seed = 391
+seeds = 4
+span_hours = 240
+expect.co_group = { max_pairs = 0 }
+expect.scaffold = { max_pairs = 0 }
+expect.candidate_fleet = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "framework"
+agents = 30
+records = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 100
+retry = 0.2
+palette_share = 0.1
+
+# Three fleets of one harness each giving every agent a fresh run tag: one
+# machine's UUIDv1s (one node id), one skewed clock's ULIDs, one counter's
+# successive numbers. The UUIDv1 and ULID runs mint a fresh tag halfway
+# through, as an agent minting an id per step does; beside unrelated agents tagging the same ways on their
+# own machines, clocks and counters, and agents with random tags.
+[[scenario]]
+name = "fleet-randomtags"
+seed = 401
+seeds = 4
+span_hours = 240
+expect.generator = { min_precision = 1.0, min_recall = 1.0 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+tag_style = "uuid_v1"
+tag_mints = 2
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+tag_style = "ulid"
+tag_mints = 2
+offset_hours = 4
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 8
+tag_style = "counter"
+offset_hours = 8
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+palette_share = 0.3
+tag_style = "uuid_v1"
+tag_mints = 2
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+palette_share = 0.3
+tag_style = "ulid"
+tag_mints = 2
+[[scenario.actor]]
+kind = "agent"
+agents = 4
+retry = 0.2
+palette_share = 0.3
+tag_style = "counter"
+[[scenario.actor]]
+kind = "agent"
+agents = 20
+retry = 0.2
+palette_share = 0.3
+
+# One operator's agents each walking one list of eight sites, sending one
+# harness's four steps in one order on each, with fresh tags, over three
+# weeks, beside two hundred unrelated agents: the playbook ties them where a
+# shared template set would not, because the set is a common default.
+[[scenario]]
+name = "fleet-playbook"
+seed = 431
+seeds = 4
+span_hours = 240
+expect.playbook = { min_precision = 0.9, min_recall = 0.66 }
+expect.candidate_fleet = { min_precision = 0.9, min_recall = 1.0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 3
+records = 32
+hosts = 8
+steps = 4
+playbook = true
+[[scenario.actor]]
+kind = "agent"
+agents = 200
+retry = 0.2
+palette_share = 0.1
+
+# A planner dispatching two workers that each dispatch two workers of their
+# own, over hours off the clock hour: a dispatch tree of three generations,
+# beside jobs on the hour.
+[[scenario]]
+name = "tree-dispatch"
+seed = 451
+seeds = 4
+expect.S6 = { min_precision = 1.0, min_recall = 0.36 }
+[[scenario.actor]]
+kind = "swarm"
+agents = 7
+modes = ["tree_dispatch"]
+records = 8
+offset_hours = 3
+palette_share = 0.3
+[[scenario.actor]]
+kind = "cron"
+agents = 2
+records = 24
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Six unrelated agents watching one feed, each sending one request at its
+# own lag after every item, each to its own hosts, beside jobs on the hour:
+# a look-alike of a dispatcher's workers that shares nothing but timing.
+# Its co-activity proposes no fleet; a reader quick on every item still
+# reads as a dispatcher now and then.
+[[scenario]]
+name = "trigger"
+seed = 461
+seeds = 4
+expect.candidate_fleet = { max_pairs = 0 }
+expect.S6 = { max_pairs = 2 }
+[[scenario.actor]]
+kind = "trigger"
+agents = 6
+records = 8
+offset_hours = 3
+palette_share = 0.3
+[[scenario.actor]]
+kind = "cron"
+agents = 2
+records = 24
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Two operators on one public harness, the second walking its steps in the
+# reverse order, beside two hundred unrelated agents: the template set ties
+# neither to the other.
+[[scenario]]
+name = "playbook-reordered"
+seed = 471
+seeds = 4
+span_hours = 240
+expect.playbook = { max_pairs = 0 }
+expect.candidate_fleet = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 1
+records = 32
+hosts = 8
+steps = 4
+playbook = true
+[[scenario.actor]]
+kind = "fleet"
+agents = 1
+records = 32
+hosts = 8
+steps = 4
+playbook = true
+shape_of = 0
+reverse_steps = true
+offset_hours = 30
+[[scenario.actor]]
+kind = "agent"
+agents = 200
+retry = 0.2
+palette_share = 0.1
+
+# One operator's thirty short sessions on one site over five days, on a
+# scan service, each with its own tag and inbox, from the operator's own
+# few records, beside eighty unrelated agents: no session holds what
+# another holds, and no site or template is rare enough for the pairwise
+# and co-group tests.
+[[scenario]]
+name = "campaign"
+seed = 481
+seeds = 4
+basis = "submit"
+span_hours = 120
+expect.campaign = { min_precision = 1.0, min_recall = 0.31 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 0.31 }
+[[scenario.actor]]
+kind = "campaign"
+agents = 30
+records = 3
+hosts = 4
+palette_share = 0.05
+[[scenario.actor]]
+kind = "agent"
+agents = 80
+records = 4
+retry = 0.2
+palette_share = 0.1
+
+# The campaign's hard negative: forty unrelated agents on one popular site
+# over five days, each drawing its records as the eighty agents elsewhere
+# do.
+[[scenario]]
+name = "campaign-crowd"
+seed = 491
+seeds = 4
+basis = "submit"
+span_hours = 120
+expect.campaign = { max_pairs = 0 }
+expect.candidate_fleet = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "agent"
+agents = 40
+records = 3
+hosts = 4
+same_family = true
+palette_share = 0.1
+[[scenario.actor]]
+kind = "agent"
+agents = 80
+records = 4
+retry = 0.2
+palette_share = 0.1

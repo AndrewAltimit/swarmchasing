@@ -4,8 +4,8 @@
 
 use super::{Audience, Report, touches_exposed};
 use crate::analyze::Cluster;
-use crate::extract::defang;
-use crate::model::{fmt_ts, truncate};
+use crate::extract::{clip_defanged, defang, defang_feature};
+use crate::model::fmt_ts;
 use crate::notice::PublicView;
 use std::fmt::Write;
 
@@ -32,6 +32,20 @@ impl Report<'_> {
         self.fleets(s);
         if matches!(self.opts.audience, Audience::Internal | Audience::Provider) {
             crate::swarm::report_block(s, &self.a.swarm_edges, &|x, y| self.pair_shown(x, y));
+            // A group names every cluster in it: outside case notes, only
+            // a kept group whose clusters the report covers.
+            let internal = self.opts.audience == Audience::Internal;
+            crate::swarm::onset_block(s, &self.a.onset_groups, &|g| {
+                if internal {
+                    g.clusters.iter().any(|c| self.selected(c))
+                } else {
+                    !g.common_trigger && g.clusters.iter().all(|c| self.selected(c))
+                }
+            });
+            // Dispatch trees name every cluster in them: internal notes only.
+            if internal {
+                crate::swarm::dispatch_tree_block(s, &self.a.dispatch_trees, &|c| self.selected(c));
+            }
         }
         self.multiplicity(s);
         self.common_features(s);
@@ -119,7 +133,7 @@ impl Report<'_> {
                     l.b,
                     l.kind.label(),
                     l.strength,
-                    defang(&truncate(&l.detail, 160))
+                    clip_defanged(&defang(&l.detail), 160)
                 );
             }
         }
@@ -160,7 +174,7 @@ impl Report<'_> {
             let _ = writeln!(
                 s,
                 "- `{}`: {} records, {} → {}, {}",
-                defang(&truncate(&c.feature.to_string(), 90)),
+                clip_defanged(&defang_feature(&c.feature.to_string()), 90),
                 c.records,
                 fmt_ts(c.start),
                 fmt_ts(c.end),

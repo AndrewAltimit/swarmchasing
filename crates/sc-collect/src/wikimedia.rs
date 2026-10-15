@@ -547,6 +547,7 @@ impl Source for WikiLinks {
         })?;
         records.truncate(size);
         Ok(Page {
+            stopped: None,
             records,
             next: None,
             truncated: false,

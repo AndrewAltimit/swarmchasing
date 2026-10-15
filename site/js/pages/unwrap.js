@@ -9,8 +9,17 @@ import { engine, host, pageRules } from "../lib/wasm.js";
 // placeholder host, with a request bin as the callback.
 const EXAMPLE = "https://r.jina.ai/https://q0.transit-authority.example/schedule?uqtag=ag2y&hook=https://webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f";
 
-const sc = await engine();
-const rules = await pageRules(sc, $("rules-note"));
+// The engine loads on arrival. The listeners are attached first, so a load
+// that fails leaves the buttons working: each press tries the load again.
+let sc = null;
+let rules = "";
+async function load() {
+  if (sc) return sc;
+  const m = await engine();
+  rules = await pageRules(m, $("rules-note"));
+  sc = m;
+  return sc;
+}
 
 const pill = (tier) => el("span", { class: `pill ${String(tier).replace(/[^a-z]/g, "")}` }, String(tier));
 
@@ -23,7 +32,7 @@ function problem(u) {
 }
 
 /** The score and tier the workbench gives this URL as one record, or null. */
-function graded(u) {
+function graded(sc, u) {
   try {
     const out = JSON.parse(sc.analyze(JSON.stringify([{ id: "unwrap", url: u }]), "json", "", rules));
     return out.analysis?.results?.[0] ?? null;
@@ -32,8 +41,13 @@ function graded(u) {
   }
 }
 
-function run() {
+async function run() {
   const out = $("unwrap-out");
+  try {
+    await load();
+  } catch {
+    return; // the status line says the engine did not load, and to try again
+  }
   const u = $("unwrap-url").value.trim();
   const bad = problem(u);
   if (bad) return showError(out, bad);
@@ -43,7 +57,7 @@ function run() {
   } catch (e) {
     return showError(out, e);
   }
-  const g = graded(u);
+  const g = graded(sc, u);
   const byLayer = {};
   for (const h of x.hits ?? []) (byLayer[h.layer] ??= []).push(h);
   const noHost = !x.target_host && !(x.layers ?? []).some((l) => l.host);
@@ -63,4 +77,11 @@ $("unwrap-url").addEventListener("keydown", (e) => e.key === "Enter" && run());
 $("unwrap-example").addEventListener("click", () => {
   $("unwrap-url").value = EXAMPLE;
   run();
+});
+load().catch(() => {
+  // Let the buttons retry the load: the status line asks the visitor to.
+  for (const b of document.querySelectorAll("[data-needs-engine]")) {
+    b.disabled = false;
+    b.removeAttribute("aria-busy");
+  }
 });

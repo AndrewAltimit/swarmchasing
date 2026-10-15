@@ -80,7 +80,9 @@ Collectors read indexes and public records only. They never open a capture or a 
 | `collect wellknown <hosts>` | Wayback index rows for agent footprints (agent cards, agent registration files, signature key directories) under `\|`-separated hosts or `*.domain`s. The files are never fetched. |
 | `collect mcp <substrings>` | Official MCP Registry servers whose name or declared URLs match (`*` for all), updated since `--from`. Metadata only; no server is contacted. |
 | `asn fetch`, `asn lookup <ip>…` | The offline IP-to-ASN table in `<data>/asn/`. |
+| `netranges fetch`, `netranges status`, `netranges lookup <ip>…` | Cloud providers' published address ranges and the Tor exit list in `<data>/netranges/` ([network ranges](../../docs/reference/watch.md#network-ranges)). |
 | `identity refresh`, `identity status`, `identity check <input>` | Providers' published agent ranges and keys in `<data>/identity/`, and each record's declared identity: verified, spoofed or claimed ([identity](../../docs/reference/identity.md)). |
+| `identity reference [--offline]` | User-agent tokens the ai.robots.txt list names that `declared-agents.toml` lacks, as candidates for review; never edits the catalog. |
 | `collect urlquery-reports <ids> -o <out>` | Fetches urlquery reports by ID, or every ID in a labels file such as Transluce's `reports.csv`. Appends to `--out` and skips IDs already there; `--sample N` caps the agent-labelled reports. |
 | `certs <query>` | Certificate Transparency lookup via crt.sh, e.g. `'%.example.com'`. |
 | `contact <domain>` | The domain's RFC 9116 security.txt contact. |
@@ -96,17 +98,17 @@ scripts/with-env.sh swarmchase collect urlquery r.jina.ai --from 20260901 -o dat
 | Command | What it does |
 |---|---|
 | `watch [watchlist.toml]` | Pulls what is new from every source in the watchlist, analyses the recent window and writes a digest of what changed into `<data>/runs/<stamp>/digest.md`, with a machine-readable `run.json` beside it. Options (`--init`, `--check`, `--only`, `--triage`, `--public-log`) and the `reset` and `prune-cache` subcommands: [Watch runs](../../docs/reference/watch.md). |
-| `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements; `--suggest`, `--serve` and `--export-hosted` add suggestions and a local page. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
+| `review` | Steps through recent watch leads and asks for a label (`a` agent, `b` benign, `u` unsure, `s` skip, `q` quit; `c` opens a case). `--unflagged N` adds a sample of unflagged records; `--list` prints the queue; `--stats` counts reviews and disagreements (`--stats --json` as one JSON document); `--suggest`, `--serve` and `--export-hosted` add suggestions and a local page. Details: [Reviewing leads](../../docs/reference/watch.md#reviewing-leads). |
 | `review agreement`, `misfires`, `check-suggestions`, `suggest-claude` | Compare model suggestions with the admin's labels, list rules that fire on benign records, validate a suggestions file, and ask Claude Code for suggestions on an export. Details: [AI assistance](../../docs/guides/ai-assistance.md). |
 | `dashboard` | A read-only local page of the attention queue, what is new since you last looked, an activity timeline, a link graph of soft links, interaction and candidate fleets, source health and rule drift, the review queue, open cases and the autonomy record, with the command for each next step. `--json` prints the same overview. Details: [The dashboard](../../docs/reference/watch.md#the-dashboard). |
 | `platform-swarms <events>…` | Candidate coordinated-account swarms in platform events (the watch's carried events, fixtures, or GH Archive hour files with `--gharchive`), defanged; `--json` for the full report. Hints, never findings. Details: [Platform swarms](../../docs/reference/watch.md#platform-swarms). |
 | `review sample` | Writes a stratified, seeded sample of low-tier records as a queue for a [reviewed benign baseline](../../docs/reference/evaluation.md#a-reviewed-benign-baseline); `review <queue> --all` labels it. |
-| `eval <input>…` | Precision and recall of the rules on labelled records, per record and per cluster, for all and for non-synthetic records. With `--min-*` floors set it exits non-zero when one is not met, which is how CI gates rules changes. `--before <date>` runs a pre-agent negative control instead. Details: [Evaluation](../../docs/reference/evaluation.md). |
+| `eval <input>…` | Precision and recall of the rules on labelled records, per record and per cluster, for all and for non-synthetic records. With `--min-*` floors set it exits 3 when one is not met, which is how CI gates rules changes; `--json-out <file>` writes the full result. `--before <date>` runs a pre-agent negative control instead. Details: [Evaluation](../../docs/reference/evaluation.md). |
 | `eval repro`, `eval check-results`, `eval export-bench` | Measure a saved result again; check the committed results; write an SC-Bench file (`eval --bench` scores one). |
 | `eval ids-hash <file>…` | A split's membership hash, for an id list or a record file; `eval --expect-ids-sha256` checks it ([frozen splits](../../docs/reference/evaluation.md#frozen-splits)). |
 | `sim write <scenarios> -o <dir>` | Simulated labelled records, one NDJSON file per scenario and seed ([simulated scenarios](../../docs/reference/evaluation.md#simulated-scenarios)). |
-| `sim bench <scenarios>` | Generate, analyse and measure every scenario; per scenario and summed, `--total` for the sum only, `--json` to save. `--min-*` floors and `--max-null-*` ceilings make it a gate ([simulator bounds](../../docs/reference/evaluation.md#simulator-bounds)). |
-| `sim calibrate <scenarios>` | Each soft-link kind's likelihood ratio from simulated truth, beside the ratio the rules set. Report only. |
+| `sim bench <scenarios>` | Generate, analyse and measure every scenario; per scenario and summed, `--total` for the sum only, `--json-out <file>` to save. `--min-*` floors and `--max-null-*` ceilings make it a gate ([simulator bounds](../../docs/reference/evaluation.md#simulator-bounds)); `--calibrate-check` adds the calibration check on the same records, `--detect-checkpoints N` the time to L2 or a candidate fleet. |
+| `sim calibrate <scenarios>` | Each soft-link kind's likelihood ratio from simulated truth, beside the ratio the rules set. `--check` fails on a ratio above its bound or unmeasured without a reason. |
 | `sim score <input>…` | Interaction edges, soft links, candidate fleets and agent grades against labelled true runs, swarms and fleets ([swarm and fleet measurement](../../docs/reference/evaluation.md#swarm-and-fleet-measurement)). Report only. |
 
 ```sh
@@ -178,7 +180,7 @@ Details: [Notices](../../docs/reference/notices.md).
 
 | Variable | Used for |
 |---|---|
-| `SWARMCHASE_DATA` | The data directory (`--out` / `--data`, default `data/`): watch state and store, labels, cases. Gitignored. |
+| `SWARMCHASE_DATA` | The data directory (`--data` or `-d`, default `data/`): watch state and store, labels, cases. Gitignored. |
 | `SWARMCHASE_ADMIN` | The admin name `case new` records; else `git config user.name`. |
 | `URLQUERY_APIKEY` | urlquery.net collectors. Without it, `watch` skips urlquery sources and says so. |
 | `URLSCAN_APIKEY` | Optional key for `collect urlscan`. |
@@ -191,7 +193,15 @@ Keep secrets in `env.list` (gitignored) and run with [`scripts/with-env.sh`](../
 
 ## Exit status
 
-Non-zero on an error, when `eval` misses a floor, when `case verify` finds a difference, and when `notice lint` or `notice add` finds a problem.
+| Code | Meaning |
+|---|---|
+| 0 | The command did what it was asked. |
+| 1 | An error, including `case verify` finding a difference and `notice lint` or `notice add` finding a problem. |
+| 2 | A usage error: an unknown flag, a missing argument or a bad value, from the command line or the environment. |
+| 3 | `eval`, `sim bench` or `sim calibrate --check`: the command ran, and a floor, ceiling or bound was not met. |
+| 4 | `watch`: the run finished and wrote its digest, and the digest carries alerts. |
+
+A watch run that fails after its digest, or in which no source could run or every source failed, exits 1, not 4. The watch workflow treats 4 as a finished run and every other non-zero code as a failure ([runner](../../docs/reference/runner.md#watchyml)), and [`eval-gate.sh`](../../scripts/ci/eval-gate.sh) passes the code through.
 
 ## Tests
 
@@ -208,9 +218,9 @@ Unit tests sit beside the code. [`tests/`](tests/integration.rs) runs the built 
 | [`lib.rs`](src/lib.rs) | Argument parsing and dispatch; [`main.rs`](src/main.rs) calls it. |
 | [`commands/`](src/commands/mod.rs) | The analysis, collect and lookup commands, one module each. |
 | [`input.rs`](src/input.rs) | Reading records and rules for the analysis commands. |
-| [`store.rs`](src/store.rs) | The watch record store, retention, JSON and NDJSON files. |
+| [`store.rs`](src/store.rs) | The data directory's files: the partitioned record store ([`records.rs`](src/store/records.rs)) and its migration from the older layout ([`migrate.rs`](src/store/migrate.rs)), retention, JSON and NDJSON files, the data lock. |
 | [`util.rs`](src/util.rs) | Output and text helpers, the urlquery key. |
-| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors ([`pull.rs`](src/watch/pull.rs)), the digest ([`digest.rs`](src/watch/digest.rs)), case monitoring and proposals ([`cases.rs`](src/watch/cases.rs)), the digest priority ([`priority.rs`](src/watch/priority.rs)), the ledger ([`ledger.rs`](src/watch/ledger.rs)), the attention queue ([`attention.rs`](src/watch/attention.rs)), shadow autonomy ([`autonomy.rs`](src/watch/autonomy.rs)), local model triage ([`triage.rs`](src/watch/triage.rs)), the run summary ([`run_summary.rs`](src/watch/run_summary.rs)), phase timing ([`timing.rs`](src/watch/timing.rs)), the public log ([`public_log.rs`](src/watch/public_log.rs)) and the strict watchlist check ([`check.rs`](src/watch/check.rs)). |
+| [`watch/`](src/watch/mod.rs) | The incremental watch: pulls and cursors (`pull.rs`), the digest (`digest.rs`), case monitoring and proposals (`cases.rs`), digest priority (`priority.rs`), ledger (`ledger.rs`), attention queue (`attention.rs`), shadow autonomy (`autonomy.rs`), model triage (`triage.rs`), slice onsets (`onset.rs`), run summary (`run_summary.rs`), phase timing (`timing.rs`), public log (`public_log.rs`), unmailed digests (`mailed.rs`) and strict watchlist check (`check.rs`), all in `src/watch/`. |
 | [`health.rs`](src/health.rs) | Source and rule health checks in the digest. |
 | [`review/`](src/review/mod.rs) | Interactive labelling; the local review page ([`serve.rs`](src/review/serve.rs)); hosted suggestions ([`hosted.rs`](src/review/hosted.rs)); suggestion agreement and rule misfires ([`agreement.rs`](src/review/agreement.rs), [`misfires.rs`](src/review/misfires.rs)); the benign-baseline sampler ([`sample.rs`](src/review/sample.rs)). |
 | [`localui/`](src/localui/mod.rs) | The admin's local pages: server, security checks, shared style and helpers. |

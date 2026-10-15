@@ -283,11 +283,18 @@ pub fn overview(i: &Inputs) -> Result<Value> {
     let mut actions: Vec<Value> = Vec::new();
 
     let Some(latest) = latest else {
+        // A directory with no data at all needs --init: the watch refuses
+        // one without it.
+        let init = if crate::store::has_data(data) {
+            ""
+        } else {
+            " --init"
+        };
         actions.push(json!({
             "kind": "watch",
             "title": "No watch run in this data directory yet",
             "detail": "Run the watch once; it writes state.json, the store and a run directory here.",
-            "command": format!("swarmchase watch -o {d}"),
+            "command": format!("swarmchase watch{init} -d {d}"),
         }));
         return Ok(json!({
             "schema": SCHEMA,
@@ -349,12 +356,36 @@ pub fn overview(i: &Inputs) -> Result<Value> {
         "triage": summary.as_ref().map_or(Value::Null, |s| s["triage"].clone()),
         "suggestions": summary.as_ref().map_or(Value::Null, |s| suggestions(&s["leads"])),
     });
+    // Changed runs whose digest never reached the admin.
+    let listed = crate::watch::mailed::unmailed_all(data, state.last_mailed.as_deref());
+    let unmailed_total = listed.total();
+    let unmailed: Vec<Value> = listed
+        .runs
+        .into_iter()
+        .map(|u| {
+            json!({
+                "stamp": u.stamp,
+                "priority": u.priority,
+                "reasons": u.reasons,
+                "leads": u.leads,
+                "digest": shell_path(&data.join("runs").join(&u.stamp).join("digest.md")),
+            })
+        })
+        .collect();
+    if let Some(first) = unmailed.first() {
+        actions.push(json!({
+            "kind": "mail",
+            "title": format!("{unmailed_total} digest(s) were never mailed"),
+            "detail": "Changed runs whose digest was not delivered (no mail setup, a refused send or a cancelled job). The next digest folds them in; read the first here.",
+            "command": format!("cat {}", first["digest"].as_str().unwrap_or("")),
+        }));
+    }
     if age_hours >= STALE_HOURS {
         actions.push(json!({
             "kind": "watch",
             "title": format!("The latest watch run is {age_hours} hours old"),
             "detail": "The scheduled watch runs every six hours; check the workflow or run it by hand.",
-            "command": format!("swarmchase watch -o {d}"),
+            "command": format!("swarmchase watch -d {d}"),
         }));
     }
 
@@ -413,7 +444,7 @@ pub fn overview(i: &Inputs) -> Result<Value> {
                 "kind": "health",
                 "title": format!("Source {} is failing", s["name"].as_str().unwrap_or("")),
                 "detail": format!("{} ({} runs in a row). Lost meanwhile: {}.", s["reason"].as_str().unwrap_or("error"), s["errors_in_row"], s["lost"].as_str().unwrap_or("its records")),
-                "command": format!("swarmchase watch -o {d}"),
+                "command": format!("swarmchase watch -d {d}"),
             }));
         }
     }
@@ -496,6 +527,7 @@ pub fn overview(i: &Inputs) -> Result<Value> {
         "autonomy": autonomy,
         "health": health,
         "waiting": waiting,
+        "unmailed": unmailed,
         "actions": actions,
     }))
 }

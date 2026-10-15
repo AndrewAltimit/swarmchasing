@@ -7,4 +7,5 @@
 
 mod conformance;
 mod golden;
+mod rules_history;
 mod snapshot;

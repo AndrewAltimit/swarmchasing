@@ -9,7 +9,7 @@ use std::fmt::Write;
 /// same-origin scripts, styles and the WASM module run, nothing is sent
 /// anywhere, and Trusted Types make every HTML and script sink refuse a
 /// plain string (the page scripts use none). `scripts/ci/check-site.py` checks it on every page.
-pub const CSP: &str = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'";
+pub const CSP: &str = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; img-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'";
 
 /// One entry of a nav group: (key, label, path under the site root, what
 /// it is).

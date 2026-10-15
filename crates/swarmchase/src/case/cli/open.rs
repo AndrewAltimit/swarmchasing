@@ -4,7 +4,7 @@
 use super::Ctx;
 use crate::case::select::{Selection, select};
 use crate::case::status::{list as list_cases, status as show_case};
-use crate::case::{CaseStatus, NoticeStatus, add_records, new_case, update};
+use crate::case::{CaseStatus, NoticeStatus, add_records, admin_name, open_case, update};
 use crate::pinning::{RulesText, rules_cmd};
 use anyhow::Result;
 use clap::Args;
@@ -54,16 +54,18 @@ pub struct SetArgs {
 
 pub(super) fn new(ctx: &Ctx, a: NewArgs, out: &mut impl Write) -> Result<()> {
     let (rules, records) = select(&ctx.data, &a.sel, ctx.now)?;
-    let an = new_case(&ctx.root, &a.id, &a.title, records, &rules, &ctx.today)?;
-    match admin_name() {
-        Some(name) => update(&ctx.root, &a.id, |c| {
-            Ok(sc_case::review::set_admin(c, &name, &ctx.today)?)
-        })?,
-        None => eprintln!(
-            "warning: no admin recorded (set SWARMCHASE_ADMIN or `git config user.name`); `swarmchase case set {} --admin \"<name>\"` before the second review",
-            a.id
-        ),
-    }
+    // A watch reads the cases; never let it see one half written.
+    let lock = crate::store::lock_data(&ctx.data, "case new")?;
+    let an = open_case(
+        &ctx.root,
+        &a.id,
+        &a.title,
+        records,
+        &rules,
+        &ctx.today,
+        admin_name().as_deref(),
+    )?;
+    drop(lock);
     println!(
         "opened {} ({} records)",
         ctx.root.join(&a.id).display(),
@@ -72,31 +74,20 @@ pub(super) fn new(ctx: &Ctx, a: NewArgs, out: &mut impl Write) -> Result<()> {
     show_case(&ctx.root, &a.id, out)
 }
 
-/// The admin's name for a new case: `SWARMCHASE_ADMIN`, else `git config
-/// user.name`.
-fn admin_name() -> Option<String> {
-    let given = |s: String| Some(s.trim().to_string()).filter(|s| !s.is_empty());
-    std::env::var("SWARMCHASE_ADMIN")
-        .ok()
-        .and_then(given)
-        .or_else(|| {
-            let o = std::process::Command::new("git")
-                .args(["config", "user.name"])
-                .output()
-                .ok()
-                .filter(|o| o.status.success())?;
-            given(String::from_utf8_lossy(&o.stdout).into_owned())
-        })
-}
-
 pub(super) fn add(ctx: &Ctx, a: AddArgs) -> Result<()> {
     let (_, records) = select(&ctx.data, &a.sel, ctx.now)?;
+    let _lock = crate::store::lock_data(&ctx.data, "case add")?;
     let (added, hosts) = add_records(&ctx.root, &a.id, records, &ctx.today)?;
     println!("added {added} record(s), {hosts} new endpoint(s)");
     Ok(())
 }
 
-pub(super) fn status(ctx: &Ctx, id: Option<&str>, out: &mut impl Write) -> Result<()> {
+pub(super) fn status(ctx: &Ctx, id: Option<&str>, json: bool, out: &mut impl Write) -> Result<()> {
+    if json {
+        let v = crate::case::status::json(&ctx.root, id)?;
+        writeln!(out, "{}", serde_json::to_string_pretty(&v)?)?;
+        return Ok(());
+    }
     match id {
         None => list_cases(&ctx.root, out),
         Some(id) => show_case(&ctx.root, id, out),

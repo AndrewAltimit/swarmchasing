@@ -9,7 +9,7 @@
 
 use crate::util::one_line;
 use crate::watch::attention::Queue;
-use sc_core::{Analysis, Tier, defang, defang_host};
+use sc_core::{Analysis, Tier, defang_host, defang_hosts};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,39 +18,10 @@ pub const NODES: usize = 60;
 /// Characters kept of a link's detail.
 const DETAIL: usize = 160;
 
-/// Text made safe to show: URLs defanged as reports do, then any bare host
-/// name left (`a.example`) written `a[.]example`. A run of letters, digits,
-/// dots and hyphens counts as a host when its labels are all non-empty and
-/// its last is letters, so `0.52` stays as it is.
+/// Text made safe to show and cut to one line: URLs and bare hosts
+/// defanged as [`sc_core::defang_hosts`] does.
 pub fn defang_text(s: &str) -> String {
-    let s = defang(&one_line(s, DETAIL));
-    let hosty = |c: char| c.is_ascii_alphanumeric() || c == '.' || c == '-';
-    let mut out = String::with_capacity(s.len());
-    let mut word = String::new();
-    let flush = |word: &mut String, out: &mut String| {
-        let labels: Vec<&str> = word.split('.').collect();
-        let host = labels.len() > 1
-            && labels.iter().all(|l| !l.is_empty())
-            && labels
-                .last()
-                .is_some_and(|l| l.len() > 1 && l.chars().all(|c| c.is_ascii_alphabetic()));
-        out.push_str(&if host {
-            defang_host(word)
-        } else {
-            word.clone()
-        });
-        word.clear();
-    };
-    for c in s.chars() {
-        if hosty(c) {
-            word.push(c);
-        } else {
-            flush(&mut word, &mut out);
-            out.push(c);
-        }
-    }
-    flush(&mut word, &mut out);
-    out
+    defang_hosts(&one_line(s, DETAIL))
 }
 
 #[derive(Default)]
@@ -81,7 +52,7 @@ pub fn graph(a: &Analysis, q: Option<&Queue>) -> Value {
             (y.to_string(), x.to_string())
         }
     };
-    let evidence = sc_core::fleets::pair_evidence(&a.soft_links);
+    let evidence = a.pair_evidence();
     for l in &a.soft_links {
         if !ids.contains(l.a.as_str()) || !ids.contains(l.b.as_str()) {
             continue;
@@ -95,7 +66,7 @@ pub fn graph(a: &Analysis, q: Option<&Queue>) -> Value {
         p.soft.push(json!({
             "kind": l.kind,
             "label": l.kind.label(),
-            "family": l.kind.family().label(),
+            "family": l.family().label(),
             "strength": round2(l.strength),
             "lr": round2(l.lr),
             "detail": defang_text(&l.detail),
@@ -258,7 +229,7 @@ mod tests {
         let links = g["links"].as_array().unwrap();
         assert_eq!(links.len(), 1, "{g}");
         let l = &links[0];
-        let e = sc_core::fleets::pair_evidence(&a.soft_links);
+        let e = a.pair_evidence();
         let lr = e.values().next().unwrap().lr;
         assert_eq!(l["soft_strength"], round2(sc_core::fleets::strength_of(lr)));
         assert_eq!(l["soft_lr"], round2(lr));

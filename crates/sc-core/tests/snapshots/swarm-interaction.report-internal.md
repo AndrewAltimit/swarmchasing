@@ -6,7 +6,7 @@
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-03-12 16:34:00 UTC
 - **Records:** 38 linked public records in 7 cluster(s) (of 38 records reviewed, 38 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.5
 
 ## Summary
 
@@ -104,7 +104,7 @@ Every flagged request to each host, including requests outside the linked cluste
 
 - **C1** (significant): 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
   - artifacts: 6 of 6 records carry a trace of how the agent was built (model-output residue, run tags, self-identification, client headers)
-  - linked by: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
+  - linked by: `exfil.webhook_site:webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
   - provenance: unknown 6 · single source
   - scope: scope exceeded · task class data retrieval; failed: S6 (data was sent to a callback inbox or side channel); S7 (an interaction edge ties this cluster's runs to another's while S6 fails)
 - **C2** (significant): 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
@@ -145,7 +145,7 @@ Every flagged request to each host, including requests outside the linked cluste
 For each cluster, the window to search, what its times measure, and the strings to look for in your request or response logs. A string here and a time inside the window together are the strongest join we can offer; the network a request came from may be a proxy.
 
 - **C1**: 2026-03-09 09:00:00 UTC to 2026-03-09 09:05:00 UTC, times of unknown kind
-  - identifiers: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
+  - identifiers: `exfil.webhook_site:webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
 - **C2**: 2026-03-12 16:30:00 UTC to 2026-03-12 16:34:00 UTC, times of unknown kind
   - identifiers: `param:uqtag=hit88q`
 - **C3**: 2026-03-05 14:25:00 UTC to 2026-03-05 14:27:30 UTC, times of unknown kind

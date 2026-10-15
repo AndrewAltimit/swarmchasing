@@ -206,9 +206,11 @@ fn render(a: &Analysis, opts: &ReportOptions, mut view: Option<&mut PublicView>)
         .clusters
         .iter()
         .fold(Vec::new(), |acc, c| merge(acc, &attribute(a, c)));
+    let tor = r.clusters.iter().map(|c| c.hosting.tor.len()).sum();
     attribution_section(
         &mut s,
         &merge(claims, &opts.claims),
+        tor,
         opts,
         r.clusters.len() == 1,
     );

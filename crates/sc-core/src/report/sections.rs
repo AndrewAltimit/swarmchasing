@@ -16,18 +16,24 @@ use std::fmt::Write;
 /// audiences see a developer named only at or above `opts.min_named`. Harness
 /// and model-family candidates are listed as ranked candidates in private
 /// reports and never in public.
+///
+/// `tor` counts the records sent through Tor exit relays. They are in no
+/// claim; private reports say so in a caution, and a public notice leaves
+/// them out of its attribution altogether.
 pub(super) fn attribution_section(
     s: &mut String,
     claims: &[Claim],
+    tor: usize,
     opts: &ReportOptions,
     one: bool,
 ) {
-    if claims.is_empty() {
+    let public = opts.audience == Audience::Public;
+    let caution = tor > 0 && !public;
+    if claims.is_empty() && !caution {
         return;
     }
     let min = opts.min_named.max(Evidence::FLOOR);
     let internal = opts.audience == Audience::Internal;
-    let public = opts.audience == Audience::Public;
     let _ = writeln!(s, "## Attribution\n");
     let _ = writeln!(
         s,
@@ -82,6 +88,9 @@ pub(super) fn attribution_section(
         );
     }
     let _ = writeln!(s);
+    if caution {
+        let _ = writeln!(s, "**Caution.** {}\n", crate::attribution::tor_caution(tor));
+    }
     if candidates > 0 && !public {
         candidate_lists(s, claims);
     }

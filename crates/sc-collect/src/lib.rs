@@ -4,7 +4,7 @@
 //! - Read **indexes and public records only** (CDX listings, scan-service
 //!   search results, CT log entries, registry and event-stream metadata,
 //!   wiki edit streams, Hacker News and Bluesky posts, GitHub search results,
-//!   code-host project listings, security.txt). Never download archived content, package code or WARC data.
+//!   code-host project listings, skill registry listings, security.txt). Never download archived content, package code or WARC data.
 //!   Never open captured pages or the URLs agents submitted: they may be live
 //!   exploit payloads or trigger callbacks to the operator.
 //! - Never read or write agent callback channels (inboxes, ntfy topics, pastes).
@@ -19,7 +19,8 @@
 //! security.txt and RDAP are single lookups on the client, and [`lookup`]
 //! finds single records by id. [`psl`] finds a
 //! host's registrable domain, and [`asn`] fetches and loads the offline
-//! IP-to-ASN table. [`identity`] fetches the range files and key
+//! IP-to-ASN table, and [`netranges`] the cloud providers' published
+//! address ranges and the Tor exit list. [`identity`] fetches the range files and key
 //! directories providers publish for their own agents.
 
 use anyhow::Result;
@@ -29,6 +30,7 @@ mod arquivo;
 pub mod asn;
 pub mod bluesky;
 mod cache;
+pub mod clawhub;
 mod client;
 mod commoncrawl;
 mod crtsh;
@@ -42,7 +44,9 @@ pub mod identity;
 pub mod lookup;
 mod mcp;
 mod memento;
+pub mod netranges;
 mod npm;
+pub mod openvsx;
 pub mod osv;
 pub mod pager;
 pub mod platform;
@@ -61,6 +65,7 @@ pub mod wikimedia;
 pub use arquivo::{Arquivo, parse_arquivo_cdx};
 pub use bluesky::BskyLinks;
 pub use cache::{CacheStats, prune_http_cache, temp_path, write_atomic};
+pub use clawhub::ClawHub;
 pub use client::{Client, DEFAULT_MAX_BODY, Retry, USER_AGENT, parse_retry_after};
 pub use commoncrawl::{CommonCrawl, parse_cc_cdx, parse_collinfo};
 pub use crtsh::CertRecord;
@@ -178,10 +183,11 @@ pub enum Kind {
     HackerNews,
     Bluesky,
     GhSearch,
+    ClawHub,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 16] = [
+    pub const ALL: [Kind; 17] = [
         Self::Wayback,
         Self::Arquivo,
         Self::Urlquery,
@@ -198,6 +204,7 @@ impl Kind {
         Self::HackerNews,
         Self::Bluesky,
         Self::GhSearch,
+        Self::ClawHub,
     ];
 
     pub fn name(self) -> &'static str {
@@ -218,6 +225,7 @@ impl Kind {
             Self::HackerNews => "hackernews",
             Self::Bluesky => "bluesky",
             Self::GhSearch => "ghsearch",
+            Self::ClawHub => "clawhub",
         }
     }
 
@@ -351,6 +359,7 @@ pub fn source(kind: Kind, query: CdxQuery, api_key: Option<String>) -> Result<Bo
         Kind::Wikimedia => Box::new(WikiLinks::new(query)?),
         Kind::HackerNews => Box::new(HnLinks { query }),
         Kind::Bluesky => Box::new(BskyLinks::new(query)?),
+        Kind::ClawHub => Box::new(ClawHub { query }),
         Kind::GhSearch => Box::new(GhSearch::new(
             query,
             api_key.ok_or_else(|| anyhow::anyhow!("ghsearch needs a GitHub token"))?,

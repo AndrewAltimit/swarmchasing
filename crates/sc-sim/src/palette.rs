@@ -72,6 +72,10 @@ pub struct Template {
     pub features: Vec<LinkFeature>,
     /// A rule fires on it as written.
     pub flagged: bool,
+    /// Its playbook step ([`sc_core::playbook::step`]) for an attack
+    /// template: what a playbook's order is read on, so two templates of
+    /// one step are one step in an order.
+    pub step: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -143,8 +147,18 @@ impl Palette {
             ("", "tool" | "scanner") => Use::Tool,
             _ => return,
         };
+        let step = (usage == Use::Attack)
+            .then(|| {
+                let a = sc_core::analyze(vec![obs.clone()], rules);
+                a.results
+                    .first()
+                    .and_then(|r| sc_core::playbook::step(r, 0))
+                    .map(|s| s.0)
+            })
+            .flatten();
         self.by_use.entry(usage).or_default().push(Template {
             origin: format!("{file}/{}", obs.id),
+            step,
             host,
             class: class.to_string(),
             flagged: !ex.hits.is_empty(),

@@ -9,7 +9,8 @@
 #     can end up queued behind the slow ones.
 #   - `ci` runs the same steps on pull requests, pushes to main and manual
 #     dispatch: fmt, clippy, tests, the detection eval gate, notice lint and a
-#     wasm32 type-check. A green PR means the tests passed.
+#     wasm32 type-check. A green PR means the tests passed. A change to
+#     Markdown alone (notices/ excepted) runs only the tests that read docs.
 #   - Pull requests from forks run NOTHING. The runner is a self-hosted box
 #     shared with other workloads, and a fork PR is arbitrary code. Also turn
 #     on Settings > Actions > "Require approval for all outside collaborators".
@@ -97,6 +98,16 @@ jobs:
       - name: Site safety (CSP, no HTML sinks)
         run: python3 scripts/ci/check-site.py
 
+      # The archive reader the log pages unpack sets of logs with, on
+      # synthetic archives built at run time.
+      - name: Site archive reader
+        run: |
+          if command -v node >/dev/null 2>&1; then
+            node scripts/ci/check-archive.mjs
+          else
+            echo "::warning::node not found; archive reader tests skipped"
+          fi
+
       # A tag a notice prints is public and anyone can copy it, so it must be
       # in [linking] published_tags or it would still link clusters.
       - name: Published tags (burned identifiers)
@@ -131,38 +142,84 @@ jobs:
       - name: Select per-toolchain target dir
         run: scripts/ci/select-ci-target-dir.sh
 
+      # Whether this change can affect a cargo step. Only Markdown outside
+      # notices/ counts as docs: notices, the watchlist, rules, samples,
+      # schemas, workflows and scripts all run the full job. A push or PR
+      # that changes docs alone runs the tests of the two crates that read
+      # docs (sc-core embeds the Field Manual and the spec vectors; sc-publish
+      # builds the checkout's pages) instead of the whole workspace. Anything
+      # unclear (a manual dispatch, a new branch, a base that cannot be
+      # fetched, an empty diff) runs everything. `--no-renames` lists a
+      # renamed file under its old path as well as its new one, so renaming a
+      # .rs file to a .md one is not mistaken for a docs-only change.
+      - name: Changed paths
+        id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          code=true
+          case "$EVENT" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="$BEFORE" ;;
+            *) base="" ;;
+          esac
+          if [[ "$base" =~ ^[0-9a-f]{40}$ && "$base" != 0000000000000000000000000000000000000000 ]] \
+             && git fetch -q --depth=1 origin "$base" 2>/dev/null \
+             && files="$(git diff --no-renames --name-only "$base" HEAD)" && [ -n "$files" ]; then
+            if ! grep -qvE '\.md$' <<<"$files" && ! grep -q '^notices/' <<<"$files"; then
+              code=false
+            fi
+            echo "changed files:"; echo "$files"
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "cargo steps: $([ "$code" = true ] && echo all || echo 'docs only: sc-core and sc-publish tests')"
+
+      - name: Tests that read docs (docs-only change)
+        if: steps.paths.outputs.code != 'true'
+        run: cargo test --profile release-test -p sc-core -p sc-publish
+
       - name: Format check
+        if: steps.paths.outputs.code == 'true'
         run: cargo fmt --all -- --check
 
       - name: Clippy
+        if: steps.paths.outputs.code == 'true'
         run: cargo clippy --all-targets --workspace -- -D warnings
 
       # `release-test` is release optimisation without fat LTO (Cargo.toml).
       # The eval gate and notice lint below reuse its build, so the profile
       # is compiled once per run.
       - name: Test
+        if: steps.paths.outputs.code == 'true'
         run: cargo test --workspace --profile release-test
 
       # Precision/recall floors on samples/eval/. With no embargo a
       # false positive goes public within a day of being acted on, so a rules change
       # that costs precision fails here.
       - name: Detection eval gate
+        if: steps.paths.outputs.code == 'true'
         run: scripts/ci/eval-gate.sh --profile release-test
 
       # Every committed notice: valid front matter and updates, and nothing a
       # notice withholds (callback channels, addresses, credential shapes).
+      # A change under notices/ always runs the full job, so this runs.
       - name: Notices (nothing withheld leaks)
+        if: steps.paths.outputs.code == 'true'
         run: cargo run -q --profile release-test -p swarmchase -- notice lint
 
       # The watchlist read strictly: a key no type knows (a misspelt
       # `limit` would leave the default in force), a bad value, a duplicate
       # name, a source that does not build. Offline; reuses the build above.
       - name: Watchlist (strict, offline)
+        if: steps.paths.outputs.code == 'true'
         run: cargo run -q --profile release-test -p swarmchase -- watch --check watchlist.toml
 
       # The browser half of the toolkit: cfg(wasm32) code and wasm-only
       # dependency features that no host build compiles.
       - name: wasm32 type-check
+        if: steps.paths.outputs.code == 'true'
         run: scripts/ci/check-wasm-target.sh
 
       # No `cargo build --release` here. Nothing in this workflow runs a

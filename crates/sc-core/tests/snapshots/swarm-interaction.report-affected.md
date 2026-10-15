@@ -6,7 +6,7 @@
 - **Window:** 2026-03-02 10:00:00 UTC → 2026-03-12 16:34:00 UTC
 - **Records:** 38 linked public records in 7 cluster(s) (of 38 records reviewed, 38 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.5
 
 ## Summary
 
@@ -84,7 +84,7 @@ Every flagged request to each host, including requests outside the linked cluste
 ## Timeline
 
 - **C1** (significant): 6 records, 1 run(s), 2026-03-09 09:00:00 UTC → 2026-03-09 09:05:00 UTC, median gap 60s
-  - linked by: `exfil.webhook_site:webhook.site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
+  - linked by: `exfil.webhook_site:webhook[.]site/5e8d2c40-3333-4d1e-8f77-6a5b4c3d2e1f`, `param:uqtag=ag1x`, `param:uqtag=ag2y`
 - **C2** (significant): 5 records, 1 run(s), 2026-03-12 16:30:00 UTC → 2026-03-12 16:34:00 UTC, median gap 60s
   - linked by: `param:uqtag=hit88q`
   - all 5 records share one URL encoding style (`sp20.sorted.noslash`): consistent with one client, not evidence on its own

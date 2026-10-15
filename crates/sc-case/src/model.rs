@@ -757,6 +757,27 @@ impl Case {
             .collect()
     }
 
+    /// What to tell the admin about unreviewed endpoints, or `None` when
+    /// every endpoint is classified: the hosts, defanged, and a
+    /// `case endpoint` line ready to run (it takes hosts defanged too).
+    pub fn unreviewed_hint(&self) -> Option<String> {
+        let hosts = self.unreviewed();
+        if hosts.is_empty() {
+            return None;
+        }
+        let shown: Vec<String> = hosts.iter().map(|h| sc_core::defang_host(h)).collect();
+        let args: Vec<String> = shown.iter().map(|h| format!("'{h}'")).collect();
+        Some(format!(
+            "{} endpoint(s) are still unreviewed: {}
+  classify them: swarmchase case endpoint {} {} targeted
+  (or not-affected, historical, or compromised --basis \"...\")",
+            hosts.len(),
+            shown.join(", "),
+            self.id,
+            args.join(" ")
+        ))
+    }
+
     /// Contacts in `role`.
     pub fn contacts_in(&self, role: ContactRole) -> impl Iterator<Item = &Contact> {
         self.contacts.iter().filter(move |x| x.role == role)

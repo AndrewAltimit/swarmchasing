@@ -47,7 +47,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-14.1"
+version = "2026-10-14.5"
 
 [thresholds]
 suggestive = 3
@@ -100,6 +100,10 @@ pause_min_secs = 600
 archive_burst_gap_secs = 180
 archive_burst_min = 5
 archive_burst_ratio = 10.0
+# Seam review: a record, or every record of one client, whose removal splits a
+# cluster's link graph is a plant signal when the two largest pieces each hold
+# at least this many records and their habits or clients differ (0: off).
+seam_min_side = 3
 
 # Probe chains: requests to one host and path, each at most `max_gap_secs`
 # after the last, with at least `min_variants` distinct parameter sets. The
@@ -160,9 +164,10 @@ remote_browser = ["carrier.livecodes", "carrier.codesandbox", "carrier.browserle
 # `sim calibrate --check` compares it with the lower bound of the kind's
 # ratio stratified by scenario, over the scenarios where it can occur. A
 # habit kind the simulation measures only on its one small set of copied
-# records stays low or off by judgment. A kind the simulation cannot produce (it copies request
-# content, so no captured secrets, header sets or reruns) keeps a ratio set by
-# judgment.
+# records stays low or off by judgment. A kind the simulation does not produce
+# (preambles, cut lengths, header sets, common features) keeps a
+# ratio set by judgment, with its reason in the scenario file's
+# `calibration.unmeasured`, which the check reads.
 [soft_links]
 fleet_min_lr = 20.0
 fleet_density = 0.5
@@ -170,17 +175,25 @@ backbone_alpha = 0.05
 backbone_overlap = 0.5
 min_link_lr = 2.0
 max_shared = 10
-# Judgment: tested against a chance model, never produced by the simulation.
+# Judgment, well below the simulation's bound (rerun: one operator's agents
+# stalled together by its quota), which measures one way pauses come to be
+# shared; tested against a chance model.
 shared_pause = 4.0
 # Judgment, below the simulation's bound: every simulated agent copies one
 # small set of records, so shared habits are measured on less variety than
 # real traffic has. Listed when rare.
 dialect = 2.0
-# Judgment for the next six: the simulation does not produce them. A rerun of
-# a whole host list in order on another day is a fleet edge on its own.
-rerun = 25.0
-preamble = 3.0
+# Simulation (rerun), below its bound: a list more than a few clusters walk is
+# a published one and draws no rerun, but a rerun is not tested against a
+# chance model, so it is held at half the fleet threshold and needs other
+# evidence before it makes a fleet.
+rerun = 10.0
+# Simulation (fleet-large), far below its bound: one operator's target list
+# walked with one set of paths; held low by judgment, since one scenario
+# measures it.
 path_set = 3.0
+# Judgment for the next four: the simulation does not produce them.
+preamble = 3.0
 cut_length = 2.0
 header_set = 2.0
 common_feature = 2.0
@@ -191,8 +204,9 @@ encoding = 1.0
 fanout = 1.0
 # Simulation (escalation, hub, ordered-list).
 escalation = 28.0
-# Judgment: the same redacted secret (REDACTED-<hash>) in records of both
-# clusters, a captured token reused. Stock passwords do not count.
+# Simulation (shared-secret), below its bound: the same redacted secret
+# (REDACTED-<hash>) in records of both clusters, a captured token reused.
+# Stock passwords and documented demo keys do not count.
 shared_secret = 50.0
 # Judgment: off. A stack of two or more relays and carriers; the simulation
 # measures it shared by one operator's clusters more often than by unrelated
@@ -223,6 +237,43 @@ scaffold_lineage = 20.0
 # prose parameter values from one template, beyond the prompt echo chance
 # model, measured on one crowded scenario of synthetic prose.
 prompt_echo = 20.0
+# Simulation (fleet-large), held at the scaffold's ratio and the fleet
+# threshold, far below its bound: three or more clusters all holding several
+# rarely held features beyond the co-group null. Counted in the targets family
+# for host families and the harness family for templates.
+co_group = 20.0
+# Simulation (fleet-randomtags), held at the scaffold's ratio, far below its
+# bound: generated identifiers decoding to one node id, Snowflake worker, clock
+# skew or counter beyond the generator chance model.
+generator = 20.0
+# Simulation (fleet-playbook), held at the scaffold's ratio, below its bound:
+# one playbook's steps in one order beyond the playbook chance model.
+playbook = 20.0
+# Simulation (campaign), held at the scaffold's ratio and the fleet threshold,
+# far below its bound: many senders on one site holding one habit set that
+# senders elsewhere seldom hold together, beyond the campaign null. Each pair
+# of a campaign's clusters is linked.
+campaign = 20.0
+
+# Joint caps: the combined ratio of two families, at most the cap and never
+# less than the stronger family alone. Families multiply as if independent,
+# and one fact can draw links in two. A cap is at or below the lower bound of
+# the pair's joint ratio, stratified by scenario, that `sim calibrate`
+# measures; `sim calibrate --check` fails a cap above it, and a family pair
+# that co-fires without a cap where the families' product on a pair they link
+# together exceeds it. Keys name the families in the order harness, timeline,
+# targets, identifiers.
+[soft_links.joint]
+# Simulation (rerun), below its bound: template co-groups and co-activity on
+# one operator's runs, measured on one small scenario.
+harness_timeline = 20.0
+# Simulation (fleet-randomtags), below its bound: template co-groups and
+# shared generators.
+harness_identifiers = 90.0
+# Simulation (rerun), at its bound: co-activity and co-targets both read
+# clusters running at the same time, so together they count as the stronger
+# alone (a cap below both families' ratios gives that).
+timeline_targets = 5.0
 
 # Scaffold fingerprints: each record reduced to its request template, values
 # replaced by slot types. A template ties clusters only with at least
@@ -312,6 +363,113 @@ max_chance = 0.01
 fdr = 0.05
 common_templates = []
 
+# Co-group: clusters above noise hold features of two families. Targets: a
+# host family (its last two labels) in one episode of activity, touches by
+# clusters above noise at most `window_secs` apart, request and submit times
+# only; families with a record on a listed benchmark are left out. Harness: a
+# specific request template (`scaffold.min_specificity`), and a slotted prose
+# template (`prompt_echo.min_words`, `prompt_echo.common_templates` left out),
+# prose templates carried by the same clusters counting once. A feature carried
+# by more than `max_holders` senders (clusters, and records outside them) ties
+# none. A group is at least `min_clusters` clusters all holding at least
+# `min_features` features, closed; its score sums each feature's -ln chance
+# that a holder set of its size, among the clusters that could hold it (active
+# in its hours, for a host family), contains the whole group. The null draws
+# `swaps` matrices by degree-preserving swap randomisation (host features only
+# to clusters active in their hours); a group's chance is (ge + 1) / (swaps +
+# 1) for ge the matrices whose strongest group scores as high, familywise over
+# every group mined from the matrix. Kept at `max_chance`, then cut at false
+# discovery rate `fdr` over the matrices mined, each at its strongest group's.
+[biclique]
+window_secs = 21600
+min_clusters = 3
+min_features = 4
+max_holders = 30
+swaps = 999
+max_chance = 0.01
+fdr = 0.05
+
+# Campaigns: senders are the clusters above noise and the flagged records
+# outside them. A sender's habits are the rule ids hit and the run-tag
+# parameter names carried by at least half its records; its sites are the
+# host families of its targets, families with a record on a listed benchmark
+# left out. A site with `min_senders` senders has a core: the habits held by
+# at least `core_share` of them, `min_habits` or more. Its members hold the
+# core but for `slack` habits, and at least `min_habits`; the statistic is the
+# hypergeometric tail of that many members among the site's senders, drawn
+# from every sender. The null draws the site's senders at random
+# `permutations` times; a site is kept at `max_chance`, then cut at false
+# discovery rate `fdr` over the sites tested.
+[campaign]
+min_senders = 4
+min_habits = 3
+slack = 1
+core_share = 0.5
+permutations = 999
+max_chance = 0.01
+fdr = 0.05
+
+# Identifier generators: strong-parameter values and UUID-shaped parameter
+# values decoded. UUIDv1/v6 give a node id (multicast nodes left out) and a
+# time; UUIDv7, ULID and KSUID a time; a Snowflake decimal its datacenter and
+# worker when its time, under the Twitter or Discord epoch, is within
+# `max_skew_secs` of the record (as must a ULID's or KSUID's); a
+# strong-parameter value ending in three or more digits, at least 100, a counter
+# stem and number. Pairs share a node id (chance 2^-47), a worker (2^-10), a
+# clock skew read from strong-parameter values only, stable within
+# `skew_tolerance_secs`, at least `min_skew_secs` and clear of whole quarter
+# hours (chance under a prior log-uniform in magnitude between `min_skew_secs`
+# and `max_skew_secs`), or a counter stem with numbers within
+# `counter_max_gap` (chance of numbers of that many digits meeting that
+# closely). A key carried by more than `max_holders` senders ties none, and a
+# node id seen only in one site's URLs outside a strong parameter is the
+# site's. Kept at `max_chance`, cut at `fdr`. Node ids are shown only as an
+# ordinal label per analysis.
+[generator]
+max_skew_secs = 172800
+min_skew_secs = 60
+skew_tolerance_secs = 2
+counter_max_gap = 3
+max_holders = 10
+max_chance = 0.01
+fdr = 0.05
+
+# Playbook alignment: a record's step is its request template less the
+# parameters carrying linking values, kept with at least `min_specificity`
+# structural parts. A cluster's steps on each host, by request or submit time
+# (never capture times), repeats in a row dropped, are one sequence; its
+# profile is its most common sequence, a playbook when it has `min_steps` steps
+# and is seen on `min_hosts` hosts. Two playbooks sharing a step carried by at
+# most `max_holders` senders (clusters, and records outside them) are aligned
+# locally, a matched step scoring its IDF weight and a gap `gap_penalty`; the
+# statistic sums each host sequence of one aligned with the other's profile,
+# both ways, against `permutations` shuffles of each cluster's steps within
+# host. That order chance must be at most `max_order_chance`; combined with the
+# rarest aligned step's base rate (as a scaffold template's) it is kept at
+# `max_chance` and cut at false discovery rate `fdr` over the pairs compared.
+# A pair whose aligned steps' payload classes follow one of `common_orders`
+# ties none.
+[playbook]
+min_specificity = 3
+min_steps = 3
+min_hosts = 2
+max_holders = 10
+gap_penalty = 1.0
+permutations = 199
+max_order_chance = 0.05
+max_chance = 0.01
+fdr = 0.05
+common_orders = [
+  # OWASP Web Security Testing Guide v4.2, its test ids in order: information
+  # gathering (WSTG-INFO), directory traversal (WSTG-ATHZ-01), reflected XSS
+  # (WSTG-INPV-01), SQL injection (WSTG-INPV-05), command injection
+  # (WSTG-INPV-12), server-side template injection (WSTG-INPV-18).
+  ["recon", "traversal", "xss", "sqli", "cmd", "ssti"],
+  # The payload classes in name order, as a tool walking a payload collection
+  # sorted by name sends them.
+  ["recon", "cmd", "sqli", "ssti", "traversal", "xss"],
+]
+
 # Interaction edges (SC-T9). S3 synchronized start: two runs of different
 # clients whose requests, unflagged ones of the same client included, line up
 # within `lockstep_tolerance_secs` at one offset up to
@@ -343,6 +501,24 @@ dispatch_pair_max_chance = 0.05
 dispatch_lag_tolerance_bins = 1
 dispatch_max_chance = 0.01
 fdr = 0.05
+
+# Onset groups: each cluster above noise naming a client is a point at its
+# first request or submit time (never a capture time). The densest
+# `window_secs` window of points of different clients is a group when it holds
+# at least `min_clusters` and its scan chance (Alm's approximation over the
+# active span, the gaps between onsets each capped) is at most `max_chance`, a window
+# starting within `clock_tolerance_secs` of a clock hour counting
+# `clock_weight` of its points;
+# the scan repeats on the points left. A group whose members share target
+# families (last two labels) beyond their holders across the analysis, at
+# `trigger_max_chance` or below, is one common trigger: listed, not kept.
+[onset]
+window_secs = 900
+min_clusters = 4
+max_chance = 0.01
+trigger_max_chance = 0.01
+clock_tolerance_secs = 120
+clock_weight = 0.25
 
 # Agent grade: a machine fetch tool's habits, read from one client's requests
 # in a run (its unflagged ones included), request and submit times only; each
@@ -409,6 +585,35 @@ target = "host"
 pattern = "r.jina.ai"
 weight = 2
 description = "Jina Reader: fetches a page server-side and returns Markdown"
+
+[[rule]]
+id = "relay.jina_search"
+group = "relay"
+kind = "relay"
+tactic = "T1"
+target = "host"
+# Jina's search relay: `https://s.jina.ai/<query>` searches the web, fetches
+# the top results and returns each through r.jina.ai
+# (https://github.com/jina-ai/reader).
+pattern = "s.jina.ai"
+weight = 2
+description = "Jina search relay: searches, fetches the top results server-side and returns Markdown"
+
+[[rule]]
+id = "relay.repo_digest"
+group = "relay"
+kind = "relay"
+tactic = "T1"
+target = "url"
+# Services that turn a code repository into one text digest for a model, by
+# swapping the host in a GitHub URL: Gitingest (https://gitingest.com/),
+# uithub (https://uithub.com/) and GitMCP, an MCP server per repository
+# (https://gitmcp.io/, also `<owner>.gitmcp.io/<repo>`). Developers read
+# repositories through them by hand too, so weight 1. Anchored on the layer's
+# own host so a page mentioning one does not match.
+pattern = "^https?://([a-z0-9-]+\\.)?(gitingest\\.com|uithub\\.com|gitmcp\\.io)([/:?#]|$)"
+weight = 1
+description = "Repository-to-text digest service (Gitingest, uithub, GitMCP)"
 
 [[rule]]
 id = "relay.markdown_new"
@@ -587,12 +792,15 @@ target = "url"
 # (https://docs.browser-use.com/cloud/guides/browser-api),
 # wss://connect.browserbase.com
 # (https://docs.browserbase.com/reference/api/connect) and
-# wss://connect.hyperbrowser.ai (https://github.com/hyperbrowserai/examples).
+# wss://connect.hyperbrowser.ai (https://github.com/hyperbrowserai/examples),
+# and Lightpanda Cloud's regional `wss://<region>.cloud.lightpanda.io/ws`
+# (https://lightpanda.io/docs/usage/cdp/puppeteer).
 # The `apiKey`, `sessionId` and `token` parameters are redacted at ingest.
-# Not a subdomain, so docs and status hosts do not match.
-pattern = "(^|[^a-z0-9.-])connect\\.(steel\\.dev|browser-use\\.com|browserbase\\.com|hyperbrowser\\.ai)\\b"
+# Not a subdomain, and Lightpanda only on its `/ws` path, so docs and status
+# hosts do not match.
+pattern = "(^|[^a-z0-9.-])(connect\\.(steel\\.dev|browser-use\\.com|browserbase\\.com|hyperbrowser\\.ai)\\b|([a-z0-9-]+\\.)?cloud\\.lightpanda\\.io/ws\\b)"
 weight = 2
-description = "Hosted-browser DevTools connect endpoint (Steel, Browser Use, Browserbase, Hyperbrowser)"
+description = "Hosted-browser DevTools connect endpoint (Steel, Browser Use, Browserbase, Hyperbrowser, Lightpanda)"
 
 [[rule]]
 id = "carrier.agent_sandbox"
@@ -873,8 +1081,11 @@ group = "run_tag"
 kind = "agent_marker"
 artifact = true
 target = "url"
-# Test tags that carry a run number, so the match distinguishes one run.
-pattern = "chatgpttest\\d*|agenttest\\d*"
+# Test tags that carry a run number, so the match distinguishes one run. No
+# letter comes before the tag, so `reagenttest` in a lab-supply slug is not
+# one, while `uq_agenttest42` is (an underscore is not a letter). The match,
+# and what links, is the `m` group: the tag without the character before it.
+pattern = "(^|[^a-z])(?P<m>(chatgpttest|agenttest)\\d*)"
 weight = 3
 link = true
 description = "Test tags agents add to URLs (with a run number)"
@@ -1195,7 +1406,11 @@ artifact = true
 target = "param_value"
 # Also `OpenAIResearcher` and `OpenAI Research`, the identity Transluce
 # documented an agent registering under (https://transluce.org/us-canada-gov).
-pattern = "\\b(claude|chatgpt|openai|gpt-?[45o]|gemini|anthropic|hunyuan|qwen|deepseek|glm|kimi)\\b|openai[\\s-]?research(er)?"
+# And a whole value of a lower-case vendor or task word fused to an
+# eight-digit date and a short suffix (`claude20261001a`,
+# `research20261004final`), the run-tag shape in
+# https://swarmcha.se/posts/chinese-agent-fleet ; matched case-sensitively.
+pattern = "\\b(claude|chatgpt|openai|gpt-?[45o]|gemini|anthropic|hunyuan|qwen|deepseek|glm|kimi)\\b|openai[\\s-]?research(er)?|(?-i:^(claude|gpt|gemini|qwen|deepseek|kimi|agent|research)\\d{8}[a-z0-9]{0,24}$)"
 weight = 1
 description = "Model/vendor name in a request parameter (e.g. ?agent=claude, org=OpenAI Research). Unreliable for attribution."
 
@@ -1619,9 +1834,49 @@ target = "user_agent"
 # (https://github.com/firecrawl/firecrawl/blob/main/apps/api/src/lib/robots-txt.ts).
 # CloudflareBrowserRenderingCrawler: the Browser Rendering crawl endpoint
 # (https://developers.cloudflare.com/browser-rendering/reference/automatic-request-headers/).
-pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|meta-externalagent|meta-externalfetcher|ExaSearchBot|FirecrawlAgent|CloudflareBrowserRenderingCrawler"
+# Amzn-User, Amzn-SearchBot: https://developer.amazon.com/amazonbot . KimiBot,
+# Kimi-User, Kimi-SearchBot: https://www.kimi.ai/policies/kimi-crawlers .
+# meta-webindexer, meta-externalads:
+# https://developers.facebook.com/docs/sharing/webmasters/web-crawlers .
+# Google-Pinpoint:
+# https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers .
+# Applebot is a search crawler, not an agent product: it is in
+# declared-agents.toml for identity checks only.
+pattern = "ChatGPT-User|OAI-SearchBot|OAI-AdsBot|GPTBot|ClaudeBot|Claude-User|Claude-SearchBot|PerplexityBot|Perplexity-User|Google-Agent|Google-CloudVertexBot|Google-GeminiNotebook|Google-Read-Aloud|Google-Pinpoint|MistralAI-User|MistralAI-Index|DuckAssistBot|Bytespider|Amazonbot|Amzn-User|Amzn-SearchBot|KimiBot|Kimi-User|Kimi-SearchBot|meta-externalagent|meta-externalfetcher|meta-webindexer|meta-externalads|ExaSearchBot|FirecrawlAgent|CloudflareBrowserRenderingCrawler"
 weight = 1
 description = "Known agent product in the user agent (FM-7.11 declared identity)"
+
+[[rule]]
+id = "header.markdown_accept"
+kind = "header"
+artifact = true
+target = "header"
+# An Accept header that lists Markdown first: coding agents ask for it so a
+# site can answer in Markdown. Claude Code and OpenCode send it
+# (https://blog.cloudflare.com/markdown-for-agents/), and so does Cursor
+# (https://www.checklyhq.com/blog/state-of-ai-agent-content-negotation).
+# Documentation tooling asks for Markdown too, so weight 1.
+pattern = "^accept:\\s*text/markdown\\b"
+weight = 1
+description = "Accept header asking for Markdown first (coding-agent content negotiation)"
+
+[[rule]]
+id = "selfid.agent_commerce"
+kind = "self_id"
+artifact = true
+target = "header"
+# Headers an agent sends when it browses or pays as a declared agent: a Web
+# Bot Auth signature tagged `agent-browser-auth` or `agent-payer-auth`
+# (https://blog.cloudflare.com/secure-agentic-commerce/), Cloudflare
+# pay-per-crawl's price headers
+# (https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/use-pay-per-crawl-as-ai-owner/crawl-pages/)
+# and the x402 payment header, `PAYMENT-SIGNATURE` in version 2
+# (https://docs.x402.org/core-concepts/http-402) and `X-PAYMENT` in version 1
+# (https://docs.cdp.coinbase.com/x402/migration-guide). Paying crawlers send
+# them on ordinary pages, so weight 1.
+pattern = "^signature-input:.*tag=\"agent-(browser|payer)-auth\"|^crawler-(max|exact)-price:|^(payment-signature|x-payment):"
+weight = 1
+description = "Agentic-commerce headers (agent-browser-auth or agent-payer-auth signature, pay-per-crawl price, x402 payment)"
 
 [[rule]]
 id = "header.coding_agent_ua"
@@ -1753,6 +2008,12 @@ id = "google_firing_range"
 # https://github.com/google/firing-range
 pattern = "://public-firing-range\\.appspot\\.com\\b"
 note = "Google Firing Range, a test bed for web scanners"
+
+[[benchmark]]
+id = "google_xss_game"
+# https://xss-game.appspot.com/ (Google's XSS training game)
+pattern = "://xss-game\\.appspot\\.com\\b"
+note = "Google's XSS game, a deliberately vulnerable training site"
 
 [[benchmark]]
 id = "hack_yourself_first"

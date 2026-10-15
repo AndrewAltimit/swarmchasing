@@ -36,6 +36,8 @@ No urlquery content is copied here. urlquery's terms forbid redistributing it, a
 
 The two `fuzzing` records are missed by design. One turns a scalar parameter into an array (`State_Id[]=1&State_Id[]=2`); the other guesses a path segment (`anything.pdf`). Each is an ordinary request on its own: array parameters are how PHP and Rails forms send lists, and a file name is a file name. What makes them fuzzing is the run around them (the same API called with the parameter's type changed, or a path tried with several names), which one record does not show. A rule for either shape would fire on ordinary form and download traffic far more often than on agents.
 
+Two indirection records are missed by design for the same reason. `oncb-jina` reads a statistics page through a relay, and `max-markdown-uniq` reads a budget report through a Markdown converter with a short `uniq3` suffix. People read pages through relays and converters too (`relay_reading`), so a relay alone is context and stays below the threshold, and the suffix is too short to tell from an ordinary cache key. What marks both as agents is the run around them in the published incident, which one record does not show.
+
 ## `llm-residue.ndjson`
 
 Synthetic records for the language-model output residue rules (`marker.md_link`, `marker.placeholder`, `marker.tool_call_json` and the rest). Each is marked `"synthetic": true`, uses reserved `.example` hosts for targets, and was written by hand, not copied from any report.
@@ -58,6 +60,11 @@ Synthetic records for the client-trace rules, each marked `"synthetic": true`, o
 
 - **Coding-harness user agents** (`header.coding_agent_ua`): agent runs sending probes through Gemini CLI, Qwen Code, Aider (its browser and its plain HTTP client) and Crush, with the user agents those tools' source code sets. The hard negatives are developers reading documentation, a README and a package registry with the same tools, and a person reading the Aider site in a browser.
 - **Assistant citation tag** (`marker.assistant_citation`): an agent reusing a ChatGPT-cited URL, `utm_source=chatgpt.com` and all, for a probe and with its run tag; the tag scores as context and never grades as self-description, so the probe alone is L0 and the run tag alone sets L1. The hard negatives, class `ai_referral`, are people clicking cited news, documentation and recipe links; one reads a cited article through a relay (the relay and the tag stay under the context cap), and an analyst filters referral traffic by the tag.
+- **Declared-agent headers**: probes from a coding agent asking for Markdown first (`header.markdown_accept`), from a paying agent with a pay-per-crawl price header and an `agent-browser-auth` signature (`selfid.agent_commerce`), and from a fetcher naming Kimi-User (`header.agent_ua`). Their hard negatives are in `hard-negatives.ndjson`.
+
+## `agent-routes.ndjson`
+
+Synthetic agent records, each marked `"synthetic": true`, on reserved `.example` hosts and the public services the rules name, written by hand: a tagged search through Jina's search relay and a target's repository read through a digest service, a program driving a Lightpanda Cloud browser to a quote probe, a vendor-plus-date run tag (`research20261004final`, the shape in the swarmcha.se fleet report) on a relayed probe, and one run that adds a fresh random value to each probe and no run tag, so only timing on the target links it. The records are kept out of `rule-coverage.ndjson`, which the simulator copies from, so adding them leaves the simulated scenarios unchanged.
 
 ## `hard-negatives.ndjson`
 
@@ -67,10 +74,12 @@ Synthetic benign records, each marked `"synthetic": true`, on reserved `.example
 - **Look-alikes that fire and stay noise**: ordinary scripted clients (a feed reader, an install script, a server calling its own API), header fingerprints on ordinary traffic (an Apache Traffic Server cache, a gzip-only mobile client, an owner's own Browser Rendering job, a signed declared agent, the MCP fetch server driven by a person), Markdown relays used to read, a large `limit`, and pages naming disposable mail, a paste app or a `document.title` assignment.
 - **Scanners** (`scanner`): an operator's template scan reading `robots.txt` and `security.txt`, and directory listing and path fuzzing on the operator's own staging host, all with the tools' default user agents and no payload.
 - **Archive links** (`archive_link`): an ordinary capture, an `im_` image capture, the capture calendar, an arquivo.pt capture and an archive.today snapshot, none of them the raw `id_` form.
+- **Ordinary automation**: a CI link checker, a chat app's link-preview bot fetching an assistant-cited link, an uptime monitor with a timestamp cache-buster, a fresh copy of a post read through a relay, a documentation sync tool asking for Markdown, a paying crawler's price header, an API client's x402 payment header, and declared fetchers reading a page.
+- **Near misses for the narrow rules**: searches and blog posts naming anti-bot tokens, a sandbox host and a published tag; an OCR call on a receipt; an owner's own hosted-browser and playground sessions; a product slug and a SKU that start like a tag; a dead link and a challenge page a person met; a search through Jina's search relay; repositories read through digest services.
 
 ## `carrier-negatives.ndjson`
 
-Synthetic benign records, class `dev_tool`, each marked `"synthetic": true` and written by hand: pages with an inline or linked script and no request of their own, served from the echo service's base64 endpoint (`httpbin.org/base64/`, and the `httpbun.com` mirror), as developers use it to serve a test page. Script references use reserved `.example` hosts. They guard `carrier.httpbin` and `carrier.html_program`: the echo rule and the script rule read one artifact, so these stay noise. No archive capture was copied.
+Synthetic benign records, class `dev_tool`, each marked `"synthetic": true` and written by hand: pages with an inline or linked script and no request of their own, served from the echo service's base64 endpoint (`httpbin.org/base64/`, and the `httpbun.com` mirror), as developers use it to serve a test page, and carry capture times from an archive index (`source` `wayback`, `ts_kind` `capture`). Script references use reserved `.example` hosts. They guard `carrier.httpbin` and `carrier.html_program`: the echo rule and the script rule read one artifact, so these stay noise. No archive capture was copied.
 
 ## `actor-controls.ndjson`
 
@@ -81,7 +90,7 @@ Synthetic runs sent by people and conventional tools, for the agent grade. Each 
 
 ## `linking-negatives.ndjson`
 
-Synthetic records for the cluster-level evaluation, each pair or group a case linking must keep apart. If one merged, the cluster-level evaluation would list it as a false merge. The cluster-level numbers are reported, not gated; the golden test in `sc-core` fails on these merges.
+Synthetic records for the cluster-level evaluation, each pair or group a case linking must keep apart. If one merged, the cluster-level evaluation would list it as a false merge. The eval gate holds floors on cluster recall and B-cubed F1, and the golden test in `sc-core` fails on these merges.
 
 - **Copied campaign tag.** Two readers, months apart, fetch different pages through the same relay with the same popular campaign tag (`tag=blackfriday`). A shared feature links only within the link window, so the pair stays apart.
 - **Planted records.** Two agent runs, each two probes on one host joined by a run tag, and beside each a benign record placed two minutes after it on the same host: one read through the same relay, one sharing only a cache-busting parameter. Each shares a rule and a host with its run inside the timing window, but only a context rule, so neither joins ([methodology](../../docs/methodology.md#linking-into-clusters)).
@@ -106,6 +115,8 @@ Synthetic agent records for fleet proposals that rest on no shared identifier ([
 - **`scaffold-1`**: three agents on one harness, days apart, each with its own run tag and hosts, sending one request structure (a relay, a payload, then a tag, a step counter and a timestamp). Each pair should draw a shared-scaffold link.
 - **`lookalike-1` to `lookalike-8`**: eight unrelated operators using one framework's default probe shape. The shape is common in the analysis, so no pair of them should draw a shared-scaffold link.
 - **`orchestra-1`**: a planner and a worker with different tags, hosts and request shapes; each worker request comes 40 to 85 seconds after a planner request, at irregular times over eight hours, with submit times. The pair should draw a co-activity link.
+
+The scaffold and look-alike records carry capture times from an archive index (`source` `wayback`, `ts_kind` `capture`), and the orchestra records submit times from a scan service (`urlscan`), so the per-source rows and the capture basis have records behind them.
 
 Every record is flagged significant on its own, so the file raises recall at both tiers and leaves precision unchanged.
 
@@ -152,7 +163,7 @@ cargo run --release -p swarmchase -- collect urlquery-reports \
 cargo run --release -p swarmchase -- eval data/eval/transluce.ndjson \
     --labels data/transluce/all-reports.csv \
     --labels samples/eval/overrides/transluce-labels.ndjson \
-    --json data/eval/transluce-eval.json
+    --json-out data/eval/transluce-eval.json
 ```
 
 Later `--labels` files override earlier ones. [`overrides/transluce-labels.ndjson`](overrides/transluce-labels.ndjson) holds our corrections to Transluce's labels, each with its reason. These are IDs and our own notes, no urlquery content. `URLQUERY_APIKEY` can live in `env.list` (run through `scripts/with-env.sh`).

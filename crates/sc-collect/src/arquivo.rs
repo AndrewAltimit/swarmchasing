@@ -60,6 +60,7 @@ impl Source for Arquivo {
         // as a query reaches: narrow the pattern or the dates to see the rest.
         let truncated = records.len() >= size;
         Ok(Page {
+            stopped: None,
             records,
             next: None,
             truncated,

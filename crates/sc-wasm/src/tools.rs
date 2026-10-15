@@ -144,6 +144,31 @@ pub fn identity_check(
     map: &str,
     files_json: &str,
 ) -> Result<String, JsError> {
+    let format: Format = format.parse().map_err(|e: String| JsError::new(&e))?;
+    let map = if map.trim().is_empty() {
+        FieldMap::default()
+    } else {
+        FieldMap::parse(map).map_err(|e| JsError::new(&e))?
+    };
+    let parsed = sc_core::parse_input(input, format, &map);
+    identities(parsed.observations.iter(), files_json)
+}
+
+/// `identity_check` on the records of the analysis the module holds: a set
+/// of files added with `inputs_add` and analysed with `inputs_analyze` is
+/// checked without being read again. Record ids carry their file's number.
+#[wasm_bindgen]
+pub fn identity_check_held(files_json: &str) -> Result<String, JsError> {
+    with_held(NOTHING, |a| {
+        identities(a.results.iter().map(|r| &r.obs), files_json)
+    })
+}
+
+/// Each record's declared identity, under the files the visitor supplied.
+fn identities<'a>(
+    observations: impl Iterator<Item = &'a sc_core::Observation>,
+    files_json: &str,
+) -> Result<String, JsError> {
     use sc_core::identity::httpsig::KeyDirectory;
     use sc_core::identity::ranges::RangeTable;
     use sc_core::identity::{IdentityClass, IdentityData, classify};
@@ -181,22 +206,15 @@ pub fn identity_check(
             Err(e) => warnings.push(e),
         }
     }
-    let format: Format = format.parse().map_err(|e: String| JsError::new(&e))?;
-    let map = if map.trim().is_empty() {
-        FieldMap::default()
-    } else {
-        FieldMap::parse(map).map_err(|e| JsError::new(&e))?
-    };
-    let parsed = sc_core::parse_input(input, format, &map);
     let mut counts: BTreeMap<IdentityClass, usize> = BTreeMap::new();
     let mut records = Vec::new();
-    for o in parsed.observations {
-        let r = classify(&o, &cat, &data);
+    for o in observations {
+        let r = classify(o, &cat, &data);
         *counts.entry(r.class).or_default() += 1;
         if r.class != IdentityClass::None {
             records.push(IdentityRow {
-                id: o.id,
-                ip: o.ip,
+                id: o.id.clone(),
+                ip: o.ip.clone(),
                 identity: r,
             });
         }
@@ -384,6 +402,25 @@ mod tests {
         assert_eq!(classes, ["ip_verified", "spoofed"], "{out}");
         assert_eq!(v["counts"]["none"], 1);
         assert_eq!(v["warnings"].as_array().unwrap().len(), 1, "{out}");
+        // The same lines as a set of two files, checked on the held analysis.
+        let (one, two) = log.split_at(log.find("203.0.113.9").unwrap());
+        crate::engine::inputs_clear();
+        for part in [one, two] {
+            assert!(crate::engine::inputs_add(part, "auto", "host=shop.example", 0).is_ok());
+        }
+        assert!(crate::engine::inputs_analyze("").is_ok());
+        let Ok(held) = identity_check_held(&files.to_string()) else {
+            panic!("identity_check_held failed");
+        };
+        let h: serde_json::Value = serde_json::from_str(&held).unwrap();
+        let rows: Vec<(&str, &str)> = h["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| (r["id"].as_str().unwrap(), r["class"].as_str().unwrap()))
+            .collect();
+        assert_eq!(rows, [("f1:log-1", "ip_verified"), ("f2:log-1", "spoofed")]);
+        assert_eq!(h["counts"], v["counts"]);
         let Ok(c) = identity_catalog() else {
             panic!("catalog")
         };

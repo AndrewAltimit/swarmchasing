@@ -1,9 +1,11 @@
 //! Timing analysis: cadence, bursts, fleet-wide pauses, the hour-of-day
 //! rhythm, pauses shared by unlinked clusters, and what date tags the agents
 //! put in URLs say: the operator's UTC offset, or a model with no clock
-//! writing a stale "today".
+//! writing a stale "today". [`changepoint`] finds a slice of the records
+//! whose per-run rate rose.
 
 mod cadence;
+pub mod changepoint;
 mod dates;
 mod pauses;
 mod rhythm;

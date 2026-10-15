@@ -6,12 +6,18 @@
 //!   or the record alone when it is in none. Precision is the share of the
 //!   record's predicted group (its run-labelled members) that shares its run;
 //!   recall the share of its run inside its predicted group. Both are averaged
-//!   over records.
+//!   over records. A member of another run in the same labelled swarm counts
+//!   as right for precision: the agents of one swarm share an inbox or a tag
+//!   by design, and linking them is what the analysis is for. The strict
+//!   precision, counting only the record's own run, is kept beside it.
 //! - **False merges**: clusters whose labelled members span two or more runs,
 //!   or mix agent and benign records. This is the error that misattributes.
+//!   A cluster whose runs are all in one labelled swarm is a **swarm merge**,
+//!   listed apart.
 //! - **False splits**: runs whose records sit in more than one predicted group.
 //!
-//! Report only: no gate reads these numbers.
+//! The eval gate holds a floor on B-cubed F1 (`--min-bcubed-f1`); the other
+//! numbers here are reported only.
 
 use super::{Label, LabelSet};
 use crate::analyze::Analysis;
@@ -26,9 +32,17 @@ pub struct ClusterEval {
     pub bcubed_precision: Option<f64>,
     pub bcubed_recall: Option<f64>,
     pub bcubed_f1: Option<f64>,
+    /// B-cubed precision counting only the record's own run as right,
+    /// members of its swarm's other runs as wrong.
+    #[serde(default)]
+    pub bcubed_precision_strict: Option<f64>,
     /// Clusters with at least one labelled member.
     pub clusters_checked: usize,
     pub false_merges: Vec<FalseMerge>,
+    /// Clusters spanning two or more runs of one labelled swarm, and no
+    /// other run: merges the swarm's design makes, not errors.
+    #[serde(default)]
+    pub swarm_merges: Vec<FalseMerge>,
     /// `false_merges.len() / clusters_checked`.
     pub false_merge_rate: Option<f64>,
     /// Runs spread over more than one predicted group.
@@ -50,14 +64,23 @@ pub fn cluster_eval(a: &Analysis, labels: &LabelSet) -> ClusterEval {
     // First occurrence of each labelled record: (result index, run, label).
     let mut seen = HashSet::new();
     let mut recs: Vec<(usize, Option<&str>, Label)> = Vec::new();
+    // Each run's labelled swarm (`none` left out).
+    let mut swarm_of: BTreeMap<&str, &str> = BTreeMap::new();
     for (i, r) in a.results.iter().enumerate() {
         let Some(l) = labels.labels.get(&r.obs.id) else {
             continue;
         };
         if seen.insert(r.obs.id.as_str()) {
             recs.push((i, l.run.as_deref(), l.label));
+            if let (Some(run), Some(sw)) = (l.run.as_deref(), l.swarm.as_deref())
+                && sw != "none"
+            {
+                swarm_of.entry(run).or_insert(sw);
+            }
         }
     }
+    let one_swarm =
+        |x: &str, y: &str| x == y || swarm_of.get(x).is_some_and(|s| swarm_of.get(y) == Some(s));
     // Predicted group: the cluster, or a singleton keyed by the record.
     let group = |i: usize| -> (bool, usize) {
         match a.results[i].cluster {
@@ -80,16 +103,19 @@ pub fn cluster_eval(a: &Analysis, labels: &LabelSet) -> ClusterEval {
     }
     out.runs = run_size.len();
     if !run_recs.is_empty() {
-        let (mut p, mut r) = (0.0, 0.0);
+        let (mut p, mut strict, mut r) = (0.0, 0.0, 0.0);
         for &(i, run) in &run_recs {
             let g = &group_runs[&group(i)];
             let same = g.iter().filter(|x| **x == run).count() as f64;
-            p += same / g.len() as f64;
+            let swarm = g.iter().filter(|x| one_swarm(x, run)).count() as f64;
+            p += swarm / g.len() as f64;
+            strict += same / g.len() as f64;
             r += same / run_size[run] as f64;
         }
         let n = run_recs.len() as f64;
         let (p, r) = (p / n, r / n);
         out.bcubed_precision = Some(p);
+        out.bcubed_precision_strict = Some(strict / n);
         out.bcubed_recall = Some(r);
         out.bcubed_f1 = Some(if p + r > 0.0 {
             2.0 * p * r / (p + r)
@@ -122,12 +148,18 @@ pub fn cluster_eval(a: &Analysis, labels: &LabelSet) -> ClusterEval {
     for (c, (runs, kinds)) in &by_cluster {
         let mixes_labels = kinds.len() > 1;
         if runs.len() > 1 || mixes_labels {
-            out.false_merges.push(FalseMerge {
+            let m = FalseMerge {
                 cluster: super::view::cluster_key(a, *c).to_string(),
                 members: super::view::cluster_size(a, *c),
                 runs: runs.iter().map(|s| s.to_string()).collect(),
                 mixes_labels,
-            });
+            };
+            let first = runs.iter().next().copied().unwrap_or_default();
+            if !mixes_labels && runs.iter().all(|r| one_swarm(first, r)) {
+                out.swarm_merges.push(m);
+            } else {
+                out.false_merges.push(m);
+            }
         }
     }
     out.false_merge_rate = (out.clusters_checked > 0)
@@ -189,5 +221,37 @@ mod tests {
         assert_eq!(e.false_merges.len(), 1);
         assert_eq!(e.false_merges[0].runs, ["B", "C"]);
         assert!(!e.false_merges[0].mixes_labels);
+        assert!(e.swarm_merges.is_empty());
+        assert_eq!(e.bcubed_precision, e.bcubed_precision_strict);
+    }
+
+    #[test]
+    fn a_merge_inside_one_swarm_is_not_an_error() {
+        // Two runs of one swarm writing to one inbox: one cluster by design.
+        let records = vec![
+            obs(
+                "d1",
+                1000,
+                "https://r.jina.ai/https://t.example/x?uqtag=dd11",
+            ),
+            obs(
+                "e1",
+                1100,
+                "https://r.jina.ai/https://u.example/y?uqtag=dd11",
+            ),
+        ];
+        let a = analyze(records, &Rules::default_rules());
+        let labels = parse_labels(
+            "{\"id\":\"d1\",\"label\":\"agent\",\"run\":\"D\",\"swarm\":\"S\"}\n\
+             {\"id\":\"e1\",\"label\":\"agent\",\"run\":\"E\",\"swarm\":\"S\"}\n",
+        );
+        let e = cluster_eval(&a, &labels);
+        assert!(e.false_merges.is_empty(), "{:?}", e.false_merges);
+        assert_eq!(e.swarm_merges.len(), 1);
+        assert_eq!(e.swarm_merges[0].runs, ["D", "E"]);
+        assert!((e.bcubed_precision.unwrap() - 1.0).abs() < 1e-9);
+        assert!((e.bcubed_precision_strict.unwrap() - 0.5).abs() < 1e-9);
+        // Recall still reads runs: each run is whole in its group.
+        assert!((e.bcubed_recall.unwrap() - 1.0).abs() < 1e-9);
     }
 }

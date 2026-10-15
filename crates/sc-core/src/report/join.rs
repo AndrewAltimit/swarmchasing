@@ -6,7 +6,7 @@
 
 use super::{Audience, ReportOptions};
 use crate::analyze::{Analysis, Cluster};
-use crate::extract::defang;
+use crate::extract::defang_feature;
 use crate::model::fmt_ts;
 use crate::timing::TimeBasis;
 use std::collections::BTreeSet;
@@ -51,7 +51,7 @@ pub(super) fn section(s: &mut String, a: &Analysis, clusters: &[&Cluster], opts:
             .link_features
             .iter()
             .take(MAX_PER_CLUSTER)
-            .map(|f| format!("`{}`", defang(&f.to_string())))
+            .map(|f| format!("`{}`", defang_feature(&f.to_string())))
             .collect();
         if !feats.is_empty() {
             let _ = write!(line, "\n  - identifiers: {}", feats.join(", "));

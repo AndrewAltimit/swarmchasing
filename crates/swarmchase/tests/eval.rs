@@ -51,6 +51,13 @@ fn coverage_gate_needs_the_allow_list() {
         .lines()
         .any(|l| !l.trim().is_empty() && !l.starts_with('#'));
     assert_eq!(r.ok, !has_entries, "{}", r.stderr);
+    // A gate not met exits 3, apart from an error's 1.
+    assert_eq!(
+        r.code,
+        Some(if has_entries { 3 } else { 0 }),
+        "{}",
+        r.stderr
+    );
     ok(
         s.path(),
         &with_samples(
@@ -119,4 +126,63 @@ fn split_writes_a_frozen_id_list_that_eval_can_score() {
     assert_eq!(v["kind"], "held_out");
     assert_eq!(v["records"].as_array().unwrap().len(), files.len());
     assert_eq!(v["only_ids"]["sha256"].as_str().unwrap().len(), 64);
+}
+
+#[test]
+fn a_floor_not_met_exits_3_and_an_error_1() {
+    let s = Scratch::new("eval-exit");
+    let files = samples();
+    // No record set reaches a B-cubed F1 above 1.
+    let r = run(
+        s.path(),
+        &with_samples(
+            &["eval", "--show-fp", "0", "--min-bcubed-f1", "1.5"],
+            &files,
+        ),
+    );
+    assert_eq!(r.code, Some(3), "{}", r.stderr);
+    assert!(r.stderr.contains("eval gate failed"), "{}", r.stderr);
+    let r = run(s.path(), &["eval", "no-such-file.ndjson"]);
+    assert_eq!(r.code, Some(1), "{}", r.stderr);
+}
+
+#[test]
+fn a_failed_calibration_check_exits_3_as_sim_bench_does() {
+    let s = Scratch::new("sim-calibrate-exit");
+    // One scenario and no `calibration.unmeasured` table: every kind the
+    // rules give a ratio above 1 that it does not measure fails.
+    let file = s.path().join("scenarios.toml");
+    std::fs::write(
+        &file,
+        "[[scenario]]\nname = \"sink\"\nseed = 11\nseeds = 1\n\
+         [[scenario.actor]]\nkind = \"swarm\"\nagents = 3\nmodes = [\"sink\"]\nrecords = 8\n",
+    )
+    .unwrap();
+    let r = run(
+        s.path(),
+        &["sim", "calibrate", file.to_str().unwrap(), "--check"],
+    );
+    assert_eq!(r.code, Some(3), "{}", r.stderr);
+    assert!(r.stdout.contains("UNMEASURED"), "{}", r.stdout);
+}
+
+#[test]
+fn the_full_result_goes_to_json_out_and_json_still_works() {
+    let s = Scratch::new("eval-json-out");
+    let files = samples();
+    for flag in ["--json-out", "--json"] {
+        let out = s
+            .path()
+            .join(format!("{}.json", flag.trim_start_matches('-')));
+        ok(
+            s.path(),
+            &with_samples(
+                &["eval", "--show-fp", "0", flag, out.to_str().unwrap()],
+                &files,
+            ),
+        );
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+        assert!(v.is_object(), "{flag}");
+    }
 }

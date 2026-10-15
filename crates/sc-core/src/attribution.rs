@@ -18,7 +18,10 @@
 //!    public scanner, so this alone never names a developer;
 //! 2. hosting network: the ASN the requests came from. It names a host, and
 //!    names a developer only when it belongs to the company the requests
-//!    self-identify as;
+//!    self-identify as. A cloud provider's published ranges add the region
+//!    and service as description. A Tor exit names no host and no sender:
+//!    its records are left out of every claim, and private reports carry a
+//!    caution instead ([`tor_caution`], [`crate::netranges`]);
 //! 3. identifiers shared with a confirmed incident (inbox IDs, tags);
 //! 4. infrastructure owned by the provider;
 //! 5. confirmation by the provider.
@@ -380,6 +383,31 @@ fn vendor_of(matched: &str) -> Option<(&'static str, &'static str)> {
     })
 }
 
+/// The company a self-identification hit names. A header rule's match is
+/// the whole header line, whose key ids, nonces and signatures may hold
+/// `gpt` or `kimi` by chance, so only the host names in a header line's
+/// value are read (`signature-agent: "https://chatgpt.com"`); any other
+/// match is read whole.
+fn self_id_vendor(matched: &str) -> Option<(&'static str, &'static str)> {
+    let Some((name, value)) = matched.split_once(": ") else {
+        return vendor_of(matched);
+    };
+    if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+        return vendor_of(matched);
+    }
+    value
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '.'))
+        .filter(|t| {
+            let labels: Vec<&str> = t.split('.').collect();
+            labels.len() > 1
+                && labels.iter().all(|l| !l.is_empty())
+                && labels
+                    .last()
+                    .is_some_and(|l| l.len() > 1 && l.chars().all(|c| c.is_ascii_alphabetic()))
+        })
+        .find_map(vendor_of)
+}
+
 /// Coding-harness tokens the `header.coding_agent_ua` rule reads, with the
 /// harness each names. Two of them sit inside a Mozilla-compatible user agent
 /// (Gemini CLI, Aider), so the first-token rule below would call them browser
@@ -425,20 +453,41 @@ fn ua_product(ua: &str) -> Option<String> {
     })
 }
 
-/// Who a runtime marker points at: the domain of a marker hostname
-/// (`a.hysandbox.example.com` → `example.com` runtime), else the rule.
-fn marker_party(rule: &str, matched: &str) -> String {
-    let labels: Vec<&str> = matched
-        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '.'))
-        .find(|s| s.contains('.'))
-        .unwrap_or("")
-        .split('.')
-        .filter(|l| !l.is_empty())
-        .collect();
+/// Who a runtime marker points at: the domain of a marker hostname, defanged
+/// (`a.hysandbox.example.com` → `example[.]com` runtime), when the rule
+/// matched a host (`host_match`); else the rule. A header line
+/// (`via: 1.1 edge`) names no domain, whatever dotted text it carries.
+fn marker_party(rule: &str, matched: &str, host_match: bool) -> String {
+    let labels: Vec<&str> = if host_match {
+        matched
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '.'))
+            .find(|s| s.contains('.'))
+            .unwrap_or("")
+            .split('.')
+            .filter(|l| !l.is_empty())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let tld = labels
+        .last()
+        .is_some_and(|l| l.len() > 1 && l.chars().all(|c| c.is_ascii_alphabetic()));
     match labels.len() {
-        0 | 1 => format!("runtime marked by {rule}"),
-        n => format!("{}.{} runtime", labels[n - 2], labels[n - 1]),
+        n if n >= 2 && tld => format!(
+            "{} runtime",
+            crate::extract::defang_host(&format!("{}.{}", labels[n - 2], labels[n - 1]))
+        ),
+        _ => format!("runtime marked by {rule}"),
     }
+}
+
+/// The caution a report gives for `n` records sent through Tor exit relays.
+/// It is no claim: it names no party and carries no label, because the
+/// network the requests left by says nothing about who sent them.
+pub fn tor_caution(n: usize) -> String {
+    format!(
+        "{n} record(s) were sent through Tor exit relays; the network says nothing about the sender. They are left out of the hosting claims, and nothing here attributes them to Tor or to the people who run its relays."
+    )
 }
 
 /// Claims the records support for one cluster: developer (self-identification
@@ -447,14 +496,15 @@ fn marker_party(rule: &str, matched: &str) -> String {
 pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
     // Developer claims from self-identification: company -> (name, records).
     let mut named: BTreeMap<&str, BTreeMap<String, usize>> = BTreeMap::new();
-    // Runtime markers (sandbox hostnames, proxy headers): rule -> (matched, records).
-    let mut markers: BTreeMap<(String, String), usize> = BTreeMap::new();
+    // Runtime markers (sandbox hostnames, proxy headers):
+    // (rule, matched, matched a host) -> records.
+    let mut markers: BTreeMap<(String, String, bool), usize> = BTreeMap::new();
     for &m in &c.members {
         let mut seen = std::collections::BTreeSet::new();
         for h in &a.results[m].hits {
             match h.kind {
                 IndicatorKind::SelfId => {
-                    if let Some((company, name)) = vendor_of(&h.matched)
+                    if let Some((company, name)) = self_id_vendor(&h.matched)
                         && seen.insert(name)
                     {
                         *named
@@ -466,12 +516,12 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
                 }
                 IndicatorKind::Infra => {
                     *markers
-                        .entry((h.rule_id.clone(), h.matched.to_ascii_lowercase()))
+                        .entry((h.rule_id.clone(), h.matched.to_ascii_lowercase(), true))
                         .or_default() += 1;
                 }
                 IndicatorKind::Header if h.rule_id.starts_with("header.via_") => {
                     *markers
-                        .entry((h.rule_id.clone(), h.matched.to_ascii_lowercase()))
+                        .entry((h.rule_id.clone(), h.matched.to_ascii_lowercase(), false))
                         .or_default() += 1;
                 }
                 _ => {}
@@ -481,12 +531,47 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
     // Networks the requests came from: the client's `asn`. A target's network
     // (`target_asn`, where a scan service reached the URL) says nothing about
     // who sent the request.
+    // A Tor exit names a relay, not the agent's host: those records are
+    // left out of every claim. Tor is no party to the incident, so they get
+    // no claim of their own; reports say so in a caution ([`tor_caution`]).
+    // Published cloud ranges ([`crate::netranges`]) describe the rest.
+    let hosting = &c.hosting;
     let mut sent_from: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut classed: BTreeMap<u32, BTreeMap<String, usize>> = BTreeMap::new();
+    let mut ranges_only: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
     for &m in &c.members {
-        if let Some(asn) = a.results[m].obs.asn {
-            *sent_from.entry(asn).or_default() += 1;
+        if hosting.tor.contains(&m) {
+            continue;
+        }
+        let class = hosting.members.get(&m);
+        match (a.results[m].obs.asn, class) {
+            (Some(asn), class) => {
+                *sent_from.entry(asn).or_default() += 1;
+                if let Some(cl) = class {
+                    *classed
+                        .entry(asn)
+                        .or_default()
+                        .entry(cl.label())
+                        .or_default() += 1;
+                }
+            }
+            (None, Some(cl)) => {
+                *ranges_only
+                    .entry(cl.provider.clone())
+                    .or_default()
+                    .entry(cl.label())
+                    .or_default() += 1;
+            }
+            (None, None) => {}
         }
     }
+    let in_ranges = |classes: Option<&BTreeMap<String, usize>>| -> Vec<String> {
+        classes
+            .into_iter()
+            .flatten()
+            .map(|(l, n)| format!("{n} of them from {l} published address ranges"))
+            .collect()
+    };
     let org = |asn: u32| {
         a.asns
             .iter()
@@ -517,8 +602,10 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
         });
     }
     for (&asn, n) in &sent_from {
+        let mut details = vec![format!("{n} record(s) sent from AS{asn}")];
+        details.extend(in_ranges(classed.get(&asn)));
         claims.push(Claim {
-            details: vec![format!("{n} record(s) sent from AS{asn}")],
+            details,
             tag: Some(Tag::Observed),
             records: *n,
             ..Claim::new(
@@ -528,15 +615,29 @@ pub fn attribute(a: &Analysis, c: &Cluster) -> Vec<Claim> {
             )
         });
     }
-    for ((rule, matched), n) in &markers {
+    // Records with no ASN whose address a provider's published ranges hold.
+    for (provider, classes) in &ranges_only {
+        let n: usize = classes.values().sum();
+        claims.push(Claim {
+            details: classes
+                .iter()
+                .map(|(l, k)| format!("{k} record(s) sent from {l} published address ranges"))
+                .collect(),
+            tag: Some(Tag::Observed),
+            records: n,
+            ..Claim::new(provider.clone(), Role::Host, Evidence::HostingAsn)
+        });
+    }
+    for ((rule, matched, host), n) in &markers {
         claims.push(Claim {
             details: vec![format!(
-                "{n} record(s) carry the runtime marker `{matched}` (rule {rule})"
+                "{n} record(s) carry the runtime marker `{}` (rule {rule})",
+                crate::extract::defang_hosts(matched)
             )],
             tag: Some(Tag::Observed),
             records: *n,
             ..Claim::new(
-                marker_party(rule, matched),
+                marker_party(rule, matched, *host),
                 Role::Host,
                 Evidence::HostingAsn,
             )
@@ -586,7 +687,12 @@ pub fn harness(a: &Analysis, c: &Cluster) -> Vec<Claim> {
         .map(|(product, (n, uas))| {
             let mut details: Vec<String> = uas
                 .iter()
-                .map(|(ua, k)| format!("{k} record(s) sent User-Agent `{ua}`"))
+                .map(|(ua, k)| {
+                    format!(
+                        "{k} record(s) sent User-Agent `{}`",
+                        crate::extract::defang_hosts(ua)
+                    )
+                })
                 .collect();
             details.extend(shared.iter().cloned());
             Claim {
@@ -921,5 +1027,58 @@ mod tests {
             ua_product("python-httpx/0.27").as_deref(),
             Some("python-httpx")
         );
+    }
+
+    /// A marker's party is a domain only when the rule matched a host, and
+    /// that domain prints defanged; a header marker names its rule.
+    #[test]
+    fn marker_parties_take_a_domain_only_from_a_host() {
+        assert_eq!(
+            marker_party(
+                "header.via_ats",
+                "via: 1.1 edge (apachetrafficserver/9.2)",
+                false
+            ),
+            "runtime marked by header.via_ats"
+        );
+        assert_eq!(
+            marker_party(
+                "header.via_hysandbox",
+                "via: 1.1 a.hysandbox.tencent-cloud.com",
+                false
+            ),
+            "runtime marked by header.via_hysandbox"
+        );
+        assert_eq!(
+            marker_party(
+                "infra.hysandbox_host",
+                "a1.hysandbox.tencent-cloud.com",
+                true
+            ),
+            "tencent-cloud[.]com runtime"
+        );
+        assert_eq!(
+            marker_party("infra.x", "1.1", true),
+            "runtime marked by infra.x"
+        );
+    }
+
+    /// A header self-identification hit records the whole header line, so
+    /// vendor names inside a key id or nonce are no developer claim.
+    #[test]
+    fn a_header_self_id_line_names_no_vendor() {
+        for line in [
+            "signature-input: sig1=(\"@authority\");keyid=\"gptglmkimi\";nonce=\"x\";tag=\"agent-browser-auth\"",
+            "signature-input: sig1=();keyid=\"poqkLGiym\";nonce=\"ZO3/XMEZjrvSnLtAP9M7jK0WGQf3J+pbmQRUpKDhF9/jsNCWqUh2sq+TH4WTX3/GpNoSZUa8eNWMKqxWp2/c2g==\"",
+        ] {
+            assert_eq!(self_id_vendor(line), None, "{line}");
+        }
+        // A signer's directory host is the agent's own name.
+        assert_eq!(
+            self_id_vendor("signature-agent: \"https://chatgpt.com\""),
+            Some(("OpenAI", "chatgpt"))
+        );
+        // A parameter value is read whole.
+        assert_eq!(self_id_vendor("GPT-4o"), Some(("OpenAI", "gpt")));
     }
 }

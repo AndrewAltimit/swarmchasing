@@ -7,7 +7,9 @@ pub mod agentness;
 pub mod analyze;
 pub mod asn;
 pub mod attribution;
+pub mod biclique;
 pub mod bursts;
+pub mod campaign;
 pub mod canary;
 pub mod capture;
 pub mod chains;
@@ -27,14 +29,17 @@ pub mod fanout;
 pub mod fingerprint;
 pub mod fleet_track;
 pub mod fleets;
+pub mod generator;
 pub mod identity;
 pub mod ingest;
 pub mod knowledge;
 pub mod model;
+pub mod netranges;
 pub mod notice;
 pub mod paths;
 pub mod plant;
 pub mod platform;
+pub mod playbook;
 pub mod prose;
 pub mod recurrence;
 pub mod redact;
@@ -42,6 +47,7 @@ pub mod report;
 pub mod rules;
 pub mod scaffold;
 pub mod scope;
+pub mod seam;
 pub mod securitytxt;
 pub mod sightings;
 pub mod sort;
@@ -64,14 +70,14 @@ pub use escalation::{Escalation, Route};
 pub use eval::summary::{Summary, summarize};
 pub use eval::{EvalReport, Label, LabelSet, evaluate, parse_labels};
 pub use extract::{
-    Extracted, Layer, defang, defang_host, extract, intermediary_hosts, is_intermediary_host,
-    unwrap_layers,
+    Extracted, Layer, clip_defanged, defang, defang_feature, defang_host, defang_hosts, extract,
+    intermediary_hosts, is_intermediary_host, unwrap_layers,
 };
 pub use fanout::FanOut;
 pub use fingerprint::{Encoding, HeaderSet, encoding, header_set};
 pub use fleets::{CandidateFleet, Family, PairEvidence, SoftLink, SoftLinkKind};
 pub use identity::{Catalog, ClusterIdentity, IdentityClass, IdentityData, RecordIdentity};
-pub use ingest::{FieldMap, Format, Parsed, parse_input};
+pub use ingest::{FieldMap, Format, Parsed, detect_format, parse_input};
 pub use model::{
     Hit, IndicatorKind, LinkFeature, OPERATOR_SOURCE, Observation, Provenance, SUBMISSION_SOURCE,
     SourceKind, Tactic, Tier, TsKind, fmt_ts, parse_ts, top_counts,
@@ -84,5 +90,7 @@ pub use report::{Audience, Notice, ReportOptions, Reported, render_markdown, ren
 pub use rules::{DEFAULT_RULES, RuleSet, Rules};
 pub use securitytxt::{SecurityTxt, parse_security_txt};
 pub use stamp::{EvalSnapshot, Stamp, StampCluster};
-pub use swarm::{EdgeStrength, RunRef, SwarmEdge, SwarmEdgeKind, SwarmOptions};
+pub use swarm::{
+    EdgeStrength, OnsetGroup, OnsetOptions, RunRef, SwarmEdge, SwarmEdgeKind, SwarmOptions,
+};
 pub use timing::{SharedPause, SharedPauseOptions, StaleDates, shared_pauses, stale_dates};

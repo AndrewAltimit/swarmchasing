@@ -30,7 +30,7 @@ pub const PAIR_MIN_JACCARD: f64 = 0.6;
 pub const MAX_TRAVERSAL_DEPTH: usize = 12;
 /// Cut-length settings (`[cut_lengths]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CutOptions {
     /// Truncated records that must share a cut length before it is reported.
     pub min_records: usize,

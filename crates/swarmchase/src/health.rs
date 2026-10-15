@@ -3,10 +3,15 @@
 //! A source whose pull collapses against its own recent history usually means
 //! an API change, an expired key or a spent quota, not a quiet week. A rule
 //! whose hit rate on new records jumps against its recent history usually
-//! means the rule started matching something ordinary. Both are reported in
+//! means the rule started matching something ordinary, though a swarm
+//! starting below the clustering threshold reads the same: where the onset
+//! check (`watch/onset.rs`) also finds the rule rising, the alert says
+//! "drift or onset" ([`Reading`]). Both are reported in
 //! the digest before a broken source hides a swarm or a noisy rule reaches a
-//! notice. A failed run alerts at once; a source that keeps pulling nothing,
-//! or is skipped run after run, is noted without alerting every time.
+//! notice. A failed run alerts at once, and a failure that goes on alerts
+//! again on its 2nd, 4th, 8th... run in a row ([`alert_due`]); a source that
+//! keeps pulling nothing, or is skipped run after run, is noted without
+//! alerting every time.
 
 use sc_core::Analysis;
 use serde::{Deserialize, Serialize};
@@ -52,6 +57,20 @@ pub struct SourceHealth {
     /// Runs in a row the source was skipped (no API key).
     #[serde(default)]
     pub skipped_runs: u32,
+    /// Pulls in a row whose canary failed.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub canary_failed_runs: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+/// Whether the `n`th run of a failure streak alerts: the 1st, 2nd, 4th,
+/// 8th and so on. A streak that goes on is still reported, without a
+/// mailed digest every run for the same failure.
+pub fn alert_due(n: u32) -> bool {
+    n.is_power_of_two()
 }
 
 impl SourceHealth {
@@ -84,15 +103,32 @@ impl SourceHealth {
         (self.empty_runs >= QUIET_RUNS).then_some(self.empty_runs)
     }
 
+    /// A pull that read its source: count a failed canary towards its
+    /// streak, or end the streak. Returns the streak while it fails.
+    pub fn observe_canary(&mut self, canary: Option<bool>) -> Option<u32> {
+        if canary == Some(false) {
+            self.canary_failed_runs += 1;
+            Some(self.canary_failed_runs)
+        } else {
+            self.canary_failed_runs = 0;
+            None
+        }
+    }
+
     /// Check this run against the history, then add it. `pulled` is the
-    /// error's short reason when the pull failed. Every failure alerts, so it
-    /// reaches the admin within one run.
+    /// error's short reason when the pull failed. A first failure alerts, so
+    /// it reaches the admin within one run; a streak alerts again on its
+    /// 2nd, 4th, 8th... run ([`alert_due`]), and the digest's source table
+    /// shows the error on every run.
     pub fn observe(&mut self, name: &str, pulled: Result<usize, &str>) -> Option<String> {
         self.skipped_runs = 0;
         let n = match pulled {
             Ok(n) => n,
             Err(why) => {
                 self.errors_in_row += 1;
+                if !alert_due(self.errors_in_row) {
+                    return None;
+                }
                 return Some(if self.errors_in_row == 1 {
                     format!(
                         "`{name}` failed this run ({why}); it retries from its checkpoint next run"
@@ -173,13 +209,37 @@ pub struct Drift {
     pub records: usize,
     pub baseline_hits: usize,
     pub baseline_records: usize,
+    /// How the rise reads, once the onset check has run.
+    pub reading: Reading,
+}
+
+/// What a rule's jump in rate most likely is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Reading {
+    /// A rule matching something ordinary.
+    #[default]
+    Drift,
+    /// Both fit: the onset check also finds the rule's slice rising on its
+    /// own, as a swarm starting below the clustering threshold would.
+    DriftOrOnset,
+    /// Most of the source's slices rose with it: the source changed.
+    Source,
 }
 
 impl Drift {
     pub fn line(&self) -> String {
         let pct = |h: usize, n: usize| 100.0 * h as f64 / n.max(1) as f64;
+        let what = match self.reading {
+            Reading::Drift => "",
+            Reading::DriftOrOnset => {
+                "drift or onset: the rule may match something ordinary, or a swarm may be starting below the clustering threshold (see Slice onsets); "
+            }
+            Reading::Source => {
+                "with most of its source's slices, so read as a source-side change before a noisy rule; "
+            }
+        };
         format!(
-            "`{}` fired on {} of {} new records from {} ({:.1}%) against {:.1}% over its previous {} records",
+            "{what}`{}` fired on {} of {} new records from {} ({:.1}%) against {:.1}% over its previous {} records",
             self.rule,
             self.hits,
             self.records,
@@ -242,6 +302,7 @@ fn drift(baseline: &[RuleRun], run: &RuleRun) -> Vec<Drift> {
                 records: run.records,
                 baseline_hits: base_hits,
                 baseline_records: base_records,
+                reading: Reading::Drift,
             });
         }
     }
@@ -272,6 +333,13 @@ mod tests {
         assert!(first.contains("next run"), "{first}");
         let second = h.observe("s", Err("HTTP 504")).unwrap();
         assert!(second.contains("2 runs in a row (HTTP 504)"), "{second}");
+        // A streak alerts again on its 4th and 8th run, not on every one.
+        assert_eq!(h.observe("s", Err("HTTP 504")), None);
+        assert!(h.observe("s", Err("HTTP 504")).unwrap().contains("4 runs"));
+        for _ in 5..8 {
+            assert_eq!(h.observe("s", Err("HTTP 504")), None);
+        }
+        assert!(h.observe("s", Err("HTTP 504")).unwrap().contains("8 runs"));
         assert_eq!(h.observe("s", Ok(40)), None);
         assert_eq!(h.errors_in_row, 0);
         assert_eq!(h.pulled.len(), 6);
@@ -307,6 +375,15 @@ mod tests {
         assert_eq!(h.observe_skip("uq", "URLQUERY_APIKEY not set"), None);
         h.observe("uq", Ok(1));
         assert!(h.observe_skip("uq", "again").is_some());
+
+        // A canary streak counts up and ends on a pass or a source with none.
+        assert_eq!(h.observe_canary(Some(false)), Some(1));
+        assert_eq!(h.observe_canary(Some(false)), Some(2));
+        assert_eq!(h.observe_canary(Some(true)), None);
+        assert_eq!(h.observe_canary(Some(false)), Some(1));
+        assert_eq!(h.observe_canary(None), None);
+        let due: Vec<u32> = (1..=20).filter(|&n| alert_due(n)).collect();
+        assert_eq!(due, [1, 2, 4, 8, 16]);
     }
 
     fn run(records: usize, hits: &[(&str, usize)]) -> RuleRun {
@@ -333,6 +410,20 @@ mod tests {
         assert_eq!((d[0].source.as_str(), d[0].rule.as_str()), ("s", "a"));
         assert_eq!((d[0].baseline_hits, d[0].baseline_records), (3, 150));
         assert!(d[0].line().contains("20.0%"), "{}", d[0].line());
+        assert!(!d[0].line().contains("onset"));
+        let mut both = d[0].clone();
+        both.reading = Reading::DriftOrOnset;
+        assert!(
+            both.line().starts_with("drift or onset: "),
+            "{}",
+            both.line()
+        );
+        both.reading = Reading::Source;
+        assert!(
+            both.line().contains("source-side change"),
+            "{}",
+            both.line()
+        );
 
         // A brand-new rule with no baseline hits drifts too.
         let (d, _) = h.observe("v1", one("s", run(40, &[("c", 6)])));

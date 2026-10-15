@@ -18,7 +18,14 @@
 // defang on the tools page; the identity page's synthetic example (each
 // class it holds renders, spoofed records in the alert), hostile records
 // and a hostile provider file; the log check's example and a hostile access
-// log. It also checks layout: no page scrolls sideways
+// log, and the hostile log it hands the workbench through session storage
+// (read once, then cleared), and a JSON log handed over in its format; a
+// gzip of several members; a set of log archives (zip, .tgz) whose entry
+// names and lines carry probes, checked on the log check, carried to the
+// workbench and picked on the workbench, each file read and named as text
+// (archives built at run time by ci/archive-fixtures.mjs), in the analysis
+// worker and again on the page with workers unavailable, which must give
+// the same result. It also checks layout: no page scrolls sideways
 // at 390 px, every nav menu opens inside the viewport at 390 and 1440 px as
 // one column, and each press of the theme toggle flips the look, storing it
 // only while it differs from the system's.
@@ -41,6 +48,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
+import { gzip as gzipBytes, logSet, tar as tarArchive, zip as zipArchive } from "./ci/archive-fixtures.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 // Override with XSS_PORT and XSS_DEBUG_PORT when another check holds these.
@@ -224,6 +232,31 @@ for (const [name, text] of [
   ["MANIFEST.sha256", `${"0".repeat(64)}  records.ndjson\n${program}  stamp.json\n`],
 ]) writeFileSync(join(bundleDir, name), text);
 const bundleFiles = ["records.ndjson", "analysis.json", "stamp.json", "claims.json", "MANIFEST.sha256"].map((n) => join(bundleDir, n));
+
+// Archives of logs for the log check and the workbench (built here, never
+// committed): a zip whose entry names and lines carry probes (markup in a
+// name, a path that climbs out, a JSON log beside the access log), and a
+// .tgz of synthetic logs whose probe run spans its files.
+const archiveDir = join(tmp, "archives");
+mkdirSync(archiveDir);
+const hostileLine = (ip, t) => `${ip} - - [04/Oct/2026:${t} +0000] "GET /search?q=${encodeURIComponent(program)}&cb=https://webhook.site/x HTTP/1.1" 200 1 "${tag}" "ChatGPT-User/1.0 ${program}"`;
+const hostileZip = join(archiveDir, "hostile-logs.zip");
+writeFileSync(hostileZip, zipArchive([
+  { name: `<img src=x onerror="${fire}">.log`, data: [hostileLine("203.0.113.5", "08:10:00"), hostileLine("203.0.113.5", "08:10:09"), hostileLine("203.0.113.5", "08:10:18")].join("\n") + "\n" },
+  { name: `../../<script>${fire}</script>/access.log`, data: `${hostileLine("203.0.113.6", "08:10:27")}\n203.0.113.6 - - [04/Oct/2026:08:10:30 +0000] "GET /${tag} HTTP/1.1" 200 1 "-" "-"\n` },
+  { name: `json/${tag}.json`, data: JSON.stringify({ ts: "2026-10-04T08:10:40Z", url: `https://www.example.org/?q=${encodeURIComponent(program)}`, ip: "203.0.113.6" }) + "\n" },
+  { name: "core.bin", data: new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0, 0]) },
+]));
+const logTgz = join(archiveDir, "rotated-logs.tgz");
+const synthetic = logSet();
+writeFileSync(logTgz, gzipBytes(tarArchive(Object.entries(synthetic).map(([name, data]) => ({ name: `var/log/${name}`, data })))));
+const threeZip = join(archiveDir, "three-logs.zip");
+writeFileSync(threeZip, zipArchive(["access.log", "access.log.1", "access.log.2"].map((n) => ({ name: n, data: synthetic[n] }))));
+// Rotated logs joined with cat, a gzip member each, zeros after the last:
+// Chrome's own gzip reader stops at the first member.
+const joinedGz = join(archiveDir, "joined-access.log.gz");
+const joinedLines = ["access.log", "access.log.1", "access.log.2"].reduce((n, k) => n + synthetic[k].trim().split("\n").length, 0);
+writeFileSync(joinedGz, Buffer.concat([...["access.log", "access.log.1", "access.log.2"].map((n) => gzipBytes(synthetic[n])), new Uint8Array(64)]));
 
 const sectxt = `Contact: mailto:${program}\nContact: javascript:${fire}\nPolicy: ${tag}\nExpires: ${program}\n`;
 
@@ -485,6 +518,11 @@ try {
     for (let i = 0; i < 50 && !document.querySelector("#context table.layers"); i++) await wait(100);
     const layersShown = !!document.querySelector("#context table.layers");
     const box = document.getElementById("claims");
+    // The draft is redrafted only while the report section is on screen
+    // (at this width the panes are steps: go to the report's).
+    document.querySelector('.steps button[data-step="report"]')?.click();
+    document.getElementById("report").scrollIntoView({ block: "center" });
+    await wait(100);
     const type = async (v) => { box.value = v; box.dispatchEvent(new Event("input")); await wait(400); };
     await type(${JSON.stringify(badClaims)});
     const claimsError = document.getElementById("claims-status").textContent;
@@ -629,6 +667,155 @@ try {
   if (!clRun.next) failures.push("the log check showed no next steps");
   if (!clRun.shown) failures.push("the log check showed nothing for a hostile log");
   await audit("check-logs");
+  // The log Check my logs hands the workbench: a hostile one, through this
+  // tab's session storage, read once and removed with the hash's flag.
+  await run(`sessionStorage.setItem("swarmchase.handoff", ${JSON.stringify(JSON.stringify({
+    v: 1,
+    log: `203.0.113.5 - - [04/Oct/2026:08:10:00 +0000] "GET /search?q=${encodeURIComponent(program)}&cb=https://webhook.site/x HTTP/1.1" 200 1 "-" "${tag}"\n`,
+    map: "host=www.example.org",
+  }))})`);
+  await open("analyze/#preset=access-log&from=check-logs", `!document.getElementById("input-collapsed").hidden`);
+  const handoff = await run(`({ read: !document.getElementById("input-collapsed").hidden && !document.getElementById("summary").hidden, left: sessionStorage.getItem("swarmchase.handoff"), hash: location.hash, format: document.getElementById("format").value })`);
+  if (!handoff.read) failures.push(`the workbench did not analyse the log Check my logs handed over: ${JSON.stringify(handoff)}`);
+  if (handoff.left !== null || /from=/.test(handoff.hash)) failures.push(`the handed-over log was not cleared: ${JSON.stringify({ left: !!handoff.left, hash: handoff.hash })}`);
+  if (handoff.format !== "access_log") failures.push(`the handed-over log was not read as an access log: ${handoff.format}`);
+  await audit("check-logs handoff");
+  const waitFor = async (expr, tries = 150) => {
+    for (let i = 0; i < tries; i++) {
+      try {
+        if (await run(`(() => { try { return !!(${expr}); } catch { return false; } })()`)) return true;
+      } catch {}
+      await sleep(100);
+    }
+    return false;
+  };
+  // A pasted JSON log goes over in the format Check my logs read it in:
+  // checked there and carried by its workbench link, then from a page that
+  // sent no format, which the workbench picks as Check my logs would.
+  const readJsonLog = async () => {
+    await waitFor(`!document.getElementById("input-collapsed").hidden || !document.getElementById("alert").hidden`);
+    return run(`({ read: !document.getElementById("input-collapsed").hidden && !document.getElementById("summary").hidden, format: document.getElementById("format").value, alert: document.getElementById("alert").hidden ? "" : document.getElementById("alert").textContent })`);
+  };
+  await open("check-logs/", `document.getElementById("cl-input")`);
+  await run(`(async () => {
+    const box = document.getElementById("cl-input");
+    box.value = ${JSON.stringify(synthetic["app.json"])};
+    box.dispatchEvent(new Event("input"));
+    document.getElementById("cl-host").value = "www.example.org";
+    document.getElementById("cl-run").click();
+    for (let i = 0; i < 200 && document.getElementById("cl-result").hidden && document.getElementById("cl-alert").hidden; i++) await new Promise((r) => setTimeout(r, 50));
+    document.querySelector('#cl-next a[href="../analyze/#preset=access-log"]').click();
+  })()`);
+  await waitFor(`location.pathname.includes("/analyze/")`);
+  const jsonHandoff = await readJsonLog();
+  if (!jsonHandoff.read || jsonHandoff.format !== "auto") failures.push(`the workbench did not read the JSON log Check my logs handed over: ${JSON.stringify(jsonHandoff).slice(0, 300)}`);
+  await run(`sessionStorage.setItem("swarmchase.handoff", ${JSON.stringify(JSON.stringify({ v: 1, log: synthetic["app.json"], map: "host=www.example.org" }))})`);
+  await open("analyze/#preset=access-log&from=check-logs", `document.getElementById("format")`);
+  const oldHandoff = await readJsonLog();
+  if (!oldHandoff.read || oldHandoff.format !== "auto") failures.push(`the workbench did not read a JSON log handed over without its format: ${JSON.stringify(oldHandoff).slice(0, 300)}`);
+  await audit("check-logs JSON handoff");
+
+  // A set of logs: the hostile zip and the synthetic .tgz picked together
+  // on Check my logs, read file by file and checked as one, then carried
+  // to the workbench; then three logs in a zip and the .tgz picked on the
+  // workbench itself. Entry names and lines carry probes.
+  const pickFiles = async (selector, files) => {
+    await send("DOM.enable");
+    const d = await send("DOM.getDocument");
+    const n = await send("DOM.querySelector", { nodeId: d.result.root.nodeId, selector });
+    await send("DOM.setFileInputFiles", { nodeId: n.result.nodeId, files: files.map(forBrowser) });
+  };
+  await open("check-logs/", `document.getElementById("cl-file")`);
+  await run(`document.getElementById("cl-host").value = "www.example.org"`);
+  await pickFiles("#cl-file", [hostileZip, logTgz]);
+  await waitFor(`!document.getElementById("cl-result").hidden || !document.getElementById("cl-alert").hidden`);
+  const clSet = await run(`(() => {
+    const s = document.getElementById("cl-summary");
+    return {
+      files: s.querySelectorAll("table.files tbody tr").length,
+      skipped: s.querySelectorAll("ul.skipped li").length,
+      flagged: s.querySelectorAll("table.records tbody tr").length,
+      fileColumn: [...s.querySelectorAll("table.records th")].some((th) => th.textContent === "File"),
+      text: s.textContent.includes("<script>") && s.textContent.includes("<img src=x"),
+      alert: document.getElementById("cl-alert").hidden ? "" : document.getElementById("cl-alert").textContent,
+      ranIn: document.body.dataset.analysedIn ?? "",
+    };
+  })()`);
+  if (clSet.ranIn !== "worker") failures.push(`the log check's set did not run in the analysis worker: ${clSet.ranIn || "nothing ran"}`);
+  stats.checkLogsSet = clSet.files;
+  if (clSet.alert) failures.push(`the log check did not read the set of archives: ${clSet.alert.slice(0, 200)}`);
+  if (clSet.files !== 7) failures.push(`the log check listed ${clSet.files} file(s) read from the set, expected 7`);
+  if (clSet.skipped !== 1) failures.push(`the log check listed ${clSet.skipped} entry(ies) not read, expected the binary one`);
+  if (!clSet.flagged || !clSet.fileColumn) failures.push("the log check's set showed no flagged request with its file");
+  if (!clSet.text) failures.push("the hostile entry names did not render as text on the log check");
+  await audit("check-logs set");
+  await run(`document.querySelector('#cl-next a[href="../analyze/#preset=access-log"]').click()`);
+  await waitFor(`location.pathname.includes("/analyze/") && !document.getElementById("input-collapsed").hidden`);
+  const setHandoff = await run(`({
+    files: document.querySelectorAll("#files table.files tbody tr").length,
+    set: !document.getElementById("set").hidden,
+    left: sessionStorage.getItem("swarmchase.handoff"),
+    text: document.getElementById("files").textContent.includes("<img src=x"),
+  })`);
+  if (setHandoff.files !== 7 || !setHandoff.set) failures.push(`the workbench did not analyse the set Check my logs handed over: ${JSON.stringify(setHandoff)}`);
+  if (setHandoff.left !== null) failures.push("the handed-over set was not cleared");
+  if (!setHandoff.text) failures.push("the handed-over entry names did not render as text in the workbench");
+  await audit("check-logs set handoff");
+  await open("analyze/", `document.getElementById("file")`);
+  await run(`document.getElementById("map").value = "host=www.example.org"`);
+  await pickFiles("#file", [threeZip, logTgz]);
+  await waitFor(`!document.getElementById("input-collapsed").hidden || !document.getElementById("alert").hidden`);
+  const wbSet = await run(`(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const files = document.querySelectorAll("#files table.files tbody tr").length;
+    const counted = [...document.querySelectorAll("#files table.files td[data-label=Records]")].every((td) => Number(td.textContent) > 0);
+    const options = document.getElementById("rec-file").options.length;
+    const picker = !document.getElementById("rec-file-wrap").hidden;
+    const rows = document.querySelectorAll("#records tbody tr.pick").length;
+    document.querySelector("#records tbody tr.pick")?.click();
+    await wait(200);
+    const context = [...document.querySelectorAll("#context dt")].some((dt) => dt.textContent === "File");
+    const pick = document.getElementById("rec-file");
+    pick.value = "2";
+    pick.dispatchEvent(new Event("change"));
+    await wait(200);
+    return { files, counted, options, picker, rows, context, head: document.getElementById("records-h").textContent, alert: document.getElementById("alert").hidden ? "" : document.getElementById("alert").textContent, ranIn: document.body.dataset.analysedIn ?? "", total: document.getElementById("input-count").textContent };
+  })()`);
+  if (wbSet.ranIn !== "worker") failures.push(`the workbench's set did not run in the analysis worker: ${wbSet.ranIn || "nothing ran"}`);
+  stats.workbenchSet = wbSet.files;
+  if (wbSet.alert) failures.push(`the workbench did not read the set: ${wbSet.alert.slice(0, 200)}`);
+  if (wbSet.files !== 7 || !wbSet.counted || wbSet.options !== 8 || !wbSet.picker) failures.push(`the workbench's set summary or file filter is wrong: ${JSON.stringify(wbSet)}`);
+  if (!wbSet.rows || !wbSet.context) failures.push(`the workbench's set showed no flagged record with its file: ${JSON.stringify(wbSet)}`);
+  if (!/in rotated-logs\.tgz\/var\/log\/access\.log\.1/.test(wbSet.head)) failures.push(`the workbench's file filter did not apply: ${wbSet.head}`);
+  await audit("workbench set");
+  // The same set with workers unavailable: the page runs the analysis
+  // itself, with the same result.
+  const noWorker = await send("Page.addScriptToEvaluateOnNewDocument", { source: "window.Worker = undefined;" });
+  await open("analyze/", `document.getElementById("file")`);
+  await run(`document.getElementById("map").value = "host=www.example.org"`);
+  await pickFiles("#file", [threeZip, logTgz]);
+  await waitFor(`!document.getElementById("input-collapsed").hidden || !document.getElementById("alert").hidden`);
+  const pageSet = await run(`({
+    files: document.querySelectorAll("#files table.files tbody tr").length,
+    rows: document.querySelectorAll("#records tbody tr.pick").length,
+    total: document.getElementById("input-count").textContent,
+    ranIn: document.body.dataset.analysedIn ?? "",
+  })`);
+  await send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noWorker.result.identifier });
+  if (pageSet.ranIn !== "page") failures.push(`with workers unavailable the workbench did not fall back to the page: ${pageSet.ranIn || "nothing ran"}`);
+  if (pageSet.files !== wbSet.files || pageSet.total !== wbSet.total) failures.push(`the page's analysis differs from the worker's: ${JSON.stringify({ worker: [wbSet.files, wbSet.total], page: [pageSet.files, pageSet.total] })}`);
+  await audit("workbench set without a worker");
+  // A gzip of several members reads every member, in the worker.
+  await open("analyze/", `document.getElementById("file")`);
+  await pickFiles("#file", [joinedGz]);
+  await waitFor(`!document.getElementById("input-collapsed").hidden || !document.getElementById("alert").hidden`);
+  const joined = await run(`({
+    rows: [...document.querySelectorAll("#files table.files tbody tr")].map((tr) => tr.textContent),
+    records: [...document.querySelectorAll("#files table.files td[data-label=Records]")].map((td) => Number(td.textContent)),
+    skipped: document.querySelectorAll("#files ul.skipped li").length,
+  })`);
+  if (joined.records.length !== 1 || joined.records[0] !== joinedLines || joined.skipped) failures.push(`the workbench did not read every member of a joined gzip (${joinedLines} lines): ${JSON.stringify(joined).slice(0, 300)}`);
+  await audit("joined gzip");
   // Back to the tools page for the bundle viewer.
   await open("tools/", `document.getElementById("case-example")`);
 

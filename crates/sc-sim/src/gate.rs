@@ -13,7 +13,7 @@
 //! nothing fails: nothing drawn is no evidence of precision.
 
 use crate::measure::{KindStat, Measurement};
-use crate::scenario::{Scenario, ScenarioFile, expect_key};
+use crate::scenario::{CLUSTER_KEY, GRADE_KEYS, Scenario, ScenarioFile, expect_key};
 use serde::{Deserialize, Serialize};
 
 /// What the null scenarios drew between different runs, summed over their
@@ -214,12 +214,37 @@ impl Gate {
             let m = results.iter().find(|r| r.0 == s.name).map(|r| &r.1);
             for (kind, e) in &s.expect {
                 let name = |what: &str| format!("{} {kind} {what}", s.name);
+                if GRADE_KEYS.contains(&kind.as_str()) {
+                    let value = m.map_or(0, |m| match kind.as_str() {
+                        "human_high" => m.human_high,
+                        _ => m.benign_high,
+                    });
+                    let most = e.max_records.unwrap_or(0);
+                    out.push(Check {
+                        name: name("records"),
+                        value: value.to_string(),
+                        bound: format!("<= {most}"),
+                        ok: value <= most,
+                    });
+                    continue;
+                }
+                if kind == CLUSTER_KEY {
+                    let least = e.min_f1.unwrap_or(0.0);
+                    let f1 = m.and_then(|m| m.clustering.bcubed()).map(|b| b.2);
+                    out.push(Check {
+                        name: name("B-cubed F1"),
+                        value: f1.map_or("no agent record".into(), |f| format!("{f:.3}")),
+                        bound: format!(">= {least:.3}"),
+                        ok: f1.is_some_and(|f| f + 1e-12 >= least),
+                    });
+                    continue;
+                }
                 let stat = m.and_then(|m| {
                     let (key, edge) = expect_key(kind)?;
                     if edge {
                         m.edges.get(&key)
                     } else {
-                        m.links.get(&key)
+                        m.groups.get(&key).or_else(|| m.links.get(&key))
                     }
                 });
                 if let Some(most) = e.max_pairs {
@@ -411,6 +436,90 @@ mod tests {
                 "[[scenario]]\nname = \"s\"\nexpect.S9 = {}\n[[scenario.actor]]\nkind = \"agent\"\n"
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn a_clustering_bound_reads_b_cubed_f1() {
+        let file = ScenarioFile::parse(
+            "[[scenario]]
+name = \"s\"
+expect.clusters = { min_f1 = 0.9 }
+[[scenario.actor]]
+kind = \"agent\"
+",
+        )
+        .unwrap();
+        let g = Gate {
+            expect: true,
+            ..Default::default()
+        };
+        let mut m = Measurement::default();
+        // Four records: precision 1, recall 0.75 (F1 6/7).
+        m.clustering.records = 4;
+        m.clustering.bcubed_precision_sum = 4.0;
+        m.clustering.bcubed_recall_sum = 3.0;
+        let lines: Vec<String> = g
+            .check_scenarios(&[("s".to_string(), m.clone())], &file)
+            .iter()
+            .map(Check::line)
+            .collect();
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].starts_with("FAIL s clusters B-cubed F1: 0.857"),
+            "{lines:?}"
+        );
+        m.clustering.bcubed_recall_sum = 4.0;
+        let c = g.check_scenarios(&[("s".to_string(), m)], &file);
+        assert!(c[0].ok, "{:?}", c[0]);
+        // Without min_f1 the table is refused.
+        assert!(
+            ScenarioFile::parse(
+                "[[scenario]]\nname = \"s\"\nexpect.clusters = { min_recall = 0.9 }\n[[scenario.actor]]\nkind = \"agent\"\n"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn review_hints_are_expected_like_kinds() {
+        let file = ScenarioFile::parse(
+            "[[scenario]]
+name = \"s\"
+expect.seam = { min_recall = 0.5 }
+             expect.onset_group = { max_pairs = 0 }
+[[scenario.actor]]
+kind = \"agent\"
+",
+        )
+        .unwrap();
+        let mut m = Measurement::default();
+        m.groups.insert(
+            "seam".into(),
+            KindStat {
+                found: 1,
+                of: 2,
+                ..stat(1, 1)
+            },
+        );
+        m.groups.insert("onset_group".into(), stat(3, 0));
+        let g = Gate {
+            expect: true,
+            ..Default::default()
+        };
+        let lines: Vec<String> = g
+            .check_scenarios(&[("s".to_string(), m)], &file)
+            .iter()
+            .map(Check::line)
+            .collect();
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(
+            lines[0].starts_with("FAIL s onset_group pairs drawn: 3"),
+            "{lines:?}"
+        );
+        assert!(
+            lines[1].starts_with("ok   s seam recall: 50.0%"),
+            "{lines:?}"
         );
     }
 

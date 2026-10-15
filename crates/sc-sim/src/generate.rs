@@ -15,7 +15,7 @@
 
 use crate::palette::{Palette, Template, Use};
 use crate::rng::Rng;
-use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Prose, Scenario};
+use crate::scenario::{Actor, Basis, Kind, Mode, Pace, Prose, Scenario, TagScope, TagStyle};
 use sc_core::{LinkFeature, Observation, TsKind};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -50,6 +50,16 @@ const PREVIEW_UAS: &[&str] = &[
     "LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)",
     "TelegramBot (like TwitterBot)",
 ];
+/// One link checker's scripted client, the same in every repository.
+const LINK_CHECKER_UA: &str = "python-requests/2.31.0";
+const SEO_UAS: &[&str] = &[
+    "Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)",
+    "Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)",
+    "Mozilla/5.0 (compatible; MJ12bot/v1.4.8; http://mj12bot.com/)",
+    "Mozilla/5.0 (compatible; DotBot/1.2; +https://opensiteexplorer.org/dotbot)",
+];
+/// Addresses an SEO vendor shards its crawl over.
+const SEO_SHARDS: usize = 4;
 const FEED_UAS: &[&str] = &[
     "Feedly/1.0 (+http://www.feedly.com/fetcher.html; 12 subscribers)",
     "Mozilla/5.0 (compatible; Inoreader/1.0; https://www.inoreader.com)",
@@ -171,7 +181,39 @@ struct Gen<'a> {
     shapes: BTreeMap<usize, Vec<Shape>>,
     /// Request times by true run, for planters copying timing.
     times: BTreeMap<String, Vec<i64>>,
+    /// The current actor's options that [`Gen::run`] applies to each of its
+    /// runs.
+    opts: RunOpts,
+    /// How the current actor's runs generate their tags.
+    tag_style: TagStyle,
+    /// Identifier replacements given out so far, shared by every run's
+    /// [`Ids`] so no two scopes get one value.
+    taken: Taken,
 }
+
+/// Actor options [`Gen::run`] applies to every run of the actor.
+#[derive(Debug, Clone, Default)]
+struct RunOpts {
+    /// Overrides each run's `tag`.
+    tags: Option<TagScope>,
+    /// A new client for every request.
+    rotate: bool,
+    /// Seconds between requests, a tenth either way, instead of the pace.
+    gap_secs: Option<i64>,
+    /// Stalls, in time order: requests due in `[start, start + secs)` leave
+    /// `secs` later, each stall once per run.
+    stalls: Vec<(i64, i64)>,
+    /// A secret every request carries, as ingest writes it.
+    secret: Option<String>,
+    /// Time-bearing tags each run mints, one per equal part of its
+    /// requests.
+    tag_mints: usize,
+}
+
+/// The parameter a secret rides in.
+const SECRET_PARAM: &str = "api_key";
+/// The documented demo key that unrelated clients copy from one API's docs.
+const DEMO_KEY: &str = "demo";
 
 /// The labelled records of one scenario under one seed, in time order.
 pub fn generate(s: &Scenario, seed: u64, palette: &Palette) -> Vec<Value> {
@@ -184,8 +226,21 @@ pub fn generate(s: &Scenario, seed: u64, palette: &Palette) -> Vec<Value> {
         out: Vec::new(),
         shapes: BTreeMap::new(),
         times: BTreeMap::new(),
+        opts: RunOpts::default(),
+        tag_style: TagStyle::Random,
+        taken: Taken::default(),
     };
     for (i, a) in s.actor.iter().enumerate() {
+        g.opts = RunOpts {
+            tags: a.tag_scope,
+            rotate: a.rotate_clients,
+            gap_secs: a.gap_hours.map(|h| (h * 3600.0) as i64),
+            stalls: Vec::new(),
+            secret: a
+                .stock_secret
+                .then(|| sc_core::redact::hash_token(DEMO_KEY)),
+            tag_mints: a.tag_mints.unwrap_or(1).max(1),
+        };
         g.actor(i, a);
     }
     g.out.sort_by(|a, b| {
@@ -215,6 +270,7 @@ pub fn to_ndjson(records: &[Value]) -> String {
 
 impl Gen<'_> {
     fn actor(&mut self, i: usize, a: &Actor) {
+        self.tag_style = a.tag_style;
         let mut rng = self.rng.fork(&format!("actor{i}"));
         let mut start = self.t0 + (a.offset_hours * 3600.0) as i64;
         if a.off_hour {
@@ -281,19 +337,30 @@ impl Gen<'_> {
             Kind::PromptFleet => self.prompt_fleet(i, a, start, window, &mut rng),
             Kind::Framework => self.framework(i, a, start, window, &mut rng),
             Kind::Swarm => self.swarm(i, a, start, &mut rng),
+            Kind::Trigger => self.trigger(i, a, start, &mut rng),
+            Kind::Campaign => self.campaign(i, a, start, window, &mut rng),
             Kind::Escalator => self.escalator(i, a, start, window, &mut rng),
             Kind::Fleet => {
                 let fleet = format!("{}-f{i}", self.scenario.name);
-                let scaffold = self.scaffold(&mut rng);
                 let ua = rng.pick(AGENT_UAS).copied().unwrap_or_default().to_string();
                 // The harness's parameters, from their own stream so the
                 // rest of the actor draws as before.
                 let mut hrng = self.rng.fork(&format!("actor{i}:harness"));
                 let names = harness_names(&mut hrng, 3);
-                let first = Shape {
-                    templates: scaffold.clone(),
-                    harness: names[..2].to_vec(),
+                // A fleet on another's harness copies its first shape (same
+                // templates and parameters, a different operator).
+                let mut first = match a.shape_of.and_then(|s| self.shapes.get(&s)) {
+                    Some(s) => s[0].clone(),
+                    None => Shape {
+                        templates: self.scaffold_of(&mut rng, a.steps.unwrap_or(3), a.playbook),
+                        harness: names[..2].to_vec(),
+                    },
                 };
+                // A reordered playbook keeps the templates and walks them in
+                // the reverse order on each host.
+                if a.reverse_steps {
+                    first.templates.reverse();
+                }
                 // An upgrade changes one parameter and one template.
                 let mut upgraded = first.clone();
                 upgraded.harness[1].clone_from(&names[2]);
@@ -301,6 +368,24 @@ impl Gen<'_> {
                     upgraded.templates[0] = t.clone();
                 }
                 let interval = (a.interval_hours.unwrap_or(26.0) * 3600.0) as i64;
+                // Where each agent starts after its slot: within three hours,
+                // or within `window_hours` when set.
+                let jitter = if a.window_hours.is_some() {
+                    window
+                } else {
+                    3 * 3600
+                };
+                // Twice: four minutes after the start, and four minutes
+                // after the first stall ends.
+                if let Some(m) = a.stall_minutes {
+                    let secs = (m * 60.0) as i64;
+                    let first = start + 240;
+                    self.opts.stalls = vec![(first, secs), (first + secs + 240, secs)];
+                }
+                if a.shared_secret {
+                    let hex = Ids::new(self.seed).token(&fleet, "secret", 12);
+                    self.opts.secret = Some(format!("{SECRET}{hex}"));
+                }
                 self.shapes.insert(i, vec![first.clone(), upgraded.clone()]);
                 for k in 0..a.agents {
                     let shape = if a.upgrade_at.is_some_and(|u| k >= u) {
@@ -311,6 +396,20 @@ impl Gen<'_> {
                     let mut client = agent_client(&mut rng);
                     client.ua.clone_from(&ua);
                     let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+                    // A playbook fleet walks its hosts one at a time, its
+                    // templates in one order on each (`run` picks template
+                    // `r % steps`, so in-order hosts send them in order).
+                    let host_list = if a.playbook {
+                        in_order(&hosts, a.records)
+                    } else {
+                        spread(&hosts, a.records)
+                    };
+                    // The agent's own tag style, when the fleet varies it.
+                    self.tag_style = if a.tag_styles.is_empty() {
+                        a.tag_style
+                    } else {
+                        a.tag_styles[k % a.tag_styles.len()]
+                    };
                     let spec = RunSpec {
                         truth: agent_truth(
                             id(k),
@@ -319,10 +418,10 @@ impl Gen<'_> {
                             "scaffold_fleet",
                         ),
                         client,
-                        start: start + k as i64 * interval + rng.range(0, 3 * 3600),
+                        start: start + k as i64 * interval + rng.range(0, jitter),
                         pace: a.pace.unwrap_or(Pace::Model),
                         gaps: None,
-                        hosts: spread(&hosts, a.records),
+                        hosts: host_list,
                         uses: vec![Use::Attack; a.records],
                         fixed: Some(shape.templates.clone()),
                         harness: shape.harness.clone(),
@@ -337,7 +436,21 @@ impl Gen<'_> {
                         habits: None,
                         prose: prose_scope(a, i, k, Some(&fleet)),
                     };
+                    // The rerun: the same hosts in the same order on another
+                    // day, from a new client with new tags.
+                    let rerun = a.rerun_after_hours.map(|h| {
+                        let mut again = spec.clone();
+                        again.truth.run = format!("{}r", id(k));
+                        again.client = agent_client(&mut rng);
+                        again.client.ua.clone_from(&ua);
+                        again.start = spec.start + (h * 3600.0) as i64 + rng.range(0, 3600);
+                        again.scope = format!("{i}:{k}:rerun");
+                        again
+                    });
                     self.run(spec, &mut rng);
+                    if let Some(again) = rerun {
+                        self.run(again, &mut rng);
+                    }
                 }
             }
             Kind::Scheduler => {
@@ -405,18 +518,38 @@ impl Gen<'_> {
                         }
                         None => (start + rng.range(0, 24 * 3600), None, a.records),
                     };
+                    // A bridging planter is an agent of its own operator
+                    // that copies two runs' tags; any other a person.
+                    let bridging = a.tag && !a.bridges.is_empty();
+                    let (label, actor, class, client, pace) = if bridging {
+                        (
+                            Some("agent"),
+                            "agent",
+                            "planted_bridge",
+                            agent_client(&mut rng),
+                            Pace::Model,
+                        )
+                    } else {
+                        (
+                            None,
+                            "human",
+                            "planted",
+                            browser_client(&mut rng),
+                            Pace::Human,
+                        )
+                    };
                     let spec = RunSpec {
                         truth: Truth {
-                            label: None,
-                            actor: "human",
-                            class: "planted".into(),
+                            label,
+                            actor,
+                            class: class.into(),
                             run: id(k),
                             swarm: Some("none".into()),
                             fleet: None,
                         },
-                        client: browser_client(&mut rng),
+                        client,
                         start: begin,
-                        pace: a.pace.unwrap_or(Pace::Human),
+                        pace: a.pace.unwrap_or(pace),
                         gaps,
                         hosts: spread(&hosts, records),
                         uses: vec![Use::Sink; records],
@@ -433,7 +566,24 @@ impl Gen<'_> {
                         habits: None,
                         prose: None,
                     };
-                    self.run(spec, &mut rng);
+                    match a.bridges.first() {
+                        // A bridging planter: every record also carries the
+                        // second victim's first run's tag, so one client's
+                        // records join two operators'.
+                        Some(&b) if a.tag => {
+                            let from = self.out.len();
+                            self.run(spec, &mut rng);
+                            let tag = Ids::new(self.seed).token(&format!("{b}:0"), "uqtag", 10);
+                            for v in &mut self.out[from..] {
+                                if let Some(u) = v.get("url").and_then(Value::as_str) {
+                                    v["url"] = json!(add_param(u, "uqtag", &format!("r{tag}")));
+                                }
+                            }
+                        }
+                        _ => {
+                            self.run(spec, &mut rng);
+                        }
+                    }
                 }
             }
             Kind::Mimic => {
@@ -474,9 +624,12 @@ impl Gen<'_> {
             Kind::TargetList | Kind::NewsSpike | Kind::Hub => {
                 self.target_list(i, a, start, window, &mut rng)
             }
-            Kind::UptimeMonitor | Kind::InternetScanner | Kind::LinkPreview | Kind::FeedPoller => {
-                self.lookalike(i, a, start, window, &mut rng)
-            }
+            Kind::UptimeMonitor
+            | Kind::InternetScanner
+            | Kind::LinkPreview
+            | Kind::FeedPoller
+            | Kind::CiLinkChecker
+            | Kind::SeoCrawler => self.lookalike(i, a, start, window, &mut rng),
             _ => self.background(i, a, start, window, &mut rng),
         }
     }
@@ -529,7 +682,7 @@ impl Gen<'_> {
                 habits: None,
                 prose: None,
             };
-            let mut ids = Ids::new(self.seed);
+            let mut ids = Ids::shared(self.seed, &self.taken);
             let mut t = base.start;
             for r in 0..a.records {
                 let host = &hosts[r % hosts.len()];
@@ -574,6 +727,10 @@ impl Gen<'_> {
                 .filter_map(|&j| self.scenario.actor.get(j).map(|b| (j, b.hosts)))
                 .flat_map(|(j, n)| self.hosts(&format!("a{j}"), n))
                 .collect(),
+            // A list of sites: one host on each.
+            _ if a.own_families => (0..a.hosts.max(1))
+                .flat_map(|k| self.hosts(&format!("a{i}s{k}"), 1))
+                .collect(),
             _ => self.hosts(&format!("a{i}"), a.hosts),
         };
         let fleet = (a.kind == Kind::TargetList).then(|| format!("{name}-f{i}"));
@@ -604,6 +761,9 @@ impl Gen<'_> {
                     }
                     t
                 }
+                // Within six hours, or within `window_hours` when set: a
+                // published list walked for days.
+                Kind::NewsSpike if a.window_hours.is_some() => start + rng.range(0, span),
                 Kind::NewsSpike => start + rng.range(0, span.min(6 * 3600)),
                 _ => start,
             };
@@ -679,6 +839,41 @@ impl Gen<'_> {
         }
     }
 
+    /// One operator's short sessions on one site, each with its own client,
+    /// tag and inbox, from the operator's share of the palette.
+    fn campaign(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let fleet = format!("{}-f{i}", self.scenario.name);
+        let site = self.hosts(&format!("a{i}"), a.hosts);
+        for k in 0..a.agents {
+            let client = agent_client(rng);
+            let begin = start + rng.range(0, window);
+            // Each session's hosts: the site's, from a seeded first host.
+            let first = rng.below(site.len());
+            let hosts: Vec<String> = (0..site.len())
+                .map(|h| site[(first + h) % site.len()].clone())
+                .collect();
+            let mut spec = self.bg_spec(
+                i,
+                k,
+                a,
+                "campaign",
+                "agent",
+                Some("agent"),
+                Use::Sink,
+                Pace::Model,
+                true,
+                &client,
+                &hosts,
+                begin,
+                a.records,
+            );
+            spec.truth.fleet = Some(fleet.clone());
+            spec.tag = a.tag;
+            spec.habits = habits(a, format!("{i}"));
+            self.run(spec, rng);
+        }
+    }
+
     /// Agents of unrelated operators on one framework: its templates in a
     /// fixed rotation and its step counter, and one parameter per operator.
     fn framework(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
@@ -715,6 +910,51 @@ impl Gen<'_> {
         }
     }
 
+    /// Unrelated agents watching one feed, each reacting to every item at a
+    /// lag of its own: each its own operator, client, hosts and habits.
+    fn trigger(&mut self, i: usize, a: &Actor, start: i64, rng: &mut Rng) {
+        // Item times, from their own stream.
+        let mut irng = self.rng.fork(&format!("actor{i}:items"));
+        let items: Vec<i64> = (0..a.records)
+            .map(|r| {
+                if r == 0 {
+                    0
+                } else {
+                    irng.range(10 * 60, 50 * 60)
+                }
+            })
+            .collect();
+        for k in 0..a.agents {
+            let lag = irng.range(30, 240);
+            let late: Vec<i64> = (0..a.records).map(|_| lag + irng.range(0, 15)).collect();
+            let hosts = self.hosts(&format!("a{i}x{k}"), a.hosts);
+            let client = agent_client(rng);
+            let mut spec = self.bg_spec(
+                i,
+                k,
+                a,
+                "single_agent",
+                "agent",
+                Some("agent"),
+                Use::Attack,
+                Pace::Model,
+                true,
+                &client,
+                &hosts,
+                start + late[0],
+                a.records,
+            );
+            spec.uses = read_then_attack(a.records, a.hosts);
+            spec.tag = a.tag;
+            spec.gaps = Some(
+                (0..a.records)
+                    .map(|r| items[r] + late[r] - late[r.saturating_sub(1)])
+                    .collect(),
+            );
+            self.run(spec, rng);
+        }
+    }
+
     fn swarm(&mut self, i: usize, a: &Actor, start: i64, rng: &mut Rng) {
         let swarm = format!("{}-s{i}", self.scenario.name);
         let n = a.agents.max(2);
@@ -730,7 +970,7 @@ impl Gen<'_> {
         let base = rng.below(AGENT_UAS.len());
         let net = rng.below(CLOUD_ASNS.len());
         // The hand-off artifact: one gist per swarm, its ids of the swarm's own.
-        let mut ids = Ids::new(self.seed);
+        let mut ids = Ids::shared(self.seed, &self.taken);
         let scope = format!("{i}:handoff");
         let (user, gist) = (
             format!("u{}", ids.token(&scope, "user", 6)),
@@ -739,9 +979,20 @@ impl Gen<'_> {
         let note = format!("https://gist.github.com/{user}/{gist}");
         let raw = format!("https://r.jina.ai/https://gist.githubusercontent.com/{user}/{gist}/raw");
         let handoff = has(Mode::Handoff);
+        // One harness for every agent, from its own stream so swarms
+        // without one draw as before.
+        let harness = if a.harness {
+            harness_names(&mut self.rng.fork(&format!("actor{i}:harness")), 2)
+        } else {
+            Vec::new()
+        };
         // Dispatch times, from their own stream so other modes draw as before.
-        let dispatch = has(Mode::Dispatch);
+        let tree = has(Mode::TreeDispatch);
+        let dispatch = has(Mode::Dispatch) || tree;
         let mut drng = rng.fork("dispatch");
+        // In a tree, each agent's delay after the dispatch at each step: its
+        // parent's, plus its own.
+        let mut offsets: Vec<Vec<i64>> = Vec::new();
         let dispatch_gaps: Vec<i64> = (0..a.records)
             .map(|_| {
                 if dispatch {
@@ -773,7 +1024,7 @@ impl Gen<'_> {
                 read_then_attack(a.records, hosts.len())
             };
             // A worker's delay after each dispatch.
-            let late: Vec<i64> = (0..a.records)
+            let mut late: Vec<i64> = (0..a.records)
                 .map(|_| {
                     if dispatch && k > 0 {
                         drng.range(40, 85)
@@ -782,6 +1033,14 @@ impl Gen<'_> {
                     }
                 })
                 .collect();
+            if tree {
+                if let Some(parent) = k.checked_sub(1).map(|p| p / 2) {
+                    for (r, l) in late.iter_mut().enumerate() {
+                        *l += offsets[parent][r];
+                    }
+                }
+                offsets.push(late.clone());
+            }
             let mut begin = if dispatch {
                 start + late.first().copied().unwrap_or(0)
             } else if handoff && k > 0 {
@@ -817,7 +1076,16 @@ impl Gen<'_> {
                 },
                 client: Client {
                     ua: AGENT_UAS[(base + k) % AGENT_UAS.len()].into(),
-                    asn: CLOUD_ASNS[(net + k) % CLOUD_ASNS.len()],
+                    // A launch's agents step through the networks at another
+                    // stride, so no two share a user agent and network.
+                    asn: CLOUD_ASNS[(net
+                        + k
+                        + if has(Mode::Launch) {
+                            k / AGENT_UAS.len()
+                        } else {
+                            0
+                        })
+                        % CLOUD_ASNS.len()],
                     ip: address(rng),
                 },
                 start: begin,
@@ -839,7 +1107,7 @@ impl Gen<'_> {
                 },
                 uses,
                 fixed: None,
-                harness: Vec::new(),
+                harness: harness.clone(),
                 shapes: Vec::new(),
                 scope: format!("{i}:{k}"),
                 sink_scope: has(Mode::Sink).then(|| format!("{i}:sink")),
@@ -866,6 +1134,8 @@ impl Gen<'_> {
             Kind::UptimeMonitor => ("uptime_monitor", "api_client"),
             Kind::InternetScanner => ("internet_scanner", "crawler"),
             Kind::LinkPreview => ("link_preview", "crawler"),
+            Kind::CiLinkChecker => ("ci_link_checker", "dev_tool"),
+            Kind::SeoCrawler => ("seo_crawler", "crawler"),
             _ => ("feed_poller", "crawler"),
         };
         let pool: Vec<Template> = self
@@ -882,10 +1152,36 @@ impl Gen<'_> {
         let ok = move |code: u16| (basis == Basis::Request).then_some(code);
         let net = rng.below(CLOUD_ASNS.len());
         let prefix = rng.pick(NETS).copied().unwrap_or("192.0.2");
-        let specs: Vec<RunSpec> = (0..n)
-            .map(|k| {
+        // An SEO vendor's shards are clients of one run.
+        let clients = if a.kind == Kind::SeoCrawler {
+            n * SEO_SHARDS
+        } else {
+            n
+        };
+        let specs: Vec<RunSpec> = (0..clients)
+            .map(|c| {
+                let k = if a.kind == Kind::SeoCrawler {
+                    c / SEO_SHARDS
+                } else {
+                    c
+                };
                 let other_net = CLOUD_ASNS[(net + k) % CLOUD_ASNS.len()];
                 let client = match a.kind {
+                    Kind::CiLinkChecker => Client {
+                        ua: LINK_CHECKER_UA.into(),
+                        asn: other_net,
+                        ip: address(rng),
+                    },
+                    // Each vendor's network, consecutive addresses.
+                    Kind::SeoCrawler => Client {
+                        ua: SEO_UAS[k % SEO_UAS.len()].into(),
+                        asn: other_net,
+                        ip: format!(
+                            "{}.{}",
+                            NETS[(k / 40) % NETS.len()],
+                            10 + (k % 40) * SEO_SHARDS + c % SEO_SHARDS
+                        ),
+                    },
                     Kind::UptimeMonitor => Client {
                         ua: MONITOR_UA.into(),
                         asn: other_net,
@@ -926,7 +1222,7 @@ impl Gen<'_> {
             })
             .collect();
         let pick = |rng: &mut Rng| pool[rng.below(pool.len())].clone();
-        let mut ids = Ids::new(self.seed);
+        let mut ids = Ids::shared(self.seed, &self.taken);
         let begin = start + rng.range(0, window);
         match a.kind {
             Kind::UptimeMonitor => {
@@ -958,6 +1254,42 @@ impl Gen<'_> {
                         let url = rewrite(tpl, host, spec, &mut ids, None);
                         self.emit(spec, &tpl.origin, url, t, ok(200), basis);
                         t += gap(rng, Pace::Tool);
+                    }
+                }
+            }
+            Kind::CiLinkChecker => {
+                // One published list, its URLs in sorted order; every
+                // repository's job starts on the hour (its runner a few
+                // seconds late) and checks them in turn.
+                let hosts = self.hosts(&format!("a{i}"), a.hosts);
+                let checks: Vec<(Template, String)> =
+                    hosts.iter().map(|h| (pick(rng), h.clone())).collect();
+                let hour = begin - begin.rem_euclid(3600) + 3600;
+                for spec in &specs {
+                    let mut t = hour + rng.range(0, 20);
+                    for c in 0..a.records {
+                        let (tpl, host) = &checks[c % checks.len()];
+                        let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                        self.emit(spec, &tpl.origin, url, t, ok(200), basis);
+                        t += gap(rng, Pace::Tool);
+                    }
+                }
+            }
+            Kind::SeoCrawler => {
+                // One site's sitemap, in sitemap order; each vendor splits it
+                // over its shards, every shard starting at once.
+                let sitemap = self.hosts(&format!("a{i}"), a.hosts);
+                let pages: Vec<(Template, String)> =
+                    sitemap.iter().map(|h| (pick(rng), h.clone())).collect();
+                for vendor in specs.chunks(SEO_SHARDS) {
+                    let at = start + rng.range(0, window);
+                    for (s, spec) in vendor.iter().enumerate() {
+                        let mut t = at + rng.range(0, 3);
+                        for (tpl, host) in pages.iter().skip(s).step_by(SEO_SHARDS) {
+                            let url = rewrite(tpl, host, &specs[0], &mut ids, None);
+                            self.emit(spec, &tpl.origin, url, t, ok(200), basis);
+                            t += gap(rng, Pace::Tool);
+                        }
                     }
                 }
             }
@@ -1150,10 +1482,28 @@ impl Gen<'_> {
 
     /// A handful of attack templates one scaffold sends again and again.
     fn scaffold(&self, rng: &mut Rng) -> Vec<Template> {
+        self.scaffold_of(rng, 3, false)
+    }
+
+    /// `n` attack templates one scaffold sends again and again. Distinct
+    /// where the palette has enough, so a playbook's steps differ. With
+    /// `steps`, distinct as playbook steps too: two records of one step
+    /// make one step of the order, and a step set such as `a b b a` reads
+    /// the same reversed, so a reordered playbook would not be reordered.
+    fn scaffold_of(&self, rng: &mut Rng, n: usize, steps: bool) -> Vec<Template> {
         let all = self.palette.get(Use::Attack);
-        let mut out = Vec::new();
-        for _ in 0..3 {
+        let mut out: Vec<Template> = Vec::new();
+        let mut tries = 0;
+        let budget = if steps { n * 64 } else { n * 8 };
+        while out.len() < n && tries < budget {
+            tries += 1;
             if let Some(t) = rng.pick(all) {
+                if out.len() < all.len() && out.iter().any(|x| x.origin == t.origin) {
+                    continue;
+                }
+                if steps && t.step.is_some() && out.iter().any(|x| x.step == t.step) {
+                    continue;
+                }
                 out.push(t.clone());
             }
         }
@@ -1171,11 +1521,32 @@ impl Gen<'_> {
     }
 
     /// Emits one run; returns its last timestamp.
-    fn run(&mut self, spec: RunSpec, rng: &mut Rng) -> i64 {
+    fn run(&mut self, mut spec: RunSpec, rng: &mut Rng) -> i64 {
         let mut t = spec.start;
         let mut step = 0usize;
-        let mut ids = Ids::new(self.seed);
+        let mut ids = Ids::shared(self.seed, &self.taken);
         let basis = self.scenario.basis;
+        let opts = self.opts.clone();
+        let per_request = opts.tags == Some(TagScope::PerRequest);
+        if let Some(scope) = opts.tags {
+            spec.tag = scope != TagScope::None;
+        }
+        let mut stalled = 0;
+        // A rotating client is drawn from its own stream per request, so the
+        // run's other draws stay as they were.
+        let (seed, rotating) = (self.seed, opts.rotate);
+        let rotate = |spec: &RunSpec, step: usize| {
+            rotating.then(|| {
+                let mut r = Rng::new(seed)
+                    .fork("rotate")
+                    .fork(&spec.scope)
+                    .fork(&step.to_string());
+                RunSpec {
+                    client: agent_client(&mut r),
+                    ..spec.clone()
+                }
+            })
+        };
         if let Some(f) = &spec.fetches {
             let mut url = f.clone();
             if spec.tag {
@@ -1189,6 +1560,12 @@ impl Gen<'_> {
             self.emit(&spec, "generated hand-off fetch", url, t, status, basis);
             t += gap(rng, spec.pace);
         }
+        let mut styled = self.styled_tag(&spec, t, 0);
+        // A time-bearing tag is minted afresh at the start of each part of
+        // the run, at the time of the request that first carries it.
+        let fresh = matches!(self.tag_style, TagStyle::UuidV1 | TagStyle::Ulid);
+        let (mints, requests) = (opts.tag_mints, spec.hosts.len().min(spec.uses.len()));
+        let mut minted = 0;
         let mut sched = t;
         for (r, (host, u)) in spec.hosts.iter().zip(&spec.uses).enumerate() {
             let shape = (!spec.shapes.is_empty()).then(|| &spec.shapes[r % spec.shapes.len()]);
@@ -1231,10 +1608,30 @@ impl Gen<'_> {
                         t = t.max(sched);
                     }
                     None => {
-                        t += gap(rng, spec.pace);
+                        t += match opts.gap_secs {
+                            Some(g) => g + rng.range(-g / 10, g / 10),
+                            None => gap(rng, spec.pace),
+                        };
                         sched = t;
                     }
                 }
+            }
+            // The operator's stalls: a request due inside one leaves at its
+            // end, and the rest of the run moves with it.
+            while let Some(&(from, secs)) = opts.stalls.get(stalled) {
+                if t < from {
+                    break;
+                }
+                stalled += 1;
+                if t < from + secs {
+                    t += secs;
+                    sched += secs;
+                }
+            }
+            let part = r * mints / requests.max(1);
+            if fresh && part != minted {
+                minted = part;
+                styled = self.styled_tag(&spec, t, part);
             }
             let error = rng.chance(spec.retry);
             let tries = if error { 3 } else { 1 };
@@ -1263,22 +1660,89 @@ impl Gen<'_> {
                     url = add_param(&url, "query", &text.replace(' ', "%20"));
                 }
                 if spec.tag && u != &Use::Benign {
-                    let tag = ids.token(&spec.scope, "uqtag", 10);
-                    url = add_param(&url, "uqtag", &format!("r{tag}"));
+                    let tag = if per_request {
+                        format!(
+                            "r{}",
+                            ids.token(&format!("{}:{step}", spec.scope), "uqtag", 10)
+                        )
+                    } else {
+                        match &styled {
+                            Some(s) => s.clone(),
+                            None => format!("r{}", ids.token(&spec.scope, "uqtag", 10)),
+                        }
+                    };
+                    url = add_param(&url, "uqtag", &tag);
                 }
                 if let Some(w) = &spec.writes {
                     url = add_param(&url, "notes", w);
+                }
+                if let Some(s) = &opts.secret {
+                    url = add_param(&url, SECRET_PARAM, s);
                 }
                 let status = (basis == Basis::Request).then_some(if error && k + 1 < tries {
                     404
                 } else {
                     200
                 });
-                self.emit(&spec, &tpl.origin, url, t, status, basis);
+                match rotate(&spec, step) {
+                    Some(moved) => self.emit(&moved, &tpl.origin, url, t, status, basis),
+                    None => self.emit(&spec, &tpl.origin, url, t, status, basis),
+                }
                 step += 1;
             }
         }
         t
+    }
+
+    /// The run's tag when its actor does not use random ones, generated at
+    /// `at`: on the operator's node id, clock or counter. The operator is
+    /// the run's fleet, else the run itself. From streams of their own, so
+    /// runs with random tags draw as before. Mint `m` after the run's first
+    /// draws from a stream of its own, so a run's first tag is as before.
+    fn styled_tag(&self, spec: &RunSpec, at: i64, m: usize) -> Option<String> {
+        let operator = spec.truth.fleet.as_deref().unwrap_or(&spec.scope);
+        let base = Rng::new(self.seed).fork("tag_style");
+        let mut op = base.fork(operator);
+        let mut own = base.fork(&spec.scope);
+        if m > 0 {
+            own = own.fork(&m.to_string());
+        }
+        match self.tag_style {
+            TagStyle::Random => None,
+            TagStyle::UuidV1 => {
+                // A globally unique node id: the multicast and locally
+                // administered bits clear.
+                let node = op.next_u64() & 0xfcff_ffff_ffff;
+                let seq = own.below(1 << 14) as u64;
+                let ticks =
+                    (at * 10_000_000 + GREGORIAN_OFFSET) as u64 + own.below(10_000_000) as u64;
+                Some(format!(
+                    "{:08x}-{:04x}-1{:03x}-{:04x}-{:012x}",
+                    ticks & 0xffff_ffff,
+                    (ticks >> 32) & 0xffff,
+                    (ticks >> 48) & 0xfff,
+                    0x8000 | seq,
+                    node
+                ))
+            }
+            TagStyle::Ulid => {
+                // A clock 97 to 840 seconds off either way: clear of an
+                // ordinary clock and of whole quarter hours.
+                let off = op.range(97, 840) * if op.chance(0.5) { 1 } else { -1 };
+                let ms = ((at + off) * 1000) as u64 + own.below(1000) as u64;
+                let mut s: String = (0..10)
+                    .rev()
+                    .map(|k| CROCKFORD[((ms >> (5 * k)) & 31) as usize] as char)
+                    .collect();
+                s.extend((0..16).map(|_| CROCKFORD[own.below(32)] as char));
+                Some(s)
+            }
+            TagStyle::Counter => {
+                let stem = COUNTER_STEMS[op.below(COUNTER_STEMS.len())];
+                let first = op.range(10_000, 90_000) as u64;
+                Some(format!("{stem}{}", first + counter_place(&spec.scope)))
+            }
+        }
     }
 
     fn emit(
@@ -1335,17 +1799,29 @@ impl Gen<'_> {
     }
 }
 
+/// Identifier replacements given out, `(original, replacement)` to the
+/// scope that holds it.
+type Taken = std::rc::Rc<std::cell::RefCell<BTreeMap<(String, String), String>>>;
+
 /// Per-scope replacements for identifiers, deterministic from the seed.
 struct Ids {
     seed: u64,
     memo: BTreeMap<(String, String), String>,
+    taken: Taken,
 }
 
 impl Ids {
     fn new(seed: u64) -> Self {
+        Self::shared(seed, &Taken::default())
+    }
+
+    /// Ids that check their replacements against `taken`, shared with the
+    /// other runs of one generation.
+    fn shared(seed: u64, taken: &Taken) -> Self {
         Self {
             seed,
             memo: BTreeMap::new(),
+            taken: taken.clone(),
         }
     }
 
@@ -1374,6 +1850,36 @@ impl Ids {
             return v.clone();
         }
         let mut rng = self.rng(scope, orig);
+        // A short number has few replacements (`test2` has ten), so two
+        // scopes could draw one; a draw another scope holds is drawn again,
+        // and after a few tries the value gains a digit.
+        let mut extra = String::new();
+        let mut tries = 0;
+        loop {
+            let out = self.draw(orig, &mut rng) + &extra;
+            let owner = self
+                .taken
+                .borrow()
+                .get(&(orig.to_string(), out.clone()))
+                .cloned();
+            // A value with no digit has no other replacement.
+            let fixed = !orig.contains(|c: char| c.is_ascii_digit());
+            if fixed || tries >= 64 || owner.as_deref().is_none_or(|o| o == scope) {
+                self.taken
+                    .borrow_mut()
+                    .insert((orig.to_string(), out.clone()), scope.to_string());
+                self.memo.insert(key, out.clone());
+                return out;
+            }
+            tries += 1;
+            if tries % 8 == 0 && orig.chars().last().is_some_and(|c| c.is_ascii_digit()) {
+                extra.push(char::from(b'0' + rng.below(10) as u8));
+            }
+        }
+    }
+
+    /// One replacement for `orig`: its digits and long hex runs redrawn.
+    fn draw(&self, orig: &str, rng: &mut Rng) -> String {
         let mut out = String::with_capacity(orig.len());
         for run in split_runs(orig) {
             let alnum = run.chars().all(|c| c.is_ascii_alphanumeric());
@@ -1395,7 +1901,6 @@ impl Ids {
                 });
             }
         }
-        self.memo.insert(key, out.clone());
         out
     }
 }
@@ -1464,8 +1969,35 @@ fn rewrite(
     url
 }
 
+/// 100-nanosecond intervals from the Gregorian epoch to the Unix epoch.
+const GREGORIAN_OFFSET: i64 = 122_192_928_000_000_000;
+
+/// The ULID alphabet (Crockford's base 32).
+const CROCKFORD: &[u8] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/// Stems a counter tag is drawn from.
+const COUNTER_STEMS: &[&str] = &["batch-", "job", "worker-", "task", "crawl-", "lane"];
+
 /// How redaction writes a secret: this prefix and hex digits.
 const SECRET: &str = "REDACTED-";
+
+/// How far past the first runs a rerun's counter sits: the operator's
+/// counter moved on by the next day, so a rerun never repeats a first run's
+/// tag.
+const RERUN_PLACE: u64 = 10_000;
+
+/// A run's place in its operator's runs, for counter tags: the agent index
+/// `k` of a scope `{actor}:{k}`, and past every first run for its rerun
+/// `{actor}:{k}:rerun`.
+fn counter_place(scope: &str) -> u64 {
+    let mut parts = scope.split(':');
+    let k: u64 = parts.nth(1).and_then(|x| x.parse().ok()).unwrap_or(0);
+    if parts.next() == Some("rerun") {
+        k + RERUN_PLACE
+    } else {
+        k
+    }
+}
 
 /// `s` with every case-insensitive occurrence of `from` replaced.
 fn replace_ci(s: &str, from: &str, to: &str) -> String {
@@ -1787,6 +2319,24 @@ mod tests {
     }
 
     #[test]
+    fn a_short_number_is_never_given_to_two_scopes() {
+        // `test2` has ten one-digit replacements: twenty scopes sharing
+        // one taken set still get twenty values, the later ones longer.
+        let taken = Taken::default();
+        let mut seen = std::collections::BTreeSet::new();
+        for k in 0..20 {
+            let mut ids = Ids::shared(5, &taken);
+            let v = ids.swap(&format!("s{k}"), "chatgpttest2");
+            assert!(v.starts_with("chatgpttest"), "{v}");
+            assert!(seen.insert(v.clone()), "{v} twice");
+            assert_eq!(ids.swap(&format!("s{k}"), "chatgpttest2"), v);
+        }
+        // A value with no digit has no other replacement.
+        let mut ids = Ids::shared(5, &taken);
+        assert_eq!(ids.swap("a", "fixed"), ids.swap("b", "fixed"));
+    }
+
+    #[test]
     fn a_palette_share_is_a_seeded_subset_per_scope() {
         let rules = sc_core::Rules::default_rules();
         let p = Palette::default_palette(&rules);
@@ -1814,6 +2364,114 @@ mod tests {
     }
 
     #[test]
+    fn a_playbook_draws_distinct_steps_so_its_reversal_is_reversed() {
+        let rules = sc_core::Rules::default_rules();
+        let palette = Palette::default_palette(&rules);
+        let file = crate::ScenarioFile::parse(
+            "[[scenario]]\nname = \"t\"\n[[scenario.actor]]\nkind = \"agent\"\n",
+        )
+        .unwrap();
+        let g = Gen {
+            scenario: &file.scenario[0],
+            seed: 1,
+            palette: &palette,
+            rng: Rng::new(1),
+            t0: 0,
+            out: Vec::new(),
+            shapes: BTreeMap::new(),
+            times: BTreeMap::new(),
+            opts: RunOpts::default(),
+            tag_style: TagStyle::Random,
+            taken: Taken::default(),
+        };
+        // Some draw without it repeats a step (`a b b a` reads the same
+        // reversed); none with it.
+        let mut repeats = 0;
+        for seed in 0..200 {
+            let distinct = |steps: bool| {
+                let t = g.scaffold_of(&mut Rng::new(seed), 4, steps);
+                let keys: std::collections::BTreeSet<_> = t.iter().map(|x| &x.step).collect();
+                assert!(t.iter().all(|x| x.step.is_some()));
+                keys.len() == t.len()
+            };
+            repeats += usize::from(!distinct(false));
+            assert!(distinct(true), "seed {seed}");
+        }
+        assert!(repeats > 0);
+    }
+
+    #[test]
+    fn counter_tags_place_reruns_after_the_first_runs() {
+        let rules = sc_core::Rules::default_rules();
+        let palette = Palette::default_palette(&rules);
+        let file = crate::ScenarioFile::parse(
+            "[[scenario]]\nname = \"t\"\n[[scenario.actor]]\nkind = \"agent\"\n",
+        )
+        .unwrap();
+        let g = Gen {
+            scenario: &file.scenario[0],
+            seed: 1,
+            palette: &palette,
+            rng: Rng::new(1),
+            t0: 0,
+            out: Vec::new(),
+            shapes: BTreeMap::new(),
+            times: BTreeMap::new(),
+            opts: RunOpts::default(),
+            tag_style: TagStyle::Counter,
+            taken: Taken::default(),
+        };
+        let mut rng = Rng::new(2);
+        let mut tag = |scope: &str| {
+            let spec = RunSpec {
+                truth: Truth {
+                    label: Some("agent"),
+                    actor: "agent",
+                    class: "test".into(),
+                    run: scope.into(),
+                    swarm: None,
+                    fleet: Some("f0".into()),
+                },
+                client: agent_client(&mut rng),
+                start: 1000,
+                pace: Pace::Model,
+                hosts: vec!["h0.t.example".to_string()],
+                uses: vec![Use::Attack],
+                gaps: None,
+                fixed: None,
+                harness: Vec::new(),
+                shapes: Vec::new(),
+                scope: scope.into(),
+                sink_scope: None,
+                tag: true,
+                retry: 0.0,
+                writes: None,
+                fetches: None,
+                adapt: true,
+                habits: None,
+                prose: None,
+            };
+            g.styled_tag(&spec, 1000, 0).unwrap()
+        };
+        let num = |t: &str| -> u64 {
+            t.trim_start_matches(|c: char| !c.is_ascii_digit())
+                .parse()
+                .unwrap()
+        };
+        let (first0, first3) = (tag("0:0"), tag("0:3"));
+        assert_eq!(num(&first3), num(&first0) + 3);
+        // A rerun is a later run of the operator's: its counter is its own,
+        // never a first run's (agent 0's or its own agent's).
+        let (rerun0, rerun3) = (tag("0:0:rerun"), tag("0:3:rerun"));
+        for r in [&rerun0, &rerun3] {
+            assert_ne!(r, &first0);
+            assert_ne!(r, &first3);
+        }
+        assert_ne!(rerun0, rerun3);
+        assert_eq!(num(&rerun3), num(&rerun0) + 3);
+    }
+
+    #[test]
     fn retries_do_not_move_a_schedule() {
         let rules = sc_core::Rules::default_rules();
         let palette = Palette::default_palette(&rules);
@@ -1830,6 +2488,9 @@ mod tests {
             out: Vec::new(),
             shapes: BTreeMap::new(),
             times: BTreeMap::new(),
+            opts: RunOpts::default(),
+            tag_style: TagStyle::Random,
+            taken: Taken::default(),
         };
         let mut rng = Rng::new(2);
         let spec = |gaps: Vec<i64>, rng: &mut Rng| RunSpec {

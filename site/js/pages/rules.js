@@ -14,7 +14,15 @@ const phone = window.matchMedia?.("(max-width: 720px)").matches;
 // rows open; on a phone they stay rows and the filters fold: the page is a
 // list to scan, and a row opens on a tap. A rule the address names opens
 // either way, and is scrolled to once the rows above it have their height.
-const target = () => (location.hash.startsWith("#rule-") ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null);
+// A malformed escape in the hash (#rule-%E0) names no rule: it must not stop the page.
+const target = () => {
+  if (!location.hash.startsWith("#rule-")) return null;
+  try {
+    return document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  } catch {
+    return null;
+  }
+};
 if (phone) {
   const fold = document.querySelector("details.filters-fold");
   if (fold) fold.open = false;
@@ -99,6 +107,7 @@ if (editor && text) {
     if (act === "reset") {
       text.value = bundled;
       store.del(RULES_KEY);
+      engineRules = null;
       say("Reset to the bundled rules; the site uses them again.");
       return;
     }
@@ -109,6 +118,7 @@ if (editor && text) {
         const r = JSON.parse(sc.check_rules(await rulesJson(text.value)));
         if (act === "save") {
           store.set(RULES_KEY, text.value);
+          engineRules = null;
           say(`Saved: ${r.rules} rules, version ${r.version}. The workbench and the unwrap tool now use them in this browser.`);
         } else say(`Valid: ${r.rules} rules, ${r.asns} ASN hints, version ${r.version}.`);
       } catch (e) {
@@ -130,6 +140,8 @@ if (editor && text) {
 }
 
 // ── Test a URL against one rule ─────────────────────────────────────────
+// The rules the testers run, read once; Save and Reset in the editor clear
+// it, so the next test runs the rules the page now holds.
 let engineRules = null;
 async function testEngine() {
   const sc = await engine();

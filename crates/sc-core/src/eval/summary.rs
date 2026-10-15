@@ -7,7 +7,9 @@
 //! `docs/reference/evaluation.md`; `schema` is bumped on a breaking change.
 
 use super::clusters::ClusterEval;
-use super::coverage::{AllowList, Coverage, RuleMeta, UNTAGGED, coverage, rule_meta};
+use super::coverage::{
+    AllowList, Coverage, Margins, RuleMeta, UNTAGGED, coverage, margins, rule_meta,
+};
 use super::stats::Proportion;
 use super::units::{self, Calibration, Slice};
 use super::{EvalReport, Label, LabelSet, Threshold, evaluate};
@@ -61,6 +63,10 @@ pub struct Summary {
     /// absent when no label is from a review sample.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub baseline: Option<super::baseline::Baseline>,
+    /// How close benign records sit to the suggestive threshold, the false
+    /// positives each rule causes, and recall without each rule.
+    #[serde(default)]
+    pub margins: Margins,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +115,10 @@ pub struct RuleSummary {
     pub precision: Proportion,
     pub hard_negatives: usize,
     pub hard_negatives_fired: usize,
+    /// Benign records it lifted to suggestive or above: below it without
+    /// the rule.
+    #[serde(default)]
+    pub benign_lifted: usize,
     /// Has at least one positive.
     pub covered: bool,
     /// Allow-list reason for going without one.
@@ -158,7 +168,9 @@ pub fn summarize(
     let report = evaluate(a, labels);
     let meta = rule_meta(rules_toml)?;
     let cov = coverage(&report, &meta, &AllowList::parse(allow));
-    let s = build(a, labels, &report, &meta, &cov);
+    let rules = crate::Rules::from_toml(rules_toml)?;
+    let m = margins(a, labels, &rules);
+    let s = build(a, labels, &report, &meta, &cov, m);
     Ok((report, cov, s))
 }
 
@@ -168,6 +180,7 @@ fn build(
     report: &EvalReport,
     meta: &[RuleMeta],
     cov: &Coverage,
+    margins: Margins,
 ) -> Summary {
     let tactic_of: BTreeMap<&str, &[String]> = meta
         .iter()
@@ -214,6 +227,7 @@ fn build(
             precision: Proportion::new(c.positives, c.positives + c.on_benign),
             hard_negatives: c.hard_negatives,
             hard_negatives_fired: c.hard_negatives_fired,
+            benign_lifted: margins.lifted.get(&c.rule_id).copied().unwrap_or(0),
             covered: c.positives > 0,
             allowed: c.allowed.clone(),
         })
@@ -286,6 +300,7 @@ fn build(
         by_file: units::breakdown(a, &items, |_, l| l.origin.clone()),
         calibration: units::calibration(a, &items),
         baseline: super::baseline::baseline(a, labels),
+        margins,
     }
 }
 

@@ -39,8 +39,9 @@ function summary(s) {
 }
 
 /**
- * Wire the panel. `prepared` resolves to the tools module holding the
- * shown analysis, or null when there is none.
+ * Wire the panel. `prepared` resolves to an object whose `sightings(opts)`
+ * gives the file (text, or a promise of it) from the analysis shown, or to
+ * null when there is none.
  */
 export function sightingsPanel(prepared) {
   resetSightings();
@@ -63,7 +64,7 @@ export function sightingsPanel(prepared) {
         operator: $("sight-operator").value.trim() || null,
         generated: new Date().toISOString().slice(0, 10),
       };
-      const text = t.sightings(JSON.stringify(opts));
+      const text = await t.sightings(JSON.stringify(opts));
       if (my !== seq) return;
       doc = text;
       $("sight-preview").textContent = text;

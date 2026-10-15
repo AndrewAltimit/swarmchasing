@@ -91,6 +91,19 @@ pub enum Format {
     AccessLog,
 }
 
+impl Format {
+    /// The name [`std::str::FromStr`] reads back (`access_log`, `ndjson`).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Ndjson => "ndjson",
+            Self::Json => "json",
+            Self::Lines => "lines",
+            Self::AccessLog => "access_log",
+        }
+    }
+}
+
 impl std::str::FromStr for Format {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, String> {
@@ -114,6 +127,13 @@ pub struct Parsed {
     /// Secret values replaced with hashes at ingest (see [`crate::redact`]).
     #[serde(default)]
     pub redacted: usize,
+    /// The format the text was read as: the one asked for, or the one
+    /// [`detect_format`] picked for `auto`.
+    #[serde(default)]
+    pub format: Format,
+    /// Lines (or array items) that held no record, each with a warning.
+    #[serde(default)]
+    pub skipped: usize,
 }
 
 const TS_KEYS: &[&str] = &[
@@ -298,7 +318,10 @@ fn json_value(v: &Value, map: &FieldMap, out: &mut Parsed) {
             for (i, r) in rows.iter().enumerate() {
                 match obj_to_obs(r, map, "import") {
                     Some(o) => out.observations.push(o),
-                    None => out.warnings.push(format!("item {i}: no url field")),
+                    None => {
+                        out.skipped += 1;
+                        out.warnings.push(format!("item {i}: no url field"));
+                    }
                 }
             }
         }
@@ -320,25 +343,37 @@ fn json_value(v: &Value, map: &FieldMap, out: &mut Parsed) {
     }
 }
 
+/// The format `auto` reads `text` as: a JSON document, NDJSON, an access
+/// log (most of the first lines parse as one), else URL lines.
+pub fn detect_format(text: &str) -> Format {
+    let trimmed = text.trim_start_matches('\u{feff}').trim();
+    if trimmed.starts_with('[') {
+        Format::Json
+    } else if trimmed.starts_with('{') {
+        if serde_json::from_str::<Value>(trimmed).is_ok() {
+            Format::Json
+        } else {
+            Format::Ndjson
+        }
+    } else if looks_like_access_log(trimmed) {
+        Format::AccessLog
+    } else {
+        Format::Lines
+    }
+}
+
 pub fn parse_input(text: &str, format: Format, map: &FieldMap) -> Parsed {
     let mut out = Parsed::default();
     let trimmed = text.trim_start_matches('\u{feff}').trim();
     if trimmed.is_empty() {
+        out.format = format;
         return out;
     }
     let format = match format {
-        Format::Auto if trimmed.starts_with('[') => Format::Json,
-        Format::Auto if trimmed.starts_with('{') => {
-            if serde_json::from_str::<Value>(trimmed).is_ok() {
-                Format::Json
-            } else {
-                Format::Ndjson
-            }
-        }
-        Format::Auto if looks_like_access_log(trimmed) => Format::AccessLog,
-        Format::Auto => Format::Lines,
+        Format::Auto => detect_format(trimmed),
         f => f,
     };
+    out.format = format;
     match format {
         Format::Json => match serde_json::from_str::<Value>(trimmed) {
             Ok(v) => json_value(&v, map, &mut out),
@@ -353,9 +388,15 @@ pub fn parse_input(text: &str, format: Format, map: &FieldMap) -> Parsed {
                 match serde_json::from_str::<Value>(line) {
                     Ok(v) => match obj_to_obs(&v, map, "import") {
                         Some(o) => out.observations.push(o),
-                        None => out.warnings.push(format!("line {}: no url field", n + 1)),
+                        None => {
+                            out.skipped += 1;
+                            out.warnings.push(format!("line {}: no url field", n + 1));
+                        }
                     },
-                    Err(e) => out.warnings.push(format!("line {}: {e}", n + 1)),
+                    Err(e) => {
+                        out.skipped += 1;
+                        out.warnings.push(format!("line {}: {e}", n + 1));
+                    }
                 }
             }
         }
@@ -367,6 +408,7 @@ pub fn parse_input(text: &str, format: Format, map: &FieldMap) -> Parsed {
                     continue;
                 }
                 let Some((prefix, url)) = split_url_line(line) else {
+                    out.skipped += 1;
                     out.warnings.push(format!("line {}: no URL", n + 1));
                     continue;
                 };
@@ -450,6 +492,7 @@ fn access_log(text: &str, map: &FieldMap, out: &mut Parsed) {
             continue;
         }
         let Some(c) = re.captures(line) else {
+            out.skipped += 1;
             out.warnings
                 .push(format!("line {}: not an access log line", n + 1));
             continue;
@@ -511,6 +554,7 @@ garbage"#;
         );
         assert_eq!(p.observations.len(), 3, "{:?}", p.warnings);
         assert_eq!(p.warnings.len(), 1);
+        assert_eq!((p.format, p.skipped), (Format::AccessLog, 1));
         let o = &p.observations;
         assert_eq!(
             o[0].url,
@@ -540,6 +584,8 @@ garbage"#;
         let p = parse_input(nd, Format::Auto, &FieldMap::default());
         assert_eq!(p.observations.len(), 1);
         assert_eq!(p.warnings.len(), 1);
+        assert_eq!((p.format, p.skipped), (Format::Ndjson, 1));
+        assert_eq!(detect_format(nd).name(), "ndjson");
         let p = parse_input(nd, Format::Auto, &FieldMap::parse("url=scan.href").unwrap());
         assert_eq!(p.observations.len(), 1);
         assert_eq!(p.observations[0].url, "https://b.example/");
@@ -555,6 +601,17 @@ garbage"#;
         let p = parse_input(lines, Format::Auto, &FieldMap::default());
         assert_eq!(p.observations.len(), 2);
         assert_eq!(p.observations[0].ts, 1791101400);
+        assert_eq!((p.format, p.skipped), (Format::Lines, 0));
+        assert_eq!(detect_format(cdx), Format::Json);
+        for f in [
+            Format::Auto,
+            Format::Ndjson,
+            Format::Json,
+            Format::Lines,
+            Format::AccessLog,
+        ] {
+            assert_eq!(f.name().parse::<Format>(), Ok(f));
+        }
     }
 
     #[test]

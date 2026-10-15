@@ -10,6 +10,7 @@ analysis_window_days = 30
 retain_days = 180           # delete runs and stored records older than this (docs/policies.md)
 contained_after_days = 14   # digest proposes "contained" for an active notice after this long with no matching record
 http_cache_ttl_secs = 3600  # reuse cached responses (<data>/cache/http) this long, then revalidate; 0 = off
+collect_deadline_mins = 90  # sources not started by then are deferred to the next run (within watch.yml's 150-minute job); 0 = off
 
 # What the watch may do on its own about the attention queue
 # (docs/reference/watch.md#autonomy). Shadow only logs what a level would have
@@ -24,11 +25,11 @@ interrupts_per_day = 3
 #
 # Kinds: wayback | arquivo | urlquery | commoncrawl | urlscan | memento |
 # gharchive | npm | pypi | ctlog | wellknown | mcp | wikimedia | hackernews |
-# bluesky | ghsearch (docs/reference/watch.md#source-kinds).
+# bluesky | ghsearch | clawhub (docs/reference/watch.md#source-kinds).
 # Every source's terms of use are summarised in its rationale, with the URL.
 #
 # The streamed relay sources (gharchive-relays, wikimedia-relay-links,
-# hackernews-relay-links, bluesky-relay-links) share one list of substrings,
+# hackernews-relay-links, bluesky-relay-links, clawhub-relay-links) share one list of substrings,
 # taken from the relay, carrier, marker and callback rules in
 # rules/default.toml: relay and carrier hosts in the form a wrapped URL
 # takes, run tags, and callback hosts. Callback hosts are only matched as
@@ -49,7 +50,9 @@ interrupts_per_day = 3
 # interact.sh  .oast.  //ntfy.sh/  dnslog.cn  requestrepo.com
 # Left out: href.li and *.translate.goog (WordPress and translation links,
 # far too common in posts and edits), the scraping APIs of relay.scrape_api
-# and codesandbox.io (their own users' issues and posts name them all day).
+# and codesandbox.io (their own users' issues and posts name them all day),
+# s.jina.ai (its path is a search query, not a target) and the repository
+# digest services of relay.repo_digest (READMEs link them all day).
 # The carrier rules that read program content fire on what the unwrapper
 # finds inside a URL these substrings already keep.
 
@@ -591,6 +594,29 @@ from = "20260901"
 limit = 2000
 page_size = 100
 
+# Rationale: agents are given skills from ClawHub, the OpenClaw skills
+# registry, and skill fleets are published in bursts, some carrying the
+# relay links or run tags of the runs that made them (documented
+# malicious-skill waves were published this way). The public listing,
+# newest first, gives each skill's owner handle, slug, display name,
+# summary and topics; this keeps skills whose text matches the shared list
+# above. A matching URL in the summary is the record (never fetched), its
+# reference the skill's canonical page (clawhub.ai/<owner>/skills/<slug>);
+# a run tag with no URL makes the page the record. Leads for review. Skill
+# files are never downloaded. Pages of 100 back to the last skill read, up
+# to `scan` pages. Noise: skills that document a relay or a webhook demo.
+# Terms (https://docs.openclaw.ai/clawhub/api): catalogs built on the public
+# read endpoints are allowed if they cache, honour 429 and Retry-After,
+# link the canonical skill page and never mirror hidden or blocked content;
+# anonymous reads are limited to 3000 a minute per IP.
+[[source]]
+name = "clawhub-relay-links"
+kind = "clawhub"
+pattern = "//r.jina.ai/http|//markdown.new/|//pure.md/|//defuddle.md/|api.allorigins.win/|corsproxy.io/|cors-anywhere|thingproxy|codetabs.com/v1/proxy|api.microlink.io/|httpbin.org/base64|httpbin.org/anything|httpbin.org/redirect-to|//httpbun.com/|//httpbun.org/|livecodes.io/?|.e2b.app|.modal.run|.proxy.daytona.work|production-sfo.browserless.io|production-lon.browserless.io|production-ams.browserless.io|chrome.browserless.io|connect.browserbase.com|connect.steel.dev|connect.browser-use.com|connect.hyperbrowser.ai|milankarman.github.io/embed-web-playground|id_/http|web.archive.org/save/|arquivo.pt/savepagenow|uqtag=|uqscan|chatgpttest|agenttest|zz=oai|tok=expt|archive_test=|//webhook.site/|oastify.com|burpcollaborator.net|interact.sh|.oast.|//ntfy.sh/|dnslog.cn|requestrepo.com"
+limit = 500
+page_size = 100
+scan = 5                  # listing pages per run
+
 # ── Per-case sources (not scheduled) ─────────────────────────────────────────
 # - urlscan.io public search (`swarmchase collect urlscan`, URLSCAN_APIKEY
 #   optional): its terms (https://urlscan.io/terms/) license personal,
@@ -645,6 +671,7 @@ page_size = 100
 [platform]
 carry_hours = 72
 label_days = 30           # keep labels from reference sources (osv, wikimedia-ai-cleanup) this long
+history_days = 30         # remember name and text families seen bursting this long (platform/baseline.json)
 # Rationale: a registry fleet built in CI names where it was built. For the
 # npm and PyPI candidates new or grown in a run, look up member releases'
 # build provenance (npm's attestations endpoint, PyPI's integrity API), at
@@ -704,6 +731,67 @@ kind = "huggingface"
 endpoint = "spaces"
 pattern = "*"
 limit = 500
+
+# Rationale: the same bursts as models: a swarm told to publish or prove
+# reach uploads model repositories under templated names from one or many
+# fresh accounts. The models listing, newest first, gives ids, owners and
+# creation times; a model's page is linked, its files never downloaded.
+# One request per run. Noise: fine-tuning runs that push a checkpoint per
+# step under numbered names (one owner, so one account). Terms as for
+# `hf-new-spaces`.
+[[platform.source]]
+name = "hf-new-models"
+kind = "huggingface"
+endpoint = "models"
+pattern = "*"
+limit = 500
+
+# Rationale: the same for datasets: agent pipelines that generate data
+# publish one dataset per task or per target under templated names. The
+# datasets listing gives ids, owners and creation times; descriptions are
+# not kept and no file is downloaded. One request per run. Noise: dataset
+# series from one lab (one owner) and benchmark mirrors. Terms as for
+# `hf-new-spaces`.
+[[platform.source]]
+name = "hf-new-datasets"
+kind = "huggingface"
+endpoint = "datasets"
+pattern = "*"
+limit = 500
+
+# Rationale: ClawHub skill fleets are published in bursts under templated
+# names, from one owner or many, and documented malicious-skill waves on
+# the registry looked like this. The public listing, newest first, gives
+# the owner handle (kept as a keyed hash), slug (as a name template),
+# summary and topics (sketched) and creation time. Pages of 100 back to the
+# last skill read, up to `scan` pages and `limit` skills. Skill files are
+# never downloaded; events link the canonical skill page. Noise: one
+# author publishing a family of skills at once (one owner, so one
+# account). Terms as for `clawhub-relay-links` above.
+[[platform.source]]
+name = "clawhub-skills"
+kind = "clawhub"
+pattern = "*"
+limit = 500
+page_size = 100
+scan = 5                  # listing pages per run
+
+# Rationale: editor extensions are an agent's tools as skills are, and
+# extension floods under templated names reach Open VSX, the registry
+# VS Code forks install from. The search API, newest first, gives
+# namespace (kept as a keyed hash), name, version, publish time, the
+# verified-publisher flag and the description (sketched); one page of
+# `page_size` a run, the span it misses counted as skipped. The `.vsix` and
+# every other file the listing links are never fetched. Off: the Eclipse
+# Foundation's terms of use (https://www.eclipse.org/legal/terms-of-use/)
+# say nothing of automated access and the service rate-limits by tier;
+# enable once the Eclipse Foundation confirms automated listing reads are
+# welcome.
+# [[platform.source]]
+# name = "openvsx-new"
+# kind = "openvsx"
+# pattern = "*"
+# page_size = 50
 
 # Rationale: the same package floods on Go: modules need no registry account,
 # only a repository, so a swarm that publishes code publishes modules with

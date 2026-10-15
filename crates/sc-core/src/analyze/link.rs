@@ -3,13 +3,14 @@
 //!
 //! Records are joined by a shared linking feature (within a time window, and
 //! only while the feature is not common), by close request or submit times
-//! against the same target with a rule in common, and by a probe chain. Everything else about
+//! against the same target with a rule in common, and by a probe chain; the
+//! last two never join records from known, different clients. Everything else about
 //! a cluster is description ([`super::hints`]).
 
 use super::hints::is_context_kind;
 use super::{Cluster, CommonFeature, ObsResult};
 use crate::chains::Chain;
-use crate::model::LinkFeature;
+use crate::model::{LinkFeature, Observation};
 use crate::rules::{Linking, Rules};
 use crate::timing::request_like;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -24,6 +25,29 @@ pub(super) struct Links<'a> {
     pub common: Vec<CommonFeature>,
     /// Probe chains, linked or not.
     pub chains: Vec<Chain>,
+    /// What joined the records: every linking feature group, run of close
+    /// requests on one host and request-timed chain that linked.
+    pub ties: Vec<Tie>,
+}
+
+/// One reason flagged records were joined, with every record it joined.
+/// The union of a cluster's ties is its link graph, which the seam review
+/// reads ([`crate::seam`]).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Tie {
+    pub members: Vec<usize>,
+    pub why: TieWhy,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum TieWhy {
+    /// A shared linking feature.
+    Feature(LinkFeature),
+    /// Close requests on one target host, each within `linking.window_secs`
+    /// of the last with a rule in common.
+    Timing(String),
+    /// A probe chain.
+    Chain,
 }
 
 /// Link the `flagged` records among `results`.
@@ -35,7 +59,9 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
     // most `feature_link_window_secs` apart. A group whose feature is common
     // (too many hosts, or too large a share of the records around it) does
     // not link and is reported instead.
-    let mut carriers: HashMap<&LinkFeature, Vec<usize>> = HashMap::new();
+    // In feature order, so ties (and the seam review reading them) come out
+    // the same on every run.
+    let mut carriers: BTreeMap<&LinkFeature, Vec<usize>> = BTreeMap::new();
     for &i in flagged {
         for f in &results[i].features {
             carriers.entry(f).or_default().push(i);
@@ -49,6 +75,7 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
     crate::sort::sort(&mut all_ts);
     let mut joined = HashSet::new();
     let mut common = Vec::new();
+    let mut ties = Vec::new();
     for (&f, idxs) in &carriers {
         if idxs.len() < 2 {
             continue;
@@ -65,6 +92,10 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
                 dsu.union(w[0], w[1]);
             }
             joined.extend(group.iter().map(|&i| (i, f)));
+            ties.push(Tie {
+                members: group,
+                why: TieWhy::Feature(f.clone()),
+            });
         }
     }
     crate::sort::by(&mut common, |a, b| {
@@ -85,25 +116,46 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
             by_host.entry(h).or_default().push(i);
         }
     }
-    for idxs in by_host.values_mut() {
-        crate::sort::by_key(idxs, |&i| results[i].obs.ts);
-        for w in idxs.windows(2) {
-            let (a, b) = (&results[w[0]], &results[w[1]]);
-            let close = a.obs.ts > 0 && b.obs.ts > 0 && b.obs.ts - a.obs.ts <= cfg.window_secs;
-            let shared = a
-                .hits
+    // Records from two known, different clients are never joined this way:
+    // a host in the news draws many unrelated agents within minutes, and
+    // being there together is all they share. Each record joins the latest
+    // earlier one on the host that could be the same client (see
+    // `Clients::same`) and whose run holds no known, different client, so
+    // one client's run is not cut by another's requests between its own,
+    // and a record naming no client does not bridge two that do.
+    let mut uses: HashMap<&str, usize> = HashMap::new();
+    for r in results {
+        if let Some(ip) = known(&r.obs.ip) {
+            *uses.entry(ip).or_default() += 1;
+        }
+    }
+    let clients = Clients { uses };
+    let mut hosts: Vec<(&&str, &mut Vec<usize>)> = by_host.iter_mut().collect();
+    crate::sort::by(&mut hosts, |a, b| a.0.cmp(b.0));
+    for (host, idxs) in hosts {
+        crate::sort::by_key(idxs, |&i| (results[i].obs.ts, i));
+        let runs = client_runs(results, &clients, idxs, Some(cfg.window_secs), |a, b| {
+            let (a, b) = (&results[a], &results[b]);
+            a.hits
                 .iter()
                 .filter(|h| !is_context_kind(h.kind))
-                .any(|h| b.hits.iter().any(|g| g.rule_id == h.rule_id));
-            if close && shared {
+                .any(|h| b.hits.iter().any(|g| g.rule_id == h.rule_id))
+        });
+        for members in runs {
+            for w in members.windows(2) {
                 dsu.union(w[0], w[1]);
             }
+            ties.push(Tie {
+                members,
+                why: TieWhy::Timing(host.to_string()),
+            });
         }
     }
 
     // Flagged requests in one probe chain (variants of one request to the
     // same host and path, minutes apart) are one client working an endpoint,
-    // even when different rules fired on each.
+    // even when different rules fired on each; requests in it from known,
+    // different clients are not (see `Clients::same`).
     // A chain hard-links its flagged records only when its gaps are request
     // or submit times; two archive captures minutes apart say when a crawler
     // saved two URLs, not that one client sent them in sequence (FM-5.4). A
@@ -116,8 +168,14 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
             .copied()
             .filter(|&m| results[m].score > 0)
             .collect();
-        for w in f.windows(2) {
-            dsu.union(w[0], w[1]);
+        for members in client_runs(results, &clients, &f, None, |_, _| true) {
+            for w in members.windows(2) {
+                dsu.union(w[0], w[1]);
+            }
+            ties.push(Tie {
+                members,
+                why: TieWhy::Chain,
+            });
         }
     }
 
@@ -130,7 +188,130 @@ pub(super) fn link<'a>(results: &'a [ObsResult], flagged: &[usize], rules: &Rule
         joined,
         common,
         chains,
+        ties,
     }
+}
+
+/// Earlier records on a host a record looks back through for one that could
+/// be its own client's, within `linking.window_secs`.
+const TIMING_LOOKBACK: usize = 64;
+
+/// The runs among `order` (record indexes in time order) that could each be
+/// one client's: every record joins the latest earlier one that
+/// [`Clients::same`] allows, with every record of its run that names a
+/// client, within `window` seconds when given, if `joins` accepts the pair.
+/// Each connected run of two or more, in order.
+fn client_runs(
+    results: &[ObsResult],
+    clients: &Clients,
+    order: &[usize],
+    window: Option<i64>,
+    joins: impl Fn(usize, usize) -> bool,
+) -> Vec<Vec<usize>> {
+    let mut dsu = Dsu((0..order.len()).collect());
+    let mut linked = vec![false; order.len()];
+    // Each run's records that name their client, one per address and user
+    // agent, by the run's root. A record that names none can be anyone's,
+    // so a join through it must still not bring two known, different
+    // clients into one run.
+    let names = |o: &Observation| known(&o.ip).is_some() || known(&o.user_agent).is_some();
+    let mut named: Vec<Vec<usize>> = order
+        .iter()
+        .map(|&i| {
+            if names(&results[i].obs) {
+                vec![i]
+            } else {
+                Vec::new()
+            }
+        })
+        .collect();
+    for (k, &bi) in order.iter().enumerate() {
+        let b = &results[bi].obs;
+        if window.is_some() && b.ts <= 0 {
+            continue;
+        }
+        let near = |&j: &usize| {
+            window.is_none_or(|w| {
+                let t = results[order[j]].obs.ts;
+                t > 0 && b.ts - t <= w
+            })
+        };
+        let kr = dsu.find(k);
+        let fits = |dsu: &mut Dsu, j: usize| {
+            let jr = dsu.find(j);
+            jr != kr
+                && named[jr].iter().all(|&x| {
+                    named[kr]
+                        .iter()
+                        .all(|&y| clients.same(&results[x].obs, &results[y].obs))
+                })
+        };
+        let mut found = None;
+        for j in (0..k).rev().take(TIMING_LOOKBACK).take_while(near) {
+            if clients.same(&results[order[j]].obs, b) && fits(&mut dsu, j) {
+                found = Some(j);
+                break;
+            }
+        }
+        let Some(j) = found else {
+            continue;
+        };
+        if joins(order[j], bi) {
+            let jr = dsu.find(j);
+            dsu.union(j, k);
+            linked[j] = true;
+            linked[k] = true;
+            let root = dsu.find(k);
+            let mut all = std::mem::take(&mut named[jr]);
+            all.append(&mut named[kr]);
+            let mut seen = BTreeSet::new();
+            all.retain(|&x| {
+                let o = &results[x].obs;
+                seen.insert((known(&o.ip), known(&o.user_agent)))
+            });
+            named[root] = all;
+        }
+    }
+    let mut runs: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for (k, &i) in order.iter().enumerate() {
+        if linked[k] {
+            runs.entry(dsu.find(k)).or_default().push(i);
+        }
+    }
+    runs.into_values().collect()
+}
+
+/// What the input says of its clients: how many records name each address.
+struct Clients<'a> {
+    uses: HashMap<&'a str, usize>,
+}
+
+impl Clients<'_> {
+    /// Whether two records could come from one client, as far as they say:
+    /// not when both name addresses and they differ, unless each address is
+    /// on that one record alone in the input (a run behind rotating proxies
+    /// sends each request from an address it never uses again; an unrelated
+    /// client sends several from its own), nor when neither names one and
+    /// both name different user agents. Records that say nothing of their
+    /// client could be anyone's.
+    fn same(&self, a: &Observation, b: &Observation) -> bool {
+        match (known(&a.ip), known(&b.ip)) {
+            (Some(x), Some(y)) => {
+                let once = |ip: &str| self.uses.get(ip).copied().unwrap_or(0) <= 1;
+                x == y || (once(x) && once(y))
+            }
+            (None, None) => !matches!(
+                (known(&a.user_agent), known(&b.user_agent)),
+                (Some(x), Some(y)) if x != y
+            ),
+            _ => true,
+        }
+    }
+}
+
+/// A field's value when it names something.
+fn known(v: &Option<String>) -> Option<&str> {
+    v.as_deref().map(str::trim).filter(|s| !s.is_empty())
 }
 
 /// The carriers of one feature in linking groups: in time order, a gap over

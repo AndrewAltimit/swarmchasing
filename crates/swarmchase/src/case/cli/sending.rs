@@ -3,7 +3,9 @@
 //! `bundle`, `verify`.
 
 use super::Ctx;
-use crate::case::report::{draft as draft_for, report as render};
+use crate::case::report::{
+    draft as draft_for, draft_path, draft_to, find_contact, report as render, stem, stem_tail,
+};
 use crate::case::{Pinned, Scope, case_dir, case_records, load, update};
 use crate::input::load_rules;
 use crate::pinning::bundle_rules;
@@ -26,7 +28,16 @@ pub struct ReportArgs {
     /// organisation). Without it the report has no such line.
     #[arg(long)]
     reporter: Option<String>,
-    /// Default: <case>/reports/<audience>-<date>.md
+    /// For an affected report: the operator's contact address, as listed in
+    /// case.toml. The report covers that operator's endpoints only.
+    #[arg(long)]
+    to: Option<String>,
+    /// With --to: the contact's endpoint, when its address is listed for
+    /// more than one operator's endpoints.
+    #[arg(long, requires = "to")]
+    endpoint: Option<String>,
+    /// Default: <case>/reports/<audience>-<date>.md, or for --to the name
+    /// its draft would have.
     #[arg(short, long)]
     out: Option<PathBuf>,
 }
@@ -41,16 +52,26 @@ pub struct DraftArgs {
     /// The contact's address, as listed in case.toml.
     #[arg(long, required_unless_present = "all", conflicts_with = "all")]
     to: Option<String>,
+    /// With --to: the contact's endpoint, when its address is listed for
+    /// more than one operator's endpoints.
+    #[arg(long, requires = "to")]
+    endpoint: Option<String>,
     /// Draft for every provider and affected contact in case.toml, each with
-    /// the audience its role implies. Contacts already sent to, and those
-    /// of other roles (registrar, host, CSIRT), are listed and skipped;
-    /// draft those one at a time with --audience and --to.
+    /// the audience its role implies, once per operator (an address listed
+    /// for two operators' endpoints gets a draft for each). Contacts already
+    /// sent to, those of other roles (registrar, host, CSIRT) and those
+    /// with a draft already in the outbox are listed and skipped; draft
+    /// those one at a time with --audience and --to (and --force).
     #[arg(long)]
     all: bool,
     /// Who the report is from, as its "Reporter" line shows it (your name or
     /// organisation). Without it the report has no such line.
     #[arg(long)]
     reporter: Option<String>,
+    /// Write over a draft already in the outbox for the same contact and
+    /// day (it may hold your edits), with --all too.
+    #[arg(long)]
+    force: bool,
 }
 
 #[derive(Args)]
@@ -81,71 +102,128 @@ pub struct SentArgs {
     /// The day only; the clocks then count from the end of it.
     #[arg(long)]
     date: Option<String>,
+    /// Record a send although the same one (same recipient and draft, or
+    /// with no draft the same day) is recorded already: the report really
+    /// went out twice.
+    #[arg(long)]
+    again: bool,
 }
 
 pub(super) fn report(ctx: &Ctx, a: ReportArgs) -> Result<()> {
-    let md = render(&ctx.root, &a.id, a.audience, a.reporter, None, &ctx.today)?;
-    let path = a.out.unwrap_or_else(|| {
-        ctx.root.join(&a.id).join("reports").join(format!(
-            "{}-{}.md",
-            audience_id(a.audience),
-            ctx.today
-        ))
-    });
+    let c = load(&ctx.root, &a.id)?;
+    let to =
+        a.to.as_deref()
+            .map(|to| find_contact(&c, to, a.endpoint.as_deref()))
+            .transpose()?;
+    let md = render(&ctx.root, &a.id, a.audience, a.reporter, to, &ctx.today)?;
+    // A report for one contact is named after it, as its draft is.
+    let name = match to {
+        Some(x) => format!("{}.md", stem(&ctx.today, a.audience, x)),
+        None => format!("{}-{}.md", audience_id(a.audience), ctx.today),
+    };
+    let path = a
+        .out
+        .unwrap_or_else(|| ctx.root.join(&a.id).join("reports").join(name));
     crate::util::write_out(Some(&path), &md)
 }
 
 pub(super) fn draft(ctx: &Ctx, a: DraftArgs) -> Result<()> {
     let c = load(&ctx.root, &a.id)?;
-    let targets: Vec<(Audience, String)> = if a.all {
-        let (targets, skipped) = all_targets(&c);
-        for line in &skipped {
-            println!("skipped {line}");
+    if !a.all {
+        let (Some(audience), Some(to)) = (a.audience, a.to.as_deref()) else {
+            bail!("--audience and --to, or --all");
+        };
+        if let Some(hint) = c.unreviewed_hint() {
+            eprintln!("warning: {hint}\n  classify them before sending");
         }
-        if targets.is_empty() {
-            bail!(
-                "no provider or affected contact in case {} left to draft for; `swarmchase case contacts {}` finds them",
-                a.id,
-                a.id
-            );
-        }
-        targets
-    } else {
-        match (a.audience, a.to) {
-            (Some(audience), Some(to)) => vec![(audience, to)],
-            _ => bail!("--audience and --to, or --all"),
-        }
-    };
-    let unreviewed = c.unreviewed().len();
-    if unreviewed > 0 {
-        eprintln!(
-            "warning: {unreviewed} endpoint(s) are still unreviewed; classify them before sending"
-        );
-    }
-    for (audience, to) in &targets {
         let path = draft_for(
             &ctx.root,
             &a.id,
-            *audience,
+            audience,
             to,
+            a.endpoint.as_deref(),
             a.reporter.clone(),
             &ctx.today,
+            a.force,
         )?;
-        println!(
-            "wrote {} (not sent; review it, send it yourself, then `swarmchase case sent {} --draft {}`)",
-            path.display(),
+        print_wrote(&a.id, &path);
+        return Ok(());
+    }
+    let (targets, skipped) = all_targets(&c);
+    for line in &skipped {
+        println!("skipped {line}");
+    }
+    if targets.is_empty() {
+        bail!(
+            "no provider or affected contact in case {} left to draft for; `swarmchase case contacts {}` finds them",
             a.id,
-            path.display()
+            a.id
         );
+    }
+    if let Some(hint) = c.unreviewed_hint() {
+        eprintln!("warning: {hint}\n  classify them before sending");
+    }
+    let dir = case_dir(&ctx.root, &a.id)?;
+    for (audience, x) in &targets {
+        // A draft already in the outbox may hold the admin's edits: kept,
+        // and the rest still drafted.
+        let p = draft_path(&dir, &ctx.today, *audience, x);
+        if p.exists() && !a.force {
+            println!(
+                "skipped {} (draft exists; --force writes it again): {}",
+                x.address,
+                p.display()
+            );
+            continue;
+        }
+        let path = draft_to(
+            &ctx.root,
+            &c,
+            *audience,
+            x,
+            a.reporter.clone(),
+            &ctx.today,
+            a.force,
+        )?;
+        print_wrote(&a.id, &path);
     }
     Ok(())
 }
 
+fn print_wrote(id: &str, path: &Path) {
+    println!(
+        "wrote {} (not sent; review it, send it yourself, then `swarmchase case sent {id} --draft {}`)",
+        path.display(),
+        path.display()
+    );
+}
+
 /// What `draft --all` drafts: each provider and affected contact not yet
-/// sent to, with its audience, once per address; and a line for each
-/// contact it skips.
-fn all_targets(c: &sc_case::model::Case) -> (Vec<(Audience, String)>, Vec<String>) {
-    let mut targets: Vec<(Audience, String)> = Vec::new();
+/// sent to, with its audience, once per recipient (an address, and for an
+/// affected report the hosts it covers, so an address listed for two
+/// operators' endpoints is two recipients); and a line for each contact it
+/// skips. A send to a shared address counts for the operator whose draft
+/// it records, or for all of them when it records none of theirs.
+fn all_targets(
+    c: &sc_case::model::Case,
+) -> (Vec<(Audience, &sc_case::model::Contact)>, Vec<String>) {
+    use std::collections::BTreeSet;
+    let site = &sc_collect::psl::registrable_domain;
+    let recipient = |audience: Audience, x: &sc_case::model::Contact| {
+        let hosts = match audience {
+            Audience::Affected => Scope::for_audience(audience, Some(x))
+                .hosts(c, site)
+                .unwrap_or_default(),
+            _ => BTreeSet::new(),
+        };
+        (
+            x.address.trim().to_ascii_lowercase(),
+            audience_id(audience),
+            hosts,
+        )
+    };
+    let mut targets: Vec<(Audience, &sc_case::model::Contact)> = Vec::new();
+    let mut seen = BTreeSet::new();
     let mut skipped = Vec::new();
     for x in &c.contacts {
         let audience = match x.role {
@@ -160,19 +238,47 @@ fn all_targets(c: &sc_case::model::Case) -> (Vec<(Audience, String)>, Vec<String
                 continue;
             }
         };
-        if c.sent
-            .iter()
-            .any(|s| s.recipient.eq_ignore_ascii_case(&x.address))
-        {
-            skipped.push(format!("{} ({}): already sent", x.address, x.role.id()));
+        let me = recipient(audience, x);
+        if !seen.insert(me.clone()) {
             continue;
         }
-        if !targets
+        let same_address =
+            |y: &&sc_case::model::Contact| y.address.trim().eq_ignore_ascii_case(x.address.trim());
+        let shared = c
+            .contacts
             .iter()
-            .any(|(_, to)| to.eq_ignore_ascii_case(&x.address))
-        {
-            targets.push((audience, x.address.clone()));
+            .filter(same_address)
+            .any(|y| recipient(audience, y) != me);
+        // Drafts name their recipient: a send recording one of this
+        // address's drafts counts for that recipient alone.
+        let tails: Vec<(bool, String)> = c
+            .contacts
+            .iter()
+            .filter(same_address)
+            .map(|y| (recipient(audience, y) == me, stem_tail(audience, y)))
+            .collect();
+        let sent = c
+            .sent
+            .iter()
+            .filter(|s| s.recipient.trim().eq_ignore_ascii_case(x.address.trim()))
+            .any(|s| {
+                let whose = s.report.as_deref().and_then(|r| {
+                    tails
+                        .iter()
+                        .find(|(_, t)| r.contains(t.as_str()))
+                        .map(|(mine, _)| *mine)
+                });
+                whose.unwrap_or(true)
+            });
+        let who = match (shared, x.endpoint.as_deref()) {
+            (true, Some(e)) => format!("{} for {}", x.address, sc_core::defang_host(e)),
+            _ => x.address.clone(),
+        };
+        if sent {
+            skipped.push(format!("{who} ({}): already sent", x.role.id()));
+            continue;
         }
+        targets.push((audience, x));
     }
     (targets, skipped)
 }
@@ -227,6 +333,25 @@ pub(super) fn sent(ctx: &Ctx, a: SentArgs) -> Result<()> {
         ),
     };
     update(&ctx.root, &a.id, |c| {
+        if !a.again
+            && let Some(s) = sc_case::actions::repeated_send(
+                c,
+                &to,
+                report.as_deref(),
+                a.at.as_deref(),
+                a.date.as_deref(),
+                ctx.now,
+            )
+        {
+            bail!(
+                "a send to {to} on {} is recorded already{}; pass --again if it was sent twice",
+                s.date,
+                s.report
+                    .as_deref()
+                    .map(|r| format!(" ({r})"))
+                    .unwrap_or_default()
+            );
+        }
         let s = sc_case::actions::sent(
             c,
             &to,

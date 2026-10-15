@@ -6,7 +6,7 @@
 - **Window:** 2026-05-11 14:02:10 UTC → 2026-05-16 09:30:04 UTC
 - **Records:** 35 linked public records in 6 cluster(s) (of 37 records reviewed, 35 flagged)
 - **Evidence tier:** significant
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.1
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.5
 
 ## Summary
 
@@ -37,7 +37,7 @@ Each claim gives its layer, label (Confirmed, Suspected, Possible, Unattributed)
 **Harness and framework candidates** (ranked; never named as the source in public):
 
 1. browser automation (Mozilla-compatible user agent). Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`; 5 record(s) encode URLs in style `hexU.noslash`; 6 record(s) sent User-Agent `Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0`; 5 record(s) encode URLs in style `sp20.noslash`; 5 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`; 2 record(s) encode URLs in style `sp20.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15`; 2 record(s) encode URLs in style `sp20.hexU.noslash`; 4 record(s) sent User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0`; 3 record(s) encode URLs in style `sp20.unsorted.noslash`.
-2. sqlmap. Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `sqlmap/1.8.4#stable (https://sqlmap.org)`; 8 record(s) match header fingerprint rule header.pentest_ua; 8 record(s) encode URLs in style `sp20.noslash`.
+2. sqlmap. Label: Possible; tag: Inference. Traces: 8 record(s) sent User-Agent `sqlmap/1.8.4#stable (hxxps://sqlmap[.]org)`; 8 record(s) match header fingerprint rule header.pentest_ua; 8 record(s) encode URLs in style `sp20.noslash`.
 
 ## Endpoints
 
@@ -95,7 +95,7 @@ URLs are defanged. Records are listed by evidence strength.
    - rules: exploit.sqli_union, header.pentest_ua
 1. 2026-05-14 03:20:03 UTC: `hxxps://api[.]parts[.]example/v1/item?id=1%20UNION%20ALL%20SELECT%20NULL,NULL--%20-`
    - rules: exploit.sqli_union, header.pentest_ua
-1. 2026-05-15 22:05:13 UTC: `hxxps://files[.]depot[.]example/index.php?page=%3Cscript%3Ealert(document.domain)%3C/script%3E`
+1. 2026-05-15 22:05:13 UTC: `hxxps://files[.]depot[.]example/index.php?page=%3Cscript%3Ealert(document[.]domain)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss
 1. 2026-05-16 09:30:03 UTC: `hxxps://intranet[.]lab[.]example/profile?name=alice%3Cscript%3Ealert(1)%3C/script%3E`
    - rules: carrier.html_program, exploit.xss

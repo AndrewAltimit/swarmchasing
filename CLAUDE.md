@@ -20,8 +20,8 @@ Find AI agent activity in public records, link it into runs and fleets, and repo
 
 | Path | Covers |
 |---|---|
-| [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, reports. No I/O (compiles to WASM). |
-| [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (archive CDX, scan services, GH Archive, registries, CT logs, security.txt), HTTP cache, PSL, ASN table. |
+| [`crates/sc-core`](crates/sc-core/README.md) | Analysis: ingest, redaction, unwrapping, rules, scoring, clustering, timing, fleet links, swarm edges, reports. No I/O (compiles to WASM). |
+| [`crates/sc-collect`](crates/sc-collect/README.md) | Passive collectors (archive CDX, scan services, GH Archive, registries, CT logs, security.txt), HTTP cache, PSL, ASN table, network ranges. |
 | [`crates/swarmchase`](crates/swarmchase/README.md) | CLI (usage in its README): [`watch/`](crates/swarmchase/src/watch/mod.rs) watch and digest, [`review/`](crates/swarmchase/src/review/mod.rs) lead labelling, [`case/`](crates/swarmchase/src/case/mod.rs) case files (subcommands in `case/cli/`), [`contacts/`](crates/swarmchase/src/contacts/mod.rs) contact discovery, [`notice.rs`](crates/swarmchase/src/notice.rs) notices, [`canary.rs`](crates/swarmchase/src/canary.rs) canary tokens. |
 | [`crates/sc-case`](crates/sc-case/README.md) | What a case is and may do, without I/O: case model, admin actions, pinning, lead clock, bundles, notice format and linter. |
 | [`crates/sc-inbox`](crates/sc-inbox/README.md) | Outside swarm reports without I/O: SC-Submission parsing, redaction, evidence classes, triage. |
@@ -101,7 +101,7 @@ python3 scripts/ci/check-md-links.py && python3 scripts/ci/check-doc-density.py
 ## Cross-cutting facts that catch people out
 
 - **The data directory is relative by default.** `--out`/`--data`, else `SWARMCHASE_DATA`, else `data/` under the working directory. A watch refuses a directory with no watch data unless given `--init`. Details: [watch](docs/reference/watch.md#the-data-directory).
-- **`eval` scores records and clusters,** over all labelled records and over the non-synthetic ones. The gate's floors read the record unit, with a second set for non-synthetic records. The committed set is a regression floor, not a precision estimate. Details: [evaluation](docs/reference/evaluation.md).
+- **`eval` scores records and clusters,** over all labelled records and over the non-synthetic ones. The gate holds floors on both units, each also over non-synthetic records. The committed set is a regression floor, not a precision estimate. Details: [evaluation](docs/reference/evaluation.md).
 - **Cases pin rules.** A case's reports, notice, exports and bundles use the rules version it was opened with; a rules change does not reach them until `case rules <id> --update`. Details: [cases](docs/reference/cases.md#pinned-rules).
 - **urlquery content is never committed or quoted.** Not in samples, fixtures, notices or eval overrides; link the report, quote only derived indicators. Details: [configuration](docs/reference/configuration.md#urlquerynet).
 - **Fork PRs run nothing** on the self-hosted runner. To test a fork's change, push it to a branch of this repository. Details: [runner](docs/reference/runner.md).

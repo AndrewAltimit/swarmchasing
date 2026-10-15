@@ -34,7 +34,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 /// Co-activity settings (`[co_activity]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CoActivityOptions {
     /// Width of an activity bin.
     pub bin_secs: i64,

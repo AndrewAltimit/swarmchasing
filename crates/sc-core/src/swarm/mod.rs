@@ -34,10 +34,16 @@
 mod artifacts;
 mod edges;
 mod eval;
+mod onset;
 mod runs;
+mod tree;
 
 pub use eval::{SwarmEval, swarm_eval};
+pub use onset::{OnsetGroup, OnsetOptions};
+pub(crate) use onset::{onset_groups, report_block as onset_block};
 pub(crate) use runs::client_key;
+pub use tree::DispatchTree;
+pub(crate) use tree::{dispatch_trees, report_block as dispatch_tree_block};
 
 use crate::analyze::{Cluster, ObsResult};
 use crate::chance::TestFamily;
@@ -184,7 +190,7 @@ fn is_zero(n: &usize) -> bool {
 
 /// Interaction edge settings (`[swarm]` in the rules file).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct SwarmOptions {
     /// S3: two requests line up when this close at the pair's offset.
     pub lockstep_tolerance_secs: i64,

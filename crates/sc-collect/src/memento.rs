@@ -68,6 +68,7 @@ impl Source for Memento {
         let truncated = records.len() > size;
         records.truncate(size);
         Ok(Page {
+            stopped: None,
             records,
             next: None,
             truncated,

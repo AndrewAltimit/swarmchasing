@@ -288,13 +288,13 @@ fn an_interrupted_run_is_reported_by_the_next_and_old_captures_are_analysed() {
     assert_eq!(state["sources"]["tm-b"]["restart"], true, "{state}");
     // The run after a reset pulls tm-b from the start again, but what its
     // store already holds is neither stored twice nor reported as new.
-    let store_b = d.join("data/store/tm-b.ndjson");
-    let held = std::fs::read_to_string(&store_b).unwrap();
+    let store_b = d.join("data/store/tm-b");
+    let held = read_dir_text(&store_b);
     ok(d, &["watch", "watchlist.toml", "--out", "data"]);
     let summary = json(&latest(d).join("run.json"));
     assert_eq!(summary["counts"]["new_records"], 0, "{summary}");
     assert_eq!(summary["leads"].as_array().map(Vec::len), Some(0));
-    assert_eq!(std::fs::read_to_string(&store_b).unwrap(), held);
+    assert_eq!(read_dir_text(&store_b), held);
     let state = json(&d.join("data/state.json"));
     assert!(state["sources"]["tm-b"]["cursor"].as_i64().unwrap() > 0);
     assert!(state["sources"]["tm-b"].get("restart").is_none(), "{state}");
@@ -310,4 +310,82 @@ fn an_interrupted_run_is_reported_by_the_next_and_old_captures_are_analysed() {
         &["watch", "prune-cache", "watchlist.toml", "--out", "data"],
     );
     assert!(r.stdout.contains("deleted 0 entries"), "{}", r.stdout);
+}
+
+/// Every file in `dir`, by name, as one text.
+fn read_dir_text(dir: &std::path::Path) -> String {
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    files.sort();
+    assert!(!files.is_empty(), "{} is empty", dir.display());
+    files
+        .iter()
+        .map(|p| std::fs::read_to_string(p).unwrap())
+        .collect()
+}
+
+#[test]
+fn a_run_that_finishes_with_alerts_exits_4() {
+    let s = Scratch::new("watch-e2e-alerts");
+    let d = s.path();
+    let now = chrono::Utc::now().timestamp();
+    let srv = serve(timemap(PORTAL, &[now - DAY]), timemap(OTHER, &[now - DAY]));
+    srv.hang.store(false, Ordering::SeqCst);
+    // One source runs; the other needs a key the environment does not
+    // have, so it is skipped with an alert.
+    std::fs::write(
+        d.join("watchlist.toml"),
+        format!(
+            r#"min_interval_secs = 0
+http_cache_ttl_secs = 0
+
+[[source]]
+name = "tm-a"
+kind = "memento"
+pattern = "{PORTAL}"
+endpoint = "http://127.0.0.1:{}/a/"
+
+[[source]]
+name = "uq"
+kind = "urlquery"
+pattern = "r.jina.ai"
+"#,
+            srv.port
+        ),
+    )
+    .unwrap();
+    let r = run(d, &["watch", "watchlist.toml", "--out", "data", "--init"]);
+    assert_eq!(r.code, Some(4), "{}", r.stderr);
+    assert!(r.stderr.contains("alert(s)"), "{}", r.stderr);
+    let digest = std::fs::read_to_string(latest(d).join("digest.md")).unwrap();
+    assert!(digest.contains("`uq` was skipped"), "{digest}");
+    // The record went to its month in the partitioned store.
+    let month = chrono::DateTime::from_timestamp(now - DAY, 0)
+        .unwrap()
+        .format("%Y-%m")
+        .to_string();
+    assert!(d.join(format!("data/store/tm-a/{month}.ndjson")).is_file());
+}
+
+#[test]
+fn a_usage_error_does_not_exit_as_a_run_with_alerts() {
+    // clap exits 2 on a bad flag or a bad value from the environment; the
+    // watch workflow treats only 4 as a finished run with alerts, so a
+    // usage error must stay a failure.
+    let s = Scratch::new("watch-e2e-usage");
+    let d = s.path();
+    let r = run(d, &["watch", "--no-such-flag"]);
+    assert_eq!(r.code, Some(2), "{}", r.stderr);
+    assert_ne!(r.code, Some(i32::from(swarmchase::exit::ALERTS)));
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_swarmchase"))
+        .args(["watch", "--out", "data"])
+        .current_dir(d)
+        .env_remove("SWARMCHASE_DATA")
+        .env("SWARMCHASE_TRIAGE_MAX", "ten")
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(!d.join("data").exists());
 }

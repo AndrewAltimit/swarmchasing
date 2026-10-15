@@ -26,6 +26,8 @@ pub fn classify(
     let id = c.id.clone();
     let mut found = Vec::new();
     for host in hosts {
+        // A host as reports print it (`a[.]b`) is taken as it is meant.
+        let host = &host.replace("[.]", ".");
         match c
             .endpoints
             .iter()
@@ -54,8 +56,9 @@ pub fn classify(
             );
         }
     }
-    for (host, i) in hosts.iter().zip(found) {
+    for i in found {
         let e = &mut c.endpoints[i];
+        let host = e.host.clone();
         e.state = state;
         e.note = note.map(str::to_string).or(e.note.take());
         if state != EndpointState::Compromised {
@@ -88,12 +91,13 @@ pub fn classify(
 /// (`case endpoint --sector`). Every host is found before anything changes.
 pub fn describe(c: &mut Case, hosts: &[String], sector: &str, today: &str) -> Result<()> {
     let sector = sector.trim();
+    let hosts: Vec<String> = hosts.iter().map(|h| h.replace("[.]", ".")).collect();
     if sector.is_empty() {
         bail!(
             "--sector: how the notice describes the target, e.g. \"a national government data portal\""
         );
     }
-    for host in hosts {
+    for host in &hosts {
         if c.endpoint(host).is_none() {
             bail!(
                 "no endpoint `{host}` in case {}{}",
@@ -102,7 +106,7 @@ pub fn describe(c: &mut Case, hosts: &[String], sector: &str, today: &str) -> Re
             );
         }
     }
-    for host in hosts {
+    for host in &hosts {
         if let Some(e) = c
             .endpoints
             .iter_mut()
@@ -315,6 +319,33 @@ pub fn sent(
         ));
     }
     Ok(line)
+}
+
+/// The send already recorded that recording this one would repeat: to the
+/// same recipient, with the same report, or with no report on the same day
+/// (`at` and `date` as [`sent`] takes them). `case sent` refuses a repeat
+/// unless told it was sent again.
+pub fn repeated_send<'a>(
+    c: &'a Case,
+    to: &str,
+    report: Option<&str>,
+    at: Option<&str>,
+    date: Option<&str>,
+    now: i64,
+) -> Option<&'a Sent> {
+    let day = at
+        .and_then(parse_time)
+        .map(crate::text::date_of)
+        .or(date.map(|d| d.trim().to_string()))
+        .unwrap_or_else(|| crate::text::date_of(now));
+    c.sent.iter().find(|s| {
+        s.recipient.trim().eq_ignore_ascii_case(to.trim())
+            && match (report, s.report.as_deref()) {
+                (Some(a), Some(b)) => a == b,
+                (None, None) => s.date == day,
+                _ => false,
+            }
+    })
 }
 
 /// A claim from case work, as `case claim` takes it.
@@ -632,6 +663,68 @@ mod tests {
             );
         }
         assert_eq!(c.sent.len(), 1);
+    }
+
+    #[test]
+    fn a_repeated_send_is_found() {
+        let mut c = case();
+        let now = 1_791_000_000;
+        let draft = Some("2026-10-02-affected-a-b.eml".to_string());
+        sent(
+            &mut c,
+            "a@b.example",
+            "email",
+            draft.clone(),
+            None,
+            None,
+            now,
+        )
+        .unwrap();
+        sent(&mut c, "c@d.example", "email", None, None, None, now).unwrap();
+        let again = |c: &Case, to, report: Option<&str>, date| {
+            repeated_send(c, to, report, None, date, now).is_some()
+        };
+        assert!(again(&c, "A@b.example", draft.as_deref(), None));
+        assert!(!again(&c, "a@b.example", Some("other.eml"), None));
+        assert!(again(&c, "c@d.example", None, None));
+        assert!(!again(&c, "c@d.example", None, Some("2026-09-01")));
+        assert!(!again(&c, "e@f.example", None, None));
+    }
+
+    #[test]
+    fn hosts_are_taken_defanged() {
+        let mut c = case();
+        let host = ["portal[.]example[.]gov".to_string()];
+        classify(
+            &mut c,
+            &host,
+            EndpointState::Targeted,
+            None,
+            None,
+            None,
+            "d",
+        )
+        .unwrap();
+        assert_eq!(c.endpoints[0].state, EndpointState::Targeted);
+        assert!(
+            c.decisions
+                .last()
+                .unwrap()
+                .text
+                .contains("portal.example.gov")
+        );
+        describe(&mut c, &host, "a portal", "d").unwrap();
+        assert_eq!(c.endpoints[0].sector.as_deref(), Some("a portal"));
+        let hint = c.unreviewed_hint();
+        assert!(hint.is_none());
+        c.endpoints[0].state = EndpointState::Unreviewed;
+        let hint = c.unreviewed_hint().unwrap();
+        assert!(
+            hint.contains("portal[.]example[.]gov")
+                && hint.contains("case endpoint s-1 'portal[.]example[.]gov' targeted")
+                && !hint.contains("portal.example"),
+            "{hint}"
+        );
     }
 
     #[test]

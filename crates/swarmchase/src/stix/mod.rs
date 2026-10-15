@@ -4,15 +4,16 @@
 //! module reads the case, scopes its records to the audience, and checks
 //! what it may export.
 //!
-//! The export takes the same operator evidence as the report for that
-//! audience ([`crate::case::Scope`]); a public export also withholds what
-//! the public notice withholds. The export is a draft written to a file;
-//! nothing is sent.
+//! The export takes the same records and operator evidence as the report
+//! for that audience ([`crate::case::Scope`]): an affected export only the
+//! records on that operator's own endpoints. A public export also withholds
+//! what the public notice withholds. The export is a draft written to a
+//! file; nothing is sent.
 
 pub use sc_stix::feature_kind;
 
 use crate::case::{self, Scope};
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use sc_core::Audience;
 use serde_json::Value;
 
@@ -25,7 +26,7 @@ pub fn export(
     reporter: Option<&str>,
     today: &str,
 ) -> Result<String> {
-    let v = export_value(root, id, audience, to, reporter, today)?;
+    let v = export_value(root, id, audience, to, None, reporter, today)?;
     Ok(format!(
         "{}
 ",
@@ -34,12 +35,14 @@ pub fn export(
 }
 
 /// The case as a STIX bundle for `audience`. An affected export is for the
-/// one operator `to` names; case notes are not exported.
+/// one operator `to` names (on `endpoint`, when the address is listed for
+/// more than one operator's); case notes are not exported.
 pub fn export_value(
     root: &std::path::Path,
     id: &str,
     audience: Audience,
     to: Option<&str>,
+    endpoint: Option<&str>,
     reporter: Option<&str>,
     today: &str,
 ) -> Result<Value> {
@@ -51,12 +54,7 @@ pub fn export_value(
         (Audience::Affected, None) => {
             bail!("an affected export is for one operator: pass --to <contact address>")
         }
-        (Audience::Affected, Some(to)) => Some(
-            c.contacts
-                .iter()
-                .find(|x| x.address.eq_ignore_ascii_case(to))
-                .with_context(|| format!("`{to}` is not a contact in case {id}"))?,
-        ),
+        (Audience::Affected, Some(to)) => Some(case::find_contact(&c, to, endpoint)?),
         _ => None,
     };
     let unreviewed = c.unreviewed().len();
@@ -536,6 +534,13 @@ kept = 1
         )
         .unwrap();
         assert!(own.contains("opsonly77"), "an operator's own logs");
+        // Only its own endpoint's records: no other operator's host.
+        assert!(
+            !own.contains("hit.example.org") && !own.contains("bystander"),
+            "{own}"
+        );
+        // The other operator's one record forms no cluster on its own, so
+        // there is nothing to export to it; never the whole case.
         let other = export(
             &root,
             "t-1",
@@ -544,8 +549,9 @@ kept = 1
             None,
             "2026-10-14",
         )
-        .unwrap();
-        assert!(!other.contains("opsonly77"), "another operator's logs");
+        .unwrap_err()
+        .to_string();
+        assert!(other.contains("nothing to export"), "{other}");
         assert!(export(&root, "t-1", Audience::Affected, None, None, "d").is_err());
         assert!(export(&root, "t-1", Audience::Internal, None, None, "d").is_err());
 

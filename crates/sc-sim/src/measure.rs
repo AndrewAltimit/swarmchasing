@@ -1,6 +1,10 @@
 //! Swarm edges, soft links and candidate fleets against true run pairs, and
 //! the agent grade by actor class.
 //!
+//! Review hints are measured beside them ([`GROUP_KINDS`]): onset groups as
+//! edges are, against true swarm pairs, and seams against false merges, the
+//! clusters above noise whose members span more than one operator.
+//!
 //! The unit is a pair of true runs. An edge side is placed on the run most of
 //! its records belong to; a cluster on the run most of its members belong
 //! to. Kinds are keyed by their serialised name. Every kind is listed with
@@ -12,7 +16,7 @@ use crate::truth::Truth;
 use sc_core::eval::Label;
 use sc_core::eval::grades::Actor;
 use sc_core::eval::stats::Proportion;
-use sc_core::{AgentLevel, Analysis, SoftLinkKind, Tier};
+use sc_core::{AgentLevel, Analysis, PlantSignalKind, SoftLinkKind, Tier};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -74,8 +78,9 @@ impl KindStat {
 }
 
 /// True pairs: all of them, and those both of whose runs reach a cluster
-/// above noise (`reachable`). For operator pairs, `joined` are already in
-/// one cluster.
+/// above noise (`reachable`). `joined` are those whose runs have most of
+/// their records in one cluster: soft-link recall leaves them out; swarm
+/// edges count them, since an edge can join the rest of the two runs.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PairCounts {
     pub total: usize,
@@ -110,7 +115,309 @@ pub struct Measurement {
     /// People's records in clusters graded L3 or above.
     #[serde(default)]
     pub human_high: usize,
+    /// Agents' records grouped by cluster against their true runs.
+    #[serde(default)]
+    pub clustering: Clustering,
+    /// How soon each true agent run is flagged.
+    #[serde(default)]
+    pub detection: Detection,
+    /// Review hints by [`GROUP_KINDS`] name. `seam`: `pairs` are clusters
+    /// above noise with a seam, `correct` and `found` those that are false
+    /// merges, `of` the false merges, `unrelated` the clean ones seamed.
+    /// `onset_group` (kept) and `onset_trigger` (listed as a common
+    /// trigger): pairs of runs in one group, against true swarm pairs, as
+    /// edges are.
+    #[serde(default)]
+    pub groups: BTreeMap<String, KindStat>,
+    /// Clusters above noise whose members are one operator's.
+    #[serde(default)]
+    pub clean_clusters: usize,
 }
+
+/// Clusters against true runs, over records labelled agent: each record's
+/// predicted group is its cluster, or the record alone when it is in none.
+/// B-cubed precision counts a member of another run of the record's swarm
+/// as right (a swarm's agents share an inbox or a tag by design); recall
+/// and the adjusted Rand index read runs only. B-cubed sums add over seeds
+/// and scenarios and the ratios are read off the sums. The adjusted Rand
+/// index is computed per analysis and averaged: pair counts summed over
+/// analyses mix records no analysis compared, and the index read off them
+/// is not an adjusted Rand index.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Clustering {
+    pub records: usize,
+    /// B-cubed precision and recall, summed over records.
+    pub bcubed_precision_sum: f64,
+    pub bcubed_recall_sum: f64,
+    /// Each analysis's adjusted Rand index, summed over the analyses where
+    /// it is defined (`ari_analyses`).
+    #[serde(default)]
+    pub ari_sum: f64,
+    #[serde(default)]
+    pub ari_analyses: usize,
+}
+
+/// The adjusted Rand index (Hubert and Arabie) of one analysis from its
+/// pair counts: pairs of records, pairs in one group and one run, pairs in
+/// one group, pairs in one run. 1 for groups that are the runs, about 0 for
+/// chance; `None` with fewer than two records.
+pub fn ari_of_pairs(pairs: f64, both: f64, group: f64, run: f64) -> Option<f64> {
+    if pairs <= 0.0 {
+        return None;
+    }
+    let expected = group * run / pairs;
+    let max = (group + run) / 2.0;
+    if (max - expected).abs() < 1e-12 {
+        return Some(1.0);
+    }
+    Some((both - expected) / (max - expected))
+}
+
+impl Clustering {
+    /// One analysis's measurement from its B-cubed sums and its pair counts
+    /// (pairs, in one group and one run, in one group, in one run).
+    pub fn of_analysis(
+        records: usize,
+        bcubed_precision_sum: f64,
+        bcubed_recall_sum: f64,
+        (pairs, both, group, run): (f64, f64, f64, f64),
+    ) -> Self {
+        let ari = ari_of_pairs(pairs, both, group, run);
+        Clustering {
+            records,
+            bcubed_precision_sum,
+            bcubed_recall_sum,
+            ari_sum: ari.unwrap_or(0.0),
+            ari_analyses: usize::from(ari.is_some()),
+        }
+    }
+
+    pub fn bcubed(&self) -> Option<(f64, f64, f64)> {
+        if self.records == 0 {
+            return None;
+        }
+        let n = self.records as f64;
+        let (p, r) = (self.bcubed_precision_sum / n, self.bcubed_recall_sum / n);
+        let f = if p + r > 0.0 {
+            2.0 * p * r / (p + r)
+        } else {
+            0.0
+        };
+        Some((p, r, f))
+    }
+
+    /// The mean adjusted Rand index over the analyses where it is defined.
+    pub fn ari(&self) -> Option<f64> {
+        (self.ari_analyses > 0).then(|| self.ari_sum / self.ari_analyses as f64)
+    }
+
+    pub(crate) fn add(&mut self, o: &Self) {
+        self.records += o.records;
+        self.bcubed_precision_sum += o.bcubed_precision_sum;
+        self.bcubed_recall_sum += o.bcubed_recall_sum;
+        self.ari_sum += o.ari_sum;
+        self.ari_analyses += o.ari_analyses;
+    }
+}
+
+/// How soon true agent runs are flagged: from the whole analysis, records
+/// and minutes from each run's first record to its first record at
+/// suggestive or above; with checkpoints, minutes to the first prefix of
+/// the records (cut at evenly spaced record counts, sorted by time) whose
+/// analysis grades the run's cluster L2 or above or puts it in a candidate
+/// fleet. A checkpoint's time is its last record's, so those minutes are
+/// an upper bound at the checkpoints' spacing.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Detection {
+    /// True agent runs.
+    pub runs: usize,
+    /// Per flagged run: its records up to and including the first flagged.
+    pub records_to_flag: Vec<usize>,
+    pub minutes_to_flag: Vec<f64>,
+    /// Checkpoints each analysis was cut at; 0 when none was run.
+    #[serde(default)]
+    pub checkpoints: usize,
+    /// Per run that reached L2 or a candidate fleet at a checkpoint.
+    #[serde(default)]
+    pub minutes_to_escalate: Vec<f64>,
+}
+
+impl Detection {
+    fn add(&mut self, o: &Self) {
+        self.runs += o.runs;
+        self.records_to_flag.extend(&o.records_to_flag);
+        self.minutes_to_flag.extend(&o.minutes_to_flag);
+        self.checkpoints = self.checkpoints.max(o.checkpoints);
+        self.minutes_to_escalate.extend(&o.minutes_to_escalate);
+    }
+}
+
+/// The `q` quantile (nearest rank) of `xs`, `None` when empty.
+pub fn quantile(xs: &[f64], q: f64) -> Option<f64> {
+    if xs.is_empty() {
+        return None;
+    }
+    let mut v = xs.to_vec();
+    v.sort_by(f64::total_cmp);
+    let k = ((q * v.len() as f64).ceil() as usize).clamp(1, v.len());
+    Some(v[k - 1])
+}
+
+fn choose2(n: usize) -> f64 {
+    let n = n as f64;
+    n * (n - 1.0) / 2.0
+}
+
+/// Agent records' clusters against their runs.
+fn clustering(a: &Analysis, truth: &Truth) -> Clustering {
+    let mut seen = BTreeSet::new();
+    // (group, run) per agent record; a record in no cluster is its own group.
+    let mut recs: Vec<((bool, usize), &str)> = Vec::new();
+    let mut swarm_of: BTreeMap<&str, &str> = BTreeMap::new();
+    for (i, r) in a.results.iter().enumerate() {
+        let Some(t) = truth.get(&r.obs.id) else {
+            continue;
+        };
+        if t.label != Some(Label::Agent) || !seen.insert(r.obs.id.as_str()) {
+            continue;
+        }
+        let g = r.cluster.map_or((false, i), |c| (true, c));
+        recs.push((g, t.run.as_str()));
+        if let Some(sw) = t.swarm_id() {
+            swarm_of.insert(t.run.as_str(), sw);
+        }
+    }
+    let (mut bp, mut br) = (0.0, 0.0);
+    let mut group: BTreeMap<(bool, usize), usize> = BTreeMap::new();
+    let mut run: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut both: BTreeMap<((bool, usize), &str), usize> = BTreeMap::new();
+    for &(g, r) in &recs {
+        *group.entry(g).or_default() += 1;
+        *run.entry(r).or_default() += 1;
+        *both.entry((g, r)).or_default() += 1;
+    }
+    // Precision counts members of the record's swarm's other runs as right,
+    // as `eval` does: one swarm's agents share an inbox or a tag by design.
+    let mut group_runs: BTreeMap<(bool, usize), Vec<(&str, usize)>> = BTreeMap::new();
+    for (&(g, r), &n) in &both {
+        group_runs.entry(g).or_default().push((r, n));
+    }
+    let one_swarm =
+        |x: &str, y: &str| x == y || swarm_of.get(x).is_some_and(|s| swarm_of.get(y) == Some(s));
+    for &(g, r) in &recs {
+        let same = both[&(g, r)] as f64;
+        let swarm: usize = group_runs[&g]
+            .iter()
+            .filter(|(x, _)| one_swarm(x, r))
+            .map(|x| x.1)
+            .sum();
+        bp += swarm as f64 / group[&g] as f64;
+        br += same / run[r] as f64;
+    }
+    let pairs = (
+        choose2(recs.len()),
+        both.values().map(|&n| choose2(n)).sum(),
+        group.values().map(|&n| choose2(n)).sum(),
+        run.values().map(|&n| choose2(n)).sum(),
+    );
+    Clustering::of_analysis(recs.len(), bp, br, pairs)
+}
+
+/// Records and minutes to each agent run's first flagged record.
+fn detection(a: &Analysis, truth: &Truth) -> Detection {
+    let mut seen = BTreeSet::new();
+    let mut by_run: BTreeMap<&str, Vec<(i64, bool)>> = BTreeMap::new();
+    for r in &a.results {
+        let Some(t) = truth.get(&r.obs.id) else {
+            continue;
+        };
+        if t.label != Some(Label::Agent) || !seen.insert(r.obs.id.as_str()) {
+            continue;
+        }
+        by_run
+            .entry(t.run.as_str())
+            .or_default()
+            .push((r.obs.ts, r.tier >= Tier::Suggestive));
+    }
+    let mut out = Detection {
+        runs: by_run.len(),
+        ..Detection::default()
+    };
+    for recs in by_run.values_mut() {
+        recs.sort_by_key(|x| (x.0, !x.1));
+        if let Some(k) = recs.iter().position(|x| x.1) {
+            out.records_to_flag.push(k + 1);
+            out.minutes_to_flag
+                .push((recs[k].0 - recs[0].0) as f64 / 60.0);
+        }
+    }
+    out
+}
+
+/// Minutes from each agent run's first record to the first of
+/// `checkpoints` prefixes of `obs` (sorted by time) whose analysis grades
+/// the cluster holding most of the run's records so far L2 or above, or
+/// puts it in a candidate fleet. Each prefix is analysed afresh.
+pub fn escalation_times(
+    obs: &[sc_core::Observation],
+    truth: &Truth,
+    rules: &sc_core::Rules,
+    checkpoints: usize,
+) -> Vec<f64> {
+    let mut sorted: Vec<&sc_core::Observation> = obs.iter().collect();
+    sorted.sort_by_key(|o| o.ts);
+    let n = sorted.len();
+    let mut first: BTreeMap<String, i64> = BTreeMap::new();
+    for o in &sorted {
+        if let Some(t) = truth.get(&o.id)
+            && t.label == Some(Label::Agent)
+        {
+            first.entry(t.run.clone()).or_insert(o.ts);
+        }
+    }
+    let mut done: BTreeMap<String, f64> = BTreeMap::new();
+    for j in 1..=checkpoints.max(1) {
+        let m = (n * j).div_ceil(checkpoints.max(1));
+        if m == 0 {
+            continue;
+        }
+        let cut = sorted[m - 1].ts;
+        let prefix: Vec<sc_core::Observation> = sorted[..m].iter().map(|o| (*o).clone()).collect();
+        let a = sc_core::analyze(prefix, rules);
+        let fleet: BTreeSet<usize> = a
+            .candidate_fleets
+            .iter()
+            .flat_map(|f| f.clusters.iter().filter_map(|c| a.cluster_index(c)))
+            .collect();
+        // Each run's cluster holding most of its records so far.
+        let mut counts: BTreeMap<&str, BTreeMap<usize, usize>> = BTreeMap::new();
+        for r in &a.results {
+            let (Some(t), Some(c)) = (truth.get(&r.obs.id), r.cluster) else {
+                continue;
+            };
+            if t.label == Some(Label::Agent) && !done.contains_key(&t.run) {
+                *counts
+                    .entry(t.run.as_str())
+                    .or_default()
+                    .entry(c)
+                    .or_default() += 1;
+            }
+        }
+        for (run, cs) in counts {
+            let Some((&c, _)) = cs.iter().max_by_key(|x| (*x.1, std::cmp::Reverse(*x.0))) else {
+                continue;
+            };
+            if a.clusters[c].agent.level >= AgentLevel::ModelWritten || fleet.contains(&c) {
+                let start = first.get(run).copied().unwrap_or(cut);
+                done.insert(run.to_string(), (cut - start).max(0) as f64 / 60.0);
+            }
+        }
+    }
+    done.into_values().collect()
+}
+
+/// The review hints measured per scenario, as `expect` names them.
+pub const GROUP_KINDS: [&str; 3] = ["seam", "onset_group", "onset_trigger"];
 
 impl Measurement {
     /// Sum another measurement into this one (seeds, scenarios, files).
@@ -124,7 +431,11 @@ impl Measurement {
             a.reachable += b.reachable;
             a.joined += b.joined;
         }
-        for (mine, theirs) in [(&mut self.edges, &o.edges), (&mut self.links, &o.links)] {
+        for (mine, theirs) in [
+            (&mut self.edges, &o.edges),
+            (&mut self.links, &o.links),
+            (&mut self.groups, &o.groups),
+        ] {
             for (k, v) in theirs {
                 mine.entry(k.clone()).or_default().add(v);
             }
@@ -133,6 +444,9 @@ impl Measurement {
         self.split_pairs += o.split_pairs;
         self.benign_high += o.benign_high;
         self.human_high += o.human_high;
+        self.clustering.add(&o.clustering);
+        self.detection.add(&o.detection);
+        self.clean_clusters += o.clean_clusters;
         for (row, cols) in &o.grades {
             let r = self.grades.entry(row.clone()).or_default();
             for (c, n) in cols {
@@ -170,7 +484,11 @@ fn pair<'a>(a: &'a str, b: &'a str) -> (&'a str, &'a str) {
 }
 
 pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
-    let mut out = Measurement::default();
+    let mut out = Measurement {
+        clustering: clustering(a, truth),
+        detection: detection(a, truth),
+        ..Measurement::default()
+    };
     // Each run's row (its first record's), clusters above noise, and the
     // cluster holding most of its records.
     let mut run_row = BTreeMap::new();
@@ -235,6 +553,11 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
                 out.swarm_pairs.total += 1;
                 if reach {
                     out.swarm_pairs.reachable += 1;
+                    // Runs whose most records share one cluster: an edge
+                    // can still join the rest of them.
+                    if home[x] == home[y] {
+                        out.swarm_pairs.joined += 1;
+                    }
                     swarm_pairs.push((x, y));
                 }
             }
@@ -271,9 +594,9 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
         drawn.entry(kind_name(&e.kind)).or_default().insert(p);
         drawn.entry("any".into()).or_default().insert(p);
     }
-    for (k, ps) in drawn {
+    let swarm_stat = |ps: &BTreeSet<(&str, &str)>| {
         let mut s = KindStat::default();
-        for &(x, y) in &ps {
+        for &(x, y) in ps {
             s.pairs += 1;
             let (tx, ty) = (run_row[x], run_row[y]);
             if x == y {
@@ -289,7 +612,10 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
         }
         s.of = swarm_pairs.len();
         s.found = swarm_pairs.iter().filter(|p| ps.contains(p)).count();
-        out.edges.insert(k, s);
+        s
+    };
+    for (k, ps) in drawn {
+        out.edges.insert(k, swarm_stat(&ps));
     }
 
     // Soft links and candidate fleets, between clusters.
@@ -341,6 +667,71 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
             }
         }
     }
+    // Onset groups: every pair of runs in a group, kept or listed as a
+    // common trigger.
+    let mut onset: BTreeMap<String, BTreeSet<(&str, &str)>> = BTreeMap::new();
+    for k in ["onset_group", "onset_trigger"] {
+        onset.entry(k.into()).or_default();
+    }
+    for g in &a.onset_groups {
+        let kind = if g.common_trigger {
+            "onset_trigger"
+        } else {
+            "onset_group"
+        };
+        let runs: Vec<&str> = g
+            .clusters
+            .iter()
+            .filter_map(|c| a.cluster_index(c))
+            .filter_map(|c| cluster_run.get(&c).copied())
+            .collect();
+        out.unplaced += g.clusters.len() - runs.len();
+        for (i, &x) in runs.iter().enumerate() {
+            for &y in &runs[i + 1..] {
+                onset.entry(kind.into()).or_default().insert(pair(x, y));
+            }
+        }
+    }
+    for (k, ps) in onset {
+        out.groups.insert(k, swarm_stat(&ps));
+    }
+
+    // Seams against false merges.
+    let mut seam = KindStat::default();
+    for c in a.clusters.iter().filter(|c| c.tier > Tier::Noise) {
+        let ops: BTreeSet<String> = c
+            .members
+            .iter()
+            .filter_map(|&m| truth.get(&a.results[m].obs.id))
+            .map(|t| t.operator())
+            .collect();
+        if ops.is_empty() {
+            continue;
+        }
+        let merged = ops.len() > 1;
+        let seamed = c
+            .origin
+            .plant_signals
+            .iter()
+            .any(|p| p.kind == PlantSignalKind::Seam);
+        if merged {
+            seam.of += 1;
+        } else {
+            out.clean_clusters += 1;
+        }
+        if seamed {
+            seam.pairs += 1;
+            if merged {
+                seam.correct += 1;
+                seam.cross_correct += 1;
+                seam.found += 1;
+            } else {
+                seam.unrelated += 1;
+            }
+        }
+    }
+    out.groups.insert("seam".into(), seam);
+
     for (k, ps) in linked {
         let mut s = KindStat::default();
         for &(x, y) in &ps {
@@ -377,14 +768,14 @@ pub fn measure(a: &Analysis, truth: &Truth) -> Measurement {
 
 /// Every soft-link kind. The match fails to compile when a kind is added
 /// to [`SoftLinkKind`] and not here, so none goes unmeasured.
-const SOFT_LINK_KINDS: [SoftLinkKind; 20] = {
+const SOFT_LINK_KINDS: [SoftLinkKind; 24] = {
     use SoftLinkKind::*;
     const fn listed(k: SoftLinkKind) {
         match k {
             SharedPause | Dialect | Rerun | Preamble | PathSet | Encoding | FanOut | CutLength
             | HeaderSet | Escalation | CommonFeature | SharedSecret | RelayStack
             | CallbackService | Scaffold | CoActivity | CoTarget | OrderedCoTarget
-            | ScaffoldLineage | PromptEcho => {}
+            | ScaffoldLineage | PromptEcho | CoGroup | Generator | Playbook | Campaign => {}
         }
     }
     listed(SharedPause);
@@ -409,5 +800,9 @@ const SOFT_LINK_KINDS: [SoftLinkKind; 20] = {
         OrderedCoTarget,
         ScaffoldLineage,
         PromptEcho,
+        CoGroup,
+        Generator,
+        Playbook,
+        Campaign,
     ]
 };

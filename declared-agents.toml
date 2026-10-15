@@ -17,7 +17,12 @@
 #                   provider does not say the file lists every address its
 #                   agents use, so an address outside it is unlisted, not spoofed.
 #   [[directory]]   id, provider, signature_agent (the `Signature-Agent` URI the
-#                   provider documents), url (its key directory), source.
+#                   provider documents), url (its key directory), source;
+#                   `access = "direct" | "intermediary"` only where the
+#                   provider's own documentation says how the signer is
+#                   operated (one operator, or a platform many end users
+#                   direct). An intermediary's verified signature attributes
+#                   the platform, not the end user.
 #   [[agent]]       token (the user-agent product token, matched
 #                   case-insensitively as a whole token), provider, product,
 #                   purpose (user_fetch | agent | search | training),
@@ -25,13 +30,17 @@
 #                   product signs), source.
 #   [[github_app]]  login (the actor login GitHub events carry, matched
 #                   case-insensitively and whole), provider, product, names
-#                   (words that claim the product in another App's login),
-#                   source. Read by the platform pass: these Apps' events are
+#                   (words of the product's name or login that claim it in
+#                   another App's login; never the provider's name alone,
+#                   which the provider's other Apps carry), orgs (the
+#                   provider's own GitHub organisations, optional), source.
+#                   Read by the platform pass: these Apps' events are
 #                   tallied, not grouped, and an undeclared `[bot]` login
-#                   carrying one of the names is a spoofing lead.
+#                   carrying one of the names is a spoofing lead, unless it
+#                   acts on a repository of one of the provider's orgs.
 
 [meta]
-version = "2026-10-12.1"
+version = "2026-10-14.2"
 
 # ── OpenAI ────────────────────────────────────────────────────────────────
 # https://developers.openai.com/api/docs/bots lists each user agent with its
@@ -57,13 +66,32 @@ source = "https://developers.openai.com/api/docs/bots"
 
 # ChatGPT agent signs its requests with Web Bot Auth and sends
 # `Signature-Agent: "https://chatgpt.com"`; it uses a browser user agent, so
-# the signature is its only declaration.
+# the signature is its only declaration. The help article's earlier
+# `-chatgpt-agent-allowlisting` slug redirects to the one below.
 [[directory]]
 id = "openai.chatgpt"
 provider = "OpenAI"
 signature_agent = "https://chatgpt.com"
 url = "https://chatgpt.com/.well-known/http-message-signatures-directory"
-source = "https://help.openai.com/en/articles/11845367-chatgpt-agent-allowlisting"
+source = "https://help.openai.com/en/articles/11845367-chatgpt-works-cloud-browser-allowlisting"
+
+# https://developers.openai.com/api/docs/guides/ip-addresses publishes the
+# egress ranges of ChatGPT integrations (connectors, GPT Actions, agentic
+# shopping) and of Codex cloud. No user-agent token is tied to them, and the
+# page says the ranges change without calling them complete.
+[[range_file]]
+id = "openai.chatgpt-connectors"
+provider = "OpenAI"
+url = "https://openai.com/chatgpt-connectors.json"
+source = "https://developers.openai.com/api/docs/guides/ip-addresses"
+exhaustive = false
+
+[[range_file]]
+id = "openai.chatgpt-agents"
+provider = "OpenAI"
+url = "https://openai.com/chatgpt-agents.json"
+source = "https://developers.openai.com/api/docs/guides/ip-addresses"
+exhaustive = false
 
 [[agent]]
 token = "ChatGPT-User"
@@ -241,6 +269,14 @@ purpose = "user_fetch"
 ranges = ["google.user-triggered-fetchers", "google.user-triggered-fetchers-google"]
 source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
 
+[[agent]]
+token = "Google-Pinpoint"
+provider = "Google"
+product = "Pinpoint fetches of sources a user adds to a collection"
+purpose = "user_fetch"
+ranges = ["google.user-triggered-fetchers", "google.user-triggered-fetchers-google"]
+source = "https://developers.google.com/crawling/docs/crawlers-fetchers/google-user-triggered-fetchers"
+
 # ── Mistral ─────────────────────────────────────────────────────────────────
 # https://docs.mistral.ai/robots lists each user agent with its published IP
 # file. The page calls them "All published IP addresses" without claiming the
@@ -298,8 +334,8 @@ source = "https://duckduckgo.com/duckduckgo-help-pages/results/duckassistbot"
 
 # ── Meta ─────────────────────────────────────────────────────────────────────
 # https://developers.facebook.com/docs/sharing/webmasters/web-crawlers names
-# both crawlers. Meta publishes no IP-range file for them, so neither has a
-# range (an address cannot be called spoofed from this catalog).
+# the crawlers. Meta publishes no IP-range file for them, so none has a range
+# (an address cannot be called spoofed from this catalog).
 
 [[agent]]
 token = "meta-externalfetcher"
@@ -315,10 +351,126 @@ product = "Meta AI training and indexing crawler"
 purpose = "training"
 source = "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers"
 
+[[agent]]
+token = "meta-webindexer"
+provider = "Meta"
+product = "Meta AI search crawler"
+purpose = "search"
+source = "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers"
+
+# Crawls for Meta's advertising and business products; the purpose enum has
+# no advertising value, and `search` is the closest (an automated crawler).
+[[agent]]
+token = "meta-externalads"
+provider = "Meta"
+product = "Meta advertising and business products crawler"
+purpose = "search"
+source = "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers"
+
+# ── Amazon ──────────────────────────────────────────────────────────────────
+# https://developer.amazon.com/amazonbot names the three agents and links a
+# "Published IP Addresses" list for each. The lists are HTML pages, not
+# machine-readable range files the refresh can parse, so no range is given.
+
+[[agent]]
+token = "Amzn-User"
+provider = "Amazon"
+product = "Amazon user-triggered fetches (Alexa answers)"
+purpose = "user_fetch"
+source = "https://developer.amazon.com/amazonbot"
+
+[[agent]]
+token = "Amzn-SearchBot"
+provider = "Amazon"
+product = "Amazon search crawler (Alexa and other search experiences)"
+purpose = "search"
+source = "https://developer.amazon.com/amazonbot"
+
+[[agent]]
+token = "Amazonbot"
+provider = "Amazon"
+product = "Amazon crawler, may train Amazon AI models"
+purpose = "training"
+source = "https://developer.amazon.com/amazonbot"
+
+# ── Moonshot AI (Kimi) ──────────────────────────────────────────────────────
+# https://www.kimi.ai/policies/kimi-crawlers lists each user agent with its
+# range file, linked relative to the page. The user agents cite
+# www.kimi.com/policies/kimi-crawlers, which redirects to that page, so the
+# files are fetched from www.kimi.ai, where they are served. The page does
+# not claim the files are complete, so they are not taken as exhaustive.
+
+[[range_file]]
+id = "kimi.kimibot"
+provider = "Moonshot AI"
+url = "https://www.kimi.ai/policies/kimibot.json"
+source = "https://www.kimi.ai/policies/kimi-crawlers"
+exhaustive = false
+
+[[range_file]]
+id = "kimi.user"
+provider = "Moonshot AI"
+url = "https://www.kimi.ai/policies/kimi-user.json"
+source = "https://www.kimi.ai/policies/kimi-crawlers"
+exhaustive = false
+
+[[range_file]]
+id = "kimi.searchbot"
+provider = "Moonshot AI"
+url = "https://www.kimi.ai/policies/kimi-searchbot.json"
+source = "https://www.kimi.ai/policies/kimi-crawlers"
+exhaustive = false
+
+[[agent]]
+token = "Kimi-User"
+provider = "Moonshot AI"
+product = "Kimi user-triggered fetches"
+purpose = "user_fetch"
+ranges = ["kimi.user"]
+source = "https://www.kimi.ai/policies/kimi-crawlers"
+
+[[agent]]
+token = "Kimi-SearchBot"
+provider = "Moonshot AI"
+product = "Kimi search crawler"
+purpose = "search"
+ranges = ["kimi.searchbot"]
+source = "https://www.kimi.ai/policies/kimi-crawlers"
+
+[[agent]]
+token = "KimiBot"
+provider = "Moonshot AI"
+product = "Kimi training crawler"
+purpose = "training"
+ranges = ["kimi.kimibot"]
+source = "https://www.kimi.ai/policies/kimi-crawlers"
+
+# ── Apple ───────────────────────────────────────────────────────────────────
+# https://support.apple.com/en-us/119829 names Applebot and links its CIDR
+# file over http; the same file is served over HTTPS, which the refresh
+# requires. The page does not call the list complete.
+
+[[range_file]]
+id = "apple.applebot"
+provider = "Apple"
+url = "https://search.developer.apple.com/applebot.json"
+source = "https://support.apple.com/en-us/119829"
+exhaustive = false
+
+[[agent]]
+token = "Applebot"
+provider = "Apple"
+product = "Apple search crawler (Spotlight, Siri, Safari), may train Apple models"
+purpose = "search"
+ranges = ["apple.applebot"]
+source = "https://support.apple.com/en-us/119829"
+
 # ── Hosted-browser signers (key directories only) ───────────────────────────
 # Services that drive a browser on a user's behalf and sign their requests
 # with Web Bot Auth. No user-agent product token is tracked for them; the
-# signature and its key directory are the declaration.
+# signature and its key directory are the declaration. A service whose public
+# docs do not give its Signature-Agent value and directory URL (Browserbase's
+# Web Bot Auth page gives neither) is left out until they do.
 
 # Cloudflare Browser Rendering signs its browser traffic and documents the
 # Signature-Agent host and key directory.
@@ -329,15 +481,6 @@ signature_agent = "https://web-bot-auth.cloudflare-browser-rendering-085.workers
 url = "https://web-bot-auth.cloudflare-browser-rendering-085.workers.dev/.well-known/http-message-signatures-directory"
 source = "https://developers.cloudflare.com/browser-rendering/reference/automatic-request-headers/"
 
-# Browserbase publishes its key directory under its own host; the
-# Signature-Agent URI is that host (the docs show only the directory path).
-[[directory]]
-id = "browserbase"
-provider = "Browserbase"
-signature_agent = "https://www.browserbase.com"
-url = "https://www.browserbase.com/.well-known/http-message-signatures-directory"
-source = "https://docs.browserbase.com/platform/identity/web-bot-auth"
-
 # ── Coding agents on GitHub ───────────────────────────────────────────────
 # Coding agents act on GitHub through their provider's GitHub App, so their
 # events carry the App's login. An App acts only where a repository owner
@@ -347,14 +490,16 @@ source = "https://docs.browserbase.com/platform/identity/web-bot-auth"
 login = "chatgpt-codex-connector[bot]"
 provider = "OpenAI"
 product = "Codex"
-names = ["codex", "chatgpt", "openai"]
+names = ["codex", "chatgpt"]
+orgs = ["openai"]
 source = "https://developers.openai.com/codex/integrations/github"
 
 [[github_app]]
 login = "claude[bot]"
 provider = "Anthropic"
 product = "Claude GitHub App"
-names = ["claude", "anthropic"]
+names = ["claude"]
+orgs = ["anthropics"]
 source = "https://code.claude.com/docs/en/github-actions"
 
 [[github_app]]
@@ -362,6 +507,7 @@ login = "Copilot"
 provider = "GitHub"
 product = "Copilot cloud agent and code review"
 names = ["copilot"]
+orgs = ["github"]
 source = "https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent"
 
 [[github_app]]
@@ -384,6 +530,15 @@ provider = "Cognition"
 product = "Devin"
 names = ["devin"]
 source = "https://docs.devin.ai/integrations/gh"
+
+# The Factory Droid App's own GitHub listing (its events carry the App's
+# `[bot]` login).
+[[github_app]]
+login = "factory-droid[bot]"
+provider = "Factory"
+product = "Droid"
+names = ["droid"]
+source = "https://github.com/apps/factory-droid"
 
 [[github_app]]
 login = "google-labs-jules[bot]"

@@ -1,12 +1,20 @@
-//! The data directory's files: the watch record store, retention, and the
-//! JSON and NDJSON helpers the watch, cases and review share.
+//! The data directory's files: the watch record store ([`records`], moved
+//! from its older layout by [`migrate`]), retention, and the JSON and NDJSON
+//! helpers the watch, cases and review share.
 
 use anyhow::{Context, Result, bail};
 use sc_core::Observation;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
 use std::path::Path;
+
+mod migrate;
+mod records;
+pub use migrate::{Migrated, migrate_store};
+pub use records::{
+    StorePruned, UNDATED, append_records, load_ids, load_store, load_store_counted, partition_of,
+    prune_store, set_aside_damaged, source_ids,
+};
 
 /// Whether `data` holds anything a data directory holds: `state.json`, the
 /// watch store, labels or cases.
@@ -63,52 +71,16 @@ pub fn read_ndjson<T: for<'de> Deserialize<'de>>(p: &Path) -> Result<(Vec<T>, us
     Ok((out, bad))
 }
 
-/// Stored records captured at or after `since`, deduplicated by ID (the
-/// first copy wins). Records with no timestamp count as captured at 0.
-/// Unreadable lines are skipped with a warning; see [`load_store_counted`].
-pub fn load_store(dir: &Path, since: i64) -> Result<Vec<Observation>> {
-    let (out, bad) = load_store_counted(dir, since)?;
-    for (file, n) in bad {
-        eprintln!("warning: {file}: {n} unreadable line(s) skipped");
-    }
-    Ok(out)
+/// What [`prune`] deleted.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Pruned {
+    pub runs: usize,
+    pub store: StorePruned,
 }
 
-/// [`load_store`], with the number of unreadable lines in each store file
-/// that has any.
-pub fn load_store_counted(
-    dir: &Path,
-    since: i64,
-) -> Result<(Vec<Observation>, BTreeMap<String, usize>)> {
-    let mut out = Vec::new();
-    let mut seen = BTreeSet::new();
-    let mut bad = BTreeMap::new();
-    let mut files: Vec<_> = std::fs::read_dir(dir)?
-        .map(|e| e.map(|e| e.path()))
-        .collect::<std::io::Result<_>>()?;
-    files.sort();
-    for p in files {
-        if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
-            continue;
-        }
-        let (records, n) = read_ndjson::<Observation>(&p)?;
-        if n > 0 {
-            let name = p.file_name().unwrap_or_default().to_string_lossy();
-            bad.insert(format!("store/{name}"), n);
-        }
-        for o in records {
-            if o.ts >= since && seen.insert(o.id.clone()) {
-                out.push(o);
-            }
-        }
-    }
-    Ok((out, bad))
-}
-
-/// Delete run directories stamped before `cutoff` and stored records captured
-/// before it. Records with no timestamp are kept: their age is unknown.
-/// Returns (run dirs deleted, records deleted).
-pub fn prune(out: &Path, cutoff: i64) -> Result<(usize, usize)> {
+/// Delete run directories stamped before `cutoff` and stored records
+/// captured before it ([`prune_store`]).
+pub fn prune(out: &Path, cutoff: i64) -> Result<Pruned> {
     let mut runs = 0;
     if let Ok(entries) = std::fs::read_dir(out.join("runs")) {
         for entry in entries {
@@ -123,39 +95,10 @@ pub fn prune(out: &Path, cutoff: i64) -> Result<(usize, usize)> {
             }
         }
     }
-    let mut records = 0;
-    if let Ok(entries) = std::fs::read_dir(out.join("store")) {
-        for entry in entries {
-            let p = entry?.path();
-            if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
-                continue;
-            }
-            let bytes = std::fs::read(&p).with_context(|| format!("reading {}", p.display()))?;
-            let mut kept: Vec<u8> = Vec::with_capacity(bytes.len());
-            let mut dropped = 0;
-            // An unreadable line has no known age, so it is kept as it is.
-            for line in byte_lines(&bytes) {
-                let ts = line
-                    .ok()
-                    .and_then(|l| serde_json::from_str::<Observation>(l).ok())
-                    .map_or(0, |o| o.ts);
-                if ts > 0 && ts < cutoff {
-                    dropped += 1;
-                } else {
-                    kept.extend_from_slice(match line {
-                        Ok(l) => l.as_bytes(),
-                        Err(b) => b,
-                    });
-                    kept.push(b'\n');
-                }
-            }
-            if dropped > 0 {
-                write_atomic(&p, &kept)?;
-                records += dropped;
-            }
-        }
-    }
-    Ok((runs, records))
+    Ok(Pruned {
+        runs,
+        store: prune_store(&out.join("store"), cutoff)?,
+    })
 }
 
 /// The files of a run's full analysis, which only the newest runs keep.
@@ -398,6 +341,26 @@ mod tests {
         let before = std::fs::read(&p).unwrap();
         prune(&dir, 50).unwrap();
         assert_eq!(std::fs::read(&p).unwrap(), before);
+
+        // Set aside once: the store reads clean after, and a second pass
+        // finds nothing.
+        let moved = set_aside_damaged(&dir.join("store"), 0).unwrap();
+        assert_eq!(
+            moved.get("store/s.ndjson"),
+            Some(&(2, "store/s.damaged".to_string()))
+        );
+        let (got, bad) = load_store_counted(&dir.join("store"), 0).unwrap();
+        assert_eq!(got.len(), 3);
+        assert!(bad.is_empty(), "{bad:?}");
+        assert!(set_aside_damaged(&dir.join("store"), 0).unwrap().is_empty());
+        let aside = std::fs::read(dir.join("store").join("s.damaged")).unwrap();
+        assert!(aside.windows(2).any(|w| w == b"\xff\xfe"));
+        // Retention deletes the damaged lines once their file is older
+        // than the cutoff, and not before.
+        prune(&dir, 0).unwrap();
+        assert!(dir.join("store").join("s.damaged").exists());
+        prune(&dir, i64::MAX).unwrap();
+        assert!(!dir.join("store").join("s.damaged").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -499,7 +462,16 @@ mod tests {
             .collect();
         assert_eq!(recent, ["new"]);
 
-        assert_eq!(prune(&out, cutoff).unwrap(), (1, 1));
+        assert_eq!(
+            prune(&out, cutoff).unwrap(),
+            Pruned {
+                runs: 1,
+                store: StorePruned {
+                    files: 0,
+                    records: 1
+                }
+            }
+        );
         assert!(!out.join("runs").join("20260101T000000Z").exists());
         assert!(out.join("runs").join("20261001T000000Z").exists());
         let kept: Vec<String> = load_store(&out.join("store"), i64::MIN)

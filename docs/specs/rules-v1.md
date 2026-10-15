@@ -25,12 +25,14 @@ A rules file is TOML. Its JSON value (the TOML read as JSON) **must** validate a
 | `[meta]` | `version`: the rules version. | **should** |
 | `[thresholds]` | `suggestive` and `significant` scores. | **should**; defaults 3 and 6 |
 | `[linking]` | Link features, time windows, run gaps, published tags ([FM-5.2](../manual/05-linking.md#fm-52-shared-link-features)). | no |
-| `[chains]`, `[fanout]`, `[escalation]`, `[soft_links]`, `[scaffold]`, `[co_activity]`, `[co_target]`, `[prompt_echo]`, `[swarm]`, `[agentness]`, `[cut_lengths]`, `[paths]` | Settings for linking, descriptive hints, interaction edges and the agent grade. | no |
+| `[chains]`, `[fanout]`, `[escalation]`, `[soft_links]`, `[scaffold]`, `[co_activity]`, `[co_target]`, `[prompt_echo]`, `[biclique]`, `[campaign]`, `[generator]`, `[playbook]`, `[swarm]`, `[onset]`, `[agentness]`, `[cut_lengths]`, `[paths]` | Settings for linking, descriptive hints, interaction edges and the agent grade. | no |
 | `[[rule]]` | The indicator rules. | no |
 | `[[asn]]` | Network number to organisation, for hosting context. | no |
 | `[[benchmark]]`, `[[stale]]` | Benchmark targets and stale knowledge ([FM-4.9](../manual/04-indicators.md#fm-49-benchmark-targets-and-declared-testing), [FM-4.5](../manual/04-indicators.md#fm-45-artifact-families)). | no |
 
 A missing settings table takes the defaults the toolkit's bundled file carries, so a case pinned to an older file renders the same. The meaning of each setting is in [methodology](../methodology.md); this spec fixes only its name and type.
+
+`[soft_links.joint]` holds caps on two soft-link families' combined likelihood ratio, each a number keyed by the two family names joined by `_` in the order harness, timeline, targets, identifiers (`timeline_targets`). An engine **must** reject any other key, and **must** combine a pair's families so that the result is at most each capped pair's cap times the other families' ratios, never below the stronger capped family alone, and the same whatever order the families come in ([FM-5.17](../manual/05-linking.md#fm-517-weighing-soft-links)).
 
 The version is an opaque string. This project uses a date. Two files with the same version **must** be byte-identical in their rules; a change to any rule, threshold or setting takes a new version.
 
@@ -76,6 +78,8 @@ The **target host** is the host of the innermost layer whose host is not itself 
 | `final_url` | Where a scan ended. | Regular expression. |
 
 Regular expressions are case-insensitive and use the syntax of the Rust `regex` crate: no look-around and no back-references, inline flags such as `(?-i:…)`, and `\x{…}` escapes. An engine in another language **must** use a compatible syntax or translate the patterns, and **must** pass the conformance vectors.
+
+A pattern with a capture group named `m` matches as that group: the matched text (what a `link = true` rule links on) is the group, and the rest of the pattern is context it must see but does not keep. With no look-behind, this is how a pattern says what may not come before a match: `(^|[^a-z])(?P<m>agenttest\d*)` matches `uq_agenttest42` as `agenttest42`.
 
 ## Scoring
 

@@ -2,10 +2,18 @@
 //! addresses their agents and crawlers send from.
 //!
 //! The providers in the catalog all use one JSON shape (`{"creationTime":
-//! ..., "prefixes": [{"ipv4Prefix": "a.b.c.d/n"}, {"ipv6Prefix": ...}]}`).
-//! The parser takes any string in the document that reads as a CIDR prefix,
-//! so a provider that renames a key still loads, and a plain list (one
-//! prefix per line) loads too.
+//! ..., "prefixes": [{"ipv4Prefix": "a.b.c.d/n"}, {"ipv6Prefix": ...}]}`),
+//! which draft-illyes-webbotauth-jafar describes. The parser takes any
+//! string in the document that reads as a CIDR prefix, so a provider that
+//! renames a key still loads, and a plain list (one prefix per line) loads
+//! too.
+//!
+//! The draft's optional fields are read when a file has them and never
+//! required: `creationTime` (when the file was generated; its age is worth
+//! stating beside a verdict), `synctoken` (an opaque value that changes
+//! with the file's contents) and a prefix's `services` (the publisher's
+//! names for what sends from it, so one shared file can name the agent per
+//! prefix). A single `service` string is read as a one-name list.
 
 use std::net::IpAddr;
 
@@ -70,7 +78,11 @@ pub struct RangeTable {
     pub created: Option<String>,
     /// When it was fetched (`yyyy-mm-dd`), set by the caller: core has no clock.
     pub fetched: Option<String>,
+    /// The file's own `synctoken`, when it has one.
+    pub synctoken: Option<String>,
     prefixes: Vec<Prefix>,
+    /// The `services` the file names per prefix, for prefixes that name any.
+    services: Vec<(Prefix, Vec<String>)>,
 }
 
 impl RangeTable {
@@ -83,11 +95,11 @@ impl RangeTable {
         };
         match serde_json::from_str::<serde_json::Value>(text) {
             Ok(v) => {
-                t.created = v
-                    .get("creationTime")
-                    .and_then(|c| c.as_str())
-                    .map(str::to_string);
+                let text = |k: &str| v.get(k).and_then(|c| c.as_str()).map(str::to_string);
+                t.created = text("creationTime");
+                t.synctoken = text("synctoken");
                 walk(&v, &mut t.prefixes);
+                services(&v, &mut t.services);
             }
             Err(_) => t.prefixes.extend(
                 text.lines()
@@ -115,6 +127,56 @@ impl RangeTable {
     /// Whether `ip` (an address as a log writes it) is in the file.
     pub fn contains(&self, ip: &str) -> bool {
         parse_ip(ip).is_some_and(|ip| self.prefixes.iter().any(|p| p.contains(ip)))
+    }
+
+    /// The services the file names for the most specific prefix holding
+    /// `ip` that names any; empty when none does.
+    pub fn services_for(&self, ip: &str) -> &[String] {
+        let Some(ip) = parse_ip(ip) else {
+            return &[];
+        };
+        self.services
+            .iter()
+            .filter(|(p, _)| p.contains(ip))
+            .max_by_key(|(p, _)| p.len)
+            .map_or(&[], |(_, s)| s.as_slice())
+    }
+
+    /// Whole days from the file's `creationTime` to `now` (Unix seconds),
+    /// when it has a readable one.
+    pub fn age_days(&self, now: i64) -> Option<i64> {
+        let t = crate::model::parse_ts(self.created.as_deref()?)?;
+        Some((now - t).div_euclid(86_400))
+    }
+}
+
+/// Prefix objects that name `services` (or one `service`): exactly one of
+/// `ipv4Prefix` and `ipv6Prefix`, as the draft requires.
+fn services(v: &serde_json::Value, out: &mut Vec<(Prefix, Vec<String>)>) {
+    match v {
+        serde_json::Value::Array(a) => a.iter().for_each(|x| services(x, out)),
+        serde_json::Value::Object(m) => {
+            let p4 = m.get("ipv4Prefix").and_then(|x| x.as_str());
+            let p6 = m.get("ipv6Prefix").and_then(|x| x.as_str());
+            let names: Vec<String> = match (m.get("services"), m.get("service")) {
+                (Some(serde_json::Value::Array(a)), _) => a
+                    .iter()
+                    .filter_map(|x| x.as_str())
+                    .map(str::to_string)
+                    .collect(),
+                (_, Some(serde_json::Value::String(s))) => vec![s.clone()],
+                _ => Vec::new(),
+            };
+            match (p4, p6) {
+                (Some(p), None) | (None, Some(p)) if !names.is_empty() => {
+                    if let Some(p) = Prefix::parse(p) {
+                        out.push((p, names));
+                    }
+                }
+                _ => m.values().for_each(|x| services(x, out)),
+            }
+        }
+        _ => {}
     }
 }
 
@@ -164,11 +226,48 @@ mod tests {
         assert!(t.contains("198.51.100.200") && t.contains("203.0.113.7:8080"));
         assert!(!t.contains("203.0.113.8"));
         assert!(RangeTable::parse("z", "{}").is_err());
+        assert_eq!(t.synctoken, None);
+        assert!(t.services_for("198.51.100.1").is_empty());
         assert!(Prefix::parse("10.0.0.0/33").is_none());
         assert!(
             Prefix::parse("0.0.0.0/0")
                 .unwrap()
                 .contains("8.8.8.8".parse().unwrap())
         );
+    }
+
+    #[test]
+    fn jafar_optional_fields() {
+        // draft-illyes-webbotauth-jafar section 4's shapes, on documentation
+        // addresses.
+        let json = r#"{"synctoken": "20260410223000", "creationTime": "2026-10-10T14:30:00Z",
+            "notes": "aggregate", "prefixes": [
+            {"ipv4Prefix": "192.0.2.0/24", "services": ["Example-Crawler", "Example-Ads"]},
+            {"ipv4Prefix": "192.0.2.64/26", "services": ["Example-Fetcher"]},
+            {"ipv6Prefix": "2001:db8::/32", "service": "Example-Agent"},
+            {"ipv4Prefix": "198.51.100.0/24"},
+            {"ipv4Prefix": "203.0.113.0/24", "ipv6Prefix": "2001:db8:1::/48", "services": ["Bad"]}]}"#;
+        let t = RangeTable::parse("x", json).unwrap();
+        assert_eq!(t.synctoken.as_deref(), Some("20260410223000"));
+        assert_eq!(
+            t.services_for("192.0.2.1"),
+            ["Example-Crawler", "Example-Ads"]
+        );
+        assert_eq!(
+            t.services_for("192.0.2.70"),
+            ["Example-Fetcher"],
+            "most specific"
+        );
+        assert_eq!(t.services_for("2001:db8::9"), ["Example-Agent"]);
+        assert!(t.services_for("198.51.100.1").is_empty());
+        assert!(t.contains("198.51.100.1"));
+        // An object with both prefixes names no service.
+        assert!(t.services_for("203.0.113.1").is_empty());
+        let now = crate::model::parse_ts("2026-10-14T00:00:00Z").unwrap();
+        assert_eq!(t.age_days(now), Some(3));
+        // The fields are never required.
+        let bare =
+            RangeTable::parse("y", r#"{"prefixes":[{"ipv4Prefix":"192.0.2.0/28"}]}"#).unwrap();
+        assert_eq!((bare.age_days(now), bare.synctoken), (None, None));
     }
 }

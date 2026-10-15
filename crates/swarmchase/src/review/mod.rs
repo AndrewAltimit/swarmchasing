@@ -64,7 +64,6 @@ pub mod sample;
 pub mod serve;
 
 use crate::suggest::Suggestion;
-use crate::util::truncate;
 use anyhow::{Context, Result, bail};
 use sc_core::{Analysis, Observation, Tier, defang, fmt_ts};
 use serde::{Deserialize, Serialize};
@@ -124,6 +123,8 @@ pub struct ReviewArgs {
     /// Data directory (the watch's `--out`).
     #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
     data: PathBuf,
+    /// With no input files: review the watch store's records captured in
+    /// this many days before now.
     #[arg(long, default_value_t = 30)]
     days: i64,
     /// Queue records at or above this tier: suggestive | significant
@@ -139,6 +140,10 @@ pub struct ReviewArgs {
     /// Print counts of reviewed records and disagreements, and exit.
     #[arg(long)]
     stats: bool,
+    /// With `--stats`: print the counts as one JSON document on stdout.
+    #[arg(long, requires = "stats")]
+    json: bool,
+    /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
     /// Save reviews as this labeller (`reviewed-<name>.ndjson`), for
@@ -194,6 +199,11 @@ pub fn run(args: ReviewArgs) -> Result<()> {
     let mut store = ReviewStore::open(path)?;
     if args.stats {
         let rules = crate::pinning::RulesText::load(args.rules.as_deref())?;
+        if args.json {
+            let v = stats_json(&store, &rules.rules, &data.join("labels"))?;
+            println!("{}", serde_json::to_string_pretty(&v)?);
+            return Ok(());
+        }
         stats(&store, &rules.rules, &mut std::io::stdout())?;
         return agreement_report(&data.join("labels"), &mut std::io::stdout());
     }
@@ -249,7 +259,7 @@ pub fn run(args: ReviewArgs) -> Result<()> {
                 r.tier.label(),
                 r.score,
                 r.obs.id,
-                defang(&truncate(&r.obs.url, 100))
+                sc_core::clip_defanged(&sc_core::defang(&r.obs.url), 100)
             );
         }
         return Ok(());
@@ -643,7 +653,7 @@ impl ReviewStore {
     }
 
     pub fn open(path: PathBuf) -> Result<Self> {
-        let entries = Self::read(&path)?;
+        let (entries, _) = Self::read(&path)?;
         let base = snapshot(&entries)?;
         Ok(Self {
             path,
@@ -652,23 +662,38 @@ impl ReviewStore {
         })
     }
 
-    fn read(path: &Path) -> Result<BTreeMap<String, Review>> {
+    /// The file's labels, and the lines that do not read (a write cut
+    /// short, a hand edit). Those are skipped with a warning rather than
+    /// hiding every other label; a save moves them to `<file>.damaged`.
+    fn read(path: &Path) -> Result<(BTreeMap<String, Review>, Vec<String>)> {
         let mut entries = BTreeMap::new();
-        match std::fs::read_to_string(path) {
-            Ok(text) => {
+        let mut bad = Vec::new();
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                let text = String::from_utf8_lossy(&bytes);
                 for (n, line) in text.lines().enumerate() {
                     if line.trim().is_empty() {
                         continue;
                     }
-                    let r: Review = serde_json::from_str(line)
-                        .with_context(|| format!("{}:{}", path.display(), n + 1))?;
-                    entries.insert(r.record.id.clone(), r);
+                    match serde_json::from_str::<Review>(line) {
+                        Ok(r) => {
+                            entries.insert(r.record.id.clone(), r);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "warning: {}:{}: label line skipped: {e}",
+                                path.display(),
+                                n + 1
+                            );
+                            bad.push(line.to_string());
+                        }
+                    }
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
         }
-        Ok(entries)
+        Ok((entries, bad))
     }
 
     /// Write this store's changes into the file: entries added, changed or
@@ -689,7 +714,17 @@ impl ReviewStore {
             .with_context(|| format!("opening {}", lock_path.display()))?;
         lock.lock()
             .with_context(|| format!("locking {}", lock_path.display()))?;
-        let mut merged = Self::read(&self.path)?;
+        let (mut merged, bad) = Self::read(&self.path)?;
+        if !bad.is_empty() {
+            // Kept aside, not dropped: the rewrite below leaves them out.
+            let aside = dir.join(format!("{name}.damaged"));
+            crate::store::append(&aside, &(bad.join("\n") + "\n"))?;
+            eprintln!(
+                "warning: {} unreadable label line(s) moved to {}",
+                bad.len(),
+                aside.display()
+            );
+        }
         let ours = snapshot(&self.entries)?;
         for (id, r) in &self.entries {
             if self.base.get(id) == ours.get(id) {
@@ -817,6 +852,8 @@ pub enum Answer {
     /// Open a case from the cluster, or add it to the named case.
     Case(Option<String>),
     Skip,
+    /// Take back the last label or skip, and show that record again.
+    Undo,
     Quit,
     Help,
 }
@@ -824,6 +861,7 @@ pub enum Answer {
 /// `a`, `b`, `u` label one record; `A`, `B`, `U` label every queued record in
 /// its cluster. Anything after the key is the note: `b reading an article`.
 /// `c` opens a case from the cluster; `c <case-id>` adds it to that case.
+/// `z` takes back the last label or skip.
 pub fn parse_answer(line: &str) -> Answer {
     let line = line.trim();
     let mut chars = line.chars();
@@ -841,6 +879,7 @@ pub fn parse_answer(line: &str) -> Answer {
         'b' => "benign",
         'u' => "unsure",
         's' => return Answer::Skip,
+        'z' => return Answer::Undo,
         'c' => return Answer::Case(note),
         'q' => return Answer::Quit,
         _ => return Answer::Help,
@@ -848,8 +887,8 @@ pub fn parse_answer(line: &str) -> Answer {
     Answer::Label(label, note, key.is_ascii_uppercase())
 }
 
-const HELP: &str = "  a = agent, b = benign, u = unsure, s = skip, q = quit (progress is saved)\n  \
-     A / B / U label every queued record in this cluster. Text after the key is a note: `b ordinary article read`\n  \
+const HELP: &str = "  a = agent, b = benign, u = unsure, s = skip, z = undo the last answer, q = quit (progress is saved)\n  \
+     A / B / U label every queued record in this cluster (asking first when that is more than 5). Text after the key is a note: `b ordinary article read`\n  \
      c opens a case from this cluster; `c <case-id>` adds the cluster to that case";
 
 fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize) -> Result<()> {
@@ -895,23 +934,31 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
             " (below L2: unsure is the most the rule allows)"
         }
     )?;
-    writeln!(out, "  url:     {}", defang(&truncate(&r.obs.url, 300)))?;
+    writeln!(
+        out,
+        "  url:     {}",
+        sc_core::clip_defanged(&sc_core::defang(&r.obs.url), 300)
+    )?;
     for l in r.layers.iter().filter(|l| l.via != "submitted").take(5) {
         writeln!(
             out,
             "  {:<8} {}",
             format!("[{}]", l.via),
-            defang(&truncate(
-                &l.text.split_whitespace().collect::<Vec<_>>().join(" "),
+            sc_core::clip_defanged(
+                &defang(&l.text.split_whitespace().collect::<Vec<_>>().join(" ")),
                 200
-            ))
+            )
         )?;
     }
     if let Some(h) = &r.target_host {
         writeln!(out, "  target:  {}", sc_core::defang_host(h))?;
     }
     if let Some(f) = &r.obs.final_url {
-        writeln!(out, "  final:   {}", defang(&truncate(f, 120)))?;
+        writeln!(
+            out,
+            "  final:   {}",
+            sc_core::clip_defanged(&sc_core::defang(f), 120)
+        )?;
     }
     for h in &r.hits {
         writeln!(
@@ -919,7 +966,7 @@ fn show(out: &mut impl Write, a: &Analysis, item: Item, pos: usize, total: usize
             "  rule:    {} (+{}) {}",
             h.rule_id,
             h.weight,
-            defang(&truncate(&h.matched, 80))
+            sc_core::clip_defanged(&sc_core::defang(&h.matched), 80)
         )?;
     }
     if let Some(link) = &r.obs.reference {
@@ -951,7 +998,10 @@ pub struct CaseAction {
 
 /// Open a case from the cluster of record `idx` (the record alone when it is
 /// unclustered), or add those records to case `into`, and log in the case's
-/// decision log where they came from.
+/// decision log where they came from. Without `into`, an open case that
+/// already holds some of the records takes the rest, so `c` twice never
+/// opens two cases on one cluster. A new case is named after the cluster's
+/// stable key and records its admin.
 pub fn case_from_cluster(
     a: &Analysis,
     idx: usize,
@@ -962,16 +1012,17 @@ pub fn case_from_cluster(
     let (members, what, slug) = match r.cluster {
         Some(c) => {
             let c = &a.clusters[c];
-            let slug: String =
-                c.id.chars()
-                    .map(|ch| {
-                        if ch.is_ascii_alphanumeric() {
-                            ch.to_ascii_lowercase()
-                        } else {
-                            '-'
-                        }
-                    })
-                    .collect();
+            let slug: String = c
+                .key
+                .chars()
+                .map(|ch| {
+                    if ch.is_ascii_alphanumeric() {
+                        ch.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .collect();
             (
                 c.members.clone(),
                 format!("cluster {} ({})", c.id, c.key),
@@ -990,8 +1041,17 @@ pub fn case_from_cluster(
         .collect();
     let origin = format!("review of {}, {what}", sink.from);
     let today = sink.today.as_str();
+    // A watch reads the cases; never let it see one half written.
+    let _lock = crate::store::lock_data(sink.root.parent().unwrap_or(&sink.root), "review case")?;
+    let into = match into {
+        Some(id) => Some(id.to_string()),
+        None => {
+            let ids: BTreeSet<String> = records.iter().map(|o| o.id.clone()).collect();
+            crate::case::holding(&sink.root, &ids)?
+        }
+    };
 
-    if let Some(id) = into {
+    if let Some(id) = into.as_deref() {
         let c = crate::case::load(&sink.root, id)?;
         if c.status == crate::case::CaseStatus::Closed {
             bail!("case {id} is closed");
@@ -1029,7 +1089,15 @@ pub fn case_from_cluster(
         r.cluster.map_or(r.tier, |c| a.clusters[c].tier).label()
     );
     let added = records.len();
-    crate::case::new_case(&sink.root, &id, &title, records, &sink.rules, today)?;
+    crate::case::open_case(
+        &sink.root,
+        &id,
+        &title,
+        records,
+        &sink.rules,
+        today,
+        crate::case::admin_name().as_deref(),
+    )?;
     crate::case::log_entry(&sink.root, &id, today, format!("opened from {origin}"))?;
     Ok(CaseAction {
         id,
@@ -1073,6 +1141,8 @@ pub fn session(
     let mut tally = Tally::default();
     let total = items.len();
     let mut pos = 0;
+    // What `z` takes back, newest last.
+    let mut history: Vec<Step> = Vec::new();
     while pos < items.len() {
         let item = items[pos];
         let id = &a.results[item.idx].obs.id;
@@ -1119,7 +1189,42 @@ pub fn session(
                 tally.quit = true;
                 break;
             }
-            Answer::Skip => tally.skipped += 1,
+            Answer::Skip => {
+                tally.skipped += 1;
+                history.push(Step::Skip { pos });
+            }
+            Answer::Undo => {
+                match history.pop() {
+                    None => writeln!(out, "  nothing to undo")?,
+                    Some(Step::Skip { pos: at }) => {
+                        tally.skipped -= 1;
+                        writeln!(out, "  undid a skip")?;
+                        pos = at;
+                    }
+                    Some(Step::Label {
+                        pos: at,
+                        label,
+                        prev,
+                    }) => {
+                        for (id, before) in &prev {
+                            match before {
+                                Some(r) => store.entries.insert(id.clone(), r.clone()),
+                                None => store.entries.remove(id),
+                            };
+                        }
+                        store.save()?;
+                        if let Some(n) = tally.labelled.get_mut(label) {
+                            *n -= prev.len();
+                            if *n == 0 {
+                                tally.labelled.remove(label);
+                            }
+                        }
+                        writeln!(out, "  undid {} `{label}` label(s)", prev.len())?;
+                        pos = at;
+                    }
+                }
+                continue;
+            }
             Answer::Label(label, note, whole_cluster) => {
                 let targets: Vec<Item> = match (whole_cluster, a.results[item.idx].cluster) {
                     (true, Some(c)) => items[pos..]
@@ -1129,7 +1234,24 @@ pub fn session(
                         .collect(),
                     _ => vec![item],
                 };
+                if targets.len() > CONFIRM_ABOVE
+                    && !confirm_many(targets.len(), label, &mut input, out)?
+                {
+                    writeln!(out, "  not labelled")?;
+                    continue;
+                }
                 let (label, note) = confirm_below_rule(a, &targets, label, note, &mut input, out)?;
+                history.push(Step::Label {
+                    pos,
+                    label,
+                    prev: targets
+                        .iter()
+                        .map(|it| {
+                            let id = &a.results[it.idx].obs.id;
+                            (id.clone(), store.entries.get(id).cloned())
+                        })
+                        .collect(),
+                });
                 for it in &targets {
                     let r = &a.results[it.idx];
                     store.entries.insert(
@@ -1162,6 +1284,39 @@ pub fn session(
         pos += 1;
     }
     Ok(tally)
+}
+
+/// One answer `z` can take back: a skip, or a label with what each record
+/// it touched held before.
+enum Step {
+    Skip {
+        pos: usize,
+    },
+    Label {
+        pos: usize,
+        label: &'static str,
+        prev: Vec<(String, Option<Review>)>,
+    },
+}
+
+/// An uppercase key that would label more records than this asks first.
+const CONFIRM_ABOVE: usize = 5;
+
+/// `label N records? [y/N]`: true only on `y` or `yes`.
+fn confirm_many(
+    n: usize,
+    label: &str,
+    input: &mut impl BufRead,
+    out: &mut impl Write,
+) -> Result<bool> {
+    write!(out, "  label {n} records `{label}`? [y/N] ")?;
+    out.flush()?;
+    let mut line = String::new();
+    input.read_line(&mut line)?;
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 /// `agent` on records graded below L2: say what the grade is and what the
@@ -1259,6 +1414,91 @@ pub fn stats(store: &ReviewStore, rules: &sc_core::Rules, out: &mut impl Write) 
         )?;
     }
     Ok(())
+}
+
+/// What [`stats`], [`baseline`] and [`agreement_report`] print, as one
+/// JSON document: counts by class and label, the disagreements with the
+/// rules, agent labels below the labelling rule, the benign baseline and
+/// agreement between labellers. Record IDs and counts only, no record
+/// content.
+pub fn stats_json(
+    store: &ReviewStore,
+    rules: &sc_core::Rules,
+    labels_dir: &Path,
+) -> Result<serde_json::Value> {
+    use serde_json::json;
+    let mut by: BTreeMap<(&str, &str), usize> = BTreeMap::new();
+    for r in store.entries.values() {
+        *by.entry((r.class.as_str(), r.label.as_str())).or_default() += 1;
+    }
+    let count = |f: &dyn Fn(&Review) -> bool| store.entries.values().filter(|r| f(r)).count();
+    let below = if store.entries.values().any(|r| r.label == "agent") {
+        let a = sc_core::analyze(
+            store.entries.values().map(|r| r.record.clone()).collect(),
+            rules,
+        );
+        count_below_rule(store, &a)
+    } else {
+        BelowRuleCount::default()
+    };
+    let base: Vec<&Review> = store
+        .entries
+        .values()
+        .filter(|r| r.class == CLASS_BASELINE)
+        .collect();
+    let baseline = (!base.is_empty()).then(|| {
+        let sampled: Vec<&&Review> = base.iter().filter(|r| !r.tuned).collect();
+        let n = sampled.iter().filter(|r| r.label == "benign").count();
+        let k = sampled
+            .iter()
+            .filter(|r| r.label == "benign" && r.tier >= Tier::Suggestive)
+            .count();
+        let p = sc_core::eval::stats::Proportion::new(k, n);
+        json!({
+            "reviews": base.len(),
+            "tuned": base.len() - sampled.len(),
+            "benign": n,
+            "target": sc_core::eval::baseline::TARGET,
+            "agents": sampled.iter().filter(|r| r.label == "agent").count(),
+            "benign_flagged": k,
+            "fp_rate": p.value,
+            "fp_rate_lo": p.lo,
+            "fp_rate_hi": p.hi,
+        })
+    });
+    let files = labeller_files(labels_dir)?;
+    let mut agreement = Vec::new();
+    if files.len() >= 2 {
+        let stores: Vec<(String, ReviewStore)> = files
+            .into_iter()
+            .map(|(who, p)| Ok((who, ReviewStore::open(p)?)))
+            .collect::<Result<_>>()?;
+        for i in 0..stores.len() {
+            for j in i + 1..stores.len() {
+                let p = pair_agreement((&stores[i].0, &stores[i].1), (&stores[j].0, &stores[j].1));
+                agreement.push(json!({
+                    "a": p.a,
+                    "b": p.b,
+                    "overlap": p.overlap,
+                    "agree": p.agree,
+                    "kappa": p.kappa,
+                }));
+            }
+        }
+    }
+    Ok(json!({
+        "file": store.path.display().to_string(),
+        "reviewed": store.entries.len(),
+        "by_class": by
+            .iter()
+            .map(|((class, label), n)| json!({"class": class, "label": label, "n": n}))
+            .collect::<Vec<_>>(),
+        "flagged_but_benign": count(&|r| r.label == "benign" && r.tier >= Tier::Suggestive),
+        "agent_but_not_flagged": count(&|r| r.label == "agent" && r.tier < Tier::Suggestive),
+        "below_rule": below,
+        "baseline": baseline,
+        "agreement": agreement,
+    }))
 }
 
 /// Agent labels below the labelling rule, each with the grade it was judged
@@ -1767,6 +2007,7 @@ mod tests {
         assert_eq!(parse_answer(""), Answer::Help);
         assert_eq!(parse_answer("q"), Answer::Quit);
         assert_eq!(parse_answer("s"), Answer::Skip);
+        assert_eq!(parse_answer("z"), Answer::Undo);
         assert_eq!(parse_answer("c"), Answer::Case(None));
         assert_eq!(parse_answer("c t-3"), Answer::Case(Some("t-3".into())));
         assert_eq!(parse_answer("cases"), Answer::Help);
@@ -1863,6 +2104,108 @@ mod tests {
             labels.labels[&first.obs.id].label,
             sc_core::Label::Agent,
             "eval reads the admin's label"
+        );
+        std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    fn run_session(
+        a: &Analysis,
+        q: &[Item],
+        store: &mut ReviewStore,
+        input: &str,
+    ) -> (Tally, String) {
+        let cases = sink(store);
+        let mut out = Vec::new();
+        let t = session(
+            a,
+            q,
+            store,
+            input.as_bytes(),
+            &mut out,
+            &Session {
+                now: "2026-10-12",
+                cases: &cases,
+                suggest: &|_, _| None,
+            },
+        )
+        .unwrap();
+        (t, String::from_utf8(out).unwrap())
+    }
+
+    #[test]
+    fn z_takes_back_the_last_label_or_skip() {
+        let a = analysis();
+        let q = queue_all(&a, &BTreeSet::new());
+        let mut store = tmp_store("undo");
+        // Nothing to undo; benign, undone, unsure; skip, undone, benign.
+        let (t, out) = run_session(&a, &q, &mut store, "z\nb\nz\nu\ns\nz\nb\nq\n");
+        assert!(out.contains("nothing to undo"), "{out}");
+        assert!(out.contains("undid 1 `benign` label(s)"), "{out}");
+        assert!(out.contains("undid a skip"), "{out}");
+        let id = |i: usize| a.results[q[i].idx].obs.id.clone();
+        assert_eq!(store.entries.len(), 2);
+        assert_eq!(store.entries[&id(0)].label, "unsure");
+        assert_eq!(store.entries[&id(1)].label, "benign");
+        assert_eq!(t.skipped, 0);
+        assert_eq!(t.labelled, BTreeMap::from([("benign", 1), ("unsure", 1)]));
+        // The undone label is gone from the file too.
+        let reopened = ReviewStore::open(store.path.clone()).unwrap();
+        assert_eq!(reopened.entries.len(), 2);
+        std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn a_cluster_label_over_five_records_asks_first() {
+        let inbox = "https://webhook.site/0b6c1f0e-1111-4c2a-9a55-3f2e1d0c9b8a";
+        let obs: Vec<Observation> = (0..8)
+            .map(|i| {
+                o(
+                    &format!("w{i}"),
+                    1000 + i * 30,
+                    &format!("{inbox}?kind=headers{i}"),
+                )
+            })
+            .collect();
+        let a = analyze(obs, &Rules::default_rules());
+        let q = queue_all(&a, &BTreeSet::new());
+        let c = a.results[q[0].idx].cluster.expect("one cluster");
+        let n = q
+            .iter()
+            .filter(|it| a.results[it.idx].cluster == Some(c))
+            .count();
+        assert!(n > CONFIRM_ABOVE, "{n}");
+        let mut store = tmp_store("confirm");
+        let (_, out) = run_session(&a, &q, &mut store, "B\nn\nB\ny\nq\n");
+        assert!(
+            out.contains(&format!("label {n} records `benign`? [y/N]")),
+            "{out}"
+        );
+        assert!(out.contains("not labelled"), "{out}");
+        assert!(
+            out.contains(&format!("labelled {n} records `benign`")),
+            "{out}"
+        );
+        assert_eq!(store.entries.len(), n);
+        std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn an_unreadable_label_line_is_skipped_and_kept_aside() {
+        let mut store = tmp_store("damaged");
+        let a = analysis();
+        let (_, _) = run_session(&a, &queue_all(&a, &BTreeSet::new()), &mut store, "b\nq\n");
+        let mut text = std::fs::read_to_string(&store.path).unwrap();
+        text.push_str("{ torn\n");
+        std::fs::write(&store.path, text).unwrap();
+        let mut reopened = ReviewStore::open(store.path.clone()).unwrap();
+        assert_eq!(reopened.entries.len(), 1);
+        reopened.save().unwrap();
+        let aside = store.path.with_file_name("reviewed.ndjson.damaged");
+        assert_eq!(std::fs::read_to_string(aside).unwrap(), "{ torn\n");
+        assert!(
+            !std::fs::read_to_string(&store.path)
+                .unwrap()
+                .contains("torn")
         );
         std::fs::remove_dir_all(store.path.parent().unwrap().parent().unwrap()).unwrap();
     }
@@ -1986,6 +2329,18 @@ mod tests {
         assert!(out.contains("(grade now) · no reason noted"), "{out}");
         let c = count_below_rule(&store, &a);
         assert_eq!((c.agents, c.total, c.graded_now, c.flagged), (1, 1, 1, 1));
+        // `--stats --json` says the same in one document.
+        let j = stats_json(
+            &store,
+            &Rules::default_rules(),
+            store.path.parent().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(j["reviewed"], 1, "{j}");
+        assert_eq!(j["by_class"][0]["label"], "agent", "{j}");
+        assert_eq!(j["below_rule"]["total"], 1, "{j}");
+        assert_eq!(j["below_rule"]["graded_now"], 1, "{j}");
+        assert!(j["baseline"].is_null() && j["agreement"] == serde_json::json!([]));
 
         // Once stored, the stored grade is read and said so.
         let idx = a.results.iter().position(|r| r.obs.id == "solo").unwrap();
@@ -2050,8 +2405,21 @@ mod tests {
                 cluster.id, cluster.key
             )
         );
+        assert!(
+            opened.id.ends_with(&cluster.key.to_ascii_lowercase()),
+            "{}",
+            opened.id
+        );
+        // `c` again: the case that holds the cluster, not a second one.
         let again = case_from_cluster(&a, idx, None, &sink).unwrap();
-        assert_eq!(again.id, format!("{}-2", opened.id), "never overwrites");
+        assert_eq!(
+            (again.id.as_str(), again.opened, again.added),
+            (opened.id.as_str(), false, 0)
+        );
+        assert_eq!(
+            crate::case::ids(&sink.root),
+            std::slice::from_ref(&opened.id)
+        );
 
         // `c <id>`: the cluster again adds nothing; another record is added
         // and logged.
@@ -2090,7 +2458,11 @@ mod tests {
         )
         .unwrap();
         let out = String::from_utf8(out).unwrap();
-        assert!(out.contains("opened case review-2026-10-12-"), "{out}");
+        // The cluster's case is open already, so `c` adds to it.
+        assert!(
+            out.contains(&format!("added 0 record(s) to case {}", opened.id)),
+            "{out}"
+        );
         assert!(out.contains("case: no case at"), "{out}");
         assert_eq!(t.labelled.get("agent"), Some(&1));
         std::fs::remove_dir_all(sink.root.parent().unwrap()).unwrap();

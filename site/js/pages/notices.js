@@ -2,6 +2,8 @@
 // The table is the whole index without this script; the form appears with
 // it, and its state lives in the URL hash (#provider=…&from=2026-10-01) so a
 // filtered view can be linked.
+import { plural } from "../lib/fmt.js";
+
 const form = document.querySelector("[data-notice-filters]");
 if (form) {
   const KEYS = ["status", "provider", "sector", "host", "q", "from", "to"];
@@ -50,7 +52,7 @@ if (form) {
       r.hidden = !ok;
       if (ok) shown++;
     }
-    count.textContent = shown === rows.length ? `${rows.length} notices` : `${shown} of ${rows.length} notices`;
+    count.textContent = shown === rows.length ? plural(rows.length, "notice") : `${shown} of ${plural(rows.length, "notice")}`;
     none.hidden = shown > 0;
     if (write) writeHash(f);
   };

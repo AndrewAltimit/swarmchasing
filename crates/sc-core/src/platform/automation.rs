@@ -8,7 +8,8 @@
 //! Apps the declared-agents catalog names are told apart first
 //! ([`classify_login`]): their events are tallied by product rather than
 //! dropped unseen, and an undeclared App whose login claims one of those
-//! products is a spoofing lead. [`benign_template`] names the benign kind of a group
+//! products is a spoofing lead, unless it acts on a repository of the
+//! product's provider, which installed it there. [`benign_template`] names the benign kind of a group
 //! whose slotted text matches a known automated or drive template; such
 //! groups are listed as suppressed, never reported.
 
@@ -76,21 +77,27 @@ pub enum LoginClass<'a> {
     /// A coding-agent App in the declared-agents catalog
     /// ([`crate::identity::DeclaredApp`]): tallied, not grouped.
     Declared(&'a crate::identity::DeclaredApp),
-    /// An undeclared App whose login claims a declared product's name: a
-    /// spoofing lead, tallied by login.
+    /// An undeclared App whose login claims a declared product's name,
+    /// acting outside the provider's own organisations: a spoofing lead,
+    /// tallied by login.
     Lookalike(&'a crate::identity::DeclaredApp),
     /// Other automation ([`is_automation`]): dropped.
     Automation,
     Person,
 }
 
-/// The class of `login` against the bundled catalog.
-pub fn classify_login(login: &str) -> LoginClass<'static> {
+/// The class of `login`, acting on a repository of `repo_owner`, against the
+/// bundled catalog. An App named like a product on its provider's own
+/// repository is the provider's own automation.
+pub fn classify_login(login: &str, repo_owner: &str) -> LoginClass<'static> {
     static CATALOG: OnceLock<crate::identity::Catalog> = OnceLock::new();
     let c = CATALOG.get_or_init(crate::identity::Catalog::bundled);
     if let Some(a) = c.github_app(login) {
         LoginClass::Declared(a)
-    } else if let Some(a) = c.github_lookalike(login) {
+    } else if let Some(a) = c
+        .github_lookalike(login)
+        .filter(|a| !c.provider_repo(a, repo_owner))
+    {
         LoginClass::Lookalike(a)
     } else if is_automation(login) {
         LoginClass::Automation
@@ -193,7 +200,7 @@ mod tests {
 
     #[test]
     fn declared_coding_agents_and_lookalikes() {
-        let declared = |l: &str| match classify_login(l) {
+        let declared = |l: &str| match classify_login(l, "someone") {
             LoginClass::Declared(a) => Some(a.provider.as_str()),
             _ => None,
         };
@@ -201,18 +208,68 @@ mod tests {
         assert_eq!(declared("chatgpt-codex-connector[bot]"), Some("OpenAI"));
         assert_eq!(declared("Copilot"), Some("GitHub"));
         assert_eq!(declared("google-labs-jules[bot]"), Some("Google"));
-        match classify_login("claude-fleet[bot]") {
+        match classify_login("claude-fleet[bot]", "someone") {
             LoginClass::Lookalike(a) => assert_eq!(a.provider, "Anthropic"),
             o => panic!("{o:?}"),
         }
         assert!(matches!(
-            classify_login("codex-runner-7[bot]"),
+            classify_login("codex-runner-7[bot]", "someone"),
             LoginClass::Lookalike(_)
         ));
         // A user login that names a product is a person, not an App.
-        assert_eq!(classify_login("claude-fan"), LoginClass::Person);
-        assert_eq!(classify_login("dependabot[bot]"), LoginClass::Automation);
+        assert_eq!(classify_login("claude-fan", "someone"), LoginClass::Person);
+        assert_eq!(
+            classify_login("dependabot[bot]", "someone"),
+            LoginClass::Automation
+        );
         assert!(practice_target("FirstContributions/first-contributions"));
+    }
+
+    #[test]
+    fn a_vendor_name_alone_or_the_vendors_own_app_is_no_spoofing_lead() {
+        // The provider's name claims no product: its other Apps carry it.
+        assert_eq!(
+            classify_login("openai-sdks[bot]", "someone"),
+            LoginClass::Automation
+        );
+        assert_eq!(
+            classify_login("anthropic-release[bot]", "someone"),
+            LoginClass::Automation
+        );
+        // A product's name on the provider's own repository: its own App.
+        assert_eq!(
+            classify_login("copilot-cli-release-app[bot]", "github"),
+            LoginClass::Automation
+        );
+        assert_eq!(
+            classify_login("codex-release[bot]", "OpenAI"),
+            LoginClass::Automation
+        );
+        // The same names anywhere else stay leads.
+        assert!(matches!(
+            classify_login("copilot-cli-release-app[bot]", "someone"),
+            LoginClass::Lookalike(a) if a.provider == "GitHub"
+        ));
+        assert!(matches!(
+            classify_login("claude-fleet[bot]", "openai"),
+            LoginClass::Lookalike(a) if a.provider == "Anthropic"
+        ));
+        assert!(matches!(
+            classify_login("codex-runner-7[bot]", ""),
+            LoginClass::Lookalike(_)
+        ));
+    }
+
+    #[test]
+    fn a_catalog_name_must_be_a_word_of_the_product_or_its_login() {
+        let toml = |names: &str| {
+            format!(
+                "[[github_app]]\nlogin = \"chatgpt-codex-connector[bot]\"\nprovider = \"OpenAI\"\nproduct = \"Codex\"\nnames = [{names}]\nsource = \"https://example.org/\"\n"
+            )
+        };
+        assert!(crate::identity::Catalog::from_toml(&toml("\"codex\", \"chatgpt\"")).is_ok());
+        let e = crate::identity::Catalog::from_toml(&toml("\"codex\", \"openai\"")).unwrap_err();
+        assert!(e.contains("`openai`"), "{e}");
     }
 
     #[test]

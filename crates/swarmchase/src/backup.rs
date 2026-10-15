@@ -1,8 +1,9 @@
 //! `swarmchase backup`: encrypted backups of what cannot be collected again.
 //!
 //! An archive is a tar of `<data>/cases`, `<data>/labels`, `<data>/rules`,
-//! `<data>/state.json`, the cross-run history (`ledger.json`, `summary.json`,
-//! `autonomy.ndjson`) and the canary registry (never the bulk record store,
+//! `<data>/inbox` (outside submissions), `<data>/state.json`, the cross-run
+//! history (`ledger.json`, `summary.json`, `autonomy.ndjson`) and the
+//! canary registry (never the bulk record store,
 //! which the sources can refill), encrypted with age to an X25519 recipient
 //! (`SWARMCHASE_BACKUP_RECIPIENT`, a public key, so the machine that makes
 //! backups holds no secret) or to a passphrase
@@ -13,8 +14,9 @@
 //! case command writes into the archive's sources meanwhile.
 //!
 //! `verify` checks the hash, and decrypts and reads the archive through when
-//! given the identity. `restore` decrypts into a directory and never
-//! overwrites one that is not empty unless forced. Restored without a record
+//! given the identity. `restore` checks that the key opens the backup before
+//! it touches the directory, and never overwrites one that is not empty
+//! (lock files aside) unless forced. Restored without a record
 //! store, every source's cursor and seen list in `state.json` are reset, so
 //! the next watch fetches the analysis window again instead of continuing
 //! from where the lost store left off. `keygen` writes an
@@ -26,10 +28,11 @@ use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// What a backup holds, relative to the data directory.
-pub const PARTS: [&str; 8] = [
+pub const PARTS: [&str; 9] = [
     "cases",
     "labels",
     "rules",
+    "inbox",
     "state.json",
     "ledger.json",
     "summary.json",
@@ -47,8 +50,9 @@ pub struct BackupArgs {
 
 #[derive(Subcommand)]
 enum BackupCmd {
-    /// Archive and encrypt cases, labels, pinned rules, state.json, the
-    /// cross-run ledger, summary and autonomy log, and the canary registry.
+    /// Archive and encrypt cases, labels, pinned rules, the submission
+    /// inbox, state.json, the cross-run ledger, summary and autonomy log,
+    /// and the canary registry.
     Create {
         #[arg(short, long, default_value = "data", env = "SWARMCHASE_DATA")]
         data: PathBuf,
@@ -283,34 +287,41 @@ fn sidecar(p: &Path) -> PathBuf {
     PathBuf::from(s)
 }
 
-/// The tar of [`PARTS`] that exist under `data`.
-fn archive(data: &Path) -> Result<Vec<u8>> {
-    let mut b = tar::Builder::new(Vec::new());
-    b.follow_symlinks(false);
-    let mut any = false;
-    for part in PARTS {
-        let p = data.join(part);
-        if p.is_dir() {
-            b.append_dir_all(part, &p)
-                .with_context(|| format!("archiving {}", p.display()))?;
-            any = true;
-        } else if p.is_file() {
-            b.append_path_with_name(&p, part)
-                .with_context(|| format!("archiving {}", p.display()))?;
-            any = true;
-        }
-    }
-    if !any {
+/// The [`PARTS`] that exist under `data`.
+fn present(data: &Path) -> Result<Vec<(&'static str, PathBuf)>> {
+    let found: Vec<(&'static str, PathBuf)> = PARTS
+        .iter()
+        .map(|part| (*part, data.join(part)))
+        .filter(|(_, p)| p.is_dir() || p.is_file())
+        .collect();
+    if found.is_empty() {
         bail!(
             "nothing to back up in {} (no cases, labels, rules, state or history)",
             data.display()
         );
     }
+    Ok(found)
+}
+
+/// Write the tar of `parts` into `out`, file by file.
+fn archive<W: Write>(parts: &[(&str, PathBuf)], out: W) -> Result<W> {
+    let mut b = tar::Builder::new(out);
+    b.follow_symlinks(false);
+    for (part, p) in parts {
+        if p.is_dir() {
+            b.append_dir_all(part, p)
+                .with_context(|| format!("archiving {}", p.display()))?;
+        } else {
+            b.append_path_with_name(p, part)
+                .with_context(|| format!("archiving {}", p.display()))?;
+        }
+    }
     Ok(b.into_inner()?)
 }
 
-fn encrypt(plain: &[u8], key: &Key, out: impl Write) -> Result<()> {
-    let enc = match key {
+/// age's encryptor for `key`.
+fn encryptor(key: &Key) -> Result<age::Encryptor> {
+    Ok(match key {
         Key::Recipient(r) => {
             age::Encryptor::with_recipients(std::iter::once(r as &dyn age::Recipient))?
         }
@@ -321,11 +332,54 @@ fn encrypt(plain: &[u8], key: &Key, out: impl Write) -> Result<()> {
         Key::Passphrase(p) => {
             age::Encryptor::with_user_passphrase(age::secrecy::SecretString::from(p.clone()))
         }
+    })
+}
+
+/// A writer that hashes what passes through it.
+struct Hashing<W> {
+    inner: W,
+    hash: sha2::Sha256,
+}
+
+impl<W: Write> Write for Hashing<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        use sha2::Digest as _;
+        let n = self.inner.write(buf)?;
+        self.hash.update(&buf[..n]);
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Stream the tar of `parts`, encrypted to `key`, into the file `p`,
+/// returning the SHA-256 of what was written. Nothing is held in memory
+/// beyond the buffers.
+fn seal_into(parts: &[(&str, PathBuf)], key: &Key, p: &Path) -> Result<String> {
+    use sha2::Digest as _;
+    let f = std::fs::File::create(p).with_context(|| format!("creating {}", p.display()))?;
+    let hashing = Hashing {
+        inner: std::io::BufWriter::new(f),
+        hash: sha2::Sha256::new(),
     };
-    let mut w = enc.wrap_output(out)?;
-    w.write_all(plain)?;
-    w.finish()?;
-    Ok(())
+    let sealed = archive(parts, encryptor(key)?.wrap_output(hashing)?)?;
+    let mut hashing = sealed.finish()?;
+    hashing.flush()?;
+    let f = hashing
+        .inner
+        .into_inner()
+        .map_err(|e| e.into_error())
+        .with_context(|| format!("writing {}", p.display()))?;
+    f.sync_all()
+        .with_context(|| format!("writing {}", p.display()))?;
+    Ok(hashing
+        .hash
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }
 
 fn decrypt(file: &Path, key: &Key) -> Result<impl Read> {
@@ -348,20 +402,28 @@ pub fn create(data: &Path, dir: &Path, stamp: &str, key: &Key) -> Result<PathBuf
     // A watch or case command writing meanwhile would leave a backup that
     // mixes two states, so the archive is read under the data lock.
     let _lock = crate::store::lock_data(data, "backup create")?;
-    let plain = archive(data)?;
+    let parts = present(data)?;
     std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     let name = format!("swarmchase-{stamp}.tar.age");
     let path = dir.join(&name);
     if path.exists() {
         bail!("{} exists", path.display());
     }
-    let mut sealed = Vec::new();
-    encrypt(&plain, key, &mut sealed)?;
-    crate::store::write_atomic(&path, &sealed)?;
-    crate::store::write_atomic(
-        &sidecar(&path),
-        format!("{}  {name}\n", crate::bundle::sha256_hex(&sealed)).as_bytes(),
-    )?;
+    // Streamed through a temporary file and a rename, so a backup cut
+    // short never leaves a file under the backup's name.
+    let tmp = crate::store::temp_path(&path);
+    let sealed = seal_into(&parts, key, &tmp).and_then(|sha| {
+        std::fs::rename(&tmp, &path).with_context(|| format!("writing {}", path.display()))?;
+        Ok(sha)
+    });
+    let sha = match sealed {
+        Ok(sha) => sha,
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+    };
+    crate::store::write_atomic(&sidecar(&path), format!("{sha}  {name}\n").as_bytes())?;
     Ok(path)
 }
 
@@ -421,12 +483,22 @@ pub fn read_through(file: &Path, key: &Key) -> Result<usize> {
     Ok(n)
 }
 
-/// Decrypt into `to`. A directory that is not empty is refused unless
-/// `force`; entries that would land outside `to` are refused by `tar`. The
-/// data directory's lock is held throughout. Returns whether the cursors
-/// were reset because `to` holds no record store ([`reset_cursors`]).
+/// Decrypt into `to`. The key is checked before `to` is touched, so a wrong
+/// key leaves nothing behind. A directory that is not empty (the data lock's
+/// files aside) is refused unless `force`; entries that would land outside
+/// `to` are refused by `tar`. The data directory's lock is held throughout.
+/// Returns whether the cursors were reset because `to` holds no record
+/// store ([`reset_cursors`]).
 pub fn restore(file: &Path, key: &Key, to: &Path, force: bool) -> Result<bool> {
-    let busy = std::fs::read_dir(to).is_ok_and(|mut d| d.next().is_some());
+    let reader = decrypt(file, key)?;
+    let lock_files = [
+        crate::store::LOCK_FILE.to_string(),
+        format!("{}.owner", crate::store::LOCK_FILE),
+    ];
+    let busy = std::fs::read_dir(to).is_ok_and(|d| {
+        d.flatten()
+            .any(|e| !lock_files.iter().any(|l| e.file_name() == l.as_str()))
+    });
     if busy && !force {
         bail!(
             "{} is not empty; restore into an empty directory, or pass --force to overwrite",
@@ -435,7 +507,7 @@ pub fn restore(file: &Path, key: &Key, to: &Path, force: bool) -> Result<bool> {
     }
     std::fs::create_dir_all(to)?;
     let _lock = crate::store::lock_data(to, "backup restore")?;
-    let mut a = tar::Archive::new(decrypt(file, key)?);
+    let mut a = tar::Archive::new(reader);
     a.set_overwrite(force);
     for e in a.entries()? {
         let mut e = e?;
@@ -524,6 +596,9 @@ mod tests {
         std::fs::write(d.join("autonomy.ndjson"), "{}\n").unwrap();
         std::fs::create_dir_all(d.join("canary")).unwrap();
         std::fs::write(d.join(crate::canary::REGISTRY), "{}").unwrap();
+        // Outside submissions cannot be collected again.
+        std::fs::create_dir_all(d.join("inbox")).unwrap();
+        std::fs::write(d.join("inbox/sub-1.json"), "{}").unwrap();
         // The bulk store is not backed up.
         std::fs::create_dir_all(d.join("store")).unwrap();
         std::fs::write(d.join("store/uq.ndjson"), "{\"bulk\":1}\n").unwrap();
@@ -580,6 +655,16 @@ mod tests {
         // A second restore into the same place needs --force.
         assert!(restore(&p, &id, &to, false).is_err());
         restore(&p, &id, &to, true).unwrap();
+        assert!(to.join("inbox/sub-1.json").is_file());
+
+        // A wrong key touches nothing, so the retry with the right one is
+        // not refused as a directory in use.
+        let fresh = root.join("fresh");
+        assert!(restore(&p, &key, &fresh, false).is_err());
+        assert!(!fresh.exists());
+        // Lock files left by an earlier attempt do not make it busy.
+        drop(crate::store::lock_data(&fresh, "backup restore").unwrap());
+        restore(&p, &id, &fresh, false).unwrap();
 
         // Tampering is caught by the hash.
         let mut bytes = std::fs::read(&p).unwrap();

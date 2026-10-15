@@ -164,6 +164,7 @@ impl Source for CtLog {
         records.truncate(size);
         let next = (got > 0 && start + got < end).then(|| Cursor::Offset((start + got) as usize));
         Ok(Page {
+            stopped: None,
             records,
             next,
             truncated,

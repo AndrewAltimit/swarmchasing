@@ -74,6 +74,9 @@ pub struct SourceReport {
     pub quiet: Option<(u32, bool)>,
     /// Wall-clock milliseconds the source's pull took.
     pub duration_ms: u64,
+    /// Not pulled: the collection deadline was reached before its turn. It
+    /// goes first next run.
+    pub deferred: bool,
 }
 
 impl SourceReport {
@@ -86,12 +89,15 @@ impl SourceReport {
     }
 
     fn ran(&self) -> bool {
-        self.skipped.is_none() && self.error.is_none()
+        self.skipped.is_none() && self.error.is_none() && !self.deferred
     }
 
-    /// One word for the run summary: `skipped`, `error`, `stopped`,
-    /// `partial` (continues next run) or `complete`.
+    /// One word for the run summary: `skipped`, `deferred`, `error`,
+    /// `stopped`, `partial` (continues next run) or `complete`.
     pub fn status(&self) -> &'static str {
+        if self.deferred {
+            return "deferred";
+        }
         match (&self.skipped, &self.error, &self.stopped, self.pending) {
             (Some(_), ..) => "skipped",
             (None, Some(_), ..) => "error",
@@ -145,7 +151,12 @@ pub(super) fn lost_lines(sources: &[SourceReport]) -> Vec<String> {
     }
     for r in sources {
         let what = capability(&r.kind);
-        if let Some(why) = &r.skipped {
+        if r.deferred {
+            out.push(format!(
+                "`{}` deferred: the collection deadline was reached before its turn; it goes first next run. Lost this run: {what}.",
+                r.name
+            ));
+        } else if let Some(why) = &r.skipped {
             let why = why.strip_prefix("skipped: ").unwrap_or(why);
             out.push(format!("`{}` skipped ({why}). Lost: {what}.", r.name));
         } else if let Some(e) = &r.error {
@@ -257,8 +268,10 @@ fn without_urls(m: &str) -> String {
     s.trim_end_matches([':', ' ']).to_string()
 }
 
-/// How the run's sources fared, with warnings. Any alert or source error
-/// makes the run count as changed, so it is emailed.
+/// How the run's sources fared, with warnings. Any alert makes the run
+/// count as changed, so it is emailed; a failure streak alerts on its 1st,
+/// 2nd, 4th, 8th... run ([`crate::health::alert_due`]), so a source that
+/// keeps failing does not mail every run.
 #[derive(Default)]
 pub struct Health {
     pub sources: Vec<SourceReport>,
@@ -528,6 +541,7 @@ pub fn digest(d: &DigestInput) -> Digest {
     );
     for s in &health.sources {
         let status = match (&s.error, &s.stopped, s.pending) {
+            _ if s.deferred => "deferred: collection deadline reached".into(),
             _ if s.skipped.is_some() => s.skipped.clone().unwrap_or_default(),
             (Some(e), _, _) => format!("error: {}", one_line(e, 160)),
             (None, Some(e), _) => format!("stopped early: {}", one_line(e, 120)),
@@ -684,7 +698,10 @@ pub fn digest(d: &DigestInput) -> Digest {
             .results
             .iter()
             .filter(|r| r.obs.ts >= b.start && r.obs.ts <= b.end)
-            .filter(|r| outer_host(&r.obs.url) == b.host && indicative(r))
+            .filter(|r| {
+                r.target_host.as_deref().map(clean_host) == Some(clean_host(&b.host))
+                    && indicative(r)
+            })
             .count();
         let _ = writeln!(
             t,
@@ -710,7 +727,6 @@ pub fn digest(d: &DigestInput) -> Digest {
         );
     }
 
-    let errors = health.sources.iter().any(|s| s.error.is_some());
     // A new lone record at L2 or higher is a lead the admin should see
     // now, like a new cluster.
     let lone_graded = d.leads.iter().any(|l| {
@@ -725,7 +741,6 @@ pub fn digest(d: &DigestInput) -> Digest {
         || !new_endpoints.is_empty()
         || !matches.is_empty()
         || !d.bursts.is_empty()
-        || errors
         || !health.alerts.is_empty()
         || d.autonomy.iter().any(|x| x.mode == Mode::On && x.acted());
     Digest { text: t, changed }
@@ -1081,6 +1096,50 @@ fn leads(t: &mut String, a: &Analysis) {
             let _ = writeln!(t, "- … {} more", n - LEAD_LINES);
         }
     };
+    let _ = writeln!(t, "\n## Campaigns ({})\n", a.campaigns.len());
+    if a.campaigns.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for c in a.campaigns.iter().take(LEAD_LINES) {
+        let shown: Vec<String> = c
+            .clusters
+            .iter()
+            .take(LEAD_LINES)
+            .map(|id| cluster_ref(a, id))
+            .collect();
+        let _ = writeln!(
+            t,
+            "- {}: `{}`, {} of {} senders hold {} ({} of {} senders anywhere; chance {:.1e}); {} cluster(s){}{}, {} record(s) outside any cluster",
+            c.id,
+            defang_host(&c.site),
+            c.members(),
+            c.senders,
+            c.habit_names().join(", "),
+            c.holders,
+            c.population,
+            c.chance,
+            c.clusters.len(),
+            if shown.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", shown.join(", "))
+            },
+            if c.clusters.len() > shown.len() {
+                format!(", … {} more", c.clusters.len() - shown.len())
+            } else {
+                String::new()
+            },
+            c.records.len(),
+        );
+    }
+    more(t, a.campaigns.len());
+    if !a.campaigns.is_empty() {
+        let _ = writeln!(
+            t,
+            "\nProposals only: one operator may run each, or one published payload may be copied by many."
+        );
+    }
+
     let _ = writeln!(t, "\n## Candidate fleets ({})\n", a.candidate_fleets.len());
     if a.candidate_fleets.is_empty() {
         let _ = writeln!(t, "None.");
@@ -1129,7 +1188,7 @@ fn leads(t: &mut String, a: &Analysis) {
         let _ = writeln!(
             t,
             "- `{}`: {}, {} → {}{clusters}",
-            sc_core::defang(&one_line(&format!("{}{}", e.host, e.path), 100)),
+            sc_core::defang_hosts(&one_line(&format!("{}{}", e.host, e.path), 100)),
             e.route_line(),
             sc_core::fmt_ts(e.start),
             sc_core::fmt_ts(e.end)
@@ -1150,7 +1209,7 @@ fn leads(t: &mut String, a: &Analysis) {
         let _ = writeln!(
             t,
             "- `{}`: {} records on {} hosts, {} → {}; {}",
-            sc_core::defang(&one_line(&c.feature.to_string(), 90)),
+            sc_core::defang_feature(&one_line(&c.feature.to_string(), 90)),
             c.records,
             c.hosts,
             sc_core::fmt_ts(c.start),
@@ -1761,5 +1820,79 @@ mod tests {
             d.text
         );
         assert!(!d.text.contains("busy[.]example"), "{}", d.text);
+    }
+
+    #[test]
+    fn a_burst_behind_a_relay_counts_the_target_captures_with_indicators() {
+        let rules = Rules::default_rules();
+        let now = 1_791_000_000;
+        // Six captures through a relay of one sparse target, each carrying
+        // an injection payload: the burst is the target's, not the relay's.
+        let store: Vec<Observation> = (0..6)
+            .map(|i| Observation {
+                id: format!("j{i}"),
+                source: "wayback".into(),
+                ts: now - 3600 + i * 60,
+                url: format!("https://r.jina.ai/https://sparse.example/q?id=1'%20OR%201=1--&p={i}"),
+                ..Default::default()
+            })
+            .collect();
+        let new_ids: BTreeSet<String> = store.iter().map(|o| o.id.clone()).collect();
+        let bursts = archive_bursts(&store, &new_ids, &rules, now);
+        assert_eq!(bursts.len(), 1, "{bursts:?}");
+        assert_eq!(bursts[0].host, "sparse.example");
+        let a = analyze(store, &rules);
+        let s = Summary::default();
+        let d = write("t1", &a, &s, &s, &new_ids, &Health::default(), &bursts);
+        assert!(
+            d.text
+                .contains("6 distinct URLs, 6 with an indicator beyond the relay"),
+            "{}",
+            d.text
+        );
+    }
+
+    #[test]
+    fn a_deferred_source_is_lost_capability_not_an_error() {
+        let r = SourceReport {
+            deferred: true,
+            ..SourceReport::new("late", "wayback")
+        };
+        assert_eq!(r.status(), "deferred");
+        let lost = lost_lines(std::slice::from_ref(&r));
+        assert!(
+            lost.iter().any(|l| l.starts_with("`late` deferred")),
+            "{lost:?}"
+        );
+        let a = analyze(Vec::new(), &Rules::default_rules());
+        let s = Summary::default();
+        let health = Health {
+            sources: vec![r],
+            ..Default::default()
+        };
+        let d = write("t1", &a, &s, &s, &BTreeSet::new(), &health, &[]);
+        assert!(
+            d.text
+                .contains("| late | 0 | 0 | 0 |  | deferred: collection deadline reached |"),
+            "{}",
+            d.text
+        );
+        assert!(!d.changed, "a deferral alone is not mailed: {}", d.text);
+    }
+
+    #[test]
+    fn a_source_error_without_an_alert_does_not_mark_the_run_changed() {
+        let a = analyze(Vec::new(), &Rules::default_rules());
+        let s = Summary::default();
+        let health = Health {
+            sources: vec![SourceReport {
+                error: Some("HTTP 503".into()),
+                ..SourceReport::new("down", "wayback")
+            }],
+            ..Default::default()
+        };
+        let d = write("t1", &a, &s, &s, &BTreeSet::new(), &health, &[]);
+        assert!(d.text.contains("error: HTTP 503"), "{}", d.text);
+        assert!(!d.changed, "{}", d.text);
     }
 }

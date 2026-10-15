@@ -23,6 +23,11 @@ pub(super) struct AnalysisCtx<'r> {
     observations: Vec<Observation>,
     /// Indexes of records with at least one hit (set by `link`).
     flagged: Vec<usize>,
+    /// What linking joined the records by (set by `link`).
+    ties: Vec<link::Tie>,
+    /// Pairs of clusters whose playbooks walk one step set in conflicting
+    /// orders (set by `playbook`).
+    order_conflicts: Vec<(String, String)>,
     a: Analysis,
 }
 
@@ -87,6 +92,11 @@ pub(super) const PASSES: &[Pass] = &[
         link::number(&mut cx.a.clusters, &mut cx.a.results)
     }),
     pass("escalations", &["number"], escalations),
+    // Declared, then undeclared: a hint from the rules alone; the CLI
+    // repeats it with the providers' ranges ([`crate::identity::fallback`]).
+    pass("fallback", &["number"], |cx| {
+        crate::identity::fallback::mark(&mut cx.a, None)
+    }),
     pass(
         "plant",
         &[
@@ -212,6 +222,60 @@ pub(super) const PASSES: &[Pass] = &[
         cx.a.prompt_echo_pairs = pairs;
         cx.a.multiplicity.push(family);
     }),
+    // Reads members' layers and parameters, and outside records' URLs.
+    pass("co_group", &["number", "trim_layers"], |cx| {
+        let s = &cx.rules.set;
+        let (groups, family) = crate::biclique::co_groups(
+            &cx.a.clusters,
+            &cx.a.results,
+            &cx.rules.benchmarks,
+            s.scaffold.min_specificity,
+            &s.prompt_echo,
+            &s.biclique,
+        );
+        cx.a.co_groups = groups;
+        if family.tested > 0 {
+            cx.a.multiplicity.push(family);
+        }
+    }),
+    pass("campaign", &["number"], |cx| {
+        let (found, family) = crate::campaign::campaigns(
+            &cx.a.clusters,
+            &cx.a.results,
+            &cx.rules.benchmarks,
+            &cx.rules.set.campaign,
+        );
+        cx.a.campaigns = found;
+        if family.tested > 0 {
+            cx.a.multiplicity.push(family);
+        }
+    }),
+    pass("generator", &["number"], |cx| {
+        let (pairs, family) = crate::generator::generator_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            &cx.rules.set.generator,
+        );
+        cx.a.generator_pairs = pairs;
+        if family.tested > 0 {
+            cx.a.multiplicity.push(family);
+        }
+    }),
+    // Reads members' layers and parameters, and outside records' URLs.
+    pass("playbook", &["number", "trim_layers"], |cx| {
+        let s = &cx.rules.set;
+        let (pairs, family, conflicts) = crate::playbook::playbook_pairs(
+            &cx.a.clusters,
+            &cx.a.results,
+            s.soft_links.max_shared,
+            &s.playbook,
+        );
+        cx.a.playbook_pairs = pairs;
+        cx.order_conflicts = conflicts;
+        if family.tested > 0 {
+            cx.a.multiplicity.push(family);
+        }
+    }),
     pass(
         "fleets",
         &[
@@ -224,6 +288,10 @@ pub(super) const PASSES: &[Pass] = &[
             "co_target",
             "scaffold_lineage",
             "prompt_echo",
+            "co_group",
+            "campaign",
+            "generator",
+            "playbook",
         ],
         fleets,
     ),
@@ -231,6 +299,13 @@ pub(super) const PASSES: &[Pass] = &[
         let (edges, families) = crate::swarm::swarm_edges(&cx.a.clusters, &cx.a.results, cx.rules);
         cx.a.swarm_edges = edges;
         cx.a.multiplicity.extend(families);
+    }),
+    pass("dispatch_trees", &["swarm"], |cx| {
+        cx.a.dispatch_trees = crate::swarm::dispatch_trees(&cx.a.swarm_edges);
+    }),
+    pass("onset", &["number"], |cx| {
+        cx.a.onset_groups =
+            crate::swarm::onset_groups(&cx.a.clusters, &cx.a.results, &cx.rules.set.onset);
     }),
     pass(
         "scope",
@@ -246,6 +321,8 @@ pub(super) fn run(observations: Vec<Observation>, rules: &Rules) -> Analysis {
         rules,
         observations,
         flagged: Vec::new(),
+        ties: Vec::new(),
+        order_conflicts: Vec::new(),
         a: Analysis::default(),
     };
     for (i, p) in PASSES.iter().enumerate() {
@@ -315,6 +392,7 @@ fn link_clusters(cx: &mut AnalysisCtx) {
         .map(|members| hints::base(results, members, &links.joined, cx.rules))
         .collect();
     cx.a.chains = links.chains;
+    cx.ties = links.ties;
     cx.a.common_features = links.common;
     cx.a.clusters = clusters;
 }
@@ -360,6 +438,7 @@ fn plant(cx: &mut AnalysisCtx) {
         &a.clusters,
         &a.escalations,
         &a.common_features,
+        &cx.ties,
         &cx.rules.set.linking,
     );
     for (c, p) in cx.a.clusters.iter_mut().zip(plants) {
@@ -465,12 +544,19 @@ fn fleets(cx: &mut AnalysisCtx) {
             ordered_cotarget_pairs: &a.ordered_cotarget_pairs,
             lineage_pairs: &a.lineage_pairs,
             prompt_echo_pairs: &a.prompt_echo_pairs,
+            co_groups: &a.co_groups,
+            campaigns: &a.campaigns,
+            generator_pairs: &a.generator_pairs,
+            playbook_pairs: &a.playbook_pairs,
+            order_conflicts: &cx.order_conflicts,
         },
         opts,
     );
     cx.a.candidate_fleets =
         crate::fleets::candidate_fleets(&soft_links, &cluster_ids(&a.clusters), opts);
     cx.a.soft_links = soft_links;
+    cx.a.joint_caps =
+        (opts.joint != crate::fleets::SoftLinkOptions::default().joint).then(|| opts.joint.clone());
 }
 
 /// Counts, the rules version and timing over every flagged record.
