@@ -30,13 +30,17 @@
 #                   product signs), source.
 #   [[github_app]]  login (the actor login GitHub events carry, matched
 #                   case-insensitively and whole), provider, product, names
-#                   (words that claim the product in another App's login),
-#                   source. Read by the platform pass: these Apps' events are
+#                   (words of the product's name or login that claim it in
+#                   another App's login; never the provider's name alone,
+#                   which the provider's other Apps carry), orgs (the
+#                   provider's own GitHub organisations, optional), source.
+#                   Read by the platform pass: these Apps' events are
 #                   tallied, not grouped, and an undeclared `[bot]` login
-#                   carrying one of the names is a spoofing lead.
+#                   carrying one of the names is a spoofing lead, unless it
+#                   acts on a repository of one of the provider's orgs.
 
 [meta]
-version = "2026-10-14.1"
+version = "2026-10-14.2"
 
 # ── OpenAI ────────────────────────────────────────────────────────────────
 # https://developers.openai.com/api/docs/bots lists each user agent with its
@@ -486,14 +490,16 @@ source = "https://developers.cloudflare.com/browser-rendering/reference/automati
 login = "chatgpt-codex-connector[bot]"
 provider = "OpenAI"
 product = "Codex"
-names = ["codex", "chatgpt", "openai"]
+names = ["codex", "chatgpt"]
+orgs = ["openai"]
 source = "https://developers.openai.com/codex/integrations/github"
 
 [[github_app]]
 login = "claude[bot]"
 provider = "Anthropic"
 product = "Claude GitHub App"
-names = ["claude", "anthropic"]
+names = ["claude"]
+orgs = ["anthropics"]
 source = "https://code.claude.com/docs/en/github-actions"
 
 [[github_app]]
@@ -501,6 +507,7 @@ login = "Copilot"
 provider = "GitHub"
 product = "Copilot cloud agent and code review"
 names = ["copilot"]
+orgs = ["github"]
 source = "https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent"
 
 [[github_app]]

@@ -1,6 +1,7 @@
 //! Grouping platform events into candidate swarms, and the chance model.
 
 use super::automation::{benign_template, practice_target};
+use super::baseline::{Baseline, MIN_READ_SECS, Weighed, family_key};
 use super::text::BANDS;
 use super::{
     Action, Basis, Burst, HintStrength, NewAccounts, Platform, PlatformEvent, PlatformOptions,
@@ -10,8 +11,9 @@ use crate::chance::TestFamily;
 use crate::timing::poisson_at_least;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-/// The span a burst is weighed against is at least this long, so a batch
-/// read over a few minutes does not make every group look dense.
+/// Without a record of the time read, the span a burst is weighed against
+/// is at least this long, so a batch read over a few minutes does not make
+/// every group look dense.
 const MIN_SPAN_SECS: i64 = 3600;
 /// The span is counted in clock hours.
 const HOUR: i64 = 3600;
@@ -28,8 +30,23 @@ fn textless(e: &PlatformEvent) -> bool {
     e.action.by_target() && e.text.is_none() && e.name_template.is_none()
 }
 
-/// Detect candidate swarms in `events`, each platform on its own.
+/// Detect candidate swarms in `events`, each platform on its own, with no
+/// record of earlier runs ([`detect_with`]).
 pub fn detect(events: &[PlatformEvent], opts: &PlatformOptions) -> PlatformReport {
+    detect_with(events, opts, &Baseline::default())
+}
+
+/// [`detect`] with what earlier runs saw: where `baseline` records the time
+/// a platform was read, bursts are weighed over that time, not over the
+/// clock hours the events fall in, and not at all under
+/// [`MIN_READ_SECS`]; earlier groups' bursts set a floor under the chance;
+/// and a group whose families burst in an earlier window is not a fresh
+/// burst.
+pub fn detect_with(
+    events: &[PlatformEvent],
+    opts: &PlatformOptions,
+    baseline: &Baseline,
+) -> PlatformReport {
     let mut by: BTreeMap<Platform, Vec<&PlatformEvent>> = BTreeMap::new();
     let mut seen = BTreeSet::new();
     for e in events {
@@ -39,7 +56,7 @@ pub fn detect(events: &[PlatformEvent], opts: &PlatformOptions) -> PlatformRepor
     }
     let mut out = PlatformReport::default();
     for evs in by.values() {
-        let r = detect_platform(evs, opts);
+        let r = detect_platform_with(evs, opts, baseline);
         out.events += r.events;
         out.accounts += r.accounts;
         out.swarms.extend(r.swarms);
@@ -47,10 +64,12 @@ pub fn detect(events: &[PlatformEvent], opts: &PlatformOptions) -> PlatformRepor
         out.below_threshold += r.below_threshold;
         out.carry.extend(r.carry);
         out.families.extend(r.families);
+        out.weighed.extend(r.weighed);
     }
     out.swarms.sort_by(|a, b| {
         b.strength
             .cmp(&a.strength)
+            .then((a.accounts == 0).cmp(&(b.accounts == 0)))
             .then(a.p_chance.total_cmp(&b.p_chance))
             .then(a.id.cmp(&b.id))
     });
@@ -77,6 +96,24 @@ impl Uf {
 
 /// [`detect`] over one platform's events (distinct ids).
 pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> PlatformReport {
+    detect_platform_with(events, opts, &Baseline::default())
+}
+
+/// The id of a group whose earliest member is `earliest`.
+fn group_id(earliest: &str) -> String {
+    format!(
+        "PS-{:08x}",
+        super::text::splitmix(super::text::fnv(
+            format!("platform-swarm\0{earliest}").as_bytes()
+        )) >> 32
+    )
+}
+
+fn detect_platform_with(
+    events: &[&PlatformEvent],
+    opts: &PlatformOptions,
+    baseline: &Baseline,
+) -> PlatformReport {
     let mut ev: Vec<&PlatformEvent> = events.to_vec();
     ev.sort_by(|a, b| a.ts.cmp(&b.ts).then(a.id.cmp(&b.id)));
     let n = ev.len();
@@ -88,6 +125,7 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
         return out;
     }
     let platform = ev[0].platform;
+    let read = baseline.read_secs(platform);
     let mut uf = Uf((0..n).collect());
 
     // Text: one template, or a near-duplicate through any LSH band. Each
@@ -278,12 +316,68 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             });
             continue;
         }
-        // The hours read in full, and the group's own hours.
-        let mut hours = dense.clone();
-        hours.extend(members.iter().map(|&i| ev[i].ts.div_euclid(HOUR)));
-        let span = (hours.len() as i64 * HOUR).max(MIN_SPAN_SECS);
-        tested += 1;
-        let burst = g.burst(span);
+        let id = group_id(&ev[members[0]].id);
+        // The time read: where the baseline records it, the stretches read
+        // plus the group's own hours outside them (events carried from before
+        // the record); else the hours read in full and the group's own hours.
+        let (span, short_read) = match read {
+            Some(r) => {
+                let outside: BTreeSet<i64> = members
+                    .iter()
+                    .map(|&i| ev[i].ts)
+                    .filter(|&t| !baseline.was_read(platform, t))
+                    .map(|t| t.div_euclid(HOUR))
+                    .collect();
+                (r + outside.len() as i64 * HOUR, r < MIN_READ_SECS)
+            }
+            None => {
+                let mut hours = dense.clone();
+                hours.extend(members.iter().map(|&i| ev[i].ts.div_euclid(HOUR)));
+                ((hours.len() as i64 * HOUR).max(MIN_SPAN_SECS), false)
+            }
+        };
+        let mut burst = g.burst(span);
+        let model_chance = burst.p_chance;
+        let window = (burst.start, burst.start + burst.window_secs);
+        // The families of the members in the densest window, and whether
+        // most of them burst in an earlier window.
+        let window_keys: Vec<String> = members
+            .iter()
+            .filter(|&&i| (window.0..=window.1).contains(&ev[i].ts))
+            .filter_map(|&i| family_key(ev[i], opts.min_words))
+            .collect();
+        let seen = window_keys
+            .iter()
+            .filter(|k| baseline.burst_before(k, window.0))
+            .count();
+        let recurring = !window_keys.is_empty() && seen * 2 >= window_keys.len();
+        let keys: BTreeSet<String> = window_keys.into_iter().collect();
+        out.weighed.push(Weighed {
+            platform,
+            id: id.clone(),
+            model_chance,
+            window,
+            keys: if model_chance <= opts.max_chance {
+                keys.into_iter().collect()
+            } else {
+                Vec::new()
+            },
+        });
+        if short_read {
+            burst.short_read = true;
+            burst.p_chance = 1.0;
+        } else if let Some((k, n)) = baseline.earlier_share(platform, &id, model_chance) {
+            burst.earlier = Some((k, n));
+            let floor = k as f64 / n as f64;
+            if floor > burst.p_chance {
+                burst.model_chance = Some(burst.p_chance);
+                burst.p_chance = floor;
+            }
+        }
+        if recurring {
+            burst.recurring = true;
+            burst.p_chance = 1.0;
+        }
         let new_accounts = g.new_accounts(&account_age, base_rate, &first_hour, &hour_age);
         let residue = g.residue();
         let texts = members.iter().filter(|&&i| ev[i].text.is_some()).count();
@@ -295,6 +389,20 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             && with_residue as f64 / texts as f64 >= opts.residue_share
             && accounts.len() >= opts.min_accounts;
         let p_age = new_accounts.as_ref().map_or(1.0, |a| a.p_chance);
+        // A family that burst in an earlier window and bursts again is a
+        // release train or a scheduled job, unless its accounts are new or
+        // its text carries residue.
+        if recurring && !residue_heavy && p_age > opts.max_chance {
+            out.suppressed.push(Suppressed {
+                platform,
+                why: "recurring family (burst in an earlier window)".into(),
+                events: members.len(),
+                accounts: accounts.len(),
+                template,
+            });
+            continue;
+        }
+        tested += 1;
         // The new-account chance is read in the group's own hours, so given
         // its timing it is independent of the burst chance; the product of
         // two such chances is weighed as one (`x (1 - ln x)`).
@@ -320,6 +428,7 @@ pub fn detect_platform(events: &[&PlatformEvent], opts: &PlatformOptions) -> Pla
             continue;
         }
         let swarm = g.swarm(
+            id,
             platform,
             template,
             burst,
@@ -510,6 +619,7 @@ impl Group<'_> {
             expected,
             p_chance,
             on_the_hour,
+            ..Default::default()
         }
     }
 
@@ -581,6 +691,7 @@ impl Group<'_> {
     #[allow(clippy::too_many_arguments)]
     fn swarm(
         &self,
+        id: String,
         platform: Platform,
         template: String,
         burst: Burst,
@@ -638,7 +749,10 @@ impl Group<'_> {
         if shared_target && distinct_targets >= 2 && owners.len() >= 2 {
             signals.push("target overlap");
         }
-        let strength = if p <= o.moderate_chance && signals.len() >= 2 {
+        // A group the source names no account for has no account evidence:
+        // a flood, not accounts acting alike, and never more than weak.
+        let strength = if p <= o.moderate_chance && signals.len() >= 2 && !self.accounts.is_empty()
+        {
             HintStrength::Moderate
         } else {
             HintStrength::Weak
@@ -672,7 +786,12 @@ impl Group<'_> {
         }
         if self.accounts.is_empty() {
             caveats.push(
-                "the source names no accounts: one publisher may account for all of it".into(),
+                "the source names no accounts: one publisher may account for all of it, as a vendor's release train does".into(),
+            );
+        }
+        if burst.recurring {
+            caveats.push(
+                "the family burst in an earlier window too: a release train or a scheduled job repeats".into(),
             );
         }
         if self.textless() {
@@ -689,27 +808,57 @@ impl Group<'_> {
             );
         }
 
-        let mut reason = format!(
-            "{} {} from {} account(s) on {} target(s)",
-            m.len(),
-            match actions.len() {
-                1 => actions.keys().next().map_or("events", |a| a.label()),
-                _ => "events",
-            },
-            self.accounts.len(),
-            distinct_targets
-        );
+        let what = match actions.len() {
+            1 => actions.keys().next().map_or("events", |a| a.label()),
+            _ => "events",
+        };
+        let mut reason = if self.accounts.is_empty() {
+            format!(
+                "{} {what} on {distinct_targets} target(s); the source names no accounts, so this is a flood that one publisher may account for",
+                m.len()
+            )
+        } else {
+            format!(
+                "{} {what} from {} account(s) on {distinct_targets} target(s)",
+                m.len(),
+                self.accounts.len()
+            )
+        };
         let _ = std::fmt::Write::write_fmt(
             &mut reason,
             format_args!(
-                "; {} of {} in one {} min window, {:.2} expected (p {:.1e})",
+                "; {} of {} in one {} min window, {:.2} expected",
                 burst.in_window,
                 burst.of,
                 burst.window_secs / 60,
                 burst.expected,
-                burst.p_chance
             ),
         );
+        let _ = if burst.short_read {
+            std::fmt::Write::write_str(
+                &mut reason,
+                " (not weighed: under an hour of this platform read)",
+            )
+        } else if burst.recurring {
+            std::fmt::Write::write_str(
+                &mut reason,
+                " (not counted: the family burst in an earlier window too)",
+            )
+        } else {
+            match (burst.earlier, burst.model_chance) {
+                (Some((k, n)), Some(model)) => std::fmt::Write::write_fmt(
+                    &mut reason,
+                    format_args!(
+                        " (p {:.1e}: {k} of {n} groups weighed here in earlier runs burst as tightly; the model alone gives {model:.1e})",
+                        burst.p_chance
+                    ),
+                ),
+                _ => std::fmt::Write::write_fmt(
+                    &mut reason,
+                    format_args!(" (p {:.1e})", burst.p_chance),
+                ),
+            }
+        };
         if let Some(a) = &new_accounts {
             let _ = std::fmt::Write::write_fmt(
                 &mut reason,
@@ -743,13 +892,6 @@ impl Group<'_> {
                 format_args!("; {n} name a coding harness"),
             );
         }
-        let earliest = &ev[m[0]].id;
-        let id = format!(
-            "PS-{:08x}",
-            super::text::splitmix(super::text::fnv(
-                format!("platform-swarm\0{earliest}").as_bytes()
-            )) >> 32
-        );
         PlatformSwarm {
             id,
             platform,

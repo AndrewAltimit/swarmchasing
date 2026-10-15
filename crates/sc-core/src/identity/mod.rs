@@ -139,9 +139,15 @@ pub struct DeclaredApp {
     pub provider: String,
     pub product: String,
     /// Words that claim this product in another App's login (`claude` in
-    /// `claude-fleet[bot]`).
+    /// `claude-fleet[bot]`): words of the product's name or of its login,
+    /// never the provider's name alone, which its other Apps carry too.
     #[serde(default)]
     pub names: Vec<String>,
+    /// The provider's own GitHub organisations: an App acting on their
+    /// repositories was installed there by the provider, so its name claims
+    /// nothing of others.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub orgs: Vec<String>,
     pub source: String,
 }
 
@@ -190,6 +196,22 @@ impl Catalog {
                 return Err(format!("agent {}: unknown directory `{d}`", a.token));
             }
         }
+        for a in &c.github_apps {
+            let own: Vec<String> = format!("{} {}", a.product, a.login)
+                .to_ascii_lowercase()
+                .split(|ch: char| !ch.is_ascii_alphanumeric())
+                .filter(|w| !w.is_empty())
+                .map(str::to_string)
+                .collect();
+            for n in &a.names {
+                if !own.contains(&n.to_ascii_lowercase()) {
+                    return Err(format!(
+                        "github_app {}: name `{n}` is not a word of the product or its login",
+                        a.login
+                    ));
+                }
+            }
+        }
         for u in c
             .range_files
             .iter()
@@ -233,7 +255,8 @@ impl Catalog {
     /// The declared App an undeclared GitHub App login (`name[bot]`) claims
     /// by name: a word of the login that starts with one of an App's
     /// `names`. A lookalike is a spoofing lead, not a finding: any App picks
-    /// its own name.
+    /// its own name. On a repository of one of the provider's own `orgs`,
+    /// see [`Catalog::provider_repo`].
     pub fn github_lookalike(&self, login: &str) -> Option<&DeclaredApp> {
         let l = login.to_ascii_lowercase();
         let stem = l.strip_suffix("[bot]")?;
@@ -250,6 +273,18 @@ impl Catalog {
                 words.iter().any(|w| w.starts_with(n.as_str()))
             })
         })
+    }
+
+    /// Whether `repo_owner` is one of the organisations of `app`'s provider
+    /// (any of the provider's declared Apps).
+    pub fn provider_repo(&self, app: &DeclaredApp, repo_owner: &str) -> bool {
+        !repo_owner.is_empty()
+            && self
+                .github_apps
+                .iter()
+                .filter(|a| a.provider == app.provider)
+                .flat_map(|a| &a.orgs)
+                .any(|o| o.eq_ignore_ascii_case(repo_owner))
     }
 
     fn range_file(&self, id: &str) -> Option<&RangeFile> {
