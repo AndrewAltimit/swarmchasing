@@ -47,7 +47,7 @@
 # Weights are tuned so evidence must stack up.
 
 [meta]
-version = "2026-10-14.4"
+version = "2026-10-14.5"
 
 [thresholds]
 suggestive = 3

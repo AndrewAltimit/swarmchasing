@@ -6,7 +6,7 @@
 - **Window:** 2026-10-07 10:00:00 UTC → 2026-10-09 09:40:00 UTC
 - **Records:** 0 linked public records in 0 cluster(s) (of 67 records reviewed, 34 flagged)
 - **Evidence tier:** noise
-- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.4
+- **Method:** swarmchasing 0.1.0, rules version 2026-10-14.5
 
 ## Summary
 

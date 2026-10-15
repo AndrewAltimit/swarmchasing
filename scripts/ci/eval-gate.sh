@@ -97,7 +97,7 @@ cargo run --quiet "$@" -p swarmchase -- sim bench samples/sim/scenarios.toml \
     --min-fleet-precision 0.93 \
     --max-null-edges 0 \
     --max-null-links 8 \
-    --max-null-fleet-pairs 2 \
+    --max-null-fleet-pairs 1 \
     --min-link-cross-run-precision 0.27 \
     --min-fleet-cross-run-precision 0.92 \
     --max-benign-high 0 \
