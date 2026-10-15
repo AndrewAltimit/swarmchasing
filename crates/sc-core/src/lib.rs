@@ -9,6 +9,7 @@ pub mod asn;
 pub mod attribution;
 pub mod biclique;
 pub mod bursts;
+pub mod campaign;
 pub mod canary;
 pub mod capture;
 pub mod chains;

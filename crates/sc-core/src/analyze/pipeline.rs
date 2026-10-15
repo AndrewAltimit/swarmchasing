@@ -238,6 +238,18 @@ pub(super) const PASSES: &[Pass] = &[
             cx.a.multiplicity.push(family);
         }
     }),
+    pass("campaign", &["number"], |cx| {
+        let (found, family) = crate::campaign::campaigns(
+            &cx.a.clusters,
+            &cx.a.results,
+            &cx.rules.benchmarks,
+            &cx.rules.set.campaign,
+        );
+        cx.a.campaigns = found;
+        if family.tested > 0 {
+            cx.a.multiplicity.push(family);
+        }
+    }),
     pass("generator", &["number"], |cx| {
         let (pairs, family) = crate::generator::generator_pairs(
             &cx.a.clusters,
@@ -277,6 +289,7 @@ pub(super) const PASSES: &[Pass] = &[
             "scaffold_lineage",
             "prompt_echo",
             "co_group",
+            "campaign",
             "generator",
             "playbook",
         ],
@@ -532,6 +545,7 @@ fn fleets(cx: &mut AnalysisCtx) {
             lineage_pairs: &a.lineage_pairs,
             prompt_echo_pairs: &a.prompt_echo_pairs,
             co_groups: &a.co_groups,
+            campaigns: &a.campaigns,
             generator_pairs: &a.generator_pairs,
             playbook_pairs: &a.playbook_pairs,
             order_conflicts: &cx.order_conflicts,

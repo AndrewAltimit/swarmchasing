@@ -25,6 +25,7 @@ Each term links to the section that defines it.
 | Confidence level | High, moderate or low: the basis for a judgment. | [FM-8.2](08-confidence.md#fm-82-confidence-levels) |
 | Context cap | Context kinds alone never reach the suggestive threshold. | [FM-4.11](04-indicators.md#fm-411-independence-groups-and-the-context-cap) |
 | Context kind | A rule kind ordinary clients produce: relay, cache buster, self-identification, header, outcome. | [FM-4.11](04-indicators.md#fm-411-independence-groups-and-the-context-cap), [FM-5.3](05-linking.md#fm-53-close-timing-on-the-same-target) |
+| Campaign | Many senders on one site holding one habit set that senders elsewhere seldom hold together, beyond chance; a soft link. | [FM-5.25](05-linking.md#fm-525-campaigns) |
 | Co-group | Three or more clusters all holding several rarely held sites or templates beyond a degree-preserving null; a soft link. | [FM-5.22](05-linking.md#fm-522-co-groups) |
 | Co-target | Two clusters on the same rare targets in the same hours beyond chance; a soft link. | [FM-5.16](05-linking.md#fm-516-co-targets) |
 | Corroboration | One kind of source, several, or confirmed in operator logs. | [FM-5.11](05-linking.md#fm-511-provenance-and-planted-records) |

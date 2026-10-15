@@ -14,8 +14,8 @@
 //! much likelier the link is between two clusters of one operator than
 //! between unrelated ones. A pair that passed a chance test (shared pauses,
 //! scaffolds, scaffold lineage, prompt echoes, co-activity, co-targets,
-//! ordered co-targets, co-groups, generators, playbooks) carries its kind's ratio in
-//! full.
+//! ordered co-targets, co-groups, campaigns, generators, playbooks) carries its
+//! kind's ratio in full.
 //! Any other link's ratio is the kind's raised to its similarity (where it
 //! has one) times its rarity: a shared value held by
 //! `n` of the `N` clusters above noise counts `ln(N / n) / ln(N / 2)` of
@@ -35,7 +35,10 @@
 //! smallest bound holds ([`combine`]).
 //!
 //! **Fleets.** Pairs whose combined ratio reaches `fleet_min_lr` are the
-//! edges of a graph of clusters, weighted by the log of the ratio. The
+//! edges of a graph of clusters, weighted by the log of the ratio, unless
+//! all their links are in the timeline family: a feed item, a schedule or
+//! an outage sets unrelated clusters off together, so timing alone proposes
+//! no fleet. The
 //! graph is reduced to its backbone and split into communities under the
 //! constant Potts model ([`crate::community`]): a community keeps only
 //! clusters tied to it more strongly than `fleet_density` of the threshold
@@ -111,6 +114,9 @@ pub enum SoftLinkKind {
     /// One playbook's steps sent in one order on their hosts, beyond
     /// chance ([`crate::playbook`]).
     Playbook,
+    /// Many senders on one site holding one habit set that senders
+    /// elsewhere seldom hold together, beyond chance ([`crate::campaign`]).
+    Campaign,
 }
 
 /// Kinds that read one underlying habit: a pair counts only its strongest
@@ -125,7 +131,8 @@ pub enum Family {
     /// When clusters are active: shared pauses, co-activity.
     Timeline,
     /// What they go after: reruns, path sets, recon preambles, co-targets,
-    /// ordered co-targets, route escalations, co-groups on host families.
+    /// ordered co-targets, route escalations, co-groups on host families,
+    /// campaigns.
     Targets,
     /// What they hold: captured secrets, common features, callback
     /// services, identifier generators.
@@ -145,7 +152,7 @@ impl Family {
 
 impl SoftLinkKind {
     /// Every kind.
-    pub const ALL: [SoftLinkKind; 23] = {
+    pub const ALL: [SoftLinkKind; 24] = {
         use SoftLinkKind::*;
         [
             SharedPause,
@@ -171,6 +178,7 @@ impl SoftLinkKind {
             CoGroup,
             Generator,
             Playbook,
+            Campaign,
         ]
     };
 
@@ -199,6 +207,7 @@ impl SoftLinkKind {
             SoftLinkKind::CoGroup => "co-group",
             SoftLinkKind::Generator => "identifier generator",
             SoftLinkKind::Playbook => "playbook order",
+            SoftLinkKind::Campaign => "campaign",
         }
     }
 
@@ -211,9 +220,8 @@ impl SoftLinkKind {
             Encoding | HeaderSet | RelayStack | Scaffold | ScaffoldLineage | PromptEcho
             | Dialect | CutLength | FanOut | Playbook => Family::Harness,
             SharedPause | CoActivity => Family::Timeline,
-            Rerun | PathSet | Preamble | CoTarget | OrderedCoTarget | Escalation | CoGroup => {
-                Family::Targets
-            }
+            Rerun | PathSet | Preamble | CoTarget | OrderedCoTarget | Escalation | CoGroup
+            | Campaign => Family::Targets,
             SharedSecret | CommonFeature | CallbackService | Generator => Family::Identifiers,
         }
     }
@@ -278,6 +286,8 @@ pub struct SoftLinkOptions {
     pub generator: f64,
     /// A pair kept by the playbook chance model ([`crate::playbook`]).
     pub playbook: f64,
+    /// Two clusters of a campaign kept by its null ([`crate::campaign`]).
+    pub campaign: f64,
     /// Caps on two families' combined ratio (`[soft_links.joint]`).
     pub joint: JointCaps,
 }
@@ -396,6 +406,7 @@ impl Default for SoftLinkOptions {
                 ..JointCaps::default()
             },
             playbook: 20.0,
+            campaign: 20.0,
         }
     }
 }
@@ -428,6 +439,7 @@ impl SoftLinkOptions {
             CoGroup => self.co_group,
             Generator => self.generator,
             Playbook => self.playbook,
+            Campaign => self.campaign,
         }
     }
 
@@ -458,6 +470,7 @@ impl SoftLinkOptions {
             CoGroup => &mut self.co_group,
             Generator => &mut self.generator,
             Playbook => &mut self.playbook,
+            Campaign => &mut self.campaign,
         };
         *f = lr;
     }
@@ -646,6 +659,7 @@ pub(crate) struct Signals<'a> {
     pub lineage_pairs: &'a [crate::scaffold::LineagePair],
     pub prompt_echo_pairs: &'a [crate::prose::PromptEchoPair],
     pub co_groups: &'a [crate::biclique::CoGroup],
+    pub campaigns: &'a [crate::campaign::Campaign],
     pub generator_pairs: &'a [crate::generator::GeneratorPair],
     pub playbook_pairs: &'a [crate::playbook::PlaybookPair],
     /// Pairs whose playbooks walk one step set in conflicting orders: no
@@ -799,6 +813,15 @@ pub(crate) fn soft_links<'a>(s: &Signals<'a>, opts: &SoftLinkOptions) -> Vec<Sof
             }
         }
         family.set(None);
+    }
+    // A campaign ties each pair of its clusters.
+    for c in s.campaigns {
+        let detail = c.detail();
+        for (i, x) in c.clusters.iter().enumerate() {
+            for y in &c.clusters[i + 1..] {
+                push(x, y, SoftLinkKind::Campaign, 1.0, detail.clone());
+            }
+        }
     }
     for e in s.escalations {
         for (i, x) in e.clusters.iter().enumerate() {
@@ -1088,6 +1111,12 @@ pub(crate) fn candidate_fleets(
         let (Some(&x), Some(&y)) = (pos.get(a.as_str()), pos.get(b.as_str())) else {
             continue;
         };
+        // When clusters are active is set by causes no operator holds (a
+        // feed item, a schedule, an outage), which send unrelated clusters
+        // off together: timeline links alone propose no fleet.
+        if e.families.iter().all(|f| f.0 == Family::Timeline) {
+            continue;
+        }
         // The product passes through logs: a ratio at the threshold may
         // come back a rounding below it.
         if e.lr >= min * (1.0 - 1e-9) {
@@ -1193,7 +1222,7 @@ mod tests {
             ]
         );
         // Every kind has a family, and the kinds list is complete.
-        assert_eq!(SoftLinkKind::ALL.len(), 23);
+        assert_eq!(SoftLinkKind::ALL.len(), 24);
         assert_eq!(SoftLinkKind::CoTarget.family(), Family::Targets);
         assert_eq!(SoftLinkKind::OrderedCoTarget.family(), Family::Targets);
         assert_eq!(SoftLinkKind::ScaffoldLineage.family(), Family::Harness);
@@ -1312,7 +1341,7 @@ mod tests {
     fn strong_pairs_group_and_weak_ones_stay_out() {
         let order: Vec<String> = ["C1", "C2", "C3", "C4", "C5"].map(String::from).to_vec();
         let links = vec![
-            link("C1", "C2", SoftLinkKind::SharedPause, 30.0),
+            link("C1", "C2", SoftLinkKind::SharedSecret, 30.0),
             // Two harness links count once; with a preamble they pass.
             link("C2", "C3", SoftLinkKind::Encoding, 6.0),
             link("C2", "C3", SoftLinkKind::HeaderSet, 6.0),
@@ -1334,12 +1363,34 @@ mod tests {
         assert_eq!(
             f[0].kinds,
             [
-                SoftLinkKind::SharedPause,
                 SoftLinkKind::Preamble,
                 SoftLinkKind::Encoding,
-                SoftLinkKind::HeaderSet
+                SoftLinkKind::HeaderSet,
+                SoftLinkKind::SharedSecret,
             ]
         );
+    }
+
+    #[test]
+    fn timeline_links_alone_propose_no_fleet() {
+        // A feed's readers: co-active on every pair, nothing else shared.
+        let order: Vec<String> = (1..=5).map(|i| format!("C{i}")).collect();
+        let mut links = Vec::new();
+        for x in 1..=4 {
+            for y in x + 1..=4 {
+                let (a, b) = (format!("C{x}"), format!("C{y}"));
+                links.push(link(&a, &b, SoftLinkKind::CoActivity, 25.0));
+                links.push(link(&a, &b, SoftLinkKind::SharedPause, 30.0));
+            }
+        }
+        let opts = SoftLinkOptions::default();
+        assert!(candidate_fleets(&links, &order, &opts).is_empty());
+        // A dispatcher's workers on one harness: timing corroborated.
+        links.push(link("C1", "C5", SoftLinkKind::CoActivity, 25.0));
+        links.push(link("C1", "C5", SoftLinkKind::Dialect, 2.0));
+        let f = candidate_fleets(&links, &order, &opts);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert_eq!(f[0].clusters, ["C1", "C5"]);
     }
 
     #[test]

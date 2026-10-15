@@ -72,6 +72,7 @@ let draft = render_markdown(&analysis, &ReportOptions::default()); // an interna
 | [`coactivity`](src/coactivity.rs) | Cluster pairs active together, or at a fixed lag, beyond a circular-shift chance model. |
 | [`cotarget`](src/cotarget.rs) | Cluster pairs on the same rare targets in the same hours beyond a hypergeometric chance model, and in the same order beyond a random order. |
 | [`biclique`](src/biclique.rs) | Co-groups: three or more clusters on several rarely held sites or templates, beyond a degree-preserving swap null. |
+| [`campaign`](src/campaign.rs) | Campaigns: one site's senders, clusters and records outside them, holding one habit set beyond a random-draw null. |
 | [`generator`](src/generator.rs) | Generated identifiers decoded (UUID node ids, Snowflake workers, clock skews, counters), and cluster pairs on one generator beyond chance. |
 | [`playbook`](src/playbook.rs) | Cluster pairs sending one harness's probe steps on their hosts in one order, beyond a within-host permutation null. |
 | [`community`](src/community.rs) | Backbone filter, deterministic Leiden (CPM) and minimum cut for candidate fleets. |

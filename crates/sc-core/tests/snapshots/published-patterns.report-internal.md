@@ -97,6 +97,12 @@ For each cluster, the window to search, what its times measure, and the strings 
 - **C5**: 2026-05-20 19:01:00 UTC to 2026-05-20 19:04:00 UTC, times of unknown kind
 
 
+## Pairwise tests
+
+Every pair test over the whole analysis, by family: the pairs tested, those kept under the family's false-discovery cut, and how many that unlikely chance alone would give among them.
+
+- campaign: 0 kept of 1 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
+
 ## Plant review
 
 Signs that a cluster's records were placed to be found. Prompts to check, never findings: none changes a score, a tier or a link.

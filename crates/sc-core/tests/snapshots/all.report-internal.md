@@ -764,15 +764,13 @@ For each cluster, the window to search, what its times measure, and the strings 
 
 Clusters tied by soft links (shared pauses, reruns, recon openings, encoding, shared scaffolds, co-activity and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.
 
-- **F1**: C1, C2, 1 soft link(s): co-activity (weakest pair 0.96)
-  - C1 ↔ C2: co-activity (0.96): 8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 5.0e-3: 2.1e-9 analytic, a share of 0.005 of 199 circular shifts; …
-- **F2**: C9, C47, 1 soft link(s): ordered co-target (weakest pair 0.97)
+- **F1**: C9, C47, 1 soft link(s): ordered co-target (weakest pair 0.97)
   - C9 ↔ C47: ordered co-target (0.97): 5 of 5 shared rare hosts first touched in the same order, in the same hours (chance 8.3e-3 for a random order, 0.01 such pairs expected among 1 tested): one ord…
-- **F3**: C17, C18, C19, 3 soft link(s): shared scaffold (weakest pair 0.95)
+- **F2**: C17, C18, C19, 3 soft link(s): shared scaffold (weakest pair 0.95)
   - C17 ↔ C18: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 49 comparable clusters and 0 record(s) outside them, a base rate of 4.2e-2 (chance 1.7e-3 for the rare…
   - C17 ↔ C19: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 49 comparable clusters and 0 record(s) outside them, a base rate of 4.2e-2 (chance 1.7e-3 for the rare…
   - C18 ↔ C19: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 3 of 49 comparable clusters and 0 record(s) outside them, a base rate of 4.2e-2 (chance 1.7e-3 for the rare…
-- **F4**: C45, C46, 1 soft link(s): shared scaffold (weakest pair 0.95)
+- **F3**: C45, C46, 1 soft link(s): shared scaffold (weakest pair 0.95)
   - C45 ↔ C46: shared scaffold (0.95): similarity 1.00, 1 shared template(s), the rarest in 2 of 49 comparable clusters and 0 record(s) outside them, a base rate of 2.1e-2 (chance 4.3e-4 for the rare…
 
 ## Possible interaction (SC-T9)
@@ -792,6 +790,7 @@ Every pair test over the whole analysis, by family: the pairs tested, those kept
 - co_activity: 1 kept of 2 tested (1 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
 - ordered_co_target: 1 kept of 1 tested (1 under its own limit), 0.01 that unlikely expected by chance (false discovery rate 5%)
 - scaffold_lineage: 0 kept of 5 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
+- campaign: 0 kept of 3 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 - role_sequence: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 - disjoint_partition: 1 kept of 1 tested (1 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
 

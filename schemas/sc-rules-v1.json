@@ -109,6 +109,7 @@
         "co_group": { "$ref": "#/$defs/ratio" },
         "generator": { "$ref": "#/$defs/ratio" },
         "playbook": { "$ref": "#/$defs/ratio" },
+        "campaign": { "$ref": "#/$defs/ratio" },
         "joint": {
           "type": "object",
           "description": "Caps on two families' combined likelihood ratio, at most the measured joint ratio's conservative value; never below the stronger family alone. Keys name the families in the order harness, timeline, targets, identifiers.",
@@ -184,6 +185,19 @@
         "min_features": { "$ref": "#/$defs/count" },
         "max_holders": { "$ref": "#/$defs/count" },
         "swaps": { "$ref": "#/$defs/count" },
+        "max_chance": { "$ref": "#/$defs/share" },
+        "fdr": { "$ref": "#/$defs/share" }
+      }
+    },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_senders": { "$ref": "#/$defs/count" },
+        "min_habits": { "$ref": "#/$defs/count" },
+        "slack": { "type": "integer", "minimum": 0 },
+        "core_share": { "$ref": "#/$defs/share" },
+        "permutations": { "type": "integer", "minimum": 1 },
         "max_chance": { "$ref": "#/$defs/share" },
         "fdr": { "$ref": "#/$defs/share" }
       }

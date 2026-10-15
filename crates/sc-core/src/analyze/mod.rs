@@ -293,6 +293,11 @@ pub struct Analysis {
     /// merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub co_groups: Vec<crate::biclique::CoGroup>,
+    /// Sites worked by many senders (clusters, and flagged records outside
+    /// them) with one habit set that senders elsewhere seldom hold
+    /// together, beyond chance: a proposal to check, never a merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub campaigns: Vec<crate::campaign::Campaign>,
     /// Pairs of clusters whose generated identifiers decode to one
     /// generator (a UUID node id, a Snowflake worker, a clock skew, a
     /// counter), beyond chance: a link to check, never a merge.

@@ -221,13 +221,6 @@ For each cluster, the window to search, what its times measure, and the strings 
   - identifiers: `param:uqtag=lh3o6v`
 
 
-## Candidate fleets
-
-Clusters tied by soft links (shared pauses, reruns, recon openings, encoding, shared scaffolds, co-activity and the like). Each tie is shared by unrelated clients too: a proposal to check, never a merge.
-
-- **F1**: C1, C2, 1 soft link(s): co-activity (weakest pair 0.96)
-  - C1 ↔ C2: co-activity (0.96): 8.2 of 10 active 60-second bins coincide, C2 trailing C1 by 60 to 120 s; 0.6 expected (chance 5.0e-3: 2.1e-9 analytic, a share of 0.005 of 199 circular shifts; …
-
 ## Pairwise tests
 
 Every pair test over the whole analysis, by family: the pairs tested, those kept under the family's false-discovery cut, and how many that unlikely chance alone would give among them.
