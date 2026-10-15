@@ -133,10 +133,13 @@ A `.gz` of several members (logs joined with `cat`, `bgzip`, `pigz`) reads as th
 
 Each file is parsed on its own (`inputs_add` in [`sc-wasm`](../../crates/sc-wasm/README.md)), in its own format under auto-detect, with one field map for all of them; then one analysis runs over every record (`inputs_analyze`), so clusters and timing span files. The module numbers each record's id by its file (`f2:log-17`); file names stay in the page. A per-file table follows: file (its path inside the archive), the format it was read as, lines, records, lines skipped and the first problem, then each entry not read with why. In the workbench, the record's context names its file, a *File* filter narrows the flagged records, the text filter matches file names, and the records CSV gains a `file` column.
 
+The table lists files with a problem first and at most 100 rows, and opens by itself for a few dozen files or fewer; in *Check my logs* it follows the flagged requests. Why a set stopped stays in sight above it.
+
 | Limit | Value |
 |---|---|
-| Unpacked text, whole set | 512 MB; the set stops there |
-| Files and entries | 10,000; the set stops there |
+| Unpacked text, whole set | 448 MB; the set stops there |
+| Records, whole set | 2,100,000; the set stops inside the file that reaches it |
+| Files and archive entries | 10,000, an archive itself not counted; the set stops there |
 | One file or entry, unpacked | 256 MB; that entry is skipped |
 | Unpacked to packed ratio | 400, past the first 8 MB of an entry; that entry is skipped |
 | Tar headers and entries passed over unread | Count toward the unpacked limit and, in a compressed tar, the ratio; past either, the rest of that archive is not read |
@@ -144,6 +147,10 @@ Each file is parsed on its own (`inputs_add` in [`sc-wasm`](../../crates/sc-wasm
 | A zip inside an archive | Held in memory to be read; counts toward the unpacked limit and its enclosing entry's ratio |
 
 Entries are skipped, with the reason shown, when they look binary (a NUL or many control bytes in the first 8 KB), are encrypted, use a zip method other than stored or deflate, or are tar links, devices or pipes; a tar that ends before its end blocks says so; directories and macOS metadata (`__MACOSX/`, `._*`) are left out silently. Entry names are labels, shown as text and never used as paths, so a name that climbs out of the archive or carries markup is harmless. A pax path is read by its byte lengths, so a name in any script comes through whole. Payloads stay inert as everywhere on the site. No outside library and no request is involved.
+
+The record and size limits come from the module's memory: it holds every record and the analysis in at most 4 GB, and a record of an ordinary access log costs it a little over 1 kB. A set that unpacks to over 50 MB, as its gzip trailers and zip directories say (a gzip's trailer holds only its last member's size, modulo 4 GiB), is read only after the visitor confirms. Should the module still run out of memory, the page says so in plain words, keeps the per-file account, and suggests splitting the set or the CLI; the worker is ended and the next run starts a new one.
+
+An analysis of more than 50,000 records stays in the worker: the page gets its counts, clusters, links and timing, and its flagged records (at most the 100,000 highest scoring) with their indexes, not a result for every record. A record the page does not hold is fetched by its index when the URL names it (`held_results`). The analysis JSON download then holds those records with `result_index`, and a line under the flagged records counts any left out.
 
 [`check-archive.mjs`](../../scripts/ci/check-archive.mjs) tests the reader in Node on archives built at run time; the XSS check loads a hostile archive on both pages.
 

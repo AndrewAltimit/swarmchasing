@@ -42,6 +42,12 @@ fn hold(a: Analysis) {
     HELD.with(|h| *h.borrow_mut() = Some(a));
 }
 
+/// Drop the module's analysis, so the memory it held is free for the next.
+#[cfg(any(feature = "engine", feature = "tools", test))]
+fn release() {
+    HELD.with(|h| *h.borrow_mut() = None);
+}
+
 /// Run `f` on the module's analysis; `missing` is the error without one.
 fn with_held<T>(
     missing: &str,

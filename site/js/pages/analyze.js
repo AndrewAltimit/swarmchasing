@@ -15,7 +15,7 @@ import { agentLadder as ladderOf } from "../lib/agent.js";
 import { scopePanel } from "../lib/scope.js";
 import { sightingsPanel, resetSightings } from "../lib/sightings.js";
 import { bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, runProgress, setPanel, setSummary } from "../lib/fileset.js";
-import { runner, Cancelled } from "../lib/runner.js";
+import { runner, heldIndexes, Cancelled, EngineCrash } from "../lib/runner.js";
 
 const VIEWS = ["runs", "fleet", "swarm", "heat", "rhythm", "strip", "hourly"];
 const STEPS = ["input", "explore", "context", "report"];
@@ -193,6 +193,17 @@ function nothingRead(title, first) {
     "To see what an analysis looks like, press Try an example.");
 }
 
+/**
+ * The analysis ran out of room in the browser: not a problem with the
+ * input, so no format advice. A set keeps its per-file account.
+ */
+function tooMany(message, read = null) {
+  clearAnalysis();
+  expandInput();
+  if (read?.files?.length) showFiles(read);
+  showAlert($("alert"), "Too many records for the browser.", message);
+}
+
 /** Back to the empty workbench: no dashboard for an input that read nothing. */
 function clearAnalysis() {
   a = null;
@@ -246,11 +257,12 @@ async function runAnalysis() {
     return false;
   }
   try {
-    out = JSON.parse(await engine.analyze(src.input, src.format, src.map, rules, progress.show));
+    out = await engine.analyze(src.input, src.format, src.map, rules, progress.show);
   } catch (e) {
     if (e instanceof Cancelled) return cancelled();
     progress.end();
-    nothingRead("The input could not be read.", e?.message ?? e);
+    if (e instanceof EngineCrash) tooMany(e.message);
+    else nothingRead("The input could not be read.", e?.message ?? e);
     return false;
   }
   progress.end(`Analysed ${plural(num(out.analysis?.total) ?? 0, "record")}.`);
@@ -285,10 +297,10 @@ async function runSetAnalysis() {
   const warn = $("warnings");
   warn.hidden = true;
   $("alert").hidden = true;
-  if (bigOk !== set && !bigSetOk(set, $("drop-status"), () => {
+  if (bigOk !== set && !(await bigSetOk(set, $("drop-status"), () => {
     bigOk = set;
     analyse();
-  })) return false;
+  }))) return false;
   let read;
   $("drop-status").hidden = true;
   try {
@@ -298,7 +310,14 @@ async function runSetAnalysis() {
   } catch (e) {
     if (e instanceof Cancelled) return cancelled();
     progress.end();
-    nothingRead("The files could not be read.", e?.message ?? e);
+    if (e instanceof EngineCrash) tooMany(e.message);
+    else nothingRead("The files could not be read.", e?.message ?? e);
+    return false;
+  }
+  if (read.failed) {
+    progress.end("The analysis ran out of memory.");
+    setRead = null;
+    tooMany(read.failed, read);
     return false;
   }
   progress.end(`Read ${plural(read.files.length, "file")}, ${plural(num(read.out?.analysis?.total) ?? 0, "record")} analysed.`);
@@ -333,6 +352,22 @@ function showFiles(read) {
 /** The file a record came from, when a set was analysed; else null. */
 const fileName = (i) => (setRead ? fileOf(a.results[i]?.obs.id, setRead.files) : null);
 
+/**
+ * A record a large analysis did not send (one the hash names), fetched
+ * from where the analysis is held into its place in `a.results`.
+ */
+async function fetchRecord(r) {
+  const i = Number(r);
+  if (!a?.result_index || r == null || !(i >= 0 && i < a.results.length) || a.results[i]) return;
+  try {
+    for (const row of arr(JSON.parse(await engine.call("held_results", JSON.stringify([i]))))) {
+      if (row?.i === i && row.result) a.results[i] = row.result;
+    }
+  } catch {
+    // Not there: the selection is left out.
+  }
+}
+
 /** Show an analysis the module made (from text or from a set), with notes above it. */
 async function takeAnalysis(out, notes) {
   // The endpoints read the analysis where it was made.
@@ -361,6 +396,7 @@ async function takeAnalysis(out, notes) {
   dateTags = obj(out.cluster_date_tags);
   endpointsCache = endpoints;
   const h = readHash();
+  await fetchRecord(h.r);
   sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
   $("dl-json").disabled = false;
   syncResultControls();
@@ -653,7 +689,7 @@ function viewHeat() {
 
 function scopeIdx() {
   const flagged = (i) => a.results[i]?.score > 0;
-  let idx = a.results.map((_, i) => i).filter(flagged);
+  let idx = heldIndexes(a).filter(flagged);
   // A cluster's members, flagged ones only: the list is "Flagged records".
   if (sel.c) idx = arr(clusterBy(sel.c)?.members).filter(flagged);
   if (sel.rule) idx = idx.filter((i) => arr(a.results[i].hits).some((h) => h.rule_id === sel.rule));
@@ -803,6 +839,7 @@ function renderRecords() {
   }));
   if (idx.length > capped.length && !few) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${idx.length - capped.length} more not shown; download the CSV or the analysis JSON for all.`)));
   if (!idx.length) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, needle ? "No flagged record in this selection matches the filter." : "No flagged records in this selection.")));
+  if (a.results_omitted) body.append(el("tr", {}, el("td", { colspan: 6, class: "hint" }, `${plural(a.results_omitted, "flagged record")} with the lowest scores stayed in the analysis engine and are not listed here or in the downloads; the swarmchase CLI lists every one.`)));
   const more = few ? el("button", { type: "button", class: "more-rows" }, `Show all ${capped.length}${idx.length > capped.length ? ` of ${idx.length}` : ""} records`) : null;
   more?.addEventListener("click", () => {
     allRecords = true;
@@ -1376,7 +1413,11 @@ async function reportText() {
 }
 copyButton($("copy-report"), reportText, "Copy failed: select the draft");
 $("dl-report").addEventListener("click", async () => download("swarmchase-report.md", await reportText(), "text/markdown"));
-$("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.json", JSON.stringify(a, null, 2), "application/json"));
+// A large analysis holds only the records it lists: they go out with their
+// indexes (`result_index`), as the engine sent them, never as a gap per
+// record not sent.
+$("dl-json").addEventListener("click", () => a && download("swarmchase-analysis.json",
+  JSON.stringify(a.result_index ? { ...a, results: a.result_index.map((i) => a.results[i]) } : a, null, 2), "application/json"));
 
 // ── CSV ────────────────────────────────────────────────────────────────────
 // Hosts and URLs go out defanged, as everywhere on the page, so nothing in
@@ -1479,8 +1520,10 @@ window.addEventListener("hashchange", () => {
   const h = readHash();
   if (h.example || h.preset === "access-log") applyHash();
   else if (a) {
-    sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
-    if (h.v && h.v !== view) setView(h.v);
-    else select({}, null);
+    fetchRecord(h.r).then(() => {
+      sel = { c: h.c && clusterBy(h.c) ? keyOf(clusterBy(h.c)) : null, r: h.r != null && a.results[+h.r] ? +h.r : null, rule: h.rule };
+      if (h.v && h.v !== view) setView(h.v);
+      else select({}, null);
+    });
   }
 });

@@ -5,9 +5,47 @@
 // rules and claims checks); the analysis, and everything that reads it
 // (endpoints, report, sightings, attribution, the identity check), run
 // where the analysis was made. Messages carry text and results only.
-import { readSet, Cancelled } from "./inputs.js";
+import { readSet, engineCrash, crashText, Cancelled } from "./inputs.js";
 
 export { Cancelled };
+
+/** The module ran out of room: `message` says so in plain words. */
+export class EngineCrash extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "EngineCrash";
+  }
+}
+
+/**
+ * The module's `analyze` result as the pages read it. A large analysis
+ * arrives with only the records the pages list (`result_index` gives each
+ * one's index among every record; see sc-wasm's engine): they go back to
+ * their places in `analysis.results`, which keeps its length (`total`),
+ * with gaps where the records not sent are, so an index means one record
+ * everywhere. `analysis.result_index` lists the records held, and
+ * `analysis.results_omitted` counts the flagged records not sent; both are
+ * absent for an analysis sent whole.
+ */
+export function expand(out) {
+  const a = out?.analysis;
+  if (!a || !Array.isArray(out.result_index)) return out;
+  const sent = Array.isArray(a.results) ? a.results : [];
+  const results = [];
+  results.length = Number(a.total) || 0;
+  out.result_index.forEach((i, k) => {
+    results[i] = sent[k];
+  });
+  a.results = results;
+  a.result_index = out.result_index;
+  a.results_omitted = Number(out.results_omitted) || 0;
+  delete out.result_index;
+  delete out.results_omitted;
+  return out;
+}
+
+/** The indexes of the records an analysis holds: every one, or those sent. */
+export const heldIndexes = (a) => a.result_index ?? a.results.map((_, i) => i);
 
 const WORKER = "./engine-worker.js";
 
@@ -62,7 +100,7 @@ export function runner(local) {
         if (data.progress) return p.onProgress?.(data.progress);
         pending.delete(data.id);
         if (data.ok) p.resolve(data.result);
-        else p.reject(new Error(data.error));
+        else p.reject(data.crash ? new EngineCrash(data.error) : new Error(data.error));
       });
       // A worker that never starts (an old browser without module workers,
       // a blocked script) fires error before its first answer.
@@ -113,44 +151,77 @@ export function runner(local) {
     });
   }
 
+  /**
+   * A worker whose module failed holds nothing usable: it is ended, and the
+   * next call starts another.
+   */
+  const crashed = (e) => {
+    if (worker && (e instanceof EngineCrash || engineCrash(e))) {
+      worker.terminate();
+      worker = null;
+      started = null;
+    }
+    return e instanceof EngineCrash || !engineCrash(e) ? e : new EngineCrash(crashText(0));
+  };
+
   /** Call `fn` of the module with string arguments, where the analysis lives. */
   self.call = async (fn, ...args) => {
-    const w = await ready();
-    if (w) return post(w, { op: "call", fn, args: args.map(String) });
-    const sc = await local();
-    return sc[fn](...args.map(String));
+    try {
+      const w = await ready();
+      if (w) return await post(w, { op: "call", fn, args: args.map(String) });
+      const sc = await local();
+      return sc[fn](...args.map(String));
+    } catch (e) {
+      throw crashed(e);
+    }
   };
 
   /**
-   * Analyse one text: resolves to the module's JSON text. `onProgress`
-   * hears the stage (`load`, then `analyse`).
+   * Analyse one text: resolves to the module's result, parsed and expanded
+   * (`expand`). `onProgress` hears the stage (`load`, then `analyse`).
+   * Rejects with EngineCrash when the module runs out of room.
    */
   self.analyze = async (input, format, map, rules, onProgress = () => {}) => {
     stop = false;
     onProgress({ stage: "load" });
     const w = await ready();
     onProgress({ stage: "analyse" });
-    if (w) return post(w, { op: "call", fn: "analyze", args: [input, format, map, rules].map(String) });
-    const sc = await local();
-    await paint();
-    if (stop) throw new Cancelled();
-    return sc.analyze(input, format, map, rules);
+    let text;
+    try {
+      if (w) text = await post(w, { op: "call", fn: "analyze", args: [input, format, map, rules].map(String) });
+      else {
+        const sc = await local();
+        await paint();
+        if (stop) throw new Cancelled();
+        text = sc.analyze(input, format, map, rules);
+      }
+    } catch (e) {
+      throw crashed(e);
+    }
+    return expand(JSON.parse(text));
   };
 
   /**
    * Read a set of files (`{ name, blob | text }`) and analyse it as one;
-   * resolves to readSet's account (inputs.js) with `out` parsed. Blobs go
-   * to the worker as they are, unread.
+   * resolves to readSet's account (inputs.js) with `out` parsed and
+   * expanded. Blobs go to the worker as they are, unread. When the module
+   * failed, `out` is null, `failed` says why and the worker is ended.
    */
   self.readSet = async (sources, opts, onProgress = () => {}) => {
     stop = false;
     onProgress({ stage: "load" });
     const w = await ready();
     const plain = { format: opts.format, map: opts.map, rules: opts.rules, keep: opts.keep ?? 0 };
-    const read = w
-      ? await post(w, { op: "set", sources: sources.map((s) => ({ name: s.name, blob: s.blob, text: s.text })), opts: plain }, onProgress)
-      : await readSet(await local(), sources, { ...plain, cancelled: () => stop, onProgress });
-    return { ...read, out: read.out ? JSON.parse(read.out) : null };
+    let read;
+    try {
+      read = w
+        ? await post(w, { op: "set", sources: sources.map((s) => ({ name: s.name, blob: s.blob, text: s.text })), opts: plain }, onProgress)
+        : await readSet(await local(), sources, { ...plain, cancelled: () => stop, onProgress });
+    } catch (e) {
+      throw crashed(e);
+    }
+    if (read.failed) crashed(new EngineCrash(read.failed));
+    return { ...read, out: read.out ? expand(JSON.parse(read.out)) : null };
   };
 
   /**

@@ -16,7 +16,7 @@ export const MiB = 1024 * 1024;
 /** The limits a set is read under. */
 export const LIMITS = Object.freeze({
   /** Unpacked text, every file of the set together. */
-  totalBytes: 512 * MiB,
+  totalBytes: 448 * MiB,
   /** Files and archive entries, skipped ones included. */
   entries: 10000,
   /** One file or entry, unpacked. */
@@ -38,8 +38,42 @@ const u64 = (b, o) => u32(b, o) + u32(b, o + 4) * 2 ** 32;
 const latin1 = (b) => String.fromCharCode(...b);
 const utf8 = new TextDecoder("utf-8");
 
-/** The page's turn to draw and take input. */
-export const breathe = () => new Promise((r) => setTimeout(r, 0));
+/** Least work, in milliseconds, between two turns `breathe` gives the page. */
+const TURN_MS = 50;
+let lastTurn = 0;
+let channel = null;
+const waiting = [];
+
+/**
+ * A turn of the event loop: `scheduler.yield()` where there is one, else
+ * `setImmediate` (Node), else a message to ourselves. Not `setTimeout(0)`:
+ * browsers hold chained timers to a few milliseconds each, which over
+ * thousands of small entries is minutes.
+ */
+function turn() {
+  if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+  if (typeof globalThis.setImmediate === "function") return new Promise((r) => globalThis.setImmediate(r));
+  if (typeof MessageChannel !== "function") return new Promise((r) => setTimeout(r, 0));
+  if (!channel) {
+    channel = new MessageChannel();
+    channel.port1.onmessage = () => waiting.shift()?.();
+  }
+  return new Promise((r) => {
+    waiting.push(r);
+    channel.port2.postMessage(0);
+  });
+}
+
+/**
+ * The page's turn to draw and take input, once at least 50 ms of work
+ * have passed since the last; sooner, nothing. Resolves either way.
+ */
+export async function breathe() {
+  const now = performance.now();
+  if (now - lastTurn < TURN_MS) return;
+  await turn();
+  lastTurn = performance.now();
+}
 
 /** A size in bytes as "12 MB", "340 kB" or "15 bytes". */
 export function bytesText(n) {
@@ -649,11 +683,14 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
   // cost unpacking too, so they count against the set's limit.
   const st = { bytes: 0, drained: 0, entries: 0, files: 0, stop: null };
   const progress = (name) => onProgress({ files: st.files, bytes: st.bytes, name });
-  /** One more entry; false, with st.stop set, past the limit. */
+  /**
+   * One more entry; false, with st.stop set, past the limit. An archive is
+   * not an entry itself: what it holds is counted.
+   */
   const counted = () => {
     st.entries++;
     if (st.entries <= limits.entries) return true;
-    st.stop = `The set holds more than ${limits.entries.toLocaleString("en")} files and entries; the page read the first ${limits.entries.toLocaleString("en")} and stopped.`;
+    st.stop = `The set holds more than ${limits.entries.toLocaleString("en")} files and archive entries; the page read ${st.files.toLocaleString("en")} file${st.files === 1 ? "" : "s"} and stopped.`;
     return false;
   };
   const bombText = `unpacks to over ${limits.ratio} times its packed size: an archive bomb, not a log`;
@@ -663,11 +700,14 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
    * counts its packed bytes when it was compressed.
    */
   async function* entry(name, chunks, depth, meter = null) {
-    if (!counted()) return;
+    if (st.stop) return;
     const r = new ByteReader(chunks);
     try {
       const head = await r.peek(SNIFF_BYTES);
       const kind = sniff(head);
+      // An archive read is not an entry; its entries are.
+      const opened = kind !== "text" && kind !== "empty" && kind !== "binary" && depth <= limits.depth;
+      if (!opened && !counted()) return;
       if (kind === "empty") return yield { type: "skip", name, reason: "empty" };
       if (kind === "binary") return yield { type: "skip", name, reason: "not text (binary content)" };
       if (kind !== "text") {
@@ -888,8 +928,8 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
       const bytes = new TextEncoder().encode(src.text);
       yield* entry(name, (async function* () { yield bytes; })(), 0);
     } else if (sniff(new Uint8Array(await src.blob.slice(0, 4).arrayBuffer())) === "zip") {
-      // A zip is read from its end, by slices of the file.
-      st.entries++;
+      // A zip is read from its end, by slices of the file. Like any
+      // archive, it is not an entry itself.
       try {
         yield* zip(name, src.blob, 1);
       } catch (e) {
@@ -901,6 +941,40 @@ export async function* unpack(sources, { limits = LIMITS, onProgress = () => {} 
     if (st.stop) yield { type: "stop", reason: st.stop };
     await breathe();
   }
+}
+
+/**
+ * About how many bytes a picked set unpacks to, from what each file says
+ * of itself, without unpacking it: a zip's directory sizes; a gzip's last
+ * four bytes, which hold its last member's size modulo 4 GiB (so a gzip of
+ * several members, or one past 4 GiB unpacked, can read low); anything
+ * else, its size. Never less than the packed size. Stops adding once past
+ * `enough`.
+ */
+export async function unpackedEstimate(sources, enough = Infinity) {
+  let n = 0;
+  for (const s of sources) {
+    if (n > enough) break;
+    if (typeof s.text === "string") {
+      n += s.text.length;
+      continue;
+    }
+    const size = s.blob?.size ?? 0;
+    let est = size;
+    try {
+      const kind = sniff(new Uint8Array(await s.blob.slice(0, 512).arrayBuffer()));
+      if (kind === "zip") {
+        const dir = await zipDirectory(s.blob);
+        est = (dir.entries ?? []).reduce((t, e) => t + e.size, 0);
+      } else if (kind === "gzip" && size >= 18) {
+        est = u32(new Uint8Array(await s.blob.slice(size - 4).arrayBuffer()), 0);
+      }
+    } catch {
+      // An unreadable file counts at its size; reading it will say why.
+    }
+    n += Math.max(size, est);
+  }
+  return n;
 }
 
 /**

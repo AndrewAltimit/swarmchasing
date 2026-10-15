@@ -160,9 +160,11 @@ test("the set stops at its unpacked limit, its entry limit, and skips a bomb or 
   assert.equal(r.files.length, 2);
   assert.match(r.stop, /stopped/);
 
+  // The zip itself is not an entry: its three logs are, and the fourth file stops the set.
   r = await read([blob(z, "a.zip"), blob(enc.encode(big), "more.log")], { ...LIMITS, entries: 3 });
-  assert.equal(r.files.length, 2);
+  assert.equal(r.files.length, 3);
   assert.match(r.stop, /more than 3 files/);
+  assert.match(r.stop, /read 3 files and stopped/);
 
   const bomb = gzip("a\n".repeat(600000));
   r = await read([blob(bomb, "bomb.log.gz")], { ...LIMITS, ratio: 50, ratioAfter: 64 * 1024 });
@@ -380,6 +382,87 @@ test("a tar that ends early says so", async () => {
   // A whole tar says nothing.
   r = await read([blob(t2, "whole.tar")]);
   assert.deepEqual(r.skips, []);
+});
+
+test("an archive is not an entry: exactly the limit of logs reads them all, one more stops", async () => {
+  const ents = (n) => Array.from({ length: n }, (_, i) => ({ name: `e/h${String(i).padStart(3, "0")}.log`, data: `203.0.113.7 - - [04/Oct/2026:08:10:00 +0000] "GET /${i} HTTP/1.1" 200 5\n` }));
+  for (const [kind, pack] of [["tgz", (e) => gzip(tar(e))], ["zip", (e) => zip(e)]]) {
+    let r = await read([blob(pack(ents(5)), `five.${kind}`)], { ...LIMITS, entries: 5 });
+    assert.equal(r.files.length, 5, kind);
+    assert.equal(r.stop, null, kind);
+    r = await read([blob(pack(ents(6)), `six.${kind}`)], { ...LIMITS, entries: 5 });
+    assert.equal(r.files.length, 5, kind);
+    assert.match(r.stop ?? "", /read 5 files and stopped/, kind);
+  }
+});
+
+test("many small tar entries read without a timer turn each", async () => {
+  const ents = Array.from({ length: 3000 }, (_, i) => ({ name: `e/${i}.log`, data: `line ${i}\n` }));
+  const t0 = Date.now();
+  const r = await read([blob(gzip(tar(ents)), "many.tgz")]);
+  assert.equal(r.files.length, 3000);
+  // A setTimeout(0) per entry, clamped to 4 ms or more, would take 12 s or more.
+  assert.ok(Date.now() - t0 < 8000, `${Date.now() - t0} ms`);
+});
+
+test("the unpacked size is estimated from a gzip's trailer and a zip's directory", async () => {
+  const big = "x".repeat(300000) + "\n";
+  const g = gzip(big);
+  assert.equal(await A.unpackedEstimate([blob(g, "a.gz")]), big.length);
+  const z = zip([{ name: "a.log", data: big }, { name: "b.log", data: big }]);
+  assert.equal(await A.unpackedEstimate([blob(z, "a.zip")]), 2 * big.length);
+  assert.equal(await A.unpackedEstimate([blob(enc.encode("abc"), "p.log"), { name: "t", text: "hello" }]), 8);
+  // Never below the packed size, and it stops adding once past `enough`.
+  assert.ok((await A.unpackedEstimate([blob(g, "1.gz"), blob(g, "2.gz"), blob(g, "3.gz")], 10)) < 3 * big.length);
+});
+
+// readSet (inputs.js) over a stand-in module: what it adds, how it stops.
+const I = await import(pathToFileURL(resolve(ROOT, "site/js/lib/inputs.js")).href);
+function fakeModule({ crashAt = null, crashAnalyse = false } = {}) {
+  let n = 0;
+  return {
+    added: [],
+    inputs_clear() {},
+    inputs_add(text, format, map, limit) {
+      n++;
+      if (n === crashAt) throw new WebAssembly.RuntimeError("unreachable");
+      const lines = text.split("\n").filter((l) => l.trim());
+      const records = limit > 0 ? Math.min(limit, lines.length) : lines.length;
+      this.added.push(limit);
+      return JSON.stringify({ file: n, format: "access_log", lines: records, records, skipped: 0, redacted: 0, warnings: [], warning_count: 0, ...(records < lines.length ? { cut: true } : {}) });
+    },
+    inputs_analyze() {
+      if (crashAnalyse) throw new WebAssembly.RuntimeError("unreachable");
+      return '{"analysis":{"total":1}}';
+    },
+  };
+}
+const threeLogs = () => ["a", "b", "c"].map((k) => ({ name: `${k}.log`, text: `1 ${k}\n2 ${k}\n3 ${k}\n` }));
+
+test("a set stops at the record limit inside the file that reaches it, with the files read", async () => {
+  const sc = fakeModule();
+  const r = await I.readSet(sc, threeLogs(), { limit: 5 });
+  assert.deepEqual(sc.added, [5, 2]);
+  assert.equal(r.files.length, 2);
+  assert.equal(r.files[1].cut, true);
+  assert.match(r.stopped ?? "", /more than 5 records/);
+  assert.equal(r.failed, null);
+  assert.ok(r.out);
+});
+
+test("an engine crash keeps the files read and says so in plain words", async () => {
+  let r = await I.readSet(fakeModule({ crashAnalyse: true }), threeLogs());
+  assert.equal(r.out, null);
+  assert.equal(r.files.length, 3);
+  assert.match(r.failed ?? "", /ran out of memory/);
+  r = await I.readSet(fakeModule({ crashAt: 2 }), threeLogs());
+  assert.equal(r.files.length, 1);
+  assert.match(r.failed ?? "", /after 3 records/);
+  // A refusal (bad format or map) is not a crash: it is thrown as it was.
+  const refusing = { ...fakeModule(), inputs_add() { throw new Error("map: bad field"); } };
+  await assert.rejects(I.readSet(refusing, threeLogs()), /map: bad field/);
+  assert.ok(I.engineCrash(new WebAssembly.RuntimeError("unreachable")));
+  assert.ok(!I.engineCrash(new Error("rules: bad")));
 });
 
 let failed = 0;
