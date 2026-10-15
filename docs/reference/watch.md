@@ -154,6 +154,8 @@ The first block gives the run a priority, `high`, `medium` or `low`, and lists t
 
 A lead is a cluster above noise that is new since the last run or rose a tier, or a new significant record that joined no cluster. New and risen are judged against the cluster's [ledger](#the-ledger) thread: a cluster whose key changed because its earliest record left the window is compared with its own previous run, not reported as new. A case clock has run when reports were sent and the indicator notice's lead time has passed with the notice not yet added, or when the notice is added and an operator may now be named. Each due clock is also a *Case status* line with the command that starts the step; the watch takes no step itself.
 
+The leads of one [campaign](../methodology.md#descriptive-hints) are one reason of kind `campaign`, at the level of its strongest lead and in its place: the campaign, its site, its new leads (clusters and records outside any cluster) and its strongest lead. One operator's many sessions are one item, not one per session.
+
 A model's suggestion never sets the priority: the same facts give the same priority whatever a model said. A new significant record outside any cluster at L2 or higher makes the run count as changed, like a new cluster.
 
 ### Attention queue
@@ -214,10 +216,11 @@ The window's headline counts records with an indicator beyond the relay or carri
 
 Both are leads to review; neither merges clusters.
 
-### Candidate fleets, escalations and common features
+### Campaigns, candidate fleets, escalations and common features
 
 Over the whole window, up to ten lines each:
 
+- **Campaigns.** One site's senders holding one habit set beyond chance: the site, the core, its members out of the site's senders, the holders anywhere, the chance, and the member clusters and records outside any cluster.
 - **Candidate fleets.** Clusters tied by soft links, with the kinds and the weakest pair's strength. Merging one is a case decision ([fleets](cases.md#fleets)). The same fleets by their keys across runs are under [fleet threads](#fleet-threads).
 - **Escalations.** Requests for one page whose route climbed (direct, relay, program, remote browser), with the clusters they touch.
 - **Common features.** Linking values shared too widely to link on, so they were demoted: records, hosts, span and the limit they passed.

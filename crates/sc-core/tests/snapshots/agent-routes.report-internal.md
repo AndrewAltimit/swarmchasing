@@ -62,6 +62,12 @@ For each cluster, the window to search, what its times measure, and the strings 
   - identifiers: `param:uqtag=covrun12`
 
 
+## Pairwise tests
+
+Every pair test over the whole analysis, by family: the pairs tested, those kept under the family's false-discovery cut, and how many that unlikely chance alone would give among them.
+
+- campaign: 0 kept of 1 tested (0 under its own limit), 0.00 that unlikely expected by chance (false discovery rate 5%)
+
 ## Representative records
 
 URLs are defanged. Records are listed by evidence strength.

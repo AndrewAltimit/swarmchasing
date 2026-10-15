@@ -223,6 +223,8 @@ pub struct RuleSet {
     #[serde(default)]
     pub biclique: crate::biclique::BicliqueOptions,
     #[serde(default)]
+    pub campaign: crate::campaign::CampaignOptions,
+    #[serde(default)]
     pub generator: crate::generator::GeneratorOptions,
     #[serde(default)]
     pub playbook: crate::playbook::PlaybookOptions,
@@ -519,6 +521,7 @@ mod tests {
             "swarm",
             "agentness",
             "biclique",
+            "campaign",
             "generator",
             "playbook",
             "onset",

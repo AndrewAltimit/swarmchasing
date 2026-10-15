@@ -249,6 +249,11 @@ generator = 20.0
 # Simulation (fleet-playbook), held at the scaffold's ratio, below its bound:
 # one playbook's steps in one order beyond the playbook chance model.
 playbook = 20.0
+# Simulation (campaign), held at the scaffold's ratio and the fleet threshold,
+# far below its bound: many senders on one site holding one habit set that
+# senders elsewhere seldom hold together, beyond the campaign null. Each pair
+# of a campaign's clusters is linked.
+campaign = 20.0
 
 # Joint caps: the combined ratio of two families, at most the cap and never
 # less than the stronger family alone. Families multiply as if independent,
@@ -381,6 +386,26 @@ min_clusters = 3
 min_features = 4
 max_holders = 30
 swaps = 999
+max_chance = 0.01
+fdr = 0.05
+
+# Campaigns: senders are the clusters above noise and the flagged records
+# outside them. A sender's habits are the rule ids hit and the run-tag
+# parameter names carried by at least half its records; its sites are the
+# host families of its targets, families with a record on a listed benchmark
+# left out. A site with `min_senders` senders has a core: the habits held by
+# at least `core_share` of them, `min_habits` or more. Its members hold the
+# core but for `slack` habits, and at least `min_habits`; the statistic is the
+# hypergeometric tail of that many members among the site's senders, drawn
+# from every sender. The null draws the site's senders at random
+# `permutations` times; a site is kept at `max_chance`, then cut at false
+# discovery rate `fdr` over the sites tested.
+[campaign]
+min_senders = 4
+min_habits = 3
+slack = 1
+core_share = 0.5
+permutations = 999
 max_chance = 0.01
 fdr = 0.05
 

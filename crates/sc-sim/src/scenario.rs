@@ -386,6 +386,13 @@ pub enum Kind {
     /// own hosts: each its own operator, and a look-alike of a dispatch
     /// star (S6) whose leader is the quickest reader.
     Trigger,
+    /// One operator running `agents` short sessions of `records` requests
+    /// each through the scenario's span (or `window_hours`), all on one
+    /// site (`hosts` hosts of one family), each session with its own
+    /// client, run tag and callback inbox, all sending records from the
+    /// operator's own share of the palette (`palette_share`): one
+    /// operator, sessions linked by nothing they hold.
+    Campaign,
 }
 
 impl Kind {
@@ -401,6 +408,7 @@ impl Kind {
                 | Self::Mimic
                 | Self::TargetList
                 | Self::PromptFleet
+                | Self::Campaign
         )
     }
 }
@@ -556,6 +564,12 @@ pub struct Actor {
     /// For a playbook fleet: its steps in reverse order.
     #[serde(default)]
     pub reverse_steps: bool,
+    /// For a swarm: every agent runs one harness, adding its parameters
+    /// (a step counter and a per-request trace) to every request and
+    /// sending the swarm's templates in one rotation, as an orchestrator's
+    /// workers built on one framework do.
+    #[serde(default)]
+    pub harness: bool,
     /// For a fleet: agent `k` generates its tags in `tag_styles[k % n]`
     /// instead of `tag_style`, as an operator changing its tags does.
     #[serde(default)]

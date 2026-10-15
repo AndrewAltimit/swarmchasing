@@ -1096,6 +1096,50 @@ fn leads(t: &mut String, a: &Analysis) {
             let _ = writeln!(t, "- … {} more", n - LEAD_LINES);
         }
     };
+    let _ = writeln!(t, "\n## Campaigns ({})\n", a.campaigns.len());
+    if a.campaigns.is_empty() {
+        let _ = writeln!(t, "None.");
+    }
+    for c in a.campaigns.iter().take(LEAD_LINES) {
+        let shown: Vec<String> = c
+            .clusters
+            .iter()
+            .take(LEAD_LINES)
+            .map(|id| cluster_ref(a, id))
+            .collect();
+        let _ = writeln!(
+            t,
+            "- {}: `{}`, {} of {} senders hold {} ({} of {} senders anywhere; chance {:.1e}); {} cluster(s){}{}, {} record(s) outside any cluster",
+            c.id,
+            defang_host(&c.site),
+            c.members(),
+            c.senders,
+            c.habit_names().join(", "),
+            c.holders,
+            c.population,
+            c.chance,
+            c.clusters.len(),
+            if shown.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", shown.join(", "))
+            },
+            if c.clusters.len() > shown.len() {
+                format!(", … {} more", c.clusters.len() - shown.len())
+            } else {
+                String::new()
+            },
+            c.records.len(),
+        );
+    }
+    more(t, a.campaigns.len());
+    if !a.campaigns.is_empty() {
+        let _ = writeln!(
+            t,
+            "\nProposals only: one operator may run each, or one published payload may be copied by many."
+        );
+    }
+
     let _ = writeln!(t, "\n## Candidate fleets ({})\n", a.candidate_fleets.len());
     if a.candidate_fleets.is_empty() {
         let _ = writeln!(t, "None.");

@@ -122,6 +122,10 @@ pub struct Lead {
     /// The local model's suggestion for `record`, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<Suggestion>,
+    /// The campaign it belongs to ([`sc_core::campaign`]): its id and its
+    /// site, defanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub campaign: Option<(String, String)>,
     /// Index of `record` in the analysis.
     #[serde(skip)]
     pub idx: usize,
@@ -189,9 +193,21 @@ pub fn leads(
                     .map(|h| defang_host(&super::digest::clean_host(h)))
                     .collect(),
                 suggestion: None,
+                campaign: None,
                 idx,
             });
         }
+    }
+    // Each lead's campaign: one operator's sessions read as one item.
+    let mut of: BTreeMap<&str, (String, String)> = BTreeMap::new();
+    for c in &a.campaigns {
+        let tag = (c.id.clone(), defang_host(&c.site));
+        for m in c.clusters.iter().chain(&c.records) {
+            of.entry(m.as_str()).or_insert_with(|| tag.clone());
+        }
+    }
+    for l in &mut out {
+        l.campaign = of.get(l.id.as_str()).cloned();
     }
     out.sort_by(|x, y| {
         y.tier
@@ -232,6 +248,7 @@ fn cluster_lead(a: &Analysis, s: &ClusterSummary, change: &'static str) -> Optio
             .map(|h| defang_host(&super::digest::clean_host(h)))
             .collect(),
         suggestion: None,
+        campaign: None,
         idx,
     })
 }

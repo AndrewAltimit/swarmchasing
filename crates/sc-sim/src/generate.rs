@@ -338,6 +338,7 @@ impl Gen<'_> {
             Kind::Framework => self.framework(i, a, start, window, &mut rng),
             Kind::Swarm => self.swarm(i, a, start, &mut rng),
             Kind::Trigger => self.trigger(i, a, start, &mut rng),
+            Kind::Campaign => self.campaign(i, a, start, window, &mut rng),
             Kind::Escalator => self.escalator(i, a, start, window, &mut rng),
             Kind::Fleet => {
                 let fleet = format!("{}-f{i}", self.scenario.name);
@@ -351,7 +352,7 @@ impl Gen<'_> {
                 let mut first = match a.shape_of.and_then(|s| self.shapes.get(&s)) {
                     Some(s) => s[0].clone(),
                     None => Shape {
-                        templates: self.scaffold_of(&mut rng, a.steps.unwrap_or(3)),
+                        templates: self.scaffold_of(&mut rng, a.steps.unwrap_or(3), a.playbook),
                         harness: names[..2].to_vec(),
                     },
                 };
@@ -838,6 +839,41 @@ impl Gen<'_> {
         }
     }
 
+    /// One operator's short sessions on one site, each with its own client,
+    /// tag and inbox, from the operator's share of the palette.
+    fn campaign(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
+        let fleet = format!("{}-f{i}", self.scenario.name);
+        let site = self.hosts(&format!("a{i}"), a.hosts);
+        for k in 0..a.agents {
+            let client = agent_client(rng);
+            let begin = start + rng.range(0, window);
+            // Each session's hosts: the site's, from a seeded first host.
+            let first = rng.below(site.len());
+            let hosts: Vec<String> = (0..site.len())
+                .map(|h| site[(first + h) % site.len()].clone())
+                .collect();
+            let mut spec = self.bg_spec(
+                i,
+                k,
+                a,
+                "campaign",
+                "agent",
+                Some("agent"),
+                Use::Sink,
+                Pace::Model,
+                true,
+                &client,
+                &hosts,
+                begin,
+                a.records,
+            );
+            spec.truth.fleet = Some(fleet.clone());
+            spec.tag = a.tag;
+            spec.habits = habits(a, format!("{i}"));
+            self.run(spec, rng);
+        }
+    }
+
     /// Agents of unrelated operators on one framework: its templates in a
     /// fixed rotation and its step counter, and one parameter per operator.
     fn framework(&mut self, i: usize, a: &Actor, start: i64, window: i64, rng: &mut Rng) {
@@ -943,6 +979,13 @@ impl Gen<'_> {
         let note = format!("https://gist.github.com/{user}/{gist}");
         let raw = format!("https://r.jina.ai/https://gist.githubusercontent.com/{user}/{gist}/raw");
         let handoff = has(Mode::Handoff);
+        // One harness for every agent, from its own stream so swarms
+        // without one draw as before.
+        let harness = if a.harness {
+            harness_names(&mut self.rng.fork(&format!("actor{i}:harness")), 2)
+        } else {
+            Vec::new()
+        };
         // Dispatch times, from their own stream so other modes draw as before.
         let tree = has(Mode::TreeDispatch);
         let dispatch = has(Mode::Dispatch) || tree;
@@ -1064,7 +1107,7 @@ impl Gen<'_> {
                 },
                 uses,
                 fixed: None,
-                harness: Vec::new(),
+                harness: harness.clone(),
                 shapes: Vec::new(),
                 scope: format!("{i}:{k}"),
                 sink_scope: has(Mode::Sink).then(|| format!("{i}:sink")),
@@ -1439,19 +1482,26 @@ impl Gen<'_> {
 
     /// A handful of attack templates one scaffold sends again and again.
     fn scaffold(&self, rng: &mut Rng) -> Vec<Template> {
-        self.scaffold_of(rng, 3)
+        self.scaffold_of(rng, 3, false)
     }
 
     /// `n` attack templates one scaffold sends again and again. Distinct
-    /// where the palette has enough, so a playbook's steps differ.
-    fn scaffold_of(&self, rng: &mut Rng, n: usize) -> Vec<Template> {
+    /// where the palette has enough, so a playbook's steps differ. With
+    /// `steps`, distinct as playbook steps too: two records of one step
+    /// make one step of the order, and a step set such as `a b b a` reads
+    /// the same reversed, so a reordered playbook would not be reordered.
+    fn scaffold_of(&self, rng: &mut Rng, n: usize, steps: bool) -> Vec<Template> {
         let all = self.palette.get(Use::Attack);
         let mut out: Vec<Template> = Vec::new();
         let mut tries = 0;
-        while out.len() < n && tries < n * 8 {
+        let budget = if steps { n * 64 } else { n * 8 };
+        while out.len() < n && tries < budget {
             tries += 1;
             if let Some(t) = rng.pick(all) {
                 if out.len() < all.len() && out.iter().any(|x| x.origin == t.origin) {
+                    continue;
+                }
+                if steps && t.step.is_some() && out.iter().any(|x| x.step == t.step) {
                     continue;
                 }
                 out.push(t.clone());
@@ -2311,6 +2361,43 @@ mod tests {
         assert_eq!(first + gaps.iter().sum::<i64>(), 40);
         // On time throughout: the gaps are the dispatches'.
         assert_eq!(sync_times(&[5, 7, 9], &[2, 2, 2]), (2, vec![0, 7, 9]));
+    }
+
+    #[test]
+    fn a_playbook_draws_distinct_steps_so_its_reversal_is_reversed() {
+        let rules = sc_core::Rules::default_rules();
+        let palette = Palette::default_palette(&rules);
+        let file = crate::ScenarioFile::parse(
+            "[[scenario]]\nname = \"t\"\n[[scenario.actor]]\nkind = \"agent\"\n",
+        )
+        .unwrap();
+        let g = Gen {
+            scenario: &file.scenario[0],
+            seed: 1,
+            palette: &palette,
+            rng: Rng::new(1),
+            t0: 0,
+            out: Vec::new(),
+            shapes: BTreeMap::new(),
+            times: BTreeMap::new(),
+            opts: RunOpts::default(),
+            tag_style: TagStyle::Random,
+            taken: Taken::default(),
+        };
+        // Some draw without it repeats a step (`a b b a` reads the same
+        // reversed); none with it.
+        let mut repeats = 0;
+        for seed in 0..200 {
+            let distinct = |steps: bool| {
+                let t = g.scaffold_of(&mut Rng::new(seed), 4, steps);
+                let keys: std::collections::BTreeSet<_> = t.iter().map(|x| &x.step).collect();
+                assert!(t.iter().all(|x| x.step.is_some()));
+                keys.len() == t.len()
+            };
+            repeats += usize::from(!distinct(false));
+            assert!(distinct(true), "seed {seed}");
+        }
+        assert!(repeats > 0);
     }
 
     #[test]

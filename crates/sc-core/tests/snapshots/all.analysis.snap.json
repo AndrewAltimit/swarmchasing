@@ -69111,24 +69111,6 @@
     {
       "id": "F1",
       "clusters": [
-        "C1",
-        "C2"
-      ],
-      "kinds": [
-        "co_activity"
-      ],
-      "links": 1,
-      "strength": 0.96,
-      "min_lr": 24.999999999999996,
-      "density": 1.0,
-      "cut_lr": 24.999999999999996,
-      "cut": [
-        "C2"
-      ]
-    },
-    {
-      "id": "F2",
-      "clusters": [
         "C9",
         "C47"
       ],
@@ -69145,7 +69127,7 @@
       ]
     },
     {
-      "id": "F3",
+      "id": "F2",
       "clusters": [
         "C17",
         "C18",
@@ -69164,7 +69146,7 @@
       ]
     },
     {
-      "id": "F4",
+      "id": "F3",
       "clusters": [
         "C45",
         "C46"
@@ -69333,6 +69315,14 @@
     {
       "family": "prompt_echo",
       "tested": 0,
+      "passed": 0,
+      "kept": 0,
+      "fdr": 0.05,
+      "expected": 0.0
+    },
+    {
+      "family": "campaign",
+      "tested": 3,
       "passed": 0,
       "kept": 0,
       "fdr": 0.05,

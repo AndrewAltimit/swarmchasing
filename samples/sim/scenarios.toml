@@ -271,7 +271,8 @@ palette_share = 0.3
 kind = "crawler"
 agents = 40
 records = 60
-# A planner dispatching two workers for hours, beside jobs on the hour.
+# A planner dispatching two workers on one harness for hours, beside jobs
+# on the hour.
 [[scenario]]
 name = "dispatch"
 seed = 121
@@ -286,6 +287,7 @@ modes = ["dispatch"]
 records = 8
 offset_hours = 3
 palette_share = 0.3
+harness = true
 [[scenario.actor]]
 kind = "cron"
 agents = 2
@@ -1180,3 +1182,114 @@ kind = "agent"
 agents = 10
 retry = 0.2
 palette_share = 0.3
+
+# Six unrelated agents watching one feed, each sending one request at its
+# own lag after every item, each to its own hosts, beside jobs on the hour:
+# a look-alike of a dispatcher's workers that shares nothing but timing.
+# Its co-activity proposes no fleet; a reader quick on every item still
+# reads as a dispatcher now and then.
+[[scenario]]
+name = "trigger"
+seed = 461
+seeds = 4
+expect.candidate_fleet = { max_pairs = 0 }
+expect.S6 = { max_pairs = 2 }
+[[scenario.actor]]
+kind = "trigger"
+agents = 6
+records = 8
+offset_hours = 3
+palette_share = 0.3
+[[scenario.actor]]
+kind = "cron"
+agents = 2
+records = 24
+[[scenario.actor]]
+kind = "agent"
+agents = 10
+retry = 0.2
+palette_share = 0.3
+
+# Two operators on one public harness, the second walking its steps in the
+# reverse order, beside two hundred unrelated agents: the template set ties
+# neither to the other.
+[[scenario]]
+name = "playbook-reordered"
+seed = 471
+seeds = 4
+span_hours = 240
+expect.playbook = { max_pairs = 0 }
+expect.candidate_fleet = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "fleet"
+agents = 1
+records = 32
+hosts = 8
+steps = 4
+playbook = true
+[[scenario.actor]]
+kind = "fleet"
+agents = 1
+records = 32
+hosts = 8
+steps = 4
+playbook = true
+shape_of = 0
+reverse_steps = true
+offset_hours = 30
+[[scenario.actor]]
+kind = "agent"
+agents = 200
+retry = 0.2
+palette_share = 0.1
+
+# One operator's thirty short sessions on one site over five days, on a
+# scan service, each with its own tag and inbox, from the operator's own
+# few records, beside eighty unrelated agents: no session holds what
+# another holds, and no site or template is rare enough for the pairwise
+# and co-group tests.
+[[scenario]]
+name = "campaign"
+seed = 481
+seeds = 4
+basis = "submit"
+span_hours = 120
+expect.campaign = { min_precision = 1.0, min_recall = 0.31 }
+expect.candidate_fleet = { min_precision = 1.0, min_recall = 0.31 }
+[[scenario.actor]]
+kind = "campaign"
+agents = 30
+records = 3
+hosts = 4
+palette_share = 0.05
+[[scenario.actor]]
+kind = "agent"
+agents = 80
+records = 4
+retry = 0.2
+palette_share = 0.1
+
+# The campaign's hard negative: forty unrelated agents on one popular site
+# over five days, each drawing its records as the eighty agents elsewhere
+# do.
+[[scenario]]
+name = "campaign-crowd"
+seed = 491
+seeds = 4
+basis = "submit"
+span_hours = 120
+expect.campaign = { max_pairs = 0 }
+expect.candidate_fleet = { max_pairs = 0 }
+[[scenario.actor]]
+kind = "agent"
+agents = 40
+records = 3
+hosts = 4
+same_family = true
+palette_share = 0.1
+[[scenario.actor]]
+kind = "agent"
+agents = 80
+records = 4
+retry = 0.2
+palette_share = 0.1
