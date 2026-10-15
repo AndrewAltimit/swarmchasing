@@ -23,7 +23,7 @@ Every watch, review and case command works in one data directory: `--data` (`-d`
 | `ledger.json` | Each cluster's history across runs ([the ledger](#the-ledger)). |
 | `summary.json`, `ledger.json` (`.bak`, `.damaged`) | The previous copy, and a copy that could not be read, set aside ([interrupted runs](#interrupted-runs)). |
 | `autonomy.ndjson` | What each [autonomy](#autonomy) level did or would have done. |
-| `platform/` | The [platform pass](#platform-swarms): checkpoints, reported candidates, carried events, labels and provenance answers. |
+| `platform/` | The [platform pass](#platform-swarms): checkpoints, reported candidates, carried events, the burst baseline, labels and provenance answers. |
 | `runs/<stamp>/platform-swarms.json` | The run's platform swarm candidates. |
 | `labels/reviewed.ndjson` | Records labelled with `swarmchase review`. |
 | `labels/suggestions-local.ndjson` | The local model's suggestions on new leads ([model triage](#model-triage)). |
@@ -263,7 +263,7 @@ The watch changes nothing itself. Apply an approved proposal with `swarmchase no
 
 A separate pass in each run looks for accounts acting alike on GitHub, GitLab.com, Codeberg, package registries (npm, PyPI, NuGet, Packagist, RubyGems, crates.io, Go modules), the Hugging Face Hub, Wikimedia wikis, Hacker News, Bluesky and CVE records: near-identical or templated text, templated names, or text-less stars, forks and pull requests on one target, from several accounts in a burst beyond chance. The method and its thresholds are in [methodology](../methodology.md#coordinated-accounts-on-public-platforms). A failure in this pass is reported in its section and never stops the record analysis.
 
-**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), `label_days` (default 30), `provenance_lookups` (default 40), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
+**Sources.** The watchlist's `[platform]` table holds `carry_hours` (default 72), `label_days` (default 30), `history_days` (default 30), `provenance_lookups` (default 40), optional `[platform.options]` (the detector's tunables, such as `min_accounts`, `burst_secs` and `max_chance`) and `[[platform.source]]` entries. Each has a `name`, a `kind` and the record source fields it uses:
 
 | Kind | Reads | Fields |
 |---|---|---|
@@ -295,13 +295,15 @@ A separate pass in each run looks for accounts acting alike on GitHub, GitLab.co
 
 Each npm or PyPI candidate with answers carries them as `provenance` in `platform-swarms.json`, and the digest gives it a *Provenance* line: the repositories and workflows its packages name, whether several packages share one, or that none carries provenance (weak context). It changes neither the chance nor the strength ([methodology](../methodology.md#coordinated-accounts-on-public-platforms)).
 
-**Declared coding agents.** GitHub events from the coding-agent Apps that [`declared-agents.toml`](../../declared-agents.toml) lists (`github_app`) are tallied by product on the source's line, not grouped. An undeclared App whose login carries one of those products' names is listed below it as a spoofing lead, by login: App logins name software, not people.
+**Declared coding agents.** GitHub events from the coding-agent Apps that [`declared-agents.toml`](../../declared-agents.toml) lists (`github_app`) are tallied by product on the source's line, not grouped. An undeclared App whose login carries one of those products' names is listed below it as a spoofing lead, by login: App logins name software, not people. A provider's name alone claims no product (`openai-sdks[bot]` is no lead), and an App acting on a repository of the provider's own GitHub organisations is the provider's own ([identity](identity.md)).
 
 **What is stored.** Nothing from the full stream. After grouping, only events worth another look are carried in `platform/carry.ndjson` for `carry_hours`: members of a group with two or more accounts and events carrying residue. Events hold a keyed hash for the account, never its login, and slotted text sketches, never the text. The run's candidates, suppressed groups and counts go to `runs/<stamp>/platform-swarms.json`.
 
-**In the digest.** *Platform swarm hints* lists candidates that are new this run or have grown since they were last listed, each with its reason line (burst, new accounts, residue and their chances), what joined it, the slotted template, its targets, any coding-harness self-identification (weak context), its packages' build provenance, what is left to rule out, and up to five defanged links. A new or grown candidate counts as a change. Suppressed groups are summed by benign kind. Candidates are not leads for triage: the hosted model may see only archive and urlquery records ([policies](../policies.md#evidence-and-attribution)).
+**The burst baseline.** `platform/baseline.json` keeps what earlier runs saw: each platform's stretches read (a pull's first event to its last) and the model burst chance of every group weighed, for `carry_hours`, and the name and text templates of members in a burst, with the window they burst in, for `history_days`. Bursts are weighed over the time read; a platform read for under an hour has its bursts not weighed; a burst chance is never below the share of earlier groups on the platform that burst as tightly; and a group whose families burst in an earlier window is suppressed as a recurring family unless its accounts are new or its text carries residue ([methodology](../methodology.md#coordinated-accounts-on-public-platforms)). Deleting the file starts the baseline afresh.
 
-**On demand.** `swarmchase platform-swarms <events.ndjson>` runs the detector over carried events or fixtures, and `--gharchive <hour.json.gz>` over GH Archive hour files read locally; `--json` prints the full report and `--options` takes a TOML of tunables.
+**In the digest.** *Platform swarm hints* lists candidates that are new this run or have grown since they were last listed, each with its reason line (burst, new accounts, residue and their chances), what joined it, the slotted template, its targets, any coding-harness self-identification (weak context), its packages' build provenance, what is left to rule out, and up to five defanged links. Every moderate candidate is shown, and the first 10 weak ones; the rest are summed by platform, and every candidate stays in `platform-swarms.json`. A new or grown candidate counts as a change. Suppressed groups are summed by benign kind. Candidates are not leads for triage: the hosted model may see only archive and urlquery records ([policies](../policies.md#evidence-and-attribution)).
+
+**On demand.** `swarmchase platform-swarms <events.ndjson>` runs the detector over carried events or fixtures, and `--gharchive <hour.json.gz>` over GH Archive hour files read locally; `--json` prints the full report, `--options` takes a TOML of tunables and `--baseline` a watch's `platform/baseline.json`.
 
 ## The run summary
 

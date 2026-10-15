@@ -671,6 +671,7 @@ scan = 5                  # listing pages per run
 [platform]
 carry_hours = 72
 label_days = 30           # keep labels from reference sources (osv, wikimedia-ai-cleanup) this long
+history_days = 30         # remember name and text families seen bursting this long (platform/baseline.json)
 # Rationale: a registry fleet built in CI names where it was built. For the
 # npm and PyPI candidates new or grown in a run, look up member releases'
 # build provenance (npm's attestations endpoint, PyPI's integrity API), at

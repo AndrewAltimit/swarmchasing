@@ -8,7 +8,15 @@
 //! multi-account group and events carrying residue, for `carry_hours`. The
 //! full stream is never stored. The candidates go to
 //! `runs/<stamp>/platform-swarms.json` and a digest section that lists new
-//! and grown ones. Candidates never become triage leads: the hosted triage
+//! and grown ones, weak ones past [`SHOWN_WEAK`] summed by platform.
+//!
+//! What earlier runs saw is kept in `<out>/platform/baseline.json`
+//! ([`sc_core::platform::Baseline`]): the stretch of each platform read in
+//! each run and the burst chances of the groups weighed, for `carry_hours`,
+//! and the families seen bursting, for `history_days`. Bursts are weighed
+//! over the time read, not at all under an hour of it, never below the share
+//! of earlier groups that burst as tightly, and a family that burst in an
+//! earlier window is not a fresh burst. Candidates never become triage leads: the hosted triage
 //! model may see archive and urlquery records only (docs/policies.md).
 //!
 //! Reference sources (`osv`, `wikimedia-ai-cleanup`) give labels, not
@@ -30,8 +38,8 @@ use anyhow::Result;
 use sc_collect::Client;
 use sc_collect::platform::{PlatformSource, TargetLabel, label_key, pull_platform};
 use sc_core::platform::{
-    CandidateProvenance, PackageProvenance, Platform, PlatformEvent, PlatformOptions,
-    PlatformReport, PlatformSwarm, detect,
+    Baseline, CandidateProvenance, PackageProvenance, Platform, PlatformEvent, PlatformOptions,
+    PlatformReport, PlatformSwarm, detect_with,
 };
 use sc_core::{Rules, defang, defang_host, fmt_ts};
 use serde::{Deserialize, Serialize};
@@ -50,6 +58,9 @@ pub struct Config {
     /// How long labels from reference sources are kept.
     #[serde(default = "default_label_days")]
     pub label_days: i64,
+    /// How long families seen bursting are remembered.
+    #[serde(default = "default_history_days")]
+    pub history_days: i64,
     /// Package releases whose build provenance one run looks up at most;
     /// 0 turns the lookups off.
     #[serde(default = "default_provenance_lookups")]
@@ -63,6 +74,7 @@ impl Default for Config {
         Self {
             carry_hours: default_carry(),
             label_days: default_label_days(),
+            history_days: default_history_days(),
             provenance_lookups: default_provenance_lookups(),
             options: PlatformOptions::default(),
             sources: Vec::new(),
@@ -77,6 +89,14 @@ fn default_carry() -> i64 {
 fn default_label_days() -> i64 {
     30
 }
+
+fn default_history_days() -> i64 {
+    30
+}
+
+/// Weak candidates the digest shows in full; the rest are summed by
+/// platform.
+pub const SHOWN_WEAK: usize = 10;
 
 fn default_provenance_lookups() -> usize {
     40
@@ -176,6 +196,9 @@ pub fn run(
         carried: batch.len(),
         ..Default::default()
     };
+    let baseline_path = dir.join("baseline.json");
+    let mut baseline: Baseline = read_json(&baseline_path)?.unwrap_or_default();
+    baseline.prune(cutoff, now - cfg.history_days.max(1) * 86_400);
     let mut new_labels: Vec<TargetLabel> = Vec::new();
     for src in &cfg.sources {
         eprint!("{:<24} platform {} … ", src.name, src.kind);
@@ -196,6 +219,7 @@ pub fn run(
                 line.declared = p.declared;
                 line.lookalikes = p.lookalikes;
                 line.labels = p.labels.len();
+                note_read(&mut baseline, &p.events);
                 if let Some(e) = &p.stopped {
                     eprintln!("  stopped early: {e}");
                     line.stopped = Some(crate::util::one_line(e, 200));
@@ -211,7 +235,9 @@ pub fn run(
         outcome.sources.push(line);
         write_json(&state_path, &state)?;
     }
-    let mut report = detect(&batch, &cfg.options);
+    let mut report = detect_with(&batch, &cfg.options, &baseline);
+    baseline.record(&report.weighed, now);
+    write_json(&baseline_path, &baseline)?;
 
     let labels_path = dir.join("labels.ndjson");
     let label_cutoff = now - cfg.label_days.max(1) * 86_400;
@@ -317,6 +343,20 @@ pub fn run(
     write_json(&run_dir.join("platform-swarms.json"), &report)?;
     outcome.report = report;
     Ok(Some(outcome))
+}
+
+/// Note in `baseline` the stretch each platform was read: from a pull's
+/// first event to its last.
+pub fn note_read(baseline: &mut Baseline, events: &[PlatformEvent]) {
+    let mut span: BTreeMap<Platform, (i64, i64)> = BTreeMap::new();
+    for e in events {
+        let s = span.entry(e.platform).or_insert((e.ts, e.ts));
+        s.0 = s.0.min(e.ts);
+        s.1 = s.1.max(e.ts);
+    }
+    for (p, (from, to)) in span {
+        baseline.add_read(p, from, to);
+    }
 }
 
 /// Each candidate's members that acted on a labelled target, by label kind.
@@ -592,7 +632,17 @@ pub fn section(o: &Outcome) -> String {
         );
     }
     t.push('\n');
+    // Every moderate candidate, and the first weak ones; the rest summed.
+    let mut weak = 0;
+    let mut rolled: BTreeMap<&str, usize> = BTreeMap::new();
     for s in shown {
+        if s.strength == sc_core::platform::HintStrength::Weak {
+            weak += 1;
+            if weak > SHOWN_WEAK {
+                *rolled.entry(s.platform.name()).or_default() += 1;
+                continue;
+            }
+        }
         let tag = if o.new.contains(&s.id) {
             "new"
         } else {
@@ -610,6 +660,15 @@ pub fn section(o: &Outcome) -> String {
                 m.sources.join(", ")
             );
         }
+    }
+    if !rolled.is_empty() {
+        let n: usize = rolled.values().sum();
+        let by: Vec<String> = rolled.iter().map(|(p, n)| format!("{p} {n}")).collect();
+        let _ = writeln!(
+            t,
+            "And {n} more weak hint(s), not shown ({}); every candidate is in `platform-swarms.json`.\n",
+            by.join(", ")
+        );
     }
     t.push_str(&render_suppressed(r));
     t
@@ -723,6 +782,64 @@ mod tests {
             );
         }
         assert!(wl.platform.carry_hours > 0);
+    }
+
+    #[test]
+    fn the_section_shows_the_first_weak_hints_and_sums_the_rest() {
+        let mut swarms = Vec::new();
+        for i in 0..14 {
+            let platform = if i < 12 {
+                Platform::Bluesky
+            } else {
+                Platform::Nuget
+            };
+            swarms.push(registry_swarm(&format!("PS-{i:08x}"), platform, &["x"]));
+        }
+        let mut strong = registry_swarm("PS-moderate", Platform::Github, &["y"]);
+        strong.strength = sc_core::platform::HintStrength::Moderate;
+        swarms.insert(0, strong);
+        let o = Outcome {
+            new: swarms.iter().map(|s| s.id.clone()).collect(),
+            report: PlatformReport {
+                swarms,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let t = section(&o);
+        assert!(t.contains("## Platform swarm hints (15)"), "{t}");
+        assert!(t.contains("### PS-moderate (github, moderate, new)"), "{t}");
+        assert_eq!(t.matches("### PS-").count(), 1 + SHOWN_WEAK, "{t}");
+        assert!(
+            t.contains("And 4 more weak hint(s), not shown (bluesky 2, nuget 2)"),
+            "{t}"
+        );
+    }
+
+    #[test]
+    fn a_pull_notes_the_stretch_each_platform_was_read() {
+        let ev = |platform, ts| PlatformEvent {
+            id: format!("e{ts}"),
+            platform,
+            ts,
+            ..Default::default()
+        };
+        let mut b = Baseline::default();
+        note_read(
+            &mut b,
+            &[
+                ev(Platform::Bluesky, 1300),
+                ev(Platform::Bluesky, 100),
+                ev(Platform::HuggingFace, 50),
+            ],
+        );
+        note_read(
+            &mut b,
+            &[ev(Platform::Bluesky, 1200), ev(Platform::Bluesky, 4000)],
+        );
+        assert_eq!(b.read_secs(Platform::Bluesky), Some(3900));
+        assert_eq!(b.read_secs(Platform::HuggingFace), Some(0));
+        assert_eq!(b.read_secs(Platform::Nuget), None);
     }
 
     #[test]

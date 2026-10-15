@@ -719,3 +719,227 @@ fn wiki_sandbox_edits_need_a_burst_not_only_new_accounts() {
     assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
     assert_eq!(rep.swarms[0].template, "user:<user>/sandbox");
 }
+
+/// Bluesky posts: `n` accounts posting `text` from `start`, `gap` apart.
+fn posts(
+    rules: &Rules,
+    tag: &str,
+    n: usize,
+    start: i64,
+    gap: i64,
+    text: &str,
+) -> Vec<PlatformEvent> {
+    (0..n)
+        .map(|i| {
+            PlatformEvent {
+                id: format!("bsky:{tag}{i}"),
+                platform: Platform::Bluesky,
+                action: Action::StoryPosted,
+                ts: start + i as i64 * gap,
+                actor: actor_key(Platform::Bluesky, &format!("{tag}-acct{i}")),
+                target: format!("news{i}.example"),
+                link: String::new(),
+                ..Default::default()
+            }
+            .with_text(text, &[], rules)
+        })
+        .collect()
+}
+
+/// Twenty minutes of a firehose: varied posts, and one story twelve news
+/// accounts repost within a second.
+fn short_firehose(rules: &Rules, start: i64) -> Vec<PlatformEvent> {
+    let mut r = Lcg(11);
+    let mut evs: Vec<PlatformEvent> = (0..600)
+        .flat_map(|i| {
+            let words = 10 + (r.next() % 20) as usize;
+            let text = r.sentence(words);
+            posts(rules, &format!("bg{i}-"), 1, start + i * 2, 0, &text)
+        })
+        .collect();
+    evs.extend(posts(
+        rules,
+        "story",
+        12,
+        start + 600,
+        0,
+        "most of the time a common illness is found after a routine screening or the patient notices a change",
+    ));
+    evs
+}
+
+#[test]
+fn a_burst_in_a_short_read_of_a_firehose_is_not_weighed() {
+    let rules = Rules::default_rules();
+    let start = T0 + 1800;
+    let evs = short_firehose(&rules, start);
+    // Without a record of the time read, the twenty minutes are weighed as
+    // an hour and the story's reposts look like a burst.
+    let rep = detect(&evs, &PlatformOptions::default());
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    // With it, twenty minutes are too short to tell a burst from steady
+    // posting.
+    let mut base = Baseline::default();
+    base.add_read(Platform::Bluesky, start, start + 1200);
+    let rep = detect_with(&evs, &PlatformOptions::default(), &base);
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    assert_eq!(rep.below_threshold, 1);
+    assert_eq!(rep.weighed.len(), 1);
+    // The model's chance over the twenty minutes is still recorded.
+    assert!(rep.weighed[0].model_chance < 1.0);
+    // Two hours read: the same reposts are weighed over the time read.
+    base.add_read(Platform::Bluesky, start - 6000, start);
+    let rep = detect_with(&evs, &PlatformOptions::default(), &base);
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    let b = &rep.swarms[0].burst;
+    assert!(!b.short_read);
+    assert_eq!(b.span_secs, 7200);
+    assert!(
+        rep.swarms[0]
+            .reason
+            .contains("12 stories posted from 12 account(s)"),
+        "{}",
+        rep.swarms[0].reason
+    );
+}
+
+#[test]
+fn earlier_bursts_on_a_busy_platform_set_a_floor_under_the_chance() {
+    let rules = Rules::default_rules();
+    let start = T0 + 1800;
+    let evs = short_firehose(&rules, start);
+    let mut base = Baseline::default();
+    base.add_read(Platform::Bluesky, start - 6000, start + 1200);
+    let earlier = |p: f64| -> Vec<baseline::Weighed> {
+        (0..80)
+            .map(|i| baseline::Weighed {
+                platform: Platform::Bluesky,
+                id: format!("PS-e{i}"),
+                model_chance: if i % 2 == 0 { p } else { 1.0 },
+                window: (0, 900),
+                keys: vec![],
+            })
+            .collect()
+    };
+    // Where earlier groups rarely burst, the model's chance stands.
+    let mut quiet = base.clone();
+    quiet.record(&earlier(1.0), T0);
+    let rep = detect_with(&evs, &PlatformOptions::default(), &quiet);
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    assert_eq!(rep.swarms[0].burst.earlier, Some((0, 80)));
+    // Where half the earlier groups burst as tightly, this one is ordinary.
+    let mut busy = base.clone();
+    busy.record(&earlier(1e-12), T0);
+    let rep = detect_with(&evs, &PlatformOptions::default(), &busy);
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    assert_eq!(rep.below_threshold, 1);
+}
+
+/// `n` packages of one vendor's numbered family in NuGet's catalog (which
+/// names no publisher), `gap` apart from `start`.
+fn release_train(n: usize, start: i64, gap: i64, version: &str) -> Vec<PlatformEvent> {
+    (0..n)
+        .map(|i| {
+            let name = format!("vendorsdk.service{i:02}");
+            PlatformEvent {
+                id: format!("nuget:{name}@{version}"),
+                platform: Platform::Nuget,
+                action: Action::PackagePublished,
+                ts: start + i as i64 * gap,
+                target: name.clone(),
+                link: String::new(),
+                name_template: name_template(&name, ""),
+                ..Default::default()
+            }
+        })
+        .collect()
+}
+
+fn nuget_background(n: usize, start: i64) -> Vec<PlatformEvent> {
+    (0..n)
+        .map(|i| PlatformEvent {
+            id: format!("nuget:ordinary{i}@{start}"),
+            platform: Platform::Nuget,
+            action: Action::PackagePublished,
+            ts: start + i as i64 * 300,
+            target: format!("ordinary{i}"),
+            link: String::new(),
+            ..Default::default()
+        })
+        .collect()
+}
+
+#[test]
+fn a_release_train_is_a_flood_without_accounts_and_recurs_as_a_family() {
+    let day = 86_400;
+    let mut evs = nuget_background(72, T0);
+    evs.extend(release_train(30, T0 + 2 * HOUR, 20, "4.0.1"));
+    let mut base = Baseline::default();
+    base.add_read(Platform::Nuget, T0, T0 + 6 * HOUR);
+    let rep = detect_with(&evs, &PlatformOptions::default(), &base);
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    let s = &rep.swarms[0];
+    assert_eq!(s.template, "vendorsdk-<id>");
+    assert_eq!(s.strength, HintStrength::Weak);
+    // No account evidence: no claim of accounts acting alike.
+    assert!(!s.reason.contains("account(s)"), "{}", s.reason);
+    assert!(s.reason.contains("names no accounts"), "{}", s.reason);
+    assert!(s.caveats.iter().any(|c| c.contains("release train")));
+    // The family's burst is recorded ...
+    base.record(&rep.weighed, T0 + 6 * HOUR);
+    assert!(
+        base.families
+            .keys()
+            .any(|k| k == "nuget:name:packages published:vendorsdk-<id>"),
+        "{:?}",
+        base.families.keys().collect::<Vec<_>>()
+    );
+    // ... the same group carried to the next run is not recurring ...
+    base.add_read(Platform::Nuget, T0 + 6 * HOUR, T0 + 12 * HOUR);
+    let rep = detect_with(&evs, &PlatformOptions::default(), &base);
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    // ... and the next day's train is the family again, not a fresh flood.
+    let mut next = nuget_background(72, T0 + day);
+    next.extend(release_train(30, T0 + day + 3 * HOUR, 20, "4.0.2"));
+    base.add_read(Platform::Nuget, T0 + day, T0 + day + 6 * HOUR);
+    let rep = detect_with(&next, &PlatformOptions::default(), &base);
+    assert!(rep.swarms.is_empty(), "{:#?}", rep.swarms);
+    assert_eq!(rep.suppressed.len(), 1);
+    assert!(rep.suppressed[0].why.contains("recurring family"));
+    // Without that history the same day reads as a flood again.
+    assert_eq!(detect(&next, &PlatformOptions::default()).swarms.len(), 1);
+}
+
+#[test]
+fn a_recurring_family_from_new_accounts_still_stands_on_their_age() {
+    let rules = Rules::default_rules();
+    let mut evs = background(&rules, 400);
+    let swarm = wave(
+        &rules,
+        "sw",
+        6,
+        T0 + 2 * HOUR + 17 * 60,
+        70,
+        |i| Some(160_400 + i as u64),
+        |i| VICTIMS[i],
+        agent_report,
+    );
+    evs.extend(swarm.clone());
+    let mut base = Baseline::default();
+    // The same reports burst a day earlier.
+    let key = baseline::family_key(&swarm[0], 8).unwrap();
+    base.families.insert(
+        key,
+        baseline::Sighting {
+            start: T0 - 86_400,
+            end: T0 - 86_400 + 900,
+            ts: T0 - 86_400,
+        },
+    );
+    let rep = detect_with(&evs, &PlatformOptions::default(), &base);
+    assert_eq!(rep.swarms.len(), 1, "{:#?}", rep.swarms);
+    let s = &rep.swarms[0];
+    assert!(s.burst.recurring);
+    assert_eq!(s.burst.p_chance, 1.0);
+    assert!(s.new_accounts.as_ref().unwrap().p_chance < 1e-3);
+}

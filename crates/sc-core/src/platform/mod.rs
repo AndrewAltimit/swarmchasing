@@ -23,7 +23,11 @@
 //! are cut at a false discovery rate over every group weighed. A text-less
 //! group, and a group of wiki edits, needs its
 //! own burst: account age alone is a property of what such groups are (new
-//! editors' sandboxes, a new project's first stars). Model-output residue,
+//! editors' sandboxes, a new project's first stars). With a [`Baseline`]
+//! of earlier runs ([`detect_with`]), bursts are weighed over the time read,
+//! not at all under an hour of it, never below the share of earlier groups
+//! that burst as tightly, and not counted for a family that burst in an
+//! earlier window. Model-output residue,
 //! coding-harness self-identification and target overlap are reported
 //! beside the chance. Known benign automation is dropped at collection
 //! ([`automation`]) and groups whose text matches a documented benign
@@ -31,6 +35,7 @@
 //! for the admin, never a finding.
 
 pub mod automation;
+pub mod baseline;
 mod detect;
 pub mod provenance;
 pub mod residue;
@@ -39,7 +44,8 @@ pub mod text;
 #[cfg(test)]
 mod tests;
 
-pub use detect::{detect, detect_platform};
+pub use baseline::Baseline;
+pub use detect::{detect, detect_platform, detect_with};
 pub use provenance::{CandidateProvenance, PackageProvenance};
 pub use text::{TextSketch, name_template, sketch, wiki_title_template};
 
@@ -355,6 +361,22 @@ pub struct Burst {
     pub p_chance: f64,
     /// The window starts on a clock hour and was counted down.
     pub on_the_hour: bool,
+    /// The platform was read for less than [`baseline::MIN_READ_SECS`] in
+    /// the carry window: the burst is not weighed and its chance is 1.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub short_read: bool,
+    /// The model's chance, where a floor from earlier runs lifted it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_chance: Option<f64>,
+    /// Groups weighed on the platform in earlier runs: how many burst at
+    /// least as tightly by the model, of how many. The chance is not taken
+    /// below their share.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub earlier: Option<(usize, usize)>,
+    /// Most members in the window belong to families that burst in an
+    /// earlier window: the burst is not counted and its chance is 1.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub recurring: bool,
 }
 
 /// New accounts among a group's accounts against the accounts first seen in
@@ -458,4 +480,7 @@ pub struct PlatformReport {
     /// expected by chance.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub families: Vec<crate::chance::TestFamily>,
+    /// Every group weighed, for [`Baseline::record`]. Not serialised.
+    #[serde(skip)]
+    pub weighed: Vec<baseline::Weighed>,
 }

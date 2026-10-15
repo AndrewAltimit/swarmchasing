@@ -4,7 +4,7 @@
 
 use crate::watch::platform::{load_events, render_swarm};
 use anyhow::{Context, Result};
-use sc_core::platform::{PlatformEvent, PlatformOptions, detect};
+use sc_core::platform::{Baseline, PlatformEvent, PlatformOptions, detect_with};
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -19,6 +19,11 @@ pub struct PlatformArgs {
     /// Detector options as TOML (the watchlist's `[platform.options]` keys).
     #[arg(long)]
     options: Option<PathBuf>,
+    /// A watch's burst baseline (`platform/baseline.json`): weigh bursts
+    /// over the stretches it records as read, against its earlier groups
+    /// and families, as the watch does.
+    #[arg(long)]
+    baseline: Option<PathBuf>,
     /// Rules file (defaults to the bundled rules/default.toml).
     #[arg(long)]
     rules: Option<PathBuf>,
@@ -58,7 +63,14 @@ pub fn run(a: PlatformArgs) -> Result<()> {
             events.extend(load_events(p)?);
         }
     }
-    let report = detect(&events, &opts);
+    let baseline: Baseline = match &a.baseline {
+        Some(p) => serde_json::from_str(
+            &std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?,
+        )
+        .context("burst baseline")?,
+        None => Baseline::default(),
+    };
+    let report = detect_with(&events, &opts, &baseline);
     if a.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
         return Ok(());

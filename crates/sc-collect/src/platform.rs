@@ -432,7 +432,8 @@ fn gh_event(v: &Value, rules: &Rules) -> GhEvent {
         _ => return GhEvent::Skip,
     };
     let login = s("/actor/login").unwrap_or("");
-    match classify_login(login) {
+    let repo_owner = repo.split_once('/').map_or("", |(o, _)| o);
+    match classify_login(login, repo_owner) {
         LoginClass::Declared(a) => {
             return GhEvent::Declared(format!("{} ({})", a.product, a.provider));
         }
