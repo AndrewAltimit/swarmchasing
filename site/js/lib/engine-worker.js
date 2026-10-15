@@ -6,16 +6,16 @@
 //        { id, op: "call", fn, args }                 one of CALLS, with string arguments
 //        { id, op: "set", sources, opts }             readSet (inputs.js) over picked files
 //   out  { id, ok: true, result }                     the call's result (text, or readSet's account)
-//        { id, ok: false, error }                     its error, as text
+//        { id, ok: false, error, crash }              its error, as text; crash when the module failed
 //        { id, progress: { stage, files, bytes, records, name } }
 //
 // The worker holds the analysis it made, as the module does on the page,
 // so a report, sightings or the identity check follow from it. It touches
 // no DOM and makes no request beyond the module's own files.
-import { readSet } from "./inputs.js";
+import { readSet, engineCrash } from "./inputs.js";
 
 /** The module functions the page may call here: the analysis and what reads it. */
-const CALLS = new Set(["analyze", "endpoints", "report", "sightings", "attribution", "identity_check", "identity_check_held"]);
+const CALLS = new Set(["analyze", "endpoints", "held_results", "report", "sightings", "attribution", "identity_check", "identity_check_held"]);
 
 let mod = null;
 const load = () =>
@@ -43,6 +43,6 @@ self.addEventListener("message", async ({ data }) => {
     }
     self.postMessage({ id, ok: true, result });
   } catch (e) {
-    self.postMessage({ id, ok: false, error: String(e?.message ?? e) });
+    self.postMessage({ id, ok: false, error: String(e?.message ?? e), crash: engineCrash(e) });
   }
 });

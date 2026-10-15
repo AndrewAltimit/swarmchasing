@@ -12,7 +12,7 @@ import { arr, obj, num, str, trunc, plural, fmtShort, topEntries } from "../lib/
 import { tools, pageRules } from "../lib/wasm.js";
 import { EXAMPLE_FILES, EXAMPLE_HOST, PROBE_LOG } from "../lib/idexample.js";
 import { bigSetOk, dropZone, fileOf, logFormat, needsSet, picked, runProgress, setPanel, setSummary } from "../lib/fileset.js";
-import { runner, Cancelled } from "../lib/runner.js";
+import { runner, heldIndexes, Cancelled, EngineCrash } from "../lib/runner.js";
 
 const MAX_LISTED = 8;
 /** The most text a set carries over to the workbench: about what a tab's session storage holds. */
@@ -93,6 +93,12 @@ const runCheck = () => busy($("cl-run"), "Checking…", check);
 
 const FORMATS = "The page reads web server access logs in Common or Combined Log Format, one request per line, and JSON logs with a url field.";
 
+/** The analysis ran out of room in the browser: not a problem with the log. */
+function tooMany(message, read = null) {
+  showAlert($("cl-alert"), "Too many records for the browser.", message, read ? setSummary(read) : null);
+  $("cl-alert").scrollIntoView({ block: "nearest" });
+}
+
 async function check() {
   $("cl-alert").hidden = true;
   if (set) return checkSet();
@@ -112,7 +118,7 @@ async function check() {
   $("cl-drop-status").hidden = true;
   try {
     const files = JSON.stringify(await providerFiles());
-    const out = JSON.parse(await engine.analyze(input, format, map, rules, progress.show));
+    const out = await engine.analyze(input, format, map, rules, progress.show);
     analysis = obj(out.analysis);
     progress.show({ stage: "check" });
     ident = JSON.parse(await engine.call("identity_check", input, format, map, files));
@@ -120,6 +126,7 @@ async function check() {
   } catch (e) {
     if (e instanceof Cancelled) return cancelled();
     progress.end();
+    if (e instanceof EngineCrash) return tooMany(e.message);
     showAlert($("cl-alert"), "The log could not be read.", ["First problem: ", el("code", {}, trunc(String(e?.message ?? e), 300))], FORMATS);
     return;
   }
@@ -135,10 +142,10 @@ async function check() {
 /** Check a set of files: unpacked, read one by one, analysed as one. */
 async function checkSet() {
   const status = $("cl-drop-status");
-  if (bigOk !== set && !bigSetOk(set, status, () => {
+  if (bigOk !== set && !(await bigSetOk(set, status, () => {
     bigOk = set;
     runCheck();
-  })) return;
+  }))) return;
   const host = hostOf($("cl-host").value);
   let sc;
   try {
@@ -161,8 +168,14 @@ async function checkSet() {
   } catch (e) {
     if (e instanceof Cancelled) return cancelled();
     progress.end();
+    // The set was read: the module failed on the identity check after it.
+    if (e instanceof EngineCrash) return tooMany(e.message, read);
     showAlert($("cl-alert"), "The files could not be read.", ["First problem: ", el("code", {}, trunc(String(e?.message ?? e), 300))], FORMATS);
     return;
+  }
+  if (read.failed) {
+    progress.end("The analysis ran out of memory.");
+    return tooMany(read.failed, read);
   }
   progress.end(`Read ${plural(read.files.length, "file")}, ${plural(num(read.out?.analysis?.total) ?? 0, "request")} checked.`);
   const analysis = obj(read.out?.analysis);
@@ -192,9 +205,13 @@ function render(sc, a, ident, host, read) {
   const df = (s) => sc.defang(str(s));
   const shownHost = host ? sc.defang(`https://${host}`).slice(8) : "your host";
   const results = arr(a.results);
-  const flagged = results.map((r, i) => [r, i]).filter(([r]) => r.tier === "significant" || r.tier === "suggestive")
+  // A large analysis holds only the records it lists (runner.js expand).
+  const flagged = heldIndexes({ ...a, results }).map((i) => [results[i], i]).filter(([r]) => r && (r.tier === "significant" || r.tier === "suggestive"))
     .sort(([x], [y]) => y.score - x.score || x.obs.ts - y.obs.ts);
-  const sig = flagged.filter(([r]) => r.tier === "significant").length;
+  // Counted over every record: a large analysis sends at most RESULTS_SENT of them.
+  const tiers = obj(a.tier_counts);
+  const sig = num(tiers.significant) ?? flagged.filter(([r]) => r.tier === "significant").length;
+  const nFlagged = Math.max(flagged.length, sig + (num(tiers.suggestive) ?? flagged.length - sig));
   const counts = obj(ident.counts);
   const records = arr(ident.records);
   const spoofed = records.filter((r) => r.class === "spoofed");
@@ -209,8 +226,8 @@ function render(sc, a, ident, host, read) {
 
   const parts = [];
   parts.push(el("p", { class: "verdict-line" }, el("strong", {}, `${plural(a.total, "request")} read${files ? ` from ${plural(files.length, "file")}` : ""} for ${shownHost}. `),
-    flagged.length
-      ? `${plural(flagged.length, "request")} matched the indicator rules (${sig} significant, ${flagged.length - sig} suggestive).`
+    nFlagged
+      ? `${plural(nFlagged, "request")} matched the indicator rules (${sig} significant, ${nFlagged - sig} suggestive).`
       : "No request matched the indicator rules strongly enough to flag.",
     " ",
     spoofed.length
@@ -218,7 +235,6 @@ function render(sc, a, ident, host, read) {
       : verified || claims
         ? "No request passed as a provider's agent from outside its published addresses."
         : "No request declared an AI provider's agent."));
-  if (read) parts.push(setSummary(read));
 
   // Flagged requests.
   parts.push(el("h3", {}, "Flagged requests"));
@@ -236,14 +252,16 @@ function render(sc, a, ident, host, read) {
         el("td", { class: "url", "data-label": "Request (defanged)" }, trunc(df(r.obs.url), 300)),
         el("td", { class: "nowrap rc-head", "data-label": "Time (UTC)" }, fmtShort(r.obs.ts)),
         files ? el("td", { class: "file-name", "data-label": "File" }, fileCell(r.obs.id)) : null))))));
-    if (flagged.length > MAX_LISTED) {
-      const more = el("button", { type: "button", class: "link-button" }, `${flagged.length - MAX_LISTED} more in the workbench`);
+    if (nFlagged > MAX_LISTED) {
+      const more = el("button", { type: "button", class: "link-button" }, `${(nFlagged - MAX_LISTED).toLocaleString("en")} more in the workbench`);
       more.addEventListener("click", toWorkbench);
       parts.push(el("p", { class: "hint" }, more, `, with ${these} carried over in this tab.`));
     }
   } else {
     parts.push(el("p", { class: "hint" }, "Nothing here looks like the agent activity the rules describe. The rules see only what a log line carries: a request body or a page an agent read is out of their sight."));
   }
+  // What each file of a set gave, after what they show.
+  if (read) parts.push(setSummary(read));
 
   // Agent identities.
   parts.push(el("h3", {}, "Agents that name themselves"));

@@ -406,7 +406,7 @@ mod tests {
         let (one, two) = log.split_at(log.find("203.0.113.9").unwrap());
         crate::engine::inputs_clear();
         for part in [one, two] {
-            assert!(crate::engine::inputs_add(part, "auto", "host=shop.example").is_ok());
+            assert!(crate::engine::inputs_add(part, "auto", "host=shop.example", 0).is_ok());
         }
         assert!(crate::engine::inputs_analyze("").is_ok());
         let Ok(held) = identity_check_held(&files.to_string()) else {

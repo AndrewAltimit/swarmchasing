@@ -34,8 +34,9 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 | Function | Returns |
 |---|---|
 | `check_rules(rules_json)` | `{"rules", "asns", "version"}`, or throws on an invalid rule set. |
-| `analyze(input, format, map, rules_json)` | Engine. `{"analysis", "warnings", "redacted", "cluster_date_tags"}`, and keeps the analysis for `endpoints`. `format` is `auto`, `ndjson`, `json`, `lines` or `access_log`; `map` is a field mapping such as `ts=a.b,url=c`, or empty. Secrets are redacted before analysis. |
-| `inputs_add(input, format, map)` | Engine. Parses one file of a set and keeps its records, ids prefixed with the file's number (`f2:log-17`); returns `{"file", "format", "lines", "records", "skipped", "redacted", "warnings", "warning_count"}`. |
+| `analyze(input, format, map, rules_json)` | Engine. `{"analysis", "warnings", "redacted", "cluster_date_tags"}`, and keeps the analysis for `endpoints`. A large one is sent in part ([large analyses](#large-analyses)). `format` is `auto`, `ndjson`, `json`, `lines` or `access_log`; `map` is a field mapping such as `ts=a.b,url=c`, or empty. Secrets are redacted before analysis. |
+| `inputs_add(input, format, map, limit)` | Engine. Parses one file of a set, up to `limit` records (0 for none), and keeps its records, ids prefixed with the file's number (`f2:log-17`); returns `{"file", "format", "lines", "records", "skipped", "redacted", "warnings", "warning_count"}`, and `"cut": true` for a file past `limit`. |
+| `held_results(indices_json)` | Engine. Records of the held analysis by index, at most 1,000: `[{"i", "result"}]`. |
 | `inputs_analyze(rules_json)` | Engine. One analysis over every file added since the last call, as `analyze` returns it and keeps it; clears the set. `inputs_clear()` drops the set. |
 | `unwrap(url, rules_json)` | Engine. The layers inside one URL and the rules that fired. |
 | `prepare(input, format, map, rules_json)` | Tools. Re-runs `analyze` on the same input and keeps it for `report` and `attribution`; returns `{"clusters", "total"}`. |
@@ -52,6 +53,10 @@ Everything crosses the boundary as strings: inputs are text or JSON, outputs are
 | `identity_catalog()` | Tools. The declared-agent catalog, with each range file's and directory's URL. |
 | `identity_check(input, format, map, files_json)` | Tools. Each record's declared identity; `files_json` holds downloaded range files and directories by catalog id ([identity](../../docs/reference/identity.md#in-the-browser)). |
 | `identity_check_held(files_json)` | Tools. `identity_check` on the records of the held analysis, such as a set analysed with `inputs_analyze`. |
+
+### Large analyses
+
+An analysis of more than 50,000 records stays in the module. What `analyze` and `inputs_analyze` return then carries in `analysis.results` only the flagged records (score above zero, at most the 100,000 highest scoring), with `result_index` giving each one's index among every record and `results_omitted` counting the flagged records left out; every other field is whole. Only flagged records are clustered, so every index a cluster holds is among them. `held_results` returns any record by its index. A result per record of a large set is more text than a browser holds in one string.
 
 Clusters in an analysis carry a number (`id`, `C1`) and a stable `key` (`k-3f9a2c1b`); its records may carry `ts_kind` and `target_asn` (see [`sc-core`](../sc-core/README.md#concepts)).
 

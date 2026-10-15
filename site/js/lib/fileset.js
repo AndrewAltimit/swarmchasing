@@ -6,8 +6,8 @@
 // the page (runner.js). File and entry names are labels shown as text;
 // they never reach the module, which numbers files instead (`f2:log-17`).
 import { el, BIG_FILE } from "./dom.js";
-import { LIMITS, bytesText, needsSet } from "./archive.js";
-import { logFormat } from "./inputs.js";
+import { LIMITS, bytesText, needsSet, unpackedEstimate } from "./archive.js";
+import { logFormat, RECORD_LIMIT } from "./inputs.js";
 import { plural, trunc } from "./fmt.js";
 
 export { needsSet, logFormat };
@@ -95,13 +95,15 @@ export function fileOf(id, files) {
 
 /**
  * A progress report as a line: "Read 3 files, 12 MB unpacked, 4,210
- * records; now logs.zip/b.log…" while reading, "Analysing 4,210 records
- * from 3 files…" after.
+ * records; now logs.zip/b.log…" while reading, "…; parsing big.log (40
+ * MB)…" while a long file is parsed, "Analysing 4,210 records from 3
+ * files…" after.
  */
-export function progressText({ stage, files = 0, bytes = 0, records = 0, name }) {
+export function progressText({ stage, files = 0, bytes = 0, records = 0, name, size = 0 }) {
   if (stage === "load") return "Starting the analysis engine…";
   if (stage === "analyse") return files ? `Analysing ${plural(records, "record")} from ${plural(files, "file")}…` : "Analysing…";
   if (stage === "check") return "Checking declared agents…";
+  if (stage === "parse") return `Read ${plural(files, "file")}, ${plural(records, "record")}; parsing ${trunc(name ?? "", 80)} (${bytesText(size)})…`;
   return `Read ${plural(files, "file")}, ${bytesText(bytes)} unpacked, ${plural(records, "record")}${name ? `; now ${trunc(name, 80)}` : ""}…`;
 }
 
@@ -135,8 +137,10 @@ export function runProgress(anchor, onCancel) {
         cancel.disabled = false;
       }
       line.textContent = progressText(p);
-      if (p.stage !== stage) {
-        stage = p.stage;
+      // A long file's parse line is part of reading, not a stage of its own.
+      const now = p.stage === "parse" ? "read" : p.stage;
+      if (now !== stage) {
+        stage = now;
         said.textContent = STAGE_SAID[stage] ?? "";
       }
     },
@@ -158,30 +162,45 @@ let summaries = 0; // ids for the skipped lists' labels
 
 const FORMAT_LABEL = { access_log: "access log", ndjson: "NDJSON", json: "JSON", lines: "URL lines" };
 
+/** Most file rows the summary lists; the rest are counted. */
+const FILE_ROWS = 100;
+/** The summary opens by itself up to this many files. */
+const OPEN_FILES = 24;
+
+/** A file worth a look: something in it was not read, or nothing was. */
+const troubled = (f) => Boolean(f.warning_count || f.skipped || f.cut || !f.records);
+
 /**
  * The per-file summary: a row per file read (its name, the format it was
  * read as, its lines, records and lines skipped, and the first problem),
- * then the entries not read with why, and the reason the set stopped.
+ * files with a problem first and at most 100 rows, then the entries not
+ * read with why, and the reason the set stopped. It opens by itself for a
+ * few dozen files or fewer.
  */
 export function setSummary({ files, skipped, stopped }) {
   const records = files.reduce((n, f) => n + f.records, 0);
-  const rows = files.map((f) => el("tr", {},
+  const worth = files.filter(troubled);
+  const listed = [...worth, ...files.filter((f) => !troubled(f))].slice(0, FILE_ROWS);
+  const rows = listed.map((f) => el("tr", {},
     el("td", { class: "file-name", "data-label": "File" }, trunc(f.name, 160)),
     el("td", { "data-label": "Read as" }, FORMAT_LABEL[f.format] ?? String(f.format)),
     el("td", { class: "num", "data-label": "Lines" }, Number(f.lines).toLocaleString()),
     el("td", { class: "num", "data-label": "Records" }, Number(f.records).toLocaleString()),
     el("td", { class: "num", "data-label": "Skipped" }, Number(f.skipped).toLocaleString()),
-    el("td", { class: "file-note", "data-label": "First problem" }, f.warnings?.[0] ? trunc(String(f.warnings[0]), 160) : "")));
-  return el("details", { class: "file-summary", open: true },
-    el("summary", {}, `${plural(files.length, "file")} read, ${plural(records, "record")}${skipped.length ? `; ${skipped.length} not read` : ""}`),
-    stopped ? el("p", { class: "warn" }, stopped) : null,
+    el("td", { class: "file-note", "data-label": "First problem" }, f.warnings?.[0] ? trunc(String(f.warnings[0]), 160) : f.cut ? "read up to the record limit" : "")));
+  const more = files.length - listed.length;
+  const moreWorth = Math.max(0, worth.length - FILE_ROWS);
+  // Why the set stopped stays in sight when the list is folded.
+  return el("div", {}, stopped ? el("p", { class: "warn" }, stopped) : null, el("details", { class: "file-summary", open: files.length <= OPEN_FILES },
+    el("summary", {}, `${plural(files.length, "file")} read, ${plural(records, "record")}${skipped.length ? `; ${skipped.length.toLocaleString()} not read` : ""}`),
     files.length ? el("div", { class: "scroll", tabindex: "0", role: "region", "aria-label": "Files read" }, el("table", { class: "files cards" },
       el("caption", { class: "sr-only" }, "Files read, with the format each was read as and its counts"),
       el("thead", {}, el("tr", {}, ["File", "Read as", "Lines", "Records", "Skipped", "First problem"].map((h, i) => el("th", { scope: "col", class: i >= 2 && i <= 4 ? "num" : null }, h)))),
       el("tbody", {}, rows))) : null,
+    more > 0 ? el("p", { class: "hint" }, `And ${plural(more, "more file")}, ${moreWorth ? `${moreWorth.toLocaleString()} of them with a problem` : "each read without a problem"}.`) : null,
     skipped.length ? [el("p", { class: "hint", id: `skipped-h-${++summaries}` }, "Not read:"),
       el("ul", { class: "skipped", "aria-labelledby": `skipped-h-${summaries}` }, skipped.slice(0, 200).map((s) => el("li", {}, el("code", {}, trunc(s.name, 160)), `: ${s.reason}`)),
-        skipped.length > 200 ? el("li", { class: "hint" }, `and ${skipped.length - 200} more`) : null)] : null);
+        skipped.length > 200 ? el("li", { class: "hint" }, `and ${(skipped.length - 200).toLocaleString()} more`) : null)] : null));
 }
 
 /**
@@ -202,18 +221,21 @@ export function setPanel(box, sources, onClear) {
 }
 
 /**
- * Whether a set this big may be read now: true under the 50 MB mark;
+ * Whether a set this big may be read now: true when it unpacks to under
+ * the 50 MB mark, as far as its files say (archive.js unpackedEstimate);
  * otherwise the question goes in `status` with a button that calls `go`.
  */
-export function bigSetOk(sources, status, go) {
-  const n = setBytes(sources);
-  if (n <= BIG_FILE) return true;
+export async function bigSetOk(sources, status, go) {
+  if ((await unpackedEstimate(sources, BIG_FILE)) <= BIG_FILE) return true;
+  const n = await unpackedEstimate(sources);
   const yes = el("button", { type: "button" }, "Read them anyway");
   yes.addEventListener("click", () => {
     status.hidden = true;
     go();
   }, { once: true });
-  status.replaceChildren(`These files are about ${Math.round(n / (1024 * 1024))} MB. The page unpacks and analyses them here, which can take a while (you can cancel it); it stops at ${bytesText(LIMITS.totalBytes)} unpacked. `, yes);
+  const packed = setBytes(sources);
+  const size = n > packed * 1.2 ? `unpack to about ${bytesText(n)}` : `are about ${bytesText(n)}`;
+  status.replaceChildren(`These files ${size}. The page unpacks and analyses them here, which can take a while (you can cancel it); it stops at ${bytesText(LIMITS.totalBytes)} unpacked or ${RECORD_LIMIT.toLocaleString("en")} records. `, yes);
   status.hidden = false;
   return false;
 }
